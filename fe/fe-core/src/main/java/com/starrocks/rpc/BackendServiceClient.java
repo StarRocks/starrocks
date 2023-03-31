@@ -64,14 +64,14 @@ import org.apache.thrift.TException;
 import java.util.NoSuchElementException;
 import java.util.concurrent.Future;
 
-public class DataNodeServiceClient {
-    private static final Logger LOG = LogManager.getLogger(DataNodeServiceClient.class);
+public class BackendServiceClient {
+    private static final Logger LOG = LogManager.getLogger(BackendServiceClient.class);
 
-    private DataNodeServiceClient() {
+    private BackendServiceClient() {
     }
 
-    public static DataNodeServiceClient getInstance() {
-        return DataNodeServiceClient.SingletonHolder.INSTANCE;
+    public static BackendServiceClient getInstance() {
+        return BackendServiceClient.SingletonHolder.INSTANCE;
     }
 
     public Future<PExecPlanFragmentResult> execPlanFragmentAsync(
@@ -280,6 +280,6 @@ public class DataNodeServiceClient {
     }
 
     private static class SingletonHolder {
-        private static final DataNodeServiceClient INSTANCE = new DataNodeServiceClient();
+        private static final BackendServiceClient INSTANCE = new BackendServiceClient();
     }
 }

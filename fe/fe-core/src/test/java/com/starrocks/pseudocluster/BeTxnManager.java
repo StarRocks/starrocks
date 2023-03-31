@@ -48,10 +48,10 @@ public class BeTxnManager {
         }
     }
 
-    PseudoDataNode backend;
+    PseudoBackend backend;
     Map<Long, TxnInfo> txns = new HashMap<>();
 
-    BeTxnManager(PseudoDataNode backend) {
+    BeTxnManager(PseudoBackend backend) {
         this.backend = backend;
     }
 
@@ -120,7 +120,7 @@ public class BeTxnManager {
         finish.setError_tablet_ids(errorTabletIds);
         finish.setTablet_versions(tabletVersions);
         if (e != null) {
-            finish.setTask_status(PseudoDataNode.toStatus(e));
+            finish.setTask_status(PseudoBackend.toStatus(e));
         }
     }
 

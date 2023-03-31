@@ -15,8 +15,8 @@
 package com.starrocks.transaction;
 
 import com.starrocks.common.Config;
+import com.starrocks.pseudocluster.PseudoBackend;
 import com.starrocks.pseudocluster.PseudoCluster;
-import com.starrocks.pseudocluster.PseudoDataNode;
 import com.starrocks.pseudocluster.Tablet;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -58,14 +58,14 @@ public class ConcurrentTxnTest {
         for (int i = 0; i < runTime; i++) {
             DBLoad.TableLoad.totalTabletRead.set(0);
             DBLoad.TableLoad.totalTableRead.set(0);
-            PseudoDataNode.scansByQueryId.clear();
+            PseudoBackend.scansByQueryId.clear();
             DBLoad dbLoad = new DBLoad(numDB, numTable, numTabletPerTable, withRead, withUpdateDelete);
             dbLoad.run(numThread, runSeconds);
             System.out.printf("totalReadExpected: %d totalRead: %d totalSucceed: %d totalFail: %d\n",
                     DBLoad.TableLoad.totalTabletRead.get(), Tablet.getTotalReadExecuted(), Tablet.getTotalReadSucceed(),
                     Tablet.getTotalReadFailed());
             if (numTabletPerTable != 0) {
-                for (Map.Entry<String, AtomicInteger> kv : PseudoDataNode.scansByQueryId.entrySet()) {
+                for (Map.Entry<String, AtomicInteger> kv : PseudoBackend.scansByQueryId.entrySet()) {
                     if (kv.getValue().get() != numTabletPerTable) {
                         String msg = String.format("queryId: %s numScan: %d\n", kv.getKey(), kv.getValue().get());
                         Assert.fail(msg);
@@ -73,8 +73,8 @@ public class ConcurrentTxnTest {
                 }
             }
             System.out.printf("tableRead: %d scanQueryId: %d\n", DBLoad.TableLoad.totalTableRead.get(),
-                    PseudoDataNode.scansByQueryId.size());
-            Assert.assertEquals(DBLoad.TableLoad.totalTableRead.get(), PseudoDataNode.scansByQueryId.size());
+                    PseudoBackend.scansByQueryId.size());
+            Assert.assertEquals(DBLoad.TableLoad.totalTableRead.get(), PseudoBackend.scansByQueryId.size());
             Assert.assertEquals(DBLoad.TableLoad.totalTabletRead.get(), Tablet.getTotalReadSucceed());
             Tablet.clearStats();
         }

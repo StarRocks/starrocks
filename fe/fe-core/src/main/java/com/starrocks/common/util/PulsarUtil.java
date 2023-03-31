@@ -29,7 +29,7 @@ import com.starrocks.proto.PPulsarMetaProxyRequest;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PStringPair;
-import com.starrocks.rpc.DataNodeServiceClient;
+import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TNetworkAddress;
@@ -145,7 +145,7 @@ public class PulsarUtil {
 
                 // get info
                 request.timeout = Config.routine_load_pulsar_timeout_second;
-                Future<PPulsarProxyResult> future = DataNodeServiceClient.getInstance().getPulsarInfo(address, request);
+                Future<PPulsarProxyResult> future = BackendServiceClient.getInstance().getPulsarInfo(address, request);
                 PPulsarProxyResult result = future.get(Config.routine_load_pulsar_timeout_second, TimeUnit.SECONDS);
                 TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                 if (code != TStatusCode.OK) {
