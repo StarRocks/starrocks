@@ -72,6 +72,7 @@
   + [配置 AWS 认证方式](/integrations/authenticate_to_aws_resources.md)
 + 管理手册
   + 部署集群
+    + [部署使用 StarRocks 存算分离集群](/administration/deploy_shared_data.md)
     + [通过 StarGo 部署](/administration/stargo.md)
     + [通过 StarRocks Manager 部署](/administration/deploy_with_manager.md)
     + [通过 Docker 镜像部署](/administration/deploy_with_docker.md)
