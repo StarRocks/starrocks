@@ -440,8 +440,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             List<Long> destBeHostGroup = hostGroups.get(destBackend.getHost());
             int totalBes = beStats.size();
-            List<Long> tablets =
-                    getSourceTablets(partitionStats, srcBEPartitionTablets, destBEPartitionTablets, totalBes);
+            List<Long> tablets = getSourceTablets(partitionStats, srcBEPartitionTablets, destBEPartitionTablets,
+                    totalBes, srcBEStat.getBeId());
             // do not choose selected tablet
             // do not choose tablet that exists in backends whose host is same with dest be
             tablets = tablets.stream()
@@ -662,7 +662,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             int totalPaths = beNum * pathStats.size();
             List<Long> tablets =
-                    getSourceTablets(partitionStats, srcPathPartitionTablets, destPathPartitionTablets, totalPaths);
+                    getSourceTablets(partitionStats, srcPathPartitionTablets, destPathPartitionTablets, totalPaths, srcBeId);
 
             long srcPathTotalCap = srcPathStat.getCapacityB();
             long destPathTotalCap = destPathStat.getCapacityB();
@@ -752,7 +752,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     private List<Long> getSourceTablets(Map<Pair<Long, Long>, PartitionStat> partitionStats,
                                         Map<Pair<Long, Long>, Set<Long>> srcPartitionTablets,
                                         Map<Pair<Long, Long>, Set<Long>> destPartitionTablets,
-                                        int totalDests) {
+                                        int totalDests, long beId) {
         // we store tablets that can make tablet distribution balance better to balancedTablets,
         // and those make tablet distribution balance worse to unbalancedTablets.
         List<Long> balancedTablets = Lists.newArrayList();
@@ -772,6 +772,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             // so we take the smallest value between the two as balanceNum
             int balanceNum = Math.min(avgNum - destTablets.size(), srcTablets.size() - avgNum);
             for (long tabletId : srcTablets) {
+                Replica rp = invertedIndex.getReplica(tabletId, beId);
+                if (rp.getDataSize() == 0) {
+                    continue;
+                }
                 if (balanceNum > 0) {
                     balancedTablets.add(tabletId);
                     balanceNum--;
@@ -783,7 +787,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         // shuffle to avoid partition heavily skewed
         Collections.shuffle(balancedTablets);
-        Collections.shuffle(unbalancedTablets);
+        unbalancedTablets.sort((id1, id2) -> {
+            Replica rp1 = invertedIndex.getReplica(id1, beId);
+            Replica rp2 = invertedIndex.getReplica(id2, beId);
+            return  Long.compare(rp2.getDataSize(), rp1.getDataSize());
+        });
         List<Long> tablets = Lists.newArrayList(balancedTablets);
         tablets.addAll(unbalancedTablets);
         return tablets;
