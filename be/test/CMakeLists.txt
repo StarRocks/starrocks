@@ -196,6 +196,7 @@ set(EXEC_FILES
         ./storage/lake/primary_key_compaction_task_test.cpp
         ./storage/lake/primary_key_publish_test.cpp
         ./storage/rowset_update_state_test.cpp
+        ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset/rowset_test.cpp
         ./storage/rowset/binary_dict_page_test.cpp
         ./storage/rowset/binary_plain_page_test.cpp
