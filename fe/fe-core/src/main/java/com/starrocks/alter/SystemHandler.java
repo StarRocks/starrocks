@@ -106,7 +106,7 @@ public class SystemHandler extends AlterHandler {
             List<Long> backendTabletIds = invertedIndex.getTabletIdsByBackendId(beId);
             if (backendTabletIds.isEmpty() && Config.drop_backend_after_decommission) {
                 try {
-                    systemInfoService.dropBackend(beId);
+                    systemInfoService.dropDataNode(beId);
                     LOG.info("no tablet on decommission backend {}, drop it", beId);
                 } catch (DdlException e) {
                     // does not matter, may be backend not exist
@@ -134,11 +134,11 @@ public class SystemHandler extends AlterHandler {
         if (alterClause instanceof AddBackendClause) {
             // add backend
             AddBackendClause addBackendClause = (AddBackendClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(addBackendClause.getHostPortPairs());
+            GlobalStateMgr.getCurrentSystemInfo().addDataNodes(addBackendClause.getHostPortPairs());
         } else if (alterClause instanceof ModifyBackendAddressClause) {
             // update Backend Address
             ModifyBackendAddressClause modifyBackendAddressClause = (ModifyBackendAddressClause) alterClause;
-            return GlobalStateMgr.getCurrentSystemInfo().modifyBackendHost(modifyBackendAddressClause);
+            return GlobalStateMgr.getCurrentSystemInfo().modifyDataNodeHost(modifyBackendAddressClause);
         } else if (alterClause instanceof DropBackendClause) {
             // drop backend
             DropBackendClause dropBackendClause = (DropBackendClause) alterClause;
@@ -213,7 +213,7 @@ public class SystemHandler extends AlterHandler {
         List<DataNode> decommissionBackends = Lists.newArrayList();
         // check if exist
         for (Pair<String, Integer> pair : hostPortPairs) {
-            DataNode backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
+            DataNode backend = infoService.getDataNodeWithHeartbeatPort(pair.first, pair.second);
             if (backend == null) {
                 throw new DdlException("Backend does not exist[" + pair.first + ":" + pair.second + "]");
             }
@@ -241,7 +241,7 @@ public class SystemHandler extends AlterHandler {
         List<Pair<String, Integer>> hostPortPairs = cancelAlterSystemStmt.getHostPortPairs();
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check if exist
-            DataNode backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
+            DataNode backend = infoService.getDataNodeWithHeartbeatPort(pair.first, pair.second);
             if (backend == null) {
                 throw new DdlException("Backend does not exists[" + pair.first + "]");
             }
