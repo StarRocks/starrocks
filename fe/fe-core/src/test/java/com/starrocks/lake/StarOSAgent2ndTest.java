@@ -93,7 +93,7 @@ public class StarOSAgent2ndTest {
             backend.setBePort(workerBePort + 1);
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
             Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId));
-            GlobalStateMgr.getCurrentSystemInfo().dropDataNode(backend);
+            GlobalStateMgr.getCurrentSystemInfo().dropBackend(backend);
             workerToBackend.clear();
         }
         { // No starlet port in backend, be port mismatch
@@ -103,7 +103,7 @@ public class StarOSAgent2ndTest {
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
             // empty result
             Assert.assertTrue(starosAgent.getBackendIdsByShard(shardId).isEmpty());
-            GlobalStateMgr.getCurrentSystemInfo().dropDataNode(backend);
+            GlobalStateMgr.getCurrentSystemInfo().dropBackend(backend);
             workerToBackend.clear();
         }
         { // No starlet port in backend, correct be port, can find the correct backend!
@@ -112,7 +112,7 @@ public class StarOSAgent2ndTest {
             backend.setBePort(workerBePort);
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
             Assert.assertEquals(Sets.newHashSet(beId), starosAgent.getBackendIdsByShard(shardId));
-            GlobalStateMgr.getCurrentSystemInfo().dropDataNode(backend);
+            GlobalStateMgr.getCurrentSystemInfo().dropBackend(backend);
             workerToBackend.clear();
         }
     }

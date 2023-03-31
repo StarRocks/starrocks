@@ -288,7 +288,7 @@ public class UtFrameUtils {
     }
 
     public static void dropMockBackend(int backendId) throws DdlException {
-        GlobalStateMgr.getCurrentSystemInfo().dropDataNode(backendId);
+        GlobalStateMgr.getCurrentSystemInfo().dropBackend(backendId);
     }
 
     public static int findValidPort() {

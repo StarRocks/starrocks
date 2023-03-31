@@ -123,7 +123,7 @@ public class SystemInfoService {
             throws DdlException {
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
-            if (getDataNodeWithHeartbeatPort(pair.first, pair.second) != null) {
+            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
                 throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
             }
             if (getComputeNodeWithHeartbeatPort(pair.first, pair.second) != null) {
@@ -185,10 +185,10 @@ public class SystemInfoService {
      * @param hostPortPairs : backend's host and port
      * @throws DdlException
      */
-    public void addDataNodes(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
+    public void addBackends(List<Pair<String, Integer>> hostPortPairs) throws DdlException {
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
-            if (getDataNodeWithHeartbeatPort(pair.first, pair.second) != null) {
+            if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
                 throw new DdlException("Same backend already exists[" + pair.first + ":" + pair.second + "]");
             }
         }
@@ -199,7 +199,7 @@ public class SystemInfoService {
     }
 
     // for test
-    public void dropDataNode(DataNode backend) {
+    public void dropBackend(DataNode backend) {
         Map<Long, DataNode> copiedBackends = Maps.newHashMap(idToBackendRef);
         copiedBackends.remove(backend.getId());
         idToBackendRef = ImmutableMap.copyOf(copiedBackends);
@@ -250,7 +250,7 @@ public class SystemInfoService {
         MetricRepo.generateBackendsTabletMetrics();
     }
 
-    public ShowResultSet modifyDataNodeHost(ModifyBackendAddressClause modifyBackendAddressClause) throws DdlException {
+    public ShowResultSet modifyBackendHost(ModifyBackendAddressClause modifyBackendAddressClause) throws DdlException {
         String willBeModifiedHost = modifyBackendAddressClause.getSrcHost();
         String fqdn = modifyBackendAddressClause.getDestHost();
         List<DataNode> candidateBackends = getBackendOnlyWithHost(willBeModifiedHost);
@@ -335,24 +335,24 @@ public class SystemInfoService {
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
-            if (getDataNodeWithHeartbeatPort(pair.first, pair.second) == null) {
+            if (getBackendWithHeartbeatPort(pair.first, pair.second) == null) {
                 throw new DdlException("backend does not exists[" + pair.first + ":" + pair.second + "]");
             }
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            dropDataNode(pair.first, pair.second, needCheckUnforce);
+            dropBackend(pair.first, pair.second, needCheckUnforce);
         }
     }
 
     // for decommission
-    public void dropDataNode(long backendId) throws DdlException {
+    public void dropBackend(long backendId) throws DdlException {
         DataNode backend = getBackend(backendId);
         if (backend == null) {
             throw new DdlException("Backend[" + backendId + "] does not exist");
         }
 
-        dropDataNode(backend.getHost(), backend.getHeartbeatPort(), false);
+        dropBackend(backend.getHost(), backend.getHeartbeatPort(), false);
     }
 
     private void checkUnforce(DataNode droppedBackend) {
@@ -395,12 +395,12 @@ public class SystemInfoService {
     }
 
     // final entry of dropping backend
-    public void dropDataNode(String host, int heartbeatPort, boolean needCheckUnforce) throws DdlException {
-        if (getDataNodeWithHeartbeatPort(host, heartbeatPort) == null) {
+    public void dropBackend(String host, int heartbeatPort, boolean needCheckUnforce) throws DdlException {
+        if (getBackendWithHeartbeatPort(host, heartbeatPort) == null) {
             throw new DdlException("backend does not exists[" + host + ":" + heartbeatPort + "]");
         }
 
-        DataNode droppedBackend = getDataNodeWithHeartbeatPort(host, heartbeatPort);
+        DataNode droppedBackend = getBackendWithHeartbeatPort(host, heartbeatPort);
         if (needCheckUnforce) {
             try {
                 checkUnforce(droppedBackend);
@@ -488,7 +488,7 @@ public class SystemInfoService {
         return null;
     }
 
-    public DataNode getDataNodeWithHeartbeatPort(String host, int heartPort) {
+    public DataNode getBackendWithHeartbeatPort(String host, int heartPort) {
         ImmutableMap<Long, DataNode> idToBackend = idToBackendRef;
         for (DataNode backend : idToBackend.values()) {
             if (backend.getHost().equals(host) && backend.getHeartbeatPort() == heartPort) {
