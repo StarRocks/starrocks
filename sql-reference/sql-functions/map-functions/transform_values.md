@@ -11,13 +11,13 @@ StarRocks 从 2.5 版本开始支持查询数据湖中的复杂数据类型 MAP 
 ## 语法
 
 ```Haskell
-map transform_values(lambda func, any_map)
+map transform_values(lambda_func, any_map)
 ```
 
 `lambda_func` 也可以放在 `any_map` 之后，即:
 
 ```Haskell
-map transform_values(any_map, lambda func)
+map transform_values(any_map, lambda_func)
 ```
 
 ## 参数说明
