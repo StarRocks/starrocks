@@ -65,6 +65,8 @@ public:
 private:
     bool _is_finished = false;
     HashPartitionContext* _hash_partition_ctx;
+
+    RuntimeProfile::Counter* _partition_num;
 };
 
 class HashPartitionSinkOperatorFactory final : public OperatorFactory {

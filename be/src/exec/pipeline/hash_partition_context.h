@@ -46,6 +46,8 @@ public:
     // Return true if sink completed and all the data in the chunks_sorters has been pulled out
     bool is_finished();
 
+    int32_t num_partitions() const { return _chunks_partitioner->num_partitions(); }
+
 private:
     const std::vector<TExpr>& _t_partition_exprs;
     std::vector<ExprContext*> _partition_exprs;

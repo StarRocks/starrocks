@@ -18,6 +18,7 @@ namespace starrocks::pipeline {
 
 Status HashPartitionSinkOperator::prepare(RuntimeState* state) {
     Operator::prepare(state);
+    _partition_num = ADD_COUNTER(_unique_metrics, "PartitionNumber", TUnit::UNIT);
     return _hash_partition_ctx->prepare(state);
 }
 
@@ -31,6 +32,7 @@ Status HashPartitionSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
 
 Status HashPartitionSinkOperator::set_finishing(RuntimeState* state) {
     _hash_partition_ctx->sink_complete();
+    COUNTER_UPDATE(_partition_num, _hash_partition_ctx->num_partitions());
     _is_finished = true;
     return Status::OK();
 }
