@@ -123,4 +123,4 @@ Status SchemaBeCompactionsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     return fill_chunk(chunk);
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized
