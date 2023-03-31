@@ -131,12 +131,9 @@ public class CostModel {
             Preconditions.checkNotNull(statistics);
             // if (node.getTable().isMaterializedView() && context.hasExtraStatistics()) {
             if (node.getTable().isMaterializedView()) {
-                return CostEstimate.of(0, 0, 0);
-                /*
+                // return CostEstimate.of(0, 0, 0);
                 ColumnRefSet usedColumns = node.getUsedColumns();
                 return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
-
-                 */
             }
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
