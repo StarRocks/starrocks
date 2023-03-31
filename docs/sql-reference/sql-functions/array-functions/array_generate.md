@@ -14,9 +14,9 @@ ARRAY array_generate([start,] end [, step])
 
 ## Parameters
 
-- `start`: optional, the start value. It must be a constant or a column evaluates to TINYINT, SMALLINT, INT, BIGINT, or LARGEINT. The default value is 1.
-- `end`: required, the end value. It must be a constant or a column evaluates to TINYINT, SMALLINT, INT, BIGINT, or LARGEINT.
-- `step`：: optional, the increment. It must be a constant or a column evaluates to TINYINT, SMALLINT, INT, BIGINT, or LARGEINT. When `start` is less than `end`, the default value is 1. When `start` is greater than `end`, the default value is -1.
+- `start`: optional, the start value. It must be a constant or a column that evaluates to TINYINT, SMALLINT, INT, BIGINT, or LARGEINT. The default value is 1.
+- `end`: required, the end value. It must be a constant or a column that evaluates to TINYINT, SMALLINT, INT, BIGINT, or LARGEINT.
+- `step`：: optional, the increment. It must be a constant or a column that evaluates to TINYINT, SMALLINT, INT, BIGINT, or LARGEINT. When `start` is less than `end`, the default value is 1. When `start` is greater than `end`, the default value is -1.
 
 ## Return value
 
