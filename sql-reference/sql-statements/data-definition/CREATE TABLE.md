@@ -564,6 +564,32 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 [PROPERTIES ("key" = "value", ...)],...)
 ```
 
+#### 为 View Delta Join 查询改写定义外键约束
+
+要在 View Delta Join 场景中启用查询重写，您必须为 Delta Join 中的表定义外键约束 `foreign_key_constraints`。详细信息，请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/Materialized_view.md#基于-view-delta-join-场景改写查询)。
+
+```SQL
+PROPERTIES (
+    "foreign_key_constraints" = "
+    (<child_column>[, ...]) 
+    REFERENCES 
+    [catalog_name].[database_name].<parent_table_name>(<parent_column>[, ...])
+    [;...]
+    "
+)
+```
+
+* `child_column`：当前表中的外键列。 您可以定义多个 `child_column`。
+* `catalog_name`：待 Join 表所在的数据目录名。未指定此参数时使用默认目录。
+* `database_name`：待 Join 表所在的数据库名。未指定此参数时使用当前数据库。
+* `parent_table_name`：待 Join 表名。
+* `parent_column`：待 Join 列名，必须为相应表的 Primary Key 或 Unique Key。
+
+> **注意**
+>
+> * `child_column` 和 `parent_column` 的数量必须一致。
+> * `child_column` 和对应的 `parent_column` 的数据类型必须匹配。
+
 ## 示例
 
 ### 创建 Hash 分桶表并根据 key 列对数据进行聚合
