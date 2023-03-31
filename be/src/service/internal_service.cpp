@@ -586,7 +586,7 @@ void PInternalServiceImplBase<T>::_get_info_impl(
     if (request->has_kafka_meta_request()) {
         std::vector<int32_t> partition_ids;
         st = _exec_env->routine_load_task_executor()->get_kafka_partition_meta(request->kafka_meta_request(),
-                                                                               &partition_ids, timeout_ms, group_id);
+                                                                               &partition_ids, timeout_ms, &group_id);
         if (st.ok()) {
             PKafkaMetaProxyResult* kafka_result = response->mutable_kafka_meta_result();
             for (int32_t id : partition_ids) {
@@ -597,7 +597,7 @@ void PInternalServiceImplBase<T>::_get_info_impl(
         std::vector<int64_t> beginning_offsets;
         std::vector<int64_t> latest_offsets;
         st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                request->kafka_offset_request(), &beginning_offsets, &latest_offsets, timeout_ms, group_id);
+                request->kafka_offset_request(), &beginning_offsets, &latest_offsets, timeout_ms, &group_id);
         if (st.ok()) {
             auto result = response->mutable_kafka_offset_result();
             for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -613,12 +613,12 @@ void PInternalServiceImplBase<T>::_get_info_impl(
 
             auto left_ms = timeout_ms - watch.elapsed_time() / 1000 / 1000;
             if (left_ms <= 0) {
-                st = Status::TimedOut("get kafka info timeout");
+                st = Status::TimedOut("get kafka offset batch timeout");
                 break;
             }
 
             st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                    offset_req, &beginning_offsets, &latest_offsets, left_ms, group_id);
+                    offset_req, &beginning_offsets, &latest_offsets, left_ms, &group_id);
             auto offset_result = response->mutable_kafka_offset_batch_result()->add_results();
             if (st.ok()) {
                 for (int i = 0; i < beginning_offsets.size(); i++) {

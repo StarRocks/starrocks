@@ -50,7 +50,7 @@ namespace starrocks {
 
 Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRequest& request,
                                                          std::vector<int32_t>* partition_ids, int timeout_ms,
-                                                         std::string& group_id) {
+                                                         std::string* group_id) {
     DCHECK(request.has_kafka_info());
 
     // This context is meaningless, just for unifing the interface
@@ -77,9 +77,9 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
     RETURN_IF_ERROR(_data_consumer_pool.get_consumer(&ctx, &consumer));
     auto it = ctx.kafka_info->properties.find("group.id");
     if (it == ctx.kafka_info->properties.end()) {
-        group_id = "unknown";
+        *group_id = "unknown";
     } else {
-        group_id = it->second;
+        *group_id = it->second;
     }
 
     Status st = std::static_pointer_cast<KafkaDataConsumer>(consumer)->get_partition_meta(partition_ids, timeout_ms);
@@ -92,7 +92,7 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_meta(const PKafkaMetaProxyRe
 Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetProxyRequest& request,
                                                            std::vector<int64_t>* beginning_offsets,
                                                            std::vector<int64_t>* latest_offsets, int timeout_ms,
-                                                           std::string& group_id) {
+                                                           std::string* group_id) {
     DCHECK(request.has_kafka_info());
 
     // This context is meaningless, just for unifing the interface
@@ -126,9 +126,9 @@ Status RoutineLoadTaskExecutor::get_kafka_partition_offset(const PKafkaOffsetPro
     RETURN_IF_ERROR(_data_consumer_pool.get_consumer(&ctx, &consumer));
     auto it = ctx.kafka_info->properties.find("group.id");
     if (it == ctx.kafka_info->properties.end()) {
-        group_id = "unknown";
+        *group_id = "unknown";
     } else {
-        group_id = it->second;
+        *group_id = it->second;
     }
     MonotonicStopWatch watch;
     watch.start();
