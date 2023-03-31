@@ -16,6 +16,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [partition_desc]
 distribution_desc
 [rollup_index]
+[ORDER BY (column_definition1,...)]
 [PROPERTIES ("key"="value", ...)]
 [BROKER PROPERTIES ("key"="value", ...)]
 ```
@@ -291,6 +292,14 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 - The values of bucketing columns cannot be updated.
 - Bucketing columns cannot be modified after they are specified.
 - Since StarRocks 2.5, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
+
+### ORDER BY
+
+Since version 3.0, the primary key and sort key are decoupled in the Primary Key model. The sort key is specified by the `ORDER BY` keyword and can be the permutation and combination of any columns.
+
+> **NOTICE**
+>
+> If the sort key is specified, the prefix index is built according to the sort key; if the sort key is not specified, the prefix index is built according to the primary key.
 
 ### PROPERTIES
 
@@ -718,5 +727,32 @@ PROPERTIES
     "resource" = "hive0",
     "database" = "hive_db_name",
     "table" = "hive_table_name"
+);
+```
+
+### Create a Primary Key table and specify the sort key
+
+Suppose that you need to analyze user behavior in real time from dimensions such as users' address and last active time. When you create a table, you can define the `user_id` column as the primary key and define the combination of the `address` and `last_active` columns as the sort key.
+
+```SQL
+create table users (
+    user_id bigint NOT NULL,
+    name string NOT NULL,
+    email string NULL,
+    address string NULL,
+    age tinyint NULL,
+    sex tinyint NULL,
+    last_active datetime,
+    property0 tinyint NOT NULL,
+    property1 tinyint NOT NULL,
+    property2 tinyint NOT NULL,
+    property3 tinyint NOT NULL
+) 
+PRIMARY KEY (`user_id`)
+DISTRIBUTED BY HASH(`user_id`) BUCKETS 4
+ORDER BY(`address`,`last_active`)
+PROPERTIES(
+    "replication_num" = "3",
+    "enable_persistent_index" = "true"
 );
 ```

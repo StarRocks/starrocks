@@ -64,7 +64,7 @@ import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.QueryStatisticsItem.FragmentInstanceInfo;
-import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.DataNodeServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
@@ -146,10 +146,10 @@ public class Coordinator {
 
     private final List<PlanFragment> fragments;
     // backend execute state
-    private final ConcurrentNavigableMap<Integer, BackendExecState> backendExecStates = new ConcurrentSkipListMap<>();
+    private final ConcurrentNavigableMap<Integer, DataNodeExecState> backendExecStates = new ConcurrentSkipListMap<>();
     // backend which state need to be checked when joining this coordinator.
     // It is supposed to be the subset of backendExecStates.
-    private final List<BackendExecState> needCheckBackendExecStates = Lists.newArrayList();
+    private final List<DataNodeExecState> needCheckBackendExecStates = Lists.newArrayList();
     private ResultReceiver receiver;
     private final List<ScanNode> scanNodes;
     // number of instances of this query, equals to
@@ -538,7 +538,7 @@ public class Coordinator {
         }
     }
 
-    private void handleErrorBackendExecState(BackendExecState errorBackendExecState, TStatusCode errorCode, String errMessage)
+    private void handleErrorBackendExecState(DataNodeExecState errorBackendExecState, TStatusCode errorCode, String errMessage)
             throws UserException, RpcException {
         if (errorBackendExecState != null) {
             cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
@@ -654,17 +654,17 @@ public class Coordinator {
                             }
                         }
                     }
-                    List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
+                    List<Pair<DataNodeExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
                     // This is a load process, and it is the first fragment.
-                    // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
+                    // we should add all DataNodeExecState of this fragment to needCheckBackendExecStates,
                     // so that we can check these backends' state when joining this Coordinator
                     boolean needCheckBackendState = isLoadType() && profileFragmentId == 0;
 
                     for (TExecPlanFragmentParams tParam : tParams) {
                         // TODO: pool of pre-formatted BackendExecStates?
                         TNetworkAddress host = instanceId2Host.get(tParam.params.fragment_instance_id);
-                        BackendExecState execState = new BackendExecState(fragment.getFragmentId(), host,
+                        DataNodeExecState execState = new DataNodeExecState(fragment.getFragmentId(), host,
                                 profileFragmentId, tParam, coordinatorPreprocessor.getAddressToBackendID());
                         backendExecStates.put(tParam.backend_num, execState);
                         if (needCheckBackendState) {
@@ -678,10 +678,10 @@ public class Coordinator {
                         futures.add(Pair.create(execState, execState.execRemoteFragmentAsync()));
                     }
 
-                    BackendExecState errorBackendExecState = null;
+                    DataNodeExecState errorBackendExecState = null;
                     TStatusCode errorCode = null;
                     String errMessage = null;
-                    for (Pair<BackendExecState, Future<PExecPlanFragmentResult>> pair : futures) {
+                    for (Pair<DataNodeExecState, Future<PExecPlanFragmentResult>> pair : futures) {
                         TStatusCode code;
                         String errMsg = null;
                         try {
@@ -859,7 +859,7 @@ public class Coordinator {
                 // Otherwise, the request will be in the first stage, including
                 // - the request need send descTable.
                 // - the request to the host, where some request in the previous group has already sent descTable.
-                List<List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>>> inflightRequestsList =
+                List<List<Pair<List<DataNodeExecState>, TExecBatchPlanFragmentsParams>>> inflightRequestsList =
                         ImmutableList.of(new ArrayList<>(), new ArrayList<>());
                 for (PlanFragment fragment : fragmentGroup) {
                     CoordinatorPreprocessor.FragmentExecParams params =
@@ -955,15 +955,15 @@ public class Coordinator {
                         Preconditions.checkState(!tUniqueParamsList.isEmpty());
 
                         // this is a load process, and it is the first fragment.
-                        // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
+                        // we should add all DataNodeExecState of this fragment to needCheckBackendExecStates,
                         // so that we can check these backends' state when joining this Coordinator
                         boolean needCheckBackendState = isLoadType() && profileFragmentId == 0;
 
                         // Create ExecState for each fragment instance.
-                        List<BackendExecState> execStates = Lists.newArrayList();
+                        List<DataNodeExecState> execStates = Lists.newArrayList();
                         for (TExecPlanFragmentParams tUniquePrams : tUniqueParamsList) {
                             // TODO: pool of pre-formatted BackendExecStates?
-                            BackendExecState execState = new BackendExecState(fragment.getFragmentId(), host,
+                            DataNodeExecState execState = new DataNodeExecState(fragment.getFragmentId(), host,
                                     profileFragmentId, tCommonParams, tUniquePrams,
                                     coordinatorPreprocessor.getAddressToBackendID());
                             execStates.add(execState);
@@ -984,24 +984,24 @@ public class Coordinator {
                     profileFragmentId += 1;
                 }
 
-                for (List<Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams>> inflightRequests :
+                for (List<Pair<List<DataNodeExecState>, TExecBatchPlanFragmentsParams>> inflightRequests :
                         inflightRequestsList) {
-                    List<Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>>> futures = Lists.newArrayList();
-                    for (Pair<List<BackendExecState>, TExecBatchPlanFragmentsParams> inflightRequest : inflightRequests) {
-                        List<BackendExecState> execStates = inflightRequest.first;
+                    List<Pair<DataNodeExecState, Future<PExecBatchPlanFragmentsResult>>> futures = Lists.newArrayList();
+                    for (Pair<List<DataNodeExecState>, TExecBatchPlanFragmentsParams> inflightRequest : inflightRequests) {
+                        List<DataNodeExecState> execStates = inflightRequest.first;
                         execStates.forEach(execState -> execState.setInitiated(true));
 
                         Preconditions.checkState(!execStates.isEmpty());
                         // Just choose any instance ExecState to send the batch RPC request.
-                        BackendExecState firstExecState = execStates.get(0);
+                        DataNodeExecState firstExecState = execStates.get(0);
                         futures.add(Pair.create(firstExecState,
                                 firstExecState.execRemoteBatchFragmentsAsync(inflightRequest.second)));
                     }
 
-                    BackendExecState errorBackendExecState = null;
+                    DataNodeExecState errorBackendExecState = null;
                     TStatusCode errorCode = null;
                     String errMessage = null;
-                    for (Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>> pair : futures) {
+                    for (Pair<DataNodeExecState, Future<PExecBatchPlanFragmentsResult>> pair : futures) {
                         TStatusCode code;
                         String errMsg = null;
                         try {
@@ -1390,13 +1390,13 @@ public class Coordinator {
     }
 
     private void cancelRemoteFragmentsAsync(PPlanFragmentCancelReason cancelReason) {
-        for (BackendExecState backendExecState : backendExecStates.values()) {
+        for (DataNodeExecState backendExecState : backendExecStates.values()) {
             backendExecState.cancelFragmentInstance(cancelReason);
         }
     }
 
     public void updateFragmentExecStatus(TReportExecStatusParams params) {
-        BackendExecState execState = backendExecStates.get(params.backend_num);
+        DataNodeExecState execState = backendExecStates.get(params.backend_num);
         if (execState == null) {
             LOG.warn("unknown backend number: {}, valid backend numbers: {}", params.backend_num,
                     backendExecStates.keySet());
@@ -1740,7 +1740,7 @@ public class Coordinator {
      * return true if all of them are OK. Otherwise, return false.
      */
     public boolean checkBackendState() {
-        for (BackendExecState backendExecState : needCheckBackendExecStates) {
+        for (DataNodeExecState backendExecState : needCheckBackendExecStates) {
             if (!backendExecState.isBackendStateHealthy()) {
                 queryStatus = new Status(TStatusCode.INTERNAL_ERROR,
                         "backend " + backendExecState.backend.getId() + " is down");
@@ -1759,7 +1759,7 @@ public class Coordinator {
         final List<QueryStatisticsItem.FragmentInstanceInfo> result =
                 Lists.newArrayList();
         for (int index = 0; index < fragments.size(); index++) {
-            for (BackendExecState backendExecState : backendExecStates.values()) {
+            for (DataNodeExecState backendExecState : backendExecStates.values()) {
                 if (fragments.get(index).getFragmentId() != backendExecState.fragmentId) {
                     continue;
                 }
@@ -1771,7 +1771,7 @@ public class Coordinator {
     }
 
     private void attachInstanceProfileToFragmentProfile() {
-        for (BackendExecState backendExecState : backendExecStates.values()) {
+        for (DataNodeExecState backendExecState : backendExecStates.values()) {
             if (!backendExecState.computeTimeInProfile(fragmentProfiles.size())) {
                 return;
             }
@@ -1781,7 +1781,7 @@ public class Coordinator {
 
     // record backend execute state
     // TODO(zhaochun): add profile information and others
-    public class BackendExecState {
+    public class DataNodeExecState {
         TExecPlanFragmentParams commonRpcParams;
         TExecPlanFragmentParams uniqueRpcParams;
         PlanFragmentId fragmentId;
@@ -1794,15 +1794,15 @@ public class Coordinator {
         ComputeNode backend;
         long lastMissingHeartbeatTime = -1;
 
-        public BackendExecState(PlanFragmentId fragmentId, TNetworkAddress host, int profileFragmentId,
-                                TExecPlanFragmentParams rpcParams,
-                                Map<TNetworkAddress, Long> addressToBackendID) {
+        public DataNodeExecState(PlanFragmentId fragmentId, TNetworkAddress host, int profileFragmentId,
+                                 TExecPlanFragmentParams rpcParams,
+                                 Map<TNetworkAddress, Long> addressToBackendID) {
             this(fragmentId, host, profileFragmentId, rpcParams, rpcParams, addressToBackendID);
         }
 
-        public BackendExecState(PlanFragmentId fragmentId, TNetworkAddress host, int profileFragmentId,
-                                TExecPlanFragmentParams commonRpcParams, TExecPlanFragmentParams uniqueRpcParams,
-                                Map<TNetworkAddress, Long> addressToBackendID) {
+        public DataNodeExecState(PlanFragmentId fragmentId, TNetworkAddress host, int profileFragmentId,
+                                 TExecPlanFragmentParams commonRpcParams, TExecPlanFragmentParams uniqueRpcParams,
+                                 Map<TNetworkAddress, Long> addressToBackendID) {
             this.profileFragmentId = profileFragmentId;
             this.fragmentId = fragmentId;
             this.commonRpcParams = commonRpcParams;
@@ -1868,7 +1868,7 @@ public class Coordinator {
                 TNetworkAddress brpcAddress = SystemInfoService.toBrpcHost(address);
 
                 try {
-                    BackendServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
+                    DataNodeServiceClient.getInstance().cancelPlanFragmentAsync(brpcAddress,
                             queryId, fragmentInstanceId(), cancelReason, commonRpcParams.is_pipeline);
                 } catch (RpcException e) {
                     LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
@@ -1910,7 +1910,7 @@ public class Coordinator {
             }
             this.initiated = true;
             try {
-                return BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, uniqueRpcParams);
+                return DataNodeServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, uniqueRpcParams);
             } catch (RpcException e) {
                 // DO NOT throw exception here, return a complete future with error code,
                 // so that the following logic will cancel the fragment.
@@ -1960,7 +1960,7 @@ public class Coordinator {
             }
             this.initiated = true;
             try {
-                return BackendServiceClient.getInstance().execBatchPlanFragmentsAsync(brpcAddress, tRequest);
+                return DataNodeServiceClient.getInstance().execBatchPlanFragmentsAsync(brpcAddress, tRequest);
             } catch (RpcException e) {
                 // DO NOT throw exception here, return a complete future with error code,
                 // so that the following logic will cancel the fragment.

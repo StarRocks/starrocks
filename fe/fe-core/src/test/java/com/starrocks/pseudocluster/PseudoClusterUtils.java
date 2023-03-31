@@ -19,7 +19,7 @@ import java.sql.SQLException;
 public class PseudoClusterUtils {
     public static Tablet triggerIncrementalCloneOnce(PseudoCluster cluster, long destBeId)
             throws SQLException, InterruptedException {
-        PseudoBackend be = cluster.getBackend(destBeId);
+        PseudoDataNode be = cluster.getBackend(destBeId);
         long tabletId = cluster.listTablets("test", "test").get(0);
         Tablet tablet = be.getTablet(tabletId);
         be.setWriteFailureRate(1.0f);
