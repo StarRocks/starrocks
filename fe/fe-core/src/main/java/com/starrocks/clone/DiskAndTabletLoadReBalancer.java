@@ -420,6 +420,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         Map<Pair<Long, Long>, PartitionStat> partitionStats = getPartitionStats(medium, false, null, null);
         OUT:
         while (srcBEIndex > destBEIndex) {
+            int originTablets = alternativeTablets.size();
             DataNodeLoadStatistic srcBEStat = beStats.get(srcBEIndex);
             DataNodeLoadStatistic destBEStat = beStats.get(destBEIndex);
             if (srcBEChanged) {
@@ -530,17 +531,21 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 if (alternativeTablets.size() >= Config.tablet_sched_max_balancing_tablets) {
                     break OUT;
                 }
+                if (alternativeTablets.size() - originTablets >= Config.tablet_sched_slot_num_per_path) {
+                    srcBEIndex--;
+                    destBEIndex++;
+                    srcBEChanged = true;
+                    destBEChanged = true;
+                    continue OUT;
+                }
             }
 
-            // code reach here means that all tablets have moved to destBE, but srcBE and destBE both have not reached the average.
-            // it is not easy to judge whether src or dest should be retained for next round, just random
-            if ((int) (Math.random() * 100) % 2 == 0) {
-                srcBEIndex--;
-                srcBEChanged = true;
-            } else {
-                destBEIndex++;
-                destBEChanged = true;
-            }
+            // code reach here means that all tablets on srcBE have moved to destBE, but srcBE and destBE both have not reached the limit.
+            // it is not easy to judge whether src or dest should be retained for next round, just change both to make originTablets clearly.
+            srcBEIndex--;
+            destBEIndex++;
+            srcBEChanged = true;
+            destBEChanged = true;
         }
 
         return alternativeTablets;
@@ -609,7 +614,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             balanceBackendDisk(medium, avgUsedPercent, pathStats, beId, beStats.size(),
                     alternativeTablets);
-            if (alternativeTablets.size() >= Config.tablet_sched_max_balancing_tablets) {
+            if (alternativeTablets.size() >= Config.tablet_sched_slot_num_per_path) {
                 break;
             }
         }
@@ -621,6 +626,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                     List<TabletSchedCtx> alternativeTablets) {
         Preconditions.checkArgument(pathStats != null && pathStats.size() > 1 && beId > -1 && beNum > 0);
 
+        int originTablets = alternativeTablets.size();
         // aliveBeIds to check tablet health
         List<Long> aliveBeIds = infoService.getBackendIds(true);
 
@@ -725,7 +731,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 schedCtx.setBalanceType(BalanceType.DISK);
                 alternativeTablets.add(schedCtx);
 
-                if (alternativeTablets.size() >= Config.tablet_sched_max_balancing_tablets) {
+                if (alternativeTablets.size() - originTablets >= Config.tablet_sched_slot_num_per_path) {
                     return;
                 }
             }
