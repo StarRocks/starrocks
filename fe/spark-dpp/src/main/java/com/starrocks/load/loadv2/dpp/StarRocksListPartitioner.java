@@ -17,7 +17,6 @@
 
 package com.starrocks.load.loadv2.dpp;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.common.PartitionType;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import org.apache.spark.Partitioner;
@@ -43,7 +42,7 @@ public class StarRocksListPartitioner extends Partitioner {
         this.partitionsMap = new HashMap<>();
         for (int i = 0; i < partitionListKeys.size(); ++i) {
             PartitionListKey partitionListKey = partitionListKeys.get(i);
-            for (DppColumns dppColumns: partitionListKey.inKeys) {
+            for (DppColumns dppColumns : partitionListKey.inKeys) {
                 partitionsMap.put(dppColumns, i);
             }
         }
@@ -66,9 +65,9 @@ public class StarRocksListPartitioner extends Partitioner {
         DppColumns key = (DppColumns) var1;
         // get the partition columns from key as partition key
         DppColumns partitionKey = new DppColumns(key, partitionKeyIndexes);
-       if (partitionsMap.containsKey(partitionKey)) {
-           return partitionsMap.get(partitionKey);
-       }
+        if (partitionsMap.containsKey(partitionKey)) {
+            return partitionsMap.get(partitionKey);
+        }
         return -1;
     }
 
