@@ -48,4 +48,4 @@ private:
     static SchemaScanner::ColumnDesc _s_columns[];
 };
 
-} // namespace starrocks
+} // namespace starrocks::vectorized
