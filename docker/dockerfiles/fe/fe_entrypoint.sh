@@ -247,8 +247,10 @@ fi
 
 update_conf_from_configmap
 if [[ -f "/opt/starrocks/fe/meta/image/ROLE" ]];then
+    log_stderr "start fe with exist meta."
     start_fe_with_meta
 else
+    log_stderr "first start fe with meta not exist."
     collect_env_info
     probe_leader $svc_name
     start_fe_no_meta $svc_name
