@@ -1,16 +1,29 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
-#include "storage/vectorized/schema_change.h"
+#include "storage/schema_change.h"
 
 #include "column/datum_convert.h"
+#include "fs/fs_util.h"
 #include "gtest/gtest.h"
+#include "storage/chunk_helper.h"
+#include "storage/convert_helper.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/storage_engine.h"
-#include "storage/vectorized/chunk_helper.h"
-#include "storage/vectorized/convert_helper.h"
+#include "storage/tablet_manager.h"
 #include "storage/wrapper_field.h"
 #include "testutil/assert.h"
-#include "util/file_utils.h"
 #include "util/logging.h"
 
 namespace starrocks::vectorized {
@@ -72,7 +85,7 @@ protected:
                 base_col->append_datum(datum);
             }
         }
-        RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
+        RowsetWriterContext writer_context;
         writer_context.rowset_id = engine->next_rowset_id();
         writer_context.tablet_uid = tablet->tablet_uid();
         writer_context.tablet_id = tablet->tablet_id();
@@ -109,7 +122,6 @@ protected:
     void test_convert_to_varchar(FieldType type, int type_size, T val, const std::string& expect_val) {
         auto src_tablet_schema =
                 SetTabletSchema("SrcColumn", field_type_to_string(type), "REPLACE", type_size, false, false);
-
         auto dst_tablet_schema = SetTabletSchema("VarcharColumn", "VARCHAR", "REPLACE", 255, false, false);
 
         Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
@@ -129,7 +141,6 @@ protected:
     template <typename T>
     void test_convert_from_varchar(FieldType type, int type_size, std::string val, T expect_val) {
         auto src_tablet_schema = SetTabletSchema("VarcharColumn", "VARCHAR", "REPLACE", 255, false, false);
-
         auto dst_tablet_schema =
                 SetTabletSchema("DstColumn", field_type_to_string(type), "REPLACE", type_size, false, false);
 
@@ -147,11 +158,7 @@ protected:
         Status st = converter->convert_datum(f.type().get(), src_datum, f2.type().get(), &dst_datum, mem_pool.get());
         ASSERT_TRUE(st.ok());
 
-        if constexpr (std::is_same_v<T, JsonValue*>) {
-            EXPECT_EQ(*expect_val, dst_datum.get<JsonValue>());
-        } else {
-            EXPECT_EQ(expect_val, dst_datum.get<T>());
-        }
+        EXPECT_EQ(expect_val, dst_datum.get<T>());
     }
 
     SchemaChange* _sc_procedure;
@@ -215,7 +222,6 @@ TEST_F(SchemaChangeTest, convert_varchar_to_double) {
 
 TEST_F(SchemaChangeTest, convert_float_to_double) {
     auto src_tablet_schema = SetTabletSchema("SrcColumn", "FLOAT", "REPLACE", 4, false, false);
-
     auto dst_tablet_schema = SetTabletSchema("VarcharColumn", "DOUBLE", "REPLACE", 8, false, false);
 
     Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
@@ -234,7 +240,6 @@ TEST_F(SchemaChangeTest, convert_float_to_double) {
 
 TEST_F(SchemaChangeTest, convert_datetime_to_date) {
     auto src_tablet_schema = SetTabletSchema("DateTimeColumn", "DATETIME", "REPLACE", 8, false, false);
-
     auto dst_tablet_schema = SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false);
 
     Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
@@ -261,7 +266,6 @@ TEST_F(SchemaChangeTest, convert_datetime_to_date) {
 
 TEST_F(SchemaChangeTest, convert_date_to_datetime) {
     auto src_tablet_schema = SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false);
-
     auto dst_tablet_schema = SetTabletSchema("DateTimeColumn", "DATETIME", "REPLACE", 8, false, false);
 
     Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
@@ -286,7 +290,6 @@ TEST_F(SchemaChangeTest, convert_date_to_datetime) {
 
 TEST_F(SchemaChangeTest, convert_int_to_date_v2) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
-
     auto dst_tablet_schema = SetTabletSchema("DateColumn", "DATE V2", "REPLACE", 3, false, false);
 
     Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
@@ -309,7 +312,6 @@ TEST_F(SchemaChangeTest, convert_int_to_date_v2) {
 
 TEST_F(SchemaChangeTest, convert_int_to_date) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
-
     auto dst_tablet_schema = SetTabletSchema("DateColumn", "DATE", "REPLACE", 3, false, false);
 
     Field f = ChunkHelper::convert_field_to_format_v2(0, src_tablet_schema->column(0));
@@ -333,7 +335,6 @@ TEST_F(SchemaChangeTest, convert_int_to_date) {
 
 TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
-
     auto dst_tablet_schema = SetTabletSchema("BitmapColumn", "OBJECT", "BITMAP_UNION", 8, false, false);
 
     ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*src_tablet_schema), 4096);
@@ -358,7 +359,6 @@ TEST_F(SchemaChangeTest, convert_int_to_bitmap) {
 
 TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "VARCHAR", "REPLACE", 255, false, false);
-
     auto dst_tablet_schema = SetTabletSchema("HLLColumn", "HLL", "HLL_UNION", 8, false, false);
 
     ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*src_tablet_schema), 4096);
@@ -385,7 +385,6 @@ TEST_F(SchemaChangeTest, convert_varchar_to_hll) {
 
 TEST_F(SchemaChangeTest, convert_int_to_count) {
     auto src_tablet_schema = SetTabletSchema("IntColumn", "INT", "REPLACE", 4, false, false);
-
     auto dst_tablet_schema = SetTabletSchema("CountColumn", "BIGINT", "SUM", 8, false, false);
 
     ChunkPtr src_chunk = ChunkHelper::new_chunk(ChunkHelper::convert_schema_to_format_v2(*src_tablet_schema), 4096);
@@ -444,7 +443,7 @@ TEST_F(SchemaChangeTest, convert_from) {
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
 
-    RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
+    RowsetWriterContext writer_context;
     writer_context.rowset_id = engine->next_rowset_id();
     writer_context.tablet_uid = new_tablet->tablet_uid();
     writer_context.tablet_id = new_tablet->tablet_id();
@@ -479,15 +478,24 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1003);
 
     ChunkChanger chunk_changer(new_tablet->tablet_schema());
+    auto indexs = chunk_changer.get_mutable_selected_column_indexs();
 
     ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(0);
     column_mapping->ref_column = 1;
+    column_mapping->ref_base_reader_column_index = 0;
+    indexs->emplace_back(0);
     column_mapping = chunk_changer.get_mutable_column_mapping(1);
     column_mapping->ref_column = 0;
+    column_mapping->ref_base_reader_column_index = 1;
+    indexs->emplace_back(1);
     column_mapping = chunk_changer.get_mutable_column_mapping(2);
     column_mapping->ref_column = 2;
+    column_mapping->ref_base_reader_column_index = 2;
+    indexs->emplace_back(2);
     column_mapping = chunk_changer.get_mutable_column_mapping(3);
     column_mapping->ref_column = 3;
+    column_mapping->ref_base_reader_column_index = 3;
+    indexs->emplace_back(3);
     column_mapping = chunk_changer.get_mutable_column_mapping(4);
     column_mapping->ref_column = -1;
     const TabletColumn& hll_column_schema = new_tablet->tablet_schema().column(4);
@@ -511,7 +519,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting) {
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
 
-    RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
+    RowsetWriterContext writer_context;
     writer_context.rowset_id = engine->next_rowset_id();
     writer_context.tablet_uid = new_tablet->tablet_uid();
     writer_context.tablet_id = new_tablet->tablet_id();
@@ -566,7 +574,7 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
 
-    RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
+    RowsetWriterContext writer_context;
     writer_context.rowset_id = engine->next_rowset_id();
     writer_context.tablet_uid = new_tablet->tablet_uid();
     writer_context.tablet_id = new_tablet->tablet_id();
@@ -579,7 +587,7 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
     ASSERT_TRUE(
-            _sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
+            _sc_procedure->process_v2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
     delete tablet_rowset_reader;
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1101);
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1102);
@@ -635,7 +643,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
 
-    RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
+    RowsetWriterContext writer_context;
     writer_context.rowset_id = engine->next_rowset_id();
     writer_context.tablet_uid = new_tablet->tablet_uid();
     writer_context.tablet_id = new_tablet->tablet_id();
@@ -648,7 +656,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
     ASSERT_TRUE(
-            _sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
+            _sc_procedure->process_v2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
     delete tablet_rowset_reader;
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1103);
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1104);
@@ -699,7 +707,7 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     ASSERT_TRUE(tablet_rowset_reader->prepare().ok());
     ASSERT_TRUE(tablet_rowset_reader->open(read_params).ok());
 
-    RowsetWriterContext writer_context(kDataFormatUnknown, kDataFormatV2);
+    RowsetWriterContext writer_context;
     writer_context.rowset_id = engine->next_rowset_id();
     writer_context.tablet_uid = new_tablet->tablet_uid();
     writer_context.tablet_id = new_tablet->tablet_id();
@@ -712,16 +720,45 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
     ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
 
     ASSERT_TRUE(
-            _sc_procedure->processV2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
+            _sc_procedure->process_v2(tablet_rowset_reader, rowset_writer.get(), new_tablet, base_tablet, rowset).ok());
     delete tablet_rowset_reader;
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1203);
     (void)StorageEngine::instance()->tablet_manager()->drop_tablet(1204);
 }
 
+TEST_F(SchemaChangeTest, convert_varchar_to_json) {
+    auto mem_pool = std::make_unique<MemPool>();
+    std::vector<std::string> test_cases = {"{\"a\": 1}", "null", "[1,2,3]"};
+    for (auto json_str : test_cases) {
+        JsonValue expected = JsonValue::parse(json_str).value();
+
+        BinaryColumn::Ptr src_column = BinaryColumn::create();
+        JsonColumn::Ptr dst_column = JsonColumn::create();
+        src_column->append(json_str);
+
+        auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_VARCHAR, OLAP_FIELD_TYPE_JSON);
+        TypeInfoPtr type1 = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+        TypeInfoPtr type2 = get_type_info(OLAP_FIELD_TYPE_JSON);
+        Status st = converter->convert_column(type1.get(), *src_column, type2.get(), dst_column.get(), mem_pool.get());
+        ASSERT_TRUE(st.ok());
+        ASSERT_EQ(*dst_column->get_object(0), expected);
+    }
+}
+
 TEST_F(SchemaChangeTest, convert_json_to_varchar) {
     std::string json_str = "{\"a\": 1}";
     JsonValue json = JsonValue::parse(json_str).value();
-    test_convert_to_varchar(OLAP_FIELD_TYPE_JSON, 16, &json, json_str);
+    JsonColumn::Ptr src_column = JsonColumn::create();
+    BinaryColumn::Ptr dst_column = BinaryColumn::create();
+    src_column->append(&json);
+
+    auto converter = vectorized::get_type_converter(OLAP_FIELD_TYPE_JSON, OLAP_FIELD_TYPE_VARCHAR);
+    auto mem_pool = std::make_unique<MemPool>();
+    TypeInfoPtr type1 = get_type_info(OLAP_FIELD_TYPE_JSON);
+    TypeInfoPtr type2 = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
+    Status st = converter->convert_column(type1.get(), *src_column, type2.get(), dst_column.get(), mem_pool.get());
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ(dst_column->get_slice(0), json_str);
 }
 
 } // namespace starrocks::vectorized
