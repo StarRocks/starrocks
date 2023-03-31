@@ -1,442 +1,512 @@
 # 管理用户权限
 
-本文介绍如何管理 StarRocks 集群中的用户权限。
+本文描述如何在 StarRocks 中管理用户、角色和权限。
 
-StarRocks 的权限管理系统参照了 MySQL 的权限管理机制，支持表级别细粒度的权限控制、基于角色的权限访问控制，以及白名单机制。
+StarRocks 同时采用了基于角色的访问控制 (RBAC) 和基于身份的访问控制 (IBAC) 以管理集群内的权限，使集群管理员可以轻松地在不同粒度级别上限制集群内的权限。
 
-## 创建用户
+在 StarRocks 集群中，您可以将权限授予用户或角色。角色是一组权限，可根据需要授予集群内的用户或角色。一个用户或角色可以被授予一个或多个角色，这些角色决定了他们对不同对象的权限。
 
-通过以下命令创建 StarRocks 用户。
+## 管理用户
 
-> 注意
->
-> 拥有 ADMIN 权限，或任意层级的 GRANT 权限的用户才可以创建新用户。
+拥有系统预置角色 `user_admin` 的用户可以在 StarRocks 中创建、修改和删除用户。
 
-```sql
-CREATE USER user_identity [auth_option] [DEFAULT ROLE 'role_name'];
-```
+### 创建用户
 
-参数：
+您可以通过指定用户身份（user identity）、认证方式和默认角色来创建用户。
 
-* `user_identity`：用户标识。以 `username@'userhost'` 或 `username@['domain']` 的形式标明。
-* `auth_option`：认证方式。可选方式包括：
-  * `IDENTIFIED BY 'auth_string'`
-  * `IDENTIFIED WITH auth_plugin`
-  * `IDENTIFIED WITH auth_plugin BY 'auth_string'`
-  * `IDENTIFIED WITH auth_plugin AS 'auth_string'`
-* `DEFAULT ROLE`：当前用户的默认角色。
+StarRocks 支持使用用户密码登录或 LDAP 认证作为用户认证方式。有关 StarRocks 认证方式的更多信息，请参阅 [用户认证](../administration/Authentication.md)。有关创建用户的更多操作说明，请参阅 [CREATE USER](../sql-reference/sql-statements/account-management/CREATE%20USER.md)。
 
-示例：
+以下示例创建用户 `jack`，仅允许其从 IP 地址 `172.10.1.10` 进行连接，为其设置密码为 `12345`，并将角色 `example_role` 分配给它作为其默认角色：
 
-```sql
--- 创建一个无密码用户，且不指定 host。
-CREATE USER 'jack';
--- 使用明文密码创建用户，允许其从 '172.16.1.10' 登录。
-CREATE USER jack@'172.16.1.10' IDENTIFIED WITH mysql_native_password BY '123456';
--- 使用暗文密码创建用户。
-CREATE USER jack@'172.16.1.10' IDENTIFIED BY PASSWORD '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
--- 创建一个 LDAP 认证的用户，并指定用户在 LDAP 中的 Distinguished Name (DN)。
-CREATE USER jack@'172.16.1.10' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com';
--- 创建一个允许从 '192.168' 子网登录的用户，同时指定其角色为 example_role。
-CREATE USER 'jack'@'192.168.%' DEFAULT ROLE 'example_role';
--- 创建一个允许从域名 'example_domain' 登录的用户。
-CREATE USER 'jack'@['example_domain'] IDENTIFIED BY '12345';
-```
-
-> 说明
-> 您可以通过 `PASSWORD()` 方法获得密文密码。
-
-## 修改用户密码
-
-通过以下命令修改用户登录密码。
-
-> **注意**
->
-> * 拥有 ADMIN 权限，或者 GLOBAL 层级 GRANT 权限的用户，可以设置任意用户的密码。
-> * 普通用户可以设置自己对应的 User Identity 的密码。自己对应的 User Identity 可以通过 SELECT CURRENT_USER(); 命令查看。
-> * 拥有非 GLOBAL 层级 GRANT 权限的用户，不可以设置已存在用户的密码，仅能在创建用户时指定密码。
-> * 除了 root 用户自身，任何用户都不能重置 root 用户的密码。
-
-```sql
-SET PASSWORD [FOR user_identity] = [PASSWORD('plain password')]|['hashed password'];
-```
-
-示例：
-
-```sql
--- 修改当前用户的密码。
-SET PASSWORD = PASSWORD('123456')
-SET PASSWORD = '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'
--- 修改指定用户密码。
-SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456')
-SET PASSWORD FOR 'jack'@['domain'] = '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'
+```SQL
+CREATE USER jack@'172.10.1.10' IDENTIFIED BY '12345' DEFAULT ROLE 'example_role';
 ```
 
 > **说明**
 >
-> 您可以通过 `PASSWORD()` 方法获得暗文密码。
+> - StarRocks 会在存储用户密码之前对其进行加密。您可以使用 password() 函数获取加密后的密码。
+> - 如果在创建用户期间未指定默认角色，StarRocks 会指定系统预置角色 `PUBLIC` 作为用户默认角色。
 
-### 修改 root 用户密码
+### 修改用户
 
-如果您忘记 `root` 用户密码，您可以通过以下步骤重置密码：
+您可以修改用户的密码、默认角色或属性。
 
-1. 在**所有 FE 节点**的配置文件 **fe/conf/fe.conf** 中添加以下配置项以关闭 FE 鉴权：
+当用户连接到 StarRocks 时，其默认角色会自动激活。有关如何在连接后为用户启用所有（默认和授予的）角色的说明，请参阅[启用所有角色](#启用所有角色)。
 
-    ```plain
-    enable_auth_check = false
-    ```
+#### 修改用户默认角色
 
-2. 重启**所有 FE 节点**。
+您可以使用 [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET%20DEFAULT%20ROLE.md) 或 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER%20USER.md) 设置用户的默认角色。
 
-    ```shell
-    ./fe/bin/stop_fe.sh
-    ./fe/bin/start_fe.sh
-    ```
+以下两个示例都将 `jack` 的默认角色设置为 `db1_admin`。设置前需要确保 `db1_admin` 角色已经赋予给了 `jack`。
 
-3. 通过 MySQL 客户端登录 `root` 用户，无需密码。
+- 通过 SET DEFAULT ROLE 设置默认角色：
 
-    ```shell
-    mysql -h <fe_ip> -P<fe_query_port> -uroot
-    ```
+  ```SQL
+  SET DEFAULT ROLE 'db1_admin' TO jack@'172.10.1.10';
+  ```
 
-4. 修改 `root` 用户密码。
+- 通过 ALTER USER 设置默认角色：
 
-    ```sql
-    SET PASSWORD for root = PASSWORD('xxxxxx');
-    ```
+  ```SQL
+  ALTER USER jack@'172.10.1.10' DEFAULT ROLE 'db1_admin';
+  ```
 
-5. 在**所有 FE 节点**的配置文件 **fe/conf/fe.conf** 中修改配置项 `enable_auth_check` 为 `true` 以重新开启 FE 鉴权。
+#### 修改用户属性
 
-    ```plain
-    enable_auth_check = true
-    ```
+您可以使用 [SET PROPERTY](../sql-reference/sql-statements/account-management/SET%20PROPERTY.md) 设置用户的属性。
 
-6. 重启**所有 FE 节点**。
+相同用户名的用户标识共享一个属性。在以下示例中，只需将属性配置给 `jack`，那么该属性配置会对所有含用户名 `jack` 的用户标识生效。
 
-    ```shell
-    ./fe/bin/stop_fe.sh
-    ./fe/bin/start_fe.sh
-    ```
+将用户 `jack` 的最大连接数设置为 `1000`：
 
-7. 通过 MySQL 客户端登录 `root` 用户验证密码是否修改成功。
+```SQL
+SET PROPERTY FOR jack 'max_user_connections' = '1000';
+```
 
-    ```shell
-    mysql -h <fe_ip> -P<fe_query_port> -uroot -p<xxxxxx>
-    ```
+#### 重置用户密码
 
-## 删除用户
+您可以使用 [SET PASSWORD](../sql-reference/sql-statements/account-management/SET%20PASSWORD.md) 或 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER%20USER.md) 为用户重置密码。
 
-通过以下命令删除 StarRocks 用户。
+> **说明**
+>
+> - 任何用户都可以重置自己的密码，无需任何权限。
+> - `root` 用户的密码仅 `root` 用户自身可以重置。如果您丢失了密码并且无法连接到 StarRocks，请参阅 [重置丢失的 root 密码](#重置丢失的-root-密码)。
+
+以下两个示例都将 `jack` 的密码重置为 `54321`：
+
+- 通过 SET PASSWORD 重置密码：
+
+  ```SQL
+  SET PASSWORD FOR jack@'172.10.1.10' = PASSWORD('54321');
+  ```
+
+- 通过 ALTER USER 重置密码：
+
+  ```SQL
+  ALTER USER jack@'172.10.1.10' IDENTIFIED BY '54321';
+  ```
+
+#### 重置丢失的 root 密码
+
+如果您丢失了 root 用户的密码且无法连接到 StarRocks，您可以按照以下步骤重置密码：
+
+1. 在**所有 FE 节点**的配置文件 **fe/conf/fe.conf** 中添加以下配置项以关闭用户认证：
+
+   ```YAML
+   enable_auth_check = false
+   ```
+
+2. 重启**所有 FE 节点**使配置生效。
+
+   ```Bash
+   ./fe/bin/stop_fe.sh
+   ./fe/bin/start_fe.sh
+   ```
+
+3. 使用 `root` 用户从 MySQL 客户端连接到 StarRocks。禁用用户认证时，无需密码即可登录。
+
+   ```Bash
+   mysql -h <fe_ip_or_fqdn> -P<fe_query_port> -uroot
+   ```
+
+4. 重置 `root` 用户密码。
+
+   ```SQL
+   SET PASSWORD for root = PASSWORD('xxxxxx');
+   ```
+
+5. 在**所有 FE 节点**的配置文件 **fe/conf/fe.conf** 中将配置项 `enable_auth_check` 设置为 `true` 以重新开启用户认证。
+
+   ```YAML
+   enable_auth_check = true
+   ```
+
+6. 重启**所有 FE 节点**使配置生效。
+
+   ```Bash
+   ./fe/bin/stop_fe.sh
+   ./fe/bin/start_fe.sh
+   ```
+
+7. 使用 `root` 用户和新密码从 MySQL 客户端连接 StarRocks 以验证密码是否重置成功。
+
+   ```Bash
+   mysql -h <fe_ip_or_fqdn> -P<fe_query_port> -uroot -p<xxxxxx>
+   ```
+
+### 删除用户
+
+您可以使用 [DROP USER](../sql-reference/sql-statements/account-management/DROP%20USER.md) 删除用户。
+
+以下示例删除用户 `jack`：
+
+```SQL
+DROP USER jack@'172.10.1.10';
+```
+
+## 管理角色
+
+拥有系统预置角色 `user_admin` 的用户可以在 StarRocks 中创建、授予、撤销和删除角色。
+
+### 创建角色
+
+您可以使用 [CREATE ROLE](../sql-reference/sql-statements/account-management/CREATE%20ROLE.md) 创建角色。
+
+以下示例创建角色 `example_role`：
+
+```SQL
+CREATE ROLE example_role;
+```
+
+### 授予角色
+
+您可以使用 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 将角色授予用户或其他角色。
+
+- 将角色授予用户。
+
+  以下示例将角色 `example_role` 授予用户 `jack`：
+
+  ```SQL
+  GRANT example_role TO USER jack@'172.10.1.10';
+  ```
+
+- 将角色授予其他角色。
+
+  以下示例将角色 `example_role` 授予角色 `test_role`：
+
+  ```SQL
+  GRANT example_role TO ROLE test_role;
+  ```
+
+### 撤销角色
+
+您可以使用 [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) 将角色从用户或其他角色撤销。
+
+> **说明**
+>
+> 系统预置的默认角色 `PUBLIC` 无法撤销。
+
+- 从用户撤销角色。
+
+  以下示例从用户 `jack` 撤销角色 `example_role`：
+
+  ```SQL
+  REVOKE example_role FROM USER jack@'172.10.1.10';
+  ```
+
+- 从角色撤销其他角色。
+
+  以下示例从角色 `test_role` 撤销角色 `example_role`：
+
+  ```SQL
+  REVOKE example_role FROM ROLE test_role;
+  ```
+
+### 删除角色
+
+您可以使用 [DROP ROLE](../sql-reference/sql-statements/account-management/DROP%20ROLE.md) 删除角色。
+
+以下示例删除角色 `example_role`：
+
+```SQL
+DROP ROLE example_role;
+```
 
 > **注意**
 >
-> 拥有 ADMIN 权限的用户可以删除用户。
+> 系统预置角色无法删除。
 
-```sql
-DROP USER 'user_identity';
+### 启用所有角色
+
+用户的默认角色是每次用户连接到 StarRocks 集群时自动激活的角色。授予给角色的权限仅在授予后生效。
+
+如果您希望集群里所有的用户在登录时都默认激活所有角色（默认和授予的角色），可以执行如下操作。该操作需要 system 层的 OPERATE 权限。
+
+执行以下语句为集群中用户启用所有角色：
+
+```SQL
+SET GLOBAL activate_all_roles_on_login = TRUE;
 ```
 
-## 授予权限
+您还可以通过 SET ROLE 来手动激活拥有的角色。例如用户 jack@'172.10.1.10' 拥有 `db_admin` 和 `user_admin` 角色，但此角色不是他的默认角色，因此在登录时不会被默认激活。当 jack@'172.10.1.10' 需要激活 `db_admin`和 `user_admin` 时，可以手动执行 `SET ROLE db_admin, user_admin;`。 注意 SET ROLE 命令是覆盖的，如果您希望激活拥有的所有角色，可以执行 SET ROLE ALL。
 
-通过以下命令授予指定用户或角色指定的权限。
+## 管理权限
 
-> 注意
->
-> * 拥有 ADMIN 权限，或者 GLOBAL 层级 GRANT 权限的用户，可以授予任意**用户**的权限。
-> * 拥有 DATABASE 层级 GRANT 权限的用户，可以授予任意用户对指定**数据库**的权限。
-> * 拥有 TABLE 层级 GRANT 权限的用户，可以授予任意用户对指定数据库中**指定表**的权限。
-> * ADMIN_PRIV 权限只能在 GLOBAL 层级授予或撤销。
-> * 拥有 GLOBAL 层级 GRANT_PRIV 实际等同于拥有 ADMIN_PRIV，因为该层级的 GRANT_PRIV 有授予任意权限的权限，请谨慎授予该权限。
+拥有系统预置角色 `user_admin` 的用户可以在 StarRocks 中授予和撤销权限。
 
-```sql
--- 授予指定用户数据库级或表级权限。
-GRANT privilege_list ON db_name[.tbl_name] TO user_identity [ROLE role_name];
--- 授予指定用户指定资源权限。
-GRANT privilege_list ON RESOURCE resource_name TO user_identity [ROLE role_name];
+### 授予权限
+
+您可以使用 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 向用户或角色授予权限。
+
+- 向用户授予权限。
+
+  以下示例将表 `sr_member` 的 SELECT 权限授予用户 `jack`，并允许 `jack` 将此权限授予其他用户或角色（通过在 SQL 中指定 WITH GRANT OPTION）：
+
+  ```SQL
+  GRANT SELECT ON TABLE sr_member TO USER jack@'172.10.1.10' WITH GRANT OPTION;
+  ```
+
+- 向角色授予权限。
+
+  以下示例将表 `sr_member` 的 SELECT 权限授予角色 `example_role`：
+
+  ```SQL
+  GRANT SELECT ON TABLE sr_member TO ROLE example_role;
+  ```
+
+### 撤销权限
+
+您可以使用 [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) 撤销用户或角色的权限。
+
+- 撤销用户的权限。
+
+  以下示例撤销用户 `jack` 对表 `sr_member` 的 SELECT 权限，并禁止 `jack` 将此权限授予其他用户或角色：
+
+  ```SQL
+  REVOKE SELECT ON TABLE sr_member FROM USER jack@'172.10.1.10';
+  ```
+
+- 撤销角色的权限。
+
+  以下示例撤销角色 `example_role` 对表 `sr_member` 的 SELECT 权限：
+
+  ```SQL
+  REVOKE SELECT ON TABLE sr_member FROM ROLE example_role;
+  ```
+
+## 查看用户和角色信息
+
+拥有系统预置角色 `user_admin` 的用户可以查看 StarRocks 集群中用户和角色的信息。
+
+### 查看权限信息
+
+您可以使用 [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md) 查看授予用户或角色的权限。
+
+- 查看当前用户的权限。
+
+  ```SQL
+  SHOW GRANTS;
+  ```
+
+  > **说明**
+  >
+  > 任何用户都可以查看自身的权限，无需任何权限。
+
+- 查看特定用户的权限。
+
+  以下示例查看用户 `jack` 的权限。
+
+  ```SQL
+  SHOW GRANTS FOR jack@'172.10.1.10';
+  ```
+
+- 查看特定角色的权限。
+
+  以下示例查看角色 `example_role` 的权限。
+
+  ```SQL
+  SHOW GRANTS FOR ROLE example_role;
+  ```
+
+### 查看用户属性
+
+您可以使用 [SHOW PROPERTY](../sql-reference/sql-statements/account-management/SET%20PROPERTY.md) 查看用户的属性。
+
+以下示例查看用户 `jack` 的属性：
+
+```SQL
+SHOW PROPERTY FOR jack@'172.10.1.10';
 ```
 
-参数：
+### 查看角色
 
-* `privilege_list`：需要赋予的权限列表，以逗号分隔。
-  * NODE_PRIV：节点变更权限。包括 FE、BE、BROKER 节点的添加、删除、下线等操作。目前该权限只能授予 root 用户。
-  * GRANT_PRIV：权限变更权限。允许执行包括授权、撤权、添加/删除/变更 用户/角色等操作。
-  * SELECT_PRIV：对数据库、表的只读权限。
-  * LOAD_PRIV：对数据库、表的写权限。包括 LOAD、INSERT、DELETE 等。
-  * ALTER_PRIV：对数据库、表的更改权限。包括重命名库/表、添加/删除/变更 列、添加/删除分区等操作。
-  * CREATE_PRIV：创建数据库、表、视图的权限。
-  * DROP_PRIV：删除数据库、表、视图的权限。
-  * USAGE_PRIV：资源的使用权限。
-* `db_name`：数据库名。
-* `tbl_name`：表名。
-* `user_identity`：用户标识。
-* `ROLE`：将权限赋予指定的 ROLE，如果指定的 ROLE 不存在，则会自动创建。
+您可以使用 [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md) 查看 StarRocks 集群中的所有角色。
 
-示例：
-
-```sql
--- 授予所有库和表的权限给用户。
-GRANT SELECT_PRIV ON *.* TO 'jack'@'%';
--- 授予指定库表的权限给用户。
-GRANT SELECT_PRIV,ALTER_PRIV,LOAD_PRIV ON db1.tbl1 TO 'jack'@'192.8.%';
--- 授予指定库表的权限给角色。
-GRANT LOAD_PRIV ON db1.* TO ROLE 'my_role';
--- 授予所有资源的使用权限给用户。
-GRANT USAGE_PRIV ON RESOURCE * TO 'jack'@'%';
--- 授予指定资源的使用权限给用户。
-GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO 'jack'@'%';
--- 授予指定资源的使用权限给角色。
-GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO ROLE 'my_role';
-```
-
-## 撤销权限
-
-通过以下命令撤销用户或角色指定权限。
-
-> 注意
->
-> * 拥有 ADMIN 权限，或者 GLOBAL 层级 GRANT 权限的用户，可以撤销任意**用户**的权限。
-> * 拥有 DATABASE 层级 GRANT 权限的用户，可以撤销任意用户对指定**数据库**的权限。
-> * 拥有 TABLE 层级 GRANT 权限的用户，可以撤销任意用户对指定数据库中**指定表**的权限。
-
-```sql
--- 撤销指定用户数据库级或表级权限。
-REVOKE privilege_list ON db_name[.tbl_name] FROM user_identity [ROLE role_name];
--- 撤销指定用户指定资源权限。
-REVOKE privilege_list ON RESOURCE resource_name FROM user_identity [ROLE role_name];
-```
-
-## 创建角色
-
-您可以对创建好的角色可以进行授权操作，拥有该角色的用户会拥有角色被赋予的权限。
-
-通过以下命令创建指定角色。
-
-> 注意
->
-> 拥有 ADMIN 权限的用户才可以创建角色。
-
-```sql
-CREATE ROLE role_name;
-```
-
-## 查看角色
-
-通过以下命令查看已创建的角色。
-
-```sql
+```SQL
 SHOW ROLES;
 ```
 
-## 删除角色
+### 查看用户
 
-> 注意
->
-> 拥有 GRANT_PRIV 或 ADMIN_PRIV 权限的用户可以删除角色。
+您可以使用 SHOW USERS 查看 StarRocks 集群中的所有用户。
 
-通过以下命令删除指定角色。
-
-```sql
-DROP ROLE role_name;
+```SQL
+SHOW USERS;
 ```
-
-## 查看用户权限
-
-您可以查看所有用户或指定用户的权限。
-
-* 查看所有用户的权限。
-
-```sql
-SHOW ALL GRANTS;
-```
-
-* 查看指定用户的权限。
-
-```sql
-SHOW GRANTS FOR user_identity;
-```
-
-## 查看用户属性
-
-通过以下命令查看用户属性。
-
-```sql
-SHOW PROPERTY [FOR user] [LIKE key];
-```
-
-参数：
-
-* `user`：用户名。
-* `LIKE`：相关属性关键字。
-
-示例：
-
-```plain text
--- 查看指定用户的属性。
-SHOW PROPERTY FOR 'jack';
-+------------------------+-------+
-| Key                    | Value |
-+------------------------+-------+
-| default_load_cluster   |       |
-| max_user_connections   | 100   |
-| quota.high             | 800   |
-| quota.low              | 100   |
-| quota.normal           | 400   |
-| resource.cpu_share     | 1000  |
-| resource.hdd_read_iops | 80    |
-| resource.hdd_read_mbps | 30    |
-| resource.io_share      | 1000  |
-| resource.ssd_read_iops | 1000  |
-| resource.ssd_read_mbps | 30    |
-+------------------------+-------+
--- 看指定用户导入 cluster 相关属性。
-SHOW PROPERTY FOR 'jack' LIKE '%load_cluster%';
-```
-
-## 名词与概念
-
-### 名词解释
-
-* 用户标识 User Identity
-
-在 StarRocks 权限系统中，一个用户被识别为一个用户标识（User Identity）。用户标识由 `username` 和 `userhost` 共同组成。其中 `username` 为用户名，由英文大小写组成。`userhost` 表示该用户链接来自的 IP。用户标识以 `username@'userhost'` 的方式呈现，表示来自 `userhost` 的 `username`。
-
-用户标识的另一种表现方式为 `username@['domain']`，其中 `domain` 为域名，可以通过 DNS 解析为一组 IP。最终表现为一组 `username@'userhost'`。
-
-以下示例统一使用 `username@'userhost'` 表示用户标识。
-
-* 权限 Privilege
-
-不同的权限代表不同的操作许可。权限作用的对象是节点、数据库或表。
-
-* 角色 Role
-
-StarRocks 可以创建自定义命名的角色。角色可以被看做是一组权限的集合。新创建的用户可以被赋予某一角色，从而自动被赋予该角色所拥有的权限。后续对角色的权限变更，也会体现在所有属于该角色的用户权限上。
-
-* 用户属性 User Property
-
-用户属性直接附属于某一用户，而非用户标识。即 `user1@'192.%'` 和 `user1@['domain']` 都拥有同一组用户属性，该属性属于用户 `user1`，而非 `user1@'192.%'` 或 `user1@['domain']`。用户属性包括但不限于：用户最大连接数、导入集群配置等等。
-
-### 相关命令
-
-* 创建用户：`CREATE USER`
-* 删除用户：`DROP USER`
-* 授权：`GRANT`
-* 撤权：`REVOKE`
-* 创建角色：`CREATE ROLE`
-* 删除角色：`DROP ROLE`
-* 查看当前用户权限：`SHOW GRANTS`
-* 查看所有用户权限：`SHOW ALL GRANTS`
-* 查看已创建的角色：`SHOW ROLES`
-* 查看用户属性：`SHOW PROPERTY`
-
-### 权限类型
-
-StarRocks 目前支持以下几种权限：
-
-* NODE_PRIV：节点变更权限。包括 FE、BE、BROKER 节点的添加、删除、下线等操作。目前该权限只能授予 Root 用户。
-* GRANT_PRIV：权限变更权限。允许执行包括授权、撤权、添加/删除/变更 用户/角色等操作。
-* SELECT_PRIV：对数据库、表的只读权限。
-* LOAD_PRIV：对数据库、表的写权限。包括 Load、Insert、Delete 等。
-* ALTER_PRIV：对数据库、表的更改权限。包括重命名库/表、添加/删除/变更列、添加/删除分区等操作。
-* CREATE_PRIV：创建数据库、表、视图的权限。
-* DROP_PRIV：删除数据库、表、视图的权限。
-* USAGE_PRIV：资源的使用权限。
-
-### 权限层级
-
-根据权限适用范围的不同，StarRocks 将库表的权限分为以下三个层级：
-
-* GLOBAL LEVEL：全局权限。即通过 GRANT 语句授予的 *.* 上的权限。被授予的权限适用于任意数据库中的任意表。
-* DATABASE LEVEL：数据库级权限。即通过 GRANT 语句授予的 db.* 上的权限。被授予的权限适用于指定数据库中的任意表。
-* TABLE LEVEL：表级权限。即通过 GRANT 语句授予的 db.tbl 上的权限。被授予的权限适用于指定数据库中的指定表。
-
-将资源的权限分为以下两个层级：
-
-* GLOBAL LEVEL：全局权限。即通过 GRANT 语句授予的 * 上的权限。被授予的权限适用于资源。
-* RESOURCE LEVEL: 资源级权限。即通过 GRANT 语句授予的 resource_name 上的权限。被授予的权限适用于指定资源。
-
-### 权限说明
-
-ADMIN_PRIV 和 GRANT_PRIV 权限同时拥有授予权限的权限，较为特殊。这里对和这两个权限相关的操作逐一说明。
-
-* `CREATE USER`
-
-  * 拥有 ADMIN 权限，或任意层级的 GRANT 权限的用户可以创建新用户。
-
-* `DROP USER`
-
-  * 只有 ADMIN 权限可以删除用户。
-
-* `CREATE ROLE`/`DROP ROLE`
-
-  * 只有拥有 GRANT_PRIV 或 ADMIN_PRIV 权限可以创建角色。
-
-* `GRANT/REVOKE`
-
-  * 拥有 ADMIN 权限，或者 GLOBAL 层级 GRANT 权限的用户，可以授予或撤销任意**用户**的权限。
-  * 拥有 DATABASE 层级 GRANT 权限的用户，可以授予或撤销任意用户对指定**数据库**的权限。
-  * 拥有 TABLE 层级 GRANT 权限的用户，可以授予或撤销任意用户对指定数据库中**指定表**的权限。
-
-* `SET PASSWORD`
-
-  * 拥有 ADMIN 权限，或者 GLOBAL 层级 GRANT 权限的用户，可以设置任意用户的密码。
-  * 普通用户可以设置自己对应的 User Identity 的密码。自己对应的 User Identity 可以通过 SELECT CURRENT_USER(); 命令查看。
-  * 拥有非 GLOBAL 层级 GRANT 权限的用户，不可以设置已存在用户的密码，仅能在创建用户时指定密码。
-
-### 其他说明
-
-StarRocks 初始化时，会自动创建如下角色和用户：
-
-* **角色**
-  * operator 角色：该角色的用户有且只有一个，拥有 NODE_PRIV 和 ADMIN_PRIV，即对 StarRocks 的所有权限。后续某个升级版本中，可能会将该角色的权限限制为 NODE_PRIV，即仅授予节点变更权限。以满足某些云上部署需求。
-  * admin 角色：该角色拥有 ADMIN_PRIV，即除节点变更以外的所有权限。您可以创建多个 admin 角色。
-* **用户**
-  * root@'%'：root 用户，允许从任意节点登录，角色为 operator。
-  * admin@'%'：admin 用户，允许从任意节点登录，角色为 admin。
-
-> 说明
-> StarRocks 不支持删除或更改默认创建的角色或用户的权限。
-
-一些可能产生冲突的操作说明：
-
-* **域名与 IP 冲突**
-
-假设创建了如下用户 `CREATE USER user1@['domain'];`，并且授权 `GRANT SELECT_PRIV ON` `*.*` `TO user1@['domain']`。此时该 `domain` 被解析为两个 IP：`ip1` 和 `ip2`。
-
-假设之后我们对 `user1@'ip1'` 进行一次单独授权 `GRANT ALTER_PRIV ON` `*.*` `TO user1@'ip1';`，则 `user1@'ip1'` 的权限会被修改为 SELECT_PRIV， ALTER_PRIV，而且当我们再次变更 `user1@['domain']` 的权限时，`user1@'ip1'` 也不会跟随改变。
-
-* **重复IP冲突**
-
-假设创建了如下用户 `CREATE USER user1@'%' IDENTIFIED BY "12345";` 以及 `CREATE USER user1@'192.%' IDENTIFIED BY "abcde";`。
-
-在优先级上，`'192.%'` 优先于 `'%'`，因此，当用户 `user1` 从 `192.168.1.1` 这台机器尝试使用密码 `'12345'` 登录 StarRocks 时会被拒绝。
-
-* **忘记密码**
-
-如果忘记密码无法登录 StarRocks，您可以在 StarRocks FE 节点所在机器，使用如下命令无密码登录 StarRocks：`mysql-client -h 127.0.0.1 -P query_port -uroot`。登录后，您可以通过 `SET PASSWORD` 命令重置密码。
-
-关于 `current_user()` 和 `user()`：
-
-用户可以通过 `SELECT current_user();` 和 `SELECT user();` 分别查看 `current_user` 和 `user`。其中 `current_user` 表示当前用户是以哪种身份通过认证系统的，而 `user` 则是用户当前实际的用户标识。
-
-例如，假设创建了 `user1@'192.%'` 用户，然后来自 `192.168.10.1` 的用户 `user1` 登录了系统，则此时的 `current_user` 为 `user1@'192.%'`，而 `user` 为 `user1@'192.168.10.1'`。
-
-所有权限都是赋予某个 `current_user` 的，真实用户拥有对应的 `current_user` 的所有权限。
 
 ## 最佳实践
 
-这里列举一些 StarRocks 权限系统的使用场景。
+### 多业务线权限管理
 
-### 场景一：权限分配
+通常，在企业内部，StarRocks 集群会由平台方统一运维管理，向各类业务方提供服务。其中，一个 StarRocks 集群内可能包含多个业务线，每个业务线可能涉及到一个或多个数据库。
 
-StarRocks 集群的使用者分为管理员（Admin）、开发工程师（RD）和用户（Client）。其中管理员拥有整个集群的所有权限，主要负责集群的搭建、节点管理等。开发工程师负责业务建模，包括建库建表、数据的导入和修改等。用户访问不同的数据库和表来获取数据。
+举例来说，在人员架构上包含平台方和业务方。业务方涉及业务线 A 和业务线 B，业务线内包含不同角色的岗位，例如分析师和业务员。分析师日常需要产出报表、分析报告，业务员日常需要查询分析师产出的报表。
 
-在这种场景下，可以为管理员赋予 ADMIN 权限或 GRANT 权限。对 RD 赋予对任意或指定数据库表的 CREATE、DROP、ALTER、LOAD、SELECT 权限。对 Client 赋予对任意或指定数据库表 SELECT 权限。同时，也可以通过创建不同的角色，来简化对多个用户的授权操作。
+![User Privileges](../assets/user_privilege_1.jpg)
 
-### 场景二：多业务线
+在数据结构上，业务 A 和业务 B 均有自己的数据库 `DB_A` 和 `DB_B`。在数据库 `DB_C` 中，业务 A 和业务 B 均需要用到部分表。并且公司中所有人都可以访问公共数据库 `DB_PUBLIC`。
 
-一个集群内有多个业务，每个业务可能使用一个或多个数据。每个业务需要管理自己的用户。在这种场景下，管理员用户可以为每个数据库创建一个拥有 DATABASE 层级 GRANT 权限的用户。该用户仅可以对用户进行指定的数据库的授权。
+![User Privileges](../assets/user_privilege_2.jpg)
 
-### 场景三：黑名单
+由于不同业务、不同岗位的日常操作与涉及库表不同，StarRocks 建议您按照业务、岗位来创建角色，将所需权限赋予给对应角色后再分配给用户。具体来说：
 
-StarRocks 本身不支持黑名单，只有白名单功能，但我们可以通过某些方式来模拟黑名单。假设先创建了名为 `user@'192.%'` 的用户，表示允许来自 `192.*` 的用户登录。此时如果想禁止来自 `192.168.10.1` 的用户登录。则可以再创建一个用户 `user1@'192.168.10.1'` 的用户，并设置一个新的密码。因为 `192.168.10.1` 的优先级高于 `192.%`，所以来自 `192.168.10.1` 将不能再使用旧密码进行登录。
+![User Privileges](../assets/user_privilege_3.jpg)
+
+1. 将系统预置角色 `db_admin`、`user_admin` 以及 `cluster_admin` 赋予给平台运维角色。同时将 `db_admin` 和 `user_admin` 作为默认角色，用于日常的基础运维。当确认需要进行节点操作时，再手动激活 `cluster_admin` 角色。
+
+   例如：
+
+   ```SQL
+   GRANT db_admin, user_admin, cluster_admin TO USER user_platform;
+   ALTER USER user_platform DEFAULT ROLE db_admin, user_admin;
+   ```
+
+2. 由平台运维人员创建系统内的所有用户，每人对应一个用户，并设置复杂密码。
+3. 为每个业务方按照职能设置角色，例如本例中的业务管理员、业务分析师、业务员。并为他们赋予对应权限。
+
+   对于业务负责人，可以赋予该业务所需权限的最大集合，并赋予他们赋权权限（即，在授权时加上 WITH GRANT OPTION 关键字）。从而，他们可以在后续工作中自行为下属分配所需权限。如果此角色为他们的日常角色，则可以设置为Default Role。
+
+   例如：
+
+   ```SQL
+   GRANT SELECT, ALTER, INSERT, UPDATE, DELETE ON ALL TABLES IN DATABASE DB_A TO ROLE linea_admin WITH GRANT OPTION;
+   GRANT SELECT, ALTER, INSERT, UPDATE, DELETE ON TABLE TABLE_C1, TABLE_C2, TABLE_C3 TO ROLE linea_admin WITH GRANT OPTION;
+   GRANT linea_admin TO USER user_linea_admin;
+   ALTER USER user_linea_admin DEFAULT ROLE linea_admin;
+   ```
+
+   对于分析师、业务员等角色，赋予他们对应操作权限即可。
+
+   例如：
+
+   ```SQL
+   GRANT SELECT ON ALL TABLES IN DATABASE DB_A TO ROLE linea_query;
+   GRANT SELECT ON TABLE TABLE_C1, TABLE_C2, TABLE_C3 TO ROLE linea_query;
+   GRANT linea_query TO USER user_linea_salesa;
+   GRANT linea_query TO USER user_linea_salesb;
+   ALTER USER user_linea_salesa DEFAULT ROLE linea_query;
+   ALTER USER user_linea_salesb DEFAULT ROLE linea_query;
+   ```
+
+4. 对于任何人都可以访问的公共库，可将该库下所有表的查询权限赋予给预置角色 `public`。
+
+  例如：
+
+   ```SQL
+   GRANT SELECT ON ALL TABLES IN DATABASE DB_PUBLIC TO ROLE public;
+   ```
+
+在其他复杂情况下，您也可以通过将角色赋予给其他的角色来达到权限继承的目的。
+
+例如，所有分析师可以对 DB_PUBLIC 的数据进行导入与修改，所有业务员可以对 DB_PUBLIC 的数据进行查询，您可以创建 public_analysis 和 public_sales，授予对应权限后，再将角色赋予给所有业务线的分析师和业务员角色。
+
+```SQL
+CREATE ROLE public_analysis;
+CREATE ROLE public_sales;
+GRANT SELECT, ALTER, INSERT, UPDATE, DELETE ON ALL TABLES IN DATABASE DB_PUBLIC TO ROLE public_analysis;
+GRANT SELECT ON ALL TABLES IN DATABASE DB_PUBLIC TO ROLE public_sales;
+GRANT public_analysis TO ROLE linea_analysis;
+GRANT public_analysis TO ROLE lineb_analysis;
+GRANT public_sales TO ROLE linea_query;
+GRANT public_sales TO ROLE lineb_query;
+```
+
+### 基于使用场景创建自定义角色
+
+建议您通过自定义角色管理权限和用户。以下梳理了一些常见场景所需的权限项。
+
+1. 全局查询权限
+
+   ```SQL
+   -- 创建自定义角色。
+   CREATE ROLE read_only;
+   -- 赋予角色所有 Catalog 的使用权限。
+   GRANT USAGE ON ALL CATALOGS TO ROLE read_only;
+   -- 赋予角色所有表的查询权限。
+   GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_only;
+   -- 赋予角色所有视图的查询权限。
+   GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_only;
+   -- 赋予角色所有物化视图的查询和加速权限。
+   GRANT SELECT ON ALL MATERIALIZED VIEWS IN ALL DATABASES TO ROLE read_only;
+   ```
+
+   您还可以进一步授予角色在查询中使用 UDF 的权限：
+
+   ```SQL
+   -- 赋予角色所有库级别 UDF 的使用权限。
+   GRANT USAGE ON ALL FUNCTIONS IN ALL DATABASES TO ROLE read_only;
+   -- 赋予角色所有全局 UDF 的使用权限。
+   GRANT USAGE ON ALL GLOBAL FUNCTIONS TO ROLE read_only;
+   ```
+
+2. 全局写权限
+
+   ```SQL
+   -- 创建自定义角色。
+   CREATE ROLE write_only;
+   -- 赋予角色所有 Catalog 的使用权限。
+   GRANT USAGE ON ALL CATALOGS TO ROLE write_only;
+   -- 赋予角色所有表的导入、更新权限。
+   GRANT INSERT, UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE write_only;
+   -- 赋予角色所有物化视图的更新权限。
+   GRANT REFRESH ON ALL MATERIALIZED VIEWS IN ALL DATABASES TO ROLE write_only;
+   ```
+
+3. 全局、数据库级、表级以及分区级备份恢复权限
+
+   - 全局备份恢复权限
+
+     全局备份恢复权限可以对任意库、表、分区进行备份恢复。需要 SYSTEM 级的 REPOSITORY 权限，在 Default Catalog 下创建数据库的权限，在任意数据库下创建表的权限，以及对任意表进行导入的权限。
+
+     ```SQL
+     -- 创建自定义角色。
+     CREATE ROLE recover;
+     -- 赋予角色 SYSTEM 级的 REPOSITORY 权限。
+     GRANT REPOSITORY ON SYSTEM TO ROLE recover;
+     -- 赋予角色创建数据库的权限。
+     GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover;
+     -- 赋予角色创建任意表的权限。
+     -- 注意如果您此时在 External Catalog 下，需要通过 `SET CATALOG default_catalog` 切换至 Default Catalog 下。
+     GRANT CREATE TABLE ON ALL DATABASE TO ROLE recover;
+     -- 赋予角色导入数据至任意表的权限。
+     GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE recover;
+     ```
+
+   - 数据库级备份恢复权限
+
+     数据库级备份恢复权限需要 SYSTEM 级的 REPOSITORY 权限，以及在 Default Catalog 下创建数据库的权限。
+
+     ```SQL
+     -- 创建自定义角色。
+     CREATE ROLE recover_db;
+     -- 赋予角色 SYSTEM 级的 REPOSITORY 权限。
+     GRANT REPOSITORY ON SYSTEM TO ROLE recover_db;
+     -- 赋予角色在 Default Catalog 下创建数据库的权限。
+     GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover_db;
+     ```
+
+   - 表级备份恢复权限
+
+     表级备份恢复权限需要 SYSTEM 级的 REPOSITORY 权限，以及在对应数据库下创建表的权限。
+
+     ```SQL
+     -- 创建自定义角色。
+     CREATE ROLE recover_tbl;
+     -- 赋予角色 SYSTEM 级的 REPOSITORY 权限。
+     GRANT REPOSITORY ON SYSTEM TO ROLE recover_tbl;
+     -- 赋予角色在对应数据库下创建表的权限。
+     GRANT CREATE TABLE ON DATABASE <db_name> TO ROLE recover_tbl;
+     ```
+
+   - 分区级备份恢复权限
+
+     分区级备份恢复权限需要 SYSTEM 级的 REPOSITORY 权限，以及对对应表进行导入的权限。
+
+     ```SQL
+     -- 创建自定义角色。
+     CREATE ROLE recover_par;
+     -- 赋予角色 SYSTEM 级的 REPOSITORY 权限。
+     GRANT REPOSITORY ON SYSTEM TO ROLE recover_par;
+     -- 赋予角色对对应表进行导入的权限。
+     GRANT INSERT ON TABLE <tbl_name> TO ROLE recover_par;
+     ```
