@@ -440,7 +440,7 @@ public class ReportHandler extends Daemon {
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
         DataNode reportBackend = currentSystemInfo.getBackend(backendId);
         if (reportBackend != null) {
-            DataNode.DataNodeStatus backendStatus = reportBackend.getBackendStatus();
+            DataNode.BackendStatus backendStatus = reportBackend.getBackendStatus();
             backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(start);
         }
 

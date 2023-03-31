@@ -65,7 +65,7 @@ import java.util.Set;
  */
 public class DataNode extends ComputeNode {
 
-    public enum DataNodeState {
+    public enum BackendState {
         using, /* backend belongs to a cluster*/
         offline,
         free /* backend is not belong to any clusters */
@@ -84,8 +84,8 @@ public class DataNode extends ComputeNode {
     // this field is set by tablet report, and just for metric monitor, no need to persist.
     private volatile long tabletMaxCompactionScore = 0;
 
-    // additional dataNodeStatus information for BE, display in JSON format
-    private final DataNodeStatus dataNodeStatus = new DataNodeStatus();
+    // additional backendStatus information for BE, display in JSON format
+    private final BackendStatus backendStatus = new BackendStatus();
 
     public DataNode() {
         super();
@@ -294,8 +294,8 @@ public class DataNode extends ComputeNode {
         }
     }
 
-    public DataNodeStatus getBackendStatus() {
-        return dataNodeStatus;
+    public BackendStatus getBackendStatus() {
+        return backendStatus;
     }
 
     public static DataNode read(DataInput in) throws IOException {
@@ -368,7 +368,7 @@ public class DataNode extends ComputeNode {
             setBackendState(in.readInt());
             setDecommissionType(in.readInt());
         } else {
-            setBackendState(DataNodeState.using.ordinal());
+            setBackendState(BackendState.using.ordinal());
             setDecommissionType(DecommissionType.SystemDecommission.ordinal());
         }
 
@@ -437,11 +437,11 @@ public class DataNode extends ComputeNode {
     /**
      * Note: This class must be a POJO in order to display in JSON format
      * Add additional information in the class to show in `show backends`
-     * if just change new added dataNodeStatus, you can do like following
-     * DataNodeStatus status = Backend.getBackendStatus();
+     * if just change new added backendStatus, you can do like following
+     * BackendStatus status = Backend.getBackendStatus();
      * status.newItem = xxx;
      */
-    public class DataNodeStatus {
+    public class BackendStatus {
         // this will be output as json, so not using FeConstants.null_string;
         public String lastSuccessReportTabletsTime = "N/A";
     }
