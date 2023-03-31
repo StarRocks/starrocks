@@ -385,6 +385,8 @@ Status ParquetBuilder::_add_column_chunk(const TypeDescriptor& type_desc, const 
         case TYPE_VARCHAR: {
             return _add_varchar_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         }
+        case TYPE_DATETIME:
+            return _add_datetime_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         default: {
             return Status::InvalidArgument(fmt::format("Type {} is not supported", type_to_string_v2(type_desc.type)));
         }
@@ -559,12 +561,14 @@ Status ParquetBuilder::_add_map_column_chunk(const TypeDescriptor& type_desc, co
                       cur_is_null, cur_mapping);
 }
 
-// TODO: handle case where column is not nullable
 Status ParquetBuilder::_add_varchar_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
                                               const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
                                               int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
-    const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
-    auto nulls = null_column->get_data();
+    unsigned char* nulls = nullptr;
+    if (col->is_nullable()) {
+        const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
+        nulls = null_column->get_data().data();
+    }
 
     const auto data_column = ColumnHelper::get_data_column(col.get());
     auto raw_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(data_column);
@@ -588,7 +592,7 @@ Status ParquetBuilder::_add_varchar_column_chunk(const TypeDescriptor& type_desc
             continue;
         }
         auto idx = mapping.at(i);
-        if (nulls[idx]) {
+        if (nulls != nullptr && nulls[idx]) {
             write(def_level[i], rep_level[i], nullptr, 0);
             continue;
         }
@@ -600,12 +604,53 @@ Status ParquetBuilder::_add_varchar_column_chunk(const TypeDescriptor& type_desc
     return Status::OK();
 }
 
+Status ParquetBuilder::_add_datetime_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
+                                                 const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                                 int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+    unsigned char* nulls = nullptr;
+    if (col->is_nullable()) {
+        const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
+        nulls = null_column->get_data().data();
+    }
+
+    const auto data_column = ColumnHelper::get_data_column(col.get());
+    auto raw_col = down_cast<const RunTimeColumnType<TYPE_DATETIME>*>(data_column)->get_data().data();
+
+    _generate_rg_writer();
+    auto col_writer = static_cast<parquet::Int64Writer*>(_rg_writer->column(_col_idx));
+    DCHECK(col_writer != nullptr);
+
+    auto write = [&](int16_t def_level, int16_t rep_level, int64_t value) {
+        col_writer->WriteBatch(1, &def_level, &rep_level, &value);
+    };
+
+    for (size_t i = 0; i < def_level.size(); i++) {
+        if (is_null[i]) {
+            write(def_level[i], rep_level[i], -1);
+            continue;
+        }
+        auto idx = mapping.at(i);
+        if (nulls != nullptr && nulls[idx]) {
+            write(def_level[i], rep_level[i], -1);
+            continue;
+        }
+        write(def_level[i] + 1 /* increment if optional */, rep_level[i], raw_col[idx].to_unix_second() * 1000); // seconds -> milliseconds
+    }
+
+    _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+    _col_idx++;
+    return Status::OK();
+}
+
 template <LogicalType lt, ::parquet::Type::type pt>
 Status ParquetBuilder::_add_int_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
                                                  const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
                                                  int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
-    const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
-    auto nulls = null_column->get_data();
+    unsigned char* nulls = nullptr;
+    if (col->is_nullable()) {
+        const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
+        nulls = null_column->get_data().data();
+    }
 
     const auto data_column = ColumnHelper::get_data_column(col.get());
     const auto raw_col = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
@@ -624,7 +669,7 @@ Status ParquetBuilder::_add_int_column_chunk(const TypeDescriptor& type_desc, co
             continue;
         }
         auto idx = mapping.at(i);
-        if (nulls[idx]) {
+        if (nulls != nullptr && nulls[idx]) {
             write(def_level[i], rep_level[i], -1);
             continue;
         }

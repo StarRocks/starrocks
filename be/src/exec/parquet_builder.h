@@ -115,6 +115,10 @@ private:
                                    const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
                                    int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
 
+    Status _add_datetime_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
+                               const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                               int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
+
     template <LogicalType lt, ::parquet::Type::type pt>
     Status _add_int_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
                                      const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
