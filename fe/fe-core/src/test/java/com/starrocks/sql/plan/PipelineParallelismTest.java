@@ -19,7 +19,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.system.DataNodeCoreStat;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Mock;
 import mockit.MockUp;
@@ -29,7 +29,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 public class PipelineParallelismTest extends PlanTestBase {
-    private MockUp<DataNodeCoreStat> mockedBackendCoreStat = null;
+    private MockUp<BackendCoreStat> mockedBackendCoreStat = null;
     private final int parallelExecInstanceNum = 16;
     private final int numHardwareCores = 8;
     private int prevParallelExecInstanceNum = 0;
@@ -38,7 +38,7 @@ public class PipelineParallelismTest extends PlanTestBase {
 
     @Before
     public void setUp() {
-        mockedBackendCoreStat = new MockUp<DataNodeCoreStat>() {
+        mockedBackendCoreStat = new MockUp<BackendCoreStat>() {
             @Mock
             public int getAvgNumOfHardwareCoresOfBe() {
                 return numHardwareCores;

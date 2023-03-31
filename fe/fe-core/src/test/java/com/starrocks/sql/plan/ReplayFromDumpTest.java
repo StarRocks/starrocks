@@ -26,7 +26,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
-import com.starrocks.system.DataNodeCoreStat;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -71,7 +71,7 @@ public class ReplayFromDumpTest {
 
     @Before
     public void before() {
-        DataNodeCoreStat.reset();
+        BackendCoreStat.reset();
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
     }
 
