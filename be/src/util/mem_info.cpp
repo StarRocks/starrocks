@@ -71,7 +71,9 @@ void MemInfo::init() {
 
         if (result == StringParser::PARSE_SUCCESS) {
             // Entries in /proc/meminfo are in KB.
-            _s_physical_mem = mem_total_kb * 1024L;
+            if (_s_physical_mem <= 0 || _s_physical_mem > mem_total_kb * 1024L) {
+                _s_physical_mem = mem_total_kb * 1024L;
+            }
         }
 
         break;

@@ -944,8 +944,8 @@ public class PlanFragmentBuilder {
             }
 
             context.getScanNodes().add(scanNode);
-            PlanFragment fragment =
-                    new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.UNPARTITIONED);
+            PlanFragment fragment = new PlanFragment(context.getNextFragmentId(), scanNode,
+                    scanNode.isBeSchemaTable() ? DataPartition.RANDOM : DataPartition.UNPARTITIONED);
             context.getFragments().add(fragment);
             return fragment;
         }
@@ -1906,7 +1906,7 @@ public class PlanFragmentBuilder {
                     }
 
                     outputColumns.except(new ArrayList<>(node.getProjection().getCommonSubOperatorMap().keySet()));
-                    joinNode.setOutputSlots(outputColumns.getStream().boxed().collect(Collectors.toList()));
+                    joinNode.setOutputSlots(outputColumns.getStream().collect(Collectors.toList()));
                 }
 
                 joinNode.setDistributionMode(distributionMode);

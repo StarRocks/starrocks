@@ -10,6 +10,7 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -34,6 +35,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.StringJoiner;
 
 import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 
@@ -44,7 +46,6 @@ public class StatisticUtils {
             .add(StatsConstants.STATISTICS_DB_NAME)
             .add("starrocks_monitor")
             .add("information_schema").build();
-
 
     public static ConnectContext buildConnectContext() {
         ConnectContext context = new ConnectContext();
@@ -238,18 +239,36 @@ public class StatisticUtils {
     }
 
     // Get all the columns in the table that can be collected.
-    // The list will only contain aggregated and non-aggregated columns of the "replace" type.
+    // The list will only contain:
+    // 1. non-aggregated column
+    // 2. replace-aggregated columns which in primary key engine (unique engine has poor performance, we don't touch it)
     // This is because in aggregate type tables, metric columns generally do not participate in predicate.
     // Collecting these columns is not meaningful but time-consuming, so we exclude them.
     public static List<String> getCollectibleColumns(Table table) {
+        boolean isPrimaryEngine = false;
+        if (table instanceof OlapTable) {
+            isPrimaryEngine = KeysType.PRIMARY_KEYS.equals(((OlapTable) table).getKeysType());
+        }
         List<String> columns = new ArrayList<>();
         for (Column column : table.getBaseSchema()) {
             if (!column.isAggregated()) {
                 columns.add(column.getName());
-            } else if (column.getAggregationType().equals(AggregateType.REPLACE)) {
+            } else if (isPrimaryEngine && column.getAggregationType().equals(AggregateType.REPLACE)) {
                 columns.add(column.getName());
             }
         }
         return columns;
+    }
+
+    public static String quoting(String... parts) {
+        StringJoiner joiner = new StringJoiner(".");
+        for (String part : parts) {
+            joiner.add(quoting(part));
+        }
+        return joiner.toString();
+    }
+
+    public static String quoting(String identifier) {
+        return "`" + identifier + "`";
     }
 }

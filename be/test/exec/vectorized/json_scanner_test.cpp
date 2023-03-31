@@ -1056,7 +1056,8 @@ TEST_F(JsonScannerTest, test_column_2x_than_columns_with_json_root) {
     range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson_expanded_array.json");
     ranges.emplace_back(range);
 
-    auto scanner = create_json_scanner(types, ranges, {"k1", "kind", "keyname", "null_col1", "null_col2", "null_col3", "null_col4"});
+    auto scanner = create_json_scanner(types, ranges,
+                                       {"k1", "kind", "keyname", "null_col1", "null_col2", "null_col3", "null_col4"});
 
     Status st;
     st = scanner->open();
@@ -1066,11 +1067,16 @@ TEST_F(JsonScannerTest, test_column_2x_than_columns_with_json_root) {
     EXPECT_EQ(7, chunk->num_columns());
     EXPECT_EQ(5, chunk->num_rows());
 
-    EXPECT_EQ("['v1', 'server', {\"ip\": \"10.10.0.1\", \"value\": \"10\"}, NULL, NULL, NULL, NULL]", chunk->debug_row(0));
-    EXPECT_EQ("['v2', 'server', {\"ip\": \"10.10.0.2\", \"value\": \"20\"}, NULL, NULL, NULL, NULL]", chunk->debug_row(1));
-    EXPECT_EQ("['v3', 'server', {\"ip\": \"10.10.0.3\", \"value\": \"30\"}, NULL, NULL, NULL, NULL]", chunk->debug_row(2));
-    EXPECT_EQ("['v4', 'server', {\"ip\": \"10.10.0.4\", \"value\": \"40\"}, NULL, NULL, NULL, NULL]", chunk->debug_row(3));
-    EXPECT_EQ("['v5', 'server', {\"ip\": \"10.10.0.5\", \"value\": \"50\"}, NULL, NULL, NULL, NULL]", chunk->debug_row(4));
+    EXPECT_EQ("['v1', 'server', {\"ip\": \"10.10.0.1\", \"value\": \"10\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(0));
+    EXPECT_EQ("['v2', 'server', {\"ip\": \"10.10.0.2\", \"value\": \"20\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(1));
+    EXPECT_EQ("['v3', 'server', {\"ip\": \"10.10.0.3\", \"value\": \"30\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(2));
+    EXPECT_EQ("['v4', 'server', {\"ip\": \"10.10.0.4\", \"value\": \"40\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(3));
+    EXPECT_EQ("['v5', 'server', {\"ip\": \"10.10.0.5\", \"value\": \"50\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(4));
 }
 
 } // namespace starrocks::vectorized

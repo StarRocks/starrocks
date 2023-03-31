@@ -476,7 +476,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
     _orc_reader->set_hive_column_names(_scanner_params.hive_column_names);
     _orc_reader->set_case_sensitive(_scanner_params.case_sensitive);
-    if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0) {
+    if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0 &&
+        _lazy_load_ctx.active_load_slots.size() != 0) {
         _orc_reader->set_lazy_load_context(&_lazy_load_ctx);
     }
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader)));
@@ -563,8 +564,8 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
         {
             SCOPED_RAW_TIMER(&_stats.column_read_ns);
-            _orc_reader->lazy_seek_to(position.row_in_stripe);
-            _orc_reader->lazy_read_next(read_num_values);
+            RETURN_IF_ERROR(_orc_reader->lazy_seek_to(position.row_in_stripe));
+            RETURN_IF_ERROR(_orc_reader->lazy_read_next(read_num_values));
         }
         {
             SCOPED_RAW_TIMER(&_stats.column_convert_ns);

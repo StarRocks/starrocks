@@ -74,6 +74,7 @@ void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* r
 }
 
 void GlobalDriverExecutor::_worker_thread() {
+    auto current_thread = Thread::current_thread();
     const int worker_id = _next_id++;
     while (true) {
         if (_num_threads_setter.should_shrink()) {
@@ -84,7 +85,13 @@ void GlobalDriverExecutor::_worker_thread() {
         CurrentThread::current().set_fragment_instance_id({});
         CurrentThread::current().set_pipeline_driver_id(0);
 
+        if (current_thread != nullptr) {
+            current_thread->set_idle(true);
+        }
         auto maybe_driver = this->_driver_queue->take();
+        if (current_thread != nullptr) {
+            current_thread->set_idle(false);
+        }
         if (maybe_driver.status().is_cancelled()) {
             return;
         }
@@ -123,6 +130,9 @@ void GlobalDriverExecutor::_worker_thread() {
                 continue;
             }
             auto maybe_state = driver->process(runtime_state, worker_id);
+            if (current_thread != nullptr) {
+                current_thread->inc_finished_tasks();
+            }
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
 

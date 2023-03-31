@@ -102,7 +102,8 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
   > **NOTE**
   >
-  > For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+  > - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+  > - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
 
 - `column_list`
 
@@ -319,7 +320,7 @@ The following parameters are supported:
 
 - `strict_mode`
 
-  Specifies whether to enable the strict mode. Valid values: `true` and `false`. Default value: `false`. `true` specifies to enable the strict mode, and `false` specifies to disable the strict mode.
+  Specifies whether to enable the [strict mode](../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`. `true` specifies to enable the strict mode, and `false` specifies to disable the strict mode.
 
 - `timezone`
 
@@ -327,20 +328,24 @@ The following parameters are supported:
 
 ## Column mapping
 
-When you load data, you can configure column mapping between the data file and the destination table by using the `column_list` parameter. If the columns of the data file can be mapped one on one in sequence onto the columns of the destination table, you do not need to specify the `column_list` parameter. Otherwise, you must specify the `column_list` parameter, as shown in the following two use cases:
+If the columns of the data file can be mapped one on one in sequence to the columns of the StarRocks table, you do not need to configure the column mapping between the data file and the StarRocks table.
 
-- The columns of the data file can be mapped one on one onto the columns of the destination table, and the data does not need to be computed by functions before it is loaded into the destination table columns.
+If the columns of the data file cannot be mapped one on one in sequence to the columns of the StarRocks table, you need to use the `columns` parameter to configure the column mapping between the data file and the StarRocks table. This includes the following two use cases:
 
-  In the `column_list` parameter, you need to input the names of the destination table columns in the same sequence as how the data file columns are arranged.
+- **Same number of columns but different column sequence.** **Also, the data from the data file does not need to be computed by functions before it is loaded into the matching StarRocks table columns.**
 
-  For example, the destination table consists of three columns, which are `col1`, `col2`, and `col3` in sequence, and the data file also consists of three columns, which can be mapped onto the destination table columns `col3`, `col2`, and `col1`. In this case, you need to specify `"columns: col3, col2, col1"`.
+  In the `columns` parameter, you need to specify the names of the StarRocks table columns in the same sequence as how the data file columns are arranged.
 
-- The columns of the data file cannot be mapped one on one onto the columns of the destination table, and the data needs to be computed by functions before it is loaded into the mapping destination table columns.
+  For example, the StarRocks table consists of three columns, which are `col1`, `col2`, and `col3` in sequence, and the data file also consists of three columns, which can be mapped to the StarRocks table columns `col3`, `col2`, and `col1` in sequence. In this case, you need to specify `"columns: col3, col2, col1"`.
 
-  In the `column_list` parameter, you need to input the names of the destination table columns in the same sequence as how the data file columns are arranged, and you also need to specify the functions you want to use to compute the data. Two examples are as follows:
+- **Different number of columns and different column sequence. Also, the data from the data file needs to be computed by functions before it is loaded into the matching StarRocks table columns.**
 
-  - The destination table consists of three columns, which are `col1`, `col2`, and `col3` in sequence. The data file consists of four columns, among which the first three columns can be mapped in sequence onto the destination table columns `col1`, `col2`, and `col3` and the fourth column cannot be mapped onto any of the destination table columns. In this case, you need to temporarily specify a name for the fourth column of the data file, and the temporary name must be different from any of the destination table column names. For example, you can specify `(col1, col2, col3, temp)`, in which the fourth column of the data file is temporarily named `temp`.
-  - The destination table consists of three columns, which are `year`, `month`, and `day` in sequence. The data file consists of only one column that accommodates date and time values in `yyyy-mm-dd hh:mm:ss` format. In this case, you can specify `(col, year = year(col), month=month(col), day=day(col))`, in which `col` is the temporary name of the data file column and the functions `year = year(col)`, `month=month(col)`, and `day=day(col)` are used to extract data from the data file column `col` and loads the data into the mapping destination table columns. For example, `year = year(col)` is used to extract the `yyyy` data from the data file column `col` and loads the data into the destination table column `year`.
+  In the `columns` parameter, you need to specify the names of the StarRocks table columns in the same sequence as how the data file columns are arranged and specify the functions you want to use to compute the data. Two examples are as follows:
+
+  - The StarRocks table consists of three columns, which are `col1`, `col2`, and `col3` in sequence. The data file consists of four columns, among which the first three columns can be mapped in sequence to the StarRocks table columns `col1`, `col2`, and `col3` and the fourth column cannot be mapped to any of the StarRocks table columns. In this case, you need to temporarily specify a name for the fourth column of the data file, and the temporary name must be different from any of the StarRocks table column names. For example, you can specify `"columns: col1, col2, col3, temp"`, in which the fourth column of the data file is temporarily named `temp`.
+  - The StarRocks table consists of three columns, which are `year`, `month`, and `day` in sequence. The data file consists of only one column that accommodates date and time values in `yyyy-mm-dd hh:mm:ss` format. In this case, you can specify `"columns: col, year = year(col), month=month(col), day=day(col)"`, in which `col` is the temporary name of the data file column and the functions `year = year(col)`, `month=month(col)`, and `day=day(col)` are used to extract data from the data file column `col` and loads the data into the mapping StarRocks table columns. For example, `year = year(col)` is used to extract the `yyyy` data from the data file column `col` and loads the data into the StarRocks table column `year`.
+
+For detailed examples, see [Configure column mapping](#configure-column-mapping).
 
 ## Examples
 
@@ -527,7 +532,7 @@ Your StarRocks database `test_db` contains a table named `table8`. The table con
 
 Your data file `example8.csv` also consists of three columns, which are mapped in sequence onto `col2`, `col1`, and `col3` of `table8`.
 
-If you want to load all data from `example3.csv` into `table3`, run the following command:
+If you want to load all data from `example8.csv` into `table8`, run the following command:
 
 ```SQL
 LOAD LABEL test_db.label8

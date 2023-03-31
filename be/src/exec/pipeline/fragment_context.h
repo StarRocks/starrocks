@@ -71,10 +71,7 @@ public:
         return status == nullptr ? Status::OK() : *status;
     }
 
-    void cancel(const Status& status) {
-        _runtime_state->set_is_cancelled(true);
-        set_final_status(status);
-    }
+    void cancel(const Status& status);
 
     void finish() { cancel(Status::OK()); }
 

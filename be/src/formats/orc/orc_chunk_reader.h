@@ -114,8 +114,8 @@ public:
     bool has_lazy_load_context() { return _lazy_load_ctx != nullptr; }
     StatusOr<ChunkPtr> get_chunk();
     StatusOr<ChunkPtr> get_active_chunk();
-    void lazy_read_next(size_t numValues);
-    void lazy_seek_to(uint64_t rowInStripe);
+    Status lazy_read_next(size_t numValues);
+    Status lazy_seek_to(uint64_t rowInStripe);
     void lazy_filter_on_cvb(Filter* filter);
     StatusOr<ChunkPtr> get_lazy_chunk();
 

@@ -364,6 +364,8 @@ struct TOlapScanNode {
   25: optional bool sorted_by_keys_per_tablet = false
 
   26: optional list<Exprs.TExpr> bucket_exprs
+  //27: optional list<string> sort_key_column_names (reserved for v2.3+)
+  28: optional i32 max_parallel_scan_instance_num
 }
 
 struct TJDBCScanNode {

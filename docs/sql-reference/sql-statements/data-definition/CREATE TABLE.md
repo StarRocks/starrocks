@@ -313,9 +313,7 @@ Syntax
 
 ```Plain%20Text
 PARTITION BY RANGE (datekey) (
-
     START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 day)
-
 )
 ```
 
@@ -370,9 +368,17 @@ replication_num: number of replicas in the specified partition. Default number: 
 
 When the table has only one partition, the properties belongs to the table. When the table has two levels of partitions, the properties belong to each partition. Users can also specify different properties for different partitions through ADD ADDITION and MODIFY PARTITION statements.
 
-#### Add bloomfilter index for a column
+#### Add bloom filter index for a column
 
-If Engine type is olap, users can specify a column to adopt bloom filter index which applies only to the condition where in and equal are query filters. More discrete values in this column will result in more precise queries. Bloom filter currently supports the key column, with the exception of the key column in TINYINT FLOAT DOUBLE type, and the value column with the aggregation method REPLACE.
+If the Engine type is olap, you can specify a column to adopt bloom filter indexes.
+
+The following limits apply when you use bloom filter index:
+
+- You can create bloom filter indexes for all columns of a Duplicate Key or Primary Key table. For an Aggregate Key or Unique Key table, you can only create bloom filter indexes for key columns.
+- TINYINT, FLOAT, DOUBLE, and DECIMAL columns do not support creating bloom filter indexes.
+- Bloom filter indexes can only improve the performance of queries that contain the `in` and `=` operators, such as `Select xxx from table where x in {}` and `Select xxx from table where column = xxx`. More discrete values in this column will result in more precise queries.
+
+For more information, see [Bloom filter indexing](../../../using_starrocks/Bloomfilter_index.md)
 
 ```SQL
 PROPERTIES (

@@ -213,7 +213,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertEquals("tunique_stats", fullStatisticsCollectJob.getTable().getName());
-        Assert.assertEquals("[pk, v1, v2]", fullStatisticsCollectJob.getColumns().toString());
+        Assert.assertEquals("[pk]", fullStatisticsCollectJob.getColumns().toString());
     }
 
     @Test
@@ -355,32 +355,6 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                 +t0StatsTableId +
                 " as table_id, `v2` as column_key, count(`v2`) as column_value from test.t0_stats " +
                 "where `v2` is not null group by `v2` order by count(`v2`) desc limit 100 ) t", sql);
-    }
-
-    @Test
-    public void testSplitColumns() {
-        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
-                new AnalyzeJob(10002, t0StatsTableId, null,
-                        StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
-                        Maps.newHashMap(),
-                        StatsConstants.ScheduleStatus.PENDING,
-                        LocalDateTime.MIN));
-        Assert.assertEquals(1, jobs.size());
-        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
-
-        int splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns", 10L);
-        Assert.assertEquals(5, splitSize);
-
-        splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns",
-                Config.statistic_collect_max_row_count_per_query);
-        Assert.assertEquals(2, splitSize);
-
-        splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns",
-                Config.statistic_collect_max_row_count_per_query + 1);
-        Assert.assertEquals(1, splitSize);
-
-        splitSize = Deencapsulation.invoke(jobs.get(0), "splitColumns", 0L);
-        Assert.assertEquals(5, splitSize);
     }
 
     @Test

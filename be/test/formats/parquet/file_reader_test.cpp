@@ -1018,8 +1018,8 @@ TEST_F(FileReaderTest, TestTwoNestedLevelArray) {
     // id: INT, b: ARRAY<ARRAY<INT>>
     const std::string filepath = "./be/test/exec/test_data/parquet_data/two_level_nested_array.parquet";
     auto file = _create_file(filepath);
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(filepath));
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -1032,7 +1032,6 @@ TEST_F(FileReaderTest, TestTwoNestedLevelArray) {
     type_array_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
 
     type_array.children.emplace_back(type_array_array);
-
 
     SlotDesc slot_descs[] = {
             {"id", type_int},

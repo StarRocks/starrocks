@@ -40,7 +40,7 @@ public abstract class LogicalOperator extends Operator {
             outputCandidates.intersect(requiredCandidates);
         }
         return Utils.findSmallestColumnRef(outputCandidates.getStream().
-                mapToObj(columnRefFactory::getColumnRef).collect(Collectors.toList()));
+                map(columnRefFactory::getColumnRef).collect(Collectors.toList()));
     }
 
 }

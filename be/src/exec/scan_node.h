@@ -56,8 +56,6 @@ class TScanRange;
 //
 class ScanNode : public ExecNode {
 public:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
-
     ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs) : ExecNode(pool, tnode, descs) {}
     ~ScanNode() override = default;
 
@@ -103,7 +101,7 @@ public:
 
     const std::string& name() const { return _name; }
 
-    virtual int io_tasks_per_scan_operator() const { return MAX_IO_TASKS_PER_OP; }
+    virtual int io_tasks_per_scan_operator() const { return _io_tasks_per_scan_operator; }
 
 protected:
     RuntimeProfile::Counter* _bytes_read_counter; // # bytes read from the scanner
@@ -119,6 +117,7 @@ protected:
     RuntimeProfile::ThreadCounters* _scanner_thread_counters;
     RuntimeProfile::Counter* _num_scanner_threads_started_counter;
     std::string _name;
+    int32_t _io_tasks_per_scan_operator = config::io_tasks_per_scan_operator;
 };
 
 } // namespace starrocks

@@ -117,6 +117,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static String audit_log_delete_age = "30d";
 
+    @ConfField(mutable = true)
+    public static long slow_lock_threshold_ms = 3000L;
+
+    @ConfField(mutable = true)
+    public static long slow_lock_log_every_ms = 3000L;
+
     /**
      * dump_log_dir:
      * This specifies FE dump log dir.
@@ -1362,6 +1368,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_update_interval_sec = 24 * 60 * 60;
 
+    @ConfField(mutable = true)
+    public static long statistic_collect_too_many_version_sleep = 600000; // 10min
     /**
      * Enable full statistics collection
      */
