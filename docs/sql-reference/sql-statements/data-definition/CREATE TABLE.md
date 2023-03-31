@@ -447,10 +447,10 @@ PROPERTIES (
 ```
 
 - `child_column`: the Foreign Key of the table. You can define multiple `child_column`.
-- `catalog_name`: the name of the catalog where the table to be joined resides. The default catalog is used when this parameter is not specified.
-- `database_name`: the name of the database where the table to be joined resides. The current database is used when this parameter is not specified.
-- `parent_table_name`: the name of the table to be joined.
-- `parent_column`:  the column to be joined. They must be the Primary Keys or Unique Keys of the corresponding tables.
+- `catalog_name`: the name of the catalog where the table to join resides. The default catalog is used if this parameter is not specified.
+- `database_name`: the name of the database where the table to join resides. The current database is used if this parameter is not specified.
+- `parent_table_name`: the name of the table to join.
+- `parent_column`: the column to be joined. They must be the Primary Keys or Unique Keys of the corresponding tables.
 
 > **CAUTION**
 >
@@ -459,7 +459,7 @@ PROPERTIES (
 
 ## Examples
 
-### Create an Aggregate Key table that uses Hash bucketing and column-based storage
+### Create an Aggregate Key table that uses Hash bucketing and columnar storage
 
 ```SQL
 CREATE TABLE example_db.table_hash
