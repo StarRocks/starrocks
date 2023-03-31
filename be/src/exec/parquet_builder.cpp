@@ -200,6 +200,10 @@ Status ParquetBuilder::_init_schema(const std::vector<std::string>& file_column_
             return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::String(), ::parquet::Type::BYTE_ARRAY, -1, ++_col_idx);
         }
+        case TYPE_DATE: {
+            return ::parquet::schema::PrimitiveNode::Make(
+                    name, rep_type, ::parquet::LogicalType::Date(), ::parquet::Type::INT32, -1, ++_col_idx);
+        }
         case TYPE_DATETIME: {
             return ::parquet::schema::PrimitiveNode::Make(
                     name, rep_type, ::parquet::LogicalType::Timestamp(true, ::parquet::LogicalType::TimeUnit::unit::MILLIS), ::parquet::Type::INT64, -1, ++_col_idx);
@@ -387,6 +391,8 @@ Status ParquetBuilder::_add_column_chunk(const TypeDescriptor& type_desc, const 
         }
         case TYPE_DATETIME:
             return _add_datetime_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+        case TYPE_DATE:
+            return _add_date_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         default: {
             return Status::InvalidArgument(fmt::format("Type {} is not supported", type_to_string_v2(type_desc.type)));
         }
@@ -597,6 +603,46 @@ Status ParquetBuilder::_add_varchar_column_chunk(const TypeDescriptor& type_desc
             continue;
         }
         write(def_level[i] + 1 /* increment if optional */, rep_level[i], vb.data() + vo[idx], vo[idx + 1] - vo[idx]);
+    }
+
+    _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+    _col_idx++;
+    return Status::OK();
+}
+
+Status ParquetBuilder::_add_date_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
+                                                  const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                                  int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+    unsigned char* nulls = nullptr;
+    if (col->is_nullable()) {
+        const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
+        nulls = null_column->get_data().data();
+    }
+
+    const auto data_column = ColumnHelper::get_data_column(col.get());
+    auto raw_col = down_cast<const RunTimeColumnType<TYPE_DATE>*>(data_column)->get_data().data();
+
+    _generate_rg_writer();
+    auto col_writer = static_cast<parquet::Int32Writer*>(_rg_writer->column(_col_idx));
+    DCHECK(col_writer != nullptr);
+
+    auto write = [&](int16_t def_level, int16_t rep_level, int32_t value) {
+        col_writer->WriteBatch(1, &def_level, &rep_level, &value);
+    };
+
+    for (size_t i = 0; i < def_level.size(); i++) {
+        if (is_null[i]) {
+            write(def_level[i], rep_level[i], -1);
+            continue;
+        }
+        auto idx = mapping.at(i);
+        if (nulls != nullptr && nulls[idx]) {
+            write(def_level[i], rep_level[i], -1);
+            continue;
+        }
+        // TODO: add util function
+        int32_t unix_days = raw_col[idx]._julian - DateValue::create(1970, 1, 1)._julian;
+        write(def_level[i] + 1 /* increment if optional */, rep_level[i], unix_days); // seconds -> milliseconds
     }
 
     _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
