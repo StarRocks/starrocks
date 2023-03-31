@@ -10,7 +10,7 @@ When a new data record is inserted, StarRocks automatically assigns a globally u
 - Join tables: When multiple tables are joined, `AUTO_INCREMENT` columns can be used as Join Keys, which can expedite queries compared to using columns whose data types are UUID and STRING.
 - Count the number of distinct values in a high-cardinality column: An `AUTO_INCREMENT` column can be used to represent the unique value column in a dictionary. Compared to directly counting distinct STRING values, counting distinct integer values of the`AUTO_INCREMENT` column can sometimes improve the query speed by several times or even tens of times.
 
-You need to specify `AUTO_INCREMENT` columns in the CREATE TABLE statement. The data types of the `AUTO_INCREMENT` columns' must be BIGINT. The value for a `AUTO_INCREMENT` column starts from 1, and increments by 1 for each new record. The values for the `AUTO_INCREMENT` column can be [implicitly assigned](#Assign values implicitly) or [explicitly specified](#Specify values explicitly).
+You need to specify `AUTO_INCREMENT` columns in the CREATE TABLE statement. The data types of the `AUTO_INCREMENT` columns' must be BIGINT. The values for an AUTO_INCREMENT column can be [implicitly assigned](#Assign values implicitly) or [explicitly specified](#Specify values explicitly). They start from 1, and increment by 1 for each new record.
 
 ## Basic operations
 
@@ -116,7 +116,7 @@ INSERT INTO t (id, number) VALUES (2, 2);
 INSERT INTO t (id, number) VALUES (3);
 ```
 
-View the table `t`.
+Query the table `t`.
 
 ```SQL
 SELECT * FROM t;
@@ -177,7 +177,9 @@ SELECT * FROM t;
 
 This section explains how to update only a few specified columns in a table that contains an `AUTO_INCREMENT` column.
 
-> **NOTE** Currently, only primary key tables support partial updates.
+> **NOTE**
+>
+> Currently, only primary key tables support partial updates.
 
 ### `AUTO_INCREMENT` column is primary key
 
@@ -186,7 +188,7 @@ You need to specify the primary key during partial updates. Therefore, if the `A
 1. Create a table `t` in the database `example_db` and insert one data row.
 
     ```SQL
-    -- create a table
+    -- Create a table.
     CREATE TABLE t
     (
         id BIGINT AUTO_INCREMENT,
@@ -198,12 +200,12 @@ You need to specify the primary key during partial updates. Therefore, if the `A
     DISTRIBUTED BY HASH(id)
     PROPERTIES("replicated_storage" = "true");
 
-    -- prepare data
+    -- Prepared data.
     INSERT INTO t (id, name, job1, job2) VALUES (0, 0, 1, 1);
     Query OK, 1 row affected (0.04 sec)
     {'label':'insert_6af28e77-7d2b-11ed-af6e-02424283676b', 'status':'VISIBLE', 'txnId':'152'}
 
-    -- view the table
+    -- Query the table.
     SELECT * FROM t ORDER BY name;
     +------+------+------+------+
     | id   | name | job1 | job2 |
@@ -231,7 +233,7 @@ You need to specify the primary key during partial updates. Therefore, if the `A
         http://<fe_host>:<fe_http_port>/api/example_db/t/_stream_load
     ```
 
-4. View the updated table. The first row of data already exists in table `t`, and the value for the column `job1` remains unchanged. The second row of data is newly inserted, and because the default value for the column `job1` is not specified, the partial update framework directly sets the value for this column to `0`.
+4. Query the updated table. The first row of data already exists in table `t`, and the value for the column `job1` remains unchanged. The second row of data is newly inserted, and because the default value for the column `job1` is not specified, the partial update framework directly sets the value for this column to `0`.
 
     ```SQL
     SELECT * FROM t ORDER BY name;
@@ -273,7 +275,7 @@ This feature can be used to build a dictionary table for accelerating the counti
     Query OK, 1 row affected (0.04 sec)
     {'label':'insert_458d9487-80f6-11ed-ae56-aa528ccd0ebf', 'status':'VISIBLE', 'txnId':'94'}
 
-    -- View the table.
+    -- Query the table.
     SELECT * FROM t ORDER BY name;
     +------+------+------+------+
     | id   | name | job1 | job2 |
@@ -302,7 +304,7 @@ This feature can be used to build a dictionary table for accelerating the counti
         http://<fe_host>:<fe_http_port>/api/example_db/t/_stream_load
     ```
 
-4. View the updated table. The first row of data already exists in table `t`, so the `AUTO_INCREMENT` column `job1` retains its original value. The second and third rows of data are newly inserted, so StarRocks generate new values for the `AUTO_INCREMENT` column `job1`.
+4. Query the updated table. The first row of data already exists in table `t`, so the `AUTO_INCREMENT` column `job1` retains its original value. The second and third rows of data are newly inserted, so StarRocks generate new values for the `AUTO_INCREMENT` column `job1`.
 
     ```SQL
     SELECT * FROM t ORDER BY name;
@@ -324,5 +326,5 @@ This feature can be used to build a dictionary table for accelerating the counti
 - The `AUTO_INCREMENT` column must be `NOT NULL` and does not have a default value.
 - If the `AUTO_INCREMENT` column is the primary key or part of the primary key, you can delete data in the Primary Key table. Otherwise, you cannot delete data in the Primary Key table.
 - Adding the `AUTO_INCREMENT` attribute by using ALTER TABLE is not supported.
-- Currently, StarRocks's shared-data mode does not support this feature.
+- Currently, StarRocks's shared-data mode does not support the `AUTO_INCREMENT` attribute.
 - Setting the starting value and increment of the `AUTO_INCREMENT` column is not supported.
