@@ -93,6 +93,7 @@
     + [升级 Apache Doris 到 StarRocks](/administration/update_from_doris.md)
     + [时区](/administration/timezone.md)
     + [Information Schema](/administration/information_schema.md)
+    + [监控管理大查询](/administration/monitor_manage_big_queries.md)
     + 管理资源
       + [资源隔离](/administration/resource_group.md)
       + [查询队列](/administration/query_queues.md)
