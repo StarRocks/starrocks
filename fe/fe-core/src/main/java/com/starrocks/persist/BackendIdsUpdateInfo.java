@@ -25,14 +25,14 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 
-public class DataNodeIdsUpdateInfo implements Writable {
+public class BackendIdsUpdateInfo implements Writable {
     private List<Long> backendIds;
 
-    public DataNodeIdsUpdateInfo() {
+    public BackendIdsUpdateInfo() {
         this.backendIds = Lists.newArrayList();
     }
 
-    public DataNodeIdsUpdateInfo(List<Long> backends) {
+    public BackendIdsUpdateInfo(List<Long> backends) {
         this.backendIds = backends;
     }
 

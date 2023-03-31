@@ -48,7 +48,7 @@ import com.starrocks.thrift.TStorageMedium;
 import java.util.List;
 import java.util.Map;
 
-public class DataNodeProcNode implements ProcNodeInterface {
+public class BackendProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("RootPath").add("DataUsedCapacity").add("OtherUsedCapacity").add("AvailCapacity")
             .add("TotalCapacity").add("TotalUsedPct").add("State").add("PathHash").add("StorageMedium")
@@ -56,7 +56,7 @@ public class DataNodeProcNode implements ProcNodeInterface {
 
     private DataNode backend;
 
-    public DataNodeProcNode(DataNode backend) {
+    public BackendProcNode(DataNode backend) {
         this.backend = backend;
     }
 

@@ -79,7 +79,7 @@ public class SchedulerWorkingSlotsProcDir implements ProcDirInterface {
             throw new AnalysisException("Backend[" + backendId + "] does not exist.");
         }
 
-        return new DataNodeProcNode(backend);
+        return new BackendProcNode(backend);
     }
 
 }

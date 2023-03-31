@@ -47,7 +47,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-public class DataNodesProcDirTest {
+public class BackendsProcDirTest {
     private DataNode b1;
     private DataNode b2;
 
@@ -136,39 +136,39 @@ public class DataNodesProcDirTest {
 
     @Test(expected = AnalysisException.class)
     public void testLookupNormal() throws AnalysisException {
-        DataNodesProcDir dir;
+        BackendsProcDir dir;
         ProcNodeInterface node;
 
-        dir = new DataNodesProcDir(systemInfoService);
+        dir = new BackendsProcDir(systemInfoService);
         try {
             node = dir.lookup("1000");
             Assert.assertNotNull(node);
-            Assert.assertTrue(node instanceof DataNodeProcNode);
+            Assert.assertTrue(node instanceof BackendProcNode);
         } catch (AnalysisException e) {
             e.printStackTrace();
             Assert.fail();
         }
 
-        dir = new DataNodesProcDir(systemInfoService);
+        dir = new BackendsProcDir(systemInfoService);
         try {
             node = dir.lookup("1001");
             Assert.assertNotNull(node);
-            Assert.assertTrue(node instanceof DataNodeProcNode);
+            Assert.assertTrue(node instanceof BackendProcNode);
         } catch (AnalysisException e) {
             Assert.fail();
         }
 
-        dir = new DataNodesProcDir(systemInfoService);
+        dir = new BackendsProcDir(systemInfoService);
         node = dir.lookup("1002");
         Assert.fail();
     }
 
     @Test
     public void testLookupInvalid() {
-        DataNodesProcDir dir;
+        BackendsProcDir dir;
         ProcNodeInterface node;
 
-        dir = new DataNodesProcDir(systemInfoService);
+        dir = new BackendsProcDir(systemInfoService);
         try {
             node = dir.lookup(null);
         } catch (AnalysisException e) {
@@ -184,10 +184,10 @@ public class DataNodesProcDirTest {
 
     @Test
     public void testFetchResultNormal() throws AnalysisException {
-        DataNodesProcDir dir;
+        BackendsProcDir dir;
         ProcResult result;
 
-        dir = new DataNodesProcDir(systemInfoService);
+        dir = new BackendsProcDir(systemInfoService);
         result = dir.fetchResult();
         Assert.assertNotNull(result);
         Assert.assertTrue(result instanceof BaseProcResult);
@@ -195,6 +195,6 @@ public class DataNodesProcDirTest {
 
     @Test    
     public void testIPTitle() {
-        Assert.assertTrue(DataNodesProcDir.TITLE_NAMES.get(1).equals("IP"));
+        Assert.assertTrue(BackendsProcDir.TITLE_NAMES.get(1).equals("IP"));
     }
 }
