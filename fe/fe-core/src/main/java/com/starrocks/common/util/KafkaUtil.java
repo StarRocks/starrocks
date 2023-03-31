@@ -48,7 +48,7 @@ import com.starrocks.proto.PKafkaOffsetProxyResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PStringPair;
-import com.starrocks.rpc.DataNodeServiceClient;
+import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.DataNode;
 import com.starrocks.thrift.TNetworkAddress;
@@ -187,7 +187,7 @@ public class KafkaUtil {
 
                 // get info
                 request.timeout = Config.routine_load_kafka_timeout_second;
-                Future<PProxyResult> future = DataNodeServiceClient.getInstance().getInfo(address, request);
+                Future<PProxyResult> future = BackendServiceClient.getInstance().getInfo(address, request);
                 PProxyResult result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
                 TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                 if (code != TStatusCode.OK) {

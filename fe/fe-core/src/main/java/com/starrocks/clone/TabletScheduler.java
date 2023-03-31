@@ -1072,7 +1072,7 @@ public class TabletScheduler extends LeaderDaemon {
         Replica chosenReplica = null;
         double maxScore = 0;
         for (Replica replica : replicas) {
-            DataNodeLoadStatistic beStatistic = statistic.getBackendLoadStatistic(replica.getBackendId());
+            BackendLoadStatistic beStatistic = statistic.getBackendLoadStatistic(replica.getBackendId());
             if (beStatistic == null) {
                 continue;
             }
@@ -1323,12 +1323,12 @@ public class TabletScheduler extends LeaderDaemon {
         if (statistic == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }
-        List<DataNodeLoadStatistic> beStatistics = statistic.getSortedBeLoadStats(null /* sorted ignore medium */);
+        List<BackendLoadStatistic> beStatistics = statistic.getSortedBeLoadStats(null /* sorted ignore medium */);
 
         // get all available paths which this tablet can fit in.
         // beStatistics is sorted by mix load score in ascend order, so select from first to last.
         List<RootPathLoadStatistic> allFitPaths = Lists.newArrayList();
-        for (DataNodeLoadStatistic bes : beStatistics) {
+        for (BackendLoadStatistic bes : beStatistics) {
             if (!bes.isAvailable()) {
                 continue;
             }

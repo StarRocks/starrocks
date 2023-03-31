@@ -20,7 +20,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.UserException;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
-import com.starrocks.rpc.DataNodeServiceClient;
+import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TMVMaintenanceTasks;
@@ -196,7 +196,7 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
 
             LOG.info("runEpoch: {}", request);
             try {
-                results.add(DataNodeServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request));
+                results.add(BackendServiceClient.getInstance().submitMVMaintenanceTaskAsync(address, request));
             } catch (Exception e) {
                 epoch.onFailed();
                 LOG.warn("deploy job of MV {} failed: ", view.getName());

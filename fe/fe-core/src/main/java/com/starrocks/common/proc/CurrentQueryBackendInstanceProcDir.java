@@ -32,7 +32,7 @@ import java.util.Map;
 /*
  * show proc "/current_backend_instances";
  */
-public class CurrentQueryDataNodeInstanceProcDir implements ProcDirInterface {
+public class CurrentQueryBackendInstanceProcDir implements ProcDirInterface {
 
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Backend").add("InstanceNum").add("InstanceId").add("ExecTime").build();

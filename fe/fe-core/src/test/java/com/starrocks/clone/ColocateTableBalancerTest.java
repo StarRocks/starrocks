@@ -493,9 +493,9 @@ public class ColocateTableBalancerTest {
         new Expectations() {
             {
                 statistic.getBackendLoadStatistic(anyLong);
-                result = new Delegate<DataNodeLoadStatistic>() {
-                    DataNodeLoadStatistic delegate(Long beId) {
-                        return new FakeDataNodeLoadStatistic(beId, null, null, null);
+                result = new Delegate<BackendLoadStatistic>() {
+                    BackendLoadStatistic delegate(Long beId) {
+                        return new FakeBackendLoadStatistic(beId, null, null, null);
                     }
                 };
                 minTimes = 0;
@@ -521,9 +521,9 @@ public class ColocateTableBalancerTest {
         Assert.assertArrayEquals(new long[] {7L, 1L, 6L, 3L, 5L, 4L, 8L, 2L}, backendIds);
     }
 
-    public final class FakeDataNodeLoadStatistic extends DataNodeLoadStatistic {
-        public FakeDataNodeLoadStatistic(long beId, String clusterName, SystemInfoService infoService,
-                                         TabletInvertedIndex invertedIndex) {
+    public final class FakeBackendLoadStatistic extends BackendLoadStatistic {
+        public FakeBackendLoadStatistic(long beId, String clusterName, SystemInfoService infoService,
+                                        TabletInvertedIndex invertedIndex) {
             super(beId, clusterName, infoService, invertedIndex);
         }
 
@@ -729,9 +729,9 @@ public class ColocateTableBalancerTest {
                 minTimes = 0;
 
                 statistic.getBackendLoadStatistic(anyLong);
-                result = new Delegate<DataNodeLoadStatistic>() {
-                    DataNodeLoadStatistic delegate(Long beId) {
-                        return new FakeDataNodeLoadStatistic(beId, null, null, null);
+                result = new Delegate<BackendLoadStatistic>() {
+                    BackendLoadStatistic delegate(Long beId) {
+                        return new FakeBackendLoadStatistic(beId, null, null, null);
                     }
                 };
                 minTimes = 0;

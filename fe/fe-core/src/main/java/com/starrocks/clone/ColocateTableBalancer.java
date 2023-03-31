@@ -693,8 +693,8 @@ public class ColocateTableBalancer extends LeaderDaemon {
                     if (!entry1.getValue().equals(entry2.getValue())) {
                         return (int) (entry2.getValue() - entry1.getValue());
                     }
-                    DataNodeLoadStatistic beStat1 = statistic.getBackendLoadStatistic(entry1.getKey());
-                    DataNodeLoadStatistic beStat2 = statistic.getBackendLoadStatistic(entry2.getKey());
+                    BackendLoadStatistic beStat1 = statistic.getBackendLoadStatistic(entry1.getKey());
+                    BackendLoadStatistic beStat2 = statistic.getBackendLoadStatistic(entry2.getKey());
                     if (beStat1 == null || beStat2 == null) {
                         return 0;
                     }

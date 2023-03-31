@@ -38,8 +38,8 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.clone.DataNodeLoadStatistic.Classification;
-import com.starrocks.clone.DataNodeLoadStatistic.LoadScore;
+import com.starrocks.clone.BackendLoadStatistic.Classification;
+import com.starrocks.clone.BackendLoadStatistic.LoadScore;
 import com.starrocks.common.Config;
 import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
@@ -70,7 +70,7 @@ public class ClusterLoadStatistic {
     private Map<TStorageMedium, Double> avgLoadScoreMap = Maps.newHashMap();
     // storage medium -> number of backend which has this kind of medium
     private Map<TStorageMedium, Integer> backendNumMap = Maps.newHashMap();
-    private List<DataNodeLoadStatistic> beLoadStatistics = Lists.newArrayList();
+    private List<BackendLoadStatistic> beLoadStatistics = Lists.newArrayList();
 
     public ClusterLoadStatistic(SystemInfoService infoService, TabletInvertedIndex invertedIndex) {
         this.infoService = infoService;
@@ -80,7 +80,7 @@ public class ClusterLoadStatistic {
     public void init() {
         ImmutableMap<Long, DataNode> backends = infoService.getIdToBackend();
         for (DataNode backend : backends.values()) {
-            DataNodeLoadStatistic beStatistic = new DataNodeLoadStatistic(backend.getId(),
+            BackendLoadStatistic beStatistic = new BackendLoadStatistic(backend.getId(),
                     SystemInfoService.DEFAULT_CLUSTER, infoService, invertedIndex);
             try {
                 beStatistic.init();
@@ -111,7 +111,7 @@ public class ClusterLoadStatistic {
                     totalReplicaNumMap.getOrDefault(medium, 0L) / (double) backendNumMap.getOrDefault(medium, 1));
         }
 
-        for (DataNodeLoadStatistic beStatistic : beLoadStatistics) {
+        for (BackendLoadStatistic beStatistic : beLoadStatistics) {
             beStatistic.calcScore(avgUsedCapacityPercentMap, avgReplicaNumPercentMap);
         }
 
@@ -121,7 +121,7 @@ public class ClusterLoadStatistic {
         }
 
         // sort be stats by mix load score
-        Collections.sort(beLoadStatistics, DataNodeLoadStatistic.MIX_COMPARATOR);
+        Collections.sort(beLoadStatistics, BackendLoadStatistic.MIX_COMPARATOR);
     }
 
     /*
@@ -132,7 +132,7 @@ public class ClusterLoadStatistic {
             return;
         }
         double totalLoadScore = 0.0;
-        for (DataNodeLoadStatistic beStat : beLoadStatistics) {
+        for (BackendLoadStatistic beStat : beLoadStatistics) {
             totalLoadScore += beStat.getLoadScore(medium);
         }
         int numBe = backendNumMap.get(medium);
@@ -142,7 +142,7 @@ public class ClusterLoadStatistic {
         int lowCounter = 0;
         int midCounter = 0;
         int highCounter = 0;
-        for (DataNodeLoadStatistic beStat : beLoadStatistics) {
+        for (BackendLoadStatistic beStat : beLoadStatistics) {
             if (!beStat.hasMedium(medium)) {
                 continue;
             }
@@ -166,13 +166,13 @@ public class ClusterLoadStatistic {
                 medium, avgLoadScore, lowCounter, midCounter, highCounter);
     }
 
-    private static void sortBeStats(List<DataNodeLoadStatistic> beStats, TStorageMedium medium) {
+    private static void sortBeStats(List<BackendLoadStatistic> beStats, TStorageMedium medium) {
         if (medium == null) {
-            Collections.sort(beStats, DataNodeLoadStatistic.MIX_COMPARATOR);
+            Collections.sort(beStats, BackendLoadStatistic.MIX_COMPARATOR);
         } else if (medium == TStorageMedium.HDD) {
-            Collections.sort(beStats, DataNodeLoadStatistic.HDD_COMPARATOR);
+            Collections.sort(beStats, BackendLoadStatistic.HDD_COMPARATOR);
         } else {
-            Collections.sort(beStats, DataNodeLoadStatistic.SSD_COMPARATOR);
+            Collections.sort(beStats, BackendLoadStatistic.SSD_COMPARATOR);
         }
     }
 
@@ -188,8 +188,8 @@ public class ClusterLoadStatistic {
         double currentSrcBeScore;
         double currentDestBeScore;
 
-        DataNodeLoadStatistic srcBeStat = null;
-        Optional<DataNodeLoadStatistic> optSrcBeStat = beLoadStatistics.stream().filter(
+        BackendLoadStatistic srcBeStat = null;
+        Optional<BackendLoadStatistic> optSrcBeStat = beLoadStatistics.stream().filter(
                 t -> t.getBeId() == srcBeId).findFirst();
         if (optSrcBeStat.isPresent()) {
             srcBeStat = optSrcBeStat.get();
@@ -197,8 +197,8 @@ public class ClusterLoadStatistic {
             return false;
         }
 
-        DataNodeLoadStatistic destBeStat = null;
-        Optional<DataNodeLoadStatistic> optDestBeStat = beLoadStatistics.stream().filter(
+        BackendLoadStatistic destBeStat = null;
+        Optional<BackendLoadStatistic> optDestBeStat = beLoadStatistics.stream().filter(
                 t -> t.getBeId() == destBeId).findFirst();
         if (optDestBeStat.isPresent()) {
             destBeStat = optDestBeStat.get();
@@ -213,11 +213,11 @@ public class ClusterLoadStatistic {
         currentSrcBeScore = srcBeStat.getLoadScore(medium);
         currentDestBeScore = destBeStat.getLoadScore(medium);
 
-        LoadScore newSrcBeScore = DataNodeLoadStatistic.calcSore(srcBeStat.getTotalUsedCapacityB(medium) - tabletSize,
+        LoadScore newSrcBeScore = BackendLoadStatistic.calcSore(srcBeStat.getTotalUsedCapacityB(medium) - tabletSize,
                 srcBeStat.getTotalCapacityB(medium), srcBeStat.getReplicaNum(medium) - 1,
                 avgUsedCapacityPercentMap.get(medium), avgReplicaNumPercentMap.get(medium));
 
-        LoadScore newDestBeScore = DataNodeLoadStatistic.calcSore(destBeStat.getTotalUsedCapacityB(medium) + tabletSize,
+        LoadScore newDestBeScore = BackendLoadStatistic.calcSore(destBeStat.getTotalUsedCapacityB(medium) + tabletSize,
                 destBeStat.getTotalCapacityB(medium), destBeStat.getReplicaNum(medium) + 1,
                 avgUsedCapacityPercentMap.get(medium), avgReplicaNumPercentMap.get(medium));
 
@@ -239,7 +239,7 @@ public class ClusterLoadStatistic {
     public List<List<String>> getClusterStatistic(TStorageMedium medium) {
         List<List<String>> statistics = Lists.newArrayList();
 
-        for (DataNodeLoadStatistic beStatistic : beLoadStatistics) {
+        for (BackendLoadStatistic beStatistic : beLoadStatistics) {
             if (!beStatistic.hasMedium(medium)) {
                 continue;
             }
@@ -250,8 +250,8 @@ public class ClusterLoadStatistic {
         return statistics;
     }
 
-    public DataNodeLoadStatistic getBackendLoadStatistic(long beId) {
-        for (DataNodeLoadStatistic backendLoadStatistic : beLoadStatistics) {
+    public BackendLoadStatistic getBackendLoadStatistic(long beId) {
+        for (BackendLoadStatistic backendLoadStatistic : beLoadStatistics) {
             if (backendLoadStatistic.getBeId() == beId) {
                 return backendLoadStatistic;
             }
@@ -260,7 +260,7 @@ public class ClusterLoadStatistic {
     }
 
     public RootPathLoadStatistic getRootPathLoadStatistic(long beId, long pathHash) {
-        for (DataNodeLoadStatistic backendLoadStatistic : beLoadStatistics) {
+        for (BackendLoadStatistic backendLoadStatistic : beLoadStatistics) {
             if (backendLoadStatistic.getBeId() == beId) {
                 return backendLoadStatistic.getPathStatistic(pathHash);
             }
@@ -268,7 +268,7 @@ public class ClusterLoadStatistic {
         return null;
     }
 
-    public List<DataNodeLoadStatistic> getAllBackendLoadStatistic() {
+    public List<BackendLoadStatistic> getAllBackendLoadStatistic() {
         return beLoadStatistics;
     }
 
@@ -279,12 +279,12 @@ public class ClusterLoadStatistic {
      * If no 'low' Backends, 'mid' Backends will be treated as 'low'
      */
     public void getBackendStatisticByClass(
-            List<DataNodeLoadStatistic> low,
-            List<DataNodeLoadStatistic> mid,
-            List<DataNodeLoadStatistic> high,
+            List<BackendLoadStatistic> low,
+            List<BackendLoadStatistic> mid,
+            List<BackendLoadStatistic> high,
             TStorageMedium medium) {
 
-        for (DataNodeLoadStatistic beStat : beLoadStatistics) {
+        for (BackendLoadStatistic beStat : beLoadStatistics) {
             Classification clazz = beStat.getClazz(medium);
             switch (clazz) {
                 case LOW:
@@ -322,9 +322,9 @@ public class ClusterLoadStatistic {
                 low.size(), mid.size(), high.size(), medium);
     }
 
-    public List<DataNodeLoadStatistic> getSortedBeLoadStats(TStorageMedium medium) {
+    public List<BackendLoadStatistic> getSortedBeLoadStats(TStorageMedium medium) {
         if (medium != null) {
-            List<DataNodeLoadStatistic> beStatsWithMedium = beLoadStatistics.stream().filter(
+            List<BackendLoadStatistic> beStatsWithMedium = beLoadStatistics.stream().filter(
                     b -> b.hasMedium(medium)).collect(Collectors.toList());
             sortBeStats(beStatsWithMedium, medium);
             return beStatsWithMedium;
@@ -336,7 +336,7 @@ public class ClusterLoadStatistic {
 
     public String getBrief() {
         StringBuilder sb = new StringBuilder();
-        for (DataNodeLoadStatistic backendLoadStatistic : beLoadStatistics) {
+        for (BackendLoadStatistic backendLoadStatistic : beLoadStatistics) {
             sb.append("    ").append(backendLoadStatistic).append("\n");
         }
         return sb.toString();
