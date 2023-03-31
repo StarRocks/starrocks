@@ -2326,7 +2326,8 @@ public class AlterTest {
     @Test
     public void testCreateTemporaryPartitionInBatch() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        String createSQL = "CREATE TABLE test.site_access(\n" +
+        starRocksAssert.withDatabase("test2");
+        String createSQL = "CREATE TABLE test2.site_access(\n" +
                 "    event_day datetime,\n" +
                 "    site_id INT DEFAULT '10',\n" +
                 "    city_code VARCHAR(100),\n" +
@@ -2344,17 +2345,17 @@ public class AlterTest {
 
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test2");
 
 
-        String sql = "alter table site_access add TEMPORARY partitions " +
+        String sql = "alter table test2.site_access add TEMPORARY partitions " +
                 "START (\"2023-03-27\") END (\"2023-03-30\") EVERY (INTERVAL 1 day);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
 
         GlobalStateMgr.getCurrentState().addPartitions(db, "site_access", addPartitionClause);
 
-        Table table = GlobalStateMgr.getCurrentState().getDb("test")
+        Table table = GlobalStateMgr.getCurrentState().getDb("test2")
                 .getTable("site_access");
         OlapTable olapTable = (OlapTable) table;
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
