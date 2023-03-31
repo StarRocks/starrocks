@@ -48,8 +48,8 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.DataNode;
-import com.starrocks.system.DataNodeCoreStat;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -187,7 +187,7 @@ public class BackendsProcDir implements ProcDirInterface {
             backendInfo.add(String.format("%.2f", dataUsed) + " %");
 
             // Num CPU cores
-            backendInfo.add(DataNodeCoreStat.getCoresOfBe(backendId));
+            backendInfo.add(BackendCoreStat.getCoresOfBe(backendId));
 
             backendInfo.add(backend.getNumRunningQueries());
             double memUsedPct = backend.getMemUsedPct();
