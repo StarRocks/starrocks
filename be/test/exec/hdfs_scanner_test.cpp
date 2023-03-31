@@ -1554,8 +1554,8 @@ TEST_F(HdfsScannerTest, TestCSVWithStructMap) {
         EXPECT_TRUE(status.ok());
         EXPECT_EQ(2, chunk->num_rows());
 
-        EXPECT_EQ("[1, NULL, NULL]", chunk->debug_row(0));
-        EXPECT_EQ("[2, NULL, NULL]", chunk->debug_row(1));
+        EXPECT_EQ("[1, [NULL,NULL], [NULL,NULL,NULL]]", chunk->debug_row(0));
+        EXPECT_EQ("[2, [NULL], [NULL,NULL]]", chunk->debug_row(1));
 
         scanner->close(_runtime_state);
     }

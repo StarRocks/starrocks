@@ -187,12 +187,8 @@ Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
     for (const auto slot : _scanner_params.materialize_slots) {
         DCHECK(slot != nullptr);
         // We don't care about options.invalid_field_as_null here, converte failed
-        auto converter = csv::get_converter(slot->type(), true);
-        if (converter == nullptr && !_invalid_field_as_null) {
-            return Status::NotSupported(strings::Substitute("Unsupported CSV type $0", slot->type().debug_string()));
-        } else if (converter == nullptr) {
-            converter = csv::get_default_value_converter();
-        }
+        auto converter = csv::get_hive_converter(slot->type(), true);
+        DCHECK(converter != nullptr);
         _converters.emplace_back(std::move(converter));
     }
     return Status::OK();

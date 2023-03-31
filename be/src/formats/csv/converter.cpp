@@ -30,7 +30,7 @@
 
 namespace starrocks::csv {
 
-static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
+static std::unique_ptr<Converter> create_converter(const TypeDescriptor& t, const bool is_hive) {
     switch (t.type) {
     case TYPE_BOOLEAN:
         return std::make_unique<BooleanConverter>();
@@ -58,11 +58,22 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
     case TYPE_DATETIME:
         return std::make_unique<DatetimeConverter>();
     case TYPE_ARRAY: {
-        auto c = get_converter(t.children[0], true);
-        if (c == nullptr) {
-            return nullptr;
+        // For hive, if array's element converter is nullptr, we use DefaultValueConverter instead
+        if (is_hive) {
+            auto c = get_converter(t.children[0], true);
+            if (c == nullptr) {
+                c = std::make_unique<DefaultValueConverter>();
+            }
+            return std::make_unique<ArrayConverter>(std::move(c));
+        } else {
+            // For broker load, if array's element converter is nullptr, we return nullptr directly, to avoid NPE
+            // problem when reading array's element.
+            auto c = get_converter(t.children[0], true);
+            if (c == nullptr) {
+                return nullptr;
+            }
+            return std::make_unique<ArrayConverter>(std::move(c));
         }
-        return std::make_unique<ArrayConverter>(std::move(c));
     }
     case TYPE_DECIMAL32:
         return std::make_unique<DecimalV3Converter<int32_t>>(t.precision, t.scale);
@@ -79,15 +90,19 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
 }
 
 std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool nullable) {
-    auto c = get_converter(type_desc);
+    auto c = create_converter(type_desc, false);
     if (c == nullptr) {
         return nullptr;
     }
     return nullable ? std::make_unique<NullableConverter>(std::move(c)) : std::move(c);
 }
 
-std::unique_ptr<Converter> get_default_value_converter() {
-    return std::make_unique<DefaultValueConverter>();
+std::unique_ptr<Converter> get_hive_converter(const TypeDescriptor& type_desc, bool nullable) {
+    auto c = create_converter(type_desc, true);
+    if (c == nullptr) {
+        return std::make_unique<DefaultValueConverter>();
+    }
+    return nullable ? std::make_unique<NullableConverter>(std::move(c)) : std::move(c);
 }
 
 } // namespace starrocks::csv

@@ -20,14 +20,14 @@
 
 namespace starrocks::csv {
 
-TEST(DefaultValueConverterTest, test_array_nested_with_map) {
+TEST(DefaultValueConverterTest, test_hive_array_nested_with_map) {
     // ARRAY<TINYINT>
     TypeDescriptor t(TYPE_ARRAY);
     t.children.emplace_back(TYPE_MAP);
     t.children[0].children.emplace_back(TYPE_INT);
     t.children[0].children.emplace_back(TYPE_INT);
 
-    auto conv = csv::get_converter(t, true);
+    auto conv = csv::get_hive_converter(t, true);
     auto col = ColumnHelper::create_column(t, true);
 
     Converter::Options opts;
@@ -40,4 +40,15 @@ TEST(DefaultValueConverterTest, test_array_nested_with_map) {
     EXPECT_FALSE(conv->read_string(col.get(), "[MAP]", opts));
 }
 
-} // namespace csv
+TEST(DefaultValueConverterTest, test_array_nested_with_map) {
+    // ARRAY<TINYINT>
+    TypeDescriptor t(TYPE_ARRAY);
+    t.children.emplace_back(TYPE_MAP);
+    t.children[0].children.emplace_back(TYPE_INT);
+    t.children[0].children.emplace_back(TYPE_INT);
+
+    auto conv = csv::get_converter(t, true);
+    EXPECT_EQ(nullptr, conv);
+}
+
+} // namespace starrocks::csv
