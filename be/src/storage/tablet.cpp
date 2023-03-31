@@ -1396,4 +1396,16 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
     }
 }
 
+std::string Tablet::schema_debug_string() const {
+    return _tablet_meta->tablet_schema().debug_string();
+}
+
+std::string Tablet::debug_string() const {
+    if (_updates) {
+        return _updates->debug_string();
+    }
+    // TODO: add more debug info
+    return string();
+}
+
 } // namespace starrocks

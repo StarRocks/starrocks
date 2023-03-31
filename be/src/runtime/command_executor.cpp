@@ -19,6 +19,7 @@
 #include "common/configbase.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/update_config_action.h"
+#include "script/script.h"
 
 namespace starrocks {
 
@@ -41,10 +42,12 @@ Status handle_set_config(const string& params_str) {
     return update_config->update_config(name_itr->value.GetString(), value_itr->value.GetString());
 }
 
-Status execute_command(const std::string& command, const std::string& params) {
-    LOG(INFO) << "execute command: " << command << " params: " << params;
+Status execute_command(const std::string& command, const std::string& params, std::string* result) {
+    LOG(INFO) << "execute command: " << command << " params: " << params.substr(0, 2000);
     if (command == "set_config") {
         return handle_set_config(params);
+    } else if (command == "execute_script") {
+        return execute_script(params, *result);
     }
     return Status::NotSupported(strings::Substitute("command $0 not supported", command));
 }

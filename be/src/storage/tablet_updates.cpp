@@ -3721,4 +3721,28 @@ void TabletUpdates::to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& ro
     }
 }
 
+std::vector<std::string> TabletUpdates::get_version_list() const {
+    std::lock_guard wl(_lock);
+    std::vector<std::string> version_list;
+    for (auto& edit_version_info : _edit_version_infos) {
+        version_list.emplace_back(edit_version_info->version.to_string());
+    }
+    return version_list;
+}
+
+std::shared_ptr<EditVersionInfo> TabletUpdates::get_edit_version(const string& version) const {
+    std::lock_guard wl(_lock);
+    for (auto& edit_version_info : _edit_version_infos) {
+        if (edit_version_info->version.to_string() == version) {
+            return std::make_shared<EditVersionInfo>(*edit_version_info);
+        }
+    }
+    return nullptr;
+}
+
+std::shared_ptr<std::unordered_map<uint32_t, RowsetSharedPtr>> TabletUpdates::get_rowset_map() const {
+    std::lock_guard lg(_rowsets_lock);
+    return std::make_shared<std::unordered_map<uint32_t, RowsetSharedPtr>>(_rowsets);
+}
+
 } // namespace starrocks

@@ -21,7 +21,8 @@
 namespace starrocks {
 
 TEST(CommandExecutorTest, not_support) {
-    EXPECT_TRUE(execute_command("set_config_11", "{}").is_not_supported());
+    std::string result;
+    EXPECT_TRUE(execute_command("set_config_11", "{}", &result).is_not_supported());
 }
 
 } // namespace starrocks

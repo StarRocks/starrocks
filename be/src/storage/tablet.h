@@ -117,6 +117,8 @@ public:
     size_t num_rows_per_row_block() const;
     size_t next_unique_id() const;
     size_t field_index(const string& field_name) const;
+    std::string schema_debug_string() const;
+    std::string debug_string() const;
 
     // operation in rowsets
     Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
