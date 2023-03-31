@@ -116,6 +116,7 @@ public:
 
     Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
+    std::vector<string> get_store_paths();
     // get root path for creating tablet. The returned vector of root path should be random,
     // for avoiding that all the tablet would be deployed one disk.
     std::vector<DataDir*> get_stores_for_create_tablet(TStorageMedium::type storage_medium);

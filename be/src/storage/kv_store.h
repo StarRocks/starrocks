@@ -77,9 +77,13 @@ public:
                          const std::string& upper_bound,
                          std::function<bool(std::string_view, std::string_view)> const& func);
 
+    const std::string& root_path() const { return _root_path; }
+
     Status compact();
 
-    Status flush();
+    Status flushWAL();
+
+    Status flushMemTable();
 
     std::string get_stats();
 

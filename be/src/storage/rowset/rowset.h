@@ -209,6 +209,7 @@ public:
     size_t total_row_size() const { return rowset_meta()->total_row_size(); }
     Version version() const { return rowset_meta()->version(); }
     RowsetId rowset_id() const { return rowset_meta()->rowset_id(); }
+    std::string rowset_id_str() const { return rowset_meta()->rowset_id().to_string(); }
     int64_t creation_time() const { return rowset_meta()->creation_time(); }
     PUniqueId load_id() const { return rowset_meta()->load_id(); }
     int64_t txn_id() const { return rowset_meta()->txn_id(); }

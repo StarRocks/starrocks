@@ -286,8 +286,12 @@ Status KVStore::compact() {
     return to_status(st);
 }
 
-Status KVStore::flush() {
+Status KVStore::flushWAL() {
     return to_status(_db->FlushWAL(true));
+}
+
+Status KVStore::flushMemTable() {
+    return to_status(_db->Flush(rocksdb::FlushOptions()));
 }
 
 std::string KVStore::get_stats() {
