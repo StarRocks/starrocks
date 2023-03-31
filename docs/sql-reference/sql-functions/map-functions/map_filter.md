@@ -43,7 +43,7 @@ The Lambda expression must have two parameters. The first parameter represents t
 
 ## Examples
 
-### Use array<boolean>
+### Use `array<boolean>`
 
 The following example uses [map_from_arrays()](map_from_arrays.md) to generate a map value `{1:"ab",3:"cdd",2:null,null:"abc"}`. Then each key-value pair is evaluated against `array<boolean>` and the pair whose result is `true` is returned.
 
