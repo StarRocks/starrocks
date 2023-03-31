@@ -230,7 +230,7 @@ public class RangePartitionInfo extends PartitionInfo {
         return range;
     }
 
-    public Range<PartitionKey> createAutomaticShadowPartition(long partitionId, String replicateNum) throws DdlException {
+    public Range<PartitionKey> createAutomaticShadowPartition(long partitionId) throws DdlException {
         Range<PartitionKey> range = null;
         try {
             PartitionKey shadowPartitionKey = PartitionKey.createShadowPartitionKey(partitionColumns);
@@ -243,7 +243,7 @@ public class RangePartitionInfo extends PartitionInfo {
             throw new DdlException("Invalid key range: " + e.getMessage());
         }
         idToDataProperty.put(partitionId, new DataProperty(TStorageMedium.HDD));
-        idToReplicationNum.put(partitionId, Short.valueOf(replicateNum));
+        idToReplicationNum.put(partitionId, Short.valueOf("1"));
         idToInMemory.put(partitionId, false);
         idToStorageCacheInfo.put(partitionId, new StorageCacheInfo(true,
                 Config.lake_default_storage_cache_ttl_seconds, false));
