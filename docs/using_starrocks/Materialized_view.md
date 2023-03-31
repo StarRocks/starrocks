@@ -243,7 +243,7 @@ Currently, StarRocks supports rewriting queries on asynchronous materialized vie
   where empid < 5;
   ```
 
-### Rewrite queries in View Delta Join scenario
+### Rewrite queries in View Delta Join scenarios
 
 StarRocks now supports rewriting queries based on asynchronous materialized views with Delta Join, which means that the queried tables are a subset of the materialized view's base tables. For example, queries of the form `table_a INNER JOIN table_b` can be rewritten by materialized views of the form `table_a INNER JOIN table_b INNER JOIN/LEFT OUTER JOIN table_c`, where `table_b INNER JOIN/LEFT OUTER JOIN table_c` is the Delta Join. This feature allows transparent acceleration for such queries, thereby preserving the flexibility of the query and avoiding the huge cost of building wide tables.
 
