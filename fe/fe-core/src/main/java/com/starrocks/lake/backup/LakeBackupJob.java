@@ -85,7 +85,7 @@ public class LakeBackupJob extends BackupJob {
                 status = new Status(Status.ErrCode.NOT_FOUND, "table " + tblName + " does not exist");
                 return;
             }
-            if (!tbl.isLakeTable()) {
+            if (!tbl.isCloudNativeTable()) {
                 status = new Status(Status.ErrCode.COMMON_ERROR, "table " + tblName
                         + " is not LAKE table");
                 return;

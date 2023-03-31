@@ -945,7 +945,7 @@ public class DatabaseTransactionMgr {
                         return;
                     }
 
-                    if (table.isCloudNativeTable()) {
+                    if (table.isCloudNativeTableOrMaterializedView()) {
                         continue;
                     }
 
@@ -1139,7 +1139,7 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
                 partitionCommitInfo.setVersion(partition.getNextVersion());
-                partitionCommitInfo.setVersionTime(table.isLakeTable() ? 0 : commitTs);
+                partitionCommitInfo.setVersionTime(table.isCloudNativeTable() ? 0 : commitTs);
             }
         }
 

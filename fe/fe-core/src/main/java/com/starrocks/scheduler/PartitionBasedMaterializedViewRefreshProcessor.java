@@ -298,7 +298,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             BaseTableInfo baseTableInfo = tablePair.first;
             Table table = tablePair.second;
-            if (!table.isNativeTable()) {
+            if (!table.isNativeTableOrMaterializedView()) {
                 context.getCtx().getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
                         baseTableInfo.getDbName(), table, Lists.newArrayList(), true);
             }
@@ -347,7 +347,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
             // remove partition info of not-exist partition for snapshot table from version map
             Table snapshotTable = snapshotBaseTables.get(tableId).second;
-            if (snapshotTable.isOlapOrLakeTable()) {
+            if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapshotOlapTable = (OlapTable) snapshotTable;
                 currentTablePartitionInfo.keySet().removeIf(partitionName ->
                         !snapshotOlapTable.getPartitionNames().contains(partitionName));
@@ -520,7 +520,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private boolean supportRefreshByPartition(Table table) {
-        if (table.isLocalTable() || table.isHiveTable() || table.isLakeTable()) {
+        if (table.isOlapTableOrMaterializedView() || table.isHiveTable() || table.isCloudNativeTable()) {
             return true;
         }
         return false;
@@ -662,7 +662,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 }
                 tableNamePartitionNames.put(table.getName(), needRefreshTablePartitionNames);
             } else {
-                if (table.isNativeTable()) {
+                if (table.isNativeTableOrMaterializedView()) {
                     tableNamePartitionNames.put(table.getName(), ((OlapTable) table).getPartitionNames());
                 }
             }
@@ -707,7 +707,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             // generate partition predicate for external table because it can not use partition names
             // to scan partial partitions
             Table table = tableRelation.getTable();
-            if (tablePartitionNames != null && !table.isNativeTable()) {
+            if (tablePartitionNames != null && !table.isNativeTableOrMaterializedView()) {
                 generatePartitionPredicate(tablePartitionNames, queryStatement, tableRelation);
             }
         }
@@ -762,7 +762,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     return true;
                 }
 
-                if (snapshotTable.isOlapOrLakeTable()) {
+                if (snapshotTable.isOlapOrCloudNativeTable()) {
                     OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
                     if (snapShotOlapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
                         Set<String> partitionNames = ((OlapTable) table).getPartitionNames();
@@ -938,7 +938,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                         throw new DmlException("Failed to copy olap table: %s", table.getName());
                     }
                     tables.put(table.getId(), Pair.create(baseTableInfo, copied));
-                } else if (table.isLakeTable()) {
+                } else if (table.isCloudNativeTable()) {
                     LakeTable copied = DeepCopy.copyWithGson(table, LakeTable.class);
                     if (copied == null) {
                         throw new DmlException("Failed to copy lake table: %s", table.getName());

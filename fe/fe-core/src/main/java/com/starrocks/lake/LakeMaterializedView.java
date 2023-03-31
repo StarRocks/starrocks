@@ -44,6 +44,7 @@ import java.util.Map;
 
 /**
  * Metadata for StarRocks lake materialized view
+ * todo: Rename to CloudNativeMaterializedView
  */
 public class LakeMaterializedView extends MaterializedView {
 
@@ -53,7 +54,7 @@ public class LakeMaterializedView extends MaterializedView {
                                 PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
                                 MvRefreshScheme refreshScheme) {
         super(id, dbId, mvName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, refreshScheme);
-        this.type = TableType.LAKE_MATERIALIZED_VIEW;
+        this.type = TableType.CLOUD_NATIVE_MATERIALIZED_VIEW;
     }
 
     private FilePathInfo getDefaultFilePathInfo() {

@@ -186,8 +186,8 @@ public class LakeMaterializedViewTest {
         byteArrayOutputStream.close();
 
         // Check lake mv and lake tablet
-        Assert.assertTrue(newTable.isLakeMaterializedView());
-        Assert.assertTrue(newTable.isCloudNativeTable());
+        Assert.assertTrue(newTable.isCloudNativeMaterializedView());
+        Assert.assertTrue(newTable.isCloudNativeTableOrMaterializedView());
         LakeMaterializedView newMv = (LakeMaterializedView) newTable;
 
         Assert.assertEquals("s3://test-bucket/1/", newMv.getStoragePath());
@@ -209,7 +209,7 @@ public class LakeMaterializedViewTest {
 
         // Test selectiveCopy
         MaterializedView newMv2 = mv.selectiveCopy(Lists.newArrayList("p1"), true, IndexExtState.ALL);
-        Assert.assertTrue(newMv2.isLakeMaterializedView());
+        Assert.assertTrue(newMv2.isCloudNativeMaterializedView());
         Assert.assertEquals("s3://test-bucket/1/", newMv.getStoragePath());
         cacheInfo = newMv.getPartitionFileCacheInfo(partitionId);
         Assert.assertTrue(cacheInfo.getEnableCache());
@@ -242,7 +242,7 @@ public class LakeMaterializedViewTest {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         MaterializedView mv = (MaterializedView) db.getTable("mv1");
-        Assert.assertTrue(mv.isLakeMaterializedView());
+        Assert.assertTrue(mv.isCloudNativeMaterializedView());
         Assert.assertTrue(mv.isActive());
 
         LakeMaterializedView lakeMv = (LakeMaterializedView) mv;
@@ -289,7 +289,7 @@ public class LakeMaterializedViewTest {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         MaterializedView mv = (MaterializedView) db.getTable("mv2");
-        Assert.assertTrue(mv.isLakeMaterializedView());
+        Assert.assertTrue(mv.isCloudNativeMaterializedView());
         Assert.assertTrue(mv.isActive());
 
         // drop base table and inactive mv
@@ -311,7 +311,7 @@ public class LakeMaterializedViewTest {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(DB);
         MaterializedView mv = (MaterializedView) db.getTable("mv3");
-        Assert.assertTrue(mv.isLakeMaterializedView());
+        Assert.assertTrue(mv.isCloudNativeMaterializedView());
 
         MaterializedView.AsyncRefreshContext asyncRefreshContext = mv.getRefreshScheme().getAsyncRefreshContext();
         Assert.assertEquals(4828164311L, asyncRefreshContext.getStartTime());
@@ -358,7 +358,7 @@ public class LakeMaterializedViewTest {
 
             Database db = GlobalStateMgr.getCurrentState().getDb(DB);
             MaterializedView mv = (MaterializedView) db.getTable("mv4");
-            Assert.assertTrue(mv.isLakeMaterializedView());
+            Assert.assertTrue(mv.isCloudNativeMaterializedView());
             Assert.assertTrue(mv.isActive());
 
             // modify column which defined in mv

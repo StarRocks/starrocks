@@ -155,7 +155,7 @@ public class TablesProcDir implements ProcDirInterface {
     }
 
     private long findReplicaCount(Table table) {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             return olapTable.getReplicaCount();
         }
@@ -163,7 +163,7 @@ public class TablesProcDir implements ProcDirInterface {
     }
 
     private String findState(Table table) {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             return olapTable.getState().toString();
         }
@@ -171,7 +171,7 @@ public class TablesProcDir implements ProcDirInterface {
     }
 
     private int findPartitionNum(Table table) {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             PartitionType partitionType = olapTable.getPartitionInfo().getType();
             if (partitionType == PartitionType.RANGE || partitionType == PartitionType.EXPR_RANGE
@@ -183,7 +183,7 @@ public class TablesProcDir implements ProcDirInterface {
     }
 
     private String findPartitionKey(Table table) {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             if (partitionInfo.getType() == PartitionType.RANGE) {
@@ -203,7 +203,7 @@ public class TablesProcDir implements ProcDirInterface {
     }
 
     private String findPartitionType(Table table) {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             return olapTable.getPartitionInfo().getType().typeString;
         } else if (table.getType() == TableType.ELASTICSEARCH) {
@@ -214,7 +214,7 @@ public class TablesProcDir implements ProcDirInterface {
     }
 
     private String findIndexNum(Table table) {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             return String.valueOf(olapTable.getIndexNameToId().size());
         }
@@ -223,7 +223,7 @@ public class TablesProcDir implements ProcDirInterface {
 
     private String findStoragePath(Table table) {
         String storageGroup = null;
-        if (table.isCloudNativeTable()) {
+        if (table.isCloudNativeTableOrMaterializedView()) {
             storageGroup = ((OlapTable) table).getStoragePath();
         }
         return storageGroup != null ? storageGroup : NULL_STRING_DEFAULT;

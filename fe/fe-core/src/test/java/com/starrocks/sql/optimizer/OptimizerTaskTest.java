@@ -1944,7 +1944,7 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo1;
                 minTimes = 0;
 
-                olapTable1.isNativeTable();
+                olapTable1.isNativeTableOrMaterializedView();
                 result = true;
                 minTimes = 0;
             }
@@ -1966,7 +1966,7 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo2;
                 minTimes = 0;
 
-                olapTable2.isNativeTable();
+                olapTable2.isNativeTableOrMaterializedView();
                 result = true;
                 minTimes = 0;
             }
@@ -2057,7 +2057,7 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo1;
                 minTimes = 0;
 
-                olapTable1.isNativeTable();
+                olapTable1.isNativeTableOrMaterializedView();
                 result = true;
                 minTimes = 0;
             }
@@ -2079,7 +2079,7 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo2;
                 minTimes = 0;
 
-                olapTable2.isNativeTable();
+                olapTable2.isNativeTableOrMaterializedView();
                 result = true;
                 minTimes = 0;
             }
@@ -2146,7 +2146,7 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo1;
                 minTimes = 0;
 
-                olapTable1.isNativeTable();
+                olapTable1.isNativeTableOrMaterializedView();
                 result = true;
                 minTimes = 0;
             }
@@ -2168,7 +2168,7 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo2;
                 minTimes = 0;
 
-                olapTable2.isNativeTable();
+                olapTable2.isNativeTableOrMaterializedView();
                 result = true;
                 minTimes = 0;
             }

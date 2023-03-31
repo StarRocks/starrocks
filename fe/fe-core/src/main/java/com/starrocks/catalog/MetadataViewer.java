@@ -203,7 +203,7 @@ public class MetadataViewer {
         db.readLock();
         try {
             Table tbl = db.getTable(tblName);
-            if (tbl == null || !tbl.isNativeTable()) {
+            if (tbl == null || !tbl.isNativeTableOrMaterializedView()) {
                 throw new DdlException("Table does not exist or is not native table: " + tblName);
             }
 

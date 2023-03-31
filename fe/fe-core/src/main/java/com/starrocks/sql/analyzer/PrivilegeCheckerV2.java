@@ -348,7 +348,7 @@ public class PrivilegeCheckerV2 {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null && !db.isInfoSchemaDb()) {
                 Table table = db.getTable(tableId);
-                if (table != null && table.isOlapOrLakeTable()) {
+                if (table != null && table.isOlapOrCloudNativeTable()) {
                     tableNames.add(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                             db.getFullName(), table.getName()));
                 }
@@ -369,7 +369,7 @@ public class PrivilegeCheckerV2 {
         Database db = GlobalStateMgr.getCurrentState().getDb(id);
         if (db != null && !db.isInfoSchemaDb()) {
             for (Table table : db.getTables()) {
-                if (table == null || !table.isOlapOrLakeTable()) {
+                if (table == null || !table.isOlapOrCloudNativeTable()) {
                     continue;
                 }
                 TableName tableNameNew = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,

@@ -228,7 +228,7 @@ public class PartitionUtil {
 
     public static Map<String, Range<PartitionKey>> getPartitionRange(Table table, Column partitionColumn)
             throws UserException {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             return ((OlapTable) table).getRangePartitionMap();
         } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable()) {
             return PartitionUtil.getMVPartitionNameWithRange(table, partitionColumn, getPartitionNames(table));

@@ -94,7 +94,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
     public List<List<Comparable>> fetchComparableResult(long version, long backendId, Replica.ReplicaState state) {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(index);
-        Preconditions.checkState(table.isLocalTable());
+        Preconditions.checkState(table.isOlapTableOrMaterializedView());
         ImmutableMap<Long, DataNode> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
         List<List<Comparable>> tabletInfos = new ArrayList<List<Comparable>>();

@@ -65,7 +65,7 @@ public class ShardDeleter extends LeaderDaemon {
             db.readLock();
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db)) {
-                    if (table.isCloudNativeTable()) {
+                    if (table.isCloudNativeTableOrMaterializedView()) {
                         GlobalStateMgr.getCurrentState()
                                 .getAllPartitionsIncludeRecycleBin((OlapTable) table)
                                 .stream()

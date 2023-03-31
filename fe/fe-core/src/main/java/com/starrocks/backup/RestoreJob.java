@@ -455,7 +455,7 @@ public class RestoreJob extends AbstractJob {
                     continue;
                 }
 
-                if (!tbl.isOlapOrLakeTable()) {
+                if (!tbl.isOlapOrCloudNativeTable()) {
                     status = new Status(ErrCode.COMMON_ERROR, "Only support retore OLAP table: " + tbl.getName());
                     return;
                 }
@@ -494,7 +494,7 @@ public class RestoreJob extends AbstractJob {
 
                     tblInfo.checkAndRecoverAutoIncrementId(localTbl);
                     // table already exist, check schema
-                    if (!localTbl.isOlapOrLakeTable()) {
+                    if (!localTbl.isOlapOrCloudNativeTable()) {
                         status = new Status(ErrCode.COMMON_ERROR,
                                 "Only support retore olap table: " + localTbl.getName());
                         return;
@@ -1477,7 +1477,7 @@ public class RestoreJob extends AbstractJob {
                 continue;
             }
 
-            if (!tbl.isOlapOrLakeTable()) {
+            if (!tbl.isOlapOrCloudNativeTable()) {
                 continue;
             }
 

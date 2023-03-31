@@ -278,7 +278,7 @@ public class ColocateMetaService {
                     writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                     return;
                 }
-                if (!table.isLakeTable()) {
+                if (!table.isCloudNativeTable()) {
                     response.appendContent("Not-supported table type");
                     writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                     return;

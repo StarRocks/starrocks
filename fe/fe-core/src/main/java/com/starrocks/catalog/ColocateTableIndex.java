@@ -196,12 +196,12 @@ public class ColocateTableIndex implements Writable {
             }
 
             if (groupAlreadyExist) {
-                if (tbl.isLakeTable() != lakeGroups.contains(groupId)) {
+                if (tbl.isCloudNativeTable() != lakeGroups.contains(groupId)) {
                     throw new DdlException("Table type mismatch with colocate group type.");
                 }
             }
 
-            if (tbl.isLakeTable()) {
+            if (tbl.isCloudNativeTable()) {
                 if (!isReplay) { // leader create or update meta group
                     LakeTable ltbl = (LakeTable) tbl;
                     List<Long> shardGroupIds = ltbl.getShardGroupIds();
@@ -276,7 +276,7 @@ public class ColocateTableIndex implements Writable {
 
             GroupId groupId = table2Group.remove(tableId);
 
-            if (tbl != null && tbl.isLakeTable() && !isReplay) {
+            if (tbl != null && tbl.isCloudNativeTable() && !isReplay) {
                 LakeTable ltbl = (LakeTable) tbl;
                 List<Long> shardGroupIds = ltbl.getShardGroupIds();
                 try {
@@ -1067,7 +1067,7 @@ public class ColocateTableIndex implements Writable {
 
     public void updateLakeTableColocationInfo(OlapTable olapTable, boolean isJoin,
             GroupId expectGroupId) throws DdlException {
-        if (olapTable == null || !olapTable.isLakeTable()) { // skip non-lake table
+        if (olapTable == null || !olapTable.isCloudNativeTable()) { // skip non-lake table
             return;
         }
 
@@ -1102,7 +1102,7 @@ public class ColocateTableIndex implements Writable {
             // database and table should be valid if reach here
             Database database = globalStateMgr.getDbIncludeRecycleBin(dbId);
             Table table = globalStateMgr.getTableIncludeRecycleBin(database, tableId);
-            if (table.isLakeTable()) {
+            if (table.isCloudNativeTable()) {
                 lakeGroups.add(entry.getValue());
             }
         }

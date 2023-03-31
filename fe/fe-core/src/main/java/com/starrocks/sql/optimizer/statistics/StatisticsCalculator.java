@@ -567,7 +567,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private long getTableRowCount(Table table, Operator node) {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             List<Partition> selectedPartitions;
             if (node.getOpType() == OperatorType.LOGICAL_BINLOG_SCAN ||
