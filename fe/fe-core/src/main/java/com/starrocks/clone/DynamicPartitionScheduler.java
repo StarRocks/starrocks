@@ -513,20 +513,12 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
             Map<Long, Range<PartitionKey>> idToRange = rangePartitionInfo.getIdToRange(false);
             for (Map.Entry<Long, Range<PartitionKey>> partitionRange : idToRange.entrySet()) {
                 PartitionKey lowerPartitionKey = partitionRange.getValue().lowerEndpoint();
-                PartitionKey upperPartitionKey = partitionRange.getValue().upperEndpoint();
 
                 if (lowerPartitionKey.compareTo(shadowPartitionKey) == 0) {
                     continue;
                 }
 
-                // The current time is greater than the extent of the partition
-                if (lowerPartitionKey.compareTo(currentPartitionKey) < 0
-                        && upperPartitionKey.compareTo(currentPartitionKey) <= 0) {
-                    candidatePartitionList.add(partitionRange);
-                }
-                // The current time is within the range of this partition.
-                if (lowerPartitionKey.compareTo(currentPartitionKey) <= 0
-                        && upperPartitionKey.compareTo(currentPartitionKey) > 0) {
+                if (lowerPartitionKey.compareTo(currentPartitionKey) <= 0) {
                     candidatePartitionList.add(partitionRange);
                 }
             }
