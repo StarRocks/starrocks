@@ -243,6 +243,63 @@ Currently, StarRocks supports rewriting queries on asynchronous materialized vie
   where empid < 5;
   ```
 
+### Rewrite queries in View Delta Join scenarios
+
+StarRocks now supports rewriting queries based on asynchronous materialized views with Delta Join, which means that the queried tables are a subset of the materialized view's base tables. For example, queries of the form `table_a INNER JOIN table_b` can be rewritten by materialized views of the form `table_a INNER JOIN table_b INNER JOIN/LEFT OUTER JOIN table_c`, where `table_b INNER JOIN/LEFT OUTER JOIN table_c` is the Delta Join. This feature allows transparent acceleration for such queries, thereby preserving the flexibility of the query and avoiding the huge cost of building wide tables.
+
+View Delta Join queries can be rewritten only when the following requirements are met:
+
+- The Delta Join must be Inner Join or Left Outer Join.
+- If the Delta Join is Inner Join, the keys to be joined must be the corresponding Foreign/Primary/Unique Key and NOT NULL.
+
+  For example, the materialized view is of the form `A INNER JOIN B ON (A.a1 = B.b1) INNER JOIN C ON (B.b2 = C.c1)`, and the query is of the form `A INNER JOIN B ON (A.a1 = B.b1)`. In this case, `B INNER JOIN C ON (B.b2 = C.c1)` is the Delta Join. `B.b2` must be the Foreign Key of B and must be NOT NULL, and `C.c1` must be the Primary Key or Unique Key of C.
+
+- If the Delta Join is Left Outer Join, the keys to be joined must be the corresponding Foreign/Primary/Unique Key.
+
+  For example, the materialized view is of the form `A INNER JOIN B ON (A.a1 = B.b1) LEFT OUTER JOIN C ON (B.b2 = C.c1)`, and the query is of the form `A INNER JOIN B ON (A.a1 = B.b1)`. In this case, `B LEFT OUTER JOIN C ON (B.b2 = C.c1)` is the Delta Join. `B.b2` must be the Foreign Key of B, and `C.c1` must be the Primary Key or Unique Key of C.
+
+To implement the above constraints, you must define the Foreign Key constraints of a table using the property `foreign_key_constraints` when creating the table. For more information, see [CREATE TABLE - PROPERTIES](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#parameters).
+
+> **CAUTION**
+>
+> The Foreign Key constraints are only used for query rewrite. Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
+
+The following example defines multiple Foreign Keys when creating the table `lineorder`:
+
+```SQL
+CREATE TABLE `lineorder` (
+  `lo_orderkey` int(11) NOT NULL COMMENT "",
+  `lo_linenumber` int(11) NOT NULL COMMENT "",
+  `lo_custkey` int(11) NOT NULL COMMENT "",
+  `lo_partkey` int(11) NOT NULL COMMENT "",
+  `lo_suppkey` int(11) NOT NULL COMMENT "",
+  `lo_orderdate` int(11) NOT NULL COMMENT "",
+  `lo_orderpriority` varchar(16) NOT NULL COMMENT "",
+  `lo_shippriority` int(11) NOT NULL COMMENT "",
+  `lo_quantity` int(11) NOT NULL COMMENT "",
+  `lo_extendedprice` int(11) NOT NULL COMMENT "",
+  `lo_ordtotalprice` int(11) NOT NULL COMMENT "",
+  `lo_discount` int(11) NOT NULL COMMENT "",
+  `lo_revenue` int(11) NOT NULL COMMENT "",
+  `lo_supplycost` int(11) NOT NULL COMMENT "",
+  `lo_tax` int(11) NOT NULL COMMENT "",
+  `lo_commitdate` int(11) NOT NULL COMMENT "",
+  `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 192
+PROPERTIES (
+-- Define Foreign Keys in foreign_key_constraints
+"foreign_key_constraints" = "
+    (lo_custkey) REFERENCES customer(c_custkey);
+    (lo_partkey) REFERENCES ssb.part(p_partkey);
+    (lo_suppkey) REFERENCES supplier(s_suppkey);
+    (lo_orderdate) REFERENCES dates(d_datekey)
+"
+);
+```
+
 ### Configure query rewrite
 
 You can configure the asynchronous materialized view query rewrite through the following session variables:
