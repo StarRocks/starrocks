@@ -66,7 +66,7 @@ public:
 
 class ZoneMapIndexReader {
 public:
-    ZoneMapIndexReader() : _load_once() {}
+    ZoneMapIndexReader() = default;
 
     // load all page zone maps into memory.
     //
@@ -83,7 +83,7 @@ public:
     const std::vector<ZoneMapPB>& page_zone_maps() const { return _page_zone_maps; }
 
     // REQUIRES: the index data has been successfully `load()`ed into memory.
-    int32_t num_pages() const { return _page_zone_maps.size(); }
+    int32_t num_pages() const { return static_cast<int32_t>(_page_zone_maps.size()); }
 
     size_t mem_usage() const;
 
@@ -96,8 +96,10 @@ private:
         kLoaded = 2,   // data was successfully loaded in memory
     };
 
-    Status do_load(fs::BlockManager* fs, const std::string& filename, const ZoneMapIndexPB& meta, bool use_page_cache,
-                   bool kept_in_memory, MemTracker* mem_tracker);
+    void _reset() { std::vector<ZoneMapPB>{}.swap(_page_zone_maps); }
+
+    Status _do_load(fs::BlockManager* fs, const std::string& filename, const ZoneMapIndexPB& meta, bool use_page_cache,
+                    bool kept_in_memory);
 
     OnceFlag _load_once;
     std::vector<ZoneMapPB> _page_zone_maps;

@@ -50,12 +50,7 @@ class BloomFilterIndexReader {
     friend class BloomFilterIndexIterator;
 
 public:
-    BloomFilterIndexReader()
-            : _load_once(),
-              _typeinfo(),
-              _algorithm(BLOCK_BLOOM_FILTER),
-              _hash_strategy(HASH_MURMUR3_X64_64),
-              _bloom_filter_reader() {}
+    BloomFilterIndexReader() = default;
 
     // Multiple callers may call this method concurrently, but only the first one
     // can load the data, the others will wait until the first one finished loading
@@ -89,13 +84,15 @@ private:
         kLoaded = 2,   // data was successfully loaded in memory
     };
 
-    Status do_load(fs::BlockManager* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                   bool use_page_cache, bool kept_in_memory, MemTracker* mem_tracker);
+    Status _do_load(fs::BlockManager* fs, const std::string& filename, const BloomFilterIndexPB& meta,
+                    bool use_page_cache, bool kept_in_memory);
+
+    void _reset();
 
     OnceFlag _load_once;
     TypeInfoPtr _typeinfo;
-    BloomFilterAlgorithmPB _algorithm;
-    HashStrategyPB _hash_strategy;
+    BloomFilterAlgorithmPB _algorithm = BLOCK_BLOOM_FILTER;
+    HashStrategyPB _hash_strategy = HASH_MURMUR3_X64_64;
     std::unique_ptr<IndexedColumnReader> _bloom_filter_reader;
 };
 
