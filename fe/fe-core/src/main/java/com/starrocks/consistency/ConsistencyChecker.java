@@ -283,7 +283,7 @@ public class ConsistencyChecker extends LeaderDaemon {
                         // Because some tablets of the not NORMAL table may just a temporary presence in memory,
                         // if we check those tablets and log FinishConsistencyCheck to bdb,
                         // it will throw NullPointerException when replaying the log.
-                        if (!table.isLocalTable() || ((OlapTable) table).getState() != OlapTableState.NORMAL) {
+                        if (!table.isOlapTableOrMaterializedView() || ((OlapTable) table).getState() != OlapTableState.NORMAL) {
                             continue;
                         }
                         tableQueue.add(table);

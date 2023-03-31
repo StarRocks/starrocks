@@ -458,7 +458,7 @@ public class OlapScanNode extends ScanNode {
                 LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
                         tabletId, visibleVersion, replicaInfos);
                 if (LOG.isDebugEnabled()) {
-                    if (olapTable.isCloudNativeTable()) {
+                    if (olapTable.isCloudNativeTableOrMaterializedView()) {
                         LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((LakeTablet) tablet).getShardId(),
                                 tablet.getBackendIds());
                     } else {
@@ -752,7 +752,7 @@ public class OlapScanNode extends ScanNode {
             }
         }
 
-        if (olapTable.isCloudNativeTable()) {
+        if (olapTable.isCloudNativeTableOrMaterializedView()) {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
             msg.lake_scan_node =
                     new TLakeScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
@@ -777,7 +777,7 @@ public class OlapScanNode extends ScanNode {
             if (!bucketExprs.isEmpty()) {
                 msg.lake_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
             }
-        } else { // If you find yourself changing this code block, see also the above code block, i.e, if (olapTable.isLakeTable) { ... }.
+        } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
                     new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
@@ -866,7 +866,7 @@ public class OlapScanNode extends ScanNode {
     @Override
     public boolean canDoReplicatedJoin() {
         // TODO(wyb): necessary to support?
-        if (olapTable.isCloudNativeTable()) {
+        if (olapTable.isCloudNativeTableOrMaterializedView()) {
             return false;
         }
         ConnectContext ctx = ConnectContext.get();
@@ -1109,7 +1109,7 @@ public class OlapScanNode extends ScanNode {
         List<Integer> dictIntIds = dictStringIds.stream().map(dictStringIdToIntIds::get).collect(Collectors.toList());
         scanNode.setDict_string_ids(dictStringIds);
         scanNode.setDict_int_ids(dictIntIds);
-        planNode.setNode_type(olapTable.isCloudNativeTable() ?
+        planNode.setNode_type(olapTable.isCloudNativeTableOrMaterializedView() ?
                 TPlanNodeType.LAKE_SCAN_NODE : TPlanNodeType.OLAP_SCAN_NODE);
         planNode.setOlap_scan_node(scanNode);
         normalizeConjuncts(normalizer, planNode, conjuncts);

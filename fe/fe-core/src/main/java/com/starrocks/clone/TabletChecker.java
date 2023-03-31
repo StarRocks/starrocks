@@ -273,7 +273,7 @@ public class TabletChecker extends LeaderDaemon {
                     if (!table.needSchedule(false)) {
                         continue;
                     }
-                    if (table.isCloudNativeTable()) {
+                    if (table.isCloudNativeTableOrMaterializedView()) {
                         // replicas are managed by StarOS and cloud storage.
                         continue;
                     }

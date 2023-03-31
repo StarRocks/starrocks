@@ -99,7 +99,7 @@ public class TableProcDir implements ProcDirInterface {
         }
 
         if (entryName.equals(PARTITIONS)) {
-            if (table.isNativeTable()) {
+            if (table.isNativeTableOrMaterializedView()) {
                 return new PartitionsProcDir(db, (OlapTable) table, false);
             } else if (table.getType() == TableType.ELASTICSEARCH) {
                 return new EsPartitionsProcDir(db, (EsTable) table);
@@ -110,7 +110,7 @@ public class TableProcDir implements ProcDirInterface {
                         "Table[" + table.getName() + "] is not a OLAP/MATERIALIZED_VIEW/ELASTICSEARCH/HIVE/HUDI table");
             }
         } else if (entryName.equals(TEMP_PARTITIONS)) {
-            if (table.isNativeTable()) {
+            if (table.isNativeTableOrMaterializedView()) {
                 return new PartitionsProcDir(db, (OlapTable) table, true);
             } else {
                 throw new AnalysisException("Table[" + table.getName() + "] does not have temp partitions");

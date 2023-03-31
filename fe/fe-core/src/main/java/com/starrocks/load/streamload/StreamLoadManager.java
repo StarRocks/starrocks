@@ -153,7 +153,7 @@ public class StreamLoadManager {
                     tblName, tblName));
         }
 
-        if (!table.isOlapOrLakeTable()) {
+        if (!table.isOlapOrCloudNativeTable()) {
             throw new AnalysisException("Only olap/lake table support stream load");
         }
     }

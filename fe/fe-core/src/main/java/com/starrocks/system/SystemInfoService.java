@@ -364,7 +364,7 @@ public class SystemInfoService {
             db.readLock();
             try {
                 db.getTables().stream()
-                        .filter(table -> table.isLocalTable())
+                        .filter(table -> table.isOlapTableOrMaterializedView())
                         .map(table -> (OlapTable) table)
                         .filter(table -> table.getTableProperty().getReplicationNum() == 1)
                         .forEach(table -> {

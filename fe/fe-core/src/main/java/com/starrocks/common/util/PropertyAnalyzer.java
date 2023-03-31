@@ -783,7 +783,7 @@ public class PropertyAnalyzer {
                             catalogName, dbName, parentTableName));
                 }
 
-                if (!baseTable.isLocalTable()) {
+                if (!baseTable.isOlapTableOrMaterializedView()) {
                     throw new AnalysisException("now do not support add foreign key on external table");
                 }
 

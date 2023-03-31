@@ -283,7 +283,7 @@ public class KafkaRoutineLoadJobTest {
                 table.getId();
                 minTimes = 0;
                 result = tableId;
-                table.isOlapOrLakeTable();
+                table.isOlapOrCloudNativeTable();
                 minTimes = 0;
                 result = true;
             }

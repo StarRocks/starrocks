@@ -142,7 +142,7 @@ public class StatisticExecutor {
 
         Database db = MetaUtils.getDatabase(dbId);
         Table table = MetaUtils.getTable(dbId, tableId);
-        if (!(table.isOlapOrLakeTable() || table.isMaterializedView())) {
+        if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
             throw new SemanticException("Table '%s' is not a OLAP table or LAKE table or Materialize View", table.getName());
         }
 

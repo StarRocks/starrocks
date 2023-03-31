@@ -78,13 +78,13 @@ public class CreateLakeTableTest {
     private void checkLakeTable(String dbName, String tableName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(tableName);
-        Assert.assertTrue(table.isLakeTable());
+        Assert.assertTrue(table.isCloudNativeTable());
     }
 
     private LakeTable getLakeTable(String dbName, String tableName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(tableName);
-        Assert.assertTrue(table.isLakeTable());
+        Assert.assertTrue(table.isCloudNativeTable());
         return (LakeTable) table;
     }
 

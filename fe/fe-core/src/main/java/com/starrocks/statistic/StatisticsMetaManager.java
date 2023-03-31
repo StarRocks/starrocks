@@ -94,7 +94,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         Preconditions.checkState(db != null);
         OlapTable table = (OlapTable) db.getTable(tableName);
         Preconditions.checkState(table != null);
-        if (table.isCloudNativeTable()) {
+        if (table.isCloudNativeTableOrMaterializedView()) {
             return true;
         }
 
