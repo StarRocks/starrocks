@@ -464,7 +464,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY (`l_shipdate`)\n" +
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
-                "REFRESH manual\n" +
+                "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
