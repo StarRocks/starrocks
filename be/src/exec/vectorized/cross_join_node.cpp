@@ -303,6 +303,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
             continue;
         }
 
+        TRY_CATCH_ALLOC_SCOPE_START()
         if ((*chunk) == nullptr) {
             // we need a valid probe chunk to initialize the new chunk.
             _init_chunk(chunk);
@@ -396,6 +397,8 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
         if ((*chunk)->num_rows() < runtime_state()->chunk_size()) {
             continue;
         }
+
+        TRY_CATCH_ALLOC_SCOPE_END()
 
         ExecNode::eval_conjuncts(_conjunct_ctxs, (*chunk).get());
 
