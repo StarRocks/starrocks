@@ -243,6 +243,63 @@ from `hive_catalog`.`emp_db`.`emps_par_tbl`
 where empid < 5;
 ```
 
+### 基于 View Delta Join 场景改写查询
+
+StarRocks 支持基于异步物化视图 Delta Join 场景改写查询，即查询的表是物化视图基表的子集的场景。例如，`table_a INNER JOIN table_b` 形式的查询可以由 `table_a INNER JOIN table_b INNER JOIN/LEFT OUTER JOIN table_c` 形式的物化视图重写，其中 `table_b INNER JOIN/LEFT OUTER JOIN table_c` 是 Delta Join。此功能允许对这类查询进行透明加速，从而保持查询的灵活性并避免构建宽表的巨大成本。
+
+View Delta Join 查询只有在满足以下要求时才能被重写：
+
+- Delta Join 必须是 Inner Join 或 Left Outer Join。
+- 如果 Delta Join 是 Inner Join，则需要 Join 的 Key 必须是对应表的 Foreign/Primary/Unique Key 且必须为 NOT NULL。
+
+  例如，物化视图的形式为 `A INNER JOIN B ON (A.a1 = B.b1) INNER JOIN C ON (B.b2 = C.c1)`，查询的形式为 `A INNER JOIN B ON (A.a1 = B.b1)`。 在这种情况下，`B INNER JOIN C ON (B.b2 = C.c1)` 是 Delta Join。`B.b2` 必须是 B 的 Foreign Key 且必须为 NOT NULL，`C.c1` 必须是 C 的 Primary Key 或 Unique Key。
+
+- 如果 Delta Join 是 Left Outer Join，则需要 Join 的 Key 必须是对应表的 Foreign/Primary/Unique Key。
+
+  例如，物化视图的形式为 `A INNER JOIN B ON (A.a1 = B.b1) LEFT OUTER JOIN C ON (B.b2 = C.c1)`，查询的形式为 `A INNER JOIN B ON (A.a1 = B.b1)`。 在这种情况下，`B LEFT OUTER JOIN C ON (B.b2 = C.c1)` 是 Delta Join。`B.b2` 必须是 B 的 Foreign Key，`C.c1` 必须是 C 的 Primary Key 或 Unique Key。
+
+要实现上述约束，您必须在创建表时通过 Property `foreign_key_constraints` 定义表的外键约束。详细信息，请参阅 [CREATE TABLE - PROPERTIES](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#参数说明)。
+
+> **注意**
+>
+> 外键约束仅用于查询重写。 导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
+
+以下示例在创建表 `lineorder` 时定义了多个外键：
+
+```SQL
+CREATE TABLE `lineorder` (
+  `lo_orderkey` int(11) NOT NULL COMMENT "",
+  `lo_linenumber` int(11) NOT NULL COMMENT "",
+  `lo_custkey` int(11) NOT NULL COMMENT "",
+  `lo_partkey` int(11) NOT NULL COMMENT "",
+  `lo_suppkey` int(11) NOT NULL COMMENT "",
+  `lo_orderdate` int(11) NOT NULL COMMENT "",
+  `lo_orderpriority` varchar(16) NOT NULL COMMENT "",
+  `lo_shippriority` int(11) NOT NULL COMMENT "",
+  `lo_quantity` int(11) NOT NULL COMMENT "",
+  `lo_extendedprice` int(11) NOT NULL COMMENT "",
+  `lo_ordtotalprice` int(11) NOT NULL COMMENT "",
+  `lo_discount` int(11) NOT NULL COMMENT "",
+  `lo_revenue` int(11) NOT NULL COMMENT "",
+  `lo_supplycost` int(11) NOT NULL COMMENT "",
+  `lo_tax` int(11) NOT NULL COMMENT "",
+  `lo_commitdate` int(11) NOT NULL COMMENT "",
+  `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 192
+PROPERTIES (
+-- Define Foreign Keys in foreign_key_constraints.
+"foreign_key_constraints" = "
+    (lo_custkey) REFERENCES customer(c_custkey);
+    (lo_partkey) REFERENCES ssb.part(p_partkey);
+    (lo_suppkey) REFERENCES supplier(s_suppkey);
+    (lo_orderdate) REFERENCES dates(d_datekey)
+"
+);
+```
+
 ### 设置物化视图查询改写
 
 您可以通过以下 Session 变量设置异步物化视图查询改写。
