@@ -59,8 +59,8 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-public class DataNodesProcDir implements ProcDirInterface {
-    private static final Logger LOG = LogManager.getLogger(DataNodesProcDir.class);
+public class BackendsProcDir implements ProcDirInterface {
+    private static final Logger LOG = LogManager.getLogger(BackendsProcDir.class);
 
     public static final ImmutableList<String> TITLE_NAMES;
     static {
@@ -79,7 +79,7 @@ public class DataNodesProcDir implements ProcDirInterface {
 
     private SystemInfoService clusterInfoService;
 
-    public DataNodesProcDir(SystemInfoService clusterInfoService) {
+    public BackendsProcDir(SystemInfoService clusterInfoService) {
         this.clusterInfoService = clusterInfoService;
     }
 
@@ -245,7 +245,7 @@ public class DataNodesProcDir implements ProcDirInterface {
             throw new AnalysisException("Backend[" + backendId + "] does not exist.");
         }
 
-        return new DataNodeProcNode(backend);
+        return new BackendProcNode(backend);
     }
 
 }
