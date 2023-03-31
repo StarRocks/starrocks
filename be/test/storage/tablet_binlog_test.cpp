@@ -121,9 +121,8 @@ TEST_F(TabletBinlogTest, test_generate_binlog) {
         }
         RowsetSharedPtr rowset;
         create_rowset(_tablet, segment_rows, &rowset);
-        int64_t timestamp = rowset->creation_time() * 1000000;
         ASSERT_OK(_tablet->add_inc_rowset(rowset, version));
-
+        int64_t timestamp = rowset->creation_time() * 1000000;
         version_infos.push_back(DupKeyVersionInfo(version, num_segments, num_rows_per_segment, timestamp));
     }
 
@@ -149,9 +148,8 @@ TEST_F(TabletBinlogTest, test_publish_out_of_order) {
             }
             RowsetSharedPtr rowset;
             create_rowset(_tablet, segment_rows, &rowset);
-            int64_t timestamp = rowset->creation_time() * 1000000;
             ASSERT_OK(_tablet->add_inc_rowset(rowset, sub_version));
-
+            int64_t timestamp = rowset->creation_time() * 1000000;
             if (k == 1) {
                 version_infos.push_back(DupKeyVersionInfo(sub_version, num_segments, num_rows_per_segment, timestamp));
             }
