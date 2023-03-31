@@ -18,6 +18,7 @@
 #include <unordered_map>
 
 #include "storage/del_vector.h"
+#include "storage/delta_column_group.h"
 #include "storage/olap_common.h"
 #include "storage/primary_index.h"
 #include "util/dynamic_cache.h"
@@ -34,12 +35,22 @@ using DelVectorPtr = std::shared_ptr<DelVector>;
 class MemTracker;
 class KVStore;
 class RowsetUpdateState;
+class RowsetColumnUpdateState;
 class Tablet;
 
 class LocalDelvecLoader : public DelvecLoader {
 public:
     LocalDelvecLoader(KVStore* meta) : _meta(meta) {}
     Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
+
+private:
+    KVStore* _meta = nullptr;
+};
+
+class LocalDeltaColumnGroupLoader : public DeltaColumnGroupLoader {
+public:
+    LocalDeltaColumnGroupLoader(KVStore* meta) : _meta(meta) {}
+    Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs);
 
 private:
     KVStore* _meta = nullptr;
@@ -79,6 +90,9 @@ public:
     DynamicCache<uint64_t, PrimaryIndex>& index_cache() { return _index_cache; }
 
     DynamicCache<string, RowsetUpdateState>& update_state_cache() { return _update_state_cache; }
+
+    Status get_delta_column_group(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
+                                  DeltaColumnGroupList* dcgs);
 
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
