@@ -6,7 +6,7 @@ Since version 3.0, StarRocks supports the `AUTO_INCREMENT` attribute, which can 
 
 When a new data record is inserted, StarRocks automatically assigns a globally unique integer value for the record's `AUTO_INCREMENT` column as its unique ID, and the subsequent values for the `AUTO_INCREMENT` column automatically increase at a specific step starting from the ID of the record. `AUTO_INCREMENT` columns can be used to simplify data management and speed up some queries. Here are some application scenarios of `AUTO_INCREMENT` columns:
 
-- Serve as primary keys:  `AUTO_INCREMENT` columns can be used as primary keys to ensure that each record has a unique ID and make it easy to query and manage data.
+- Serve as primary keys: `AUTO_INCREMENT` columns can be used as primary keys to ensure that each record has a unique ID and make it easy to query and manage data.
 - Join tables: When multiple tables are joined, `AUTO_INCREMENT` columns can be used as Join Keys, which can expedite queries compared to using columns whose data types are UUID and STRING.
 - Count the number of distinct values in a high-cardinality column: An `AUTO_INCREMENT` column can be used to represent the unique value column in a dictionary. Compared to directly counting distinct STRING values, counting distinct integer values of the`AUTO_INCREMENT` column can sometimes improve the query speed by several times or even tens of times.
 
