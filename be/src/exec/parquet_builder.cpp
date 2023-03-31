@@ -124,6 +124,10 @@ Status ParquetBuilder::_init_schema(const std::vector<std::string>& file_column_
         auto column_expr = _output_expr_ctxs[i]->root();
         auto nodePtr = _init_schema_node(file_column_names[i], column_expr->type(),
                                          ::parquet::Repetition::OPTIONAL);
+        if (nodePtr == nullptr) {
+            return Status::InvalidArgument(fmt::format("Field {} of type {} (or its subtypes) is not supported",
+                                                       file_column_names[i], type_to_string_v2(column_expr->type().type)));
+        }
         fields.push_back(nodePtr);
     }
 
@@ -141,7 +145,7 @@ Status ParquetBuilder::_init_schema(const std::vector<std::string>& file_column_
             ::parquet::schema::NodeVector fields;
             for (size_t i = 0; i < type_desc.children.size(); i++) {
                 auto child = _init_schema_node(type_desc.field_names[i], type_desc.children[i], ::parquet::Repetition::OPTIONAL); // use optional as default
-                fields.push_back(child); // use emplace?
+                fields.push_back(child);
             }
             return ::parquet::schema::GroupNode::Make(name, rep_type, fields, ::parquet::ConvertedType::NONE, col_idx);
         }
@@ -160,17 +164,54 @@ Status ParquetBuilder::_init_schema(const std::vector<std::string>& file_column_
             auto key_value = ::parquet::schema::GroupNode::Make("key_value", parquet::Repetition::REPEATED, {key, value});
             return ::parquet::schema::GroupNode::Make(name, rep_type, {key_value}, ::parquet::LogicalType::Map(), col_idx);
         }
-        case TYPE_INT: {
-            ::parquet::Type::type parquet_data_type;
-            ParquetBuildHelper::build_file_data_type(parquet_data_type, type_desc.type);
+        case TYPE_TINYINT: {
             return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, parquet_data_type, ::parquet::ConvertedType::NONE, -1, -1, -1, ++_col_idx);
+                    name, rep_type, ::parquet::LogicalType::Int(8, true), ::parquet::Type::INT32, -1, ++_col_idx);
         }
-        case TYPE_VARCHAR: {
-            ::parquet::Type::type parquet_data_type;
-            ParquetBuildHelper::build_file_data_type(parquet_data_type, type_desc.type);
+        case TYPE_UNSIGNED_TINYINT: {
             return ::parquet::schema::PrimitiveNode::Make(
-                name, rep_type, ::parquet::LogicalType::String(), parquet_data_type, -1, ++_col_idx);
+                    name, rep_type, ::parquet::LogicalType::Int(8, false), ::parquet::Type::INT32, -1, ++_col_idx);
+        }
+        case TYPE_SMALLINT: {
+            return ::parquet::schema::PrimitiveNode::Make(
+                    name, rep_type, ::parquet::LogicalType::Int(16, true), ::parquet::Type::INT32, -1, ++_col_idx);
+        }
+        case TYPE_UNSIGNED_SMALLINT: {
+            return ::parquet::schema::PrimitiveNode::Make(
+                    name, rep_type, ::parquet::LogicalType::Int(16, false), ::parquet::Type::INT32, -1, ++_col_idx);
+        }
+        case TYPE_INT: {
+            return ::parquet::schema::PrimitiveNode::Make(
+                    name, rep_type, ::parquet::LogicalType::Int(32, true), ::parquet::Type::INT32, -1, ++_col_idx);
+        }
+        case TYPE_UNSIGNED_INT: {
+            return ::parquet::schema::PrimitiveNode::Make(
+                    name, rep_type, ::parquet::LogicalType::Int(32, false), ::parquet::Type::INT32, -1, ++_col_idx);
+        }
+        case TYPE_BIGINT: {
+            return ::parquet::schema::PrimitiveNode::Make(
+                    name, rep_type, ::parquet::LogicalType::Int(64, true), ::parquet::Type::INT64, -1, ++_col_idx);
+        }
+        case TYPE_UNSIGNED_BIGINT: {
+            return ::parquet::schema::PrimitiveNode::Make(
+                    name, rep_type, ::parquet::LogicalType::Int(64, false), ::parquet::Type::INT64, -1, ++_col_idx);
+        }
+        case TYPE_VARCHAR: { // TODO: use len
+            return ::parquet::schema::PrimitiveNode::Make(
+                name, rep_type, ::parquet::LogicalType::String(), ::parquet::Type::BYTE_ARRAY, -1, ++_col_idx);
+        }
+        case TYPE_DATETIME: {
+            return ::parquet::schema::PrimitiveNode::Make(
+                    name, rep_type, ::parquet::LogicalType::Timestamp(true, ::parquet::LogicalType::TimeUnit::unit::MILLIS), ::parquet::Type::INT64, -1, ++_col_idx);
+        }
+        case TYPE_DECIMAL:
+        case TYPE_DECIMALV2:
+        case TYPE_DECIMAL32:
+        case TYPE_DECIMAL64:
+        case TYPE_DECIMAL128: {
+            DCHECK(type_desc.is_decimal_type());
+            return ::parquet::schema::PrimitiveNode::Make(
+                    name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale), parquet::Type::BYTE_ARRAY, -1, ++_col_idx);
         }
         default: {
             return {};
@@ -217,6 +258,7 @@ void ParquetBuildHelper::build_file_data_type(parquet::Type::type& parquet_data_
     case TYPE_DECIMAL:
     case TYPE_DECIMAL32:
     case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
     case TYPE_DECIMALV2: {
         parquet_data_type = parquet::Type::BYTE_ARRAY;
         break;
@@ -323,7 +365,6 @@ Status ParquetBuilder::_add_column_chunk(const TypeDescriptor& type_desc, const 
     DCHECK(is_null.size() == prev_level_size);
 
     switch (type_desc.type) {
-        // nested type
         case TYPE_STRUCT: {
             return _add_struct_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         }
@@ -333,9 +374,9 @@ Status ParquetBuilder::_add_column_chunk(const TypeDescriptor& type_desc, const 
         case TYPE_MAP: {
             return _add_map_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         }
-        // primitive type
+        // TODO: use template of logic type and physical writer type
         case TYPE_INT: {
-//            _add_int_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+            return _add_int_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         }
         case TYPE_VARCHAR: {
             return _add_varchar_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
@@ -514,6 +555,7 @@ Status ParquetBuilder::_add_map_column_chunk(const TypeDescriptor& type_desc, co
                       cur_is_null, cur_mapping);
 }
 
+// TODO: handle case where column is not nullable
 Status ParquetBuilder::_add_varchar_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
                                               const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
                                               int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
@@ -547,6 +589,42 @@ Status ParquetBuilder::_add_varchar_column_chunk(const TypeDescriptor& type_desc
             continue;
         }
         write(def_level[i] + 1 /* increment if optional */, rep_level[i], vb.data() + vo[idx], vo[idx + 1] - vo[idx]);
+    }
+
+    _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+    _col_idx++;
+    return Status::OK();
+}
+
+Status ParquetBuilder::_add_int_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
+                                                 const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                                 int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+    const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
+    auto nulls = null_column->get_data();
+
+    const auto data_column = ColumnHelper::get_data_column(col.get());
+    auto raw_col = down_cast<const RunTimeColumnType<TYPE_INT>*>(data_column)->get_data().data();
+
+    _generate_rg_writer();
+    // TODO: use type trait to get the correct writer
+    auto col_writer = static_cast<parquet::Int32Writer*>(_rg_writer->column(_col_idx));
+    DCHECK(col_writer != nullptr);
+
+    auto write = [&](int16_t def_level, int16_t rep_level, int32_t value) {
+        col_writer->WriteBatch(1, &def_level, &rep_level, &value);
+    };
+
+    for (size_t i = 0; i < def_level.size(); i++) {
+        if (is_null[i]) {
+            write(def_level[i], rep_level[i], -1);
+            continue;
+        }
+        auto idx = mapping.at(i);
+        if (nulls[idx]) {
+            write(def_level[i], rep_level[i], -1);
+            continue;
+        }
+        write(def_level[i] + 1 /* increment if optional */, rep_level[i], raw_col[idx]);
     }
 
     _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
