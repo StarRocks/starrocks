@@ -533,7 +533,7 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         } else if (partitionType.isNumericType()) {
             candidatePartitionList = new ArrayList<>(rangePartitionInfo.getIdToRange(false).entrySet());
         } else {
-            throw new AnalysisException("Partition ttl does not support:" + partitionType);
+            throw new AnalysisException("Partition ttl does not support type:" + partitionType);
         }
 
         candidatePartitionList.sort(Comparator.comparing(o -> o.getValue().upperEndpoint()));
