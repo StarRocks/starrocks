@@ -61,12 +61,12 @@ This section describes privileges that are available on different objects.
 
 | Object                      | Privilege                                             | Description                                    |
 | --------------------------- | ----------------------------------------------------- | ---------------------------------------------- |
-| CATALOG （internal catalog) | USAGE                                                 | Uses the internal catalog (default_catalog).   |
-| CREATE DATABASE             | Creates databases in the internal catalog.            |                                                |
-| ALL                         | Has all the above privileges on the internal catalog. |                                                |
+| CATALOG（internal catalog) | USAGE                                                 | Uses the internal catalog (default_catalog).   |
+| CATALOG（internal catalog)             | CREATE DATABASE           |        Creates databases in the internal catalog.                                   |
+| CATALOG（internal catalog)                        | ALL  |               Has all the above privileges on the internal catalog.                           |
 | CATALOG (external catalog)  | USAGE                                                 | Uses an external catalog to view tables in it. |
-| DROP                        | Deletes an external catalog.                          |                                                |
-| ALL                         | Has all the above privileges on the external catalog. |                                                |
+| CATALOG (external catalog)                        |   DROP                       |    Deletes an external catalog.                                   |
+| CATALOG (external catalog)                         |  ALL   |              Has all the above privileges on the external catalog.                                |
 
 > Notes: StarRocks internal catalog cannot be deleted.
 
@@ -132,7 +132,7 @@ During an upgrade from v2.x to v3.0, some of your operations may be unable to pe
 | Backup and restore          | BACKUP, RESTORE                 | Users who have the `LOAD_PRIV` privilege on a database can back up and restore the database or any table in the database. | The administrator must grant backup and restore privileges to users again after the upgrade. |
 | Recover after deletion      | RECOVER                         | Users who have the `ALTER_PRIV`, `CREATE_PRIV`, and `DROP_PRIV` privileges on the database and table can recover the database and table. | You must have the CREATE DATABASE privilege on the default_catalog to recover the database. You must have the CREATE TABLE privilege on the database and the DROP privilege on the table. |
 | Create and change users     | CREATE USER, ALTER USER         | Users who have the `GRANT_PRIV` privilege on the database can create and change users. | You must have the `user_admin` role to create and change users. |
-| Grant and revoke privileges | GRANT, REVOKE                   | Users who have the `GRANT_PRIV` privilege on an object can grant privileges on the object to other users or roles. | After the upgrade, you can still grant the privileges you already have on that object to other users or roles after the upgrade.<br>In the new privilege system:You must have the `user_admin` role to grant privileges to other users or roles.<br>If your GRANT statement includes `WITH GRANT OPTION`, you can grant the privileges involved in the statement to other users or roles. |
+| Grant and revoke privileges | GRANT, REVOKE                   | Users who have the `GRANT_PRIV` privilege on an object can grant privileges on the object to other users or roles. | After the upgrade, you can still grant the privileges you already have on that object to other users or roles after the upgrade.<br>In the new privilege system: You must have the `user_admin` role to grant privileges to other users or roles.<br>If your GRANT statement includes `WITH GRANT OPTION`, you can grant the privileges involved in the statement to other users or roles. |
 
 In v2.x, StarRocks does not fully implement role-based access control (RBAC). When you assign a role to a user, StarRocks directly grants all the privileges of the role to the user, instead of the role itself. Therefore, the user does not actually own the role.
 
