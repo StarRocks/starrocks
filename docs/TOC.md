@@ -99,7 +99,9 @@
       + [File manager](./administration/filemanager.md)
   + [Data recovery](./administration/Data_recovery.md)
   + User Privilege and Authentication
-    + [User privilege](./administration/User_privilege.md)
+    + [Overview of privileges](./administration/privilege_overview.md)
+    + [Privileges](./administration/privilege_item.md)
+    + [Manage user privileges](./administration/User_privilege.md)
     + [Authentication](./administration/Authentication.md)
   + Performance Tuning
     + [Query planning](./administration/Query_planning.md)
