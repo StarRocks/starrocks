@@ -1920,13 +1920,60 @@ public class AggregateTest extends PlanTestBase {
         // for each sum(col + 1), should rewrite to sum(col) + count(col) * 1
         assertContains(plan, "  3:Project\n" +
                 "  |  output columns:\n" +
-                "  |  18 <-> [26: sum, BIGINT, true] + [27: count, BIGINT, true] * 1\n" +
-                "  |  19 <-> [29: sum, BIGINT, true] + [30: count, BIGINT, true] * 1\n" +
-                "  |  20 <-> [32: sum, BIGINT, true] + [33: count, BIGINT, true] * 1\n" +
-                "  |  21 <-> [35: sum, DOUBLE, true] + cast([36: count, BIGINT, true] as DOUBLE) * 1.0\n" +
-                "  |  22 <-> [38: sum, DOUBLE, true] + cast([39: count, BIGINT, true] as DOUBLE) * 1.0\n" +
-                "  |  23 <-> [41: sum, BIGINT, true] + [42: count, BIGINT, true] * 1\n" +
-                "  |  24 <-> [44: sum, DECIMAL128(38,2), true] + cast([45: count, BIGINT, true] as DECIMAL128(18,0)) * 1");
+                "  |  18 <-> [25: sum, BIGINT, true] + [26: count, BIGINT, true] * 1\n" +
+                "  |  19 <-> [27: sum, BIGINT, true] + [28: count, BIGINT, true] * 1\n" +
+                "  |  20 <-> [29: sum, BIGINT, true] + [30: count, BIGINT, true] * 1\n" +
+                "  |  21 <-> [32: sum, DOUBLE, true] + cast([33: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  22 <-> [34: sum, DOUBLE, true] + cast([35: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  23 <-> [36: sum, BIGINT, true] + [37: count, BIGINT, true] * 1\n" +
+                "  |  24 <-> [38: sum, DECIMAL128(38,2), true] + cast([39: count, BIGINT, true] as DECIMAL128(18,0)) * 1");
+        // if a column can cast to target type safely, we can remove the implicit cast directly.
+        // in this case, t1b is SMALLINT,and need to be cast to INT implicitly before calculate sum,
+        // after we rewrite sum(add(cast t1b as int), 1),
+        // there must be no project node between aggregate node and olap scan node
+        sql = "select sum(t1b+1) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 12> : 13: sum + 14: count * 1\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: t1b), count(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // apply this rule more than once
+        // 1. sum(add(add(cast t1b as int, 1), 1)) => sum(add(cast t1b as int, 1)) + count(add(cast t1b as int, 1) * 1
+        // 2. sum(add(cast t1b as int,1)) => sum(t1b) + count(t1b) * 1
+        // so the final result is sum(t1b) + count(t1b) * 1 + count(add(cast t1b as int. 1)) * 1
+        sql = "select sum(t1b+1+1) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 12> : 16: sum + 17: count * 1 + 15: count * 1\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: t1b), count(CAST(2: t1b AS INT) + 1), sum(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        // should make sure the argument of count appears in project node
+        sql = "select sum(id_decimal + 1 + 2) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 12> : 14: sum + CAST(15: count AS DECIMAL128(18,0)) * 2\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(13: cast), count(13: cast)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 13> : " +
+                "CAST(CAST(CAST(10: id_decimal AS DECIMAL64(12,2)) AS DECIMAL64(15,2)) + 1 AS DECIMAL64(13,2))\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
         // 1.2 not null
         sql = "select sum(t1b+1),sum(t1c+1),sum(t1d+1),sum(t1e+1),sum(t1f+1),sum(t1g+1),sum(id_decimal+1)" +
                 " from test_all_type_not_null";
@@ -1935,15 +1982,15 @@ public class AggregateTest extends PlanTestBase {
         // so count() will be a common expression
         assertContains(plan, "  3:Project\n" +
                 "  |  output columns:\n" +
-                "  |  18 <-> [26: sum, BIGINT, true] + [46: multiply, BIGINT, true]\n" +
-                "  |  19 <-> [29: sum, BIGINT, true] + [46: multiply, BIGINT, true]\n" +
-                "  |  20 <-> [32: sum, BIGINT, true] + [46: multiply, BIGINT, true]\n" +
-                "  |  21 <-> [35: sum, DOUBLE, true] + cast([36: count, BIGINT, true] as DOUBLE) * 1.0\n" +
-                "  |  22 <-> [38: sum, DOUBLE, true] + cast([33: count, BIGINT, true] as DOUBLE) * 1.0\n" +
-                "  |  23 <-> [41: sum, BIGINT, true] + [46: multiply, BIGINT, true]\n" +
-                "  |  24 <-> [44: sum, DECIMAL128(38,2), true] + cast([33: count, BIGINT, true] as DECIMAL128(18,0)) * 1\n" +
+                "  |  18 <-> [25: sum, BIGINT, true] + [40: multiply, BIGINT, true]\n" +
+                "  |  19 <-> [27: sum, BIGINT, true] + [40: multiply, BIGINT, true]\n" +
+                "  |  20 <-> [29: sum, BIGINT, true] + [40: multiply, BIGINT, true]\n" +
+                "  |  21 <-> [32: sum, DOUBLE, true] + cast([33: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  22 <-> [34: sum, DOUBLE, true] + cast([35: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  23 <-> [36: sum, BIGINT, true] + [40: multiply, BIGINT, true]\n" +
+                "  |  24 <-> [38: sum, DECIMAL128(38,2), true] + cast([35: count, BIGINT, true] as DECIMAL128(18,0)) * 1\n" +
                 "  |  common expressions:\n" +
-                "  |  46 <-> [33: count, BIGINT, true] * 1");
+                "  |  40 <-> [35: count, BIGINT, true] * 1");
 
         // 2. aggregate result reuse
         sql = "select sum(t1b), sum(t1b+1), sum(t1b+2) from test_all_type";
