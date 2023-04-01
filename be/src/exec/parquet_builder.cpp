@@ -196,10 +196,10 @@ Status ParquetBuilder::_init_schema(const std::vector<std::string>& file_column_
             return ::parquet::schema::PrimitiveNode::Make(
                     name, rep_type, ::parquet::LogicalType::Int(64, false), ::parquet::Type::INT64, -1, ++_col_idx);
         }
-        case TYPE_VARCHAR: { // TODO: use len
+        case TYPE_CHAR:
+        case TYPE_VARCHAR:
             return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::String(), ::parquet::Type::BYTE_ARRAY, -1, ++_col_idx);
-        }
         case TYPE_DATE: {
             return ::parquet::schema::PrimitiveNode::Make(
                     name, rep_type, ::parquet::LogicalType::Date(), ::parquet::Type::INT32, -1, ++_col_idx);
@@ -386,9 +386,9 @@ Status ParquetBuilder::_add_column_chunk(const TypeDescriptor& type_desc, const 
             return _add_int_column_chunk<TYPE_INT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         case TYPE_BIGINT:
             return _add_int_column_chunk<TYPE_BIGINT, parquet::Type::INT64>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        case TYPE_VARCHAR: {
+        case TYPE_CHAR:
+        case TYPE_VARCHAR:
             return _add_varchar_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
         case TYPE_DATETIME:
             return _add_datetime_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         case TYPE_DATE:
