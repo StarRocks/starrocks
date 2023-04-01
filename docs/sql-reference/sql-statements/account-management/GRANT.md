@@ -4,7 +4,7 @@
 
 Grants specific privileges to a user or a role.
 
-Grants roles to users.
+Grants roles to users or other roles.
 
 ## Syntax
 

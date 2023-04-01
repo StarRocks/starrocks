@@ -105,7 +105,7 @@ Default roles provide basic privilege protection for users. For example, User A 
 
 A user who does not have a default role still has the `public` role, which is automatically activated after the user logs in to the cluster.
 
-##### Manually activate roles
+#### Manually activate roles
 
 In addition to default roles, users can also manually activate one or more existing roles within a session. You can use [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW%20GRANTS.md) to view the privileges and roles that can be activated, and use [SET ROLE](../sql-reference/sql-statements/account-management/SET%20ROLE.md) to configure active roles that are effective in the current session.
 
