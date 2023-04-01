@@ -50,6 +50,9 @@ public:
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
 
 private:
+    template <class HashJoinerFactory, class HashJoinBuilderFactory, class HashJoinProbeFactory>
+    pipeline::OpFactories _decompose_to_pipeline(pipeline::PipelineBuilderContext* context);
+
     static bool _has_null(const ColumnPtr& column);
 
     void _init_hash_table_param(HashTableParam* param);
