@@ -179,9 +179,9 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.AuthUpgradeInfo;
+import com.starrocks.persist.BackendIdsUpdateInfo;
+import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
-import com.starrocks.persist.DataNodeIdsUpdateInfo;
-import com.starrocks.persist.DataNodeTabletsInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
@@ -1443,7 +1443,7 @@ public class GlobalStateMgr {
                     }
                     MvId mvId = new MvId(db.getId(), mv.getId());
                     table.addRelatedMaterializedView(mvId);
-                    if (!table.isNativeTable()) {
+                    if (!table.isNativeTableOrMaterializedView()) {
                         connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
                                 baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
                                 ConnectorTableInfo.builder().setRelatedMaterializedViews(
@@ -2223,7 +2223,7 @@ public class GlobalStateMgr {
             }
             // There MUST BE 2 space in front of each column description line
             // sqlalchemy requires this to parse SHOW CREATE TABLE stmt.
-            if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
+            if (table.isOlapOrCloudNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
                     sb.append("  ").append(column.toSqlWithoutAggregateTypeName());
@@ -2234,7 +2234,7 @@ public class GlobalStateMgr {
                 sb.append("  ").append(column.toSql());
             }
         }
-        if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
+        if (table.isOlapOrCloudNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
             if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
                 for (Index index : olapTable.getIndexes()) {
@@ -2245,9 +2245,9 @@ public class GlobalStateMgr {
         }
 
         sb.append("\n) ENGINE=");
-        sb.append(table.getType() == TableType.LAKE ? "OLAP" : table.getType().name()).append(" ");
+        sb.append(table.getType() == TableType.CLOUD_NATIVE ? "OLAP" : table.getType().name()).append(" ");
         
-        if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
+        if (table.isOlapOrCloudNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
 
             // keys
@@ -2332,7 +2332,7 @@ public class GlobalStateMgr {
             }
 
             // enable storage cache && cache ttl
-            if (table.isLakeTable()) {
+            if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
@@ -3446,7 +3446,7 @@ public class GlobalStateMgr {
         localMetastore.initDefaultCluster();
     }
 
-    public void replayUpdateClusterAndBackends(DataNodeIdsUpdateInfo info) {
+    public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
         localMetastore.replayUpdateClusterAndBackends(info);
     }
 
@@ -3517,7 +3517,7 @@ public class GlobalStateMgr {
         nodeMgr.setFrontendConfig(configs);
     }
 
-    public void replayBackendTabletsInfo(DataNodeTabletsInfo backendTabletsInfo) {
+    public void replayBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
         localMetastore.replayBackendTabletsInfo(backendTabletsInfo);
     }
 

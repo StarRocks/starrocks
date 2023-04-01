@@ -114,7 +114,7 @@ public class DataNodeProcNodeTest {
 
     @Test
     public void testResultNormal() throws AnalysisException {
-        DataNodeProcNode node = new DataNodeProcNode(b1);
+        BackendProcNode node = new BackendProcNode(b1);
         ProcResult result;
 
         // fetch result

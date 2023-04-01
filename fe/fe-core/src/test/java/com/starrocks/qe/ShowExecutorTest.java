@@ -98,9 +98,9 @@ import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.DataNode;
-import com.starrocks.system.DataNodeCoreStat;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
@@ -828,7 +828,7 @@ public class ShowExecutorTest {
             }
         };
 
-        new MockUp<DataNodeCoreStat>() {
+        new MockUp<BackendCoreStat>() {
             @Mock
             int getCoresOfBe(long beId) {
                 return 16;

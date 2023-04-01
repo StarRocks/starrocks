@@ -196,6 +196,7 @@ set(EXEC_FILES
         ./storage/lake/primary_key_compaction_task_test.cpp
         ./storage/lake/primary_key_publish_test.cpp
         ./storage/rowset_update_state_test.cpp
+        ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset/rowset_test.cpp
         ./storage/rowset/binary_dict_page_test.cpp
         ./storage/rowset/binary_plain_page_test.cpp
@@ -299,7 +300,6 @@ set(EXEC_FILES
         ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
         ./util/bitmap_test.cpp
-        ./util/bitmap_value_test.cpp
         ./util/bit_stream_utils_test.cpp
         ./util/bit_util_test.cpp
         ./util/block_compression_test.cpp

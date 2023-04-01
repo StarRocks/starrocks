@@ -593,7 +593,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS: {
-                    final DataNodeIdsUpdateInfo info = (DataNodeIdsUpdateInfo) journal.getData();
+                    final BackendIdsUpdateInfo info = (BackendIdsUpdateInfo) journal.getData();
                     globalStateMgr.replayUpdateClusterAndBackends(info);
                     break;
                 }
@@ -679,7 +679,7 @@ public class EditLog {
                     break;
                 }
                 case OperationType.OP_BACKEND_TABLETS_INFO: {
-                    DataNodeTabletsInfo backendTabletsInfo = (DataNodeTabletsInfo) journal.getData();
+                    BackendTabletsInfo backendTabletsInfo = (BackendTabletsInfo) journal.getData();
                     GlobalStateMgr.getCurrentState().replayBackendTabletsInfo(backendTabletsInfo);
                     break;
                 }
@@ -1433,7 +1433,7 @@ public class EditLog {
         logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
     }
 
-    public void logUpdateClusterAndBackendState(DataNodeIdsUpdateInfo info) {
+    public void logUpdateClusterAndBackendState(BackendIdsUpdateInfo info) {
         logEdit(OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS, info);
     }
 
@@ -1510,7 +1510,7 @@ public class EditLog {
         logEdit(OperationType.OP_SET_FORBIT_GLOBAL_DICT, info);
     }
 
-    public void logBackendTabletsInfo(DataNodeTabletsInfo backendTabletsInfo) {
+    public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
         logEdit(OperationType.OP_BACKEND_TABLETS_INFO, backendTabletsInfo);
     }
 

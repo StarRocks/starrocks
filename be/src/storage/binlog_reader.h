@@ -40,6 +40,7 @@ constexpr const char* BINLOG_TIMESTAMP = "_binlog_timestamp";
 
 class Tablet;
 class BinlogManager;
+class BinlogFileReadHolder;
 
 // Read binlog in a tablet. Binlog can be treated as a table with schema. The schema includes the
 // data columns of base table and meta columns of binlog. The name and SQL data type of meta columns
@@ -110,6 +111,7 @@ private:
     Status _seek_binlog_file_reader(int64_t version, int64_t seq_id);
     Status _init_segment_iterator();
     void _release_segment_iterator(bool release_rowset);
+    void _release_binlog_file();
     void _reset();
     void _swap_output_and_data_chunk(Chunk* output_chunk);
     void _append_meta_column(Chunk* output_chunk, int32_t num_rows, int64_t version, int64_t timestamp,
@@ -131,7 +133,7 @@ private:
     int32_t _binlog_timestamp_column_index = -1;
 
     // current binlog file to read
-    BinlogFileMetaPBPtr _file_meta;
+    std::shared_ptr<BinlogFileReadHolder> _binlog_file_holder;
     std::shared_ptr<BinlogFileReader> _binlog_file_reader;
     // owned by _binlog_file_reader
     LogEntryInfo* _log_entry_info = nullptr;

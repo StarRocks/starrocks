@@ -536,6 +536,7 @@ public class TabletScheduler extends LeaderDaemon {
                         tabletCtx.getTabletId(), e);
                 stat.counterTabletScheduledFailed.incrementAndGet();
                 finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
+                continue;
             }
 
             Preconditions.checkState(tabletCtx.getState() == TabletSchedCtx.State.RUNNING);
@@ -604,7 +605,7 @@ public class TabletScheduler extends LeaderDaemon {
             if (tbl == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
             }
-            if (tbl.isCloudNativeTable()) {
+            if (tbl.isCloudNativeTableOrMaterializedView()) {
                 throw new SchedException(Status.UNRECOVERABLE, "tablet is managed externally");
             }
 
@@ -877,7 +878,7 @@ public class TabletScheduler extends LeaderDaemon {
                     tabletCtx.getTabletId(), tabletCtx.getTablet().getReplicaInfos(),
                     tabletCtx.getSrcReplica().getBackendId(), tabletCtx.getDestBackendId());
         } catch (SchedException e) {
-            if (e.getStatus() == Status.SCHEDULE_RETRY) {
+            if (e.getStatus() == Status.SCHEDULE_RETRY || e.getStatus() == Status.UNRECOVERABLE) {
                 LOG.debug("failed to find version incomplete replica from tablet relocating. " +
                                 "reason: [{}], tablet: [{}], replicas: {} dest:{} try to find a new backend", e.getMessage(),
                         tabletCtx.getTabletId(), tabletCtx.getTablet().getReplicaInfos(),
@@ -1071,7 +1072,7 @@ public class TabletScheduler extends LeaderDaemon {
         Replica chosenReplica = null;
         double maxScore = 0;
         for (Replica replica : replicas) {
-            DataNodeLoadStatistic beStatistic = statistic.getBackendLoadStatistic(replica.getBackendId());
+            BackendLoadStatistic beStatistic = statistic.getBackendLoadStatistic(replica.getBackendId());
             if (beStatistic == null) {
                 continue;
             }
@@ -1322,12 +1323,12 @@ public class TabletScheduler extends LeaderDaemon {
         if (statistic == null) {
             throw new SchedException(Status.UNRECOVERABLE, "cluster does not exist");
         }
-        List<DataNodeLoadStatistic> beStatistics = statistic.getSortedBeLoadStats(null /* sorted ignore medium */);
+        List<BackendLoadStatistic> beStatistics = statistic.getSortedBeLoadStats(null /* sorted ignore medium */);
 
         // get all available paths which this tablet can fit in.
         // beStatistics is sorted by mix load score in ascend order, so select from first to last.
         List<RootPathLoadStatistic> allFitPaths = Lists.newArrayList();
-        for (DataNodeLoadStatistic bes : beStatistics) {
+        for (BackendLoadStatistic bes : beStatistics) {
             if (!bes.isAvailable()) {
                 continue;
             }

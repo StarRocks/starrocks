@@ -48,6 +48,7 @@
     + [Iceberg catalog](./data_source/catalog/iceberg_catalog.md)
     + [Hudi catalog](./data_source/catalog/hudi_catalog.md)
     + [Delta Lake catalog](./data_source/catalog/deltalake_catalog.md)
+    + [JDBC catalog](./data_source/catalog/jdbc_catalog.md)
     + [Query external data](./data_source/catalog/query_external_data.md)
   + [External tables](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
@@ -70,6 +71,7 @@
   + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
 + Administration
   + Deployment
+    + [Deploy a shared-data StarRocks cluster](./administration/deploy_shared_data.md)
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
     + [Deploy StarRocks in Docker](./quick_start/deploy_in_docker.md)
     + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/sr_operator.md)
@@ -85,6 +87,7 @@
     + [Enable FQDN access](./administration/enable_fqdn.md)
     + [Configure a time zone](./administration/timezone.md)
     + [Information Schema](./administration/information_schema.md)
+    + [Monitor and manage big queries](./administration/monitor_manage_big_queries.md)
     + Resource Management
       + [Resource group](./administration/resource_group.md)
       + [Query queue](./administration/query_queues.md)
@@ -194,6 +197,7 @@
       + [RECOVER](./sql-reference/sql-statements/data-definition/RECOVER.md)
       + [REFRESH EXTERNAL TABLE](./sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)
       + [RESTORE](./sql-reference/sql-statements/data-definition/RESTORE.md)
+      + [SET CATALOG](./sql-reference/sql-statements/data-definition/SET%20CATALOG.md)
       + [SHOW ANALYZE JOB](./sql-reference/sql-statements/data-definition/SHOW%20ANALYZE%20JOB.md)
       + [SHOW ANALYZE STATUS](./sql-reference/sql-statements/data-definition/SHOW%20ANALYZE%20STATUS.md)
       + [SHOW META](./sql-reference/sql-statements/data-definition/SHOW%20META.md)
@@ -245,6 +249,7 @@
       + [SPARK LOAD](./sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)
       + [STOP ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)
       + [STREAM LOAD](./sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)
+      + [UPDATE](./sql-reference/sql-statements/data-manipulation/UPDATE.md)
     + Auxiliary Commands
       + [DESC](./sql-reference/sql-statements/Utility/DESCRIBE.md)
     + Data Types
@@ -271,6 +276,7 @@
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
     + [Keywords](./sql-reference/sql-statements/keywords.md)
+    + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
   + Function Reference
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
@@ -312,6 +318,7 @@
       + [array_difference](./sql-reference/sql-functions/array-functions/array_difference.md)
       + [array_distinct](./sql-reference/sql-functions/array-functions/array_distinct.md)
       + [array_filter](./sql-reference/sql-functions/array-functions/array_filter.md)
+      + [array_generate](./sql-reference/sql-functions/array-functions/array_generate.md)
       + [array_intersect](./sql-reference/sql-functions/array-functions/array_intersect.md)
       + [array_join](./sql-reference/sql-functions/array-functions/array_join.md)
       + [array_length](./sql-reference/sql-functions/array-functions/array_length.md)
@@ -475,10 +482,14 @@
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
     + Map Functions
+      + [map_apply](./sql-reference/sql-functions/map-functions/map_apply.md)
+      + [map_filter](./sql-reference/sql-functions/map-functions/map_filter.md)
       + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)
       + [map_keys](./sql-reference/sql-functions/map-functions/map_keys.md)
       + [map_size](./sql-reference/sql-functions/map-functions/map_size.md)
       + [map_values](./sql-reference/sql-functions/map-functions/map_values.md)
+      + [transform_keys](./sql-reference/sql-functions/map-functions/transform_keys.md)
+      + [transform_values](./sql-reference/sql-functions/map-functions/transform_values.md)
     + Math Functions
       + [abs](./sql-reference/sql-functions/math-functions/abs.md)
       + [acos](./sql-reference/sql-functions/math-functions/acos.md)

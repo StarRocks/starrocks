@@ -263,7 +263,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             for (long tableId : transactionState.getTableIdList()) {
                 Table table = db.getTable(tableId);
                 if (table != null) {
-                    return table.isCloudNativeTable();
+                    return table.isCloudNativeTableOrMaterializedView();
                 }
             }
         } finally {

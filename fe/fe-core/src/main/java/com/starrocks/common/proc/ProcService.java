@@ -53,7 +53,7 @@ public final class ProcService {
         if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             root.register("auth", new AuthProcDir(GlobalStateMgr.getCurrentState().getAuth()));
         }
-        root.register("backends", new DataNodesProcDir(GlobalStateMgr.getCurrentSystemInfo()));
+        root.register("backends", new BackendsProcDir(GlobalStateMgr.getCurrentSystemInfo()));
         root.register("compute_nodes", new ComputeNodeProcDir(GlobalStateMgr.getCurrentSystemInfo()));
         root.register("dbs", new DbsProcDir(GlobalStateMgr.getCurrentState()));
         root.register("jobs", new JobsDbProcDir(GlobalStateMgr.getCurrentState()));
@@ -66,7 +66,7 @@ public final class ProcService {
         root.register("transactions", new TransDbProcDir());
         root.register("monitor", new MonitorProcDir());
         root.register("current_queries", new CurrentQueryStatisticsProcDir());
-        root.register("current_backend_instances", new CurrentQueryDataNodeInstanceProcDir());
+        root.register("current_backend_instances", new CurrentQueryBackendInstanceProcDir());
         root.register("cluster_balance", new ClusterBalanceProcDir());
         root.register("routine_loads", new RoutineLoadsProcDir());
         root.register("stream_loads", new StreamLoadsProcDir());

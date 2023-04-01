@@ -129,6 +129,7 @@ statement
     | adminCheckTabletsStatement
     | killStatement
     | syncStatement
+    | executeScriptStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -1515,6 +1516,10 @@ setWarehouseStatement
     : SET WAREHOUSE identifierOrString
     ;
 
+executeScriptStatement
+    : ADMIN EXECUTE ON INTEGER_VALUE string
+    ;
+
 unsupportedStatement
     : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
     | BEGIN WORK?
@@ -1586,8 +1591,8 @@ limitElement
 querySpecification
     : SELECT setVarHint* setQuantifier? selectItem (',' selectItem)*
       fromClause
-      ((QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?
-      | (WHERE where=expression)? (GROUP BY groupingElement)? (HAVING having=expression)?)
+      ((WHERE where=expression)? (GROUP BY groupingElement)? (HAVING having=expression)?
+       (QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?)
     ;
 
 fromClause

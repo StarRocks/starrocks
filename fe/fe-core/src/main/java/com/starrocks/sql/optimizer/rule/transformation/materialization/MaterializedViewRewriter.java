@@ -178,10 +178,12 @@ public class MaterializedViewRewriter {
             List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression);
             List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
             // do not support external table now
-            if (queryTableScanDescs.stream().anyMatch(tableScanDesc -> !tableScanDesc.getTable().isNativeTable())) {
+            if (queryTableScanDescs.stream().anyMatch(
+                    tableScanDesc -> !tableScanDesc.getTable().isNativeTableOrMaterializedView())) {
                 return null;
             }
-            if (mvTableScanDescs.stream().anyMatch(tableScanDesc -> !tableScanDesc.getTable().isNativeTable())) {
+            if (mvTableScanDescs.stream().anyMatch(
+                    tableScanDesc -> !tableScanDesc.getTable().isNativeTableOrMaterializedView())) {
                 return null;
             }
 
