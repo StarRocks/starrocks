@@ -47,8 +47,13 @@ public class WorkGroupAnalyzer {
                 }
                 String key = ((SlotRef) lhs).getColumnName();
                 String value = ((StringLiteral) rhs).getValue();
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/analyzer/WorkGroupAnalyzer.java
                 if (key.equalsIgnoreCase(WorkGroup.USER)) {
                     if (!WorkGroupClassifier.UseRolePattern.matcher(value).matches()) {
+=======
+                if (key.equalsIgnoreCase(ResourceGroup.USER)) {
+                    if (!ResourceGroupClassifier.USER_PATTERN.matcher(value).matches()) {
+>>>>>>> 326e6e42e ([BugFix] Use the same verification rules for creating user names and resource groups #20349):fe/fe-core/src/main/java/com/starrocks/sql/analyzer/ResourceGroupAnalyzer.java
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.USER,
                                         eqPred.toSql()));
