@@ -49,7 +49,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DropBackendClause;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -88,13 +88,13 @@ public class SystemInfoServiceTest {
     public void setUp() throws IOException {
         new Expectations() {
             {
-                editLog.logAddBackend((DataNode) any);
+                editLog.logAddBackend((Backend) any);
                 minTimes = 0;
 
-                editLog.logDropBackend((DataNode) any);
+                editLog.logDropBackend((Backend) any);
                 minTimes = 0;
 
-                editLog.logBackendStateChange((DataNode) any);
+                editLog.logBackendStateChange((Backend) any);
                 minTimes = 0;
 
                 db.readLock();
@@ -336,7 +336,7 @@ public class SystemInfoServiceTest {
         file.createNewFile();
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        DataNode back1 = new DataNode(1L, "localhost", 3);
+        Backend back1 = new Backend(1L, "localhost", 3);
         back1.updateOnce(4, 6, 8);
         systemInfoService.replayAddBackend(back1);
         long checksum1 = systemInfoService.saveBackends(dos, 0);
@@ -348,7 +348,7 @@ public class SystemInfoServiceTest {
         long checksum2 = systemInfoService.loadBackends(dis, 0);
         Assert.assertEquals(checksum1, checksum2);
         Assert.assertEquals(1, systemInfoService.getIdToBackend().size());
-        DataNode back2 = systemInfoService.getBackend(1);
+        Backend back2 = systemInfoService.getBackend(1);
         Assert.assertTrue(back1.equals(back2));
         dis.close();
 

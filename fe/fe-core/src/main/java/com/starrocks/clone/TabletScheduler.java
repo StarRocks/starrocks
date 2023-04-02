@@ -67,7 +67,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -206,12 +206,12 @@ public class TabletScheduler extends LeaderDaemon {
         }
         currentSlotPerPathConfig = cappedVal;
 
-        ImmutableMap<Long, DataNode> backends = infoService.getIdToBackend();
+        ImmutableMap<Long, Backend> backends = infoService.getIdToBackend();
         if (backends == null) {
             return false;
         }
 
-        for (DataNode backend : backends.values()) {
+        for (Backend backend : backends.values()) {
             if (!backend.hasPathHash() && backend.isAlive()) {
                 // when upgrading, backend may not get path info yet. so return false and wait for next round.
                 // and we should check if backend is alive. If backend is dead when upgrading, this backend
@@ -241,7 +241,7 @@ public class TabletScheduler extends LeaderDaemon {
         }
 
         // add new backends
-        for (DataNode be : backends.values()) {
+        for (Backend be : backends.values()) {
             if (!backendsWorkingSlots.containsKey(be.getId())) {
                 List<Long> pathHashes =
                         be.getDisks().values().stream().map(DiskInfo::getPathHash).collect(Collectors.toList());
@@ -734,7 +734,7 @@ public class TabletScheduler extends LeaderDaemon {
 
             // check the backends of original sequence are all available
             for (Long backendId : lastBackendsSet) {
-                DataNode be = infoService.getBackend(backendId);
+                Backend be = infoService.getBackend(backendId);
                 if (!be.isAvailable()) {
                     return;
                 }
@@ -955,7 +955,7 @@ public class TabletScheduler extends LeaderDaemon {
 
     private boolean deleteBackendUnavailable(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         for (Replica replica : tabletCtx.getReplicas()) {
-            DataNode be = infoService.getBackend(replica.getBackendId());
+            Backend be = infoService.getBackend(replica.getBackendId());
             if (be == null) {
                 // this case should be handled in deleteBackendDropped()
                 continue;
@@ -1009,7 +1009,7 @@ public class TabletScheduler extends LeaderDaemon {
         // host -> (replicas on same host)
         Map<String, List<Replica>> hostToReplicas = Maps.newHashMap();
         for (Replica replica : tabletCtx.getReplicas()) {
-            DataNode be = infoService.getBackend(replica.getBackendId());
+            Backend be = infoService.getBackend(replica.getBackendId());
             if (be == null) {
                 // this case should be handled in deleteBackendDropped()
                 return false;
@@ -1036,7 +1036,7 @@ public class TabletScheduler extends LeaderDaemon {
 
     private boolean deleteReplicaNotInCluster(TabletSchedCtx tabletCtx, boolean force) throws SchedException {
         for (Replica replica : tabletCtx.getReplicas()) {
-            DataNode be = infoService.getBackend(replica.getBackendId());
+            Backend be = infoService.getBackend(replica.getBackendId());
             if (be == null) {
                 // this case should be handled in deleteBackendDropped()
                 return false;
