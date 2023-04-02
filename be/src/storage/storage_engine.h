@@ -55,6 +55,7 @@
 namespace starrocks {
 
 class AsyncDeltaWriterExecutor;
+class AsyncTabletSinkChunkSplitExecutor;
 class DataDir;
 class EngineTask;
 class BlockManager;
@@ -157,6 +158,10 @@ public:
     TxnManager* txn_manager() { return _txn_manager.get(); }
 
     AsyncDeltaWriterExecutor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
+
+    AsyncTabletSinkChunkSplitExecutor* async_tablet_sink_split_chunk_executor() {
+        return _async_tablet_sink_chunk_split_executor.get();
+    }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
 
@@ -332,6 +337,8 @@ private:
     std::unique_ptr<RowsetIdGenerator> _rowset_id_generator;
 
     std::unique_ptr<AsyncDeltaWriterExecutor> _async_delta_writer_executor;
+
+    std::unique_ptr<AsyncTabletSinkChunkSplitExecutor> _async_tablet_sink_chunk_split_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
 

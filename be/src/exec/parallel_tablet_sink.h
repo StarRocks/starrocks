@@ -41,6 +41,11 @@
 #include "util/bitmap.h"
 #include "util/ref_count_closure.h"
 
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bthread/execution_queue.h>
+DIAGNOSTIC_POP
+
 namespace starrocks {
 
 class Bitmap;
@@ -51,9 +56,31 @@ class TupleDescriptor;
 class ExprContext;
 class TExpr;
 
-namespace tablet_sink {
+namespace parallel_tablet_sink {
 
-class OlapTableSink;
+class NodeChannel;
+class IndexChannel;
+class ParallelOlapTableSink;
+
+struct TabletSinkAddChunkTask {
+    vectorized::Chunk* chunk = nullptr;
+    NodeChannel* node = nullptr;
+    const int64_t* tablet_ids = nullptr;
+    std::atomic<int32_t>* pending_processing_num_channel;
+    std::unordered_map<int64_t, std::vector<int64_t>>* tablet_to_be;
+    std::vector<uint16_t>* selection_idx;
+    int64_t be_id;
+};
+
+struct TabletSinkCachedElement {
+    TabletSinkCachedElement(std::unique_ptr<vectorized::Chunk>&& chunk, int32_t num_channel, int tablet_id_reserve_size)
+            : chunk(std::move(chunk)), pending_processing_num_channel(num_channel) {}
+
+    std::unique_ptr<vectorized::Chunk> chunk;
+    std::atomic<int32_t> pending_processing_num_channel;
+    std::vector<std::vector<int64_t>> vec_tablet_ids;
+    std::vector<uint16_t> validate_select_idx;
+};
 
 // The counter of add_batch rpc of a single node
 struct AddBatchCounter {
@@ -144,7 +171,7 @@ private:
 
 class NodeChannel {
 public:
-    NodeChannel(OlapTableSink* parent, int64_t index_id, int64_t node_id);
+    NodeChannel(ParallelOlapTableSink* parent, IndexChannel* index_channel, int64_t index_id, int64_t node_id);
     ~NodeChannel() noexcept;
 
     // called before open, used to add tablet loacted in this backend
@@ -155,9 +182,6 @@ public:
     // we use open/open_wait to parallel
     void open();
     Status open_wait();
-
-    Status add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_ids, const uint32_t* indexes, uint32_t from,
-                     uint32_t size);
 
     // two ways to stop channel:
     // 1. mark_close()->close_wait() PS. close_wait() will block waiting for the last AddBatch rpc response.
@@ -178,19 +202,29 @@ public:
         *actual_consume_ns += _actual_consume_ns;
     }
 
+    ParallelOlapTableSink* parent() const { return _parent; }
+    IndexChannel* index_channel() const { return _index_channel; }
+    std::mutex& pending_batches_lock() { return _pending_batches_lock; }
+    Status err_st() const { return _err_st; }
     int64_t node_id() const { return _node_id; }
+    int64_t index_id() const { return _index_id; }
     const NodeInfo* node_info() const { return _node_info; }
     std::string print_load_info() const { return _load_info; }
     std::string name() const { return _name; }
+    void increase_pending_batches_num() { _pending_batches_num++; }
+    void decrease_pending_batches_num() { _pending_batches_num--; }
+    bool cancelled() { return _cancelled; }
+    bool eos_is_produced() { return _eos_is_produced; }
+    RuntimeState* runtime_state() { return _runtime_state; }
+    int64_t& queue_push_lock_ns() { return _queue_push_lock_ns; }
+    PTabletWriterAddChunkRequest cur_add_chunk_request() { return _cur_add_chunk_request; }
 
     Status none_of(std::initializer_list<bool> vars);
 
     void clear_all_batches();
 
-private:
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
-
-    OlapTableSink* _parent = nullptr;
+    ParallelOlapTableSink* _parent = nullptr;
+    IndexChannel* _index_channel = nullptr;
     int64_t _index_id = -1;
     int64_t _node_id = -1;
     std::string _load_info;
@@ -217,8 +251,8 @@ private:
     std::unique_ptr<RowDescriptor> _row_desc;
 
     std::mutex _pending_batches_lock;
+
     std::atomic<int> _pending_batches_num{0};
-    size_t _max_pending_batches_num = 16;
 
     doris::PBackendService_Stub* _stub = nullptr;
     RefCountClosure<PTabletWriterOpenResult>* _open_closure = nullptr;
@@ -245,7 +279,7 @@ private:
 
 class IndexChannel {
 public:
-    IndexChannel(OlapTableSink* parent, int64_t index_id) : _parent(parent), _index_id(index_id) {}
+    IndexChannel(ParallelOlapTableSink* parent, int64_t index_id) : _parent(parent), _index_id(index_id) {}
     ~IndexChannel();
 
     Status init(RuntimeState* state, const std::vector<TTabletWithPartition>& tablets);
@@ -259,9 +293,15 @@ public:
     void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
     bool has_intolerable_failure();
 
+    int num_node_channels() { return _node_channels.size(); }
+
+    void set_err_st(Status err_st) { _err_st = err_st; }
+    Status err_st() const { return _err_st; }
+    std::mutex& mark_failed_lock() { return _mark_failed_lock; }
+
 private:
-    friend class OlapTableSink;
-    OlapTableSink* _parent;
+    friend class ParallelOlapTableSink;
+    ParallelOlapTableSink* _parent;
     int64_t _index_id;
 
     // BeId -> channel
@@ -272,17 +312,22 @@ private:
     std::unordered_map<int64_t, std::vector<int64_t>> _tablet_to_be;
     // BeId
     std::set<int64_t> _failed_channels;
+
+    std::mutex _mark_failed_lock;
+
+    Status _err_st;
 };
 
 // Write data to Olap Table.
-// When OlapTableSink::open() called, there will be a consumer thread running in the background.
-// When you call OlapTableSink::send(), you will be the productor who products pending batches.
+// When ParallelOlapTableSink::open() called, there will be a consumer thread running in the background.
+// When you call ParallelOlapTableSink::send(), you will be the productor who products pending batches.
 // Join the consumer thread in close().
-class OlapTableSink : public DataSink {
+class ParallelOlapTableSink : public DataSink {
 public:
     // Construct from thrift struct which is generated by FE.
-    OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status);
-    ~OlapTableSink() override;
+    ParallelOlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status,
+                          int tablet_sink_split_chunk_dop);
+    ~ParallelOlapTableSink() override;
 
     Status init(const TDataSink& sink) override;
 
@@ -298,6 +343,11 @@ public:
     // Returns the runtime profile for the sink.
     RuntimeProfile* profile() override { return _profile; }
 
+    static int _execute_node_channel_add_chunk(void* meta, bthread::TaskIterator<TabletSinkAddChunkTask>& iter);
+
+    void increase_pending_batches_num() { _pending_batches_num++; }
+    void decrease_pending_batches_num() { _pending_batches_num--; }
+
 private:
     template <PrimitiveType PT>
     void _validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
@@ -311,7 +361,7 @@ private:
 
     void _print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc);
 
-    static void _print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc);
+    void _print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc);
 
     // the consumer func of sending pending chunks in every NodeChannel.
     // use polling & NodeChannel::try_send_chunk_and_fetch_status() to achieve nonblocking sending.
@@ -319,7 +369,8 @@ private:
     void _send_chunk_process();
 
     // send chunk data to specific BE channel
-    Status _send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel* channel, std::vector<uint16_t>& _selection_idx);
+    Status _send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel* channel, std::vector<uint16_t>& _selection_idx,
+                               std::vector<int64_t>& tablet_ids);
 
     friend class NodeChannel;
     friend class IndexChannel;
@@ -371,7 +422,6 @@ private:
     std::vector<uint8_t> _validate_selection;
     // one chunk selection for BE node
     std::vector<uint32_t> _node_select_idx;
-    std::vector<int64_t> _tablet_ids;
     vectorized::OlapTablePartitionParam* _vectorized_partition = nullptr;
     // Store the output expr comput result column
     std::unique_ptr<vectorized::Chunk> _output_chunk;
@@ -401,7 +451,19 @@ private:
 
     // the timeout of load channels opened by this tablet sink. in second
     int64_t _load_channel_timeout_s = 0;
+
+    constexpr static uint64_t kInvalidQueueId = (uint64_t)-1;
+
+    int _tablet_sink_split_chunk_dop = 0;
+    std::vector<bthread::ExecutionQueueId<TabletSinkAddChunkTask>> _queue_ids;
+    int64_t _num_node_channel = 0;
+    vector<int64_t> _acc_num_node_channel;
+    std::queue<TabletSinkCachedElement> _cached_element_queue;
+    std::mutex _lock;
+    std::condition_variable _send_chunk_cond;
+    std::atomic<int> _pending_batches_num{0};
+    size_t _max_pending_batches_num;
 };
 
-} // namespace tablet_sink
+} // namespace parallel_tablet_sink
 } // namespace starrocks

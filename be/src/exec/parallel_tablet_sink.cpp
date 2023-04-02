@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "exec/tablet_sink.h"
+#include "exec/parallel_tablet_sink.h"
 
 #include <memory>
 #include <sstream>
@@ -28,7 +28,6 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "config.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/substitute.h"
@@ -38,7 +37,9 @@
 #include "serde/protobuf_serde.h"
 #include "service/brpc.h"
 #include "simd/simd.h"
+#include "storage/async_tablet_sink_chunk_split_executor.h"
 #include "storage/hll.h"
+#include "storage/storage_engine.h"
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
 #include "util/monotime.h"
@@ -52,12 +53,11 @@ static const uint8_t VALID_SEL_OK = 0x1;
 // make sure the least bit is 1.
 static const uint8_t VALID_SEL_OK_AND_NULL = 0x3;
 
-namespace starrocks::tablet_sink {
+namespace starrocks::parallel_tablet_sink {
 
-NodeChannel::NodeChannel(OlapTableSink* parent, int64_t index_id, int64_t node_id)
-        : _parent(parent), _index_id(index_id), _node_id(node_id) {
+NodeChannel::NodeChannel(ParallelOlapTableSink* parent, IndexChannel* index_channel, int64_t index_id, int64_t node_id)
+        : _parent(parent), _index_channel(index_channel), _index_id(index_id), _node_id(node_id) {
     // restrict the chunk memory usage of send queue
-    _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
 }
 
 NodeChannel::~NodeChannel() {
@@ -221,47 +221,6 @@ Status NodeChannel::open_wait() {
     return status;
 }
 
-Status NodeChannel::add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_ids, const uint32_t* indexes,
-                              uint32_t from, uint32_t size) {
-    // If add_row() when _eos_is_produced==true, there must be sth wrong, we can only mark this channel as failed.
-    if (_cancelled | _eos_is_produced) {
-        return _err_st;
-    }
-
-    // We use OlapTableSink mem_tracker which has the same ancestor of _plan node,
-    // so in the ideal case, mem limit is a matter for _plan node.
-    // But there is still some unfinished things, we do mem limit here temporarily.
-    // _cancelled may be set by rpc callback, and it's possible that _cancelled might be set in any of the steps below.
-    // It's fine to do a fake add_row() and return OK, because we will check _cancelled in next add_row() or mark_close().
-    while (!_cancelled && ((_mem_tracker->any_limit_exceeded() && _pending_batches_num > 0) ||
-                           _pending_batches_num >= _max_pending_batches_num)) {
-        SCOPED_RAW_TIMER(&_mem_exceeded_block_ns);
-        SleepFor(MonoDelta::FromMilliseconds(10));
-    }
-
-    if (_cur_chunk->columns().empty()) {
-        _cur_chunk = chunk->clone_empty_with_slot();
-    }
-
-    if (_cur_chunk->num_rows() >= _runtime_state->chunk_size()) {
-        {
-            SCOPED_RAW_TIMER(&_queue_push_lock_ns);
-            std::lock_guard<std::mutex> l(_pending_batches_lock);
-            _mem_tracker->consume(_cur_chunk->memory_usage());
-            _pending_chunks.emplace(std::move(_cur_chunk), _cur_add_chunk_request);
-            _pending_batches_num++;
-        }
-        _cur_chunk = chunk->clone_empty_with_slot();
-        _cur_add_chunk_request.clear_tablet_ids();
-    }
-
-    _cur_chunk->append_selective(*chunk, indexes, from, size);
-    for (size_t i = 0; i < size; ++i) {
-        _cur_add_chunk_request.add_tablet_ids(tablet_ids[indexes[from + i]]);
-    }
-    return Status::OK();
-}
-
 Status NodeChannel::mark_close() {
     auto st = none_of({_cancelled, _eos_is_produced});
     if (!st.ok()) {
@@ -272,9 +231,9 @@ Status NodeChannel::mark_close() {
     {
         std::lock_guard<std::mutex> l(_pending_batches_lock);
         DCHECK(_cur_chunk != nullptr);
-        _mem_tracker->consume(_cur_chunk->memory_usage());
         _pending_chunks.emplace(std::move(_cur_chunk), _cur_add_chunk_request);
-        _pending_batches_num++;
+        parent()->increase_pending_batches_num();
+        increase_pending_batches_num();
     }
 
     _eos_is_produced = true;
@@ -343,8 +302,8 @@ int NodeChannel::try_send_chunk_and_fetch_status() {
             DCHECK(!_pending_chunks.empty());
             send_chunk = std::move(_pending_chunks.front());
             _pending_chunks.pop();
-            _mem_tracker->release(send_chunk.first->memory_usage());
-            _pending_batches_num--;
+            parent()->decrease_pending_batches_num();
+            decrease_pending_batches_num();
         }
 
         auto chunk = std::move(send_chunk.first);
@@ -423,7 +382,7 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<TTabletWithPart
             NodeChannel* channel = nullptr;
             auto it = _node_channels.find(node_id);
             if (it == std::end(_node_channels)) {
-                auto channel_ptr = std::make_unique<NodeChannel>(_parent, _index_id, node_id);
+                auto channel_ptr = std::make_unique<NodeChannel>(_parent, this, _index_id, node_id);
                 channel = channel_ptr.get();
                 _node_channels.emplace(node_id, std::move(channel_ptr));
             } else {
@@ -443,26 +402,39 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<TTabletWithPart
 }
 
 bool IndexChannel::has_intolerable_failure() {
+    std::lock_guard<std::mutex> l(_mark_failed_lock);
     return _failed_channels.size() >= ((_parent->_num_repicas + 1) / 2);
 }
 
-OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status) : _pool(pool) {
+ParallelOlapTableSink::ParallelOlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status,
+                                             int tablet_sink_split_chunk_dop)
+        : _pool(pool), _tablet_sink_split_chunk_dop(tablet_sink_split_chunk_dop) {
     if (!texprs.empty()) {
         *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs);
     }
 }
 
-OlapTableSink::~OlapTableSink() {
+ParallelOlapTableSink::~ParallelOlapTableSink() {
     // We clear NodeChannels' batches here, cuz NodeChannels' batches destruction will use
-    // OlapTableSink::_mem_tracker and its parents.
-    // But their destructions are after OlapTableSink's.
+    // ParallelOlapTableSink::_mem_tracker and its parents.
+    // But their destructions are after ParallelOlapTableSink's.
     // TODO: can be remove after all MemTrackers become shared.
     for (auto& index_channel : _channels) {
         index_channel->for_each_node_channel([](NodeChannel* ch) { ch->clear_all_batches(); });
     }
+
+    for (const auto& queue_id : _queue_ids) {
+        if (queue_id.value != kInvalidQueueId) {
+            int r = bthread::execution_queue_stop(queue_id);
+            LOG_IF(WARNING, r != 0) << "Fail to stop tablet split chunk bthread execution queue: " << r;
+            r = bthread::execution_queue_join(queue_id);
+            LOG_IF(WARNING, r != 0) << "Fail to join tablet split chunk bthread execution queue: " << r;
+        }
+    }
+    _queue_ids.clear();
 }
 
-Status OlapTableSink::init(const TDataSink& t_sink) {
+Status ParallelOlapTableSink::init(const TDataSink& t_sink) {
     DCHECK(t_sink.__isset.olap_table_sink);
     const auto& table_sink = t_sink.olap_table_sink;
     _load_id.set_hi(table_sink.load_id.hi);
@@ -487,14 +459,14 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     return Status::OK();
 }
 
-Status OlapTableSink::prepare(RuntimeState* state) {
+Status ParallelOlapTableSink::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(DataSink::prepare(state));
 
     _sender_id = state->per_fragment_instance_idx();
     _num_senders = state->num_per_fragment_instances();
 
     // profile must add to state's object pool
-    _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
+    _profile = state->obj_pool()->add(new RuntimeProfile("ParallelOlapTableSink"));
 
     SCOPED_TIMER(_profile->total_time_counter());
 
@@ -590,14 +562,33 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-Status OlapTableSink::open(RuntimeState* state) {
+Status ParallelOlapTableSink::open(RuntimeState* state) {
     SCOPED_TIMER(_profile->total_time_counter());
     SCOPED_TIMER(_open_timer);
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
 
+    _acc_num_node_channel.push_back(0);
     for (auto& index_channel : _channels) {
         index_channel->for_each_node_channel([](NodeChannel* ch) { ch->open(); });
+        _num_node_channel += index_channel->num_node_channels();
+        _acc_num_node_channel.push_back(_num_node_channel);
+    }
+    _max_pending_batches_num = 16 * _num_node_channel;
+
+    bthread::ExecutionQueueOptions opts;
+    opts.executor = StorageEngine::instance()->async_tablet_sink_split_chunk_executor();
+    if (UNLIKELY(opts.executor == nullptr)) {
+        return Status::InternalError("AsyncTabletSinkSplitChunkExecutor init failed");
+    }
+
+    for (int i = 0; i < _tablet_sink_split_chunk_dop; i++) {
+        _queue_ids.emplace_back();
+        if (int r = bthread::execution_queue_start(&_queue_ids[_queue_ids.size() - 1], &opts,
+                                                   _execute_node_channel_add_chunk, nullptr);
+            r != 0) {
+            return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
+        }
     }
 
     Status err_st = Status::OK();
@@ -619,12 +610,19 @@ Status OlapTableSink::open(RuntimeState* state) {
         }
     }
 
-    _sender_thread = std::thread(&OlapTableSink::_send_chunk_process, this);
+    _sender_thread = std::thread(&ParallelOlapTableSink::_send_chunk_process, this);
     Thread::set_thread_name(_sender_thread, "olap_table_sink");
     return Status::OK();
 }
 
-Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+Status ParallelOlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+    {
+        std::unique_lock<std::mutex> l(_lock);
+        _send_chunk_cond.wait(l, [&]() {
+            return _cached_element_queue.size() <= 10 && _pending_batches_num <= _max_pending_batches_num;
+        });
+    }
+
     SCOPED_TIMER(_profile->total_time_counter());
     DCHECK(chunk->num_rows() > 0);
     size_t num_rows = chunk->num_rows();
@@ -656,13 +654,18 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
                 DCHECK(output_column != nullptr);
                 _output_chunk->append_column(std::move(output_column), _output_tuple_desc->slots()[i]->id());
             }
-            chunk = _output_chunk.get();
         } else {
-            chunk->reset_slot_id_to_index();
+            _output_chunk = chunk->clone_unique();
+            _output_chunk->reset_slot_id_to_index();
             for (size_t i = 0; i < _output_tuple_desc->slots().size(); ++i) {
-                chunk->set_slot_id_to_index(_output_tuple_desc->slots()[i]->id(), i);
+                _output_chunk->set_slot_id_to_index(_output_tuple_desc->slots()[i]->id(), i);
             }
         }
+
+        _cached_element_queue.emplace(std::move(_output_chunk), _num_node_channel, _runtime_state->chunk_size());
+        _output_chunk = nullptr;
+        chunk = _cached_element_queue.back().chunk.get();
+
         DCHECK_EQ(chunk->get_slot_id_to_index_map().size(), _output_tuple_desc->slots().size());
     }
 
@@ -672,6 +675,7 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
         SCOPED_RAW_TIMER(&_validate_data_ns);
         _validate_data(state, chunk);
     }
+    std::vector<uint16_t>& validate_select_idx = _cached_element_queue.back().validate_select_idx;
     {
         uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
         int invalid_row_index = 0;
@@ -685,41 +689,44 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
         // If chunk num_rows is 6
         // _validate_selection is [1, 0, 0, 0, 1, 1]
         // selection_idx after arrange will be : [0, 4, 5]
-        _validate_select_idx.resize(num_rows);
+        validate_select_idx.resize(num_rows);
         size_t selected_size = 0;
         for (uint16_t i = 0; i < num_rows; ++i) {
-            _validate_select_idx[selected_size] = i;
+            validate_select_idx[selected_size] = i;
             selected_size += (_validate_selection[i] & 0x1);
         }
-        _validate_select_idx.resize(selected_size);
+        validate_select_idx.resize(selected_size);
 
-        if (num_rows_after_validate - _validate_select_idx.size() > 0) {
+        if (num_rows_after_validate - validate_select_idx.size() > 0) {
             std::string debug_row = chunk->debug_row(invalid_row_index);
             state->append_error_msg_to_file(debug_row,
                                             "The row is out of partition ranges. Please add a new partition.");
         }
 
-        _number_filtered_rows += (num_rows - _validate_select_idx.size());
-        _number_output_rows += _validate_select_idx.size();
+        _number_filtered_rows += (num_rows - validate_select_idx.size());
+        _number_output_rows += validate_select_idx.size();
     }
 
-    size_t selection_size = _validate_select_idx.size();
+    size_t selection_size = validate_select_idx.size();
     if (selection_size == 0) {
         return Status::OK();
     }
-    _tablet_ids.resize(num_rows);
+    std::vector<std::vector<int64_t>>& vec_tablet_ids = _cached_element_queue.back().vec_tablet_ids;
     if (num_rows > selection_size) {
         for (size_t i = 0; i < selection_size; ++i) {
             _partition_ids.emplace(_partitions[_validate_select_idx[i]]->id);
         }
 
-        size_t index_size = _partitions[_validate_select_idx[0]]->indexes.size();
+        size_t index_size = _partitions[validate_select_idx[0]]->indexes.size();
+        vec_tablet_ids.resize(index_size);
         for (size_t i = 0; i < index_size; ++i) {
+            std::vector<int64_t>& tablet_ids = vec_tablet_ids[i];
+            tablet_ids.resize(num_rows);
             for (size_t j = 0; j < selection_size; ++j) {
-                uint16_t selection = _validate_select_idx[j];
-                _tablet_ids[selection] = _partitions[selection]->indexes[i].tablets[_tablet_indexes[selection]];
+                uint16_t selection = validate_select_idx[j];
+                tablet_ids[selection] = _partitions[selection]->indexes[i].tablets[_tablet_indexes[selection]];
             }
-            RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i].get(), _validate_select_idx));
+            RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i].get(), validate_select_idx, tablet_ids));
         }
     } else { // Improve for all rows are selected
         for (size_t i = 0; i < num_rows; ++i) {
@@ -727,36 +734,40 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
         }
 
         size_t index_size = _partitions[0]->indexes.size();
+        vec_tablet_ids.resize(index_size);
         for (size_t i = 0; i < index_size; ++i) {
+            std::vector<int64_t>& tablet_ids = vec_tablet_ids[i];
+            tablet_ids.resize(num_rows);
             for (size_t j = 0; j < num_rows; ++j) {
-                _tablet_ids[j] = _partitions[j]->indexes[i].tablets[_tablet_indexes[j]];
+                tablet_ids[j] = _partitions[j]->indexes[i].tablets[_tablet_indexes[j]];
             }
-            RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i].get(), _validate_select_idx));
+            RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i].get(), validate_select_idx, tablet_ids));
         }
     }
     return Status::OK();
 }
 
-Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel* channel,
-                                          std::vector<uint16_t>& selection_idx) {
+Status ParallelOlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel* channel,
+                                                  std::vector<uint16_t>& selection_idx,
+                                                  std::vector<int64_t>& tablet_ids) {
     Status err_st = Status::OK();
     for (auto& it : channel->_node_channels) {
-        int64_t be_id = it.first;
-        _node_select_idx.clear();
-        _node_select_idx.reserve(selection_idx.size());
-        for (unsigned short selection : selection_idx) {
-            std::vector<int64_t>& be_ids = channel->_tablet_to_be.find(_tablet_ids[selection])->second;
-            if (std::find(be_ids.begin(), be_ids.end(), be_id) != be_ids.end()) {
-                _node_select_idx.emplace_back(selection);
-            }
-        }
         NodeChannel* node = it.second.get();
-        auto st = node->add_chunk(chunk, _tablet_ids.data(), _node_select_idx.data(), 0, _node_select_idx.size());
+        TabletSinkAddChunkTask task;
+        task.chunk = chunk;
+        task.node = node;
+        task.tablet_to_be = &channel->_tablet_to_be;
+        task.selection_idx = &selection_idx;
+        task.tablet_ids = tablet_ids.data();
+        task.be_id = it.first;
+        task.pending_processing_num_channel = &_cached_element_queue.back().pending_processing_num_channel;
 
-        if (!st.ok()) {
-            channel->mark_as_failed(node);
-            err_st = st;
+        int queue_index = (_acc_num_node_channel[node->index_id()] + node->node_id()) % _tablet_sink_split_chunk_dop;
+        int r = bthread::execution_queue_execute(_queue_ids[queue_index], task);
+        if (r != 0) {
+            LOG(WARNING) << "Fail to execution_queue_execute: " << r;
         }
+
         if (channel->has_intolerable_failure()) {
             return err_st;
         }
@@ -764,8 +775,78 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
     return Status::OK();
 }
 
-Status OlapTableSink::close(RuntimeState* state, Status close_status) {
+int ParallelOlapTableSink::_execute_node_channel_add_chunk(void* meta,
+                                                           bthread::TaskIterator<TabletSinkAddChunkTask>& iter) {
+    if (iter.is_queue_stopped()) {
+        return 0;
+    }
+    for (; iter; ++iter) {
+        NodeChannel* node = iter->node;
+
+        // If add_row() when _eos_is_produced==true, there must be sth wrong, we can only mark this channel as failed.
+        if (node->_cancelled || node->_eos_is_produced) {
+            IndexChannel* index_channel = node->index_channel();
+            {
+                std::lock_guard<std::mutex> l(index_channel->mark_failed_lock());
+                index_channel->mark_as_failed(node);
+                index_channel->set_err_st(node->err_st());
+            }
+            (*iter->pending_processing_num_channel)--;
+            continue;
+        }
+
+        int64_t be_id = iter->be_id;
+        vectorized::Chunk* chunk = iter->chunk;
+        std::unordered_map<int64_t, std::vector<int64_t>>* tablet_to_be = iter->tablet_to_be;
+        const int64_t* tablet_ids = iter->tablet_ids;
+        std::vector<uint16_t>* selection_idx = iter->selection_idx;
+        std::vector<uint32_t> indexes;
+
+        indexes.reserve(selection_idx->size());
+        for (unsigned short selection : *selection_idx) {
+            std::vector<int64_t>& be_ids = tablet_to_be->find(tablet_ids[selection])->second;
+            if (std::find(be_ids.begin(), be_ids.end(), be_id) != be_ids.end()) {
+                indexes.emplace_back(selection);
+            }
+        }
+
+        int from = 0;
+        int size = indexes.size();
+
+        if (node->_cur_chunk->columns().empty()) {
+            node->_cur_chunk = chunk->clone_empty_with_slot();
+        }
+
+        if (node->_cur_chunk->num_rows() >= node->_runtime_state->chunk_size()) {
+            {
+                SCOPED_RAW_TIMER(&node->_queue_push_lock_ns);
+                std::lock_guard<std::mutex> l(node->_pending_batches_lock);
+                node->_pending_chunks.emplace(std::move(node->_cur_chunk), node->_cur_add_chunk_request);
+                node->_parent->increase_pending_batches_num();
+                node->increase_pending_batches_num();
+            }
+            node->_cur_chunk = chunk->clone_empty_with_slot();
+            node->_cur_add_chunk_request.clear_tablet_ids();
+        }
+
+        node->_cur_chunk->append_selective(*chunk, indexes.data(), from, size);
+        for (size_t i = 0; i < size; ++i) {
+            node->_cur_add_chunk_request.add_tablet_ids(tablet_ids[indexes[from + i]]);
+        }
+
+        (*iter->pending_processing_num_channel)--;
+    }
+    return 0;
+}
+
+Status ParallelOlapTableSink::close(RuntimeState* state, Status close_status) {
     Status status = close_status;
+
+    {
+        std::unique_lock<std::mutex> l(_lock);
+        _send_chunk_cond.wait(l, [&]() { return _cached_element_queue.empty(); });
+    }
+
     if (status.ok()) {
         // only if status is ok can we call this _profile->total_time_counter().
         // if status is not ok, this sink may not be prepared, so that _profile is null
@@ -850,6 +931,17 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
         }
     }
 
+    for (const auto& queue_id : _queue_ids) {
+        if (queue_id.value != kInvalidQueueId) {
+            int r = bthread::execution_queue_stop(queue_id);
+            LOG_IF(WARNING, r != 0) << "Fail to stop tablet split chunk bthread execution queue: " << r;
+            r = bthread::execution_queue_join(queue_id);
+            LOG_IF(WARNING, r != 0) << "Fail to join tablet split chunk bthread execution queue: " << r;
+        }
+    }
+
+    _queue_ids.clear();
+
     // Sender join() must put after node channels mark_close/cancel.
     // But there is no specific sequence required between sender join() & close_wait().
     if (_sender_thread.joinable()) {
@@ -860,7 +952,7 @@ Status OlapTableSink::close(RuntimeState* state, Status close_status) {
     return status;
 }
 
-void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc) {
+void ParallelOlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& str, SlotDescriptor* desc) {
     std::string error_str = str.to_string();
     if (error_str.length() > 100) {
         error_str = error_str.substr(0, 100);
@@ -875,7 +967,8 @@ void OlapTableSink::_print_varchar_error_msg(RuntimeState* state, const Slice& s
 #endif
 }
 
-void OlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc) {
+void ParallelOlapTableSink::_print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal,
+                                                     SlotDescriptor* desc) {
     std::string error_msg = strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'",
                                                 decimal.to_string(), desc->col_name(), desc->type().debug_string());
 #if BE_TEST
@@ -899,8 +992,8 @@ void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, con
 }
 
 template <PrimitiveType PT>
-void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
-                                      std::vector<uint8_t>* validate_selection) {
+void ParallelOlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* column,
+                                              const SlotDescriptor* desc, std::vector<uint8_t>* validate_selection) {
     using CppType = vectorized::RunTimeCppType<PT>;
     using ColumnType = vectorized::RunTimeColumnType<PT>;
     auto* data_column = down_cast<ColumnType*>(vectorized::ColumnHelper::get_data_column(column));
@@ -922,7 +1015,7 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* c
     }
 }
 
-void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk) {
+void ParallelOlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (int i = 0; i < _output_tuple_desc->slots().size(); ++i) {
         SlotDescriptor* desc = _output_tuple_desc->slots()[i];
@@ -1026,7 +1119,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
     }
 }
 
-void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
+void ParallelOlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (auto desc : _output_tuple_desc->slots()) {
         if (desc->type().type == TYPE_CHAR) {
@@ -1068,17 +1161,27 @@ void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
     }
 }
 
-void OlapTableSink::_send_chunk_process() {
+void ParallelOlapTableSink::_send_chunk_process() {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_runtime_state->instance_mem_tracker());
 
     SCOPED_RAW_TIMER(&_non_blocking_send_ns);
     while (true) {
+        if (!_cached_element_queue.empty() && _cached_element_queue.front().pending_processing_num_channel == 0) {
+            std::lock_guard<std::mutex> l(_lock);
+            while (!_cached_element_queue.empty() &&
+                   _cached_element_queue.front().pending_processing_num_channel == 0) {
+                _cached_element_queue.pop();
+            }
+        }
+
         int running_channels_num = 0;
         for (auto& index_channel : _channels) {
             index_channel->for_each_node_channel([&running_channels_num](NodeChannel* ch) {
                 running_channels_num += ch->try_send_chunk_and_fetch_status();
             });
         }
+
+        _send_chunk_cond.notify_all();
 
         if (running_channels_num == 0) {
             LOG(INFO) << "Exiting consumer thread, no running channel";
@@ -1091,4 +1194,4 @@ void OlapTableSink::_send_chunk_process() {
     }
 }
 
-} // namespace starrocks::tablet_sink
+} // namespace starrocks::parallel_tablet_sink

@@ -34,3 +34,4 @@ ADD_BE_TEST(schema_scanner/schema_columns_scanner_test)
 
 # Benchmarks
 ADD_BE_BENCH(vectorized/chunks_sorter_bench_test)
+ADD_BE_BENCH(vectorized/tablet_sink_bench)

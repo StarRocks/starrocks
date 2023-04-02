@@ -42,6 +42,7 @@ set(EXEC_FILES
     olap_common.cpp
     tablet_info.cpp
     tablet_sink.cpp
+    parallel_tablet_sink.cpp
     es/es_predicate.cpp
     es/es_scan_reader.cpp
     es/es_scroll_query.cpp

@@ -314,6 +314,8 @@ CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
 CONF_mInt64(load_error_log_reserve_hours, "48");
 CONF_Int32(number_tablet_writer_threads, "16");
+CONF_Int32(number_tablet_sink_chunk_split_threads, "16");
+CONF_Bool(enable_async_tablet_sink_chunk_split_executor, "false");
 
 // Automatically detect whether a char/varchar column to use dictionary encoding
 // If the number of keys in a dictionary is greater than this fraction of the total number of rows

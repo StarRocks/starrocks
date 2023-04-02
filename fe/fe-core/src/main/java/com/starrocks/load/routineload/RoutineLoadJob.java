@@ -224,6 +224,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected long totalTaskExcutionTimeMs = 1; // init as 1 to avoid division by zero
     protected long committedTaskNum = 0;
     protected long abortedTaskNum = 0;
+    protected int tabletSinkDop = 1;
 
     // The tasks belong to this job
     protected List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
@@ -262,6 +263,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             SessionVariable var = ConnectContext.get().getSessionVariable();
             sessionVariables.put(SessionVariable.SQL_MODE, Long.toString(var.getSqlMode()));
             sessionVariables.put(SessionVariable.EXEC_MEM_LIMIT, Long.toString(var.getMaxExecMemByte()));
+            tabletSinkDop = var.getRoutineLoadTabletSinkDop();
         } else {
             sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
             sessionVariables.put(SessionVariable.EXEC_MEM_LIMIT, Long.toString(SessionVariable.DEFAULT_EXEC_MEM_LIMIT));
@@ -694,6 +696,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             }
             StreamLoadPlanner planner =
                     new StreamLoadPlanner(db, (OlapTable) table, StreamLoadTask.fromRoutineLoadJob(this));
+            planner.setTabletSinkDop(tabletSinkDop);
             TExecPlanFragmentParams planParams = planner.plan(loadId);
             // add table indexes to transaction state
             TransactionState txnState = Catalog.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), txnId);

@@ -43,6 +43,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/async_delta_writer_executor.h"
+#include "storage/async_tablet_sink_chunk_split_executor.h"
 #include "storage/data_dir.h"
 #include "storage/fs/file_block_manager.h"
 #include "storage/lru_cache.h"
@@ -185,6 +186,10 @@ Status StorageEngine::_open() {
 
     _async_delta_writer_executor = std::make_unique<AsyncDeltaWriterExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_async_delta_writer_executor->init(), "init AsyncDeltaWriterExecutor failed");
+
+    _async_tablet_sink_chunk_split_executor = std::make_unique<AsyncTabletSinkChunkSplitExecutor>();
+    RETURN_IF_ERROR_WITH_WARN(_async_tablet_sink_chunk_split_executor->init(),
+                              "init AsyncTabletSinkChunkSplitExecutor failed");
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");

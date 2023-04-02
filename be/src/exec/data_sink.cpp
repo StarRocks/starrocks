@@ -28,6 +28,7 @@
 #include "common/logging.h"
 #include "exec/exec_node.h"
 #include "exec/file_builder.h"
+#include "exec/parallel_tablet_sink.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr.h"
 #include "gen_cpp/InternalService_types.h"
@@ -101,7 +102,22 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
     case TDataSinkType::OLAP_TABLE_SINK: {
         Status status;
         DCHECK(thrift_sink.__isset.olap_table_sink);
-        *sink = std::make_unique<stream_load::OlapTableSink>(state->obj_pool(), output_exprs, &status);
+        const auto& table_sink = thrift_sink.olap_table_sink;
+        int tablet_sink_split_chunk_dop = 1;
+        if (table_sink.__isset.tablet_sink_split_chunk_dop) {
+            tablet_sink_split_chunk_dop = table_sink.tablet_sink_split_chunk_dop;
+        }
+        if (tablet_sink_split_chunk_dop == 1) {
+            *sink = std::make_unique<tablet_sink::OlapTableSink>(state->obj_pool(), output_exprs, &status);
+        } else {
+            if (!config::enable_async_tablet_sink_chunk_split_executor) {
+                return Status::InternalError(
+                        "enable_async_tablet_sink_chunk_split_executor is false, please enable it if you set "
+                        "routine_load_tablet_sink_split_chunk_dop > 1 in FE");
+            }
+            *sink = std::make_unique<parallel_tablet_sink::ParallelOlapTableSink>(state->obj_pool(), output_exprs,
+                                                                                  &status, tablet_sink_split_chunk_dop);
+        }
         RETURN_IF_ERROR(status);
         break;
     }

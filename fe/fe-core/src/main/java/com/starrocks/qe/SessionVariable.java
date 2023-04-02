@@ -108,6 +108,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // see comment of `starrocks_max_scan_key_num` and `max_pushdown_conditions_per_column` in BE config
     public static final String MAX_SCAN_KEY_NUM = "max_scan_key_num";
     public static final String MAX_PUSHDOWN_CONDITIONS_PER_COLUMN = "max_pushdown_conditions_per_column";
+    public static final String ROUTINE_LOAD_TABLET_SINK_SPLIT_CHUNK_DOP = "routine_load_tablet_sink_split_chunk_dop";
 
     // use new execution engine instead of the old one if enable_pipeline_engine is true,
     // the new execution engine split a fragment into pipelines, then create several drivers
@@ -538,12 +539,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_TRACE_LOG, flag = VariableMgr.INVISIBLE)
     private boolean enableOptimizerTraceLog = false;
 
+    @VariableMgr.VarAttr(name = ROUTINE_LOAD_TABLET_SINK_SPLIT_CHUNK_DOP)
+    private int routineLoadTabletSinkDop = 1;
+
     public long getRuntimeFilterScanWaitTime() {
         return runtimeFilterScanWaitTime;
     }
 
     public boolean enableHiveColumnStats() {
         return enableHiveColumnStats;
+    }
+
+    public int getRoutineLoadTabletSinkDop() {
+        return routineLoadTabletSinkDop;
+    }
+
+    public void setRoutineLoadTabletSinkDop(int dop) {
+        this.routineLoadTabletSinkDop = dop;
     }
 
     public int getHivePartitionStatsSampleSize() {
