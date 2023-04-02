@@ -445,6 +445,22 @@ public class CreateTableTest {
         Assert.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
     }
 
+    @Test
+    public void testDecimal() throws Exception {
+        String sql = "CREATE TABLE create_decimal_tbl\n" +
+                "(\n" +
+                "    c1 decimal(38, 1),\n" +
+                "    c2 numeric(38, 1),\n" +
+                "    c3 number(38, 1) \n" +
+                ")\n" +
+                "DUPLICATE KEY(c1)\n" +
+                "DISTRIBUTED BY HASH(c1) BUCKETS 1\n" +
+                "PROPERTIES(\"replication_num\" = \"1\");";
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+    }
+
     @Test(expected = AnalysisException.class)
     public void testCreateSumSmallTypeAgg() throws Exception {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
