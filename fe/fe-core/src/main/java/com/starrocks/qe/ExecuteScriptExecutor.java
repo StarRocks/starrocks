@@ -20,7 +20,7 @@ import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -33,7 +33,7 @@ public class ExecuteScriptExecutor {
     private static final Logger LOG = LogManager.getLogger(ExecuteScriptExecutor.class);
 
     public static void execute(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
-        DataNode be = GlobalStateMgr.getCurrentSystemInfo().getBackend(stmt.getBeId());
+        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(stmt.getBeId());
         TNetworkAddress address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
         ExecuteCommandRequestPB request = new ExecuteCommandRequestPB();
         request.command = "execute_script";
