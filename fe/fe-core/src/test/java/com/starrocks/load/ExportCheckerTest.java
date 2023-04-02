@@ -16,7 +16,7 @@ package com.starrocks.load;
 
 import com.starrocks.common.UserException;
 import com.starrocks.load.ExportJob.JobState;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
@@ -40,11 +40,11 @@ public class ExportCheckerTest {
             }
         };
 
-        DataNode be = new DataNode();
+        Backend be = new Backend();
         
         new MockUp<SystemInfoService>() {
             @Mock
-            public DataNode getBackend(long backendId) {
+            public Backend getBackend(long backendId) {
                 return be;
             }
         };
@@ -79,7 +79,7 @@ public class ExportCheckerTest {
 
         new MockUp<SystemInfoService>() {
             @Mock
-            public DataNode getBackend(long backendId) {
+            public Backend getBackend(long backendId) {
                 return null;
             }
         };

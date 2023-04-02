@@ -117,7 +117,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.FrontendService;
@@ -1811,7 +1811,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(olapTable.getClusterId());
         for (Long id : systemInfoService.getBackendIds(false)) {
-            DataNode backend = systemInfoService.getBackend(id);
+            Backend backend = systemInfoService.getBackend(id);
             nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
         }
         result.setNodes(nodeInfos);

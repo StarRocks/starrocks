@@ -60,8 +60,8 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TAdaptiveDopParam;
@@ -156,7 +156,7 @@ public class CoordinatorPreprocessor {
     private final Map<TNetworkAddress, TNetworkAddress> bePortToBeWebServerPort = Maps.newHashMap();
 
     // backends which this query will use
-    private ImmutableMap<Long, DataNode> idToBackend;
+    private ImmutableMap<Long, Backend> idToBackend;
     // compute node which this query will use
     private ImmutableMap<Long, ComputeNode> idToComputeNode;
 
@@ -321,7 +321,7 @@ public class CoordinatorPreprocessor {
         return bePortToBeWebServerPort;
     }
 
-    public ImmutableMap<Long, DataNode> getIdToBackend() {
+    public ImmutableMap<Long, Backend> getIdToBackend() {
         return idToBackend;
     }
 
@@ -332,7 +332,7 @@ public class CoordinatorPreprocessor {
     public TNetworkAddress getBrpcAddress(TNetworkAddress beAddress) {
         long beId = Preconditions.checkNotNull(addressToBackendID.get(beAddress),
                 "backend not found: " + beAddress);
-        DataNode be = Preconditions.checkNotNull(idToBackend.get(beId),
+        Backend be = Preconditions.checkNotNull(idToBackend.get(beId),
                 "backend not found: " + beId);
         return be.getBrpcAddress();
     }
@@ -413,9 +413,9 @@ public class CoordinatorPreprocessor {
 
         if (LOG.isDebugEnabled()) {
             LOG.debug("idToBackend size={}", idToBackend.size());
-            for (Map.Entry<Long, DataNode> entry : idToBackend.entrySet()) {
+            for (Map.Entry<Long, Backend> entry : idToBackend.entrySet()) {
                 Long backendID = entry.getKey();
-                DataNode backend = entry.getValue();
+                Backend backend = entry.getValue();
                 LOG.debug("backend: {}-{}-{}", backendID, backend.getHost(), backend.getBePort());
             }
 
@@ -464,7 +464,7 @@ public class CoordinatorPreprocessor {
     private void recordUsedBackend(TNetworkAddress addr, Long backendID) {
         if (this.queryOptions.getLoad_job_type() == TLoadJobType.STREAM_LOAD &&
                 !bePortToBeWebServerPort.containsKey(addr)) {
-            DataNode backend = idToBackend.get(backendID);
+            Backend backend = idToBackend.get(backendID);
             bePortToBeWebServerPort.put(addr, new TNetworkAddress(backend.getHost(), backend.getHttpPort()));
         }
         usedBackendIDs.add(backendID);
@@ -1310,9 +1310,9 @@ public class CoordinatorPreprocessor {
                 return "";
             }
             StringBuilder infoStr = new StringBuilder("backend: ");
-            for (Map.Entry<Long, DataNode> entry : this.idToBackend.entrySet()) {
+            for (Map.Entry<Long, Backend> entry : this.idToBackend.entrySet()) {
                 Long backendID = entry.getKey();
-                DataNode backend = entry.getValue();
+                Backend backend = entry.getValue();
                 infoStr.append(String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
                         backend.isAlive(), SimpleScheduler.isInBlacklist(backendID)));
             }
@@ -2016,7 +2016,7 @@ public class CoordinatorPreprocessor {
         // Make sure each host have average bucket to scan
         private void getExecHostPortForFragmentIDAndBucketSeq(TScanRangeLocations seqLocation,
                                                               PlanFragmentId fragmentId, Integer bucketSeq,
-                                                              ImmutableMap<Long, DataNode> idToBackend)
+                                                              ImmutableMap<Long, Backend> idToBackend)
                 throws UserException {
             Map<Long, Integer> buckendIdToBucketCountMap = fragmentIdToBackendIdBucketCountMap.get(fragmentId);
             int maxBucketNum = Integer.MAX_VALUE;

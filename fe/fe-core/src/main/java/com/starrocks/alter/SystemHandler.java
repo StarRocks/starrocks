@@ -63,7 +63,7 @@ import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
@@ -98,7 +98,7 @@ public class SystemHandler extends AlterHandler {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         // check if decommission is finished
         for (Long beId : systemInfoService.getBackendIds(false)) {
-            DataNode backend = systemInfoService.getBackend(beId);
+            Backend backend = systemInfoService.getBackend(beId);
             if (backend == null || !backend.isDecommissioned()) {
                 continue;
             }
@@ -147,12 +147,12 @@ public class SystemHandler extends AlterHandler {
             // decommission
             DecommissionBackendClause decommissionBackendClause = (DecommissionBackendClause) alterClause;
             // check request
-            List<DataNode> decommissionBackends = checkDecommission(decommissionBackendClause);
+            List<Backend> decommissionBackends = checkDecommission(decommissionBackendClause);
 
             // set backend's state as 'decommissioned'
             // for decommission operation, here is no decommission job. the system handler will check
             // all backend in decommission state
-            for (DataNode backend : decommissionBackends) {
+            for (Backend backend : decommissionBackends) {
                 backend.setDecommissioned(true);
                 GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(backend);
                 LOG.info("set backend {} to decommission", backend.getId());
@@ -196,7 +196,7 @@ public class SystemHandler extends AlterHandler {
         return null;
     }
 
-    private List<DataNode> checkDecommission(DecommissionBackendClause decommissionBackendClause)
+    private List<Backend> checkDecommission(DecommissionBackendClause decommissionBackendClause)
             throws DdlException {
         return checkDecommission(decommissionBackendClause.getHostPortPairs());
     }
@@ -207,13 +207,13 @@ public class SystemHandler extends AlterHandler {
      * 2. after decommission, the remaining backend num should meet the replication num.
      * 3. after decommission, The remaining space capacity can store data on decommissioned backends.
      */
-    public static List<DataNode> checkDecommission(List<Pair<String, Integer>> hostPortPairs)
+    public static List<Backend> checkDecommission(List<Pair<String, Integer>> hostPortPairs)
             throws DdlException {
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
-        List<DataNode> decommissionBackends = Lists.newArrayList();
+        List<Backend> decommissionBackends = Lists.newArrayList();
         // check if exist
         for (Pair<String, Integer> pair : hostPortPairs) {
-            DataNode backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
+            Backend backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
             if (backend == null) {
                 throw new DdlException("Backend does not exist[" + pair.first + ":" + pair.second + "]");
             }
@@ -237,11 +237,11 @@ public class SystemHandler extends AlterHandler {
 
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         // check if backends is under decommission
-        List<DataNode> backends = Lists.newArrayList();
+        List<Backend> backends = Lists.newArrayList();
         List<Pair<String, Integer>> hostPortPairs = cancelAlterSystemStmt.getHostPortPairs();
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check if exist
-            DataNode backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
+            Backend backend = infoService.getBackendWithHeartbeatPort(pair.first, pair.second);
             if (backend == null) {
                 throw new DdlException("Backend does not exists[" + pair.first + "]");
             }
@@ -255,7 +255,7 @@ public class SystemHandler extends AlterHandler {
             backends.add(backend);
         }
 
-        for (DataNode backend : backends) {
+        for (Backend backend : backends) {
             if (backend.setDecommissioned(false)) {
                 GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(backend);
             } else {

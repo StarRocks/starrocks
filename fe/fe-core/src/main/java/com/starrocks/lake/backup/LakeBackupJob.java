@@ -40,7 +40,7 @@ import com.starrocks.proto.UploadSnapshotsResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.thrift.THdfsProperties;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -61,7 +61,7 @@ public class LakeBackupJob extends BackupJob {
 
     private Map<SnapshotInfo, LockTabletMetadataRequest> lockRequests = Maps.newHashMap();
 
-    private Map<DataNode, UploadSnapshotsRequest> uploadRequests = Maps.newHashMap();
+    private Map<Backend, UploadSnapshotsRequest> uploadRequests = Maps.newHashMap();
 
     private Map<SnapshotInfo, Future<LockTabletMetadataResponse>> lockResponses = Maps.newHashMap();
 
@@ -109,7 +109,7 @@ public class LakeBackupJob extends BackupJob {
     protected void prepareSnapshotTask(Partition partition, Table tbl, Tablet tablet, MaterializedIndex index,
                                        long visibleVersion, int schemaHash) {
         try {
-            DataNode backend = GlobalStateMgr.getCurrentSystemInfo()
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo()
                     .getBackend(((LakeTablet) tablet).getPrimaryBackendId());
             LakeTableSnapshotInfo snapshotInfo = new LakeTableSnapshotInfo(dbId,
                     tbl.getId(), partition.getId(), index.getId(), tablet.getId(),
@@ -132,7 +132,7 @@ public class LakeBackupJob extends BackupJob {
     @Override
     protected void sendSnapshotRequests() {
         for (Map.Entry<SnapshotInfo, LockTabletMetadataRequest> entry : lockRequests.entrySet()) {
-            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey().getBeId());
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey().getBeId());
             LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
             Future<LockTabletMetadataResponse> response = lakeService.lockTabletMetadata(entry.getValue());
             lockResponses.put(entry.getKey(), response);
@@ -150,7 +150,7 @@ public class LakeBackupJob extends BackupJob {
             request.tabletId = info.getTabletId();
             request.version = ((LakeTableSnapshotInfo) info).getVersion();
             request.expireTime = (createTime + timeoutMs) / 1000;
-            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(info.getBeId());
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(info.getBeId());
             LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(),
                     backend.getBrpcPort());
             lakeService.unlockTabletMetadata(request);
@@ -174,14 +174,14 @@ public class LakeBackupJob extends BackupJob {
             snapshot.destPath = repo.getRepoTabletPathBySnapshotInfo(label, info);
             request.snapshots.put(lakeInfo.getTabletId(), snapshot);
         }
-        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
         unfinishedTaskIds.put(beId, 1L);
         uploadRequests.put(backend, request);
     }
 
     @Override
     protected void sendUploadTasks() {
-        for (Map.Entry<DataNode, UploadSnapshotsRequest> entry : uploadRequests.entrySet()) {
+        for (Map.Entry<Backend, UploadSnapshotsRequest> entry : uploadRequests.entrySet()) {
             LakeService lakeService = BrpcProxy.getLakeService(entry.getKey().getHost(), entry.getKey().getBrpcPort());
             Future<UploadSnapshotsResponse> response = lakeService.uploadSnapshots(entry.getValue());
             uploadResponses.put(entry.getKey().getId(), response);

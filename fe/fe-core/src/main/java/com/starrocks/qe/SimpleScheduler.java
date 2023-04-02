@@ -40,8 +40,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TScanRangeLocation;
@@ -75,13 +75,13 @@ public class SimpleScheduler {
     @Nullable
     public static TNetworkAddress getHost(long backendId,
                                           List<TScanRangeLocation> locations,
-                                          ImmutableMap<Long, DataNode> backends,
+                                          ImmutableMap<Long, Backend> backends,
                                           Reference<Long> backendIdRef) {
         if (locations == null || backends == null) {
             return null;
         }
         LOG.debug("getHost backendID={}, backendSize={}", backendId, backends.size());
-        DataNode backend = backends.get(backendId);
+        Backend backend = backends.get(backendId);
         lock.lock();
         try {
             if (backend != null && backend.isAlive() && !blacklistBackends.containsKey(backendId)) {
@@ -93,7 +93,7 @@ public class SimpleScheduler {
                         continue;
                     }
                     // choose the first alive backend(in analysis stage, the locations are random)
-                    DataNode candidateBackend = backends.get(location.backend_id);
+                    Backend candidateBackend = backends.get(location.backend_id);
                     if (candidateBackend != null && candidateBackend.isAlive()
                             && !blacklistBackends.containsKey(location.backend_id)) {
                         backendIdRef.setRef(location.backend_id);
@@ -120,9 +120,9 @@ public class SimpleScheduler {
     }
 
     @Nullable
-    public static TNetworkAddress getBackendHost(ImmutableMap<Long, DataNode> backendMap,
+    public static TNetworkAddress getBackendHost(ImmutableMap<Long, Backend> backendMap,
                                                  Reference<Long> backendIdRef) {
-        DataNode node = getBackend(backendMap);
+        Backend node = getBackend(backendMap);
         if (node != null) {
             backendIdRef.setRef(node.getId());
             return new TNetworkAddress(node.getHost(), node.getBePort());
@@ -131,7 +131,7 @@ public class SimpleScheduler {
     }
 
     @Nullable
-    public static DataNode getBackend(ImmutableMap<Long, DataNode> nodeMap) {
+    public static Backend getBackend(ImmutableMap<Long, Backend> nodeMap) {
         if (nodeMap == null || nodeMap.isEmpty()) {
             return null;
         }

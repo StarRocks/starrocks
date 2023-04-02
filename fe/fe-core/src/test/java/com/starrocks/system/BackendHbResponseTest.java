@@ -19,7 +19,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;
 import org.junit.Test;
 
-public class DataNodeHbResponseTest {
+public class BackendHbResponseTest {
     @Test
     public void testSerializeHbResponse() {
         int beId = 1;

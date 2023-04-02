@@ -50,7 +50,7 @@ import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -94,8 +94,8 @@ public class LocalTabletsProcDir implements ProcDirInterface {
     public List<List<Comparable>> fetchComparableResult(long version, long backendId, Replica.ReplicaState state) {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(index);
-        Preconditions.checkState(table.isOlapTableOrMaterializedView());
-        ImmutableMap<Long, DataNode> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        Preconditions.checkState(table.isLocalTable());
+        ImmutableMap<Long, Backend> backendMap = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
 
         List<List<Comparable>> tabletInfos = new ArrayList<List<Comparable>>();
         db.readLock();
@@ -158,7 +158,7 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         tabletInfo.add(0);
                         tabletInfo.add(replica.getVersionCount());
                         tabletInfo.add(Replica.DEPRECATED_PROP_PATH_HASH);
-                        DataNode backend = backendMap.get(replica.getBackendId());
+                        Backend backend = backendMap.get(replica.getBackendId());
                         String metaUrl;
                         String compactionUrl;
                         if (backend != null) {

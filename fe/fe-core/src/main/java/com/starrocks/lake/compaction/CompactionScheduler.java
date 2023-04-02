@@ -37,7 +37,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -289,7 +289,7 @@ public class CompactionScheduler extends Daemon {
             throws UserException {
         List<Future<CompactResponse>> futures = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            DataNode backend = systemInfoService.getBackend(entry.getKey());
+            Backend backend = systemInfoService.getBackend(entry.getKey());
             if (backend == null) {
                 throw new UserException("Backend " + entry.getKey() + " has been dropped");
             }

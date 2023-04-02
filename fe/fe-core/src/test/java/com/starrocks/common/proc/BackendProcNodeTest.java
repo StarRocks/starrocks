@@ -42,7 +42,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.After;
@@ -52,8 +52,8 @@ import org.junit.Test;
 
 import java.util.Map;
 
-public class DataNodeProcNodeTest {
-    private DataNode b1;
+public class BackendProcNodeTest {
+    private Backend b1;
     @Mocked
     private GlobalStateMgr globalStateMgr;
     @Mocked
@@ -65,13 +65,13 @@ public class DataNodeProcNodeTest {
     public void setUp() {
         new Expectations() {
             {
-                editLog.logAddBackend((DataNode) any);
+                editLog.logAddBackend((Backend) any);
                 minTimes = 0;
 
-                editLog.logDropBackend((DataNode) any);
+                editLog.logDropBackend((Backend) any);
                 minTimes = 0;
 
-                editLog.logBackendStateChange((DataNode) any);
+                editLog.logBackendStateChange((Backend) any);
                 minTimes = 0;
 
                 globalStateMgr.getNextId();
@@ -100,7 +100,7 @@ public class DataNodeProcNodeTest {
             }
         };
 
-        b1 = new DataNode(1000, "host1", 10000);
+        b1 = new Backend(1000, "host1", 10000);
         b1.updateOnce(10001, 10003, 10005);
         Map<String, DiskInfo> disks = Maps.newHashMap();
         disks.put("/home/disk1", new DiskInfo("/home/disk1"));
