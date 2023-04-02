@@ -28,7 +28,7 @@ import com.staros.proto.WorkerState;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -88,7 +88,7 @@ public class StarOSAgent2ndTest {
         Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
 
         { // give a correct starlet port, wrong bePort
-            DataNode backend = new DataNode(beId, workerHost, 0);
+            Backend backend = new Backend(beId, workerHost, 0);
             backend.setStarletPort(workerStarletPort);
             backend.setBePort(workerBePort + 1);
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
@@ -97,7 +97,7 @@ public class StarOSAgent2ndTest {
             workerToBackend.clear();
         }
         { // No starlet port in backend, be port mismatch
-            DataNode backend = new DataNode(beId, workerHost, 0);
+            Backend backend = new Backend(beId, workerHost, 0);
             backend.setStarletPort(0);
             backend.setBePort(workerBePort + 1);
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
@@ -107,7 +107,7 @@ public class StarOSAgent2ndTest {
             workerToBackend.clear();
         }
         { // No starlet port in backend, correct be port, can find the correct backend!
-            DataNode backend = new DataNode(beId, workerHost, 0);
+            Backend backend = new Backend(beId, workerHost, 0);
             backend.setStarletPort(0);
             backend.setBePort(workerBePort);
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend);
