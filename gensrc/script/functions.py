@@ -403,12 +403,12 @@ vectorized_functions = [
     [50288, 'from_unixtime', 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime'],
     [50289, 'from_unixtime', 'VARCHAR', ['BIGINT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
 
-    [50300, 'unix_timestamp', 'INT', [], 'TimeFunctions::to_unix_for_now'],
-    [50301, 'unix_timestamp', 'INT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime'],
-    [50302, 'unix_timestamp', 'INT', ['DATE'], 'TimeFunctions::to_unix_from_date'],
-    [50303, 'unix_timestamp', 'INT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format'],
-    [50304, 'from_unixtime', 'VARCHAR', ['INT'], 'TimeFunctions::from_unix_to_datetime'],
-    [50305, 'from_unixtime', 'VARCHAR', ['INT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
+    # [50300, 'unix_timestamp', 'INT', [], 'TimeFunctions::to_unix_for_now'],
+    # [50301, 'unix_timestamp', 'INT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime'],
+    # [50302, 'unix_timestamp', 'INT', ['DATE'], 'TimeFunctions::to_unix_from_date'],
+    # [50303, 'unix_timestamp', 'INT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format'],
+    # [50304, 'from_unixtime', 'VARCHAR', ['INT'], 'TimeFunctions::from_unix_to_datetime'],
+    # [50305, 'from_unixtime', 'VARCHAR', ['INT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
 
     [50310, 'dayname', 'VARCHAR', ['DATETIME'], 'TimeFunctions::day_name'],
     [50311, 'monthname', 'VARCHAR', ['DATETIME'], 'TimeFunctions::month_name'],
