@@ -37,7 +37,7 @@ import com.starrocks.clone.BackendLoadStatistic.Classification;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
@@ -431,7 +431,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 destBEPartitionTablets = getPartitionTablets(destBEStat.getBeId(), medium, -1);
             }
 
-            DataNode destBackend = infoService.getBackend(destBEStat.getBeId());
+            Backend destBackend = infoService.getBackend(destBEStat.getBeId());
             if (destBackend == null) {
                 destBEIndex++;
                 destBEChanged = true;
@@ -816,7 +816,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     private Map<String, List<Long>> getHostGroups(List<Long> backendIds) {
         Map<String, List<Long>> hostGroups = Maps.newHashMap();
         for (Long backendId : backendIds) {
-            DataNode backend = infoService.getBackend(backendId);
+            Backend backend = infoService.getBackend(backendId);
             if (backend == null) {
                 continue;
             }
@@ -1095,7 +1095,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
                     TabletSchedCtx schedCtx = null;
                     if (!isLocalBalance) {
-                        DataNode destBackend = infoService.getBackend(destTablets.first);
+                        Backend destBackend = infoService.getBackend(destTablets.first);
                         if (destBackend == null) {
                             continue;
                         }

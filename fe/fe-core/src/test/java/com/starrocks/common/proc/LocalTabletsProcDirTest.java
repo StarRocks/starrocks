@@ -36,7 +36,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -55,10 +55,10 @@ public class LocalTabletsProcDirTest {
     @Test
     public void testFetchResultWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
                                                @Mocked SystemInfoService systemInfoService) {
-        Map<Long, DataNode> idToBackend = Maps.newHashMap();
+        Map<Long, Backend> idToBackend = Maps.newHashMap();
         long backendId = 20L;
-        idToBackend.put(backendId, new DataNode(backendId, "127.0.0.1", 9050));
-        idToBackend.put(backendId, new DataNode(backendId + 1, "127.0.0.2", 9050));
+        idToBackend.put(backendId, new Backend(backendId, "127.0.0.1", 9050));
+        idToBackend.put(backendId, new Backend(backendId + 1, "127.0.0.2", 9050));
 
         new Expectations() {
             {
