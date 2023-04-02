@@ -151,6 +151,8 @@ def generate_fe(path):
         'functionSet.addVectorizedScalarBuiltin(${id}, "${name}", ${has_vargs}, Type.${ret}${args_types});')
 
     def gen_fe_fn(fnm):
+        if fnm['id'] in functions.fe_deprecated_functions:
+            return ''
         fnm["args_types"] = ", " if len(fnm["args"]) > 0 else ""
         fnm["args_types"] = fnm["args_types"] + ", ".join(["Type." + i for i in fnm["args"] if i != "..."])
         fnm["has_vargs"] = "true" if "..." in fnm["args"] else "false"
