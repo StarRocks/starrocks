@@ -484,7 +484,7 @@ build_brpc() {
     cd $TP_SOURCE_DIR/$BRPC_SOURCE
     CMAKE_GENERATOR="Unix Makefiles"
     BUILD_SYSTEM='make'
-    ./config_brpc.sh --headers="$TP_INSTALL_DIR/include /usr/include" --libs="$TP_INSTALL_DIR/bin $TP_INSTALL_DIR/lib /usr/lib" --with-glog
+    ./config_brpc.sh --headers="$TP_INSTALL_DIR/include /usr/include" --libs="$TP_INSTALL_DIR/bin $TP_INSTALL_DIR/lib /usr/lib" --with-glog --with-rdma  
     make -j$PARALLEL
     cp -rf output/* ${TP_INSTALL_DIR}/
     if [ -f $TP_INSTALL_DIR/lib/libbrpc.a ]; then
