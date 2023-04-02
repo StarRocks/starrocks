@@ -28,8 +28,8 @@ import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
-import com.starrocks.system.DataNode;
-import com.starrocks.system.DataNode.BackendState;
+import com.starrocks.system.Backend;
+import com.starrocks.system.Backend.BackendState;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBackendMeta;
 import com.starrocks.thrift.TColumnMeta;
@@ -520,9 +520,9 @@ public class ExternalOlapTable extends OlapTable {
 
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
             for (TBackendMeta backendMeta : backendMetas) {
-                DataNode backend = systemInfoService.getBackend(backendMeta.getBackend_id());
+                Backend backend = systemInfoService.getBackend(backendMeta.getBackend_id());
                 if (backend == null) {
-                    backend = new DataNode();
+                    backend = new Backend();
                     backend.setId(backendMeta.getBackend_id());
                     backend.setHost(backendMeta.getHost());
                     backend.setBePort(backendMeta.getBe_port());

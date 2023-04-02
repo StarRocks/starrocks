@@ -22,8 +22,8 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBackend;
 import com.starrocks.thrift.TMasterResult;
@@ -145,7 +145,7 @@ public class ReportHandlerTest {
     public void testHandleResourceUsageReport() {
         QueryQueueManager queryQueueManager = QueryQueueManager.getInstance();
 
-        DataNode backend = new DataNode(0, "127.0.0.1", 80);
+        Backend backend = new Backend(0, "127.0.0.1", 80);
         ComputeNode computeNode = new ComputeNode(2, "127.0.0.1", 88);
 
         new MockUp<SystemInfoService>() {
@@ -199,12 +199,12 @@ public class ReportHandlerTest {
     
     @Test
     public void testHandleReport() throws TException {
-        DataNode be = new DataNode(10001, "host1", 8000);
+        Backend be = new Backend(10001, "host1", 8000);
         ComputeNode cn = new ComputeNode(10002, "host2", 8000);
 
         new MockUp<SystemInfoService>() {
             @Mock
-            public DataNode getBackendWithBePort(String host, int bePort) {
+            public Backend getBackendWithBePort(String host, int bePort) {
                 if (host.equals(be.getHost()) && bePort == be.getBePort()) {
                     return be;
                 }

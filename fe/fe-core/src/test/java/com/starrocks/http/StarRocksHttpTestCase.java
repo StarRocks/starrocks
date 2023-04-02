@@ -61,7 +61,7 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -347,11 +347,11 @@ public abstract class StarRocksHttpTestCase {
     }
 
     private static void assignBackends() {
-        DataNode backend1 = new DataNode(testBackendId1, "node-1", 9308);
+        Backend backend1 = new Backend(testBackendId1, "node-1", 9308);
         backend1.setBePort(9300);
-        DataNode backend2 = new DataNode(testBackendId2, "node-2", 9308);
+        Backend backend2 = new Backend(testBackendId2, "node-2", 9308);
         backend2.setBePort(9300);
-        DataNode backend3 = new DataNode(testBackendId3, "node-3", 9308);
+        Backend backend3 = new Backend(testBackendId3, "node-3", 9308);
         backend3.setBePort(9300);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend1);
         GlobalStateMgr.getCurrentSystemInfo().addBackend(backend2);

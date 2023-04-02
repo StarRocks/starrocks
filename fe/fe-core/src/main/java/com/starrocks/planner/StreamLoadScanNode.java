@@ -58,7 +58,7 @@ import com.starrocks.common.Config;
 import com.starrocks.load.Load;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
@@ -114,7 +114,7 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     private boolean needAssignBE;
 
-    private List<DataNode> backends;
+    private List<Backend> backends;
     private int nextBe = 0;
     private final Random random = new Random(System.currentTimeMillis());
     private String dbName;
@@ -241,7 +241,7 @@ public class StreamLoadScanNode extends LoadScanNode {
 
     private void assignBackends() throws UserException {
         backends = Lists.newArrayList();
-        for (DataNode be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
             if (be.isAvailable()) {
                 backends.add(be);
             }
@@ -386,7 +386,7 @@ public class StreamLoadScanNode extends LoadScanNode {
             locations.setScan_range(scanRange);
 
             if (needAssignBE) {
-                DataNode selectedBackend = backends.get(nextBe++);
+                Backend selectedBackend = backends.get(nextBe++);
                 nextBe = nextBe % backends.size();
                 TScanRangeLocation location = new TScanRangeLocation();
                 location.setBackend_id(selectedBackend.getId());

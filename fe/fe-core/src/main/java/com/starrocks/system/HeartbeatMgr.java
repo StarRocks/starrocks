@@ -121,7 +121,7 @@ public class HeartbeatMgr extends LeaderDaemon {
      */
     @Override
     protected void runAfterCatalogReady() {
-        ImmutableMap<Long, DataNode> idToBackendRef = nodeMgr.getIdToBackend();
+        ImmutableMap<Long, Backend> idToBackendRef = nodeMgr.getIdToBackend();
         if (idToBackendRef == null) {
             return;
         }
@@ -129,7 +129,7 @@ public class HeartbeatMgr extends LeaderDaemon {
         List<Future<HeartbeatResponse>> hbResponses = Lists.newArrayList();
 
         // send backend heartbeat
-        for (DataNode backend : idToBackendRef.values()) {
+        for (Backend backend : idToBackendRef.values()) {
             BackendHeartbeatHandler handler = new BackendHeartbeatHandler(backend);
             hbResponses.add(executor.submit(handler));
         }
@@ -207,7 +207,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                 // Synchronize cpu cores of backends when synchronizing master info to other Frontends.
                 // It is non-empty, only when replaying a 'mocked' master Frontend heartbeat response to other Frontends.
                 hbResponse.getBackendId2cpuCores().forEach((backendId, cpuCores) -> {
-                    DataNode be = nodeMgr.getBackend(backendId);
+                    Backend be = nodeMgr.getBackend(backendId);
                     if (be != null && be.getCpuCores() != cpuCores) {
                         be.setCpuCores(cpuCores);
                         BackendCoreStat.setNumOfHardwareCoresOfBe(backendId, cpuCores);

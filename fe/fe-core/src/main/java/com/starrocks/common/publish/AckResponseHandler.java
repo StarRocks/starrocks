@@ -17,7 +17,7 @@
 
 package com.starrocks.common.publish;
 
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 
 import java.util.Collection;
 
@@ -25,19 +25,19 @@ import java.util.Collection;
 public class AckResponseHandler extends ResponseHandler {
     private Listener listener;
 
-    public AckResponseHandler(Collection<DataNode> nodes, Listener listener) {
+    public AckResponseHandler(Collection<Backend> nodes, Listener listener) {
         super(nodes);
         this.listener = listener;
     }
 
     @Override
-    public void onResponse(DataNode node) {
+    public void onResponse(Backend node) {
         super.onResponse(node);
         listener.onResponse(node);
     }
 
     @Override
-    public void onFailure(DataNode node, Throwable t) {
+    public void onFailure(Backend node, Throwable t) {
         super.onFailure(node, t);
         listener.onFailure(node, t);
     }

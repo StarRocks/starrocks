@@ -21,7 +21,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import mockit.Mock;
@@ -47,7 +47,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     @Override
     @Before
     public void setUp() {
-        DataNode backend4 = new DataNode(1234, "localhost", 8040);
+        Backend backend4 = new Backend(1234, "localhost", 8040);
         backend4.setBePort(9300);
         backend4.setAlive(true);
         backend4.setHttpPort(9737);
@@ -63,7 +63,7 @@ public class TransactionLoadActionTest extends StarRocksHttpTestCase {
     
     @After
     public void tearDown() {
-        GlobalStateMgr.getCurrentSystemInfo().dropBackend(new DataNode(1234, "localhost", HTTP_PORT));
+        GlobalStateMgr.getCurrentSystemInfo().dropBackend(new Backend(1234, "localhost", HTTP_PORT));
     }
 
     @BeforeClass

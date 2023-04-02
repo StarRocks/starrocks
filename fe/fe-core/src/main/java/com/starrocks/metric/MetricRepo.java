@@ -67,7 +67,7 @@ import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -509,7 +509,7 @@ public final class MetricRepo {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
 
         for (Long beId : infoService.getBackendIds(false)) {
-            DataNode be = infoService.getBackend(beId);
+            Backend be = infoService.getBackend(beId);
             if (be == null) {
                 continue;
             }

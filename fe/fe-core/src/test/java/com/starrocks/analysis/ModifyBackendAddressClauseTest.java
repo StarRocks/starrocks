@@ -22,7 +22,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 
-public class ModifyDataNodeAddressClauseTest {
+public class ModifyBackendAddressClauseTest {
     
     @Test
     public void testCreateClause() {

@@ -35,7 +35,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -63,7 +63,7 @@ public class FileScanNodeTest {
     private int loadParallelInstanceNum;
 
     // backends
-    private ImmutableMap<Long, DataNode> idToBackend;
+    private ImmutableMap<Long, Backend> idToBackend;
 
     @Mocked
     Partition partition;
@@ -78,14 +78,14 @@ public class FileScanNodeTest {
         loadParallelInstanceNum = Config.load_parallel_instance_num;
 
         // backends
-        Map<Long, DataNode> idToBackendTmp = Maps.newHashMap();
-        DataNode b1 = new DataNode(0L, "host0", 9050);
+        Map<Long, Backend> idToBackendTmp = Maps.newHashMap();
+        Backend b1 = new Backend(0L, "host0", 9050);
         b1.setAlive(true);
         idToBackendTmp.put(0L, b1);
-        DataNode b2 = new DataNode(1L, "host1", 9050);
+        Backend b2 = new Backend(1L, "host1", 9050);
         b2.setAlive(true);
         idToBackendTmp.put(1L, b2);
-        DataNode b3 = new DataNode(2L, "host2", 9050);
+        Backend b3 = new Backend(2L, "host2", 9050);
         b3.setAlive(true);
         idToBackendTmp.put(2L, b3);
         idToBackend = ImmutableMap.copyOf(idToBackendTmp);

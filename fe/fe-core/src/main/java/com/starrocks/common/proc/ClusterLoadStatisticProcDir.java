@@ -38,7 +38,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.clone.ClusterLoadStatistic;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 
 // show proc "/cluster_balance/cluster_load_stat";
@@ -80,7 +80,7 @@ public class ClusterLoadStatisticProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid be id format: " + beIdStr);
         }
 
-        DataNode be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
         if (be == null) {
             throw new AnalysisException("backend " + beId + " does not exist");
         }

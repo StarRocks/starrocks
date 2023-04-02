@@ -42,7 +42,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 
 import java.util.List;
@@ -54,9 +54,9 @@ public class BackendProcNode implements ProcNodeInterface {
             .add("TotalCapacity").add("TotalUsedPct").add("State").add("PathHash").add("StorageMedium")
             .add("TabletNum").add("DataTotalCapacity").add("DataUsedPct").build();
 
-    private DataNode backend;
+    private Backend backend;
 
-    public BackendProcNode(DataNode backend) {
+    public BackendProcNode(Backend backend) {
         this.backend = backend;
     }
 
