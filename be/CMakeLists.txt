@@ -581,6 +581,7 @@ include_directories(
     SYSTEM ${GPERFTOOLS_HOME}/include
     SYSTEM ${THIRDPARTY_DIR}/include/thrift/
     SYSTEM ${THIRDPARTY_DIR}/include/event/
+    SYSTEM ${SRC_DIR}/thirdparty/
 )
 
 
