@@ -46,7 +46,11 @@ public class ResourceGroupAnalyzer {
                 String key = ((SlotRef) lhs).getColumnName();
                 String value = ((StringLiteral) rhs).getValue();
                 if (key.equalsIgnoreCase(ResourceGroup.USER)) {
+<<<<<<< HEAD
                     if (!ResourceGroupClassifier.UseRolePattern.matcher(value).matches()) {
+=======
+                    if (!ResourceGroupClassifier.USER_PATTERN.matcher(value).matches()) {
+>>>>>>> 326e6e42e ([BugFix] Use the same verification rules for creating user names and resource groups #20349)
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.USER,
                                         eqPred.toSql()));

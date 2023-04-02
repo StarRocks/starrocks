@@ -23,9 +23,14 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class ResourceGroupClassifier implements Writable {
+<<<<<<< HEAD
     public static final Pattern UseRolePattern = Pattern.compile("^\\w+$");
     public static final Set<String> QUERY_TYPES =
             Arrays.stream(QueryType.values()).map(Enum::name).collect(Collectors.toSet());
+=======
+    public static final Pattern USER_PATTERN = Pattern.compile("^[a-zA-Z][a-zA-Z0-9_]{1,63}/?[.a-zA-Z0-9_-]{0,63}$");
+    public static final Pattern USE_ROLE_PATTERN = Pattern.compile("^\\w+$");
+>>>>>>> 326e6e42e ([BugFix] Use the same verification rules for creating user names and resource groups #20349)
     public static final ImmutableSet<String> SUPPORTED_QUERY_TYPES =
             ImmutableSet.of(QueryType.SELECT.name());
 
