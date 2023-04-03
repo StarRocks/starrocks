@@ -2,103 +2,174 @@
 
 ## 功能
 
-您可以使用该语句进行如下操作：
+从用户或角色中撤销指定的权限或角色。有关 StarRocks 支持的权限项，参见 [权限项](../../../administration/privilege_item.md)。
 
-- 撤销某用户或某角色的指定权限。
-- 撤销先前授予某用户的指定角色。注意仅 StarRocks 2.4 及以上版本支持该功能。
-- 撤销一个用户 IMPERSONATE 另一个用户的权限。注意仅 StarRocks 2.4 及以上版本支持该功能。
+> 只有 `user_admin` 角色可以执行此操作。
 
 ## 语法
 
-- 撤销某用户或某角色对数据库和表的指定权限。当撤销某角色的指定权限时，该角色必须存在。
+### 撤销指定权限
 
-    ```SQL
-    REVOKE privilege_list ON db_name[.tbl_name] FROM {user_identity | ROLE 'role_name'}
-    ```
+能撤销的权限因对象 (object) 而异。下面讲解不同对象可以撤销的不同权限。
 
-- 撤销某用户或某角色对资源的指定权限。当撤销某角色的指定权限时，该角色必须存在。
+```SQL
+# System 相关
 
-    ```SQL
-    REVOKE privilege_list ON RESOURCE 'resource_name' FROM {user_identity | ROLE 'role_name'};
-    ```
+REVOKE  
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | ALL [PRIVILEGES]} 
+    ON SYSTEM
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
 
-- 撤销用户 `a` 以用户 `b` 的身份执行命令的权限。
+# Resource group 相关
 
-    ```SQL
-    REVOKE IMPERSONATE ON user_identity_b FROM user_identity_a;
-    ```
+REVOKE  
+    { ALTER | DROP | ALL [PRIVILEGES] } 
+    ON { RESOURCE GROUP <resourcegroup_name> [, <resourcegroup_name>,...] ｜ ALL RESOURCE GROUPS} 
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
 
-- 撤销先前授予某用户的指定角色。该指定角色必须存在。
+# Resource 相关
 
-    ```SQL
-    REVOKE 'role_name' FROM user_identity;
-    ```
+REVOKE 
+    { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
+    ON { RESOURCE <resource_name> [, <resource_name>,...] ｜ ALL RESOURCES} 
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+
+# User 相关
+
+REVOKE IMPERSONATE ON USER <user_identity> FROM USER <user_identity>;
+
+# 全局 UDF 相关
+
+REVOKE { 
+    { USAGE | DROP | ALL [PRIVILEGES]} 
+    ON { GLOBAL FUNCTION <function_name> [, <function_name>,...]    
+       | ALL GLOBAL FUNCTIONS }
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+
+# Internal catalog 相关
+
+REVOKE 
+    { USAGE | CREATE DATABASE | ALL [PRIVILEGES]} 
+    ON CATALOG default_catalog
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+
+# External catalog 相关
+
+REVOKE  
+   { USAGE | DROP | ALL [PRIVILEGES] } 
+   ON { CATALOG <catalog_name> [, <catalog_name>,...] | ALL CATALOGS}
+   FROM { ROLE | USER} {<role_name>|<user_identity>}
+
+# Database 相关
+
+REVOKE 
+    { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
+    ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+  
+* 注意：需要执行 set catalog 之后才能使用。
+
+# Table 相关
+
+REVOKE  
+    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
+    ON { TABLE <table_name> [, < table_name >,...]
+       | ALL TABLES IN 
+           { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+
+* 注意：需要执行 set catalog 之后才能使用。
+* table 还可以用 db.tbl 的方式来表示。
+REVOKE <priv> ON TABLE db.tbl FROM {ROLE <role_name> | USER <user_identity>}
+
+# View 相关
+
+REVOKE  
+    { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
+    ON { VIEW <view_name> [, < view_name >,...]
+       ｜ ALL VIEWS IN 
+           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+    
+* 注意：需要执行 set catalog 之后才能使用。 
+* view 还可以用 db.view 的方式来表示。
+REVOKE <priv> ON VIEW db.view FROM {ROLE <role_name> | USER <user_identity>}
+
+# Materialized view 相关
+
+REVOKE { 
+    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
+       ｜ ALL MATERIALIZED VIEWS IN 
+           { { DATABASE <database_name> [,<database_name>,...] }| ALL [DATABASES] }
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+    
+* 注意：需要执行 set catalog 之后才能使用。  
+* 注意：mv 还可以用 db.mv 的方式来表示。
+REVOKE <priv> ON MATERIALIZED VIEW db.mv FROM {ROLE <role_name> | USER <user_identity>};
+
+# Function 相关
+
+REVOKE { 
+    { USAGE | DROP | ALL [PRIVILEGES]} 
+    ON { FUNCTION <function_name> [, < function_name >,...]
+       ｜ ALL FUNCTIONS IN 
+           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+    FROM { ROLE | USER} {<role_name>|<user_identity>}
+    
+* 注意：需要执行 set catalog 之后才能使用。 
+* function 还可以用 db.function 的方式来表示。
+REVOKE <priv> ON FUNCTION db.function FROM {ROLE <role_name> | USER <user_identity>};
+```
+
+### 撤销指定角色
+
+```SQL
+REVOKE <role_name> [,<role_name>, ...] FROM ROLE <role_name>
+REVOKE <role_name> [,<role_name>, ...] FROM USER <user_identity>
+```
 
 ## 参数说明
 
-### privilege_list
-
-撤销某用户或某角色的指定权限。如果要一次性撤销某用户或某角色多种权限，需要用逗号 (`,`) 将不同权限分隔开。支持撤销的权限如下：
-
-- `NODE_PRIV`：集群节点操作权限，如节点上下线。
-- `ADMIN_PRIV`：除 `NODE_PRIV` 以外的所有权限。
-- `GRANT_PRIV`：操作权限，如创建用户和角色、删除用户和角色、授权、撤权和设置账户密码等。
-- `SELECT_PRIV`：数据库和表的读取权限。
-- `LOAD_PRIV`：数据库和表的导入权限。
-- `ALTER_PRIV`：数据库和表的结构变更权限。
-- `CREATE_PRIV`：数据库和表的创建权限。
-- `DROP_PRIV`：数据库和表的删除权限。
-- `USAGE_PRIV`：资源的使用权限。
-
-### db_name [.tbl_name]
-
-指定的数据库和表。支持以下格式：
-
-- `*.*`：所有数据库及库中所有表。
-- `db.*`：指定数据库及库中所有表。
-- `db.tbl`：指定数据库下的指定表。
-
-> 说明：当使用 `db.*` 或 `db.tbl` 格式时，指定数据库和指定表可以是不存在的数据库和表。
-
-### resource_name
-
-指定的资源。支持以下格式：
-
-- `*`：所有资源。
-- `resource`：指定资源。
-
-> 说明：当使用 `resource` 格式时，指定资源可以是不存在的资源。
-
-### user_identity
-
-该参数由两部分组成：`user_name` 和 `host`。 `user_name` 表示用户名。`host` 表示用户的主机地址，可以不指定，也可以指定为域名。如不指定，host 默认值为 `%`，表示该用户可以从任意 host 连接 StarRocks。如指定 `host` 为域名，权限的生效时间可能会有 1 分钟左右的延迟。`user_identity` 必须是使用 [CREATE USER](../account-management/CREATE%20USER.md) 语句创建的。
-
-### role_name
-
-角色名。
+| **参数**           | **描述**                        |
+| ------------------ | ------------------------------- |
+| role_name          | 角色名称                        |
+| user_identity      | 用户标识，例如 'jack'@'192.%'。 |
+| resourcegroup_name | 资源组名称                      |
+| resource_name      | 资源名称                        |
+| function_name      | 函数名称                        |
+| catalog_name       | External catalog 名称           |
+| database_name      | 数据库名称                      |
+| table_name         | 表名                            |
+| view_name          | 视图名称                        |
+| mv_name            | 物化视图名称                    |
 
 ## 示例
 
-示例一：撤销用户 `jack` 对数据库 `db1` 及库中所有表的读取权限。
+### 撤销权限
+
+撤销用户 `jack` 对表 `sr_member` 的 SELECT 权限。
 
 ```SQL
-REVOKE SELECT_PRIV ON db1.* FROM 'jack'@'192.%';
+REVOKE SELECT ON TABLE sr_member FROM USER 'jack@'172.10.1.10'';
 ```
 
-示例二：撤销用户 `jack` 对资源 spark_resource 的使用权限。
+撤销角色 `test_role` 对资源 `spark_resource` 的使用权限。
 
 ```SQL
-REVOKE USAGE_PRIV ON RESOURCE 'spark_resource' FROM 'jack'@'192.%';
+REVOKE USAGE ON RESOURCE 'spark_resource' FROM ROLE 'test_role';
 ```
 
-示例三：撤销先前授予用户 `jack` 的 `my_role` 角色。
+### 撤销角色
+
+撤销先前授予用户 `jack` 的 `example_role` 角色。
 
 ```SQL
-REVOKE 'my_role' FROM 'jack'@'%';
+REVOKE example_role FROM 'jack'@'%';
 ```
 
-示例四：撤销用户 `jack` 以用户 `rose` 的身份执行命令的权限。
+撤销先前授予角色 `test_role` 的 `example_role` 角色。
 
 ```SQL
-REVOKE IMPERSONATE ON 'rose'@'%' FROM 'jack'@'%';
+REVOKE example_role FROM ROLE 'test_role';
 ```

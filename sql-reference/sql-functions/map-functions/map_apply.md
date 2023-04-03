@@ -58,4 +58,5 @@ mysql> select map_apply((k,v)->(k+1,length(v)), col_map) from (select map_from_a
 ```
 
 ## 参考文档
+
 [map_apply](map_apply.md), [Lambda 表达式](../Lambda_expression.md)

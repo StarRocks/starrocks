@@ -7,104 +7,82 @@
 ## 语法
 
 ```SQL
--- 命令
-CREATE USER <user_identity> [auth_option] 
-[DEFAULT ROLE 'role_name']
-
--- 参数说明
-user_identity:'user_name'@'host'
-
-auth_option: {
-    IDENTIFIED BY 'auth_string'
-    IDENTIFIED WITH auth_plugin
-    IDENTIFIED WITH auth_plugin BY 'auth_string'
-    IDENTIFIED WITH auth_plugin AS 'auth_string'
-}
+CREATE USER <user_identity> [auth_option] [DEFAULT ROLE <role_name>[, <role_name>, ...]]
 ```
 
-1. **CREATE USER**
+## 参数说明
 
-    用于创建一个 StarRocks 用户。在 StarRocks 中，一个 user_identity 唯一标识一个用户。
+- `user_identity`：用户标识。由登录IP（userhost）和用户名（username）组成，写作：`username@'userhost'` 。其中，`userhost` 的部分可以使用 `%` 来进行模糊匹配。如果不指定 `userhost`，默认为 `%`，即表示创建一个可以从任意 host 使用 `username` 链接到 StarRocks 的用户。
 
-2. **user_identity**
+- `auth_option`：用户的认证方式。目前，StarRocks 支持原生密码、mysql_native_password 和 LDAP 三种认证方式，其中，原生密码与 mysql_native_password 认证方式的内在逻辑相同，仅在具体设置语法上有轻微差别。同一个 user identity 只能使用一种认证方式。
 
-    由两部分组成，`user_name` 和 `host`，其中 `user_name` 为用户名。host 标识用户端连接所在的主机地址。host 部分可以使用 % 进行模糊匹配。如果不指定 host，默认为 '%'，即表示该用户可以从任意 host 连接到 StarRocks。
+    ```SQL
+      auth_option: {
+          IDENTIFIED BY 'auth_string'
+          IDENTIFIED WITH mysql_native_password BY 'auth_string'
+          IDENTIFIED WITH mysql_native_password AS 'auth_string'
+          IDENTIFIED WITH authentication_ldap_simple AS 'auth_string'
+          
+      }
+      ```
 
-3. **auth_option**
+      | **认证方式**                 | **创建用户时的密码** | **用户****登录****时的密码** |
+      | ---------------------------- | -------------------- | ---------------------------- |
+      | 原生密码                     | 明文或密文           | 明文                         |
+      | `mysql_native_password BY`   | 明文                 | 明文                         |
+      | `mysql_native_password WITH` | 密文                 | 明文                         |
+      | `authentication_ldap_simple` | 明文                 | 明文                         |
 
-    指定用户的认证方式，目前支持 `mysql_native_password` 和 `authentication_ldap_simple`。
+    > 注：在所有认证方式中，StarRocks均会加密存储用户的密码。
 
-    > 注意
-    > 同一个用户（user_identity）只能使用一种认证方式。
-
-4. **DEFAULT ROLE**
-
-    如果指定了角色（ROLE），则会自动将该角色所拥有的权限赋予新创建的这个用户。如果不指定，则该用户默认没有任何权限。指定的 ROLE 必须已经存在。角色创建请参考 [CREATE ROLE](../account-management/CREATE%20ROLE.md) 章节。
+- `DEFAULT ROLE <role_name>[, <role_name>, ...]`：如果指定了此参数，则会自动将此角色赋予给用户，并且在用户登录后默认激活。如果不指定，则该用户默认没有任何权限。指定的角色必须已经存在。
 
 ## 示例
 
-1. 创建一个无密码用户（不指定 host，则等价于 jack@'%'）。
+示例一：使用明文密码创建一个用户（不指定 host 等价于 jack@'%'）。
 
-    ```SQL
-    CREATE USER 'jack';
-    ```
+```SQL
+CREATE USER jack IDENTIFIED BY '123456';
+CREATE USER jack IDENTIFIED WITH mysql_native_password BY '123456';
+```
 
-2. 创建一个有密码用户，允许从 '172.10.1.10' 登录。
+示例二：使用密文密码创建一个用户，允许该用户从 '172.10.1.10' 登录。
 
-    ```sql
-    CREATE USER jack@'172.10.1.10' IDENTIFIED BY '123456';
-    ```
+```SQL
+CREATE USER jack@'172.10.1.10' IDENTIFIED BY PASSWORD '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
+CREATE USER jack@'172.10.1.10' IDENTIFIED WITH mysql_native_password AS '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
+```
 
-    或者
+> 其中，密文密码可以通过PASSWORD()函数获得
 
-    ```SQL
-    CREATE USER jack@'172.10.1.10' IDENTIFIED WITH mysql_native_password BY '123456';
-    ```
+示例三：创建一个允许从域名 'example_domain' 登录的用户。
 
-3. 为了避免传递明文，用例 2 也可以使用下面的方式来创建。
+```SQL
+CREATE USER 'jack'@['example_domain'] IDENTIFIED BY '123456';
+```
 
-    ```SQL
-    CREATE USER jack@'172.10.1.10' IDENTIFIED BY PASSWORD '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
-    ```
+示例四：创建一个 LDAP 认证的用户。
 
-    或者
+```SQL
+CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple;
+```
 
-    ```SQL
-    CREATE USER jack@'172.10.1.10' IDENTIFIED WITH mysql_native_password AS '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
-    ```
+示例五：创建一个 LDAP 认证的用户，并指定用户在 LDAP 中的 DN (Distinguished Name)。
 
-    后面加密的内容可以通过 PASSWORD()获得到，例如：
+```SQL
+CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com';
+```
 
-    ```sql
-    SELECT PASSWORD('123456');
-    ```
+示例六：创建一个允许从 '192.168' 子网登录的用户，同时指定其默认角色为 `db_admin` 和 `user_admin`。
 
-4. 创建一个 ldap 认证的用户。
+```SQL
+CREATE USER 'jack'@'192.168.%' DEFAULT ROLE db_admin, user_admin;
+```
 
-    ```sql
-    CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple;
-    ```
+## 相关文档
 
-5. 创建一个 ldap 认证的用户，并指定用户在 ldap 中的 DN(Distinguished Name)。
+创建用户后，可以为用户授予权限或角色，更改用户信息，或者删除用户。
 
-    ```sql
-    CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com';
-    ```
-
-6. 创建一个允许从 '192.168' 子网登录的用户，同时指定其角色为 example_role。
-
-    ```sql
-    CREATE USER 'jack'@'192.168.%' DEFAULT ROLE 'example_role';
-    ```
-
-7. 创建一个允许从域名 'example_domain' 登录的用户。
-
-    ```sql
-    CREATE USER 'jack'@['example_domain'] IDENTIFIED BY '12345';
-    ```
-
-8. 创建一个用户，并指定一个角色。
-
-    ```sql
-    CREATE USER 'jack'@'%' IDENTIFIED BY '12345' DEFAULT ROLE 'my_role';
-    ```
+- [ALTER USER](ALTER%20USER.md)
+- [GRANT](GRANT.md)
+- [DROP USER](DROP%20USER.md)
