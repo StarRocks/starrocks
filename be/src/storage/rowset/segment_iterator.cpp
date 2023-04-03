@@ -241,6 +241,8 @@ private:
 
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
 
+    bool _skip_fill_local_cache() const { return _opts.reader_type != READER_QUERY; }
+
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using ColumnDecoders = std::vector<ColumnDecoder>;
@@ -256,7 +258,7 @@ private:
     DelVectorPtr _del_vec;
     roaring_uint32_iterator_t _roaring_iter;
 
-    std::unique_ptr<RandomAccessFile> _rfile;
+    std::unordered_map<ColumnId, std::unique_ptr<RandomAccessFile>> _column_files;
 
     SparseRange _scan_range;
     SparseRangeIterator _range_iter;
@@ -348,8 +350,6 @@ Status SegmentIterator::_init() {
     _selected_idx.resize(_reserve_chunk_size);
 
     StarRocksMetrics::instance()->segment_read_total.increment(1);
-    // get file handle from file descriptor of segment
-    ASSIGN_OR_RETURN(_rfile, _opts.fs->new_random_access_file(_segment->file_name()));
 
     /// the calling order matters, do not change unless you know why.
 
@@ -431,7 +431,10 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             ColumnIteratorOptions iter_opts;
             iter_opts.stats = _opts.stats;
             iter_opts.use_page_cache = _opts.use_page_cache;
-            iter_opts.read_file = _rfile.get();
+            RandomAccessFileOptions opts{.skip_fill_local_cache = _skip_fill_local_cache()};
+            ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_name()));
+            iter_opts.read_file = rfile.get();
+            _column_files[cid] = std::move(rfile);
             iter_opts.check_dict_encoding = check_dict_enc;
             iter_opts.reader_type = _opts.reader_type;
             RETURN_IF_ERROR(_column_iterators[cid]->init(iter_opts));
@@ -498,7 +501,7 @@ Status SegmentIterator::_get_row_ranges_by_key_ranges() {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(_segment->load_index());
+    RETURN_IF_ERROR(_segment->load_index(_skip_fill_local_cache()));
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -529,7 +532,7 @@ Status SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(_segment->load_index());
+    RETURN_IF_ERROR(_segment->load_index(_skip_fill_local_cache()));
     for (const auto& short_key_range : _opts.short_key_ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -1414,7 +1417,8 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
     for (const auto& pair : _opts.predicates) {
         ColumnId cid = pair.first;
         if (_bitmap_index_iterators[cid] == nullptr) {
-            RETURN_IF_ERROR(_segment->new_bitmap_index_iterator(cid, &_bitmap_index_iterators[cid]));
+            RETURN_IF_ERROR(
+                    _segment->new_bitmap_index_iterator(cid, &_bitmap_index_iterators[cid], _skip_fill_local_cache()));
             _has_bitmap_index |= (_bitmap_index_iterators[cid] != nullptr);
         }
     }
@@ -1556,9 +1560,12 @@ void SegmentIterator::close() {
     _context_list[1].close();
     _column_iterators.resize(0);
     _obj_pool.clear();
-    _rfile.reset();
     _segment.reset();
     _column_decoders.clear();
+
+    for (auto& [cid, rfile] : _column_files) {
+        rfile.reset();
+    }
 
     STLClearObject(&_selection);
     STLClearObject(&_selected_idx);

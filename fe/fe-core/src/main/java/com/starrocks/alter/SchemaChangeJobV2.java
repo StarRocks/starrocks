@@ -327,6 +327,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     }
                     if (sortKeyIdxes != null) {
                         copiedSortKeyIdxes = sortKeyIdxes;
+                    } else if (copiedSortKeyIdxes != null && !copiedSortKeyIdxes.isEmpty()) {
+                        sortKeyIdxes = copiedSortKeyIdxes;
                     }
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();

@@ -118,7 +118,7 @@ public class LocalMetaStoreTest {
             @Mock
             public void logModifyPartition(ModifyPartitionInfo info) {
                 Assert.assertNotNull(info);
-                Assert.assertTrue(db.getTable(info.getTableId()).isLocalTable());
+                Assert.assertTrue(db.getTable(info.getTableId()).isOlapTableOrMaterializedView());
                 Assert.assertEquals(TStorageMedium.HDD, info.getDataProperty().getStorageMedium());
                 Assert.assertEquals(DataProperty.MAX_COOLDOWN_TIME_MS, info.getDataProperty().getCooldownTimeMs());
             }

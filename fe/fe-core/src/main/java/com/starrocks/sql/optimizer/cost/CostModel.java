@@ -257,19 +257,30 @@ public class CostModel {
             }
 
             ColumnStatistic distColStat = inputStatistics.getColumnStatistic(skewInfo.getSkewColumnRef());
-            ColumnStatistic groupByColStat = inputStatistics.getColumnStatistic(node.getGroupBys().get(0));
+            List<ColumnStatistic> groupByStats = node.getGroupBys().subList(0, node.getGroupBys().size() - 1)
+                    .stream().map(inputStatistics::getColumnStatistic).collect(Collectors.toList());
 
-            if (distColStat.isUnknownValue() || distColStat.isUnknown() || groupByColStat.isUnknown() ||
-                    groupByColStat.isUnknownValue()) {
+            if (distColStat.isUnknownValue() || distColStat.isUnknown() ||
+                    groupByStats.stream().anyMatch(groupStat -> groupStat.isUnknown() || groupStat.isUnknownValue())) {
                 return 1.5;
             }
-            double groupByColDistinctValues = Math.max(1, groupByColStat.getDistinctValuesCount());
+            double groupByColDistinctValues = 1.0;
+            for (ColumnStatistic groupStat : groupByStats) {
+                groupByColDistinctValues *= groupStat.getDistinctValuesCount();
+            }
+            groupByColDistinctValues =
+                    Math.max(1.0, Math.min(groupByColDistinctValues, inputStatistics.getOutputRowCount()));
+
             final double groupByColDistinctHighWaterMark = 10000;
             final double groupByColDistinctLowWaterMark = 100;
-            final double avgDistValuesPerGroup = distColStat.getDistinctValuesCount() / groupByColDistinctValues;
+            final double distColDistinctValuesCountWaterMark = 10000000;
+            final double distColDistinctValuesCount = distColStat.getDistinctValuesCount();
+            final double avgDistValuesPerGroup = distColDistinctValuesCount / groupByColDistinctValues;
 
-            if ((groupByColDistinctValues <= groupByColDistinctLowWaterMark) ||
-                    (groupByColDistinctValues < groupByColDistinctHighWaterMark && avgDistValuesPerGroup > 100)) {
+            if (distColDistinctValuesCount > distColDistinctValuesCountWaterMark &&
+                    ((groupByColDistinctValues <= groupByColDistinctLowWaterMark) ||
+                            (groupByColDistinctValues < groupByColDistinctHighWaterMark &&
+                                    avgDistValuesPerGroup > 100))) {
                 return 0.5;
             } else {
                 return 1.5;
@@ -401,7 +412,12 @@ public class CostModel {
 
             // Right cross join could not be parallelized, so apply more punishment
             if (join.getJoinType().isRightJoin()) {
-                cpuCost *= StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                // Add more punishment when right size is 10x greater than left size.
+                if (rightSize > 10 * leftSize) {
+                    cpuCost *= StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                } else {
+                    cpuCost += StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                }
                 memCost += rightSize;
             }
             if (join.getJoinType().isOuterJoin() || join.getJoinType().isSemiJoin() ||

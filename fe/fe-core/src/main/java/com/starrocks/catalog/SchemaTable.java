@@ -62,8 +62,21 @@ public class SchemaTable extends Table {
         return name.startsWith("be_");
     }
 
+    public static boolean isFeSchemaTable(String name) {
+        // currently, it only stands for single FE leader, because only FE leader has related info
+        return name.startsWith("fe_");
+    }
+
     public boolean isBeSchemaTable() {
         return SchemaTable.isBeSchemaTable(getName());
+    }
+
+    public boolean isFeSchemaTable() {
+        return SchemaTable.isFeSchemaTable(getName());
+    }
+
+    public boolean requireOperatePrivilege() {
+        return isBeSchemaTable() || isFeSchemaTable();
     }
 
     @Override
@@ -602,6 +615,20 @@ public class SchemaTable extends Table {
                                             .column("SORT_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("PROPERTIES", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .build()))
+                    .put("be_compactions", new SchemaTable(
+                            SystemId.BE_COMPACTIONS_ID,
+                            "be_compactions",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CANDIDATES_NUM", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("BASE_COMPACTION_CONCURRENCY", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CUMULATIVE_COMPACTION_CONCURRENCY", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("LATEST_COMPACTION_SCORE", ScalarType.createType(PrimitiveType.DOUBLE))
+                                    .column("CANDIDATE_MAX_SCORE", ScalarType.createType(PrimitiveType.DOUBLE))
+                                    .column("MANUAL_COMPACTION_CONCURRENCY", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("MANUAL_COMPACTION_CANDIDATES_NUM", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .build()))
                     .put("be_tablets", new SchemaTable(
                             SystemId.BE_TABLETS_ID,
                             "be_tablets",
@@ -621,6 +648,9 @@ public class SchemaTable extends Table {
                                     .column("CREATE_TIME", ScalarType.createType(PrimitiveType.BIGINT))
                                     .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("DATA_DIR", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("SHARD_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("SCHEMA_HASH", ScalarType.createType(PrimitiveType.BIGINT))
                                     .build()))
                     .put("be_metrics", new SchemaTable(
                             SystemId.BE_METRICS_ID,
@@ -660,6 +690,40 @@ public class SchemaTable extends Table {
                                     .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
                                     .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("VALUE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
+                    .put("fe_tablet_schedules", new SchemaTable(
+                            SystemId.FE_SCHEDULES_ID,
+                            "fe_tablet_schedules",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("TABLE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("PARTITION_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TABLET_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PRIORITY", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TABLET_STATUS", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DOUBLE))
+                                    .column("SCHEDULE_TIME", ScalarType.createType(PrimitiveType.DOUBLE))
+                                    .column("FINISH_TIME", ScalarType.createType(PrimitiveType.DOUBLE))
+                                    .column("CLONE_SRC", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CLONE_DEST", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CLONE_BYTES", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("CLONE_DURATION", ScalarType.createType(PrimitiveType.DOUBLE))
+                                    .column("MSG", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
+                    .put("be_threads", new SchemaTable(
+                            SystemId.BE_THREADS_ID,
+                            "be_threads",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("GROUP", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PTHREAD_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("IDLE", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("FINISHED_TASKS", ScalarType.createType(PrimitiveType.BIGINT))
                                     .build()))
                     .build();
 
@@ -759,8 +823,10 @@ public class SchemaTable extends Table {
                 TSchemaTableType.SCH_BE_METRICS),
         SCH_BE_TXNS("BE_TXNS", "BE_TXNS",
                 TSchemaTableType.SCH_BE_TXNS),
-
-        SCH_BE_CONFIGS("BE_CONFIGS", "BE_CONFIGS", TSchemaTableType.SCH_BE_CONFIGS);
+        SCH_BE_CONFIGS("BE_CONFIGS", "BE_CONFIGS", TSchemaTableType.SCH_BE_CONFIGS),
+        SCH_FE_TABLET_SCHEDULES("FE_TABLET_SCHEDULES", "FE_TABLET_SCHEDULES", TSchemaTableType.SCH_FE_TABLET_SCHEDULES),
+        SCH_BE_COMPACTIONS("BE_COMPACTIONS", "BE_COMPACTIONS", TSchemaTableType.SCH_BE_COMPACTIONS),
+        SCH_BE_THREADS("BE_THREADS", "BE_THREADS", TSchemaTableType.SCH_BE_THREADS);
 
         private final String description;
         private final String tableName;

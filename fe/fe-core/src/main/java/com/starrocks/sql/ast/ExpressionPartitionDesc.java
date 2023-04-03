@@ -86,6 +86,7 @@ public class ExpressionPartitionDesc extends PartitionDesc {
     @Override
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> otherProperties) throws AnalysisException {
         if (rangePartitionDesc != null) {
+            rangePartitionDesc.setAutoPartitionTable(true);
             rangePartitionDesc.analyze(columnDefs, otherProperties);
         }
 

@@ -20,10 +20,10 @@ import com.starrocks.catalog.Table;
 
 public class TransactionLogApplierFactory {
     public TransactionLogApplier create(Table table) {
-        if (table.isCloudNativeTable()) {
+        if (table.isCloudNativeTableOrMaterializedView()) {
             return new LakeTableTxnLogApplier((OlapTable) table);
         }
-        if (table.isLocalTable()) {
+        if (table.isOlapTableOrMaterializedView()) {
             return new OlapTableTxnLogApplier((OlapTable) table);
         }
         return null;

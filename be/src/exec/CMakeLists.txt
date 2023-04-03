@@ -62,6 +62,7 @@ set(EXEC_FILES
     lake_meta_scan_node.cpp
     hash_joiner.cpp
     hash_join_node.cpp
+    hash_join_components.cpp
     join_hash_map.cpp
     topn_node.cpp
     chunks_sorter.cpp
@@ -123,6 +124,9 @@ set(EXEC_FILES
     schema_scanner/schema_be_tablets_scanner.cpp
     schema_scanner/schema_be_txns_scanner.cpp
     schema_scanner/schema_be_configs_scanner.cpp
+    schema_scanner/schema_be_threads_scanner.cpp
+    schema_scanner/schema_fe_tablet_schedules_scanner.cpp
+    schema_scanner/schema_be_compactions_scanner.cpp
     schema_scanner/schema_helper.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
@@ -246,6 +250,7 @@ set(EXEC_FILES
     query_cache/ticket_checker.cpp
     spill/spiller.cpp
     spill/spiller_factory.cpp
+    spill/spill_components.cpp
     spill/mem_table.cpp
     spill/dir_manager.cpp
     spill/serde.cpp

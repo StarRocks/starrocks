@@ -55,6 +55,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("definition")
     private String definition;
 
+    @SerializedName("postRun")
+    private String postRun;
+
     @SerializedName("user")
     private String user;
 
@@ -163,6 +166,14 @@ public class TaskRunStatus implements Writable {
         this.definition = definition;
     }
 
+    public String getPostRun() {
+        return postRun;
+    }
+
+    public void setPostRun(String postRun) {
+        this.postRun = postRun;
+    }
+
     public int getErrorCode() {
         return errorCode;
     }
@@ -226,6 +237,18 @@ public class TaskRunStatus implements Writable {
             return "";
         }
     }
+    public void setExtraMessage(String extraMessage) {
+        if (extraMessage == null) {
+            return;
+        }
+
+        if (source == Constants.TaskSource.MV) {
+            this.mvTaskRunExtraMessage =
+                    GsonUtils.GSON.fromJson(extraMessage, MVTaskRunExtraMessage.class);
+        } else {
+            // do nothing
+        }
+    }
 
     public static TaskRunStatus read(DataInput in) throws IOException {
         String json = Text.readString(in);
@@ -249,12 +272,14 @@ public class TaskRunStatus implements Writable {
                 ", progress=" + progress + "%" +
                 ", dbName='" + getDbName() + '\'' +
                 ", definition='" + definition + '\'' +
+                ", postRun='" + postRun + '\'' +
                 ", user='" + user + '\'' +
                 ", errorCode=" + errorCode +
                 ", errorMessage='" + errorMessage + '\'' +
                 ", expireTime=" + expireTime +
                 ", priority=" + priority +
                 ", mergeRedundant=" + mergeRedundant +
+                ", extraMessage=" + getExtraMessage() +
                 '}';
     }
 }

@@ -956,7 +956,7 @@ public class OlapTable extends Table {
                             rangePartitionInfo.getReplicationNum(partition.getId()),
                             rangePartitionInfo.getIsInMemory(partition.getId()),
                             rangePartitionInfo.getStorageCacheInfo(partition.getId()),
-                            isLakeTable());
+                            isCloudNativeTable());
                 } else if (!reserveTablets) {
                     GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 }
@@ -1601,7 +1601,7 @@ public class OlapTable extends Table {
                 partition.setState(PartitionState.NORMAL);
                 for (MaterializedIndex idx : partition.getMaterializedIndices(extState)) {
                     idx.setState(IndexState.NORMAL);
-                    if (copied.isCloudNativeTable()) {
+                    if (copied.isCloudNativeTableOrMaterializedView()) {
                         continue;
                     }
                     for (Tablet tablet : idx.getTablets()) {
@@ -2385,7 +2385,7 @@ public class OlapTable extends Table {
         throw new SemanticException("getPartitionFileCacheInfo is not supported");
     }
 
-    public void setStorageInfo(FilePathInfo pathInfo, boolean enableCache, long cacheTtlS, boolean asyncWriteBack) {
+    public void setStorageInfo(FilePathInfo pathInfo, StorageCacheInfo storageCacheInfo) {
         throw new SemanticException("setStorageInfo is not supported");
     }
     // ------ for lake table and lake materialized view end ------

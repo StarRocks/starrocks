@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <new>
 #include <type_traits>
 
 #include "column/column.h"
@@ -282,7 +283,7 @@ protected:
 public:
     static constexpr bool pod_state() { return std::is_trivially_destructible_v<State>; }
 
-    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const final { new (ptr) State; }
+    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { new (ptr) State; }
 
     void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const final { data(ptr).~State(); }
 

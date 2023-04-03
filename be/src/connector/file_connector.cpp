@@ -37,6 +37,10 @@ DataSourcePtr FileDataSourceProvider::create_data_source(const TScanRange& scan_
     return std::make_unique<FileDataSource>(this, scan_range);
 }
 
+const TupleDescriptor* FileDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_file_scan_node.tuple_id);
+}
+
 // ================================
 FileDataSource::FileDataSource(const FileDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.broker_scan_range) {
@@ -140,6 +144,10 @@ Status FileDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         }
     }
     return Status::OK();
+}
+
+const std::string FileDataSource::get_custom_coredump_msg() const {
+    return strings::Substitute("Load file path: $0", _scan_range.ranges[0].path);
 }
 
 int64_t FileDataSource::raw_rows_read() const {

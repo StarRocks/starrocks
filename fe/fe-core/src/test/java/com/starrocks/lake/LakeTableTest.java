@@ -115,7 +115,7 @@ public class LakeTableTest {
         builder.setFsInfo(fsInfo);
         builder.setFullPath("s3://test-bucket/1/");
         FilePathInfo pathInfo = builder.build();
-        table.setStorageInfo(pathInfo, false, 0, false);
+        table.setStorageInfo(pathInfo, new StorageCacheInfo(false, 0, false));
 
         // Test serialize and deserialize
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
@@ -131,7 +131,7 @@ public class LakeTableTest {
         byteArrayOutputStream.close();
 
         // Check lake table and lake tablet
-        Assert.assertTrue(newTable.isLakeTable());
+        Assert.assertTrue(newTable.isCloudNativeTable());
         LakeTable newLakeTable = (LakeTable) newTable;
 
         Assert.assertEquals("s3://test-bucket/1/", newLakeTable.getStoragePath());

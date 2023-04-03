@@ -161,6 +161,8 @@ import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+import com.starrocks.thrift.TGetTabletScheduleRequest;
+import com.starrocks.thrift.TGetTabletScheduleResponse;
 import com.starrocks.thrift.TGetTaskInfoResult;
 import com.starrocks.thrift.TGetTaskRunInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
@@ -296,7 +298,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setDbs(dbs);
         return result;
     }
-
 
     @Override
     public TGetTablesResult getTableNames(TGetTablesParams params) throws TException {
@@ -1571,8 +1572,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TAllocateAutoIncrementIdResult allocAutoIncrementId(TAllocateAutoIncrementIdParam request) throws TException {
         TAllocateAutoIncrementIdResult result = new TAllocateAutoIncrementIdResult();
         long rows = Math.max(request.rows, Config.auto_increment_cache_size);
-        Long nextId = GlobalStateMgr.getCurrentState().allocateAutoIncrementId(request.table_id, rows);
+        Long nextId = null;
         try {
+            nextId = GlobalStateMgr.getCurrentState().allocateAutoIncrementId(request.table_id, rows);
             // log the delta result.
             ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
             deltaMap.put(request.table_id, nextId + rows);
@@ -1583,6 +1585,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setAllocated_rows(0);
 
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            result.setStatus(status);
+            return result;
+        }
+
+        if (nextId == null) {
+            result.setAuto_increment_id(0);
+            result.setAllocated_rows(0);
+
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("No ids have been allocated"));
             result.setStatus(status);
             return result;
         }
@@ -1706,7 +1719,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-
         Map<String, AddPartitionClause> addPartitionClauseMap;
         try {
             Column firstPartitionColumn = expressionRangePartitionInfo.getPartitionColumns().get(0);
@@ -1778,8 +1790,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     if (bePathsMap.keySet().size() < quorum) {
                         errorStatus.setError_msgs(Lists.newArrayList(
                                 "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                + tablet.getId() + ", backends: " +
-                                Joiner.on(",").join(localTablet.getBackends())));
+                                        + tablet.getId() + ", backends: " +
+                                        Joiner.on(",").join(localTablet.getBackends())));
                         result.setStatus(errorStatus);
                         return result;
                     }
@@ -1875,5 +1887,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw e;
         }
         return result;
+    }
+
+    @Override
+    public TGetTabletScheduleResponse getTabletSchedule(TGetTabletScheduleRequest request) throws TException {
+        TGetTabletScheduleResponse response = GlobalStateMgr.getCurrentState().getTabletScheduler().getTabletSchedule(request);
+        LOG.info("getTabletSchedule: {} return {} TabletSchedule", request, response.getTablet_schedulesSize());
+        return response;
     }
 }

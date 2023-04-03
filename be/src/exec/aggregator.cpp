@@ -126,6 +126,14 @@ void AggregatorParams::init() {
 
             bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
             agg_fn_types[i] = {return_type, serde_type, arg_typedescs, is_input_nullable, desc.nodes[0].is_nullable};
+            if (fn.name.function_name == "array_agg") {
+                // set order by info
+                if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
+                    !fn.aggregate_fn.is_asc_order.empty()) {
+                    agg_fn_types[i].is_asc_order = fn.aggregate_fn.is_asc_order;
+                    agg_fn_types[i].nulls_first = fn.aggregate_fn.nulls_first;
+                }
+            }
         }
     }
 
@@ -211,9 +219,21 @@ Status Aggregator::open(RuntimeState* state) {
         _single_agg_state = _mem_pool->allocate_aligned(_agg_states_total_size, _max_agg_state_align_size);
         RETURN_IF_UNLIKELY_NULL(_single_agg_state, Status::MemoryAllocFailed("alloc single agg state failed"));
         auto call_agg_create = [this]() {
-            for (int i = 0; i < _agg_functions.size(); i++) {
-                _agg_functions[i]->create(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
+            size_t created = 0;
+            try {
+                for (int i = 0; i < _agg_functions.size(); i++) {
+                    _agg_functions[i]->create(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
+                    created++;
+                }
+            } catch (std::bad_alloc& e) {
+                tls_thread_status.set_is_catched(false);
+                for (int i = 0; i < created; i++) {
+                    _agg_functions[i]->destroy(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i]);
+                }
+                _single_agg_state = nullptr;
+                return Status::MemoryLimitExceeded("aggregate::create allocate failed");
             }
+
             return Status::OK();
         };
         if (_has_udaf) {
@@ -320,6 +340,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
                 arg_type = TypeDescriptor::from_thrift(fn.arg_types[1]);
             }
 
+            // hack for accepting various arguments
             if (fn.name.function_name == "exchange_bytes" || fn.name.function_name == "exchange_speed") {
                 arg_type = TypeDescriptor(TYPE_BIGINT);
             }
@@ -417,7 +438,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         _agg_fn_ctxs[i] = FunctionContext::create_context(
                 state, _mem_pool.get(), AnyValUtil::column_type_to_type_desc(_agg_fn_types[i].result_type),
-                _agg_fn_types[i].arg_typedescs);
+                _agg_fn_types[i].arg_typedescs, _agg_fn_types[i].is_asc_order, _agg_fn_types[i].nulls_first);
         state->obj_pool()->add(_agg_fn_ctxs[i]);
     }
 
@@ -633,6 +654,7 @@ Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
                                                         _agg_input_columns[i][0].get(), 0, chunk_size);
         }
     }
+    RETURN_IF_ERROR(check_has_error());
     return Status::OK();
 }
 
@@ -654,6 +676,7 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
                                            _agg_input_columns[i][0].get(), _tmp_agg_states.data());
         }
     }
+    RETURN_IF_ERROR(check_has_error());
     return Status::OK();
 }
 
@@ -676,6 +699,7 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
                                                        _tmp_agg_states.data(), _streaming_selection);
         }
     }
+    RETURN_IF_ERROR(check_has_error());
     return Status::OK();
 }
 

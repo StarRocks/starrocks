@@ -361,7 +361,6 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-
     // ------------------------------------------- Admin Statement -----------------------------------------------------
 
     public R visitAdminSetConfigStatement(AdminSetConfigStmt statement, C context) {
@@ -692,6 +691,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitExecuteScriptStatement(ExecuteScriptStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // --------------------------------------- Export Statement --------------------------------------------------------
 
     public R visitExportStatement(ExportStmt statement, C context) {
@@ -917,6 +920,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitTableFunction(TableFunctionRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    public R visitNormalizedTableFunction(NormalizedTableFunctionRelation node, C context) {
         return visitRelation(node, context);
     }
 
