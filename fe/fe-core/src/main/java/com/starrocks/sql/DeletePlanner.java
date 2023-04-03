@@ -83,7 +83,7 @@ public class DeletePlanner {
             OlapTable table = (OlapTable) deleteStatement.getTable();
             if (table.isAbortDelete()) {
                 throw new SemanticException(
-                    "Delete statement is forbidden when auto increment column is not the Key for Primary Key table.");
+                        "Delete statement is forbidden when auto increment column is not the Key for Primary Key table.");
             }
             for (Column column : table.getBaseSchema()) {
                 if (column.isKey()) {

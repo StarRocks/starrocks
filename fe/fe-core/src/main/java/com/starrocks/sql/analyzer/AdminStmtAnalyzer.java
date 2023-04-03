@@ -216,7 +216,7 @@ public class AdminStmtAnalyzer {
                 throw new SemanticException(PARSER_ERROR_MSG.missingProps("type"), pos);
             }
             AdminCheckTabletsStmt.CheckType checkType = Enums.getIfPresent(
-                    AdminCheckTabletsStmt.CheckType.class, typeStr.toUpperCase())
+                            AdminCheckTabletsStmt.CheckType.class, typeStr.toUpperCase())
                     .orNull();
             if (checkType == null) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidPropertyValue("type", typeStr), pos);
@@ -253,7 +253,7 @@ public class AdminStmtAnalyzer {
                 return false;
             }
             statusFilter = Enums.getIfPresent(Replica.ReplicaStatus.class,
-                    ((StringLiteral) rightChild).getStringValue().toUpperCase())
+                            ((StringLiteral) rightChild).getStringValue().toUpperCase())
                     .orNull();
 
             return statusFilter != null;
