@@ -103,6 +103,8 @@ public:
 
     const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
 
+    virtual bool always_shared_scan() const { return true; }
+
 protected:
     std::vector<ExprContext*> _partition_exprs;
 };
