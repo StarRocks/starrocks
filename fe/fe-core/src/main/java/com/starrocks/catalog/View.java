@@ -38,7 +38,9 @@ import com.google.common.base.Preconditions;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -137,6 +139,18 @@ public class View extends Table {
         if (!(node instanceof QueryStatement)) {
             throw new StarRocksPlannerException(String.format("View definition of %s " +
                     "is not a query statement", name), ErrorType.INTERNAL_ERROR);
+        }
+
+        // Analyze view to ensure the view is valid
+        try {
+            ConnectContext context = new ConnectContext(null);
+            Analyzer.analyze((QueryStatement) node, context);
+        } catch (Exception e) {
+            LOG.warn("view stmt is {}", inlineViewDef);
+            LOG.warn("analyze exception because: ", e);
+            throw new StarRocksPlannerException(
+                    String.format("Failed to analyze view-definition statement of view: %s", name),
+                    ErrorType.INTERNAL_ERROR);
         }
 
         return (QueryStatement) node;
