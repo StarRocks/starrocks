@@ -21,6 +21,7 @@
 #include "formats/csv/datetime_converter.h"
 #include "formats/csv/decimalv2_converter.h"
 #include "formats/csv/decimalv3_converter.h"
+#include "formats/csv/default_value_converter.h"
 #include "formats/csv/float_converter.h"
 #include "formats/csv/json_converter.h"
 #include "formats/csv/nullable_converter.h"
@@ -29,7 +30,7 @@
 
 namespace starrocks::csv {
 
-static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
+static std::unique_ptr<Converter> create_converter(const TypeDescriptor& t, const bool is_hive) {
     switch (t.type) {
     case TYPE_BOOLEAN:
         return std::make_unique<BooleanConverter>();
@@ -56,8 +57,16 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
         return std::make_unique<DateConverter>();
     case TYPE_DATETIME:
         return std::make_unique<DatetimeConverter>();
-    case TYPE_ARRAY:
-        return std::make_unique<ArrayConverter>(get_converter(t.children[0], true));
+    case TYPE_ARRAY: {
+        auto c = get_converter(t.children[0], true);
+        if (c == nullptr) {
+            // For hive, if array's element converter is nullptr, we use DefaultValueConverter instead
+            // For broker load, if array's element converter is nullptr, we return nullptr directly, to avoid NPE
+            // problem when reading array's element.
+            return is_hive ? std::make_unique<ArrayConverter>(std::make_unique<DefaultValueConverter>()) : nullptr;
+        }
+        return std::make_unique<ArrayConverter>(std::move(c));
+    }
     case TYPE_DECIMAL32:
         return std::make_unique<DecimalV3Converter<int32_t>>(t.precision, t.scale);
     case TYPE_DECIMAL64:
@@ -66,36 +75,24 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
         return std::make_unique<DecimalV3Converter<int128_t>>(t.precision, t.scale);
     case TYPE_JSON:
         return std::make_unique<JsonConverter>();
-    case TYPE_DECIMAL:
-    case TYPE_UNKNOWN:
-    case TYPE_NULL:
-    case TYPE_BINARY:
-    case TYPE_VARBINARY:
-    case TYPE_STRUCT:
-    case TYPE_MAP:
-    case TYPE_HLL:
-    case TYPE_PERCENTILE:
-    case TYPE_TIME:
-    case TYPE_OBJECT:
-    case TYPE_FUNCTION:
-    case TYPE_UNSIGNED_TINYINT:
-    case TYPE_UNSIGNED_SMALLINT:
-    case TYPE_UNSIGNED_INT:
-    case TYPE_UNSIGNED_BIGINT:
-    case TYPE_DISCRETE_DOUBLE:
-    case TYPE_DATE_V1:
-    case TYPE_DATETIME_V1:
-    case TYPE_NONE:
-    case TYPE_MAX_VALUE:
+    default:
         break;
     }
     return nullptr;
 }
 
 std::unique_ptr<Converter> get_converter(const TypeDescriptor& type_desc, bool nullable) {
-    auto c = get_converter(type_desc);
+    auto c = create_converter(type_desc, false);
     if (c == nullptr) {
         return nullptr;
+    }
+    return nullable ? std::make_unique<NullableConverter>(std::move(c)) : std::move(c);
+}
+
+std::unique_ptr<Converter> get_hive_converter(const TypeDescriptor& type_desc, bool nullable) {
+    auto c = create_converter(type_desc, true);
+    if (c == nullptr) {
+        return std::make_unique<DefaultValueConverter>();
     }
     return nullable ? std::make_unique<NullableConverter>(std::move(c)) : std::move(c);
 }

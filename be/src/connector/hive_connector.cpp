@@ -166,7 +166,7 @@ Status HiveDataSource::_init_partition_values() {
             const ColumnPtr& data_column = const_column->data_column();
             ColumnPtr& chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
             if (data_column->is_nullable()) {
-                chunk_part_column->append_nulls(1);
+                chunk_part_column->append_default();
             } else {
                 chunk_part_column->append(*data_column, 0, 1);
             }
