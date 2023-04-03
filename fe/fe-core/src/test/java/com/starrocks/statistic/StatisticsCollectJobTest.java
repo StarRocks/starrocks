@@ -601,10 +601,17 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                 return now;
             }
         };
+        new MockUp<Partition>() {
+            @Mock
+            public long getDataSize() {
+                return Config.statistic_auto_collect_table_interval_size + 10;
+            }
+        };
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         BasicStatsMeta execMeta1 = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
-                StatsConstants.AnalyzeType.FULL, now.minusSeconds(Config.statistic_auto_collect_interval).minusHours(1),
+                StatsConstants.AnalyzeType.FULL,
+                now.minusSeconds(Config.statistic_auto_collect_table_interval).minusHours(1),
                 Maps.newHashMap());
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta1);
 
@@ -658,11 +665,17 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                 return now;
             }
         };
+        new MockUp<Partition>() {
+            @Mock
+            public long getDataSize() {
+                return Config.statistic_auto_collect_table_interval_size + 10;
+            }
+        };
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         BasicStatsMeta execMeta = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL,
-                now.minusSeconds(Config.statistic_auto_collect_interval).minusHours(1),
+                now.minusSeconds(Config.statistic_auto_collect_table_interval).minusHours(1),
                 Maps.newHashMap());
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta);
 
@@ -705,24 +718,6 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         }
 
         {
-            // healthy = 0.1 && small table
-            new Expectations(execMeta) {
-                {
-                    execMeta.getHealthy();
-                    result = 0.1;
-                }
-            };
-
-            List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
-            Assert.assertEquals(1, jobs.size());
-            Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
-            FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
-            Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumns().toString());
-        }
-
-        long defaultSize = Config.statistic_auto_sample_data_size;
-        Config.statistic_auto_sample_data_size = -1;
-        try {
             // healthy = 0.2 && big table
             new Expectations(execMeta) {
                 {
@@ -736,8 +731,28 @@ public class StatisticsCollectJobTest extends PlanTestBase {
             Assert.assertTrue(jobs.get(0) instanceof SampleStatisticsCollectJob);
             SampleStatisticsCollectJob fjb = (SampleStatisticsCollectJob) jobs.get(0);
             Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumns().toString());
-        } finally {
-            Config.statistic_auto_sample_data_size = defaultSize;
+        }
+        
+        {
+            new MockUp<Partition>() {
+                @Mock
+                public long getDataSize() {
+                    return Config.statistic_auto_collect_table_interval_size - 10;
+                }
+            };
+            // healthy = 0.1 && small table
+            new Expectations(execMeta) {
+                {
+                    execMeta.getHealthy();
+                    result = 0.1;
+                }
+            };
+
+            List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
+            Assert.assertEquals(1, jobs.size());
+            Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
+            FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
+            Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumns().toString());
         }
     }
 
