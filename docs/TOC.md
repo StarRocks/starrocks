@@ -99,7 +99,9 @@
       + [File manager](./administration/filemanager.md)
   + [Data recovery](./administration/Data_recovery.md)
   + User Privilege and Authentication
-    + [User privilege](./administration/User_privilege.md)
+    + [Overview of privileges](./administration/privilege_overview.md)
+    + [Privileges](./administration/privilege_item.md)
+    + [Manage user privileges](./administration/User_privilege.md)
     + [Authentication](./administration/Authentication.md)
   + Performance Tuning
     + [Query planning](./administration/Query_planning.md)
@@ -116,11 +118,14 @@
       + [EXECUTE AS](./sql-reference/sql-statements/account-management/EXECUTE%20AS.md)
       + [GRANT](./sql-reference/sql-statements/account-management/GRANT.md)
       + [REVOKE](./sql-reference/sql-statements/account-management/REVOKE.md)
+      + [SET DEFAULT ROLE](./sql-reference/sql-statements/account-management/SET%20DEFAULT%20ROLE.md)
       + [SET PASSWORD](./sql-reference/sql-statements/account-management/SET%20PASSWORD.md)
       + [SET PROPERTY](./sql-reference/sql-statements/account-management/SET%20PROPERTY.md)
+      + [SET ROLE](./sql-reference/sql-statements/account-management/SET%20ROLE.md)
       + [SHOW AUTHENTICATION](./sql-reference/sql-statements/data-definition/SHOW%20AUTHENTICATION.md)
       + [SHOW GRANTS](./sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
       + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
+      + [SHOW USERS](./sql-reference/sql-statements/account-management/SHOW%20USERS.md)
     + Cluster Management
       + [ADD SQLBLACKLIST](./sql-reference/sql-statements/Administration/ADD%20SQLBLACKLIST.md)
       + [ADMIN CANCEL REPAIR TABLE](./sql-reference/sql-statements/Administration/ADMIN%20CANCEL%20REPAIR.md)
@@ -318,7 +323,6 @@
       + [array_difference](./sql-reference/sql-functions/array-functions/array_difference.md)
       + [array_distinct](./sql-reference/sql-functions/array-functions/array_distinct.md)
       + [array_filter](./sql-reference/sql-functions/array-functions/array_filter.md)
-      + [array_generate](./sql-reference/sql-functions/array-functions/array_generate.md)
       + [array_intersect](./sql-reference/sql-functions/array-functions/array_intersect.md)
       + [array_join](./sql-reference/sql-functions/array-functions/array_join.md)
       + [array_length](./sql-reference/sql-functions/array-functions/array_length.md)
@@ -590,6 +594,7 @@
     + Struct Functions
       + [row](/sql-reference/sql-functions/struct-functions/row.md)
     + Utility Functions
+      + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
       + [host_name](./sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](./sql-reference/sql-functions/utility-functions/isnull.md)
