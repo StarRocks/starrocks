@@ -16,6 +16,7 @@
   + [数据模型](/table_design/Data_model.md)
   + 数据分布
     + [数据分布](/table_design/Data_distribution.md)
+    + [自动创建分区](/table_design/automatic%20partitioning.md)
     + [动态分区](/table_design/dynamic_partitioning.md)
     + [临时分区](/table_design/Temporary_partition.md)
   + [数据压缩](/table_design/data_compression.md)
