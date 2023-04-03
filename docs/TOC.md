@@ -642,6 +642,7 @@
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
 + Release Notes
+  + [v3.0](./release_notes/release-3.0.md)
   + [v2.5](./release_notes/release-2.5.md)
   + [v2.4](./release_notes/release-2.4.md)
   + [v2.3](./release_notes/release-2.3.md)
