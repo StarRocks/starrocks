@@ -534,35 +534,39 @@ public:
      * @paramType columns: [BinaryColumn, BinaryColumn]
      * @return BigIntColumn
      */
-    DEFINE_VECTORIZED_FN(to_unix_from_datetime_with_format);
+    DEFINE_VECTORIZED_FN(to_unix_from_datetime_with_format_64);
+    DEFINE_VECTORIZED_FN(to_unix_from_datetime_with_format_32);
 
     /**
      * @param: [timestamp]
      * @paramType columns: [TimestampColumn]
      * @return BigIntColumn
      */
-    DEFINE_VECTORIZED_FN(to_unix_from_datetime);
+    DEFINE_VECTORIZED_FN(to_unix_from_datetime_64);
+    DEFINE_VECTORIZED_FN(to_unix_from_datetime_32);
 
     /**
      * @param: [date]
      * @paramType columns: [DateColumn]
      * @return BigIntColumn
      */
-    DEFINE_VECTORIZED_FN(to_unix_from_date);
+    DEFINE_VECTORIZED_FN(to_unix_from_date_64);
+    DEFINE_VECTORIZED_FN(to_unix_from_date_32);
 
     /**
      * @param: []
      * @return ConstColumn
      */
-    DEFINE_VECTORIZED_FN(to_unix_for_now);
+    DEFINE_VECTORIZED_FN(to_unix_for_now_64);
+    DEFINE_VECTORIZED_FN(to_unix_for_now_32);
 
     /**
      * @param: [timestmap]
      * @paramType columns: [IntColumn]
      * @return BinaryColumn
      */
-    DEFINE_VECTORIZED_FN(from_unix_to_datetime);
     DEFINE_VECTORIZED_FN(from_unix_to_datetime_64);
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_32);
 
     // from_unix_datetime with format's auxiliary method
     static Status from_unix_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -574,7 +578,8 @@ public:
      * @paramType columns: [IntColumn, BinaryColumn]
      * @return BinaryColumn
      */
-    DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format);
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_64);
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_32);
 
     /**
      * return number of seconds in this day.
@@ -626,6 +631,7 @@ private:
 
     static std::string convert_format(const Slice& format);
 
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format);
     DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format_general);
 
     template <LogicalType TIMESTAMP_TYPE>

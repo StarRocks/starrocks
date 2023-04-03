@@ -50,7 +50,6 @@ include "RuntimeFilter.thrift"
 // constants for function version
 enum TFunctionVersion {
     RUNTIME_FILTER_SERIALIZE_VERSION_2 = 6,
-    FUNC_VERSION_UNIX_TIMESTAMP_INT64 = 7,
 }
 
 enum TQueryType {

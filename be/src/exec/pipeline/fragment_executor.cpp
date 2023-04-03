@@ -224,7 +224,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
 
     int func_version = request.common().__isset.func_version
                                ? request.common().func_version
-                               : TFunctionVersion::type::FUNC_VERSION_UNIX_TIMESTAMP_INT64;
+                               : TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_2;
     runtime_state->set_func_version(func_version);
     runtime_state->init_mem_trackers(query_mem_tracker);
     runtime_state->set_be_number(request.backend_num());

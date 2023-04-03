@@ -79,6 +79,15 @@ public class SelectConstTest extends PlanTestBase {
     }
 
     @Test
+    public void testFromUnixtime() throws Exception {
+        assertPlanContains("select from_unixtime(10)", "'1970-01-01 08:00:10'");
+        assertPlanContains("select from_unixtime(1024)", "'1970-01-01 08:17:04'");
+        assertPlanContains("select from_unixtime(32678)", "'1970-01-01 17:04:38'");
+        assertPlanContains("select from_unixtime(102400000)", "'1973-03-31 12:26:40'");
+        assertPlanContains("select from_unixtime(253402243100)", "'9999-12-31 15:58:20'");
+    }
+
+    @Test
     public void testAggWithConstant() throws Exception {
         assertPlanContains("select case when c1=1 then 1 end from (select '1' c1  union  all select '2') a " +
                         "group by rollup(case  when c1=1 then 1 end, 1 + 1)",
