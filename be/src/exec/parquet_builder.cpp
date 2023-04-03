@@ -333,20 +333,11 @@ void ParquetBuilder::_generate_rg_writer() {
     }
 }
 
-#define DISPATCH_PARQUET_NUMERIC_WRITER(WRITER, COLUMN_TYPE, NATIVE_TYPE)                                         \
-    ParquetBuilder::_generate_rg_writer();                                                                        \
-    parquet::WRITER* col_writer = static_cast<parquet::WRITER*>(_rg_writer->column(_col_idx));                           \
-    col_writer->WriteBatch(                                                                                       \
-            num_rows, def_levels.data(), nullptr,                                             \
-            reinterpret_cast<const NATIVE_TYPE*>(down_cast<const COLUMN_TYPE*>(data_column)->get_data().data())); \
-    _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes(); \
-    _col_idx++; \
-
-
 Status ParquetBuilder::add_chunk(Chunk* chunk) {
     if (!chunk->has_rows()) {
         return Status::OK();
     }
+    _generate_rg_writer();
 
     _col_idx = 0; // reset index on writing
 
@@ -614,7 +605,7 @@ Status ParquetBuilder::_add_varchar_column_chunk(const TypeDescriptor& type_desc
     auto vb = raw_col->get_bytes();
 
     _generate_rg_writer();
-    auto col_writer = static_cast<parquet::ByteArrayWriter*>(_rg_writer->column(_col_idx));
+    auto col_writer = down_cast<parquet::ByteArrayWriter*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
     auto write = [&](int16_t def_level, int16_t rep_level, unsigned char* ptr, auto len) {
@@ -655,7 +646,7 @@ Status ParquetBuilder::_add_date_column_chunk(const TypeDescriptor& type_desc, c
     auto raw_col = down_cast<const RunTimeColumnType<TYPE_DATE>*>(data_column)->get_data().data();
 
     _generate_rg_writer();
-    auto col_writer = static_cast<parquet::Int32Writer*>(_rg_writer->column(_col_idx));
+    auto col_writer = down_cast<parquet::Int32Writer*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
     auto write = [&](int16_t def_level, int16_t rep_level, int32_t value) {
@@ -695,7 +686,7 @@ Status ParquetBuilder::_add_datetime_column_chunk(const TypeDescriptor& type_des
     auto raw_col = down_cast<const RunTimeColumnType<TYPE_DATETIME>*>(data_column)->get_data().data();
 
     _generate_rg_writer();
-    auto col_writer = static_cast<parquet::Int64Writer*>(_rg_writer->column(_col_idx));
+    auto col_writer = down_cast<parquet::Int64Writer*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
     auto write = [&](int16_t def_level, int16_t rep_level, int64_t value) {
