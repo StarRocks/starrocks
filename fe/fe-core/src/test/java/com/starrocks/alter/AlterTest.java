@@ -51,6 +51,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -2320,6 +2321,47 @@ public class AlterTest {
         alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
         clause = (AddColumnsClause) alterTableStmt.getOps().get(0);
         Assert.assertEquals(null, clause.getRollupName());
+    }
+
+    @Test
+    public void testCreateTemporaryPartitionInBatch() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        starRocksAssert.withDatabase("test2");
+        String createSQL = "CREATE TABLE test2.site_access(\n" +
+                "    event_day datetime,\n" +
+                "    site_id INT DEFAULT '10',\n" +
+                "    city_code VARCHAR(100),\n" +
+                "    user_name VARCHAR(32) DEFAULT '',\n" +
+                "    pv BIGINT DEFAULT '0'\n" +
+                ")\n" +
+                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                "PARTITION BY date_trunc('day', event_day)(\n" +
+                " START (\"2023-03-27\") END (\"2023-03-30\") EVERY (INTERVAL 1 day)\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                "PROPERTIES(\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("test2");
+
+
+        String sql = "alter table test2.site_access add TEMPORARY partitions " +
+                "START (\"2023-03-27\") END (\"2023-03-30\") EVERY (INTERVAL 1 day);";
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        AddPartitionClause addPartitionClause = (AddPartitionClause) alterTableStmt.getOps().get(0);
+
+        GlobalStateMgr.getCurrentState().addPartitions(db, "site_access", addPartitionClause);
+
+        Table table = GlobalStateMgr.getCurrentState().getDb("test2")
+                .getTable("site_access");
+        OlapTable olapTable = (OlapTable) table;
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        Assert.assertEquals(3, rangePartitionInfo.getIdToRange(true).size());
+
     }
 
     @Test
