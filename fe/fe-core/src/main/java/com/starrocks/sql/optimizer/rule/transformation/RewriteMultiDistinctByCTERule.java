@@ -154,7 +154,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
         if (!hasMultiColumns && agg.getGroupingKeys().size() > 1) {
             return false;
         }
-        
+
         return distinctAggOperatorList.size() > 1 || agg.getAggregations().values().stream()
                 .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG));
     }

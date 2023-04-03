@@ -273,7 +273,7 @@ public class OptOlapPartitionPruner {
                 columnToNullPartitions, scalarOperatorList, specifyPartitionIds);
         try {
             List<Long> prune = partitionPruner.prune();
-            if (prune == null && isTemporaryPartitionPrune)  {
+            if (prune == null && isTemporaryPartitionPrune) {
                 return partitionIds;
             } else {
                 return prune;

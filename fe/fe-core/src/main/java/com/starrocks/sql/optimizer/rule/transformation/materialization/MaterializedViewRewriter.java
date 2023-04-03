@@ -618,7 +618,7 @@ public class MaterializedViewRewriter {
         distributedColumns.stream().forEach(distKey -> mvPruneKeyColNames.add(distKey.getName()));
         mv.getPartitionColumnNames().stream().forEach(partName -> mvPruneKeyColNames.add(partName));
         final Set<Integer> mvPruneColumnIdSet = mvOutputColumnRefSet.getStream().map(
-                id -> mvContext.getMvColumnRefFactory().getColumnRef(id))
+                        id -> mvContext.getMvColumnRefFactory().getColumnRef(id))
                 .filter(colRef -> mvPruneKeyColNames.contains(colRef.getName()))
                 .map(colRef -> colRef.getId())
                 .collect(Collectors.toSet());
@@ -1191,7 +1191,7 @@ public class MaterializedViewRewriter {
                 // Ignore permutations which not contain expected extra query to mv relation id mappings.
                 boolean hasExpectedExtraQueryToMVRelationIds = true;
                 for (Map.Entry<Integer, Integer> expect : expectedExtraQueryToMVRelationIds.entrySet()) {
-                    if (!queryToMVRelations.get(expect.getKey()).equals(expect.getValue()))  {
+                    if (!queryToMVRelations.get(expect.getKey()).equals(expect.getValue())) {
                         hasExpectedExtraQueryToMVRelationIds = false;
                         break;
                     }

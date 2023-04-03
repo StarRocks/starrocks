@@ -15,6 +15,7 @@
 package com.starrocks.sql.common;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.BaseMessage;
+
 public interface ParserErrorMsg {
 
     // --------- error in building AST phase ---------

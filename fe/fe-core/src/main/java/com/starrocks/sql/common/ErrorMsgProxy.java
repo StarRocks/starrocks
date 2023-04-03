@@ -31,7 +31,7 @@ public class ErrorMsgProxy {
 
     @SuppressWarnings("unchecked")
     private static <T> T create(Class<T> clazz) {
-        return  (T) Proxy.newProxyInstance(clazz.getClassLoader(),
+        return (T) Proxy.newProxyInstance(clazz.getClassLoader(),
                 new Class[] {clazz},
                 new InvocationHandler() {
                     // msg cache for zero arguments method
@@ -58,7 +58,6 @@ public class ErrorMsgProxy {
                 }
         );
     }
-
 
 
     @Retention(RetentionPolicy.RUNTIME)

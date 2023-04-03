@@ -31,6 +31,7 @@ public class ShowBackendsStmt extends ShowStmt {
     public ShowBackendsStmt(NodePosition pos) {
         super(pos);
     }
+
     @Override
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();

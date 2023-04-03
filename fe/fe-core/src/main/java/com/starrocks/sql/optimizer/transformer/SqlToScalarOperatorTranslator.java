@@ -229,6 +229,7 @@ public final class SqlToScalarOperatorTranslator {
             }
             return res;
         }
+
         private int collectSubqueryNum(Expr node) {
             int num = 0;
             for (Expr child : node.getChildren()) {

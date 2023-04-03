@@ -117,8 +117,8 @@ public class SubqueryUtils {
                 Function.CompareMode.IS_IDENTICAL);
         if (argTypes.length > 0 && argTypes[0].isDecimalV3()) {
             func = DecimalV3FunctionAnalyzer.rectifyAggregationFunction((AggregateFunction) func,
-                            argTypes[0],
-                            argTypes[0]);
+                    argTypes[0],
+                    argTypes[0]);
         }
         return func;
     }

@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -37,6 +36,7 @@ public class PartitionDesc implements ParseNode {
 
     protected final NodePosition pos;
     protected boolean isSystem = false;
+
     public PartitionDesc() {
         this(NodePosition.ZERO);
     }

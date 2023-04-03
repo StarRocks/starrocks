@@ -278,6 +278,7 @@ public class ScalarOperatorsReuse {
         // enable some special logic codes only for lambda functions.
         private boolean hasLambdaFunction;
         private Set<ColumnRefOperator> lambdaArguments = Sets.newHashSet();
+
         private CommonSubScalarOperatorCollector(boolean reuseLambdaDependentExpr) {
             this.reuseLambdaDependentExpr = reuseLambdaDependentExpr;
             this.isLambdaDependent = false;

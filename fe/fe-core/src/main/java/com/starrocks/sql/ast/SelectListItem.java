@@ -70,6 +70,7 @@ public class SelectListItem implements ParseNode {
     public NodePosition getPos() {
         return pos;
     }
+
     @Override
     public SelectListItem clone() {
         return new SelectListItem(this);

@@ -246,7 +246,7 @@ public class CostModel {
         // 2. distinct cardinality of group-by column is less than 10000 and avgDistValuesPerGroup > 100
         // Bad cases as follows: this Rule is conservative, the cases except good cases are all bad cases.
         private double computeDataSkewPenaltyOfGroupByCountDistinct(PhysicalHashAggregateOperator node,
-                                                            Statistics inputStatistics) {
+                                                                    Statistics inputStatistics) {
             DataSkewInfo skewInfo = node.getDistinctColumnDataSkew();
             if (skewInfo.getStage() != 1) {
                 return skewInfo.getPenaltyFactor();
