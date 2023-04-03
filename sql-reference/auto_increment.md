@@ -14,7 +14,7 @@ StarRocks 自 3.0 版本起支持 `AUTO_INCREMENT` 列属性，可以简化数�
 
 ## 基本用法
 
-## 建表指定自增列
+### 建表指定自增列
 
 创建表 `t`，包含两列，分别为 `id` 和 `number`，如下所示，建表时指定 `number` 列为自增列：
 
@@ -137,7 +137,9 @@ SELECT * FROM t;
 ### 单调性保证
 
 为了提升分配自增 ID 的性能，BE 会本地缓存部分自增 ID。在这种情况下，StarRocks 无法保证自增 ID 按照时间顺序严格递增，只能保证自增 ID 大致上是递增的。
-
+> **说明**
+>
+> BE 缓存的自增 ID 数量由 FE 动态参数 `auto_increment_cache_size` 决定，默认是 `100000`。您可以使用 `ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "xxx");` 进行修改 。
 假设 StarRocks 集群具有一个 FE 节点和两个 BE 节点。创建表 `t` 并且插入五行数据，如下所示：
 
 ```SQL
