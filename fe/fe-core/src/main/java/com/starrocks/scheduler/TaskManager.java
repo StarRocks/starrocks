@@ -48,7 +48,6 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -545,6 +544,7 @@ public class TaskManager {
                 return;
             }
         }
+        LOG.info("replayCreateTaskRun:" + status);
 
         switch (status.getState()) {
             case PENDING:
@@ -577,6 +577,7 @@ public class TaskManager {
         Constants.TaskRunState fromStatus = statusChange.getFromStatus();
         Constants.TaskRunState toStatus = statusChange.getToStatus();
         Long taskId = statusChange.getTaskId();
+        LOG.info("replayUpdateTaskRun:" + statusChange);
         if (fromStatus == Constants.TaskRunState.PENDING) {
             Queue<TaskRun> taskRunQueue = taskRunManager.getPendingTaskRunMap().get(taskId);
             if (taskRunQueue == null) {
@@ -625,20 +626,32 @@ public class TaskManager {
             }
         } else if (fromStatus == Constants.TaskRunState.RUNNING &&
                 (toStatus == Constants.TaskRunState.SUCCESS || toStatus == Constants.TaskRunState.FAILED)) {
+            // NOTE: TaskRuns before the fe restart will be replayed in `replayCreateTaskRun` which
+            // will not be rerun because `InsertOverwriteJobRunner.replayStateChange` will replay, so
+            // the taskRun's may be PENDING/RUNNING/SUCCESS.
             TaskRun runningTaskRun = taskRunManager.getRunningTaskRunMap().remove(taskId);
-            if (runningTaskRun == null) {
-                return;
-            }
-            TaskRunStatus status = runningTaskRun.getStatus();
-            if (status.getQueryId().equals(statusChange.getQueryId())) {
-                if (toStatus == Constants.TaskRunState.FAILED) {
-                    status.setErrorMessage(statusChange.getErrorMessage());
-                    status.setErrorCode(statusChange.getErrorCode());
+            if (runningTaskRun != null) {
+                TaskRunStatus status = runningTaskRun.getStatus();
+                if (status.getQueryId().equals(statusChange.getQueryId())) {
+                    if (toStatus == Constants.TaskRunState.FAILED) {
+                        status.setErrorMessage(statusChange.getErrorMessage());
+                        status.setErrorCode(statusChange.getErrorCode());
+                    }
+                    status.setState(toStatus);
+                    status.setProgress(100);
+                    status.setFinishTime(statusChange.getFinishTime());
+                    status.setExtraMessage(statusChange.getExtraMessage());
+                    taskRunManager.getTaskRunHistory().addHistory(status);
                 }
-                status.setState(toStatus);
-                status.setProgress(100);
-                status.setFinishTime(statusChange.getFinishTime());
-                taskRunManager.getTaskRunHistory().addHistory(status);
+            } else {
+                // Find the task status from history map.
+                String queryId = statusChange.getQueryId();
+                TaskRunStatus status = taskRunManager.getTaskRunHistory().getTask(queryId);
+                if (status == null) {
+                    return;
+                }
+                // Do update extra message from change status.
+                status.setExtraMessage(statusChange.getExtraMessage());
             }
         } else {
             LOG.warn("Illegal TaskRun queryId:{} status transform from {} to {}",
@@ -710,13 +723,14 @@ public class TaskManager {
         }
         try {
             // only SUCCESS and FAILED in taskRunHistory
-            Deque<TaskRunStatus> taskRunHistory = taskRunManager.getTaskRunHistory().getAllHistory();
+            List<TaskRunStatus> taskRunHistory = taskRunManager.getTaskRunHistory().getAllHistory();
             Iterator<TaskRunStatus> iterator = taskRunHistory.iterator();
             while (iterator.hasNext()) {
                 TaskRunStatus taskRunStatus = iterator.next();
                 long expireTime = taskRunStatus.getExpireTime();
                 if (currentTimeMs > expireTime) {
                     historyToDelete.add(taskRunStatus.getQueryId());
+                    taskRunManager.getTaskRunHistory().removeTask(taskRunStatus.getQueryId());
                     iterator.remove();
                 }
             }

@@ -15,20 +15,43 @@
 
 package com.starrocks.scheduler;
 
-import com.google.common.collect.Queues;
+import com.google.common.collect.Maps;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 
-import java.util.Deque;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public class TaskRunHistory {
-
-    private final Deque<TaskRunStatus> historyDeque = Queues.newLinkedBlockingDeque();
+    // Thread-Safe history map: QueryId -> TaskRunStatus
+    // The same task-id may contain multi history task run status, so use query_id instead.
+    private final Map<String, TaskRunStatus> historyTaskRunMap =
+            Collections.synchronizedMap(Maps.newLinkedHashMap());
 
     public void addHistory(TaskRunStatus status) {
-        historyDeque.addFirst(status);
+        historyTaskRunMap.put(status.getQueryId(), status);
     }
 
-    public Deque<TaskRunStatus> getAllHistory() {
-        return historyDeque;
+    public TaskRunStatus getTask(String queryId) {
+        if (queryId == null) {
+            return null;
+        }
+        return historyTaskRunMap.get(queryId);
+    }
+
+    public void removeTask(String queryId) {
+        if (queryId == null) {
+            return;
+        }
+        historyTaskRunMap.remove(queryId);
+    }
+
+    // Reserve historyTaskRunMap values to keep the last insert at the first.
+    public List<TaskRunStatus> getAllHistory() {
+        List<TaskRunStatus> historyRunStatus =
+                historyTaskRunMap.values().stream().collect(Collectors.toList());
+        Collections.reverse(historyRunStatus);
+        return historyRunStatus;
     }
 }
