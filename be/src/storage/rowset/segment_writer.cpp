@@ -144,8 +144,9 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         // now we create zone map for key columns
         // and not support zone map for array type.
         // TODO(mofei) refactor it to type specification
-        opts.need_zone_map = column.is_key() ||
-                             (_tablet_schema->keys_type() == KeysType::DUP_KEYS && is_zone_map_key_type(column.type()));
+        opts.need_zone_map = (_tablet_schema->keys_type() == KeysType::DUP_KEYS ||
+                              _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) &&
+                             is_zone_map_key_type(column.type());
         if (column.type() == LogicalType::TYPE_ARRAY) {
             opts.need_zone_map = false;
         }
