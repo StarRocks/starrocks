@@ -31,7 +31,6 @@
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
-#include "exec/parquet_builder.h"
 
 namespace starrocks::parquet {
 

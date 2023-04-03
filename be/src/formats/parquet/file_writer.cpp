@@ -712,7 +712,7 @@ Status FileWriterBase::_add_date_column_chunk(const TypeDescriptor& type_desc, c
     auto raw_col = down_cast<const RunTimeColumnType<TYPE_DATE>*>(data_column)->get_data().data();
 
     _generate_rg_writer();
-    auto col_writer = down_cast<parquet::Int32Writer*>(_rg_writer->column(_col_idx));
+    auto col_writer = down_cast<::parquet::Int32Writer*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
     auto write = [&](int16_t def_level, int16_t rep_level, int32_t value) {
@@ -753,7 +753,7 @@ Status FileWriterBase::_add_datetime_column_chunk(const TypeDescriptor& type_des
     auto raw_col = down_cast<const RunTimeColumnType<TYPE_DATETIME>*>(data_column)->get_data().data();
 
     _generate_rg_writer();
-    auto col_writer = down_cast<parquet::Int64Writer*>(_rg_writer->column(_col_idx));
+    auto col_writer = down_cast<::parquet::Int64Writer*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
     auto write = [&](int16_t def_level, int16_t rep_level, int64_t value) {
@@ -794,10 +794,10 @@ Status FileWriterBase::_add_int_column_chunk(const TypeDescriptor& type_desc, co
     const auto raw_col = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
 
     _generate_rg_writer();
-    auto col_writer = down_cast<parquet::TypedColumnWriter<parquet::PhysicalType<pt>>*>(_rg_writer->column(_col_idx));
+    auto col_writer = down_cast<::parquet::TypedColumnWriter<::parquet::PhysicalType<pt>>*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
-    auto write = [&](int16_t def_level, int16_t rep_level, typename parquet::type_traits<pt>::value_type value) {
+    auto write = [&](int16_t def_level, int16_t rep_level, typename ::parquet::type_traits<pt>::value_type value) {
         col_writer->WriteBatch(1, &def_level, &rep_level, &value);
     };
 
