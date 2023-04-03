@@ -125,8 +125,8 @@ Status ParquetBuilder::_init_schema(const std::vector<std::string>& file_column_
         auto nodePtr = _init_schema_node(file_column_names[i], column_expr->type(),
                                          ::parquet::Repetition::OPTIONAL);
         if (nodePtr == nullptr) {
-            return Status::InvalidArgument(fmt::format("Field {} of type {} (or its subtypes) is not supported",
-                                                       file_column_names[i], type_to_string_v2(column_expr->type().type)));
+            return Status::InvalidArgument(fmt::format("Field {} of type {} is not supported",
+                                                       file_column_names[i], column_expr->type().debug_string()));
         }
         fields.push_back(nodePtr);
     }
@@ -394,7 +394,7 @@ Status ParquetBuilder::_add_column_chunk(const TypeDescriptor& type_desc, const 
         case TYPE_DATE:
             return _add_date_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         default: {
-            return Status::InvalidArgument(fmt::format("Type {} is not supported", type_to_string_v2(type_desc.type)));
+            return Status::InvalidArgument(fmt::format("Type {} is not supported",  type_desc.debug_string()));
         }
     }
 }
