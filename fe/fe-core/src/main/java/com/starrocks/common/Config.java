@@ -765,6 +765,12 @@ public class Config extends ConfigBase {
     public static int insert_load_default_timeout_second = 3600; // 1 hour
 
     /**
+     * stream load force using ip for be or not
+     */
+    @ConfField(mutable = true)
+    public static boolean stream_load_force_use_ip = false;
+
+    /**
      * Default stream load and streaming mini load timeout
      */
     @ConfField(mutable = true)
