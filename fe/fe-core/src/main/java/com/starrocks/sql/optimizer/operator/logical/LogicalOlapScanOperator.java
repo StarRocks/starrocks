@@ -237,5 +237,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             this.prunedPartitionPredicates = prunedPartitionPredicates;
             return this;
         }
+
+        public Builder setHashDistributionSpec(HashDistributionSpec hashDistributionSpec) {
+            this.hashDistributionSpec = hashDistributionSpec;
+            return this;
+        }
     }
 }
