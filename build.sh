@@ -318,6 +318,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
                     -DUSE_JEMALLOC=$USE_JEMALLOC \
                     -DWITH_BENCH=${WITH_BENCH} \
+                    -DWITH_COMPRESS=${WITH_COMPRESS} \
                     -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
     fi
