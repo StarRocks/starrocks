@@ -4,7 +4,7 @@
 
 Release date: March 31, 2023
 
-### New Feature
+### New Features
 
 **Architecture**
 
