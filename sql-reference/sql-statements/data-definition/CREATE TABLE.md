@@ -29,7 +29,7 @@ distribution_desc
 语法：
 
 ```sql
-col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
+col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT]
 ```
 
 说明：
@@ -121,6 +121,8 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 * **DEFAULT current_timestamp**：默认值为当前时间。参见 [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md) 。
 * **DEFAULT <默认值>**：默认值为指定类型的值。例如，列类型为 VARCHAR，即可指定默认值为 `DEFAULT "beijing"`。当前不支持指定 ARRAY、BITMAP、JSON、HLL 和 BOOLEAN 类型为默认值。
 * **DEFAULT (<表达式>)**：默认值为指定函数返回的结果。目前仅支持 [uuid()](../../sql-functions/utility-functions/uuid.md) 和 [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) 表达式。
+
+* **AUTO_INCREMENT**：指定自增列。自增列的数据类型只支持 BIGINT，自增 ID 从 1 开始增加，自增步长为 1。有关自增列的详细说明，请参见 [AUTO_INCREMENT](../../auto_increment.md)。
 
 ### **index_definition**
 
