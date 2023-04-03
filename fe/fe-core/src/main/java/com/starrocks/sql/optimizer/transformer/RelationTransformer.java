@@ -609,8 +609,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             List<ColumnRefOperator> rightFieldMappings = rightPlan.getRootBuilder().getFieldMappings();
 
             ExpressionMapping expressionMapping = new ExpressionMapping(new Scope(RelationId.of(node),
-                        node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields())),
-                        Streams.concat(leftFieldMappings.stream(), rightFieldMappings.stream()).collect(Collectors.toList()));
+                    node.getLeft().getRelationFields().joinWith(node.getRight().getRelationFields())),
+                    Streams.concat(leftFieldMappings.stream(), rightFieldMappings.stream()).collect(Collectors.toList()));
 
             Operator root = LogicalApplyOperator.builder().setCorrelationColumnRefs(correlation)
                     .setNeedCheckMaxRows(false)

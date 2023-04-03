@@ -46,6 +46,7 @@ public class ShowSqlBlackListStmt extends ShowStmt {
     public ShowSqlBlackListStmt(NodePosition pos) {
         super(pos);
     }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowSqlBlackListStatement(this, context);

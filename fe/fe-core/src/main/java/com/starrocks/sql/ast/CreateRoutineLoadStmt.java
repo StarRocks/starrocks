@@ -165,7 +165,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(PULSAR_PARTITIONS_PROPERTY)
             .add(PULSAR_INITIAL_POSITIONS_PROPERTY)
             .build();
-        
+
     private String confluentSchemaRegistryUrl;
     private LabelName labelName;
     private final String tableName;
@@ -542,7 +542,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 enclose = 0;
             }
             if (jobProperties.containsKey(ESCAPE)) {
-                escape = (byte) jobProperties.get(ESCAPE).charAt(0);            
+                escape = (byte) jobProperties.get(ESCAPE).charAt(0);
             } else {
                 escape = 0;
             }

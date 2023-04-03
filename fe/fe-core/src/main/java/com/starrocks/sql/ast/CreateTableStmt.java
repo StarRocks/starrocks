@@ -17,7 +17,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;

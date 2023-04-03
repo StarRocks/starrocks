@@ -117,7 +117,6 @@ public class ShowStreamLoadStmt extends ShowStmt {
     }
 
 
-
     public String getDbFullName() {
         return labelName.getDbName();
     }

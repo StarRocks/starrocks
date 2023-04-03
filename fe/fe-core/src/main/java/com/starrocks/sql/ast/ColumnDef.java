@@ -32,10 +32,22 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.analysis;
+package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.BoolLiteral;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FloatLiteral;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LargeIntLiteral;
+import com.starrocks.analysis.NullLiteral;
+import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
@@ -100,19 +112,19 @@ public class ColumnDef implements ParseNode {
                 new FunctionCallExpr("now", new ArrayList<>()));
     }
 
-    private final static Set<String> charsetNames;
+    private static final Set<String> CHARSET_NAMES;
 
     static {
-        charsetNames = Sets.newHashSet();
-        charsetNames.add("utf8");
-        charsetNames.add("gbk");
+        CHARSET_NAMES = Sets.newHashSet();
+        CHARSET_NAMES.add("utf8");
+        CHARSET_NAMES.add("gbk");
     }
 
     // parameter initialized in constructor
     private final String name;
     private final TypeDef typeDef;
-    private final String DEFAULT_CHARSET = "utf8";
-    private String charsetName = DEFAULT_CHARSET;
+    private final String defaultCharset = "utf8";
+    private String charsetName = defaultCharset;
     private AggregateType aggregateType;
     private boolean isKey;
     // Primary-key column should obey the not-null constraint. When creating a table, the not-null constraint will add to the primary-key column default. If the user specifies NULL explicitly, semantics analysis will report an error.
@@ -150,7 +162,7 @@ public class ColumnDef implements ParseNode {
         this.name = name;
         this.typeDef = typeDef;
         if (charsetName == null) {
-            this.charsetName = DEFAULT_CHARSET;
+            this.charsetName = defaultCharset;
         } else {
             this.charsetName = charsetName;
         }
@@ -249,7 +261,7 @@ public class ColumnDef implements ParseNode {
                 }
             } else {
                 // if character setting is not for varchar type, Display unsupported information to the user
-                if (!DEFAULT_CHARSET.equalsIgnoreCase(charsetName)) {
+                if (!defaultCharset.equalsIgnoreCase(charsetName)) {
                     throw new AnalysisException(
                             "character setting is only supported for type varchar in column definition");
                 }
@@ -258,12 +270,12 @@ public class ColumnDef implements ParseNode {
 
         charsetName = charsetName.toLowerCase();
 
-        if (!charsetNames.contains(charsetName)) {
+        if (!CHARSET_NAMES.contains(charsetName)) {
             throw new AnalysisException("Unknown charset name: " + charsetName);
         }
 
         // be is not supported yet,so Display unsupported information to the user
-        if (!charsetName.equals(DEFAULT_CHARSET)) {
+        if (!charsetName.equals(defaultCharset)) {
             throw new AnalysisException("charset name " + charsetName + " is not supported yet in column definition");
         }
 

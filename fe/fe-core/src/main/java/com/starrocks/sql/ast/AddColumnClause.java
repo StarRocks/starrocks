@@ -16,7 +16,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.sql.parser.NodePosition;
 

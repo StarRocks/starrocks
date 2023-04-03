@@ -41,6 +41,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ColumnDef;
 import org.apache.commons.lang3.StringUtils;
 import com.starrocks.sql.parser.NodePosition;
 

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.alter;
 
 import com.staros.proto.FileCacheInfo;
@@ -20,7 +19,6 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -53,6 +51,7 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -93,8 +92,8 @@ public class LakeTableSchemaChangeJobTest {
         new MockUp<StarOSAgent>() {
             @Mock
             public List<Long> createShards(int shardCount, FilePathInfo path, FileCacheInfo cache, long groupId,
-                    List<Long> matchShardIds)
-                throws DdlException {
+                                           List<Long> matchShardIds)
+                    throws DdlException {
                 for (int i = 0; i < shardCount; i++) {
                     shadowTabletIds.add(GlobalStateMgr.getCurrentState().getNextId());
                 }

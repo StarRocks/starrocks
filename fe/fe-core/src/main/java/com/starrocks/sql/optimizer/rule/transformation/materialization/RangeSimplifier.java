@@ -144,7 +144,8 @@ public class RangeSimplifier {
 
     private List<ScalarOperator> filterScalarOperators(
             List<ScalarOperator> columnScalars, Range<ConstantOperator> validRange) {
-        List<ScalarOperator> results = Lists.newArrayList();;
+        List<ScalarOperator> results = Lists.newArrayList();
+        ;
         for (ScalarOperator candidate : columnScalars) {
             if (isRedundantPredicate(candidate, validRange)) {
                 continue;
