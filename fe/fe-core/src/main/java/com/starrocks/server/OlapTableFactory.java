@@ -136,7 +136,8 @@ public class OlapTableFactory implements AbstractTableFactory {
             if (partitionInfo instanceof ExpressionRangePartitionInfo) {
                 ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
                 long partitionId = metastore.getNextId();
-                String replicateNum = stmt.getProperties().get("replication_num");
+                String replicateNum = stmt.getProperties().getOrDefault("replication_num",
+                        String.valueOf(RunMode.defaultReplicationNum()));
                 expressionRangePartitionInfo.createAutomaticShadowPartition(partitionId, replicateNum);
                 partitionNameToId.put(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME, partitionId);
             }
