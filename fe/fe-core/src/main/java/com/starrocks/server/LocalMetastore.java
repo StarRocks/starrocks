@@ -43,7 +43,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -165,6 +164,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -3150,7 +3150,7 @@ public class LocalMetastore implements ConnectorMetadata {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             if (mv != null) {
                 LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
+                        "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
                 mv.setActive(false);
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);

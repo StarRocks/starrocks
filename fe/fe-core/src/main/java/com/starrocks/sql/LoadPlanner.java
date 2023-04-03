@@ -247,7 +247,7 @@ public class LoadPlanner {
         if (partialUpdate) {
             if (this.etlJobType == EtlJobType.BROKER) {
                 destColumns = Load.getPartialUpateColumns(destTable, fileGroups.get(0).getColumnExprList(),
-                    isMissAutoIncrementColumn);
+                        isMissAutoIncrementColumn);
             } else {
                 destColumns = Load.getPartialUpateColumns(destTable, columnDescs, isMissAutoIncrementColumn);
             }
