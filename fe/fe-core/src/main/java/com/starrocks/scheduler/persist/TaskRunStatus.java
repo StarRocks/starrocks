@@ -237,6 +237,18 @@ public class TaskRunStatus implements Writable {
             return "";
         }
     }
+    public void setExtraMessage(String extraMessage) {
+        if (extraMessage == null) {
+            return;
+        }
+
+        if (source == Constants.TaskSource.MV) {
+            this.mvTaskRunExtraMessage =
+                    GsonUtils.GSON.fromJson(extraMessage, MVTaskRunExtraMessage.class);
+        } else {
+            // do nothing
+        }
+    }
 
     public static TaskRunStatus read(DataInput in) throws IOException {
         String json = Text.readString(in);
@@ -267,6 +279,7 @@ public class TaskRunStatus implements Writable {
                 ", expireTime=" + expireTime +
                 ", priority=" + priority +
                 ", mergeRedundant=" + mergeRedundant +
+                ", extraMessage=" + getExtraMessage() +
                 '}';
     }
 }
