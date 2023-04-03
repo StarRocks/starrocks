@@ -361,7 +361,6 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-
     // ------------------------------------------- Admin Statement -----------------------------------------------------
 
     public R visitAdminSetConfigStatement(AdminSetConfigStmt statement, C context) {
@@ -689,6 +688,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitExecuteAsStatement(ExecuteAsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitExecuteScriptStatement(ExecuteScriptStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

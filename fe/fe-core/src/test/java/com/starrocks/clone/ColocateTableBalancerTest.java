@@ -53,7 +53,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -78,15 +78,15 @@ import java.util.Set;
 public class ColocateTableBalancerTest {
     private ColocateTableBalancer balancer = ColocateTableBalancer.getInstance();
 
-    private DataNode backend1;
-    private DataNode backend2;
-    private DataNode backend3;
-    private DataNode backend4;
-    private DataNode backend5;
-    private DataNode backend6;
-    private DataNode backend7;
-    private DataNode backend8;
-    private DataNode backend9;
+    private Backend backend1;
+    private Backend backend2;
+    private Backend backend3;
+    private Backend backend4;
+    private Backend backend5;
+    private Backend backend6;
+    private Backend backend7;
+    private Backend backend8;
+    private Backend backend9;
 
     private Map<Long, Double> mixLoadScores;
 
@@ -101,16 +101,16 @@ public class ColocateTableBalancerTest {
 
     @Before
     public void setUp() throws Exception {
-        backend1 = new DataNode(1L, "192.168.1.1", 9050);
-        backend2 = new DataNode(2L, "192.168.1.2", 9050);
-        backend3 = new DataNode(3L, "192.168.1.3", 9050);
-        backend4 = new DataNode(4L, "192.168.1.4", 9050);
-        backend5 = new DataNode(5L, "192.168.1.5", 9050);
-        backend6 = new DataNode(6L, "192.168.1.6", 9050);
+        backend1 = new Backend(1L, "192.168.1.1", 9050);
+        backend2 = new Backend(2L, "192.168.1.2", 9050);
+        backend3 = new Backend(3L, "192.168.1.3", 9050);
+        backend4 = new Backend(4L, "192.168.1.4", 9050);
+        backend5 = new Backend(5L, "192.168.1.5", 9050);
+        backend6 = new Backend(6L, "192.168.1.6", 9050);
         // 7,8,9 are on same host
-        backend7 = new DataNode(7L, "192.168.1.8", 9050);
-        backend8 = new DataNode(8L, "192.168.1.8", 9050);
-        backend9 = new DataNode(9L, "192.168.1.8", 9050);
+        backend7 = new Backend(7L, "192.168.1.8", 9050);
+        backend8 = new Backend(8L, "192.168.1.8", 9050);
+        backend9 = new Backend(9L, "192.168.1.8", 9050);
 
         mixLoadScores = Maps.newHashMap();
         mixLoadScores.put(1L, 0.1);
@@ -241,9 +241,9 @@ public class ColocateTableBalancerTest {
     @Test
     public void testBalanceWithOnlyOneAvailableBackend(@Mocked SystemInfoService infoService,
                                                        @Mocked ClusterLoadStatistic statistic,
-                                                       @Mocked DataNode myBackend2,
-                                                       @Mocked DataNode myBackend3,
-                                                       @Mocked DataNode myBackend4) {
+                                                       @Mocked Backend myBackend2,
+                                                       @Mocked Backend myBackend3,
+                                                       @Mocked Backend myBackend4) {
         new Expectations() {
             {
                 // backend2 is available
@@ -305,9 +305,9 @@ public class ColocateTableBalancerTest {
     @Test
     public void testBalanceWithSingleReplica(@Mocked SystemInfoService infoService,
                                              @Mocked ClusterLoadStatistic statistic,
-                                             @Mocked DataNode myBackend2,
-                                             @Mocked DataNode myBackend3,
-                                             @Mocked DataNode myBackend4) {
+                                             @Mocked Backend myBackend2,
+                                             @Mocked Backend myBackend3,
+                                             @Mocked Backend myBackend4) {
         new Expectations() {
             {
                 // backend2 is available
@@ -544,10 +544,10 @@ public class ColocateTableBalancerTest {
     @Test
     public void testGetUnavailableBeIdsInGroup(@Mocked ColocateTableIndex colocateTableIndex,
                                                @Mocked SystemInfoService infoService,
-                                               @Mocked DataNode myBackend2,
-                                               @Mocked DataNode myBackend3,
-                                               @Mocked DataNode myBackend4,
-                                               @Mocked DataNode myBackend5
+                                               @Mocked Backend myBackend2,
+                                               @Mocked Backend myBackend3,
+                                               @Mocked Backend myBackend4,
+                                               @Mocked Backend myBackend5
     ) {
         GroupId groupId = new GroupId(10000, 10001);
         Set<Long> allBackendsInGroup = Sets.newHashSet(1L, 2L, 3L, 4L, 5L);
@@ -623,10 +623,10 @@ public class ColocateTableBalancerTest {
 
     @Test
     public void testGetAvailableBeIds(@Mocked SystemInfoService infoService,
-                                      @Mocked DataNode myBackend2,
-                                      @Mocked DataNode myBackend3,
-                                      @Mocked DataNode myBackend4,
-                                      @Mocked DataNode myBackend5) {
+                                      @Mocked Backend myBackend2,
+                                      @Mocked Backend myBackend3,
+                                      @Mocked Backend myBackend4,
+                                      @Mocked Backend myBackend5) {
         List<Long> clusterBackendIds = Lists.newArrayList(1L, 2L, 3L, 4L, 5L);
         new Expectations() {
             {
@@ -871,11 +871,11 @@ public class ColocateTableBalancerTest {
     @Test
     public void testRepairPrecedeBalance(@Mocked SystemInfoService infoService,
                                          @Mocked ClusterLoadStatistic statistic,
-                                         @Mocked DataNode myBackend1,
-                                         @Mocked DataNode myBackend2,
-                                         @Mocked DataNode myBackend3,
-                                         @Mocked DataNode myBackend4,
-                                         @Mocked DataNode myBackend5) {
+                                         @Mocked Backend myBackend1,
+                                         @Mocked Backend myBackend2,
+                                         @Mocked Backend myBackend3,
+                                         @Mocked Backend myBackend4,
+                                         @Mocked Backend myBackend5) {
         new Expectations() {
             {
                 // backend1 is available

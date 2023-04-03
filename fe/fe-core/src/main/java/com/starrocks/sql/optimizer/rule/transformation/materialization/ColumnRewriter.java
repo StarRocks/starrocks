@@ -134,6 +134,7 @@ public class ColumnRewriter {
             this.viewToQuery = viewToQuery;
             return this;
         }
+
         ColumnWriterBuilder withEnableEquivalenceClassesRewrite(boolean enableEquivalenceClassesRewrite) {
             this.enableEquivalenceClassesRewrite = enableEquivalenceClassesRewrite;
             return this;

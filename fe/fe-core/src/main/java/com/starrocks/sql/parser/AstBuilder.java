@@ -31,7 +31,6 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CollectionElementExpr;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
@@ -143,6 +142,7 @@ import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnAssignment;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
@@ -198,6 +198,7 @@ import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.EmptyStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.FunctionArgsDef;
@@ -3135,6 +3136,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new SetWarehouseStmt(warehouseName, createPos(context));
     }
 
+    @Override
+    public ParseNode visitExecuteScriptStatement(StarRocksParser.ExecuteScriptStatementContext context) {
+        long beId = Long.parseLong(context.INTEGER_VALUE().getText());
+        StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+        String script = stringLiteral.getStringValue();
+        return new ExecuteScriptStmt(beId, script, createPos(context));
+    }
+
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------
 
     @Override
@@ -3992,7 +4001,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitTableFunction(StarRocksParser.TableFunctionContext context) {
-        FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.tableFunctionCall());
+        QualifiedName functionName = getQualifiedName(context.qualifiedName());
+        List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
+        FunctionCallExpr functionCallExpr =
+                new FunctionCallExpr(FunctionName.createFnName(functionName.toString().toLowerCase()), parameters);
         TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(functionCallExpr);
 
         if (context.alias != null) {
@@ -4004,8 +4016,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitTableFunctionTable(StarRocksParser.TableFunctionTableContext context) {
-        TableFunctionRelation relation = new TableFunctionRelation((FunctionCallExpr) visit(context.tableFunctionCall()));
+    public ParseNode visitNormalizedTableFunction(StarRocksParser.NormalizedTableFunctionContext context) {
+        QualifiedName functionName = getQualifiedName(context.qualifiedName());
+        List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
+        FunctionCallExpr functionCallExpr =
+                new FunctionCallExpr(FunctionName.createFnName(functionName.toString().toLowerCase()), parameters);
+        TableFunctionRelation relation = new TableFunctionRelation(functionCallExpr);
 
         if (context.alias != null) {
             Identifier identifier = (Identifier) visit(context.alias);
@@ -4014,13 +4030,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         relation.setColumnOutputNames(getColumnNames(context.columnAliases()));
 
         return new NormalizedTableFunctionRelation(relation);
-    }
-
-    @Override
-    public ParseNode visitTableFunctionCall(StarRocksParser.TableFunctionCallContext context) {
-        QualifiedName functionName = getQualifiedName(context.qualifiedName());
-        List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
-        return new FunctionCallExpr(FunctionName.createFnName(functionName.toString().toLowerCase()), parameters);
     }
 
     @Override
@@ -6006,7 +6015,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 scale = Integer.parseInt(context.scale.getText());
             }
         }
-        if (context.DECIMAL() != null) {
+        if (context.DECIMAL() != null || context.NUMBER() != null || context.NUMERIC() != null) {
             if (precision != null) {
                 if (scale != null) {
                     return ScalarType.createUnifiedDecimalType(precision, scale);

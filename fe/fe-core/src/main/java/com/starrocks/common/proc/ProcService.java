@@ -53,7 +53,7 @@ public final class ProcService {
         if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             root.register("auth", new AuthProcDir(GlobalStateMgr.getCurrentState().getAuth()));
         }
-        root.register("backends", new DataNodesProcDir(GlobalStateMgr.getCurrentSystemInfo()));
+        root.register("backends", new BackendsProcDir(GlobalStateMgr.getCurrentSystemInfo()));
         root.register("compute_nodes", new ComputeNodeProcDir(GlobalStateMgr.getCurrentSystemInfo()));
         root.register("dbs", new DbsProcDir(GlobalStateMgr.getCurrentState()));
         root.register("jobs", new JobsDbProcDir(GlobalStateMgr.getCurrentState()));

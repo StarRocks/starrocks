@@ -29,6 +29,7 @@ import java.util.Map;
 
 public class LambdaFunctionExpr extends Expr {
     private int commonSubOperatorNum = 0;
+
     // the arguments are lambda expr, lambda arg1, lambda arg2...
     public LambdaFunctionExpr(List<Expr> arguments) {
         this(arguments, NodePosition.ZERO);

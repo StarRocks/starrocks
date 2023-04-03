@@ -36,6 +36,7 @@ public class ImportColumnDesc implements ParseNode {
     public ImportColumnDesc(String column) {
         this(column, null, NodePosition.ZERO);
     }
+
     public ImportColumnDesc(String column, Expr expr) {
         this(column, expr, NodePosition.ZERO);
     }

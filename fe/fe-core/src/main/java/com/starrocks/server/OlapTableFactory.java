@@ -136,7 +136,8 @@ public class OlapTableFactory implements AbstractTableFactory {
             if (partitionInfo instanceof ExpressionRangePartitionInfo) {
                 ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
                 long partitionId = metastore.getNextId();
-                String replicateNum = stmt.getProperties().get("replication_num");
+                String replicateNum = stmt.getProperties().getOrDefault("replication_num",
+                        String.valueOf(RunMode.defaultReplicationNum()));
                 expressionRangePartitionInfo.createAutomaticShadowPartition(partitionId, replicateNum);
                 partitionNameToId.put(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME, partitionId);
             }
@@ -214,7 +215,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
             }
 
-            if (table.isLakeTable() && !runMode.isAllowCreateLakeTable())  {
+            if (table.isCloudNativeTable() && !runMode.isAllowCreateLakeTable())  {
                 throw new DdlException("Cannot create table with persistent volume in current run mode \"" + runMode + "\"");
             }
             if (table.isOlapTable() && !runMode.isAllowCreateOlapTable()) {
@@ -475,7 +476,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         // create partition
         try {
             // do not create partition for external table
-            if (table.isOlapOrLakeTable()) {
+            if (table.isOlapOrCloudNativeTable()) {
                 if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
                     if (properties != null && !properties.isEmpty()) {
                         // here, all properties should be checked
@@ -632,7 +633,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             return;
         }
 
-        if (olapTable.isLakeTable() != expectLakeTable) {
+        if (olapTable.isCloudNativeTable() != expectLakeTable) {
             return;
         }
 

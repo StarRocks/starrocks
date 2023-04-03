@@ -87,7 +87,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.task.AgentClient;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.THdfsProperties;
@@ -332,7 +332,7 @@ public class ExportJob implements Writable {
         ScanNode scanNode = null;
         switch (exportTable.getType()) {
             case OLAP:
-            case LAKE:
+            case CLOUD_NATIVE:
                 scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
                 scanNode.setColumnFilters(Maps.newHashMap());
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
@@ -363,7 +363,7 @@ public class ExportJob implements Writable {
         PlanFragment fragment = null;
         switch (exportTable.getType()) {
             case OLAP:
-            case LAKE:
+            case CLOUD_NATIVE:
                 fragment = new PlanFragment(
                         new PlanFragmentId(nextId.getAndIncrement()), scanNode, DataPartition.RANDOM);
                 break;
@@ -685,7 +685,7 @@ public class ExportJob implements Writable {
             case OLAP:
             case MYSQL:
                 return releaseSnapshotPaths();
-            case LAKE:
+            case CLOUD_NATIVE:
                 return releaseMetadataLocks();
             default:
                 return Status.OK;
@@ -699,7 +699,7 @@ public class ExportJob implements Writable {
             TNetworkAddress address = snapshotPath.first;
             String host = address.getHostname();
             int port = address.getPort();
-            DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
             if (backend == null) {
                 continue;
             }
@@ -731,7 +731,7 @@ public class ExportJob implements Writable {
                 TNetworkAddress address = location.getServer();
                 String host = address.getHostname();
                 int port = address.getPort();
-                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
                 if (backend == null) {
                     continue;
                 }
@@ -991,7 +991,7 @@ public class ExportJob implements Writable {
     }
 
     public boolean exportLakeTable() {
-        return exportTable.isCloudNativeTable();
+        return exportTable.isCloudNativeTableOrMaterializedView();
     }
 
     public boolean exportOlapTable() {

@@ -68,7 +68,7 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
@@ -144,7 +144,7 @@ public class FileScanNode extends LoadScanNode {
     private int filesAdded;
 
     // Only used for external table in select statement
-    private List<DataNode> backends;
+    private List<Backend> backends;
     private int nextBe = 0;
 
     private Analyzer analyzer;
@@ -405,7 +405,7 @@ public class FileScanNode extends LoadScanNode {
 
     private TScanRangeLocations newLocations(TBrokerScanRangeParams params, String brokerName, boolean hasBroker)
             throws UserException {
-        DataNode selectedBackend = backends.get(nextBe++);
+        Backend selectedBackend = backends.get(nextBe++);
         nextBe = nextBe % backends.size();
 
         // Generate on broker scan range
@@ -496,7 +496,7 @@ public class FileScanNode extends LoadScanNode {
 
     private void assignBackends() throws UserException {
         backends = Lists.newArrayList();
-        for (DataNode be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
+        for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
             if (be.isAvailable()) {
                 backends.add(be);
             }
@@ -682,7 +682,7 @@ public class FileScanNode extends LoadScanNode {
             return;
         }
 
-        Set<Long> aliveBes = backends.stream().map(DataNode::getId).collect(Collectors.toSet());
+        Set<Long> aliveBes = backends.stream().map(Backend::getId).collect(Collectors.toSet());
         nextBe = 0;
         for (TScanRangeLocations locations : locationsList) {
             TScanRangeLocation scanRangeLocation = locations.getLocations().get(0);

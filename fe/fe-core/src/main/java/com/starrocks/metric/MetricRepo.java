@@ -67,7 +67,7 @@ import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -509,7 +509,7 @@ public final class MetricRepo {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
 
         for (Long beId : infoService.getBackendIds(false)) {
-            DataNode be = infoService.getBackend(beId);
+            Backend be = infoService.getBackend(beId);
             if (be == null) {
                 continue;
             }
@@ -705,26 +705,20 @@ public final class MetricRepo {
     private static void collectDatabaseMetrics(MetricVisitor visitor) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<String> dbNames = globalStateMgr.getDbNames();
-        GaugeMetricImpl databaseNum = new GaugeMetricImpl<>(
+        GaugeMetricImpl<Integer> databaseNum = new GaugeMetricImpl<>(
                 "database_num", MetricUnit.OPERATIONS, "count of database");
-        long dbNum = 0;
+        int dbNum = 0;
         for (String dbName : dbNames) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
             if (null == db) {
                 continue;
             }
             dbNum++;
-            db.readLock();
-            try {
-                GaugeMetricImpl tableNum = new GaugeMetricImpl<>(
-                        "table_num", MetricUnit.OPERATIONS, "count of table");
-                tableNum.setValue(0L);
-                tableNum.setValue(db.getTables().size());
-                tableNum.addLabel(new MetricLabel("db_name", dbName));
-                visitor.visit(tableNum);
-            } finally {
-                db.readUnlock();
-            }
+            GaugeMetricImpl<Integer> tableNum = new GaugeMetricImpl<>(
+                    "table_num", MetricUnit.OPERATIONS, "count of table");
+            tableNum.setValue(db.getTableNumber());
+            tableNum.addLabel(new MetricLabel("db_name", dbName));
+            visitor.visit(tableNum);
         }
         databaseNum.setValue(dbNum);
         visitor.visit(databaseNum);

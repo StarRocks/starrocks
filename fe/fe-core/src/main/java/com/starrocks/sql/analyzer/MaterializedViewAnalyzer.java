@@ -522,7 +522,7 @@ public class MaterializedViewAnalyzer {
             if (table == null) {
                 throw new SemanticException("Materialized view partition expression %s could only ref to base table",
                         slotRef.toSql());
-            } else if (table.isNativeTable()) {
+            } else if (table.isNativeTableOrMaterializedView()) {
                 checkPartitionColumnWithBaseOlapTable(slotRef, (OlapTable) table);
             } else if (table.isHiveTable() || table.isHudiTable()) {
                 checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);
@@ -620,7 +620,7 @@ public class MaterializedViewAnalyzer {
             Table table = tableNameTableMap.get(tableName);
             List<BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                if (table.isNativeTable()) {
+                if (table.isNativeTableOrMaterializedView()) {
                     if (baseTableInfo.getTable().equals(table)) {
                         slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
                                 baseTableInfo.getDbName(), table.getName()));
@@ -652,7 +652,7 @@ public class MaterializedViewAnalyzer {
             PrimitiveType type = partitionColumn.getPrimitiveType();
             if (!type.isFixedPointType() && !type.isDateType()) {
                 throw new SemanticException("Materialized view partition exp column:"
-                        + partitionColumn.getName() + " with type "  + type + " not supported");
+                        + partitionColumn.getName() + " with type " + type + " not supported");
             }
         }
 

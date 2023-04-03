@@ -117,7 +117,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.FrontendService;
@@ -1572,8 +1572,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TAllocateAutoIncrementIdResult allocAutoIncrementId(TAllocateAutoIncrementIdParam request) throws TException {
         TAllocateAutoIncrementIdResult result = new TAllocateAutoIncrementIdResult();
         long rows = Math.max(request.rows, Config.auto_increment_cache_size);
-        Long nextId = GlobalStateMgr.getCurrentState().allocateAutoIncrementId(request.table_id, rows);
+        Long nextId = null;
         try {
+            nextId = GlobalStateMgr.getCurrentState().allocateAutoIncrementId(request.table_id, rows);
             // log the delta result.
             ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
             deltaMap.put(request.table_id, nextId + rows);
@@ -1584,6 +1585,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setAllocated_rows(0);
 
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            result.setStatus(status);
+            return result;
+        }
+
+        if (nextId == null) {
+            result.setAuto_increment_id(0);
+            result.setAllocated_rows(0);
+
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("No ids have been allocated"));
             result.setStatus(status);
             return result;
         }
@@ -1799,7 +1811,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(olapTable.getClusterId());
         for (Long id : systemInfoService.getBackendIds(false)) {
-            DataNode backend = systemInfoService.getBackend(id);
+            Backend backend = systemInfoService.getBackend(id);
             nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
         }
         result.setNodes(nodeInfos);

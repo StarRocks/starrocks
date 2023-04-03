@@ -430,6 +430,17 @@ Status StorageEngine::set_cluster_id(int32_t cluster_id) {
     return Status::OK();
 }
 
+std::vector<string> StorageEngine::get_store_paths() {
+    std::vector<string> paths;
+    {
+        std::lock_guard<std::mutex> l(_store_lock);
+        for (auto& it : _store_map) {
+            paths.push_back(it.first);
+        }
+    }
+    return paths;
+}
+
 std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium::type storage_medium) {
     std::vector<DataDir*> stores;
     {
@@ -1203,7 +1214,12 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
         auto st = _get_remote_next_increment_id_interval(alloc_params, &alloc_result);
 
         if (!st.ok() || alloc_result.status.status_code != TStatusCode::OK) {
-            return Status::InternalError("auto increment allocate failed");
+            std::stringstream err_msg;
+            for (auto& msg : alloc_result.status.error_msgs) {
+                err_msg << msg;
+            }
+
+            return Status::InternalError("auto increment allocate failed, err msg: " + err_msg.str());
         }
 
         if (cur_avaliable_rows > 0) {

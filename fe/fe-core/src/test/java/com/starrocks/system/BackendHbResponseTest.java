@@ -30,8 +30,7 @@ public class BackendHbResponseTest {
         long hbTime = System.currentTimeMillis();
         String version = "version1";
         int cpuCores = 10;
-        BackendHbResponse
-                resp = new BackendHbResponse(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores);
+        BackendHbResponse resp = new BackendHbResponse(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores);
 
         Assert.assertEquals(beId, resp.getBeId());
         Assert.assertEquals(bePort, resp.getBePort());

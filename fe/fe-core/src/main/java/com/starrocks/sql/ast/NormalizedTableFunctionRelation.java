@@ -24,10 +24,10 @@ import com.starrocks.analysis.JoinOperator;
  * {@link TableFunctionRelation} can only appear on the right side of a lateral join, while
  * {@link NormalizedTableFunctionRelation} can appear anywhere a regular table can appear:
  * <code>
- *     SELECT * FROM TABLE(my_table_function(...));
- *     SELECT * FROM t0, TABLE(my_table_function(...));
- *     SELECT * FROM t0 LEFT JOIN TABLE(my_table_function(...)) t1(x, y) ON ...;
- *     SELECT * FROM TABLE(my_table_function(...)) t1(x, y) LEFT JOIN t0 ON ...;
+ * SELECT * FROM TABLE(my_table_function(...));
+ * SELECT * FROM t0, TABLE(my_table_function(...));
+ * SELECT * FROM t0 LEFT JOIN TABLE(my_table_function(...)) t1(x, y) ON ...;
+ * SELECT * FROM TABLE(my_table_function(...)) t1(x, y) LEFT JOIN t0 ON ...;
  * </code>
  */
 public class NormalizedTableFunctionRelation extends JoinRelation {

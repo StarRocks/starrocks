@@ -46,7 +46,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -63,7 +63,7 @@ public class CreateTableTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        DataNode be = UtFrameUtils.addMockBackend(10002);
+        Backend be = UtFrameUtils.addMockBackend(10002);
         be.setIsDecommissioned(true);
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addMockBackend(10004);
@@ -85,6 +85,18 @@ public class CreateTableTest {
     private static void alterTableWithNewParser(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
+    @Test(expected = DdlException.class)
+    public void testNotSpecifyReplicateNum() throws Exception {
+        createTable(
+                "CREATE TABLE test.`duplicate_table_with_null` ( `k1`  date, `k2`  datetime,`k3`  " +
+                        "char(20), `k4`  varchar(20), `k5`  boolean, `k6`  tinyint, `k7`  smallint, " +
+                        "`k8`  int, `k9`  bigint, `k10` largeint, `k11` float, `k12` double, " +
+                        "`k13` decimal(27,9)) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY " +
+                        "time_slice(k2, interval 1 hour) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) " +
+                        "PROPERTIES ( \"storage_format\" = \"v2\");"
+        );
     }
 
     @Test
@@ -443,6 +455,22 @@ public class CreateTableTest {
         System.out.println("columns = " + columns);
         Assert.assertTrue(columns.contains("`sum_decimal` decimal128(38, 4) SUM"));
         Assert.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
+    }
+
+    @Test
+    public void testDecimal() throws Exception {
+        String sql = "CREATE TABLE create_decimal_tbl\n" +
+                "(\n" +
+                "    c1 decimal(38, 1),\n" +
+                "    c2 numeric(38, 1),\n" +
+                "    c3 number(38, 1) \n" +
+                ")\n" +
+                "DUPLICATE KEY(c1)\n" +
+                "DISTRIBUTED BY HASH(c1) BUCKETS 1\n" +
+                "PROPERTIES(\"replication_num\" = \"1\");";
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
     }
 
     @Test(expected = AnalysisException.class)
