@@ -20,6 +20,8 @@
 
 namespace starrocks {
 
+// This class used by data lake(Hive, Iceberg,... etc), not for broker load.
+// Broker load plz refer to csv_scanner.cpp
 class HdfsTextScanner final : public HdfsScanner {
 public:
     HdfsTextScanner() = default;
@@ -34,18 +36,22 @@ public:
 private:
     // create a reader or re init reader
     Status _create_or_reinit_reader();
-    Status _get_hive_column_index(const std::string& column_name);
+    Status _build_hive_column_name_2_index();
 
     using ConverterPtr = std::unique_ptr<csv::Converter>;
     std::string _record_delimiter;
     std::string _field_delimiter;
     char _collection_delimiter;
     char _mapkey_delimiter;
+    // Always set true in data lake now.
+    // TODO(SmithCruise) use a hive catalog property to control this behavior
+    bool _invalid_field_as_null = true;
     std::vector<Column*> _column_raw_ptrs;
     std::vector<ConverterPtr> _converters;
     std::shared_ptr<CSVReader> _reader = nullptr;
     size_t _current_range_index = 0;
-    std::unordered_map<std::string, int> _columns_index;
+    // The map's value is the position of column name in hive's table(Not in StarRocks' table)
+    std::unordered_map<std::string, int> _formatted_hive_column_name_2_index;
     bool _no_data = false;
 };
 } // namespace starrocks
