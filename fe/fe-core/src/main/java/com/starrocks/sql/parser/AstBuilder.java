@@ -5433,6 +5433,39 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitMapExpression(StarRocksParser.MapExpressionContext context) {
+        ArrayList<Expr> row = Lists.newArrayList();
+        Expr key = (Expr) visit(context.key);
+        Expr value = (Expr) visit(context.value);
+        row.add(key);
+        row.add(value);
+        return new ValueList(row, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitMapConstructor(StarRocksParser.MapConstructorContext context) {
+        NodePosition pos = createPos(context);
+        Type type = Type.ANY_MAP;
+        if (context.mapType() != null) {
+            type = getMapType(context.mapType());
+        }
+
+        List<Expr> exprs;
+        if (context.expressionList() != null) {
+            if (!(context.expressionList().expression(0) instanceof StarRocksParser.MapExpressionContext)) {
+                throw new ParsingException(PARSER_ERROR_MSG.invalidMapFormat(),
+                        createPos(context.expressionList().expression(0)));
+            }
+            List<ValueList> rowValues = visit(context.expressionList().expression(), ValueList.class);
+            List<List<Expr>> rows = rowValues.stream().map(ValueList::getRow).collect(toList());
+            exprs = rows.stream().flatMap(x -> x.stream()).collect(Collectors.toList());
+        } else {
+            exprs = Collections.emptyList();
+        }
+        return new MapExpr(type, exprs, pos);
+    }
+
+    @Override
     public ParseNode visitCollectionSubscript(StarRocksParser.CollectionSubscriptContext context) {
         Expr value = (Expr) visit(context.value);
         Expr index = (Expr) visit(context.index);

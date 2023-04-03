@@ -87,6 +87,7 @@ public:
     const decimal12_t& get_decimal12() const { return get<decimal12_t>(); }
     const DecimalV2Value& get_decimal() const { return get<DecimalV2Value>(); }
     const DatumArray& get_array() const { return get<DatumArray>(); }
+    const DatumMap& get_map() const { return get<DatumMap>(); }
     const DatumStruct& get_struct() const { return get<DatumStruct>(); }
     const HyperLogLog* get_hyperloglog() const { return get<HyperLogLog*>(); }
     const BitmapValue* get_bitmap() const { return get<BitmapValue*>(); }

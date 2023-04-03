@@ -413,15 +413,23 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitMapExpr(MapExpr node, Scope scope) {
             if (!node.getChildren().isEmpty()) {
-                Type keyType = Type.NULL;
-                Type valueType = Type.NULL;
-                if (node.getKeyExpr() != null) {
-                    keyType = node.getKeyExpr().getType();
-                }
-                if (node.getValueExpr() != null) {
-                    valueType = node.getValueExpr().getType();
-                }
+                Type keyType = node.getKeyCommonType();
+                Type valueType = node.getValueCommonType();
                 node.setType(new MapType(keyType, valueType));
+                try {
+                    for (int i = 0; i < node.getChildren().size(); i += 2) {
+                        if (!node.getChildren().get(i).getType().matchesType(keyType)) {
+                            node.castChild(keyType, i);
+                        }
+                    }
+                    for (int i = 1; i < node.getChildren().size(); i += 2) {
+                        if (!node.getChildren().get(i).getType().matchesType(valueType)) {
+                            node.castChild(valueType, i);
+                        }
+                    }
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
+                }
             } else {
                 node.setType(new MapType(Type.NULL, Type.NULL));
             }
