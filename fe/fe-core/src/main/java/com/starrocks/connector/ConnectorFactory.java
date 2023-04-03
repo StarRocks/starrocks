@@ -30,7 +30,7 @@ public class ConnectorFactory {
      * @return a connector instance
      */
     public static Connector createConnector(ConnectorContext context) {
-        if (null == null || !ConnectorType.isSupport(context.getType())) {
+        if (null == context || !ConnectorType.isSupport(context.getType())) {
             return null;
         }
 
@@ -38,8 +38,7 @@ public class ConnectorFactory {
         Class<Connector> connectorClass = connectorType.getConnectorClass();
         Class<ConnectorConfig> ctConfigClass = connectorType.getConfigClass();
         try {
-            Constructor connectorConstructor =
-                    connectorClass.getDeclaredConstructor(new Class[] {ConnectorContext.class});
+            Constructor connectorConstructor = connectorClass.getDeclaredConstructor(ConnectorContext.class);
             Connector connector = (Connector) connectorConstructor.newInstance(new Object[] {context});
 
             // init config, then load config

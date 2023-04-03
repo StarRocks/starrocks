@@ -14,25 +14,21 @@
 
 package com.starrocks.connector.elasticsearch;
 
-import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.KeysDesc;
-import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
+import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.server.AbstractTableFactory;
-import com.starrocks.server.TableFactoryProvider;
-import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.common.EngineType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
 
 // TODO add meta cache
 public class ElasticsearchMetadata
@@ -72,33 +68,18 @@ public class ElasticsearchMetadata
         if (!DEFAULT_DB.equalsIgnoreCase(dbName)) {
             return null;
         }
-        return toEsTable(esRestClient, properties, catalogName, tblName);
+        return toEsTable(esRestClient, properties, tblName);
     }
 
     public static EsTable toEsTable(EsRestClient esRestClient,
                                     Map<String, String> properties,
-                                    String catalogName,
                                     String tableName) {
         try {
-            List<ColumnDef> columns = EsUtil.convertColumnSchema(esRestClient, tableName);
+            List<Column> columns = EsUtil.convertColumnSchema(esRestClient, tableName);
             properties.put(EsTable.INDEX, tableName);
-            Database db = new Database(DEFAULT_DB_ID, DEFAULT_DB);
-            TableName table = new TableName(catalogName, DEFAULT_DB,  tableName);
-            db.setCatalogName(catalogName);
-            CreateTableStmt tableStmt = new CreateTableStmt(false,
-                    false,
-                    table,
-                    columns,
-                    EngineType.ELASTICSEARCH.name(),
-                    new KeysDesc(),
-                    null,
-                    null,
-                    properties,
-                    new HashMap<>(),
-                    "created by internal es catalog");
-
-            AbstractTableFactory tableFactory = TableFactoryProvider.getFactory(EngineType.ELASTICSEARCH.name());
-            EsTable esTable = (EsTable) tableFactory.createTable(null, db, tableStmt);
+            EsTable esTable = new EsTable(CONNECTOR_ID_GENERATOR.getNextId().asInt()
+                    , tableName, columns, properties, new SinglePartitionInfo());
+            esTable.setComment("created by internal es catalog");
             esTable.syncTableMetaData(esRestClient);
             return esTable;
         } catch (Exception e) {
@@ -106,6 +87,5 @@ public class ElasticsearchMetadata
             throw new StarRocksConnectorException("transform to EsTable Error");
         }
     }
-
 
 }

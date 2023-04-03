@@ -38,8 +38,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -117,8 +116,8 @@ public class EsUtil {
     /**
      * Generate columns from ElasticSearch.
      **/
-    public static List<ColumnDef> convertColumnSchema(EsRestClient client, String index) throws AnalysisException {
-        List<ColumnDef> columns = new ArrayList<>();
+    public static List<Column> convertColumnSchema(EsRestClient client, String index) throws AnalysisException {
+        List<Column> columns = new ArrayList<>();
         String mappings = client.getMapping(index);
         JSONObject properties = parseProperties(index, mappings);
         if (null == properties) {
@@ -131,7 +130,7 @@ public class EsUtil {
             if (columnAttr.has("type")) {
                 type = convertType(columnAttr.get("type").toString());
             }
-            ColumnDef column = new ColumnDef(columnName, new TypeDef(type), true);
+            Column column = new Column(columnName, type, true);
             columns.add(column);
         }
         return columns;

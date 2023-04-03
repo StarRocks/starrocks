@@ -16,6 +16,7 @@ package com.starrocks.connector;
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.connector.config.ConnectorConfig;
+import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.elasticsearch.ElasticsearchConnector;
 import com.starrocks.connector.elasticsearch.EsConfig;
 import com.starrocks.connector.hive.HiveConnector;
@@ -31,14 +32,16 @@ public enum ConnectorType {
     HIVE("hive", HiveConnector.class, null),
     ICEBERG("iceberg", IcebergConnector.class, null),
     JDBC("jdbc", JDBCConnector.class, null),
-    HUDI("hudi", HudiConnector.class, null);
+    HUDI("hudi", HudiConnector.class, null),
+    DELTALAKE("deltalake", DeltaLakeConnector.class, null);
 
     public static Set<String> SUPPORT_TYPE_SET = ImmutableSet.of(
             ELASTICSEARCH.getName(),
             HIVE.getName(),
             ICEBERG.getName(),
             JDBC.getName(),
-            HUDI.getName()
+            HUDI.getName(),
+            DELTALAKE.getName()
     );
 
     ConnectorType(String name, Class connectorClass, Class configClass) {
@@ -79,6 +82,8 @@ public enum ConnectorType {
                 return JDBC;
             case "hudi":
                 return HUDI;
+            case "deltalake":
+                return DELTALAKE;
             default:
                 throw new IllegalStateException("Unexpected value: " + name);
         }

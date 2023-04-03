@@ -26,9 +26,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 // ConnectorMgr is responsible for managing all ConnectorFactory, and for creating Connector
 public class ConnectorMgr {
-    private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
     private final ConcurrentHashMap<String, Connector> connectors = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, ConnectorFactory> connectorFactories = new ConcurrentHashMap<>();
     private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
     public Connector createConnector(ConnectorContext context) {
