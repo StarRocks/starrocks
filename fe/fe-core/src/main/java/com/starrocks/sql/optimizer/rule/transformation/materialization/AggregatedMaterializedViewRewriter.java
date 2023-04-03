@@ -266,24 +266,11 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     @Override
     protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, ScalarOperator compensationPredicates,
                                               OptExpression queryExpression) {
-        // query predicate and (not viewToQueryCompensationPredicate) is the final query compensation predicate
-        ScalarOperator queryCompensationPredicate = MvUtils.canonizePredicate(
-                Utils.compoundAnd(
-                        rewriteContext.getQueryPredicateSplit().toScalarOperator(),
-                        CompoundPredicateOperator.not(compensationPredicates)));
-        // add filter above input and put filter under aggExpr
-        OptExpression input = queryExpression.inputAt(0);
-        if (!ConstantOperator.TRUE.equals(queryCompensationPredicate)) {
-            // add filter
-            Operator.Builder builder = OperatorBuilderFactory.build(input.getOp());
-            builder.withOperator(input.getOp());
-            builder.setPredicate(queryCompensationPredicate);
-            Operator newInputOp = builder.build();
-            OptExpression newInputExpr = OptExpression.create(newInputOp, input.getInputs());
-            // create new OptExpression to strip GroupExpression
-            return OptExpression.create(queryExpression.getOp(), newInputExpr);
+        OptExpression newInput = super.queryBasedRewrite(rewriteContext, compensationPredicates, queryExpression.inputAt(0));
+        if (newInput == null) {
+            return null;
         }
-        return null;
+        return OptExpression.create(queryExpression.getOp(), newInput);
     }
 
     @Override

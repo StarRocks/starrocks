@@ -105,7 +105,7 @@ public class OptExpressionDuplicator {
                         k -> columnRefFactory.getNextRelationId());
                 columnRefFactory.updateColumnToRelationIds(newColumnRef.getId(), newRelationId);
             }
-            LogicalOlapScanOperator.Builder scanBuilder = (LogicalOlapScanOperator.Builder) opBuilder;
+            LogicalScanOperator.Builder scanBuilder = (LogicalScanOperator.Builder) opBuilder;
 
             Map<Column, ColumnRefOperator> columnMetaToColRefMap =
                     ((LogicalScanOperator) optExpression.getOp()).getColumnMetaToColRefMap();
@@ -125,10 +125,13 @@ public class OptExpressionDuplicator {
             scanBuilder.setColumnMetaToColRefMap(newColumnMetaToColRefMap);
 
             // process HashDistributionSpec
-            LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
-            HashDistributionSpec newHashDistributionSpec =
-                    processHashDistributionSpec(olapScan.getDistributionSpec(), columnRefFactory, columnMapping);
-            scanBuilder.setHashDistributionSpec(newHashDistributionSpec);
+            if (optExpression.getOp() instanceof LogicalOlapScanOperator) {
+                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
+                HashDistributionSpec newHashDistributionSpec =
+                        processHashDistributionSpec(olapScan.getDistributionSpec(), columnRefFactory, columnMapping);
+                LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
+                olapScanBuilder.setHashDistributionSpec(newHashDistributionSpec);
+            }
 
             processCommon(opBuilder);
 
@@ -136,7 +139,7 @@ public class OptExpressionDuplicator {
                     && optExpression.getOp() instanceof LogicalOlapScanOperator
                     && partitionByTable != null) {
                 // maybe partition column is not in the output columns, should add it
-
+                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
                 OlapTable table = (OlapTable) olapScan.getTable();
                 if (table.getId() == partitionByTable.getId()) {
                     if (!columnRefOperatorColumnMap.containsValue(partitionColumn)) {
