@@ -36,7 +36,6 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -207,6 +206,7 @@ public class FunctionSet {
     public static final String GET_JSON_STRING = "get_json_string";
 
     // Matching functions:
+    public static final String ILIKE = "ilike";
     public static final String LIKE = "like";
     public static final String REGEXP = "regexp";
 
@@ -226,9 +226,11 @@ public class FunctionSet {
     public static final String HLL_UNION_AGG = "hll_union_agg";
     public static final String MAX = "max";
     public static final String MAX_BY = "max_by";
+    public static final String MIN_BY = "min_by";
     public static final String MIN = "min";
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_CONT = "percentile_cont";
+    public static final String PERCENTILE_DISC = "percentile_disc";
     public static final String RETENTION = "retention";
     public static final String STDDEV = "stddev";
     public static final String STDDEV_POP = "stddev_pop";
@@ -300,6 +302,7 @@ public class FunctionSet {
     public static final String ARRAY_REMOVE = "array_remove";
     public static final String ARRAY_FILTER = "array_filter";
     public static final String ARRAY_SORTBY = "array_sortby";
+    public static final String ARRAY_GENERATE = "array_generate";
 
     // Bit functions:
     public static final String BITAND = "bitand";
@@ -445,25 +448,17 @@ public class FunctionSet {
                     .add(Type.DECIMALV2)
                     .build();
 
-    private static final Map<Type, Type> ARRAY_AGG_TYPES = ImmutableMap.<Type, Type>builder()
-            .put(Type.BOOLEAN, Type.ARRAY_BOOLEAN)
-            .put(Type.TINYINT, Type.ARRAY_TINYINT)
-            .put(Type.SMALLINT, Type.ARRAY_SMALLINT)
-            .put(Type.INT, Type.ARRAY_INT)
-            .put(Type.BIGINT, Type.ARRAY_BIGINT)
-            .put(Type.LARGEINT, Type.ARRAY_LARGEINT)
-            .put(Type.FLOAT, Type.ARRAY_FLOAT)
-            .put(Type.DOUBLE, Type.ARRAY_DOUBLE)
-            .put(Type.VARCHAR, Type.ARRAY_VARCHAR)
-            .put(Type.CHAR, Type.ARRAY_VARCHAR)
-            .put(Type.DATE, Type.ARRAY_DATE)
-            .put(Type.DATETIME, Type.ARRAY_DATETIME)
-            .put(Type.DECIMAL32, Type.ARRAY_DECIMAL32)
-            .put(Type.DECIMAL64, Type.ARRAY_DECIMAL64)
-            .put(Type.DECIMAL128, Type.ARRAY_DECIMAL128)
-            .put(Type.TIME, Type.ARRAY_DATETIME) // ??
-            .put(Type.JSON, Type.ARRAY_JSON)
-            .build();
+    private static final Set<Type> SORTABLE_TYPES =
+            ImmutableSet.<Type>builder()
+                    .addAll(Type.INTEGER_TYPES)
+                    .addAll(Type.DECIMAL_TYPES)
+                    .addAll(Type.STRING_TYPES)
+                    .add(Type.DATE)
+                    .add(Type.DATETIME)
+                    .add(Type.DECIMALV2)
+                    .addAll(Type.FLOAT_TYPES)
+                    .build();
+
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
      * need to check whether the expression tree can use vectorized function from bottom to
@@ -561,6 +556,7 @@ public class FunctionSet {
             .add(ARRAYS_OVERLAP)
             .add(ARRAY_AGG)
             .add(ARRAY_CONCAT)
+            .add(ARRAY_SLICE)
             .build();
 
     public FunctionSet() {
@@ -708,7 +704,7 @@ public class FunctionSet {
 
     private void addBuiltInFunction(Function fn) {
         Preconditions.checkArgument(!fn.getReturnType().isPseudoType() || fn.isPolymorphic(), fn.toString());
-        if (getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
+        if (!fn.isPolymorphic() && getFunction(fn, Function.CompareMode.IS_INDISTINGUISHABLE) != null) {
             return;
         }
         fn.setIsNullable(!alwaysReturnNonNullableFunctions.contains(fn.functionName()));
@@ -755,6 +751,10 @@ public class FunctionSet {
                 Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.BIGINT, true,
                 true, false, true));
 
+        addBuiltin(AggregateFunction.createBuiltin(ARRAY_AGG,
+                Lists.newArrayList(Type.ANY_ELEMENT), Type.ANY_ARRAY, Type.ANY_STRUCT, true,
+                true, false, false));
+
         for (Type t : Type.getSupportedTypes()) {
             if (t.isFunctionType()) {
                 continue;
@@ -786,8 +786,17 @@ public class FunctionSet {
                 if (t1.isFunctionType() || t1.isNull() || t1.isChar() || t1.isPseudoType()) {
                     continue;
                 }
-                addBuiltin(AggregateFunction.createBuiltin(MAX_BY,
-                        Lists.newArrayList(t1, t), t1, Type.VARBINARY, true, true, false));
+                addBuiltin(AggregateFunction.createBuiltin(
+                        MAX_BY, Lists.newArrayList(t1, t), t1, Type.VARBINARY, true, true, false));
+            }
+
+            // MIN_BY
+            for (Type t1 : Type.getSupportedTypes()) {
+                if (t1.isFunctionType() || t1.isNull() || t1.isChar() || t1.isPseudoType()) {
+                    continue;
+                }
+                addBuiltin(AggregateFunction.createBuiltin(
+                        MIN_BY, Lists.newArrayList(t1, t), t1, Type.VARBINARY, true, true, false));
             }
 
             // NDV
@@ -842,8 +851,6 @@ public class FunctionSet {
         // Percentile
         registerBuiltinPercentileAggFunction();
 
-        // ArrayAgg
-        registerBuiltinArrayAggFunction();
 
         // HLL_UNION_AGG
         addBuiltin(AggregateFunction.createBuiltin(HLL_UNION_AGG,
@@ -1094,12 +1101,10 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
                 Lists.newArrayList(Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
                 false, false, false));
-    }
 
-    private void registerBuiltinArrayAggFunction() {
-        for (Map.Entry<Type, Type> entry : ARRAY_AGG_TYPES.entrySet()) {
-            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_AGG,
-                    Lists.newArrayList(entry.getKey()), entry.getValue(), entry.getValue(),
+        for (Type type : SORTABLE_TYPES) {
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_DISC,
+                    Lists.newArrayList(type, Type.DOUBLE), type, Type.VARBINARY,
                     false, false, false));
         }
     }

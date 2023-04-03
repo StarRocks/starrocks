@@ -98,7 +98,13 @@ public class DecimalV3FunctionAnalyzer {
         }
 
         if (FunctionSet.ARRAY_INTERSECT.equalsIgnoreCase(fnName) || FunctionSet.ARRAY_CONCAT.equalsIgnoreCase(fnName)) {
-            Type[] childTypes = Arrays.stream(argTypes).map(a -> ((ArrayType) a).getItemType()).toArray(Type[]::new);
+            Type[] childTypes = Arrays.stream(argTypes).map(a -> {
+                if (a.isArrayType()) {
+                    return ((ArrayType) a).getItemType();
+                } else {
+                    return a;
+                }
+            }).toArray(Type[]::new);
             Preconditions.checkState(Arrays.stream(childTypes).anyMatch(Type::isDecimalV3));
             Type commonType = new ArrayType(Type.getCommonType(childTypes, 0, childTypes.length));
             return Arrays.stream(argTypes).map(t -> commonType).toArray(Type[]::new);
@@ -106,7 +112,13 @@ public class DecimalV3FunctionAnalyzer {
 
         if (FunctionSet.ARRAYS_OVERLAP.equalsIgnoreCase(fnName)) {
             Preconditions.checkState(argTypes.length == 2);
-            Type[] childTypes = Arrays.stream(argTypes).map(a -> ((ArrayType) a).getItemType()).toArray(Type[]::new);
+            Type[] childTypes = Arrays.stream(argTypes).map(a -> {
+                if (a.isArrayType()) {
+                    return ((ArrayType) a).getItemType();
+                } else {
+                    return a;
+                }
+            }).toArray(Type[]::new);
             ArrayType commonType = new ArrayType(Type.getAssignmentCompatibleType(childTypes[0], childTypes[1], false));
             return new Type[] {commonType, commonType};
         }
@@ -205,6 +217,7 @@ public class DecimalV3FunctionAnalyzer {
         newFn.setRetType(returnType);
         return newFn;
     }
+
 
     // This function is used to convert the sum(distinct) function to the multi_distinct_sum function in
     // optimizing phase and PlanFragment building phase.
@@ -325,7 +338,7 @@ public class DecimalV3FunctionAnalyzer {
             }
             newFn = DecimalV3FunctionAnalyzer
                     .rectifyAggregationFunction((AggregateFunction) fn, argType, commonType);
-        } else if (FunctionSet.MAX_BY.equals(fnName)) {
+        } else if (FunctionSet.MAX_BY.equals(fnName) || FunctionSet.MIN_BY.equals(fnName)) {
             Type returnType = fn.getReturnType();
             // Decimal v3 function return type maybe need change
             ScalarType firstType = (ScalarType) argumentTypes[0];
@@ -455,11 +468,8 @@ public class DecimalV3FunctionAnalyzer {
                 newFn.setArgsType(argumentTypes);
                 return newFn;
             }
-            case FunctionSet.ARRAY_AGG: {
-                Type returnType = new ArrayType(argumentTypes[0]);
-                newFn.setArgsType(argumentTypes);
-                newFn.setRetType(returnType);
-                ((AggregateFunction) newFn).setIntermediateType(returnType);
+            case FunctionSet.ARRAY_SLICE: {
+                newFn.setRetType(argumentTypes[0]);
                 return newFn;
             }
             default:

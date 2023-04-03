@@ -228,6 +228,8 @@ public class BDBEnvironment {
         environmentConfig.setConfigParam(EnvironmentConfig.FILE_LOGGING_LEVEL, Config.bdbje_log_level);
         environmentConfig.setConfigParam(EnvironmentConfig.CLEANER_THREADS,
                 String.valueOf(Config.bdbje_cleaner_threads));
+        environmentConfig.setConfigParam(EnvironmentConfig.RESERVED_DISK,
+                String.valueOf(Config.bdbje_reserved_disk_size));
 
         if (isElectable) {
             Durability durability = new Durability(getSyncPolicy(Config.master_sync_policy),

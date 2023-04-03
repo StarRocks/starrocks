@@ -263,7 +263,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
             for (long tableId : transactionState.getTableIdList()) {
                 Table table = db.getTable(tableId);
                 if (table != null) {
-                    return table.isCloudNativeTable();
+                    return table.isCloudNativeTableOrMaterializedView();
                 }
             }
         } finally {
@@ -471,8 +471,8 @@ public class PublishVersionDaemon extends LeaderDaemon {
                     }
                     if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(),
-                                Constants.TaskRunPriority.NORMAL.value());
+                                mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
+                                Constants.TaskRunPriority.NORMAL.value(), true, false);
                     }
                 } finally {
                     mvDb.readUnlock();

@@ -14,12 +14,29 @@
 
 package com.starrocks.credential;
 
+import com.starrocks.credential.aliyun.AliyunCloudConfigurationFactory;
+import com.starrocks.credential.aws.AWSCloudConfigurationFactory;
+import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
+import com.starrocks.credential.gcp.GCPCloudConfigurationFactory;
+
 import java.util.Map;
 
 public abstract class CloudConfigurationFactory {
     public static CloudConfiguration tryBuildForStorage(Map<String, String> properties) {
         CloudConfigurationFactory factory = new AWSCloudConfigurationFactory(properties);
         CloudConfiguration cloudConfiguration = factory.buildForStorage();
+        if (cloudConfiguration != null) {
+            return cloudConfiguration;
+        }
+
+        factory = new AzureCloudConfigurationFactory(properties);
+        cloudConfiguration = factory.buildForStorage();
+        if (cloudConfiguration != null) {
+            return cloudConfiguration;
+        }
+
+        factory = new GCPCloudConfigurationFactory(properties);
+        cloudConfiguration = factory.buildForStorage();
         if (cloudConfiguration != null) {
             return cloudConfiguration;
         }

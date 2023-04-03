@@ -35,6 +35,10 @@ Status LocalDelvecLoader::load(const TabletSegmentId& tsid, int64_t version, Del
     return StorageEngine::instance()->update_manager()->get_del_vec(_meta, tsid, version, pdelvec);
 }
 
+Status LocalDeltaColumnGroupLoader::load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs) {
+    return StorageEngine::instance()->update_manager()->get_delta_column_group(_meta, tsid, version, pdcgs);
+}
+
 UpdateManager::UpdateManager(MemTracker* mem_tracker)
         : _index_cache(std::numeric_limits<size_t>::max()), _update_state_cache(std::numeric_limits<size_t>::max()) {
     _update_mem_tracker = mem_tracker;
@@ -45,6 +49,10 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
 
     _index_cache.set_mem_tracker(_index_cache_mem_tracker.get());
     _update_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
+
+    int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
+    int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
+    _index_cache.set_capacity(byte_limits * update_mem_percent);
 }
 
 UpdateManager::~UpdateManager() {
@@ -82,6 +90,11 @@ Status UpdateManager::get_del_vec_in_meta(KVStore* meta, const TabletSegmentId& 
 Status UpdateManager::set_del_vec_in_meta(KVStore* meta, const TabletSegmentId& tsid, const DelVector& delvec) {
     // TODO: support batch transaction with tablet/rowset meta save
     return TabletMetaManager::set_del_vector(meta, tsid.tablet_id, tsid.segment_id, delvec);
+}
+
+Status UpdateManager::get_delta_column_group(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
+                                             DeltaColumnGroupList* dcgs) {
+    return TabletMetaManager::get_delta_column_group(meta, tsid.tablet_id, tsid.segment_id, version, dcgs);
 }
 
 Status UpdateManager::get_del_vec(KVStore* meta, const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec) {
@@ -176,6 +189,24 @@ void UpdateManager::expire_cache() {
 
         _last_clear_expired_cache_millis = MonotonicMillis();
     }
+}
+
+void UpdateManager::evict_cache(int64_t memory_urgent_level, int64_t memory_high_level) {
+    int64_t capacity = _index_cache.capacity();
+    int64_t size = _index_cache.size();
+    int64_t memory_urgent = capacity * memory_urgent_level / 100;
+    int64_t memory_high = capacity * memory_high_level / 100;
+
+    if (size > memory_urgent) {
+        _index_cache.try_evict(memory_urgent);
+    }
+
+    size = _index_cache.size();
+    if (size > memory_high) {
+        int64_t target_memory = std::max((size * 9 / 10), memory_high);
+        _index_cache.try_evict(target_memory);
+    }
+    return;
 }
 
 string UpdateManager::memory_stats() {

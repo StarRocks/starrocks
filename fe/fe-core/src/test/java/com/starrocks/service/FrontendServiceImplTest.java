@@ -14,7 +14,7 @@
 
 package com.starrocks.service;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.Partition;
@@ -158,6 +158,19 @@ public class FrontendServiceImplTest {
                         "PROPERTIES(\n" +
                         "    \"replication_num\" = \"1\"\n" +
                         ");")
+                .withTable("CREATE TABLE site_access_border (\n" +
+                        "    event_day DATETIME NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('day', event_day)\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");")
                 .withTable("CREATE TABLE site_access_hour (\n" +
                         "    event_day DATETIME,\n" +
                         "    site_id INT DEFAULT '10',\n" +
@@ -180,7 +193,7 @@ public class FrontendServiceImplTest {
                         ")\n" +
                         "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
                         "PARTITION BY date_trunc('day', event_day) (\n" +
-                        "START (\"2015-06-01\") END (\"2022-12-01\") EVERY (INTERVAL 1 month)\n" +
+                        "START (\"2020-06-01\") END (\"2022-06-05\") EVERY (INTERVAL 1 day)\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
                         "PROPERTIES (\n" +
@@ -208,9 +221,7 @@ public class FrontendServiceImplTest {
                         "    pv BIGINT DEFAULT '0'\n" +
                         ")\n" +
                         "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
-                        "PARTITION BY time_slice(event_day, interval 5 day) (\n" +
-                        "START (\"2015-01-01\") END (\"2022-01-01\") EVERY (INTERVAL 1 year)\n" +
-                        ")\n" +
+                        "PARTITION BY time_slice(event_day, interval 5 day)\n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
                         "PROPERTIES(\"replication_num\" = \"1\");");
     }
@@ -333,6 +344,57 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testCreatePartitionApiBorder() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_border");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("NULL");
+        values.add("0000-01-01");
+        values.add("9999-12-31");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(TStatusCode.OK, partition.getStatus().getStatus_code());
+        Partition p00000101 = table.getPartition("p00000101");
+        Assert.assertNotNull(p00000101);
+        Partition p99991231 = table.getPartition("p99991231");
+        Assert.assertNotNull(p99991231);
+        partition = impl.createPartition(request);
+        Assert.assertEquals(2, partition.partitions.size());
+    }
+
+    @Test
+    public void testAutomaticPartitionLimitExceed() throws TException {
+        Config.max_automatic_partition_number = 1;
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_slice");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1991-04-24");
+        values.add("1991-04-25");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.RUNTIME_ERROR);
+        Assert.assertTrue(partition.getStatus().getError_msgs().get(0).contains("max_automatic_partition_number"));
+        Config.max_automatic_partition_number = 4096;
+    }
+
+
+    @Test
     public void testCreatePartitionApiHour() throws TException {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_hour");
@@ -413,5 +475,48 @@ public class FrontendServiceImplTest {
                         "PARTITION BY date_trunc('hour', event_day)\n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
                         "PROPERTIES(\"replication_num\" = \"1\");");
+    }
+
+    @Test(expected = AnalysisException.class)
+    public void testUnsupportedAutomaticTableGranularityDoesNotMatch() throws Exception {
+        starRocksAssert.withDatabase("test2").useDatabase("test2")
+                .withTable("CREATE TABLE site_access_granularity_does_not_match(\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "    START (\"2023-05-01\") END (\"2023-05-03\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");");
+    }
+
+    @Test(expected = AnalysisException.class)
+    public void testUnsupportedAutomaticTableGranularityDoesNotMatch2() throws Exception {
+        starRocksAssert.withDatabase("test2").useDatabase("test2")
+                .withTable("CREATE TABLE site_access_granularity_does_not_match2(\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "   START (\"2022-05-01\") END (\"2022-05-03\") EVERY (INTERVAL 1 day),\n" +
+                        "    START (\"2023-05-01\") END (\"2023-05-03\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");");
     }
 }

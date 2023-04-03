@@ -24,6 +24,7 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
 import com.starrocks.thrift.TBrokerFD;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -270,6 +271,11 @@ public class HdfsFsManager {
     private static final String OBS_SCHEME = "obs";
     private static final String TOS_SCHEME = "tos";
 
+    private static final String ABFS_SCHEMA = "abfs";
+    private static final String ABFSS_SCHEMA = "abfss";
+    private static final String ADL_SCHEMA = "adl";
+    private static final String WASB_SCHEMA = "wasb";
+    private static final String WASBS_SCHEMA = "wasbs";
     private static final String USER_NAME_KEY = "username";
     private static final String PASSWORD_KEY = "password";
     // arguments for ha hdfs
@@ -325,6 +331,11 @@ public class HdfsFsManager {
     public static final String FS_OBS_IMPL_DISABLE_CACHE = "fs.obs.impl.disable.cache";
     public static final String FS_OBS_CONNECTION_SSL_ENABLED = "fs.obs.connection.ssl.enabled";
     public static final String FS_OBS_IMPL = "fs.obs.impl";
+    public static final String FS_ABFS_IMPL_DISABLE_CACHE = "fs.abfs.impl.disable.cache";
+    public static final String FS_ABFSS_IMPL_DISABLE_CACHE = "fs.abfss.impl.disable.cache";
+    public static final String FS_ADL_IMPL_DISABLE_CACHE = "fs.adl.impl.disable.cache";
+    public static final String FS_WASB_IMPL_DISABLE_CACHE = "fs.wasb.impl.disable.cache";
+    public static final String FS_WASBS_IMPL_DISABLE_CACHE = "fs.wasbs.impl.disable.cache";
 
     // arguments for tos
     public static final String FS_TOS_ACCESS_KEY = "fs.tos.access.key";
@@ -389,25 +400,42 @@ public class HdfsFsManager {
             throw new UserException("invalid path. scheme is null");
         }
         HdfsFs brokerFileSystem = null;
-        if (scheme.equals(HDFS_SCHEME) || scheme.equals(VIEWFS_SCHEME)) {
-            brokerFileSystem = getDistributedFileSystem(scheme, path, loadProperties, tProperties);
-        } else if (scheme.equals(S3A_SCHEME)) {
-            brokerFileSystem = getS3AFileSystem(path, loadProperties, tProperties);
-        } else if (scheme.equals(OSS_SCHEME)) {
-            brokerFileSystem = getOSSFileSystem(path, loadProperties, tProperties);
-        } else if (scheme.equals(COS_SCHEME)) {
-            brokerFileSystem = getCOSFileSystem(path, loadProperties, tProperties);
-        } else if (scheme.equals(KS3_SCHEME)) {
-            brokerFileSystem = getKS3FileSystem(path, loadProperties, tProperties);
-        } else if (scheme.equals(OBS_SCHEME)) {
-            brokerFileSystem = getOBSFileSystem(path, loadProperties, tProperties);
-        } else if (scheme.equals(TOS_SCHEME)) {
-            brokerFileSystem = getTOSFileSystem(path, loadProperties, tProperties);
-        } else {
-            // If all above match fails, then we will read the settings from hdfs-site.xml, core-site.xml of FE,
-            // and try to create a universal file system. The reason why we can do this is because hadoop/s3 
-            // SDK is compatible with nearly all file/object storage system
-            brokerFileSystem = getUniversalFileSystem(path, loadProperties, tProperties);
+        switch (scheme) {
+            case HDFS_SCHEME:
+            case VIEWFS_SCHEME:
+                brokerFileSystem = getDistributedFileSystem(scheme, path, loadProperties, tProperties);
+                break;
+            case S3A_SCHEME:
+                brokerFileSystem = getS3AFileSystem(path, loadProperties, tProperties);
+                break;
+            case OSS_SCHEME:
+                brokerFileSystem = getOSSFileSystem(path, loadProperties, tProperties);
+                break;
+            case COS_SCHEME:
+                brokerFileSystem = getCOSFileSystem(path, loadProperties, tProperties);
+                break;
+            case KS3_SCHEME:
+                brokerFileSystem = getKS3FileSystem(path, loadProperties, tProperties);
+                break;
+            case OBS_SCHEME:
+                brokerFileSystem = getOBSFileSystem(path, loadProperties, tProperties);
+                break;
+            case TOS_SCHEME:
+                brokerFileSystem = getTOSFileSystem(path, loadProperties, tProperties);
+                break;
+            case ABFS_SCHEMA:
+            case ABFSS_SCHEMA:
+            case ADL_SCHEMA:
+            case WASB_SCHEMA:
+            case WASBS_SCHEMA:
+                brokerFileSystem = getAzureFileSystem(path, loadProperties, tProperties);
+                break;
+            default:
+                // If all above match fails, then we will read the settings from hdfs-site.xml, core-site.xml of FE,
+                // and try to create a universal file system. The reason why we can do this is because hadoop/s3
+                // SDK is compatible with nearly all file/object storage system
+                brokerFileSystem = getUniversalFileSystem(path, loadProperties, tProperties);
+                break;
         }
         return brokerFileSystem;
     }
@@ -564,7 +592,7 @@ public class HdfsFsManager {
                 CloudConfigurationFactory.tryBuildForStorage(loadProperties);
         if (cloudConfiguration != null) {
             String host = S3A_SCHEME + "://" + pathUri.getUri().getHost();
-            fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.toString());
+            fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.getCredentialString());
         } else {
             // endpoint is the server host, pathUri.getUri().getHost() is the bucket
             // we should use these two params as the host identity, because FileSystem will
@@ -624,6 +652,76 @@ public class HdfsFsManager {
                             TObjectStoreType.S3);
                     tryWriteCloudCredentialToProperties(cloudConfiguration, tProperties);
                 }
+            }
+            return fileSystem;
+        } catch (Exception e) {
+            LOG.error("errors while connect to " + path, e);
+            throw new UserException(e);
+        } finally {
+            fileSystem.getLock().unlock();
+        }
+    }
+
+    /**
+     * Support for Azure Storage File System
+     * Support abfs://, abfs://, adl://, wasb://, wasbs://
+     *
+     * @param path
+     * @param loadProperties
+     * @return
+     * @throws UserException
+     * @throws URISyntaxException
+     * @throws Exception
+     */
+    public HdfsFs getAzureFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
+        WildcardURI pathUri = new WildcardURI(path);
+
+        // Put path into fileProperties, so that we can get storage account in AzureStorageCloudConfiguration
+        loadProperties.put(AzureCloudConfigurationFactory.AZURE_PATH_KEY, path);
+
+        CloudConfiguration cloudConfiguration =
+                CloudConfigurationFactory.tryBuildForStorage(loadProperties);
+
+        if (cloudConfiguration == null) {
+            throw new UserException("Illegal azure load properties");
+        }
+
+        String host = pathUri.getUri().getScheme() + "://" + pathUri.getUri().getHost();
+        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.getCredentialString());
+
+        cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
+        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
+        if (fileSystem == null) {
+            // it means it is removed concurrently by checker thread
+            return null;
+        }
+        fileSystem.getLock().lock();
+        try {
+            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
+                // this means the file system is closed by file system checker thread
+                // it is a corner case
+                return null;
+            }
+            if (fileSystem.getDFSFileSystem() == null) {
+                LOG.info("could not find file system for path " + path + " create a new one");
+                // create a new filesystem
+                Configuration conf = new ConfigurationWrap();
+                cloudConfiguration.applyToConfiguration(conf);
+
+                // Always disable hadoop's cache for azure storage
+                conf.set(FS_ABFS_IMPL_DISABLE_CACHE, "true");
+                conf.set(FS_ABFSS_IMPL_DISABLE_CACHE, "true");
+                conf.set(FS_ADL_IMPL_DISABLE_CACHE, "true");
+                conf.set(FS_WASB_IMPL_DISABLE_CACHE, "true");
+                conf.set(FS_WASBS_IMPL_DISABLE_CACHE, "true");
+
+                FileSystem azureFileSystem = FileSystem.get(pathUri.getUri(), conf);
+                fileSystem.setFileSystem(azureFileSystem);
+                fileSystem.setConfiguration(conf);
+            }
+            if (tProperties != null) {
+                tryWriteCloudCredentialToProperties(cloudConfiguration, tProperties);
             }
             return fileSystem;
         } catch (Exception e) {
@@ -1105,7 +1203,6 @@ public class HdfsFsManager {
     public void getTProperties(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
         getFileSystem(path, loadProperties, tProperties);
-        return;
     }
 
     public List<TBrokerFileStatus> listPath(String path, boolean fileNameOnly, Map<String, String> loadProperties)

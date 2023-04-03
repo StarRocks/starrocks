@@ -55,6 +55,7 @@ Variables that can be set both globally or partially effective include:
 * use_compute_nodes
 * vectorized_engine_enable
 * wait_timeout
+* sql_dialect
 
 Variables that can only be set globally effective include:
 
@@ -145,7 +146,7 @@ SELECT /*+ SET_VAR
 
 * enable_insert_strict
 
-  Used to enable the strict mode when importing data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Load data using INSERT](../loading/InsertInto.md)".
+  Used to enable the strict mode when importing data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md)".
 
 * enable_spilling
 
@@ -236,10 +237,6 @@ SELECT /*+ SET_VAR
 * enable_query_cache (2.5 and later)
 
   Specifies whether to enable the Query Cache feature. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. When this feature is enabled, it works only for queries that meet the conditions specified in the application scenarios of [Query Cache](../using_starrocks/query_cache.md#application-scenarios).
-
-* query_cache_force_populate (2.5 and later)
-
-  Specifies whether to ignore the computation results saved in the query cache. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. If this feature is enabled, StarRocks ignores the cached computation results when it performs computations required by queries. In this case, StarRocks once again reads data from the source, computes the data, and updates the computation results saved in the query cache. In this sense, the `query_cache_force_populate=true` setting resembles cache misses.
 
 * query_cache_entry_max_bytes (2.5 and later)
 
@@ -475,3 +472,13 @@ SELECT /*+ SET_VAR
   The maximum number of rows allowed for the Hash table based on which Bloom filter Local RF is generated. Local RF will not be generated if this value is exceeded. This variable prevents the generation of an excessively long Local RF.
 
   The value is an integer. Default value: 1024000.
+
+* sql_dialect
+
+  The SQL dialect that is used. For example, you can run the `set sql_dialect = 'trino';` command to set the SQL dialect to Trino, so you can use Trino-specific SQL syntax and functions in your queries.
+
+* io_tasks_per_scan_operator
+
+  The number of io tasks issued by a scan operator simutaneously. Increase this value when accessing remote storage system like HDFS/S3 if latency is high. However the higher this value, the more memory consumption.
+
+  The value is an interger. Default value: 4.

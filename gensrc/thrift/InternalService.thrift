@@ -47,8 +47,10 @@ include "RuntimeProfile.thrift"
 include "WorkGroup.thrift"
 include "RuntimeFilter.thrift"
 
-// constants for TPlanNodeId
-const i32 INVALID_PLAN_NODE_ID = -1
+// constants for function version
+enum TFunctionVersion {
+    RUNTIME_FILTER_SERIALIZE_VERSION_2 = 6,
+}
 
 enum TQueryType {
     SELECT,
@@ -178,7 +180,8 @@ struct TQueryOptions {
   74: optional double spill_mem_limit_threshold;
   75: optional i64 spill_operator_min_bytes;
   76: optional TSpillMode spill_mode;
-
+  77: optional i64 rpc_http_min_size;
+  78: optional i32 io_tasks_per_scan_operator = 4;
 }
 
 

@@ -20,7 +20,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -70,9 +70,9 @@ public class ExternalDbTablePrivTest {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
-        PrivilegeManager privilegeManager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager authorizationManager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager();
         starRocksAssert.getCtx().setRemoteIP("localhost");
-        privilegeManager.initBuiltinRolesAndUsers();
+        authorizationManager.initBuiltinRolesAndUsers();
         ctxToRoot();
         createUsers();
         ConnectorPlanTestBase.mockHiveCatalog(starRocksAssert.getCtx());
@@ -246,4 +246,13 @@ public class ExternalDbTablePrivTest {
         Assert.assertTrue(executor.execute().getResultRows().isEmpty());
     }
 
+    @Test
+    public void testPrivOnExternalCatalog() throws Exception {
+        // set catalog xxx: check any action on or in catalog
+        verifyGrantRevoke(
+                "set catalog hive0",
+                "grant select on tpch.region to test",
+                "revoke select on tpch.region from test",
+                "Access denied for user 'test' to catalog 'hive0'");
+    }
 }

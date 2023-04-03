@@ -15,7 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 
-cmake_minimum_required(VERSION 3.5.1)
+cmake_minimum_required(VERSION 3.11.1)
 
 # set CMAKE_C_COMPILER, this must set before project command
 if (DEFINED ENV{CC} AND DEFINED ENV{CXX})
@@ -144,9 +144,9 @@ set(BOOST_ROOT ${THIRDPARTY_DIR})
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 
 if (NOT APPLE)
-    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex program_options filesystem context)
+    find_package(Boost 1.80.0 REQUIRED COMPONENTS thread regex program_options filesystem context)
 else()
-    find_package(Boost 1.75.0 COMPONENTS thread regex program_options filesystem context)
+    find_package(Boost 1.80.0 COMPONENTS thread regex program_options filesystem context)
 endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
@@ -161,7 +161,7 @@ set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/
 add_library(glog STATIC IMPORTED)
 set_target_properties(glog PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libglog.a)
 
-add_library(re2 STATIC IMPORTED)
+add_library(re2 STATIC IMPORTED GLOBAL)
 set_target_properties(re2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libre2.a)
 
 add_library(pprof STATIC IMPORTED)
@@ -172,7 +172,7 @@ add_library(tcmalloc STATIC IMPORTED)
 set_target_properties(tcmalloc PROPERTIES IMPORTED_LOCATION
     ${GPERFTOOLS_HOME}/lib/libtcmalloc.a)
 
-add_library(protobuf STATIC IMPORTED)
+add_library(protobuf STATIC IMPORTED GLOBAL)
 set_target_properties(protobuf PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libprotobuf.a)
 
 add_library(protoc STATIC IMPORTED)
@@ -376,41 +376,44 @@ if (${WITH_BLOCK_CACHE} STREQUAL "ON")
 endif()
 
 if ("${USE_STAROS}" STREQUAL "ON")
-     # starrocks project has its imported libprotobuf.a and libre2.a
-     # add following ALIAS so grpc can find the correct dependent libraries
-     add_library(protobuf::libprotobuf ALIAS protobuf)
-     add_library(re2::re2 ALIAS re2)
+    # explicitly import ZLIB::ZLIB which is required by starlet thirdparty
+    add_library(ZLIB::ZLIB STATIC IMPORTED)
+    set_target_properties(ZLIB::ZLIB PROPERTIES IMPORTED_LOCATION ${LIBZ})
+    # starrocks project has its imported libprotobuf.a and libre2.a
+    # add following ALIAS so grpc can find the correct dependent libraries
+    add_library(protobuf::libprotobuf ALIAS protobuf)
+    add_library(re2::re2 ALIAS re2)
 
-     find_package(gRPC CONFIG REQUIRED)
-     message(STATUS "Using gRPC ${gRPC_VERSION}")
-     get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
-     include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
+    find_package(gRPC CONFIG REQUIRED)
+    message(STATUS "Using gRPC ${gRPC_VERSION}")
+    get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
+    include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 
-     find_package(starlet CONFIG REQUIRED)
-     message(STATUS "Using starlet ${starlet_VERSION}")
-     message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
-     message(STATUS "starlet lib dir: ${STARLET_LIBS}")
-     include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
-     add_library(starlet STATIC IMPORTED)
-     set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
+    find_package(starlet CONFIG REQUIRED)
+    message(STATUS "Using starlet ${starlet_VERSION}")
+    message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
+    message(STATUS "starlet lib dir: ${STARLET_LIBS}")
+    include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
+    add_library(starlet STATIC IMPORTED)
+    set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
 
-     find_package (prometheus-cpp CONFIG REQUIRED)
-     get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
-     message(STATUS "Using prometheus-cpp")
-     message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
-     include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
+    find_package (prometheus-cpp CONFIG REQUIRED)
+    get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
+    message(STATUS "Using prometheus-cpp")
+    message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
+    include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
 
-     add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
-     set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
+    add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
+    set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
 
-     set(STARROCKS_DEPENDENCIES
-        ${STARROCKS_DEPENDENCIES}
-        starlet
-        gRPC::grpc++_reflection
-        gRPC::grpc++
-        starlet_fslib_all
-        prometheus-cpp::core
-        )
+    set(STARROCKS_DEPENDENCIES
+       ${STARROCKS_DEPENDENCIES}
+       starlet
+       gRPC::grpc++_reflection
+       gRPC::grpc++
+       starlet_fslib_all
+       prometheus-cpp::core
+       )
 endif()
 
 # Check if functions are supported in this platform. All flags will generated
@@ -611,6 +614,7 @@ set(STARROCKS_LINK_LIBS
     Types
     Udf
     Util
+    Script
     StarRocksGen
     Webserver
     TestUtil
@@ -858,6 +862,7 @@ add_subdirectory(${SRC_DIR}/udf)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
+add_subdirectory(${SRC_DIR}/script)
 
 if (WITH_BENCH STREQUAL "ON")
      message(STATUS "Build binary with bench")

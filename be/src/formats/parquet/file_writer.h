@@ -85,8 +85,6 @@ private:
                                                                      ::parquet::Repetition::type rep_type);
 };
 
-
-
 class FileWriterBase {
 public:
     FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,

@@ -26,6 +26,7 @@ add_library(Storage STATIC
     decimal_type_info.cpp
     delete_handler.cpp
     del_vector.cpp
+    delta_column_group.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
     segment_flush_executor.cpp
@@ -42,6 +43,7 @@ add_library(Storage STATIC
     primary_key_encoder.cpp
     protobuf_file.cpp
     rowset_update_state.cpp
+    rowset_column_update_state.cpp
     update_compaction_state.cpp
     version_graph.cpp
     storage_engine.cpp

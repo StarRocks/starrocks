@@ -27,18 +27,33 @@
 namespace starrocks {
 
 // NOTE: The bucket must be created before running this test.
-constexpr static const char* kBucketName = "starrocks-fs-s3-unit-test";
+constexpr static const char* kBucketName = "starrocks-fs-s3-ut";
 
 class S3FileSystemTest : public testing::Test {
 public:
     S3FileSystemTest() = default;
     ~S3FileSystemTest() override = default;
-    void SetUp() override { Aws::InitAPI(_options); }
-    void TearDown() override { Aws::ShutdownAPI(_options); }
 
-    std::string S3Path(std::string_view path) {
-        return fmt::format("s3://{}.{}{}", kBucketName, config::object_storage_endpoint, path);
+    static void SetUpTestCase() {
+        CHECK(!config::object_storage_access_key_id.empty()) << "Need set object_storage_access_key_id in be_test.conf";
+        CHECK(!config::object_storage_secret_access_key.empty())
+                << "Need set object_storage_secret_access_key in be_test.conf";
+        CHECK(!config::object_storage_endpoint.empty()) << "Need set object_storage_endpoint in be_test.conf";
+
+        Aws::InitAPI(_s_options);
+
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("s3://"));
+        (void)fs->delete_dir_recursive(S3Path("/"));
     }
+
+    static void TearDownTestCase() {
+        ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("s3://"));
+        (void)fs->delete_dir_recursive(S3Path("/"));
+
+        Aws::ShutdownAPI(_s_options);
+    }
+
+    static std::string S3Path(std::string_view path) { return fmt::format("s3://{}{}", kBucketName, path); }
 
     void CheckIsDirectory(FileSystem* fs, const std::string& dir_name, bool expected_success,
                           bool expected_is_dir = true) {
@@ -50,11 +65,11 @@ public:
     }
 
 private:
-    Aws::SDKOptions _options;
+    static inline Aws::SDKOptions _s_options;
 };
 
 TEST_F(S3FileSystemTest, test_write_and_read) {
-    auto uri = fmt::format("s3://{}.{}/dir/test-object.png", kBucketName, config::object_storage_endpoint);
+    auto uri = fmt::format("s3://{}/dir/test-object.png", kBucketName);
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString(uri));
     ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(uri));
     EXPECT_OK(wf->append("hello"));
@@ -77,6 +92,7 @@ TEST_F(S3FileSystemTest, test_write_and_read) {
 }
 
 TEST_F(S3FileSystemTest, test_directory) {
+    auto now = ::time(nullptr);
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("s3://"));
     bool created = false;
 
@@ -151,7 +167,7 @@ TEST_F(S3FileSystemTest, test_directory) {
     //
     {
         ASSIGN_OR_ABORT(auto of, fs->new_writable_file(S3Path("/dirname2/1.dat")));
-        EXPECT_OK(of->append("hello"));
+        EXPECT_OK(of->append("starrocks"));
         EXPECT_OK(of->close());
         CheckIsDirectory(fs.get(), S3Path("/dirname2/1.dat"), true, false);
     }
@@ -167,6 +183,33 @@ TEST_F(S3FileSystemTest, test_directory) {
     //
     EXPECT_OK(fs->create_dir(S3Path("/dirname2/subdir0")));
     CheckIsDirectory(fs.get(), S3Path("/dirname2/subdir0"), true, true);
+
+    EXPECT_OK(fs->iterate_dir2(S3Path("/dirname2/"), [&](DirEntry entry) {
+        auto name = entry.name;
+        if (name == "0.dat") {
+            CHECK(entry.is_dir.has_value());
+            CHECK(!entry.is_dir.value());
+            CHECK(entry.size.has_value());
+            CHECK_EQ(/* length of "hello" = */ 5, entry.size.value());
+            CHECK(entry.mtime.has_value());
+            CHECK_GE(entry.mtime.value(), now);
+        } else if (name == "1.dat") {
+            CHECK(entry.is_dir.has_value());
+            CHECK(!entry.is_dir.value());
+            CHECK(entry.size.has_value());
+            CHECK_EQ(/* length of "starrocks" = */ 9, entry.size.value());
+            CHECK(entry.mtime.has_value());
+            CHECK_GE(entry.mtime.value(), now);
+        } else if (name == "subdir0") {
+            CHECK(entry.is_dir.has_value());
+            CHECK(entry.is_dir.value());
+            CHECK(!entry.size.has_value());
+            CHECK(!entry.mtime.has_value());
+        } else {
+            CHECK(false) << "Unexpected file " << name;
+        }
+        return true;
+    }));
 
     std::vector<std::string> entries;
     auto cb = [&](std::string_view name) -> bool {

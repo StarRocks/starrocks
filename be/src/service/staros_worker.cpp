@@ -23,12 +23,21 @@
 #include "common/logging.h"
 #include "file_store.pb.h"
 #include "fmt/format.h"
+#include "gflags/gflags.h"
 #include "gutil/strings/fastmem.h"
 #include "util/debug_util.h"
 #include "util/lru_cache.h"
 #include "util/sha.h"
 
+// cachemgr thread pool size
+DECLARE_int32(cachemgr_threadpool_size);
+// buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
+DECLARE_int32(fs_stream_buffer_size_bytes);
+
 namespace starrocks {
+
+std::shared_ptr<StarOSWorker> g_worker;
+std::unique_ptr<staros::starlet::Starlet> g_starlet;
 
 namespace fslib = staros::starlet::fslib;
 
@@ -129,7 +138,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
 absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
                                                                                             const Configuration& conf) {
     // get_shard_info call will probably trigger an add_shard() call to worker itself. Be sure there is no dead lock.
-    auto info_or = g_worker->get_shard_info(id);
+    auto info_or = g_starlet->get_shard_info(id);
     if (!info_or.ok()) {
         return info_or.status();
     }
@@ -282,13 +291,14 @@ Status to_status(absl::Status absl_status) {
     }
 }
 
-std::shared_ptr<StarOSWorker> g_worker;
-std::unique_ptr<staros::starlet::Starlet> g_starlet;
-
 void init_staros_worker() {
     if (g_starlet.get() != nullptr) {
         return;
     }
+
+    FLAGS_cachemgr_threadpool_size = config::starlet_cache_thread_num;
+    FLAGS_fs_stream_buffer_size_bytes = config::starlet_fs_stream_buffer_size_bytes;
+
     staros::starlet::StarletConfig starlet_config;
     starlet_config.rpc_port = config::starlet_port;
     g_worker = std::make_shared<StarOSWorker>();

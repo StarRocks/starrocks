@@ -34,7 +34,8 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.analysis.ColumnDef.DefaultValueDef;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.PrimitiveType;

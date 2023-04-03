@@ -49,7 +49,7 @@ public class CatalogUtils {
 
     // check table type is OLAP
     public static void checkNativeTable(Database db, Table table) throws DdlException {
-        if (!table.isNativeTable()) {
+        if (!table.isNativeTableOrMaterializedView()) {
             throw new DdlException("Table[" + table.getName() + "] is not OLAP table or LAKE table");
         }
     }
@@ -91,7 +91,7 @@ public class CatalogUtils {
             if (table == null) {
                 return;
             }
-            if (table.isLakeTable()) {
+            if (table.isCloudNativeTable()) {
                 throw new AnalysisException(PARSER_ERROR_MSG.unsupportedOpWithInfo("lake table " + db + "." + tableName));
             }
         } finally {
@@ -226,15 +226,16 @@ public class CatalogUtils {
         // When POC, the backends is not greater than three most of the time.
         // The bucketNum will be given a small multiplier factor for small backends.
         int bucketNum = 0;
-        if (backendNum <= 3) {
+        if (backendNum <= 12) {
             bucketNum = 2 * backendNum;
-        } else if (backendNum <= 6) {
-            bucketNum = backendNum;
-        } else if (backendNum <= 12) {
-            bucketNum = 12;
+        } else if (backendNum <= 24) {
+            bucketNum = (int) (1.5 * backendNum);
+        } else if (backendNum <= 36) {
+            bucketNum = 36;
         } else {
             bucketNum = Math.min(backendNum, 48);
         }
         return bucketNum;
+
     }
 }

@@ -28,6 +28,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -112,7 +113,7 @@ public:
 
     virtual void setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker);
 
-    void set_spiller(std::shared_ptr<Spiller> spiller) { _spiller = std::move(spiller); }
+    void set_spiller(std::shared_ptr<spill::Spiller> spiller) { _spiller = std::move(spiller); }
 
     void set_spill_channel(SpillProcessChannelPtr channel) { _spill_channel = std::move(channel); }
     const SpillProcessChannelPtr& spill_channel() { return _spill_channel; }
@@ -121,7 +122,9 @@ public:
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
-    virtual Status done(RuntimeState* state) = 0;
+    virtual Status do_done(RuntimeState* state) = 0;
+
+    Status done(RuntimeState* state);
 
     // get_next only works after done().
     virtual Status get_next(ChunkPtr* chunk, bool* eos) = 0;
@@ -138,10 +141,10 @@ public:
 
     virtual bool has_pending_data() { return false; }
 
-    const std::shared_ptr<Spiller>& spiller() const { return _spiller; }
+    const std::shared_ptr<spill::Spiller>& spiller() const { return _spiller; }
 
     size_t revocable_mem_bytes() const { return _revocable_mem_bytes; }
-    void set_spill_stragety(SpillStrategy stragety) { _spill_strategy = stragety; }
+    void set_spill_stragety(spill::SpillStrategy stragety) { _spill_strategy = stragety; }
 
     virtual void cancel() {}
 
@@ -164,8 +167,8 @@ protected:
     RuntimeProfile::Counter* _output_timer = nullptr;
 
     size_t _revocable_mem_bytes = 0;
-    SpillStrategy _spill_strategy = SpillStrategy::NO_SPILL;
-    std::shared_ptr<Spiller> _spiller;
+    spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
+    std::shared_ptr<spill::Spiller> _spiller;
     SpillProcessChannelPtr _spill_channel;
 };
 

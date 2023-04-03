@@ -40,7 +40,7 @@ public class LogicalTreeAnchorOperator extends LogicalOperator {
 
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
-        return RowOutputInfo.createEmptyDescriptor();
+        return RowOutputInfo.createEmptyInfo();
     }
 
     @Override

@@ -273,7 +273,7 @@ public class OptOlapPartitionPruner {
                 columnToNullPartitions, scalarOperatorList, specifyPartitionIds);
         try {
             List<Long> prune = partitionPruner.prune();
-            if (prune == null && isTemporaryPartitionPrune)  {
+            if (prune == null && isTemporaryPartitionPrune) {
                 return partitionIds;
             } else {
                 return prune;
@@ -317,6 +317,10 @@ public class OptOlapPartitionPruner {
         } else if (!partitionInfo.isRangePartition()) {
             probeResult = false;
         } else if (((RangePartitionInfo) partitionInfo).getPartitionColumns().size() > 1) {
+            probeResult = false;
+        } else if (((RangePartitionInfo) partitionInfo).getIdToRange(true)
+                .containsKey(candidatePartitions.get(0))) {
+            // it's a temp partition list, no need to do the further prune
             probeResult = false;
         } else if (olapScanOperator.getPredicate() == null) {
             probeResult = false;

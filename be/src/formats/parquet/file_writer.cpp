@@ -865,7 +865,6 @@ Status FileWriterBase::_add_decimal_column_chunk(const TypeDescriptor& type_desc
     return Status::OK();
 }
 
-
 // The current row group written bytes = total_bytes_written + total_compressed_bytes + estimated_bytes.
 // total_bytes_written: total bytes written by the page writer
 // total_compressed_types: total bytes still compressed but not written

@@ -18,7 +18,6 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -41,6 +40,7 @@ public class RangePartitionDesc extends PartitionDesc {
     private final List<String> partitionColNames;
     private final List<SingleRangePartitionDesc> singleRangePartitionDescs;
     private final List<MultiRangePartitionDesc> multiRangePartitionDescs;
+    private boolean isAutoPartitionTable = false;
 
     public RangePartitionDesc(List<String> partitionColNames, List<PartitionDesc> partitionDescs) {
         this(partitionColNames, partitionDescs, NodePosition.ZERO);
@@ -87,7 +87,7 @@ public class RangePartitionDesc extends PartitionDesc {
 
             boolean found = false;
             for (ColumnDef columnDef : columnDefs) {
-                if (columnDef.getName().equals(partitionCol)) {
+                if (columnDef.getName().equalsIgnoreCase(partitionCol)) {
                     if (!columnDef.isKey() && columnDef.getAggregateType() != AggregateType.NONE) {
                         throw new AnalysisException("The partition column could not be aggregated column"
                                 + " and unique table's partition column must be key column");
@@ -121,8 +121,12 @@ public class RangePartitionDesc extends PartitionDesc {
                     throw new AnalysisException("Batch build partition for hour interval only supports " +
                             "partition column as DATETIME type");
                 }
-                this.singleRangePartitionDescs.addAll(multiRangePartitionDesc.
-                        convertToSingle(firstPartitionColumn.getType(), otherProperties));
+                PartitionConvertContext context = new PartitionConvertContext();
+                context.setAutoPartitionTable(isAutoPartitionTable);
+                context.setFirstPartitionColumnType(firstPartitionColumn.getType());
+                context.setProperties(otherProperties);
+
+                this.singleRangePartitionDescs.addAll(multiRangePartitionDesc.convertToSingle(context));
             }
         }
 
@@ -146,6 +150,10 @@ public class RangePartitionDesc extends PartitionDesc {
             }
             desc.analyze(columnDefs.size(), givenProperties);
         }
+    }
+
+    public void setAutoPartitionTable(boolean autoPartitionTable) {
+        this.isAutoPartitionTable = autoPartitionTable;
     }
 
     @Override

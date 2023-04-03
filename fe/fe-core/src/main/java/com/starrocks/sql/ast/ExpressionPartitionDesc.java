@@ -17,7 +17,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
@@ -86,6 +85,7 @@ public class ExpressionPartitionDesc extends PartitionDesc {
     @Override
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> otherProperties) throws AnalysisException {
         if (rangePartitionDesc != null) {
+            rangePartitionDesc.setAutoPartitionTable(true);
             rangePartitionDesc.analyze(columnDefs, otherProperties);
         }
 

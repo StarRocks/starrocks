@@ -19,8 +19,8 @@
 #include "exprs/builtin_functions.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
+#include "types/logical_type.h"
 #include "util/timezone_hsscan.h"
-
 namespace starrocks {
 
 // TODO:
@@ -534,34 +534,39 @@ public:
      * @paramType columns: [BinaryColumn, BinaryColumn]
      * @return BigIntColumn
      */
-    DEFINE_VECTORIZED_FN(to_unix_from_datetime_with_format);
+    DEFINE_VECTORIZED_FN(to_unix_from_datetime_with_format_64);
+    DEFINE_VECTORIZED_FN(to_unix_from_datetime_with_format_32);
 
     /**
      * @param: [timestamp]
      * @paramType columns: [TimestampColumn]
      * @return BigIntColumn
      */
-    DEFINE_VECTORIZED_FN(to_unix_from_datetime);
+    DEFINE_VECTORIZED_FN(to_unix_from_datetime_64);
+    DEFINE_VECTORIZED_FN(to_unix_from_datetime_32);
 
     /**
      * @param: [date]
      * @paramType columns: [DateColumn]
      * @return BigIntColumn
      */
-    DEFINE_VECTORIZED_FN(to_unix_from_date);
+    DEFINE_VECTORIZED_FN(to_unix_from_date_64);
+    DEFINE_VECTORIZED_FN(to_unix_from_date_32);
 
     /**
      * @param: []
      * @return ConstColumn
      */
-    DEFINE_VECTORIZED_FN(to_unix_for_now);
+    DEFINE_VECTORIZED_FN(to_unix_for_now_64);
+    DEFINE_VECTORIZED_FN(to_unix_for_now_32);
 
     /**
      * @param: [timestmap]
      * @paramType columns: [IntColumn]
      * @return BinaryColumn
      */
-    DEFINE_VECTORIZED_FN(from_unix_to_datetime);
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_64);
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_32);
 
     // from_unix_datetime with format's auxiliary method
     static Status from_unix_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -573,7 +578,8 @@ public:
      * @paramType columns: [IntColumn, BinaryColumn]
      * @return BinaryColumn
      */
-    DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format);
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_64);
+    DEFINE_VECTORIZED_FN(from_unix_to_datetime_with_format_32);
 
     /**
      * return number of seconds in this day.
@@ -598,17 +604,31 @@ public:
     constexpr static const unsigned int WEEK_YEAR = 2;
     constexpr static const unsigned int WEEK_FIRST_WEEKDAY = 4;
 
+    // It's really hard to define max unix timestamp because of timezone.
+    // so this value is 253402329599(UTC 9999-12-31 23:59:59) - 24 * 3600(for all timezones)
+    constexpr static const int64_t MAX_UNIX_TIMESTAMP = 253402243199L;
+
 private:
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_to_datetime);
+
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_to_unix_from_datetime);
+
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_to_unix_from_date);
+
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_to_unix_from_datetime_with_format);
+
     // internal approach to process string content, based on any string format.
     static void str_to_date_internal(TimestampValue* ts, const Slice& fmt, const Slice& str,
                                      ColumnBuilder<TYPE_DATETIME>* result);
 
     static std::string convert_format(const Slice& format);
 
-    static StatusOr<ColumnPtr> from_unix_with_format_general(FunctionContext* context,
-                                                             const starrocks::Columns& columns);
-    static StatusOr<ColumnPtr> from_unix_with_format_const(std::string& format_content, FunctionContext* context,
-                                                           const starrocks::Columns& columns);
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format);
+    DEFINE_VECTORIZED_FN_TEMPLATE(_t_from_unix_with_format_general);
+
+    template <LogicalType TIMESTAMP_TYPE>
+    static StatusOr<ColumnPtr> _t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
+                                                              const starrocks::Columns& columns);
 
     static StatusOr<ColumnPtr> convert_tz_general(FunctionContext* context, const Columns& columns);
 

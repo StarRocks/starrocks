@@ -302,44 +302,63 @@ public class ScalarOperatorFunctions {
         return arg;
     }
 
-    @ConstantFunction(name = "unix_timestamp", argTypes = {}, returnType = INT)
+    @ConstantFunction(name = "unix_timestamp", argTypes = {}, returnType = BIGINT)
     public static ConstantOperator unixTimestampNow() {
         return unixTimestamp(now());
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = INT),
-            @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = INT)
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = BIGINT),
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = BIGINT)
     })
     public static ConstantOperator unixTimestamp(ConstantOperator arg) {
         LocalDateTime dt = arg.getDatetime();
         ZonedDateTime zdt = ZonedDateTime.of(dt, TimeUtils.getTimeZone().toZoneId());
-        if (zdt.toEpochSecond() > Integer.MAX_VALUE || zdt.toEpochSecond() < 0) {
-            return ConstantOperator.createInt(0);
+        long value = zdt.toEpochSecond();
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            value = 0;
         }
-        return ConstantOperator.createInt((int) zdt.toEpochSecond());
+        return ConstantOperator.createBigint(value);
     }
 
-    @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT}, returnType = VARCHAR),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR)
+    })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime) throws AnalysisException {
-        // if unixTime < 0, we should return null, throw a exception and let BE process
-        if (unixTime.getInt() < 0) {
-            throw new AnalysisException("unixtime should larger than zero");
+        long value = 0;
+        if (unixTime.getType().isInt()) {
+            value = unixTime.getInt();
+        } else {
+            value = unixTime.getBigint();
+        }
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
-                LocalDateTime.ofInstant(Instant.ofEpochSecond(unixTime.getInt()), TimeUtils.getTimeZone().toZoneId()));
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
         return ConstantOperator.createVarchar(dl.toString());
     }
 
-    @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR)
+    })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime, ConstantOperator fmtLiteral)
             throws AnalysisException {
-        // if unixTime < 0, we should return null, throw a exception and let BE process
-        if (unixTime.getInt() < 0) {
-            throw new AnalysisException("unixtime should larger than zero");
+        long value = 0;
+        if (unixTime.getType().isInt()) {
+            value = unixTime.getInt();
+        } else {
+            value = unixTime.getBigint();
+        }
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
-                LocalDateTime.ofInstant(Instant.ofEpochSecond(unixTime.getInt()), TimeUtils.getTimeZone().toZoneId()));
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
         return dateFormat(dl, fmtLiteral);
     }
 
@@ -347,6 +366,28 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator now() {
         ConnectContext connectContext = ConnectContext.get();
         LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime() / 1000 * 1000)
+                .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+        return ConstantOperator.createDatetime(startTime);
+    }
+
+    @ConstantFunction(name = "now", argTypes = {INT}, returnType = DATETIME)
+    public static ConstantOperator now(ConstantOperator fsp) throws AnalysisException {
+        int fspVal = fsp.getInt();
+        if (fspVal == 0) {
+            return now();
+        }
+        // Although there is a check here, it will not take effect and will be forwarded to BE.
+        if (fspVal < 0) {
+            throw new AnalysisException("precision must be greater than 0.");
+        }
+        if (fspVal > 6) {
+            throw new AnalysisException("Too-big precision " + fspVal + "specified for 'now'. Maximum is 6.");
+        }
+        // Here only the syntax is implemented for the metabase to use.
+        // If you want to achieve a precise type, you need to change the BE code
+        // and consider the transitivity of the FE expression.
+        ConnectContext connectContext = ConnectContext.get();
+        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDatetime(startTime);
     }

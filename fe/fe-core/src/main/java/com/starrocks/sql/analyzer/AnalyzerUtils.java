@@ -36,6 +36,8 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -46,10 +48,13 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.TimeUtils;
+import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.AstVisitor;
@@ -75,6 +80,7 @@ import com.starrocks.sql.parser.ParsingException;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -150,11 +156,18 @@ public class AnalyzerUtils {
             db.readLock();
             Function search = new Function(fnName, argTypes, Type.INVALID, false);
             Function fn = db.getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            if (fn != null && !PrivilegeActions.checkFunctionAction(context, fn.dbName(),
-                    fn.signatureString(), PrivilegeType.USAGE)) {
-                throw new StarRocksPlannerException(String.format("Access denied. " +
-                        "Found UDF: %s and need the USAGE privilege for FUNCTION", fn.getFunctionName()),
-                        ErrorType.USER_ERROR);
+            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                if (fn != null && !PrivilegeActions.checkFunctionAction(context, db, fn, PrivilegeType.USAGE)) {
+                    throw new StarRocksPlannerException(String.format("Access denied. " +
+                            "Found UDF: %s and need the USAGE privilege for FUNCTION", fn.getFunctionName()),
+                            ErrorType.USER_ERROR);
+                }
+            } else {
+                if (!context.getGlobalStateMgr().getAuth().checkDbPriv(context, dbName, PrivPredicate.SELECT)) {
+                    throw new StarRocksPlannerException(String.format("Access denied. " +
+                            "Found UDF: %s and need the SELECT priv for %s", fnName, dbName),
+                            ErrorType.USER_ERROR);
+                }
             }
 
             return fn;
@@ -168,7 +181,7 @@ public class AnalyzerUtils {
         Function fn = context.getGlobalStateMgr().getGlobalFunctionMgr()
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (fn != null && !PrivilegeActions.checkGlobalFunctionAction(context,
-                fn.signatureString(), PrivilegeType.USAGE)) {
+                fn, PrivilegeType.USAGE)) {
             throw new StarRocksPlannerException(String.format("Access denied. " +
                     "Found UDF: %s and need the USAGE privilege for GLOBAL FUNCTION", fn.getFunctionName()),
                     ErrorType.USER_ERROR);
@@ -406,6 +419,12 @@ public class AnalyzerUtils {
         return tables;
     }
 
+    public static Map<TableName, Table> collectAllConnectorTableAndView(StatementBase statementBase) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        new AnalyzerUtils.ConnectorTableAndViewCollector(tables).visit(statementBase);
+        return tables;
+    }
+
     private static class TableAndViewCollector extends TableCollector {
         public TableAndViewCollector(Map<TableName, Table> dbs) {
             super(dbs);
@@ -414,6 +433,36 @@ public class AnalyzerUtils {
         public Void visitView(ViewRelation node, Void context) {
             Table table = node.getView();
             tables.put(node.getResolveTableName(), table);
+            return null;
+        }
+    }
+
+    private static class ConnectorTableAndViewCollector extends TableAndViewCollector {
+        public ConnectorTableAndViewCollector(Map<TableName, Table> dbs) {
+            super(dbs);
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            Table table = node.getTable();
+            if (table == null) {
+                tables.put(node.getName(), null);
+                return null;
+            }
+            // For external tables, their db/table names are case-insensitive, need to get real names of them.
+            if (table.isHiveTable() || table.isHudiTable()) {
+                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+                TableName tableName = new TableName(hiveMetaStoreTable.getCatalogName(), hiveMetaStoreTable.getDbName(),
+                        hiveMetaStoreTable.getTableName());
+                tables.put(tableName, table);
+            } else if (table.isIcebergTable()) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                TableName tableName = new TableName(icebergTable.getCatalogName(), icebergTable.getRemoteDbName(),
+                        icebergTable.getRemoteTableName());
+                tables.put(tableName, table);
+            } else {
+                tables.put(node.getName(), table);
+            }
             return null;
         }
     }
@@ -488,7 +537,8 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            tableRelations.put(node.getName().getTbl(), node);
+            String tblName = node.getTable() != null ? node.getTable().getName() : node.getName().getTbl();
+            tableRelations.put(tblName, node);
             return null;
         }
     }
@@ -626,6 +676,9 @@ public class AnalyzerUtils {
             LocalDateTime endTime;
             String partitionName;
             try {
+                if ("NULL".equalsIgnoreCase(partitionValue)) {
+                    partitionValue = "0000-01-01";
+                }
                 beginDateTimeFormat = DateUtils.probeFormat(partitionValue);
                 beginTime = DateUtils.parseStringWithDefaultHSM(partitionValue, beginDateTimeFormat);
                 // The start date here is passed by BE through function calculation,
@@ -633,36 +686,28 @@ public class AnalyzerUtils {
                 switch (granularity.toLowerCase()) {
                     case "hour":
                         beginTime = beginTime.withMinute(0).withSecond(0).withNano(0);
-                        partitionName = partitionPrefix + beginTime.format(DateUtils.HOUR_FORMATTER);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.HOUR_FORMATTER_UNIX);
                         endTime = beginTime.plusHours(interval);
                         break;
                     case "day":
                         beginTime = beginTime.withHour(0).withMinute(0).withSecond(0).withNano(0);
-                        partitionName = partitionPrefix + beginTime.format(DateUtils.DATEKEY_FORMATTER);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.DATEKEY_FORMATTER_UNIX);
                         endTime = beginTime.plusDays(interval);
                         break;
                     case "month":
                         beginTime = beginTime.withDayOfMonth(1);
-                        partitionName = partitionPrefix + beginTime.format(DateUtils.MONTH_FORMATTER);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.MONTH_FORMATTER_UNIX);
                         endTime = beginTime.plusMonths(interval);
                         break;
                     case "year":
                         beginTime = beginTime.withDayOfYear(1);
-                        partitionName = partitionPrefix + beginTime.format(DateUtils.YEAR_FORMATTER);
+                        partitionName = partitionPrefix + beginTime.format(DateUtils.YEAR_FORMATTER_UNIX);
                         endTime = beginTime.plusYears(interval);
                         break;
                     default:
                         throw new AnalysisException("unsupported automatic partition granularity:" + granularity);
                 }
-                DateTimeFormatter outputDateFormat = DateUtils.DATE_FORMATTER;
-                if (firstPartitionColumnType == Type.DATETIME) {
-                    outputDateFormat = DateUtils.DATE_TIME_FORMATTER;
-                }
-                String lowerBound = beginTime.format(outputDateFormat);
-                String upperBound = endTime.format(outputDateFormat);
-                PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
-                        Collections.singletonList(new PartitionValue(lowerBound)),
-                        Collections.singletonList(new PartitionValue(upperBound)));
+                PartitionKeyDesc partitionKeyDesc = createPartitionKeyDesc(firstPartitionColumnType, beginTime, endTime);
                 Map<String, String> partitionProperties = Maps.newHashMap();
                 Short replicationNum = olapTable.getTableProperty().getReplicationNum();
                 partitionProperties.put("replication_num", String.valueOf(replicationNum));
@@ -670,7 +715,7 @@ public class AnalyzerUtils {
 
                 SingleRangePartitionDesc singleRangePartitionDesc =
                         new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
-
+                singleRangePartitionDesc.setSystem(true);
                 AddPartitionClause addPartitionClause =
                         new AddPartitionClause(singleRangePartitionDesc, distributionDesc,
                                 partitionProperties, false);
@@ -680,6 +725,34 @@ public class AnalyzerUtils {
             }
         }
         return result;
+    }
+
+    private static PartitionKeyDesc createPartitionKeyDesc(Type partitionType, LocalDateTime beginTime,
+                                                           LocalDateTime endTime) throws AnalysisException {
+        boolean isMaxValue;
+        DateTimeFormatter outputDateFormat;
+        if (partitionType.isDate()) {
+            outputDateFormat = DateUtils.DATE_FORMATTER_UNIX;
+            isMaxValue = endTime.isAfter(TimeUtils.MAX_DATE.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+        } else if (partitionType.isDatetime()) {
+            outputDateFormat = DateUtils.DATE_TIME_FORMATTER_UNIX;
+            isMaxValue = endTime.isAfter(TimeUtils.MAX_DATETIME.toInstant().atZone(ZoneId.systemDefault()).toLocalDateTime());
+        } else {
+            throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionType));
+        }
+        String lowerBound = beginTime.format(outputDateFormat);
+
+        PartitionValue upperPartitionValue;
+        if (isMaxValue) {
+            upperPartitionValue = PartitionValue.MAX_VALUE;
+        } else {
+            String upperBound = endTime.format(outputDateFormat);
+            upperPartitionValue = new PartitionValue(upperBound);
+        }
+
+        return new PartitionKeyDesc(
+                Collections.singletonList(new PartitionValue(lowerBound)),
+                Collections.singletonList(upperPartitionValue));
     }
 
     public static SlotRef getSlotRefFromFunctionCall(Expr expr) {

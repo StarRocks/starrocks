@@ -22,4 +22,10 @@ public interface CloudConfiguration {
     void toThrift(TCloudConfiguration tCloudConfiguration);
 
     void applyToConfiguration(Configuration configuration);
+
+    // Hadoop FileSystem has a cache itself, it used request uri as a cache key by default,
+    // so it cannot sense the CloudCredential changed.
+    // So we need to generate an identifier for different CloudCredential, and used it as cache key.
+    // getCredentialString() Method just like toString()
+    String getCredentialString();
 }

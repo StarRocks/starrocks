@@ -29,12 +29,12 @@ ARG GCC_INSTALL_HOME
 ARG CMAKE_INSTALL_HOME
 ARG MAVEN_VERSION
 ARG MAVEN_INSTALL_HOME
-ARG COMMIT_ID
 
 LABEL org.opencontainers.image.source="https://github.com/starrocks/starrocks"
-LABEL com.starrocks.version=${COMMIT_ID:-"UNKNOWN"}
 
-RUN yum install -y java-1.8.0-openjdk java-1.8.0-openjdk-devel && yum clean all && rm -rf /var/cache/yum
+RUN yum install -y epel-release && yum install -y wget unzip bzip2 patch bison byacc flex autoconf automake make \
+        libtool which git ccache binutils-devel python3 file java-1.8.0-openjdk java-1.8.0-openjdk-devel && \
+        yum clean all && rm -rf /var/cache/yum
 
 # install gcc
 COPY --from=gcc-builder /workspace/installed/ /

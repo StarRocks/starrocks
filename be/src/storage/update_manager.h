@@ -18,9 +18,12 @@
 #include <unordered_map>
 
 #include "storage/del_vector.h"
+#include "storage/delta_column_group.h"
 #include "storage/olap_common.h"
 #include "storage/primary_index.h"
 #include "util/dynamic_cache.h"
+#include "util/mem_info.h"
+#include "util/parse_util.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -32,12 +35,22 @@ using DelVectorPtr = std::shared_ptr<DelVector>;
 class MemTracker;
 class KVStore;
 class RowsetUpdateState;
+class RowsetColumnUpdateState;
 class Tablet;
 
 class LocalDelvecLoader : public DelvecLoader {
 public:
     LocalDelvecLoader(KVStore* meta) : _meta(meta) {}
     Status load(const TabletSegmentId& tsid, int64_t version, DelVectorPtr* pdelvec);
+
+private:
+    KVStore* _meta = nullptr;
+};
+
+class LocalDeltaColumnGroupLoader : public DeltaColumnGroupLoader {
+public:
+    LocalDeltaColumnGroupLoader(KVStore* meta) : _meta(meta) {}
+    Status load(const TabletSegmentId& tsid, int64_t version, DeltaColumnGroupList* pdcgs);
 
 private:
     KVStore* _meta = nullptr;
@@ -78,6 +91,9 @@ public:
 
     DynamicCache<string, RowsetUpdateState>& update_state_cache() { return _update_state_cache; }
 
+    Status get_delta_column_group(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
+                                  DeltaColumnGroupList* dcgs);
+
     MemTracker* compaction_state_mem_tracker() const { return _compaction_state_mem_tracker.get(); }
 
     void clear_cache();
@@ -86,6 +102,8 @@ public:
 
     void expire_cache();
 
+    void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
+
     MemTracker* mem_tracker() const { return _update_mem_tracker; }
 
     string memory_stats();
@@ -93,6 +111,13 @@ public:
     string detail_memory_stats();
 
     string topn_memory_stats(size_t topn);
+
+    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
+        int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
+        int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
+        _index_cache.set_capacity(byte_limits * update_mem_percent);
+        return Status::OK();
+    }
 
 private:
     // default 6min

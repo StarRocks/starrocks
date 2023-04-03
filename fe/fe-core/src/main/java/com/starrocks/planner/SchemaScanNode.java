@@ -64,6 +64,8 @@ public class SchemaScanNode extends ScanNode {
     private String schemaWild;
     private String frontendIP;
     private int frontendPort;
+    private Long jobId;
+    private String label;
 
     // only used for BE related schema scans
     private Long beId = null;
@@ -71,6 +73,8 @@ public class SchemaScanNode extends ScanNode {
     private Long partitionId = null;
     private Long tabletId = null;
     private Long txnId = null;
+    private String type = null;
+    private String state = null;
     private List<TScanRangeLocations> beScanRanges = null;
 
     public void setSchemaDb(String schemaDb) {
@@ -101,6 +105,14 @@ public class SchemaScanNode extends ScanNode {
 
     public void setFrontendPort(int frontendPort) {
         this.frontendPort = frontendPort;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
+    public void setJobId(long jobId) {
+        this.jobId = jobId;
     }
 
     /**
@@ -163,6 +175,28 @@ public class SchemaScanNode extends ScanNode {
         if (tabletId != null) {
             msg.schema_scan_node.setTablet_id(tabletId);
         }
+
+        if (jobId != null) {
+            msg.schema_scan_node.setJob_id(jobId);
+        }
+
+        if (label != null) {
+            msg.schema_scan_node.setLabel(label);
+        }
+        if (txnId != null) {
+            msg.schema_scan_node.setTxn_id(txnId);
+        }
+        if (type != null) {
+            msg.schema_scan_node.setType(type);
+        }
+        if (state != null) {
+            msg.schema_scan_node.setState(state);
+        }
+        // setting limit for the scanner may cause query to return less rows than expected
+        // but this is for the purpose of protect FE resource usage, so it's acceptable
+        if (getLimit() > 0) {
+            msg.schema_scan_node.setLimit(getLimit());
+        }
     }
 
     public void setBeId(long beId) {
@@ -183,6 +217,14 @@ public class SchemaScanNode extends ScanNode {
 
     public void setTxnId(long txnId) {
         this.txnId = txnId;
+    }
+
+    public void setType(String type) {
+        this.type = type;
+    }
+
+    public void setState(String state) {
+        this.state = state;
     }
 
     public boolean isBeSchemaTable() {

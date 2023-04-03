@@ -36,7 +36,6 @@ package com.starrocks.catalog;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
@@ -124,7 +123,7 @@ public class TabletInvertedIndex {
                              Set<Long> foundTabletsWithValidSchema,
                              Map<Long, TTabletInfo> foundTabletsWithInvalidSchema,
                              ListMultimap<TStorageMedium, Long> tabletMigrationMap,
-                             Map<Long, ListMultimap<Long, TPartitionVersionInfo>> transactionsToPublish,
+                             Map<Long, Map<Long, Map<Long, TPartitionVersionInfo>>> transactionsToPublish,
                              Map<Long, Long> transactionsToCommitTime,
                              ListMultimap<Long, Long> transactionsToClear,
                              ListMultimap<Long, Long> tabletRecoveryMap,
@@ -164,6 +163,9 @@ public class TabletInvertedIndex {
                         TTablet backendTablet = backendTablets.get(tabletId);
                         Replica replica = entry.getValue();
                         for (TTabletInfo backendTabletInfo : backendTablet.getTablet_infos()) {
+                            if (backendTabletInfo.isSetIs_error_state()) {
+                                replica.setIsErrorState(backendTabletInfo.is_error_state);
+                            }
                             if (tabletMeta.containsSchemaHash(backendTabletInfo.getSchema_hash())) {
                                 foundTabletsWithValidSchema.add(tabletId);
                                 // 1. (intersection)
@@ -257,13 +259,19 @@ public class TabletInvertedIndex {
                                                 TPartitionVersionInfo versionInfo =
                                                         new TPartitionVersionInfo(tabletMeta.getPartitionId(),
                                                                 partitionCommitInfo.getVersion(), 0);
-                                                ListMultimap<Long, TPartitionVersionInfo> map =
+                                                Map<Long, Map<Long, TPartitionVersionInfo>> txnMap =
                                                         transactionsToPublish.get(transactionState.getDbId());
-                                                if (map == null) {
-                                                    map = ArrayListMultimap.create();
-                                                    transactionsToPublish.put(transactionState.getDbId(), map);
+                                                if (txnMap == null) {
+                                                    txnMap = Maps.newHashMap();
+                                                    transactionsToPublish.put(transactionState.getDbId(), txnMap);
                                                 }
-                                                map.put(transactionId, versionInfo);
+                                                Map<Long, TPartitionVersionInfo> partitionMap =
+                                                        txnMap.get(transactionId);
+                                                if (partitionMap == null) {
+                                                    partitionMap = Maps.newHashMap();
+                                                    txnMap.put(transactionId, partitionMap);
+                                                }
+                                                partitionMap.put(versionInfo.getPartition_id(), versionInfo);
                                                 transactionsToCommitTime.put(transactionId,
                                                         transactionState.getCommitTime());
                                             }

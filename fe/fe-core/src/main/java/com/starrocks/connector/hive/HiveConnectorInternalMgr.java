@@ -47,6 +47,8 @@ public class HiveConnectorInternalMgr {
     private final int loadRemoteFileMetadataThreadNum;
     private final boolean enableHmsEventsIncrementalSync;
 
+    private final boolean enableBackgroundRefreshHiveMetadata;
+
     public HiveConnectorInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
         this.properties = properties;
@@ -62,6 +64,9 @@ public class HiveConnectorInternalMgr {
                 String.valueOf(Config.remote_file_metadata_load_concurrency)));
         this.enableHmsEventsIncrementalSync = Boolean.parseBoolean(properties.getOrDefault("enable_hms_events_incremental_sync",
                 String.valueOf(Config.enable_hms_events_incremental_sync)));
+
+        this.enableBackgroundRefreshHiveMetadata = Boolean.parseBoolean(properties.getOrDefault(
+                "enable_background_refresh_connector_metadata", "true"));
     }
 
     public void shutdown() {
@@ -147,5 +152,9 @@ public class HiveConnectorInternalMgr {
 
     public HdfsEnvironment getHdfsEnvironment() {
         return hdfsEnvironment;
+    }
+
+    public boolean isEnableBackgroundRefreshHiveMetadata() {
+        return enableBackgroundRefreshHiveMetadata;
     }
 }

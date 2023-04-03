@@ -349,7 +349,7 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
         rowset_meta->set_segments(i, op_write.rewrite_segments(i));
     }
 
-    if (watch.elapsed_time() > /*10ms=*/10 * 1000 * 1000) {
+    if (watch.elapsed_time() > /*100ms=*/100 * 1000 * 1000) {
         LOG(INFO) << "RowsetUpdateState rewrite_segment cost(ms): " << watch.elapsed_time() / 1000000;
     }
     return Status::OK();

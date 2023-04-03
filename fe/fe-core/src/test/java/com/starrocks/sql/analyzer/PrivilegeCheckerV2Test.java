@@ -34,7 +34,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.mysql.MysqlChannel;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -83,7 +84,7 @@ public class PrivilegeCheckerV2Test {
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
 
-    private static PrivilegeManager privilegeManager;
+    private static AuthorizationManager authorizationManager;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -120,9 +121,9 @@ public class PrivilegeCheckerV2Test {
         starRocksAssert.withTable(createTblStmtStr3);
         createMvForTest(starRocksAssert.getCtx());
 
-        privilegeManager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
+        authorizationManager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager();
         starRocksAssert.getCtx().setRemoteIP("localhost");
-        privilegeManager.initBuiltinRolesAndUsers();
+        authorizationManager.initBuiltinRolesAndUsers();
         ctxToRoot();
         createUsers();
     }
@@ -224,13 +225,20 @@ public class PrivilegeCheckerV2Test {
         };
     }
 
-    private static void ctxToTestUser() {
+    private static void ctxToTestUser() throws PrivilegeException {
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setCurrentRoleIds(
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager().getRoleIdsByUser(testUser)
+        );
         starRocksAssert.getCtx().setQualifiedUser(testUser.getQualifiedUser());
     }
 
-    private static void ctxToRoot() {
+    private static void ctxToRoot() throws PrivilegeException {
         starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
+        starRocksAssert.getCtx().setCurrentRoleIds(
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager().getRoleIdsByUser(UserIdentity.ROOT)
+        );
+
         starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
     }
 
@@ -2261,7 +2269,7 @@ public class PrivilegeCheckerV2Test {
 
         grantRevokeSqlAsRoot("grant drop on materialized view db1.mv4 to test");
         GlobalStateMgr.getCurrentState().dropMaterializedView(statement);
-        GlobalStateMgr.getCurrentState().getPrivilegeManager().removeInvalidObject();
+        GlobalStateMgr.getCurrentState().getAuthorizationManager().removeInvalidObject();
         ctxToTestUser();
     }
 
@@ -2459,7 +2467,7 @@ public class PrivilegeCheckerV2Test {
     public void testUseGlobalFunc() throws Exception {
         FunctionName fn = FunctionName.createFnName("my_udf_json_get");
         fn.setAsGlobalFunction();
-        Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        Function function = new Function(1, fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
             GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
         } catch (Throwable e) {
@@ -2507,7 +2515,7 @@ public class PrivilegeCheckerV2Test {
 
         fn = FunctionName.createFnName("my_udf_json_get2");
         fn.setAsGlobalFunction();
-        function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        function = new Function(2, fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
             GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
         } catch (Throwable e) {
@@ -2549,7 +2557,7 @@ public class PrivilegeCheckerV2Test {
     }
 
     @Test
-    public void testShowAuthentication() throws com.starrocks.common.AnalysisException, DdlException {
+    public void testShowAuthentication() throws com.starrocks.common.AnalysisException, DdlException, PrivilegeException {
         ctxToTestUser();
         ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(testUser, false);
         ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
@@ -2581,7 +2589,7 @@ public class PrivilegeCheckerV2Test {
     @Test
     public void testGrantRevokeBuiltinRole() throws Exception {
         String sql = "create role r1";
-        PrivilegeManager manager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager();
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
 
@@ -2773,4 +2781,55 @@ public class PrivilegeCheckerV2Test {
         starRocksAssert.dropTable("db1.tprimary");
     }
 
+    @Test
+    public void testShowTable() throws Exception {
+        ctxToRoot();
+        Config.enable_experimental_mv = true;
+        String createSql = "create materialized view db1.mv5 " +
+                "distributed by hash(k2)" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 1000 SECOND) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, db1.tbl1.k2 from db1.tbl1;";
+        starRocksAssert.withMaterializedView(createSql);
+
+        String createViewSql = "create view db1.view5 as select * from db1.tbl1";
+        starRocksAssert.withView(createViewSql);
+
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        grantRevokeSqlAsRoot("grant select on db1.tbl1 to test");
+        ctxToTestUser();
+        ShowResultSet res = new ShowExecutor(ctx,
+                (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx)).execute();
+        System.out.println(res.getResultRows());
+        Assert.assertEquals(1, res.getResultRows().size());
+        Assert.assertEquals("tbl1", res.getResultRows().get(0).get(0));
+
+        // can show mv if we have any privilege on it
+        grantRevokeSqlAsRoot("grant alter on materialized view db1.mv5 to test");
+        res = new ShowExecutor(ctx,
+                (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx)).execute();
+        System.out.println(res.getResultRows());
+        Assert.assertEquals(2, res.getResultRows().size());
+        Assert.assertEquals("mv5", res.getResultRows().get(0).get(0));
+
+
+        // can show view if we have any privilege on it
+        grantRevokeSqlAsRoot("grant drop on view db1.view5 to test");
+        res = new ShowExecutor(ctx,
+                (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx)).execute();
+        System.out.println(res.getResultRows());
+        Assert.assertEquals(3, res.getResultRows().size());
+        Assert.assertEquals("view5", res.getResultRows().get(2).get(0));
+        grantRevokeSqlAsRoot("revoke drop on view db1.view5 from test");
+        grantRevokeSqlAsRoot("revoke alter on materialized view db1.mv5 from test");
+        grantRevokeSqlAsRoot("revoke select on db1.tbl1 from test");
+
+        ctxToRoot();
+        starRocksAssert.dropMaterializedView("db1.mv5");
+        starRocksAssert.dropView("db1.view5");
+        ctxToTestUser();
+    }
 }

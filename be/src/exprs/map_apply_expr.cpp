@@ -26,21 +26,38 @@
 #include "exprs/expr_context.h"
 #include "exprs/function_helper.h"
 #include "exprs/lambda_function.h"
+#include "exprs/map_expr.h"
+#include "glog/logging.h"
 #include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
 
 namespace starrocks {
+
 MapApplyExpr::MapApplyExpr(const TExprNode& node) : Expr(node, false) {}
 
-MapApplyExpr::MapApplyExpr(TypeDescriptor type) : Expr(std::move(type), false) {}
+// for tests
+MapApplyExpr::MapApplyExpr(TypeDescriptor type) : Expr(std::move(type), false), _maybe_duplicated_keys(true) {}
+
+Status MapApplyExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
+    RETURN_IF_ERROR(Expr::prepare(state, context));
+    if (_children.size() < 2) {
+        return Status::InternalError("map expression's children size should not less than 2.");
+    }
+    auto lambda_func = down_cast<LambdaFunction*>(_children[0]);
+    auto map_expr = down_cast<MapExpr*>(lambda_func->get_lambda_expr());
+    _maybe_duplicated_keys = map_expr->maybe_duplicated_keys();
+    lambda_func->get_lambda_arguments_ids(&_arguments_ids);
+    return Status::OK();
+}
 
 StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> input_columns;
     NullColumnPtr input_null_map = nullptr;
     MapColumn* input_map = nullptr;
+    ColumnPtr input_map_ptr_ref = nullptr; // hold shared_ptr to avoid early deleted.
     // step 1: get input columns from map(key_col, value_col)
-    for (int i = 1; i < _children.size(); ++i) {
-        ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[i], chunk);
+    for (int i = 1; i < _children.size(); ++i) { // currently only 2 children, may be more in the future
+        ASSIGN_OR_RETURN(auto child_col, context->evaluate(_children[i], chunk));
         // the column is a null literal.
         if (child_col->only_null()) {
             return ColumnHelper::align_return_type(child_col, type(), chunk->num_rows(), true);
@@ -68,6 +85,7 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
 
         if (input_map == nullptr) {
             input_map = cur_map;
+            input_map_ptr_ref = data_column;
         } else {
             if (UNLIKELY(!ColumnHelper::offsets_equal(cur_map->offsets_column(), input_map->offsets_column()))) {
                 return Status::InternalError("Input map element's size are not equal in map_apply().");
@@ -83,12 +101,10 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
     } else {
         auto cur_chunk = std::make_shared<Chunk>();
         // put all arguments into the new chunk
-        std::vector<SlotId> arguments_ids;
-        auto lambda_func = dynamic_cast<LambdaFunction*>(_children[0]);
-        int argument_num = lambda_func->get_lambda_arguments_ids(&arguments_ids);
+        int argument_num = _arguments_ids.size();
         DCHECK(argument_num == input_columns.size());
         for (int i = 0; i < argument_num; ++i) {
-            cur_chunk->append_column(input_columns[i], arguments_ids[i]); // column ref
+            cur_chunk->append_column(input_columns[i], _arguments_ids[i]); // column ref
         }
         // put captured columns into the new chunk aligning with the first map's offsets
         std::vector<SlotId> slot_ids;
@@ -104,14 +120,14 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
         }
         // evaluate the lambda expression
         if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {
-            column = EVALUATE_NULL_IF_ERROR(context, _children[0], cur_chunk.get());
+            ASSIGN_OR_RETURN(column, context->evaluate(_children[0], cur_chunk.get()));
             column = ColumnHelper::align_return_type(column, type(), cur_chunk->num_rows(), false);
         } else { // split large chunks into small ones to avoid too large or various batch_size
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             accumulator.push(std::move(cur_chunk));
             accumulator.finalize();
             while (auto tmp_chunk = accumulator.pull()) {
-                auto tmp_col = EVALUATE_NULL_IF_ERROR(context, _children[0], tmp_chunk.get());
+                ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
                 tmp_col = ColumnHelper::align_return_type(tmp_col, type(), tmp_chunk->num_rows(), false);
                 if (column == nullptr) {
                     column = tmp_col;
@@ -128,9 +144,13 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                                                  input_map->offsets_column()->get_data().back(),
                                                  map_col->keys_column()->size()));
     }
+
     auto res_map =
             std::make_shared<MapColumn>(map_col->keys_column(), map_col->values_column(), input_map->offsets_column());
 
+    if (_maybe_duplicated_keys && res_map->size() > 0) {
+        res_map->remove_duplicated_keys();
+    }
     // attach null info
     if (input_null_map != nullptr) {
         return NullableColumn::create(std::move(res_map), input_null_map);

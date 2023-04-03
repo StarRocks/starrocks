@@ -62,6 +62,7 @@ set(EXEC_FILES
     lake_meta_scan_node.cpp
     hash_joiner.cpp
     hash_join_node.cpp
+    hash_join_components.cpp
     join_hash_map.cpp
     topn_node.cpp
     chunks_sorter.cpp
@@ -113,6 +114,8 @@ set(EXEC_FILES
     schema_scanner/schema_materialized_views_scanner.cpp
     schema_scanner/schema_tasks_scanner.cpp
     schema_scanner/schema_task_runs_scanner.cpp
+    schema_scanner/schema_loads_scanner.cpp
+    schema_scanner/schema_load_tracking_logs_scanner.cpp
     schema_scanner/schema_user_privileges_scanner.cpp
     schema_scanner/schema_schema_privileges_scanner.cpp
     schema_scanner/schema_table_privileges_scanner.cpp
@@ -121,6 +124,9 @@ set(EXEC_FILES
     schema_scanner/schema_be_tablets_scanner.cpp
     schema_scanner/schema_be_txns_scanner.cpp
     schema_scanner/schema_be_configs_scanner.cpp
+    schema_scanner/schema_be_threads_scanner.cpp
+    schema_scanner/schema_fe_tablet_schedules_scanner.cpp
+    schema_scanner/schema_be_compactions_scanner.cpp
     schema_scanner/schema_helper.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
@@ -244,10 +250,12 @@ set(EXEC_FILES
     query_cache/ticket_checker.cpp
     spill/spiller.cpp
     spill/spiller_factory.cpp
-    spill/spilled_stream.cpp
-    spill/spiller_path_provider.cpp
+    spill/spill_components.cpp
     spill/mem_table.cpp
-    spill/query_spill_manager.cpp
+    spill/dir_manager.cpp
+    spill/serde.cpp
+    spill/input_stream.cpp
+    spill/log_block_manager.cpp
     stream/state/mem_state_table.cpp
     stream/aggregate/agg_state_data.cpp
     stream/aggregate/agg_group_state.cpp

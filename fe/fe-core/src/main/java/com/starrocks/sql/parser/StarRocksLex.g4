@@ -14,7 +14,12 @@
 
 
 lexer grammar StarRocksLex;
-@parser::members {public static long sqlMode;}
+@members {
+private long sqlMode = com.starrocks.qe.SqlModeHelper.MODE_DEFAULT;
+public void setSqlMode(long newSqlMode) {
+    sqlMode = newSqlMode;
+}
+}
 tokens {
     CONCAT
 }
@@ -29,6 +34,7 @@ ANALYZE: 'ANALYZE';
 AND: 'AND';
 ANTI: 'ANTI';
 ARRAY: 'ARRAY';
+ARRAY_AGG: 'ARRAY_AGG';
 AS: 'AS';
 ASC: 'ASC';
 ASYNC: 'ASYNC';
@@ -103,6 +109,7 @@ DECOMMISSION: 'DECOMMISSION';
 DEFAULT: 'DEFAULT';
 DELETE: 'DELETE';
 DENSE_RANK: 'DENSE_RANK';
+DEFERRED: 'DEFERRED';
 NTILE: 'NTILE';
 DESC: 'DESC';
 DESCRIBE: 'DESCRIBE';
@@ -170,6 +177,7 @@ HUB: 'HUB';
 IDENTIFIED: 'IDENTIFIED';
 IF: 'IF';
 IMPERSONATE: 'IMPERSONATE';
+IMMEDIATE: 'IMMEDIATE';
 IGNORE: 'IGNORE';
 IMAGE: 'IMAGE';
 IN: 'IN';
@@ -238,6 +246,8 @@ NONE: 'NONE';
 NOT: 'NOT';
 NULL: 'NULL';
 NULLS: 'NULLS';
+NUMBER: 'NUMBER';
+NUMERIC: 'NUMERIC';
 OBSERVER: 'OBSERVER';
 OF: 'OF';
 OFFSET: 'OFFSET';
@@ -393,6 +403,9 @@ WORK: 'WORK';
 WRITE: 'WRITE';
 YEAR: 'YEAR';
 CURRENT_CATALOG: 'CURRENT_CATALOG';
+LOCK: 'LOCK';
+UNLOCK: 'UNLOCK';
+LOW_PRIORITY: 'LOW_PRIORITY';
 
 EQ  : '=';
 NEQ : '<>' | '!=';
@@ -408,7 +421,7 @@ ASTERISK_SYMBOL: '*';
 SLASH_SYMBOL: '/';
 PERCENT_SYMBOL: '%';
 
-LOGICAL_OR: '||' {setType((StarRocksParser.sqlMode & com.starrocks.qe.SqlModeHelper.MODE_PIPES_AS_CONCAT) == 0 ? LOGICAL_OR : StarRocksParser.CONCAT);};
+LOGICAL_OR: '||' {setType((sqlMode & com.starrocks.qe.SqlModeHelper.MODE_PIPES_AS_CONCAT) == 0 ? LOGICAL_OR : StarRocksParser.CONCAT);};
 LOGICAL_AND: '&&';
 LOGICAL_NOT: '!';
 

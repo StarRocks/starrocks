@@ -145,10 +145,10 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
                     multilane_op != nullptr) {
                     multilane_op->set_lane_arbiter(lane_arbiter);
                     multilane_operators.push_back(multilane_op);
-                } else if (auto* olap_scan_op = dynamic_cast<OlapScanOperator*>(op.get()); olap_scan_op != nullptr) {
-                    olap_scan_op->set_lane_arbiter(lane_arbiter);
-                    olap_scan_op->set_cache_operator(cache_op);
-                    cache_op->set_scan_operator(olap_scan_op);
+                } else if (auto* scan_op = dynamic_cast<ScanOperator*>(op.get()); scan_op != nullptr) {
+                    scan_op->set_lane_arbiter(lane_arbiter);
+                    scan_op->set_cache_operator(cache_op);
+                    cache_op->set_scan_operator(scan_op);
                 }
             }
             cache_op->set_multilane_operators(std::move(multilane_operators));
@@ -494,7 +494,9 @@ void PipelineDriver::_update_overhead_timer() {
 
 std::string PipelineDriver::to_readable_string() const {
     std::stringstream ss;
-    ss << "driver=" << this << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
+    ss << "query_id=" << print_id(this->query_ctx()->query_id())
+       << " fragment_id=" << print_id(this->fragment_ctx()->fragment_instance_id()) << " driver=" << this
+       << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
             ss << _operators[i]->get_name();

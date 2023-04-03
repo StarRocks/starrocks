@@ -27,6 +27,7 @@ public class EmptyStmt extends UnsupportedStmt {
     public EmptyStmt(NodePosition pos) {
         super(pos);
     }
+
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;

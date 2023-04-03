@@ -327,6 +327,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     }
                     if (sortKeyIdxes != null) {
                         copiedSortKeyIdxes = sortKeyIdxes;
+                    } else if (copiedSortKeyIdxes != null && !copiedSortKeyIdxes.isEmpty()) {
+                        sortKeyIdxes = copiedSortKeyIdxes;
                     }
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
@@ -683,7 +685,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 if (modifiedColumns.contains(mvColumn.getName())) {
                     LOG.warn("Setting the materialized view {}({}) to invalid because " +
                             "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                            table.getName(), mvColumn.getName());
+                            mvColumn.getName(), table.getName());
                     mv.setActive(false);
                     return;
                 }

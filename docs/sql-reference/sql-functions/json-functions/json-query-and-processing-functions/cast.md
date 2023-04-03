@@ -58,65 +58,36 @@ Example 1: Convert a JSON value to an SQL value.
 
 ```Plain%20Text
 -- Convert a JSON value to an INT value.
-
 mysql> select cast(parse_json('1') as int);
-
 +------------------------------+
-
 | cast(parse_json('1') AS INT) |
-
 +------------------------------+
-
 |                            1 |
-
 +------------------------------+
-
-
 
 -- Convert a JSON string to a VARCHAR value.
-
 mysql> select cast(parse_json('"star"') as varchar);
-
 +---------------------------------------+
-
 | cast(parse_json('"star"') AS VARCHAR) |
-
 +---------------------------------------+
-
 | star                                  |
-
 +---------------------------------------+
-
-
 
 -- Convert a JSON object to a VARCHAR value.
-
 mysql> select cast(parse_json('{"star": 1}') as varchar);
-
 +--------------------------------------------+
-
 | cast(parse_json('{"star": 1}') AS VARCHAR) |
-
 +--------------------------------------------+
-
 | {"star": 1}                                |
-
 +--------------------------------------------+
-
-
 
 -- Convert a JSON array to a VARCHAR value.
 
 mysql> select cast(parse_json('[1,2,3]') as varchar);
-
 +----------------------------------------+
-
 | cast(parse_json('[1,2,3]') AS VARCHAR) |
-
 +----------------------------------------+
-
 | [1, 2, 3]                              |
-
 +----------------------------------------+
 ```
 
@@ -124,48 +95,26 @@ Example 2: Convert an SQL value to a JSON value.
 
 ```Plain%20Text
 -- Convert an INT value to a JSON value.
-
 mysql> select cast(1 as json);
-
 +-----------------+
-
 | cast(1 AS JSON) |
-
 +-----------------+
-
 | 1               |
-
 +-----------------+
-
-
 
 -- Convert a VARCHAR value to a JSON value.
-
 mysql> select cast("star" as json);
-
 +----------------------+
-
 | cast('star' AS JSON) |
-
 +----------------------+
-
 | "star"               |
-
 +----------------------+
-
-
 
 -- Convert a BOOLEAN value to a JSON value.
-
 mysql> select cast(true as json);
-
 +--------------------+
-
 | cast(TRUE AS JSON) |
-
 +--------------------+
-
 | true               |
-
 +--------------------+
 ```

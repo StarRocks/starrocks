@@ -14,9 +14,26 @@
 
 #pragma once
 
+#include "common/object_pool.h"
 #include "exprs/expr.h"
 
 namespace starrocks {
+
+// map's key column and value column come from expression of children[0], children[1]
+class MapExpr final : public Expr {
+public:
+    explicit MapExpr(const TExprNode& node) : Expr(node) {}
+
+    MapExpr(const MapExpr&) = default;
+    MapExpr(MapExpr&&) = default;
+
+    // a naive way to predicate whether there will be duplicated keys
+    bool maybe_duplicated_keys() { return !_children[0]->is_slotref(); }
+
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* chunk) override;
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new MapExpr(*this)); }
+};
 
 class MapExprFactory {
 public:
