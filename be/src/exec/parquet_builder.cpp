@@ -392,21 +392,42 @@ Status ParquetBuilder::_add_column_chunk(const TypeDescriptor& type_desc, const 
         case TYPE_DOUBLE: {
             return _add_int_column_chunk<TYPE_DOUBLE, parquet::Type::DOUBLE>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         }
-        case TYPE_TINYINT:
+        case TYPE_TINYINT: {
             return _add_int_column_chunk<TYPE_TINYINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        case TYPE_SMALLINT:
-            return _add_int_column_chunk<TYPE_SMALLINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        case TYPE_INT:
-            return _add_int_column_chunk<TYPE_INT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        case TYPE_BIGINT:
+        }
+        case TYPE_UNSIGNED_TINYINT: {
+            return _add_int_column_chunk<TYPE_UNSIGNED_TINYINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+        }
+        case TYPE_SMALLINT: {
+            return _add_int_column_chunk<TYPE_SMALLINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level,
+                                                                              max_rep_level, is_null, mapping);
+        }
+        case TYPE_UNSIGNED_SMALLINT: {
+            return _add_int_column_chunk<TYPE_UNSIGNED_SMALLINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+        }
+        case TYPE_INT: {
+            return _add_int_column_chunk<TYPE_INT, parquet::Type::INT32>(type_desc, col, def_level, rep_level,
+                                                                         max_rep_level, is_null, mapping);
+        }
+        case TYPE_UNSIGNED_INT: {
+            return _add_int_column_chunk<TYPE_UNSIGNED_INT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+        }
+        case TYPE_BIGINT: {
             return _add_int_column_chunk<TYPE_BIGINT, parquet::Type::INT64>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+        }
+        case TYPE_UNSIGNED_BIGINT: {
+            return _add_int_column_chunk<TYPE_UNSIGNED_BIGINT, parquet::Type::INT64>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+        }
         case TYPE_CHAR:
-        case TYPE_VARCHAR:
+        case TYPE_VARCHAR: {
             return _add_varchar_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        case TYPE_DATETIME:
+        }
+        case TYPE_DATETIME: {
             return _add_datetime_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        case TYPE_DATE:
+        }
+        case TYPE_DATE: {
             return _add_date_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+        }
         case TYPE_DECIMAL32: {
             return _add_decimal_column_chunk<TYPE_DECIMAL32, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         }
