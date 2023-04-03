@@ -121,6 +121,8 @@ public:
 
     virtual const TupleDescriptor* tuple_descriptor(RuntimeState* state) const = 0;
 
+    virtual bool always_shared_scan() const { return true; }
+
 protected:
     std::vector<ExprContext*> _partition_exprs;
 };
