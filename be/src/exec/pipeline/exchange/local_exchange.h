@@ -36,6 +36,7 @@ public:
                             LocalExchangeSourceOperatorFactory* source)
             : _name(std::move(name)), _memory_manager(std::move(memory_manager)), _source(source) {}
 
+    virtual ~LocalExchanger() = default;
     virtual Status prepare(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
 
