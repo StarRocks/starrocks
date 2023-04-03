@@ -53,6 +53,7 @@ set(EXEC_FILES
         ./exec/arrow_converter_test.cpp
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
+        ./exec/connector_scan_node_test.cpp
         ./exec/csv_scanner_test.cpp
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scanner_test.cpp
