@@ -14,6 +14,7 @@
 
 #include "exec/spill/input_stream.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "exec/spill/serde.h"
@@ -225,7 +226,10 @@ public:
     Status init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs);
 
     StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
-    bool is_ready() override { return _merger.is_data_ready(); }
+    bool is_ready() override {
+        return _merger.is_data_ready() && std::all_of(_input_streams.begin(), _input_streams.end(),
+                                                      [](auto& stream) { return stream->is_ready(); });
+    }
     void close() override {}
 
     bool enable_prefetch() const override { return true; }

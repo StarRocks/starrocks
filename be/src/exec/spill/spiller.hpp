@@ -169,17 +169,18 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
         auto restore_task = [this, state, guard]() {
             RETURN_IF(!guard.scoped_begin(), Status::OK());
             auto defer = DeferOp([&]() { _running_restore_tasks--; });
-            SerdeContext ctx;
-            auto res = _stream->prefetch(ctx);
+            {
+                SerdeContext ctx;
+                auto res = _stream->prefetch(ctx);
 
-            if (!res.is_end_of_file() && !res.ok()) {
-                _spiller->update_spilled_task_status(std::move(res));
-            }
-
+                if (!res.is_end_of_file() && !res.ok()) {
+                    _spiller->update_spilled_task_status(std::move(res));
+                }
+                if (!res.ok()) {
+                    _finished_restore_tasks++;
+                }
+            };
             guard.scoped_end();
-            if (!res.ok()) {
-                _finished_restore_tasks++;
-            }
             return Status::OK();
         };
         RETURN_IF_ERROR(executor.submit(std::move(restore_task)));
