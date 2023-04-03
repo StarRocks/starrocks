@@ -1,29 +1,27 @@
 # SET CATALOG
 
-Sets the current catalog. After the current catalog is set, partially and unqualified identifiers for tables, functions, and views that are referenced by SQL statements are resolved from the current catalog.
-
-Setting the catalog also resets the current schema to `default`.
+Switches to a specified catalog in the current session.
 
 ## Syntax
 
 ```SQL
-SET CATALOG [ catalog_name | 'catalog_name' ]
+SET CATALOG <catalog_name>
 ```
 
 ## Parameter
 
-`catalog_name`: the name of the catalog to use. If the catalog does not exist, an exception is thrown.
+`catalog_name`: the name of the catalog to use in the current session. You can switch to an internal or external catalog. If the catalog that you specify does not exist, an exception is thrown.
 
 ## Examples
 
-Run one of the following commands to set a Hive catalog named `hive_metastore` as the current catalog:
+Run the following command to switch to a Hive catalog named `hive_metastore` in the current session:
 
 ```SQL
 SET CATALOG hive_metastore;
 ```
 
-Or
+Run the following command to switch to the internal catalog `default_catalog` in the current session：
 
 ```SQL
-SET CATALOG 'hive_metastore';
+SET CATALOG default_catalog;
 ```
