@@ -165,6 +165,18 @@ Status ParquetBuilder::_init_schema(const std::vector<std::string>& file_column_
             auto key_value = ::parquet::schema::GroupNode::Make("key_value", parquet::Repetition::REPEATED, {key, value});
             return ::parquet::schema::GroupNode::Make(name, rep_type, {key_value}, ::parquet::LogicalType::Map(), col_idx);
         }
+        case TYPE_BOOLEAN: {
+            return ::parquet::schema::PrimitiveNode::Make(
+                    name, rep_type, ::parquet::LogicalType::None(), ::parquet::Type::BOOLEAN, -1, ++_col_idx);
+        }
+        case TYPE_FLOAT: {
+            return ::parquet::schema::PrimitiveNode::Make(
+                    name, rep_type, ::parquet::LogicalType::None(), ::parquet::Type::FLOAT, -1, ++_col_idx);
+        }
+        case TYPE_DOUBLE: {
+            return ::parquet::schema::PrimitiveNode::Make(
+                    name, rep_type, ::parquet::LogicalType::None(), ::parquet::Type::DOUBLE, -1, ++_col_idx);
+        }
         case TYPE_TINYINT: {
             return ::parquet::schema::PrimitiveNode::Make(
                     name, rep_type, ::parquet::LogicalType::Int(8, true), ::parquet::Type::INT32, -1, ++_col_idx);
@@ -379,6 +391,15 @@ Status ParquetBuilder::_add_column_chunk(const TypeDescriptor& type_desc, const 
         }
         case TYPE_MAP: {
             return _add_map_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+        }
+        case TYPE_BOOLEAN: {
+            return _add_int_column_chunk<TYPE_BOOLEAN, parquet::Type::BOOLEAN>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+        }
+        case TYPE_FLOAT: {
+            return _add_int_column_chunk<TYPE_FLOAT, parquet::Type::FLOAT>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+        }
+        case TYPE_DOUBLE: {
+            return _add_int_column_chunk<TYPE_DOUBLE, parquet::Type::DOUBLE>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
         }
         case TYPE_TINYINT:
             return _add_int_column_chunk<TYPE_TINYINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
@@ -713,7 +734,7 @@ Status ParquetBuilder::_add_int_column_chunk(const TypeDescriptor& type_desc, co
     const auto raw_col = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
 
     _generate_rg_writer();
-    auto col_writer = static_cast<parquet::TypedColumnWriter<parquet::PhysicalType<pt>>*>(_rg_writer->column(_col_idx));
+    auto col_writer = down_cast<parquet::TypedColumnWriter<parquet::PhysicalType<pt>>*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
     auto write = [&](int16_t def_level, int16_t rep_level, typename parquet::type_traits<pt>::value_type value) {
