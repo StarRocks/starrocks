@@ -89,7 +89,7 @@ private:
     StatusOr<uint32_t> _get_footer_read_size() const;
 
     // Validate the magic bytes and get the length of metadata
-    StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
+    StatusOr<uint32_t> _parse_metadata_length(const std::string& footer_buffer) const;
 
     // decode min/max value from row group stats
     static Status _decode_min_max_column(const ParquetField& field, const std::string& timezone,

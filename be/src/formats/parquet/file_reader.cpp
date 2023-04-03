@@ -68,7 +68,6 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 
 Status FileReader::_parse_footer() {
     std::string footer_buffer;
-    uint8_t* footer_buf = nullptr;
     uint32_t footer_size = 0;
 
     bool in_cache = false;
@@ -76,18 +75,14 @@ Status FileReader::_parse_footer() {
         in_cache = _scanner_ctx->footer_cache->get(_scanner_ctx->file_cache_key, &footer_buffer);
     }
     if (!in_cache) {
-        ASSIGN_OR_RETURN(auto footer_reader_size, _get_footer_read_size);
-        to_read = std::min(_file_size, footer_reader_size);
+        ASSIGN_OR_RETURN(uint32_t footer_reader_size, _get_footer_read_size());
+        uint32_t to_read = std::min<uint32_t>(_file_size, footer_reader_size);
         footer_buffer.resize(to_read);
-        footer_buf = (uint8_t*)footer_buffer.data();
         {
             SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
             RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buffer.data(), to_read));
         }
-        // check magic
-        RETURN_IF_ERROR(_check_magic(footer_buf + to_read - 4));
-        // deserialize footer
-        footer_size = decode_fixed32_le(footer_buf + to_read - 8);
+        ASSIGN_OR_RETURN(footer_size, _parse_metadata_length(footer_buffer));
 
         // if local buf is not large enough, we have to allocate on heap and re-read.
         // 4 bytes magic number, 4 bytes for footer_size, so total size is footer_size + 8.
@@ -100,25 +95,21 @@ Status FileReader::_parse_footer() {
                                             _file->filename(), _file_size, to_read));
             }
             footer_buffer.resize(to_read);
-            footer_buf = (uint8_t*)footer_buffer.data();
             {
                 SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
-                RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buf, to_read));
+                RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buffer.data(), to_read));
             }
         } else {
             int64_t extra = to_read - footer_size - 8;
-            memmove(footer_buf, footer_buf + extra, footer_size + 8);
+            memmove(footer_buffer.data(), footer_buffer.data() + extra, footer_size + 8);
             footer_buffer.resize(footer_size + 8);
-            footer_buf = (uint8_t*)footer_buffer.data();
         }
         if (_scanner_ctx->footer_cache != nullptr) {
             _scanner_ctx->footer_cache->put(_scanner_ctx->file_cache_key, footer_buffer);
         }
     } else {
-        footer_buf = (uint8_t*)footer_buffer.data();
-        size_t size = footer_buffer.size();
-        RETURN_IF_ERROR(_check_magic(footer_buf + size - 4));
-        footer_size = decode_fixed32_le(footer_buf + size - 8);
+        ASSIGN_OR_RETURN(footer_size, _parse_metadata_length(footer_buffer));
+        DCHECK_EQ(footer_buffer.size(), footer_size + 8);
     }
 
     _scanner_ctx->stats->request_bytes_read += footer_size + 8;
@@ -126,7 +117,8 @@ Status FileReader::_parse_footer() {
 
     tparquet::FileMetaData t_metadata;
     // deserialize footer
-    RETURN_IF_ERROR(deserialize_thrift_msg(footer_buf, &footer_size, TProtocolType::COMPACT, &t_metadata));
+    RETURN_IF_ERROR(deserialize_thrift_msg((const uint8_t*)footer_buffer.data(), &footer_size, TProtocolType::COMPACT,
+                                           &t_metadata));
     _file_metadata.reset(new FileMetaData());
     RETURN_IF_ERROR(_file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
     return Status::OK();
@@ -143,17 +135,17 @@ StatusOr<uint32_t> FileReader::_get_footer_read_size() const {
     return std::min(_file_size, DEFAULT_FOOTER_BUFFER_SIZE);
 }
 
-StatusOr<uint32_t> FileReader::_parse_metadata_length(const std::vector<char>& footer_buff) const {
-    size_t size = footer_buff.size();
-    if (memequal(footer_buff.data() + size - 4, 4, PARQUET_EMAIC_NUMBER, 4)) {
+StatusOr<uint32_t> FileReader::_parse_metadata_length(const std::string& footer_buffer) const {
+    size_t size = footer_buffer.size();
+    if (memequal(footer_buffer.data() + size - 4, 4, PARQUET_EMAIC_NUMBER, 4)) {
         return Status::NotSupported("StarRocks parquet reader not support encrypted parquet file yet");
     }
 
-    if (!memequal(footer_buff.data() + size - 4, 4, PARQUET_MAGIC_NUMBER, 4)) {
+    if (!memequal(footer_buffer.data() + size - 4, 4, PARQUET_MAGIC_NUMBER, 4)) {
         return Status::Corruption("Parquet file magic not matched");
     }
 
-    uint32_t metadata_length = decode_fixed32_le(reinterpret_cast<const uint8_t*>(footer_buff.data()) + size - 8);
+    uint32_t metadata_length = decode_fixed32_le(reinterpret_cast<const uint8_t*>(footer_buffer.data()) + size - 8);
     if (metadata_length > _file_size - PARQUET_FOOTER_SIZE) {
         return Status::Corruption(strings::Substitute(
                 "Parquet file size is $0 bytes, smaller than the size reported by footer's ($1 bytes)", _file_size,
