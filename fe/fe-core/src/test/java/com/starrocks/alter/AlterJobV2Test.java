@@ -216,8 +216,6 @@ public class AlterJobV2Test {
             MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
                     .getDb("test").getTable("mv3");
             Assert.assertTrue(!mv.isActive());
-        } catch (Exception e) {
-            Assert.fail();
         } finally {
             starRocksAssert.dropTable("modify_column_test3");
         }
