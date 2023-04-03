@@ -766,7 +766,7 @@ TEST_F(TimeFunctionsTest, toUnixForNow) {
     {
         Columns columns;
 
-        ColumnPtr result = TimeFunctions::to_unix_for_now(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::to_unix_for_now_32(_utils->get_fn_ctx(), columns).value();
 
         ASSERT_TRUE(result->is_constant());
 
@@ -786,7 +786,7 @@ TEST_F(TimeFunctionsTest, toUnixFromDatetime) {
 
         columns.emplace_back(tc1);
 
-        ColumnPtr result = TimeFunctions::to_unix_from_datetime(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::to_unix_from_datetime_32(_utils->get_fn_ctx(), columns).value();
 
         ASSERT_TRUE(result->is_numeric());
 
@@ -806,7 +806,7 @@ TEST_F(TimeFunctionsTest, toUnixFromDate) {
 
         columns.emplace_back(tc1);
 
-        ColumnPtr result = TimeFunctions::to_unix_from_date(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::to_unix_from_date_32(_utils->get_fn_ctx(), columns).value();
 
         ASSERT_TRUE(result->is_numeric());
 
@@ -830,7 +830,7 @@ TEST_F(TimeFunctionsTest, toUnixFromDatetimeWithFormat) {
         columns.emplace_back(tc1);
         columns.emplace_back(tc2);
 
-        ColumnPtr result = TimeFunctions::to_unix_from_datetime_with_format(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::to_unix_from_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
 
         ASSERT_TRUE(result->is_numeric());
 
@@ -851,7 +851,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetime) {
 
         columns.emplace_back(tc1);
 
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_32(_utils->get_fn_ctx(), columns).value();
 
         //ASSERT_TRUE(result->is_numeric());
 
@@ -884,7 +884,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithFormat) {
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
 
         //ASSERT_TRUE(result->is_numeric());
 
@@ -918,7 +918,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
 
         //ASSERT_TRUE(result->is_numeric());
 
@@ -943,7 +943,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
         ASSERT_TRUE(TimeFunctions::from_unix_prepare(_utils->get_fn_ctx(),
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
         ASSERT_TRUE(result->only_null());
         ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
