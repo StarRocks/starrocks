@@ -158,8 +158,10 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
 
     if (master_info.__isset.backend_ip) {
         if (master_info.backend_ip != BackendOptions::get_localhost()) {
-            LOG(WARNING) << master_info.backend_ip << " not equal to to backend localhost "
-                         << BackendOptions::get_localhost();
+            if (!config::force_use_ip_as_localhost) {
+                LOG(WARNING) << master_info.backend_ip << " not equal to to backend localhost "
+                             << BackendOptions::get_localhost();
+            }
             bool fe_saved_is_valid_ip = is_valid_ip(master_info.backend_ip);
             if (fe_saved_is_valid_ip && is_valid_ip(BackendOptions::get_localhost())) {
                 return Status::InternalError("FE saved address not match backend address");
@@ -188,7 +190,9 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
 
             for (auto& host : hosts) {
                 if (host.is_address_v4() && host.get_host_address_v4() == ip) {
-                    BackendOptions::set_localhost(master_info.backend_ip);
+                    if (!config::force_use_ip_as_localhost) {
+                        BackendOptions::set_localhost(master_info.backend_ip);
+                    }
                     set_new_localhost = true;
                     break;
                 }

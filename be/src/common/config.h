@@ -916,4 +916,7 @@ CONF_mInt64(txn_info_history_size, "20000");
 CONF_mInt32(update_cache_evict_internal_sec, "11");
 CONF_mBool(enable_auto_evict_update_cache, "true");
 
+// In k8s we should use ip to report error log url
+CONF_Bool(force_use_ip_as_localhost, "false");
+
 } // namespace starrocks::config
