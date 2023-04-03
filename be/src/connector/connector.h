@@ -103,6 +103,13 @@ public:
 
     const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
 
+<<<<<<< HEAD
+=======
+    virtual const TupleDescriptor* tuple_descriptor(RuntimeState* state) const = 0;
+
+    virtual bool always_shared_scan() const { return true; }
+
+>>>>>>> bf63bef9b ([BugFix] Make cloud native table shared scan same as olap table (#20775))
 protected:
     std::vector<ExprContext*> _partition_exprs;
 };
