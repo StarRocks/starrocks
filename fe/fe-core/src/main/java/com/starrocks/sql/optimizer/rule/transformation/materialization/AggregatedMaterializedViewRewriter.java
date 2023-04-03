@@ -579,6 +579,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                 } else {
                     sumReturnType = sumFn.getReturnType();
                 }
+                sumFn = sumFn.copy();
                 sumFn.setArgsType(oldFunctionCall.getFunction().getArgs());
                 sumFn.setRetType(sumReturnType);
                 Pair<ColumnRefOperator, CallOperator> sumCallOp =
