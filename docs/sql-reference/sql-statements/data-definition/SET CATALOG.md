@@ -19,3 +19,9 @@ Run the following command to switch to a Hive catalog named `hive_metastore` in 
 ```SQL
 SET CATALOG hive_metastore;
 ```
+
+Run the following command to switch to the internal catalog `default_catalog` in the current session：
+
+```SQL
+SET CATALOG default_catalog;
+```
