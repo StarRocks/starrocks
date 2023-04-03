@@ -50,7 +50,6 @@ class TypeInfo;
 
 // Describes a type. Includes the enum, children types, and any type-specific metadata
 // (e.g. precision and scale for decimals).
-// TODO: add optional field
 struct TypeDescriptor {
     LogicalType type{TYPE_UNKNOWN};
     /// Only meaningful for type TYPE_CHAR/TYPE_VARCHAR/TYPE_HLL

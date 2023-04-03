@@ -20,18 +20,18 @@
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
 
+#include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
 #include "common/logging.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
-#include "runtime/exec_env.h"
-#include "util/priority_thread_pool.hpp"
 #include "gutil/casts.h"
 #include "gutil/endian.h"
-#include "column/array_column.h"
-#include "column/struct_column.h"
-#include "column/map_column.h"
+#include "runtime/exec_env.h"
+#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 
@@ -123,11 +123,10 @@ Status ParquetBuilder::_init_schema(const std::vector<std::string>& file_column_
     ::parquet::schema::NodeVector fields;
     for (int i = 0; i < _output_expr_ctxs.size(); i++) {
         auto column_expr = _output_expr_ctxs[i]->root();
-        auto nodePtr = _init_schema_node(file_column_names[i], column_expr->type(),
-                                         ::parquet::Repetition::OPTIONAL);
+        auto nodePtr = _init_schema_node(file_column_names[i], column_expr->type(), ::parquet::Repetition::OPTIONAL);
         if (nodePtr == nullptr) {
-            return Status::InvalidArgument(fmt::format("Field {} of type {} is not supported",
-                                                       file_column_names[i], column_expr->type().debug_string()));
+            return Status::InvalidArgument(fmt::format("Field {} of type {} is not supported", file_column_names[i],
+                                                       column_expr->type().debug_string()));
         }
         fields.push_back(nodePtr);
     }
@@ -138,102 +137,109 @@ Status ParquetBuilder::_init_schema(const std::vector<std::string>& file_column_
 }
 
 // Repetition of subtype in nested type is set by default now, due to type descriptor has no nullable field.
-::parquet::schema::NodePtr ParquetBuilder::_init_schema_node(const std::string& name, const TypeDescriptor& type_desc, ::parquet::Repetition::type rep_type) {
+::parquet::schema::NodePtr ParquetBuilder::_init_schema_node(const std::string& name, const TypeDescriptor& type_desc,
+                                                             ::parquet::Repetition::type rep_type) {
     switch (type_desc.type) {
-        case TYPE_STRUCT: {
-            DCHECK(type_desc.children.size() == type_desc.field_names.size());
-            int col_idx = ++_col_idx;
-            ::parquet::schema::NodeVector fields;
-            for (size_t i = 0; i < type_desc.children.size(); i++) {
-                auto child = _init_schema_node(type_desc.field_names[i], type_desc.children[i], ::parquet::Repetition::OPTIONAL); // use optional as default
-                fields.push_back(child);
-            }
-            return ::parquet::schema::GroupNode::Make(name, rep_type, fields, ::parquet::ConvertedType::NONE, col_idx);
+    case TYPE_STRUCT: {
+        DCHECK(type_desc.children.size() == type_desc.field_names.size());
+        int col_idx = ++_col_idx;
+        ::parquet::schema::NodeVector fields;
+        for (size_t i = 0; i < type_desc.children.size(); i++) {
+            auto child = _init_schema_node(type_desc.field_names[i], type_desc.children[i],
+                                           ::parquet::Repetition::OPTIONAL); // use optional as default
+            fields.push_back(child);
         }
-        case TYPE_ARRAY: {
-            DCHECK(type_desc.children.size() == 1);
-            int col_idx = ++_col_idx;
-            auto element = _init_schema_node("element", type_desc.children[0], ::parquet::Repetition::OPTIONAL); // use optional as default
-            auto list = ::parquet::schema::GroupNode::Make("list", parquet::Repetition::REPEATED, {element});
-            return ::parquet::schema::GroupNode::Make(name, rep_type, {list}, ::parquet::LogicalType::List(), col_idx);
-        }
-        case TYPE_MAP: {
-            DCHECK(type_desc.children.size() == 2);
-            int col_idx = ++_col_idx;
-            auto key = _init_schema_node("key", type_desc.children[0], ::parquet::Repetition::REQUIRED);
-            auto value = _init_schema_node("value", type_desc.children[1], ::parquet::Repetition::OPTIONAL);
-            auto key_value = ::parquet::schema::GroupNode::Make("key_value", parquet::Repetition::REPEATED, {key, value});
-            return ::parquet::schema::GroupNode::Make(name, rep_type, {key_value}, ::parquet::LogicalType::Map(), col_idx);
-        }
-        case TYPE_BOOLEAN: {
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::None(), ::parquet::Type::BOOLEAN, -1, ++_col_idx);
-        }
-        case TYPE_FLOAT: {
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::None(), ::parquet::Type::FLOAT, -1, ++_col_idx);
-        }
-        case TYPE_DOUBLE: {
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::None(), ::parquet::Type::DOUBLE, -1, ++_col_idx);
-        }
-        case TYPE_TINYINT: {
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::Int(8, true), ::parquet::Type::INT32, -1, ++_col_idx);
-        }
-        case TYPE_UNSIGNED_TINYINT: {
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::Int(8, false), ::parquet::Type::INT32, -1, ++_col_idx);
-        }
-        case TYPE_SMALLINT: {
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::Int(16, true), ::parquet::Type::INT32, -1, ++_col_idx);
-        }
-        case TYPE_UNSIGNED_SMALLINT: {
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::Int(16, false), ::parquet::Type::INT32, -1, ++_col_idx);
-        }
-        case TYPE_INT: {
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::Int(32, true), ::parquet::Type::INT32, -1, ++_col_idx);
-        }
-        case TYPE_UNSIGNED_INT: {
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::Int(32, false), ::parquet::Type::INT32, -1, ++_col_idx);
-        }
-        case TYPE_BIGINT: {
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::Int(64, true), ::parquet::Type::INT64, -1, ++_col_idx);
-        }
-        case TYPE_UNSIGNED_BIGINT: {
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::Int(64, false), ::parquet::Type::INT64, -1, ++_col_idx);
-        }
-        case TYPE_CHAR:
-        case TYPE_VARCHAR:
-            return ::parquet::schema::PrimitiveNode::Make(
-                name, rep_type, ::parquet::LogicalType::String(), ::parquet::Type::BYTE_ARRAY, -1, ++_col_idx);
-        case TYPE_DATE: {
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::Date(), ::parquet::Type::INT32, -1, ++_col_idx);
-        }
-        case TYPE_DATETIME: {
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::Timestamp(true, ::parquet::LogicalType::TimeUnit::unit::MILLIS), ::parquet::Type::INT64, -1, ++_col_idx);
-        }
-        case TYPE_DECIMAL32:
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale), parquet::Type::INT32, -1, ++_col_idx);
-        case TYPE_DECIMAL64:
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale), parquet::Type::INT64, -1, ++_col_idx);
-        case TYPE_DECIMAL128: {
-            return ::parquet::schema::PrimitiveNode::Make(
-                    name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale), parquet::Type::FIXED_LEN_BYTE_ARRAY, 16, ++_col_idx);
-        }
-        default: {
-            return {};
-        }
+        return ::parquet::schema::GroupNode::Make(name, rep_type, fields, ::parquet::ConvertedType::NONE, col_idx);
+    }
+    case TYPE_ARRAY: {
+        DCHECK(type_desc.children.size() == 1);
+        int col_idx = ++_col_idx;
+        auto element = _init_schema_node("element", type_desc.children[0],
+                                         ::parquet::Repetition::OPTIONAL); // use optional as default
+        auto list = ::parquet::schema::GroupNode::Make("list", parquet::Repetition::REPEATED, {element});
+        return ::parquet::schema::GroupNode::Make(name, rep_type, {list}, ::parquet::LogicalType::List(), col_idx);
+    }
+    case TYPE_MAP: {
+        DCHECK(type_desc.children.size() == 2);
+        int col_idx = ++_col_idx;
+        auto key = _init_schema_node("key", type_desc.children[0], ::parquet::Repetition::REQUIRED);
+        auto value = _init_schema_node("value", type_desc.children[1], ::parquet::Repetition::OPTIONAL);
+        auto key_value = ::parquet::schema::GroupNode::Make("key_value", parquet::Repetition::REPEATED, {key, value});
+        return ::parquet::schema::GroupNode::Make(name, rep_type, {key_value}, ::parquet::LogicalType::Map(), col_idx);
+    }
+    case TYPE_BOOLEAN: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::None(),
+                                                      ::parquet::Type::BOOLEAN, -1, ++_col_idx);
+    }
+    case TYPE_FLOAT: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::None(),
+                                                      ::parquet::Type::FLOAT, -1, ++_col_idx);
+    }
+    case TYPE_DOUBLE: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::None(),
+                                                      ::parquet::Type::DOUBLE, -1, ++_col_idx);
+    }
+    case TYPE_TINYINT: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::Int(8, true),
+                                                      ::parquet::Type::INT32, -1, ++_col_idx);
+    }
+    case TYPE_UNSIGNED_TINYINT: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::Int(8, false),
+                                                      ::parquet::Type::INT32, -1, ++_col_idx);
+    }
+    case TYPE_SMALLINT: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::Int(16, true),
+                                                      ::parquet::Type::INT32, -1, ++_col_idx);
+    }
+    case TYPE_UNSIGNED_SMALLINT: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::Int(16, false),
+                                                      ::parquet::Type::INT32, -1, ++_col_idx);
+    }
+    case TYPE_INT: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::Int(32, true),
+                                                      ::parquet::Type::INT32, -1, ++_col_idx);
+    }
+    case TYPE_UNSIGNED_INT: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::Int(32, false),
+                                                      ::parquet::Type::INT32, -1, ++_col_idx);
+    }
+    case TYPE_BIGINT: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::Int(64, true),
+                                                      ::parquet::Type::INT64, -1, ++_col_idx);
+    }
+    case TYPE_UNSIGNED_BIGINT: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::Int(64, false),
+                                                      ::parquet::Type::INT64, -1, ++_col_idx);
+    }
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::String(),
+                                                      ::parquet::Type::BYTE_ARRAY, -1, ++_col_idx);
+    case TYPE_DATE: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::Date(),
+                                                      ::parquet::Type::INT32, -1, ++_col_idx);
+    }
+    case TYPE_DATETIME: {
+        return ::parquet::schema::PrimitiveNode::Make(
+                name, rep_type, ::parquet::LogicalType::Timestamp(true, ::parquet::LogicalType::TimeUnit::unit::MILLIS),
+                ::parquet::Type::INT64, -1, ++_col_idx);
+    }
+    case TYPE_DECIMAL32:
+        return ::parquet::schema::PrimitiveNode::Make(
+                name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
+                parquet::Type::INT32, -1, ++_col_idx);
+    case TYPE_DECIMAL64:
+        return ::parquet::schema::PrimitiveNode::Make(
+                name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
+                parquet::Type::INT64, -1, ++_col_idx);
+    case TYPE_DECIMAL128: {
+        return ::parquet::schema::PrimitiveNode::Make(
+                name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
+                parquet::Type::FIXED_LEN_BYTE_ARRAY, 16, ++_col_idx);
+    }
+    default: {
+        return {};
+    }
     }
 }
 
@@ -367,85 +373,99 @@ Status ParquetBuilder::add_chunk(Chunk* chunk) {
 
 // TODO(letian-jiang): traverse type_desc and schema simultaneously
 Status ParquetBuilder::_add_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                       const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                       int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+                                         const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                         int16_t max_rep_level, const std::vector<bool>& is_null,
+                                         const std::map<int, int>& mapping) {
     auto prev_level_size = def_level.size();
     DCHECK(rep_level.size() == prev_level_size);
     DCHECK(is_null.size() == prev_level_size);
 
     switch (type_desc.type) {
-        case TYPE_STRUCT: {
-            return _add_struct_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_ARRAY: {
-            return _add_array_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_MAP: {
-            return _add_map_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_BOOLEAN: {
-            return _add_int_column_chunk<TYPE_BOOLEAN, parquet::Type::BOOLEAN>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_FLOAT: {
-            return _add_int_column_chunk<TYPE_FLOAT, parquet::Type::FLOAT>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_DOUBLE: {
-            return _add_int_column_chunk<TYPE_DOUBLE, parquet::Type::DOUBLE>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_TINYINT: {
-            return _add_int_column_chunk<TYPE_TINYINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_UNSIGNED_TINYINT: {
-            return _add_int_column_chunk<TYPE_UNSIGNED_TINYINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_SMALLINT: {
-            return _add_int_column_chunk<TYPE_SMALLINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level,
-                                                                              max_rep_level, is_null, mapping);
-        }
-        case TYPE_UNSIGNED_SMALLINT: {
-            return _add_int_column_chunk<TYPE_UNSIGNED_SMALLINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_INT: {
-            return _add_int_column_chunk<TYPE_INT, parquet::Type::INT32>(type_desc, col, def_level, rep_level,
+    case TYPE_STRUCT: {
+        return _add_struct_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+    }
+    case TYPE_ARRAY: {
+        return _add_array_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+    }
+    case TYPE_MAP: {
+        return _add_map_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+    }
+    case TYPE_BOOLEAN: {
+        return _add_int_column_chunk<TYPE_BOOLEAN, parquet::Type::BOOLEAN>(type_desc, col, def_level, rep_level,
+                                                                           max_rep_level, is_null, mapping);
+    }
+    case TYPE_FLOAT: {
+        return _add_int_column_chunk<TYPE_FLOAT, parquet::Type::FLOAT>(type_desc, col, def_level, rep_level,
+                                                                       max_rep_level, is_null, mapping);
+    }
+    case TYPE_DOUBLE: {
+        return _add_int_column_chunk<TYPE_DOUBLE, parquet::Type::DOUBLE>(type_desc, col, def_level, rep_level,
                                                                          max_rep_level, is_null, mapping);
-        }
-        case TYPE_UNSIGNED_INT: {
-            return _add_int_column_chunk<TYPE_UNSIGNED_INT, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_BIGINT: {
-            return _add_int_column_chunk<TYPE_BIGINT, parquet::Type::INT64>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_UNSIGNED_BIGINT: {
-            return _add_int_column_chunk<TYPE_UNSIGNED_BIGINT, parquet::Type::INT64>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_CHAR:
-        case TYPE_VARCHAR: {
-            return _add_varchar_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_DATETIME: {
-            return _add_datetime_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_DATE: {
-            return _add_date_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_DECIMAL32: {
-            return _add_decimal_column_chunk<TYPE_DECIMAL32, parquet::Type::INT32>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_DECIMAL64: {
-            return _add_decimal_column_chunk<TYPE_DECIMAL64, parquet::Type::INT64>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        case TYPE_DECIMAL128: {
-            return _add_decimal_column_chunk<TYPE_DECIMAL128, parquet::Type::FIXED_LEN_BYTE_ARRAY>(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
-        }
-        default: {
-            return Status::InvalidArgument(fmt::format("Type {} is not supported",  type_desc.debug_string()));
-        }
+    }
+    case TYPE_TINYINT: {
+        return _add_int_column_chunk<TYPE_TINYINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level,
+                                                                         max_rep_level, is_null, mapping);
+    }
+    case TYPE_UNSIGNED_TINYINT: {
+        return _add_int_column_chunk<TYPE_UNSIGNED_TINYINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level,
+                                                                                  max_rep_level, is_null, mapping);
+    }
+    case TYPE_SMALLINT: {
+        return _add_int_column_chunk<TYPE_SMALLINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level,
+                                                                          max_rep_level, is_null, mapping);
+    }
+    case TYPE_UNSIGNED_SMALLINT: {
+        return _add_int_column_chunk<TYPE_UNSIGNED_SMALLINT, parquet::Type::INT32>(type_desc, col, def_level, rep_level,
+                                                                                   max_rep_level, is_null, mapping);
+    }
+    case TYPE_INT: {
+        return _add_int_column_chunk<TYPE_INT, parquet::Type::INT32>(type_desc, col, def_level, rep_level,
+                                                                     max_rep_level, is_null, mapping);
+    }
+    case TYPE_UNSIGNED_INT: {
+        return _add_int_column_chunk<TYPE_UNSIGNED_INT, parquet::Type::INT32>(type_desc, col, def_level, rep_level,
+                                                                              max_rep_level, is_null, mapping);
+    }
+    case TYPE_BIGINT: {
+        return _add_int_column_chunk<TYPE_BIGINT, parquet::Type::INT64>(type_desc, col, def_level, rep_level,
+                                                                        max_rep_level, is_null, mapping);
+    }
+    case TYPE_UNSIGNED_BIGINT: {
+        return _add_int_column_chunk<TYPE_UNSIGNED_BIGINT, parquet::Type::INT64>(type_desc, col, def_level, rep_level,
+                                                                                 max_rep_level, is_null, mapping);
+    }
+    case TYPE_CHAR:
+    case TYPE_VARCHAR: {
+        return _add_varchar_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+    }
+    case TYPE_DATETIME: {
+        return _add_datetime_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+    }
+    case TYPE_DATE: {
+        return _add_date_column_chunk(type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+    }
+    case TYPE_DECIMAL32: {
+        return _add_decimal_column_chunk<TYPE_DECIMAL32, parquet::Type::INT32>(type_desc, col, def_level, rep_level,
+                                                                               max_rep_level, is_null, mapping);
+    }
+    case TYPE_DECIMAL64: {
+        return _add_decimal_column_chunk<TYPE_DECIMAL64, parquet::Type::INT64>(type_desc, col, def_level, rep_level,
+                                                                               max_rep_level, is_null, mapping);
+    }
+    case TYPE_DECIMAL128: {
+        return _add_decimal_column_chunk<TYPE_DECIMAL128, parquet::Type::FIXED_LEN_BYTE_ARRAY>(
+                type_desc, col, def_level, rep_level, max_rep_level, is_null, mapping);
+    }
+    default: {
+        return Status::InvalidArgument(fmt::format("Type {} is not supported", type_desc.debug_string()));
+    }
     }
 }
 
 Status ParquetBuilder::_add_struct_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                              const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                              int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+                                                const std::vector<int16_t>& def_level,
+                                                const std::vector<int16_t>& rep_level, int16_t max_rep_level,
+                                                const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
     const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
     const auto nulls = null_column->get_data();
     const auto data_column = ColumnHelper::get_data_column(col.get());
@@ -456,16 +476,16 @@ Status ParquetBuilder::_add_struct_column_chunk(const TypeDescriptor& type_desc,
     std::vector<bool> cur_is_null;
     std::map<int, int> cur_mapping;
 
-    int j = 0; // pointer to next not-null value, increment upon non-empty array
+    int j = 0;                                      // pointer to next not-null value, increment upon non-empty array
     for (size_t i = 0; i < def_level.size(); i++) { // pointer to cur_def_level, cur_rep_level, cur_is_null
-        if (is_null[i]) { // Null from parent column
+        if (is_null[i]) {                           // Null from parent column
             cur_def_level.push_back(def_level[i]);
             cur_is_null.push_back(true);
             cur_rep_level.push_back(rep_level[i]);
             continue;
         }
         int idx = mapping.at(i); // idx is pointer to column, nulls, and offsets
-        if (nulls[idx]) { // Null in this column
+        if (nulls[idx]) {        // Null in this column
             cur_def_level.push_back(def_level[i]);
             cur_is_null.push_back(true);
             cur_rep_level.push_back(rep_level[i]);
@@ -482,7 +502,7 @@ Status ParquetBuilder::_add_struct_column_chunk(const TypeDescriptor& type_desc,
     for (size_t i = 0; i < type_desc.children.size(); i++) {
         auto sub_col = struct_column->field_column(type_desc.field_names[i]);
         auto ret = _add_column_chunk(type_desc.children[i], sub_col, cur_def_level, cur_rep_level, max_rep_level,
-                          cur_is_null, cur_mapping);
+                                     cur_is_null, cur_mapping);
         if (!ret.ok()) {
             return ret;
         }
@@ -490,10 +510,10 @@ Status ParquetBuilder::_add_struct_column_chunk(const TypeDescriptor& type_desc,
     return Status::OK();
 }
 
-
 Status ParquetBuilder::_add_array_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                              const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                              int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+                                               const std::vector<int16_t>& def_level,
+                                               const std::vector<int16_t>& rep_level, int16_t max_rep_level,
+                                               const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
     const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
     const auto nulls = null_column->get_data();
     const auto array_column = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
@@ -507,16 +527,16 @@ Status ParquetBuilder::_add_array_column_chunk(const TypeDescriptor& type_desc, 
 
     max_rep_level++;
 
-    int j = 0; // pointer to next not-null value, increment upon non-empty array
+    int j = 0;                                      // pointer to next not-null value, increment upon non-empty array
     for (size_t i = 0; i < def_level.size(); i++) { // pointer to cur_def_level, cur_rep_level, cur_is_null
-        if (is_null[i]) { // Null from parent column
+        if (is_null[i]) {                           // Null from parent column
             cur_def_level.push_back(def_level[i]);
             cur_is_null.push_back(true);
             cur_rep_level.push_back(rep_level[i]);
             continue;
         }
         int idx = mapping.at(i); // idx is pointer to column, nulls, and offsets
-        if (nulls[idx]) { // Null in this column
+        if (nulls[idx]) {        // Null in this column
             cur_def_level.push_back(def_level[i]);
             cur_is_null.push_back(true);
             cur_rep_level.push_back(rep_level[i]);
@@ -542,12 +562,13 @@ Status ParquetBuilder::_add_array_column_chunk(const TypeDescriptor& type_desc, 
     }
 
     return _add_column_chunk(type_desc.children[0], elements, cur_def_level, cur_rep_level, max_rep_level, cur_is_null,
-                      cur_mapping);
+                             cur_mapping);
 }
 
 Status ParquetBuilder::_add_map_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                              const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                              int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+                                             const std::vector<int16_t>& def_level,
+                                             const std::vector<int16_t>& rep_level, int16_t max_rep_level,
+                                             const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
     const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
     const auto nulls = null_column->get_data();
     const auto map_column = down_cast<MapColumn*>(ColumnHelper::get_data_column(col.get()));
@@ -563,9 +584,9 @@ Status ParquetBuilder::_add_map_column_chunk(const TypeDescriptor& type_desc, co
 
     max_rep_level++;
 
-    int j = 0; // pointer to next not-null value, increment upon non-empty array
+    int j = 0;                                      // pointer to next not-null value, increment upon non-empty array
     for (size_t i = 0; i < def_level.size(); i++) { // pointer to cur_def_level, cur_rep_level, cur_is_null
-        if (is_null[i]) { // Null from parent column
+        if (is_null[i]) {                           // Null from parent column
             cur_def_level_key.push_back(def_level[i]);
             cur_def_level_value.push_back(def_level[i]);
             cur_is_null.push_back(true);
@@ -573,7 +594,7 @@ Status ParquetBuilder::_add_map_column_chunk(const TypeDescriptor& type_desc, co
             continue;
         }
         int idx = mapping.at(i); // idx is pointer to column, nulls, and offsets
-        if (nulls[idx]) { // Null in this column
+        if (nulls[idx]) {        // Null in this column
             cur_def_level_key.push_back(def_level[i]);
             cur_def_level_value.push_back(def_level[i]);
             cur_is_null.push_back(true);
@@ -602,18 +623,19 @@ Status ParquetBuilder::_add_map_column_chunk(const TypeDescriptor& type_desc, co
         }
     }
 
-    auto ret = _add_column_chunk(type_desc.children[0], keys, cur_def_level_key, cur_rep_level, max_rep_level, cur_is_null,
-                      cur_mapping);
+    auto ret = _add_column_chunk(type_desc.children[0], keys, cur_def_level_key, cur_rep_level, max_rep_level,
+                                 cur_is_null, cur_mapping);
     if (!ret.ok()) {
         return ret;
     }
     return _add_column_chunk(type_desc.children[1], values, cur_def_level_value, cur_rep_level, max_rep_level,
-                      cur_is_null, cur_mapping);
+                             cur_is_null, cur_mapping);
 }
 
 Status ParquetBuilder::_add_varchar_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                              const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                              int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+                                                 const std::vector<int16_t>& def_level,
+                                                 const std::vector<int16_t>& rep_level, int16_t max_rep_level,
+                                                 const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
         const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
@@ -655,8 +677,9 @@ Status ParquetBuilder::_add_varchar_column_chunk(const TypeDescriptor& type_desc
 }
 
 Status ParquetBuilder::_add_date_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                                  const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                                  int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+                                              const std::vector<int16_t>& def_level,
+                                              const std::vector<int16_t>& rep_level, int16_t max_rep_level,
+                                              const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
         const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
@@ -695,8 +718,9 @@ Status ParquetBuilder::_add_date_column_chunk(const TypeDescriptor& type_desc, c
 }
 
 Status ParquetBuilder::_add_datetime_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                                 const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                                 int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+                                                  const std::vector<int16_t>& def_level,
+                                                  const std::vector<int16_t>& rep_level, int16_t max_rep_level,
+                                                  const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
         const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
@@ -724,7 +748,8 @@ Status ParquetBuilder::_add_datetime_column_chunk(const TypeDescriptor& type_des
             write(def_level[i], rep_level[i], -1);
             continue;
         }
-        write(def_level[i] + 1 /* increment if optional */, rep_level[i], raw_col[idx].to_unix_second() * 1000); // seconds -> milliseconds
+        write(def_level[i] + 1 /* increment if optional */, rep_level[i],
+              raw_col[idx].to_unix_second() * 1000); // seconds -> milliseconds
     }
 
     _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
@@ -734,8 +759,9 @@ Status ParquetBuilder::_add_datetime_column_chunk(const TypeDescriptor& type_des
 
 template <LogicalType lt, ::parquet::Type::type pt>
 Status ParquetBuilder::_add_int_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                                 const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                                 int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+                                             const std::vector<int16_t>& def_level,
+                                             const std::vector<int16_t>& rep_level, int16_t max_rep_level,
+                                             const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
         const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
@@ -773,8 +799,9 @@ Status ParquetBuilder::_add_int_column_chunk(const TypeDescriptor& type_desc, co
 
 template <LogicalType lt, ::parquet::Type::type pt>
 Status ParquetBuilder::_add_decimal_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                             const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                             int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
+                                                 const std::vector<int16_t>& def_level,
+                                                 const std::vector<int16_t>& rep_level, int16_t max_rep_level,
+                                                 const std::vector<bool>& is_null, const std::map<int, int>& mapping) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
         const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();

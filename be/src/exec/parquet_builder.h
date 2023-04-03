@@ -89,50 +89,59 @@ private:
     Status _init(const ParquetBuilderOptions& options, const std::vector<std::string>& file_column_names);
     void _init_properties(const ParquetBuilderOptions& options);
     Status _init_schema(const std::vector<std::string>& file_column_names);
-    parquet::schema::NodePtr _init_schema_node(const std::string& name, const TypeDescriptor& type_desc, ::parquet::Repetition::type rep_type);
+    parquet::schema::NodePtr _init_schema_node(const std::string& name, const TypeDescriptor& type_desc,
+                                               ::parquet::Repetition::type rep_type);
     void _generate_rg_writer();
     void _flush_row_group();
     size_t _get_rg_written_bytes();
     void _check_size();
 
     Status _add_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                           const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                           int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
+                             const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                             int16_t max_rep_level, const std::vector<bool>& is_null,
+                             const std::map<int, int>& mapping);
 
     Status _add_struct_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                  const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                  int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
+                                    const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                    int16_t max_rep_level, const std::vector<bool>& is_null,
+                                    const std::map<int, int>& mapping);
 
     Status _add_array_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                           const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                           int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
+                                   const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                   int16_t max_rep_level, const std::vector<bool>& is_null,
+                                   const std::map<int, int>& mapping);
 
     Status _add_map_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                               const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                               int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
+                                 const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                 int16_t max_rep_level, const std::vector<bool>& is_null,
+                                 const std::map<int, int>& mapping);
 
     Status _add_varchar_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                   const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                   int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
+                                     const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                     int16_t max_rep_level, const std::vector<bool>& is_null,
+                                     const std::map<int, int>& mapping);
 
     Status _add_date_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                                  const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                                  int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
+                                  const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                  int16_t max_rep_level, const std::vector<bool>& is_null,
+                                  const std::map<int, int>& mapping);
 
     Status _add_datetime_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                               const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                               int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
+                                      const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                      int16_t max_rep_level, const std::vector<bool>& is_null,
+                                      const std::map<int, int>& mapping);
 
     template <LogicalType lt, ::parquet::Type::type pt>
     Status _add_int_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                     const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                     int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
+                                 const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                 int16_t max_rep_level, const std::vector<bool>& is_null,
+                                 const std::map<int, int>& mapping);
 
     template <LogicalType lt, ::parquet::Type::type pt>
     Status _add_decimal_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                 const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                 int16_t max_rep_level, const std::vector<bool>& is_null, const std::map<int, int>& mapping);
-
+                                     const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
+                                     int16_t max_rep_level, const std::vector<bool>& is_null,
+                                     const std::map<int, int>& mapping);
 
     std::unique_ptr<WritableFile> _writable_file;
     std::shared_ptr<ParquetOutputStream> _output_stream;
