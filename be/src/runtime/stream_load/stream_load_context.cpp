@@ -34,6 +34,8 @@
 
 #include "runtime/stream_load/stream_load_context.h"
 
+#include <fmt/format.h>
+
 namespace starrocks {
 
 std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Status& st) const {
@@ -114,6 +116,10 @@ std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Sta
         writer.Key("ErrorURL");
         writer.String(error_url.c_str());
     }
+    if (!rejected_record_path.empty()) {
+        writer.Key("RejectedRecordPath");
+        writer.String(rejected_record_path.c_str());
+    }
     writer.EndObject();
     return s.GetString();
 }
@@ -183,6 +189,10 @@ std::string StreamLoadContext::to_json() const {
     if (!error_url.empty()) {
         writer.Key("ErrorURL");
         writer.String(error_url.c_str());
+    }
+    if (!rejected_record_path.empty()) {
+        writer.Key("RejectedRecordPath");
+        writer.String(rejected_record_path.c_str());
     }
     writer.EndObject();
     return s.GetString();
