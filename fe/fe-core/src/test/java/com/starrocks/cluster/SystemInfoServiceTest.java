@@ -50,6 +50,7 @@ import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.system.Backend;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -126,7 +127,7 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                systemInfoService = new SystemInfoService();
+                systemInfoService = new LocalSystemInfoService();
                 GlobalStateMgr.getCurrentSystemInfo();
                 minTimes = 0;
                 result = systemInfoService;
