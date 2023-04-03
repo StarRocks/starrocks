@@ -243,10 +243,14 @@ private:
 
     Status _init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc);
 
+    StatusOr<std::unique_ptr<ColumnIterator>> _new_dcg_column_iterator(DeltaColumnGroupList dcgs, uint32_t ucid,
+                                                                       std::string* filename);
+
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using ColumnDecoders = std::vector<ColumnDecoder>;
     std::shared_ptr<Segment> _segment;
+    std::unordered_map<std::string, std::shared_ptr<Segment>> _dcg_segments;
     SegmentReadOptions _opts;
     RawColumnIterators _column_iterators;
     ColumnDecoders _column_decoders;
@@ -416,6 +420,27 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
             _opts.stats->raw_rows_read);
 }
 
+StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_iterator(DeltaColumnGroupList dcgs,
+                                                                                    uint32_t ucid,
+                                                                                    std::string* filename) {
+    // build column iter from delta column group
+    // iterate dcg from new ver to old ver
+    for (const auto& dcg : dcgs) {
+        int idx = dcg->get_column_idx(ucid);
+        if (idx >= 0) {
+            if (_dcg_segments.count(dcg->column_file()) == 0) {
+                ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg));
+                _dcg_segments[dcg->column_file()] = dcg_segment;
+            }
+            if (filename != nullptr) {
+                *filename = dcg->column_file();
+            }
+            return _dcg_segments[dcg->column_file()]->new_column_iterator(idx);
+        }
+    }
+    return nullptr;
+}
+
 Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const ColumnUID ucid, bool check_dict_enc) {
     ColumnIteratorOptions iter_opts;
     iter_opts.stats = _opts.stats;
@@ -428,7 +453,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     } else {
         CHECK(ucid >= 0);
         std::string dcg_filename;
-        ASSIGN_OR_RETURN(auto col_iter, _segment->new_dcg_column_iterator(_dcgs, (uint32_t)ucid, &dcg_filename));
+        ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator(_dcgs, (uint32_t)ucid, &dcg_filename));
         if (col_iter == nullptr) {
             // not found in delta column group
             ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid));

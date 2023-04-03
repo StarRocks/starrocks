@@ -100,6 +100,8 @@ public:
 
     void clear_cached_del_vec(const std::vector<TabletSegmentId>& tsids);
 
+    void clear_cached_delta_column_group(const std::vector<TabletSegmentId>& tsids);
+
     void expire_cache();
 
     MemTracker* mem_tracker() const { return _update_mem_tracker; }
@@ -131,6 +133,11 @@ private:
     std::mutex _del_vec_cache_lock;
     std::unordered_map<TabletSegmentId, DelVectorPtr> _del_vec_cache;
     std::unique_ptr<MemTracker> _del_vec_cache_mem_tracker;
+
+    // Delta Column Group cache, dcg is short for `Delta Column Group`
+    std::mutex _delta_column_group_cache_lock;
+    std::unordered_map<TabletSegmentId, DeltaColumnGroupList> _delta_column_group_cache;
+    std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
 
     std::unique_ptr<ThreadPool> _apply_thread_pool;
 

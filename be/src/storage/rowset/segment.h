@@ -110,6 +110,8 @@ public:
     // may return EndOfFile
     StatusOr<ChunkIteratorPtr> new_iterator(const Schema& schema, const SegmentReadOptions& read_options);
 
+    StatusOr<std::shared_ptr<Segment>> new_dcg_segment(const DeltaColumnGroup& dcg);
+
     uint64_t id() const { return _segment_id; }
 
     // TODO: remove this method, create `ColumnIterator` via `ColumnReader`.
@@ -163,9 +165,6 @@ public:
     const ShortKeyIndexDecoder* decoder() const { return _sk_index_decoder.get(); }
 
     int64_t mem_usage() { return _basic_info_mem_usage() + _short_key_index_mem_usage(); }
-
-    StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(DeltaColumnGroupList dcgs, uint32_t ucid,
-                                                                      std::string* filename);
 
     DISALLOW_COPY_AND_MOVE(Segment);
 
@@ -240,9 +239,6 @@ private:
     std::unique_ptr<std::vector<LogicalType>> _column_storage_types;
     // When reading old type format data this will be set to true.
     bool _needs_chunk_adapter = false;
-
-    // used for store delta column group's segment
-    std::vector<std::shared_ptr<Segment>> _dcg_segments;
 };
 
 } // namespace starrocks

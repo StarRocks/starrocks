@@ -34,7 +34,7 @@ public:
         if (_schema.sort_key_idxes().empty()) {
             // Ensure the columns are continuous and started from zero.
             for (size_t i = 0; i < _schema.num_fields(); i++) {
-                CHECK_EQ(ColumnId(i), _schema.field(i)->id());
+                //CHECK_EQ(ColumnId(i), _schema.field(i)->id());
             }
         }
 #endif

@@ -259,6 +259,9 @@ public:
 
     void get_basic_info_extra(TabletBasicInfo& info);
 
+    Status get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
+                                         std::vector<uint32_t>* rowset_ids);
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -286,10 +289,6 @@ private:
         int64_t compaction_score = 0;
         std::string to_string() const;
     };
-
-    // used for PrimaryIndex load
-    Status _get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
-                                          std::vector<uint32_t>* rowset_ids);
 
     void _redo_edit_version_log(const EditVersionMetaPB& v);
 
@@ -365,7 +364,7 @@ private:
 
     void _check_creation_time_increasing();
 
-    Status _check_conflict_with_partial_update(CompactionInfo* info, int64_t output_version);
+    Status _check_conflict_with_partial_update(CompactionInfo* info);
 
     // these functions is only used in ut
     void stop_apply(bool apply_stopped) { _apply_stopped = apply_stopped; }

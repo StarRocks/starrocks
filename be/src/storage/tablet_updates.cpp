@@ -447,12 +447,12 @@ void TabletUpdates::_redo_edit_version_log(const EditVersionMetaPB& edit_version
     _next_rowset_id += edit_version_meta_pb.rowsetid_add();
 }
 
-Status TabletUpdates::_get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
-                                                     std::vector<uint32_t>* rowset_ids) {
+Status TabletUpdates::get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
+                                                    std::vector<uint32_t>* rowset_ids) {
     std::lock_guard rl(_lock);
     if (_edit_version_infos.empty()) {
-        string msg = strings::Substitute("tablet deleted when _get_apply_version_and_rowsets tablet:$0",
-                                         _tablet.tablet_id());
+        string msg =
+                strings::Substitute("tablet deleted when get_apply_version_and_rowsets tablet:$0", _tablet.tablet_id());
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
@@ -904,6 +904,12 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
             _set_error(msg);
             return;
         }
+        // clear cached delta column group
+        std::vector<TabletSegmentId> tsids;
+        for (const auto& dcg : state.delta_column_groups()) {
+            tsids.push_back(TabletSegmentId(tablet_id, dcg.first));
+        }
+        manager->clear_cached_delta_column_group(tsids);
         // 5. apply memory
         _next_log_id++;
         _apply_version_idx++;
@@ -1469,26 +1475,29 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     return Status::OK();
 }
 
-Status TabletUpdates::_check_conflict_with_partial_update(CompactionInfo* info, int64_t output_version) {
-    for (uint32_t input : info->inputs) {
-        Rowset* rowset = _get_rowset(input).get();
-        CHECK(rowset != nullptr);
-        for (uint32_t id = 0; id < rowset->num_segments(); id++) {
-            if (info->start_version.major() + 1 <= output_version) {
-                DeltaColumnGroupList each_dcgs;
-                RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
-                        _tablet.data_dir()->get_meta(), _tablet.tablet_id(),
-                        rowset->rowset_meta()->get_rowset_seg_id() + id, info->start_version.major() + 1,
-                        output_version, each_dcgs));
-                if (each_dcgs.size() > 0) {
-                    LOG(WARNING) << strings::Substitute(
-                            "check conflict with partial update failed, tabletid:$0 segid:$1 ver:$2-$3 dcgs:$4",
-                            _tablet.tablet_id(), rowset->rowset_meta()->get_rowset_seg_id() + id,
-                            info->start_version.major() + 1, output_version, each_dcgs.size());
-                    _compaction_state.reset();
-                    return Status::InternalError("compaction conflict with partial update");
-                }
+Status TabletUpdates::_check_conflict_with_partial_update(CompactionInfo* info) {
+    // check edit version info from latest to info->start_version
+    for (auto i = _edit_version_infos.rbegin(); i != _edit_version_infos.rend() && info->start_version < (*i)->version;
+         i++) {
+        // check if need to cancel this compaction
+        bool need_cancel = false;
+        if ((*i)->deltas.size() == 0) {
+            // meet full clone
+            need_cancel = true;
+        } else {
+            uint32_t rowset_id = (*i)->deltas[0];
+            RowsetSharedPtr rowset = _get_rowset(rowset_id);
+            if (rowset->is_column_mode_partial_update()) {
+                need_cancel = true;
             }
+        }
+
+        if (need_cancel) {
+            LOG(WARNING) << strings::Substitute("compaction conflict with partial update failed, tabletid:$0 ver:$1-$2",
+                                                _tablet.tablet_id(), info->start_version.major(),
+                                                (*i)->version.major());
+            _compaction_state.reset();
+            return Status::Cancelled("compaction conflict with partial update");
         }
     }
     return Status::OK();
@@ -1516,7 +1525,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     EditVersionMetaPB edit;
     auto lastv = _edit_version_infos.back().get();
     // handle conflict between column mode partial update
-    RETURN_IF_ERROR(_check_conflict_with_partial_update((*pinfo).get(), lastv->version.major()));
+    RETURN_IF_ERROR(_check_conflict_with_partial_update((*pinfo).get()));
     auto edit_version_pb = edit.mutable_version();
     edit_version_pb->set_major(lastv->version.major());
     edit_version_pb->set_minor(lastv->version.minor() + 1);

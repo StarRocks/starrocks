@@ -55,10 +55,16 @@ public:
         return ss.str();
     }
 
+    size_t memory_usage() const { return _memory_usage; }
+
+private:
+    void _calc_memory_usage();
+
 private:
     int64_t _version = 0;
     std::vector<uint32_t> _column_ids;
     std::string _column_file;
+    size_t _memory_usage = 0;
 };
 
 using DeltaColumnGroupPtr = std::shared_ptr<DeltaColumnGroup>;

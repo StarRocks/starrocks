@@ -260,7 +260,7 @@ Status RowsetColumnUpdateState::finalize_partial_update_state(Tablet* tablet, Ro
         rowset_meta_pb.txn_meta().has_merge_condition()) {
         return Status::OK();
     }
-    RETURN_IF_ERROR(_init_rowset_seg_id(tablet, latest_applied_version.major()));
+    RETURN_IF_ERROR(_init_rowset_seg_id(tablet));
     for (uint32_t i = 0; i < rowset->num_update_files(); i++) {
         // check and resolve conflict
         if (_partial_update_states.size() == 0 || !_partial_update_states[i].inited) {
@@ -509,9 +509,11 @@ Status RowsetColumnUpdateState::finalize(Rowset* rowset, Tablet* tablet, int64_t
     return Status::OK();
 }
 
-Status RowsetColumnUpdateState::_init_rowset_seg_id(Tablet* tablet, int64_t version) {
+Status RowsetColumnUpdateState::_init_rowset_seg_id(Tablet* tablet) {
     std::vector<RowsetSharedPtr> rowsets;
-    RETURN_IF_ERROR(tablet->updates()->get_applied_rowsets(version, &rowsets, nullptr));
+    int64_t version;
+    std::vector<uint32_t> rowset_ids;
+    RETURN_IF_ERROR(tablet->updates()->get_apply_version_and_rowsets(&version, &rowsets, &rowset_ids));
     for (const auto& rs_ptr : rowsets) {
         for (uint32_t seg_id = 0; seg_id < rs_ptr->num_segments(); seg_id++) {
             _rssid_to_rowsetid_segid[rs_ptr->rowset_meta()->get_rowset_seg_id() + seg_id] =

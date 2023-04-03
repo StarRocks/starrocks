@@ -76,6 +76,7 @@ struct ColumnPartialUpdateState {
 
     // build `rss_rowid_to_update_rowid` from `src_rss_rowids`
     void build_rss_rowid_to_update_rowid() {
+        rss_rowid_to_update_rowid.clear();
         for (uint32_t upt_id = 0; upt_id < src_rss_rowids.size(); upt_id++) {
             uint64_t each_rss_rowid = src_rss_rowids[upt_id];
             // build rssid & rowid -> update file's rowid
@@ -142,7 +143,7 @@ private:
     // find <RowsetId, segment id> by rssid
     StatusOr<RowsetSegmentId> _find_rowset_seg_id(uint32_t rssid);
     // build the map from rssid to <RowsetId, segment id>
-    Status _init_rowset_seg_id(Tablet* tablet, int64_t version);
+    Status _init_rowset_seg_id(Tablet* tablet);
 
     Status _read_chunk_from_update(const std::map<uint32_t, std::pair<uint32_t, uint32_t>>& rowid_to_update_rowid,
                                    std::vector<ChunkIteratorPtr>& update_iterators, std::vector<uint32_t>& rowids,
