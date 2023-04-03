@@ -1186,6 +1186,8 @@ public class TabletScheduler extends LeaderDaemon {
             sendDeleteReplicaTask(replica.getBackendId(), tabletCtx.getTabletId(), tabletCtx.getSchemaHash());
         }
 
+        invertedIndex.markTabletForceDelete(tabletCtx.getTabletId());
+
         // write edit log
         ReplicaPersistInfo info = ReplicaPersistInfo.createForDelete(tabletCtx.getDbId(),
                 tabletCtx.getTblId(),
