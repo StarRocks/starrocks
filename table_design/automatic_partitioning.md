@@ -24,8 +24,8 @@ PARTITION BY date_trunc|time_slice(<time_unit>,<partition_column_name>)
 - `time_unit` ：分区粒度，目前仅支持为 `hour`、`day`、`month` 或 `year`，暂时不支持为 `week`。如果分区粒度为 `hour`，则仅支持分区列为 DATETIME 类型，不支持为 DATE 类型。
 - `partition_column_name`：分区列。由于分区类型为 RANGE 类型，因此分区列仅支持为 DATE 或 DATETIME 类型，不支持为其它类型。目前仅支持指定一个分区列，不支持指定多个分区列。
   - 如果使用 `date_trunc` 函数，则分区列支持为 DATE 或 DATETIME 类型。如果使用 `time_slice` 函数，则分区列仅支持为 DATETIME 类型。
-  - 分区列的值支持为 `NULL`。如果分区列是 DATE 类型，则数值范围为 [0000-01-01~9999-12-31]。如果分区列是 DATETIME 类型，则数值范围为 [0000-01-01 01:01:01~9999-12-31 23:59:59]。
-- `partition_live_number`**：**保留最近多少数量的分区。最近是指分区按时间的先后顺序进行排序，然后从后往前数的分区的个数会保留，其余分区会删除。后台会定时调度任务来管理分区数量，调度间隔可以通过 FE 动态参数 `dynamic_partition_check_interval_seconds` 配置，默认为 600 秒，即 10 分钟。
+  - 分区列的值支持为 `NULL`。如果分区列是 DATE 类型，则数值范围为 [0000-01-01 ~ 9999-12-31]。如果分区列是 DATETIME 类型，则数值范围为 [0000-01-01 01:01:01 ~ 9999-12-31 23:59:59]。
+- `partition_live_number`：保留最近多少数量的分区。最近是指分区按时间的先后顺序进行排序，然后从后往前数的分区的个数会保留，其余分区会删除。后台会定时调度任务来管理分区数量，调度间隔可以通过 FE 动态参数 `dynamic_partition_check_interval_seconds` 配置，默认为 600 秒，即 10 分钟。
 
 ## 示例
 

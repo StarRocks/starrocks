@@ -38,7 +38,7 @@ WHERE <where_condition>
 
 `from_item`
 
-引用数据库中一个或者多个其他的表。该表与待操作的表进行连接，WHERE 子句指定连接条件，最终基于连接查询的结果集给待更新中匹配行的列赋值。 例如 FROM 子句为 `FROM t1 WHERE t0.pk = t1.pk;`，StarRocks 实际执行 UPDATE 语句时会将该 FROM 子句的表表达式会转换为 `t0 JOIN t1 ON ``t0.pk``=``t1.pk``;`。
+引用数据库中一个或者多个其他的表。该表与待操作的表进行连接，WHERE 子句指定连接条件，最终基于连接查询的结果集给待更新中匹配行的列赋值。 例如 FROM 子句为 `FROM t1 WHERE t0.pk = t1.pk;`，StarRocks 实际执行 UPDATE 语句时会将该 FROM 子句的表表达式会转换为 `t0 JOIN t1 ON t0.pk=t1.pk;`。
 
 `where_condition`
 
