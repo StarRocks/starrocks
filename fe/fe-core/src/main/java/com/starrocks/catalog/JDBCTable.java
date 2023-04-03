@@ -70,6 +70,10 @@ public class JDBCTable extends Table {
         return jdbcTable;
     }
 
+    public String getProperty(String propertyKey) {
+        return properties.get(propertyKey);
+    }
+
     private void validate(Map<String, String> properties) throws DdlException {
         if (properties == null) {
             throw new DdlException("Please set properties of jdbc table, they are: table and resource");
