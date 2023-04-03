@@ -467,14 +467,14 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             // For string column rewrite to dictionary column, other columns remain unchanged
             Arrays.stream(columnIds).map(cid -> stringColumnIdToDictColumnIds.getOrDefault(cid, cid))
                     .forEach(rewritesOutputColumns::union);
-            LogicalProperty newProperty =  new LogicalProperty(logicalProperty);
+            LogicalProperty newProperty = new LogicalProperty(logicalProperty);
             newProperty.setOutputColumns(rewritesOutputColumns);
             return newProperty;
         }
 
         private static LogicalProperty rewriteLogicProperty(LogicalProperty logicalProperty,
                                                             ColumnRefSet outputColumns) {
-            LogicalProperty newProperty =  new LogicalProperty(logicalProperty);
+            LogicalProperty newProperty = new LogicalProperty(logicalProperty);
             newProperty.setOutputColumns(outputColumns);
             return newProperty;
         }

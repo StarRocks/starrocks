@@ -18,7 +18,6 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -123,7 +122,7 @@ public class RangePartitionDesc extends PartitionDesc {
                             "partition column as DATETIME type");
                 }
                 PartitionConvertContext context = new PartitionConvertContext();
-                context.setAutoPartitionTable(isAutoPartitionTable);;
+                context.setAutoPartitionTable(isAutoPartitionTable);
                 context.setFirstPartitionColumnType(firstPartitionColumn.getType());
                 context.setProperties(otherProperties);
 

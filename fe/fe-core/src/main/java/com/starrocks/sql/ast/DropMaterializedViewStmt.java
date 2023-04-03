@@ -35,6 +35,7 @@ public class DropMaterializedViewStmt extends DdlStmt {
     public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName) {
         this(ifExists, dbMvName, NodePosition.ZERO);
     }
+
     public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName, NodePosition pos) {
         super(pos);
         this.ifExists = ifExists;
