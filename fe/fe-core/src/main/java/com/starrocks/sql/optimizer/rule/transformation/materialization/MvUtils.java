@@ -856,9 +856,9 @@ public class MvUtils {
     }
 
     private static List<Range<PartitionKey>> getLatestPartitionRangeForTable(Table partitionByTable,
-                                                                      Column partitionColumn,
-                                                                      MaterializedView mv,
-                                                                      Set<String> mvPartitionNamesToRefresh) {
+                                                                             Column partitionColumn,
+                                                                             MaterializedView mv,
+                                                                             Set<String> mvPartitionNamesToRefresh) {
         Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable);
         List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
                 modifiedPartitionNames);
@@ -874,7 +874,7 @@ public class MvUtils {
     }
 
     private static List<Range<PartitionKey>> getLatestPartitionRangeForNativeTable(OlapTable partitionTable,
-                                                                            Set<String> modifiedPartitionNames) {
+                                                                                   Set<String> modifiedPartitionNames) {
         // partitions that will be excluded
         Set<Long> filteredIds = Sets.newHashSet();
         for (Partition p : partitionTable.getPartitions()) {
@@ -887,7 +887,7 @@ public class MvUtils {
     }
 
     private static List<Range<PartitionKey>> getLatestPartitionRange(Table table, Column partitionColumn,
-                                                              Set<String> modifiedPartitionNames) {
+                                                                     Set<String> modifiedPartitionNames) {
         if (table.isNativeTableOrMaterializedView()) {
             return getLatestPartitionRangeForNativeTable((OlapTable) table, modifiedPartitionNames);
         } else {

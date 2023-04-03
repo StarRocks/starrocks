@@ -19,6 +19,7 @@ import com.starrocks.sql.parser.NodePosition;
 
 public class SetWarehouseStmt extends StatementBase {
     private String warehouseName;
+
     public SetWarehouseStmt(String warehouseName) {
         this(warehouseName, NodePosition.ZERO);
     }

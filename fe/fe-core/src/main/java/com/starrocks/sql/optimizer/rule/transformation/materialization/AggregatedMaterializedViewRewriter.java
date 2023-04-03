@@ -541,7 +541,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             newAggCall.setChild(0, targetColumn);
             // NOTE: Change fn's type  as 1th child has change, otherwise physical plan
             // will still use old arg input's type.
-            newAggCall.getFunction().setArgsType(new Type[] { targetColumn.getType() });
+            newAggCall.getFunction().setArgsType(new Type[] {targetColumn.getType()});
             return newAggCall;
         }
     }
@@ -616,6 +616,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         newAggOp.setProjection(new Projection(projections));
         return newAggOp;
     }
+
     private Pair<ColumnRefOperator, CallOperator> createNewCallOperator(ColumnRefFactory queryColumnRefFactory,
                                                                         Function newFn,
                                                                         List<ScalarOperator> args,
@@ -623,7 +624,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         Preconditions.checkState(newFn != null);
         CallOperator newCallOp = new CallOperator(newFn.functionName(), newFn.getReturnType(), args, newFn);
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : oldAggregations.entrySet()) {
-            if (entry.getValue().equals(newCallOp))  {
+            if (entry.getValue().equals(newCallOp)) {
                 return Pair.create(entry.getKey(), newCallOp);
             }
         }
