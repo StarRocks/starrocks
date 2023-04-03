@@ -356,6 +356,9 @@ public class ShowStmtAnalyzer {
                                                 olapTable.getKeysType() != KeysType.PRIMARY_KEYS) {
                                             extras.add(column.getAggregationType().name());
                                         }
+                                        if (column.useZoneMap()) {
+                                            extras.add("USE_ZONE_MAP");
+                                        }
                                         String defaultStr = column.getMetaDefaultValue(extras);
                                         String extraStr = StringUtils.join(extras, ",");
                                         List<String> row = Arrays.asList(
@@ -433,6 +436,9 @@ public class ShowStmtAnalyzer {
                                 }
                                 if (bfColumns != null && bfColumns.contains(column.getName())) {
                                     extras.add("BLOOM_FILTER");
+                                }
+                                if (column.useZoneMap()) {
+                                    extras.add("USE_ZONE_MAP");
                                 }
                                 String defaultStr = column.getMetaDefaultValue(extras);
                                 String extraStr = StringUtils.join(extras, ",");

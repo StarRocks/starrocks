@@ -190,7 +190,8 @@ struct TColumn {
     // For fixed-length column, this value may be ignored by BE when creating a tablet.
     20: optional i32 index_len                 
     // column type. If this field is set, the |column_type| will be ignored.
-    21: optional Types.TTypeDesc type_desc         
+    21: optional Types.TTypeDesc type_desc
+    22: optional bool use_zone_map         
 }
 
 struct TOlapTableIndexTablets {

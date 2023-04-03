@@ -94,6 +94,8 @@ public class Column implements Writable {
     private boolean isAllowNull;
     @SerializedName(value = "isAutoIncrement")
     private boolean isAutoIncrement;
+    @SerializedName(value = "useZoneMap")
+    private boolean useZoneMap;
     @SerializedName(value = "defaultValue")
     private String defaultValue;
     // this handle function like now() or simple expression
@@ -167,6 +169,7 @@ public class Column implements Writable {
             }
         }
         this.isAutoIncrement = false;
+        this.useZoneMap = false;
         this.comment = comment;
         this.stats = new ColumnStats();
     }
@@ -275,12 +278,20 @@ public class Column implements Writable {
         return isAutoIncrement;
     }
 
+    public boolean useZoneMap() {
+        return useZoneMap;
+    }
+
     public void setIsAllowNull(boolean isAllowNull) {
         this.isAllowNull = isAllowNull;
     }
 
     public void setIsAutoIncrement(boolean isAutoIncrement) {
         this.isAutoIncrement = isAutoIncrement;
+    }
+
+    public void setUseZoneMap(boolean useZoneMap) {
+        this.useZoneMap = useZoneMap;
     }
 
     public DefaultExpr getDefaultExpr() {
@@ -331,6 +342,7 @@ public class Column implements Writable {
         tColumn.setIs_key(this.isKey);
         tColumn.setIs_allow_null(this.isAllowNull);
         tColumn.setIs_auto_increment(this.isAutoIncrement);
+        tColumn.setUse_zone_map(this.useZoneMap);
         tColumn.setDefault_value(this.defaultValue);
         // The define expr does not need to be serialized here for now.
         // At present, only serialized(analyzed) define expr is directly used when creating a materialized view.
@@ -472,6 +484,9 @@ public class Column implements Writable {
                 getPrimitiveType() != PrimitiveType.BITMAP) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         }
+        if (useZoneMap) {
+            sb.append("USE_ZONE_MAP ");
+        }
         sb.append("COMMENT \"").append(comment).append("\"");
 
         return sb.toString();
@@ -566,6 +581,9 @@ public class Column implements Writable {
                 getPrimitiveType() != PrimitiveType.BITMAP) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
         }
+        if (useZoneMap) {
+            sb.append("USE_ZONE_MAP ");
+        }
         sb.append("COMMENT \"").append(comment).append("\"");
 
         return sb.toString();
@@ -621,6 +639,10 @@ public class Column implements Writable {
             return false;
         }
         if (this.getScale() != other.getScale()) {
+            return false;
+        }
+
+        if (this.useZoneMap != other.useZoneMap) {
             return false;
         }
 

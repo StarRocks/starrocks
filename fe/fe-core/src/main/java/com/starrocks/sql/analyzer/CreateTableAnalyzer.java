@@ -234,6 +234,7 @@ public class CreateTableAnalyzer {
         boolean hasHll = false;
         boolean hasBitmap = false;
         boolean hasJson = false;
+        boolean hasUseZonemap = false;
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             try {
@@ -258,6 +259,13 @@ public class CreateTableAnalyzer {
             if (!columnSet.add(columnDef.getName())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, columnDef.getName());
             }
+
+            if (columnDef.useZoneMap()) {
+                hasUseZonemap = true;
+                if (!columnDef.getType().supportZoneMapSupport()) {
+                    throw new SemanticException("Column type [" + columnDef.getType() + "] not support zone_map");
+                }
+            }
         }
 
         if (hasHll && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
@@ -266,6 +274,11 @@ public class CreateTableAnalyzer {
 
         if (hasBitmap && keysDesc.getKeysType() != KeysType.AGG_KEYS) {
             throw new SemanticException("BITMAP_UNION must be used in AGG_KEYS", keysDesc.getPos());
+        }
+
+        if (hasUseZonemap && keysDesc.getKeysType() != KeysType.PRIMARY_KEYS 
+                && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
+            throw new SemanticException("USE_ZONE_MAP must be used in PRIMARY_KEYS or DUPLICATE_KEYS", keysDesc.getPos());
         }
 
         DistributionDesc distributionDesc = statement.getDistributionDesc();

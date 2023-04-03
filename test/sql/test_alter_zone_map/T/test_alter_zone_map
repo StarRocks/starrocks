@@ -1,0 +1,112 @@
+-- name: test_alter_zone_map
+CREATE TABLE IF NOT EXISTS tbl1 (
+    k1      varchar(20),
+    v1      varchar(20),
+    v2      varchar(20)
+) ENGINE=OLAP
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+properties (
+"replication_num" = "1"
+);
+
+insert into tbl1 values("100", "100", "100");
+insert into tbl1 values("200", "200", "200");
+insert into tbl1 values("300", "300", "300");
+select * from tbl1;
+select * from tbl1 where v1 = "200";
+alter table tbl1 modify column v1 varchar(20) use_zone_map;
+function: wait_alter_table_finish()
+insert into tbl1 values("400", "400", "400");
+select * from tbl1 where v1 = "200";
+select * from tbl1 where v1 = "400";
+alter table tbl1 modify column v1 varchar(20);
+function: wait_alter_table_finish()
+insert into tbl1 values("500", "500", "500");
+select * from tbl1 where v1 = "200";
+select * from tbl1 where v1 = "500";
+
+-- name: test_create_with_zone_map
+CREATE TABLE IF NOT EXISTS tbl2 (
+    k1      varchar(20),
+    v1      varchar(20),
+    v2      varchar(20) use_zone_map
+) ENGINE=OLAP
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+properties (
+"replication_num" = "1"
+);
+
+insert into tbl2 values("100", "100", "100");
+insert into tbl2 values("200", "200", "200");
+insert into tbl2 values("300", "300", "300");
+select * from tbl2;
+select * from tbl2 where v2 = "200";
+
+-- name: test_max_min_in_pk
+CREATE TABLE IF NOT EXISTS tbl3 (
+    k1      INT,
+    v1      INT use_zone_map,
+    v2      INT use_zone_map
+) ENGINE=OLAP
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+properties (
+"replication_num" = "1"
+);
+
+insert into tbl3 values(100,100,100),(200,200,200),(300,300,300),(400,400,400);
+select max(v1), min(v2) from tbl3;
+delete from tbl3 where k1 = 100;
+delete from tbl3 where k1 = 400;
+select max(v1), min(v2) from tbl3;
+select * from tbl3 where v2 = 400;
+select * from tbl3 where v2 = 100;
+
+-- name: test_invalid_type
+CREATE TABLE IF NOT EXISTS tbl4 (
+    k1      INT,
+    v1      INT SUM use_zone_map,
+    v2      INT SUM use_zone_map
+) ENGINE=OLAP
+AGGREGATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+properties (
+"replication_num" = "1"
+);
+
+CREATE TABLE IF NOT EXISTS tbl4 (
+    k1      INT,
+    v1      INT use_zone_map,
+    v2      INT use_zone_map
+) ENGINE=OLAP
+UNIQUE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+properties (
+"replication_num" = "1"
+);
+
+CREATE TABLE IF NOT EXISTS tbl4 (
+    k1      INT,
+    v1      INT,
+    v2      ARRAY<INT> use_zone_map
+) ENGINE=OLAP
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+properties (
+"replication_num" = "1"
+);
+
+CREATE TABLE IF NOT EXISTS tbl4 (
+    k1      INT,
+    v1      INT,
+    v2      JSON
+) ENGINE=OLAP
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+properties (
+"replication_num" = "1"
+);
+alter table tbl4 modify column v2 JSON use_zone_map;
+

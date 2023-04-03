@@ -112,6 +112,9 @@ public:
     bool has_bitmap_index() const { return _check_flag(kHasBitmapIndexShift); }
     void set_has_bitmap_index(bool value) { _set_flag(kHasBitmapIndexShift, value); }
 
+    bool use_zone_map() const { return _check_flag(kUseZoneMapShft); }
+    void set_use_zone_map(bool value) { _set_flag(kUseZoneMapShft, value); }
+
     ColumnLength length() const { return _length; }
     void set_length(ColumnLength length) { _length = length; }
 
@@ -172,6 +175,7 @@ private:
     constexpr static uint8_t kHasPrecisionShift = 4;
     constexpr static uint8_t kHasScaleShift = 5;
     constexpr static uint8_t kHasAutoIncrementShift = 6;
+    constexpr static uint8_t kUseZoneMapShft = 7;
 
     ExtraFields* _get_or_alloc_extra_fields() {
         if (_extra_fields == nullptr) {

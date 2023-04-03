@@ -133,6 +133,7 @@ public class ColumnDef implements ParseNode {
     private boolean isAllowNullImplicit = false;
     private Boolean isAllowNull;
     private Boolean isAutoIncrement;
+    private Boolean useZoneMap;
     private DefaultValueDef defaultValueDef;
     private final String comment;
 
@@ -140,24 +141,24 @@ public class ColumnDef implements ParseNode {
 
     public ColumnDef(String name, TypeDef typeDef) {
         this(name, typeDef, null, false, null, false, DefaultValueDef.NOT_SET,
-                null, "", NodePosition.ZERO);
+                null, "", NodePosition.ZERO, false);
     }
 
     public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
                      Boolean isAllowNull, DefaultValueDef defaultValueDef, String comment) {
         this(name, typeDef, null, isKey, aggregateType, isAllowNull, defaultValueDef,
-                null, comment, NodePosition.ZERO);
+                null, comment, NodePosition.ZERO, false);
     }
 
     public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
                      Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement, String comment) {
         this(name, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef, isAutoIncrement,
-                comment, NodePosition.ZERO);
+                comment, NodePosition.ZERO, false);
     }
 
     public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
                      Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement, String comment,
-                     NodePosition pos) {
+                     NodePosition pos, Boolean useZoneMap) {
         this.pos = pos;
         this.name = name;
         this.typeDef = typeDef;
@@ -182,6 +183,7 @@ public class ColumnDef implements ParseNode {
             this.isAutoIncrement = true;
         }
         this.comment = comment;
+        this.useZoneMap = useZoneMap;
     }
 
     public boolean isAllowNull() {
@@ -194,6 +196,10 @@ public class ColumnDef implements ParseNode {
 
     public boolean isAutoIncrement() {
         return isAutoIncrement;
+    }
+
+    public boolean useZoneMap() {
+        return useZoneMap;
     }
 
     // The columns will obey NULL constraint if not specified. The primary key column should abide by the NOT NULL constraint default to be compatible with ANSI.
@@ -462,6 +468,10 @@ public class ColumnDef implements ParseNode {
         if (defaultValueDef.isSet) {
             sb.append("DEFAULT ").append(toDefaultExpr(defaultValueDef.expr)).append(" ");
         }
+
+        if (useZoneMap) {
+            sb.append("USE_ZONE_MAP ");
+        }
         sb.append("COMMENT \"").append(comment).append("\"");
 
         return sb.toString();
@@ -475,6 +485,7 @@ public class ColumnDef implements ParseNode {
     public Column toColumn() {
         Column col = new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValueDef, comment);
         col.setIsAutoIncrement(isAutoIncrement);
+        col.setUseZoneMap(useZoneMap);
         return col;
     }
 

@@ -840,6 +840,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (isAutoIncrement != null) {
             isAllowNull = false;
         }
+        boolean useZoneMap = false;
+        if (context.USE_ZONE_MAP() != null) {
+            useZoneMap = true;
+        }
         ColumnDef.DefaultValueDef defaultValueDef = ColumnDef.DefaultValueDef.NOT_SET;
         final StarRocksParser.DefaultDescContext defaultDescContext = context.defaultDesc();
         if (defaultDescContext != null) {
@@ -859,7 +863,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String comment = context.comment() == null ? "" :
                 ((StringLiteral) visit(context.comment().string())).getStringValue();
         return new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef,
-                isAutoIncrement, comment, createPos(context));
+                isAutoIncrement, comment, createPos(context), useZoneMap);
     }
 
     @Override

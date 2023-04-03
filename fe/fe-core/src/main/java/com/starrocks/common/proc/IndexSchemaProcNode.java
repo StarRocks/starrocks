@@ -85,6 +85,9 @@ public class IndexSchemaProcNode implements ProcNodeInterface {
             if (bfColumns != null && bfColumns.contains(column.getName())) {
                 extras.add("BLOOM_FILTER");
             }
+            if (column.useZoneMap()) {
+                extras.add("USE_ZONE_MAP");
+            }
             String defaultStr = column.getMetaDefaultValue(extras);
             String extraStr = StringUtils.join(extras, ",");
 

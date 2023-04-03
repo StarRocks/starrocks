@@ -404,6 +404,11 @@ public class SchemaChangeHandler extends AlterHandler {
             schemaForFinding.set(modColIndex, modColumn);
         }
 
+        // check alter use zone_map
+        if (modColumn.useZoneMap() && !modColumn.getType().supportZoneMapSupport()) {
+            throw new DdlException("Column type [" + modColumn.getType() + "] not support zonemap");
+        }
+
         // check if column being mod
         if (!modColumn.equals(oriColumn)) {
             // column is mod. we have to mod this column in all indices

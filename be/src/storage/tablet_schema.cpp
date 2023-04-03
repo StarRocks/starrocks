@@ -209,6 +209,7 @@ void TabletColumn::init_from_pb(const ColumnPB& column) {
     _set_flag(kHasPrecisionShift, column.has_precision());
     _set_flag(kHasScaleShift, column.has_frac());
     _set_flag(kHasAutoIncrementShift, column.is_auto_increment());
+    _set_flag(kUseZoneMapShft, column.use_zone_map());
 
     if (column.has_precision()) {
         DCHECK_LE(column.precision(), UINT8_MAX);
@@ -240,6 +241,7 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     column->set_is_key(is_key());
     column->set_is_nullable(is_nullable());
     column->set_is_auto_increment(is_auto_increment());
+    column->set_use_zone_map(use_zone_map());
     if (has_default_value()) {
         column->set_default_value(default_value());
     }
@@ -463,7 +465,7 @@ std::string TabletColumn::debug_string() const {
        << ",precision=" << (has_precision() ? std::to_string(_precision) : "N/A")
        << ",frac=" << (has_scale() ? std::to_string(_scale) : "N/A") << ",length=" << _length
        << ",index_length=" << _index_length << ",is_bf_column=" << is_bf_column()
-       << ",has_bitmap_index=" << has_bitmap_index() << ")";
+       << ",has_bitmap_index=" << has_bitmap_index() << ",use_zone_map=" << use_zone_map() << ")";
     return ss.str();
 }
 

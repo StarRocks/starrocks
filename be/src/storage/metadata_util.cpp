@@ -190,6 +190,10 @@ static Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, 
         column_pb->set_is_auto_increment(t_column.is_auto_increment);
     }
 
+    if (t_column.__isset.use_zone_map) {
+        column_pb->set_use_zone_map(t_column.use_zone_map);
+    }
+
     return Status::OK();
 }
 

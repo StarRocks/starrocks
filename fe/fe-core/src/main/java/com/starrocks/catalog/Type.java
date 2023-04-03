@@ -790,6 +790,11 @@ public abstract class Type implements Cloneable {
                 !isJsonType() && !isOnlyMetricType() && !isFunctionType() && !isBinaryType();
     }
 
+    public boolean supportZoneMapSupport() {
+        return !isJsonType() && !isOnlyMetricType() && !isFunctionType() 
+            && !isBinaryType() && !isComplexType();
+    }
+
     public static final String ONLY_METRIC_TYPE_ERROR_MSG =
             "Type percentile/hll/bitmap/json/struct/map not support aggregation/group-by/order-by/union/join";
 
