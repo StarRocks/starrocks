@@ -557,8 +557,8 @@ public class Alter {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
 
-            if (!table.isOlapOrLakeTable()) {
-                throw new DdlException("Do not support alter non-OLAP or non-LAKE table[" + tableName + "]");
+            if (!table.isOlapOrCloudNativeTable()) {
+                throw new DdlException("Do not support alter non-native table[" + tableName + "]");
             }
             olapTable = (OlapTable) table;
 
@@ -657,7 +657,7 @@ public class Alter {
                 // currently, only in memory property could reach here
                 Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY));
                 olapTable = (OlapTable) db.getTable(tableName);
-                if (olapTable.isLakeTable()) {
+                if (olapTable.isCloudNativeTable()) {
                     throw new DdlException("Lake table not support alter in_memory");
                 }
 
@@ -683,7 +683,7 @@ public class Alter {
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
 
                 olapTable = (OlapTable) db.getTable(tableName);
-                if (olapTable.isLakeTable()) {
+                if (olapTable.isCloudNativeTable()) {
                     throw new DdlException("Lake table not support alter in_memory or enable_persistent_index or write_quorum");
                 }
 
@@ -734,7 +734,7 @@ public class Alter {
         String origTblName = origTable.getName();
         String newTblName = clause.getTblName();
         Table newTbl = db.getTable(newTblName);
-        if (newTbl == null || !newTbl.isOlapOrLakeTable()) {
+        if (newTbl == null || !newTbl.isOlapOrCloudNativeTable()) {
             throw new DdlException("Table " + newTblName + " does not exist or is not OLAP/LAKE table");
         }
         OlapTable olapNewTbl = (OlapTable) newTbl;

@@ -731,7 +731,6 @@ TEST_F(JsonFunctionsTest, extract_from_object_test) {
     EXPECT_STREQ(output.data(), "{}");
     EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": {}})", "$.data.key", &output));
 
-
     EXPECT_STATUS(Status::NotFound(""), test_extract_from_object(R"({"data": 1})", "$.data.key", &output));
 }
 

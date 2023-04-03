@@ -136,7 +136,8 @@ public class OlapTableFactory implements AbstractTableFactory {
             if (partitionInfo instanceof ExpressionRangePartitionInfo) {
                 ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
                 long partitionId = metastore.getNextId();
-                String replicateNum = stmt.getProperties().get("replication_num");
+                String replicateNum = stmt.getProperties().getOrDefault("replication_num",
+                        String.valueOf(RunMode.defaultReplicationNum()));
                 expressionRangePartitionInfo.createAutomaticShadowPartition(partitionId, replicateNum);
                 partitionNameToId.put(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME, partitionId);
             }
@@ -214,7 +215,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
             }
 
-            if (table.isLakeTable() && !runMode.isAllowCreateLakeTable())  {
+            if (table.isCloudNativeTable() && !runMode.isAllowCreateLakeTable())  {
                 throw new DdlException("Cannot create table with persistent volume in current run mode \"" + runMode + "\"");
             }
             if (table.isOlapTable() && !runMode.isAllowCreateOlapTable()) {
@@ -475,7 +476,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         // create partition
         try {
             // do not create partition for external table
-            if (table.isOlapOrLakeTable()) {
+            if (table.isOlapOrCloudNativeTable()) {
                 if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
                     if (properties != null && !properties.isEmpty()) {
                         // here, all properties should be checked
@@ -555,7 +556,9 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
                 createTblSuccess = db.createTableWithLock(table, false);
                 if (!createTblSuccess) {
-                    if (!stmt.isSetIfNotExists()) {
+                    if (db.isInfoSchemaDb()) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "create denied");
+                    } else if (!stmt.isSetIfNotExists()) {
                         ErrorReport
                                 .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
                     } else {
@@ -630,19 +633,30 @@ public class OlapTableFactory implements AbstractTableFactory {
             return;
         }
 
-        if (olapTable.isLakeTable() != expectLakeTable) {
+        if (olapTable.isCloudNativeTable() != expectLakeTable) {
             return;
         }
 
         String fullGroupName = db.getId() + "_" + colocateGroup;
         ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
+        ColocateTableIndex.GroupId colocateGrpIdInOtherDb = null; /* to use GroupId.grpId */
         if (groupSchema != null) {
             // group already exist, check if this table can be added to this group
             groupSchema.checkColocateSchema(olapTable);
+        } else {
+            // we also need to check the schema consistency with colocate group in other database
+            colocateGrpIdInOtherDb = colocateTableIndex.checkColocateSchemaWithGroupInOtherDb(
+                    colocateGroup, db.getId(), olapTable);
         }
-        // add table to this group, if group does not exist, create a new one
+        // Add table to this group, if group does not exist, create a new one.
+        // If the to create colocate group should colocate with groups in other databases,
+        // i.e. `colocateGrpIdInOtherDb` is not null, we reuse `GroupId.grpId` from those
+        // groups, so that we can have a mechanism to precisely find all the groups that colocate with
+        // each other in different databases.
         colocateTableIndex.addTableToGroup(db.getId(), olapTable, colocateGroup,
-                null /* generate group id inside */, false /* isReplay */);
+                colocateGrpIdInOtherDb == null ? null :
+                        new ColocateTableIndex.GroupId(db.getId(), colocateGrpIdInOtherDb.grpId),
+                false /* isReplay */);
         olapTable.setColocateGroup(colocateGroup);
     }
 }

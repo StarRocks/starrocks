@@ -45,6 +45,8 @@ public:
     ESDataSourceProvider(ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
 
+    const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
+
 protected:
     ConnectorScanNode* _scan_node;
     const TEsScanNode _es_scan_node;

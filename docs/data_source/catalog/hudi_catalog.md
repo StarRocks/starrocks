@@ -2,7 +2,7 @@
 
 A Hudi catalog is a kind of external catalog that enables you to query data from Apache Hudi without ingestion.
 
-Also, you can directly transform and load data from Hudi based on this Hudi catalog.
+Also, you can directly transform and load data from Hudi by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Hudi catalogs. StarRocks supports Hudi catalogs from v2.4 onwards.
 
 To ensure successful SQL workloads on your Hudi cluster, your StarRocks cluster needs to integrate with two important components:
 
@@ -326,6 +326,30 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
       "aws.glue.region" = "us-west-2"
   );
   ```
+
+### View Hudi catalogs
+
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+
+```SQL
+SHOW CATALOGS;
+```
+
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation information of an external catalog. The following example queries the creation information of a Hudi catalog named `hudi_catalog_glue`:
+
+```SQL
+SHOW CREATE CATALOG hudi_catalog_glue;
+```
+
+### Drop a Hudi catalog
+
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop a Hudi catalog.
+
+The following example drops a Hudi catalog named `hudi_catalog_glue`:
+
+```SQL
+DROP Catalog hudi_catalog_glue;
+```
 
 ## View the schema of a Hudi table
 

@@ -112,6 +112,7 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
@@ -428,10 +429,13 @@ public class StmtExecutor {
 
                 // sql's blacklist is enabled through enable_sql_blacklist.
                 if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
-                    String originSql = parsedStmt.getOrigStmt().originStmt.trim().toLowerCase().replaceAll(" +", " ");
-
-                    // If this sql is in blacklist, show message.
-                    SqlBlackList.verifying(originSql);
+                    OriginStatement origStmt = parsedStmt.getOrigStmt();
+                    if (origStmt != null) {
+                        String originSql = origStmt.originStmt.trim()
+                                .toLowerCase().replaceAll(" +", " ");
+                        // If this sql is in blacklist, show message.
+                        SqlBlackList.verifying(originSql);
+                    }
                 }
 
                 // Record planner costs in audit log
@@ -538,6 +542,8 @@ public class StmtExecutor {
                 handleDelSqlBlackListStmt();
             } else if (parsedStmt instanceof ExecuteAsStmt) {
                 handleExecAsStmt();
+            } else if (parsedStmt instanceof ExecuteScriptStmt) {
+                handleExecScriptStmt();
             } else if (parsedStmt instanceof SetRoleStmt) {
                 handleSetRole();
             } else if (parsedStmt instanceof SetDefaultRoleStmt) {
@@ -571,13 +577,16 @@ public class StmtExecutor {
                 coord.cancel();
             }
 
-            if (parsedStmt instanceof InsertStmt) {
+            if (parsedStmt instanceof InsertStmt && !parsedStmt.isExplain()) {
                 // sql's blacklist is enabled through enable_sql_blacklist.
                 if (Config.enable_sql_blacklist) {
-                    String originSql = parsedStmt.getOrigStmt().originStmt.trim().toLowerCase().replaceAll(" +", " ");
-
-                    // If this sql is in blacklist, show message.
-                    SqlBlackList.verifying(originSql);
+                    OriginStatement origStmt = parsedStmt.getOrigStmt();
+                    if (origStmt != null) {
+                        String originSql = origStmt.originStmt.trim()
+                                .toLowerCase().replaceAll(" +", " ");
+                        // If this sql is in blacklist, show message.
+                        SqlBlackList.verifying(originSql);
+                    }
                 }
             }
 
@@ -980,6 +989,10 @@ public class StmtExecutor {
 
     private void handleExecAsStmt() throws PrivilegeException, UserException {
         ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
+    }
+
+    private void handleExecScriptStmt() throws PrivilegeException, UserException {
+        ExecuteScriptExecutor.execute((ExecuteScriptStmt) parsedStmt, context);
     }
 
     private void handleSetRole() throws PrivilegeException, UserException {

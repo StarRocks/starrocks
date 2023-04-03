@@ -536,6 +536,7 @@ public class TabletScheduler extends LeaderDaemon {
                         tabletCtx.getTabletId(), e);
                 stat.counterTabletScheduledFailed.incrementAndGet();
                 finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
+                continue;
             }
 
             Preconditions.checkState(tabletCtx.getState() == TabletSchedCtx.State.RUNNING);
@@ -604,7 +605,7 @@ public class TabletScheduler extends LeaderDaemon {
             if (tbl == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
             }
-            if (tbl.isCloudNativeTable()) {
+            if (tbl.isCloudNativeTableOrMaterializedView()) {
                 throw new SchedException(Status.UNRECOVERABLE, "tablet is managed externally");
             }
 
@@ -877,7 +878,7 @@ public class TabletScheduler extends LeaderDaemon {
                     tabletCtx.getTabletId(), tabletCtx.getTablet().getReplicaInfos(),
                     tabletCtx.getSrcReplica().getBackendId(), tabletCtx.getDestBackendId());
         } catch (SchedException e) {
-            if (e.getStatus() == Status.SCHEDULE_RETRY) {
+            if (e.getStatus() == Status.SCHEDULE_RETRY || e.getStatus() == Status.UNRECOVERABLE) {
                 LOG.debug("failed to find version incomplete replica from tablet relocating. " +
                                 "reason: [{}], tablet: [{}], replicas: {} dest:{} try to find a new backend", e.getMessage(),
                         tabletCtx.getTabletId(), tabletCtx.getTablet().getReplicaInfos(),
@@ -1184,6 +1185,8 @@ public class TabletScheduler extends LeaderDaemon {
             // process.
             sendDeleteReplicaTask(replica.getBackendId(), tabletCtx.getTabletId(), tabletCtx.getSchemaHash());
         }
+
+        invertedIndex.markTabletForceDelete(tabletCtx.getTabletId());
 
         // write edit log
         ReplicaPersistInfo info = ReplicaPersistInfo.createForDelete(tabletCtx.getDbId(),

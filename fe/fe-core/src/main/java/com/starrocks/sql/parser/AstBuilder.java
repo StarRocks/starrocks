@@ -198,6 +198,7 @@ import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.EmptyStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.FunctionArgsDef;
@@ -1326,23 +1327,41 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
             }
         }
-        CreateTableAsSelectStmt createTableAsSelectStmt =
-                (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
-        int startIndex = context.createTableAsSelectStatement().start.getStartIndex();
+        CreateTableAsSelectStmt createTableAsSelectStmt = null;
+        InsertStmt insertStmt = null;
+        if (context.createTableAsSelectStatement() != null) {
+            createTableAsSelectStmt = (CreateTableAsSelectStmt) visit(context.createTableAsSelectStatement());
+        } else if (context.insertStatement() != null) {
+            insertStmt = (InsertStmt) visit(context.insertStatement());
+        }
+
+        int startIndex = 0;
+        if (createTableAsSelectStmt != null) {
+            startIndex = context.createTableAsSelectStatement().start.getStartIndex();
+        } else {
+            startIndex = context.insertStatement().start.getStartIndex();
+        }
 
         NodePosition pos = createPos(context);
+        String dbName;
+        String taskName;
         if (qualifiedName == null) {
-            return new SubmitTaskStmt(null, null,
-                    properties, startIndex, createTableAsSelectStmt, pos);
+            dbName = null;
+            taskName = null;
         } else if (qualifiedName.getParts().size() == 1) {
-            return new SubmitTaskStmt(null, qualifiedName.getParts().get(0),
-                    properties, startIndex, createTableAsSelectStmt, pos);
+            dbName = null;
+            taskName = qualifiedName.getParts().get(0);
         } else if (qualifiedName.getParts().size() == 2) {
-            return new SubmitTaskStmt(qualifiedName.getParts().get(0),
-                    qualifiedName.getParts().get(1), properties, startIndex, createTableAsSelectStmt, pos);
+            dbName = qualifiedName.getParts().get(0);
+            taskName = qualifiedName.getParts().get(1);
         } else {
             throw new ParsingException(PARSER_ERROR_MSG.invalidTaskFormat(qualifiedName.toString()),
                     qualifiedName.getPos());
+        }
+        if (createTableAsSelectStmt != null) {
+            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, createTableAsSelectStmt, pos);
+        } else {
+            return new SubmitTaskStmt(dbName, taskName, properties, startIndex, insertStmt, pos);
         }
     }
 
@@ -3117,6 +3136,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new SetWarehouseStmt(warehouseName, createPos(context));
     }
 
+    @Override
+    public ParseNode visitExecuteScriptStatement(StarRocksParser.ExecuteScriptStatementContext context) {
+        long beId = Long.parseLong(context.INTEGER_VALUE().getText());
+        StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+        String script = stringLiteral.getStringValue();
+        return new ExecuteScriptStmt(beId, script, createPos(context));
+    }
+
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------
 
     @Override
@@ -3974,7 +4001,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitTableFunction(StarRocksParser.TableFunctionContext context) {
-        FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.tableFunctionCall());
+        QualifiedName functionName = getQualifiedName(context.qualifiedName());
+        List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
+        FunctionCallExpr functionCallExpr =
+                new FunctionCallExpr(FunctionName.createFnName(functionName.toString().toLowerCase()), parameters);
         TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(functionCallExpr);
 
         if (context.alias != null) {
@@ -3986,8 +4016,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitTableFunctionTable(StarRocksParser.TableFunctionTableContext context) {
-        TableFunctionRelation relation = new TableFunctionRelation((FunctionCallExpr) visit(context.tableFunctionCall()));
+    public ParseNode visitNormalizedTableFunction(StarRocksParser.NormalizedTableFunctionContext context) {
+        QualifiedName functionName = getQualifiedName(context.qualifiedName());
+        List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
+        FunctionCallExpr functionCallExpr =
+                new FunctionCallExpr(FunctionName.createFnName(functionName.toString().toLowerCase()), parameters);
+        TableFunctionRelation relation = new TableFunctionRelation(functionCallExpr);
 
         if (context.alias != null) {
             Identifier identifier = (Identifier) visit(context.alias);
@@ -3996,13 +4030,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         relation.setColumnOutputNames(getColumnNames(context.columnAliases()));
 
         return new NormalizedTableFunctionRelation(relation);
-    }
-
-    @Override
-    public ParseNode visitTableFunctionCall(StarRocksParser.TableFunctionCallContext context) {
-        QualifiedName functionName = getQualifiedName(context.qualifiedName());
-        List<Expr> parameters = visit(context.expressionList().expression(), Expr.class);
-        return new FunctionCallExpr(FunctionName.createFnName(functionName.toString().toLowerCase()), parameters);
     }
 
     @Override
@@ -5988,7 +6015,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 scale = Integer.parseInt(context.scale.getText());
             }
         }
-        if (context.DECIMAL() != null) {
+        if (context.DECIMAL() != null || context.NUMBER() != null || context.NUMERIC() != null) {
             if (precision != null) {
                 if (scale != null) {
                     return ScalarType.createUnifiedDecimalType(precision, scale);

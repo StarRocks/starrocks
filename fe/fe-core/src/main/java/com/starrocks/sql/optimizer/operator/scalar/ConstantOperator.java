@@ -35,6 +35,7 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.ResolverStyle;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -465,6 +466,10 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
                 } else {
                     // try cast by format "yyyy-MM-dd HH:mm:ss.SSS"
                     LocalDateTime localDateTime = LocalDateTime.from(DATE_TIME_FORMATTER_MS.parse(dateStr));
+                    if (desc.isDate()) {
+                        // The date type only needs to retain the precision of the day
+                        localDateTime = localDateTime.truncatedTo(ChronoUnit.DAYS);
+                    }
                     return ConstantOperator.createDatetime(localDateTime, desc);
                 }
             } catch (Exception e) {

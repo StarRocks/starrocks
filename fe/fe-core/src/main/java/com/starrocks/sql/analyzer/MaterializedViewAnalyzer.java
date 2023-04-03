@@ -522,7 +522,7 @@ public class MaterializedViewAnalyzer {
             if (table == null) {
                 throw new SemanticException("Materialized view partition expression %s could only ref to base table",
                         slotRef.toSql());
-            } else if (table.isNativeTable()) {
+            } else if (table.isNativeTableOrMaterializedView()) {
                 checkPartitionColumnWithBaseOlapTable(slotRef, (OlapTable) table);
             } else if (table.isHiveTable() || table.isHudiTable()) {
                 checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);
@@ -551,6 +551,7 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view partition column in partition exp " +
                             "must be base table partition column");
                 }
+                partitionColumns.forEach(partitionColumn1 -> checkPartitionColumnType(partitionColumn1));
             } else {
                 throw new SemanticException("Materialized view related base table partition type:" +
                         partitionInfo.getType().name() + "not supports");
@@ -558,14 +559,15 @@ public class MaterializedViewAnalyzer {
         }
 
         private void checkPartitionColumnWithBaseHMSTable(SlotRef slotRef, HiveMetaStoreTable table) {
-            List<String> partitionColumnNames = table.getPartitionColumnNames();
+            List<Column> partitionColumns = table.getPartitionColumns();
             if (table.isUnPartitioned()) {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
             } else {
                 boolean found = false;
-                for (String partitionColumn : partitionColumnNames) {
-                    if (partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                for (Column partitionColumn : partitionColumns) {
+                    if (partitionColumn.getName().equalsIgnoreCase(slotRef.getColumnName())) {
+                        checkPartitionColumnType(partitionColumn);
                         found = true;
                         break;
                     }
@@ -586,8 +588,9 @@ public class MaterializedViewAnalyzer {
             } else {
                 boolean found = false;
                 for (PartitionField partitionField : partitionSpec.fields()) {
-                    String partitionColumn = partitionField.name();
-                    if (partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                    String partitionColumnName = partitionField.name();
+                    if (partitionColumnName.equalsIgnoreCase(slotRef.getColumnName())) {
+                        checkPartitionColumnType(table.getColumn(partitionColumnName));
                         found = true;
                         break;
                     }
@@ -617,7 +620,7 @@ public class MaterializedViewAnalyzer {
             Table table = tableNameTableMap.get(tableName);
             List<BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                if (table.isNativeTable()) {
+                if (table.isNativeTableOrMaterializedView()) {
                     if (baseTableInfo.getTable().equals(table)) {
                         slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
                                 baseTableInfo.getDbName(), table.getName()));
@@ -642,6 +645,14 @@ public class MaterializedViewAnalyzer {
                         break;
                     }
                 }
+            }
+        }
+
+        private void checkPartitionColumnType(Column partitionColumn) {
+            PrimitiveType type = partitionColumn.getPrimitiveType();
+            if (!type.isFixedPointType() && !type.isDateType()) {
+                throw new SemanticException("Materialized view partition exp column:"
+                        + partitionColumn.getName() + " with type "  + type + " not supported");
             }
         }
 

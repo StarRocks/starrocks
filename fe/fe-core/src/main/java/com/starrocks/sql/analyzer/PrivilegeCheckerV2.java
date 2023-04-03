@@ -107,6 +107,7 @@ import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -347,7 +348,7 @@ public class PrivilegeCheckerV2 {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db != null && !db.isInfoSchemaDb()) {
                 Table table = db.getTable(tableId);
-                if (table != null && table.isOlapOrLakeTable()) {
+                if (table != null && table.isOlapOrCloudNativeTable()) {
                     tableNames.add(new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                             db.getFullName(), table.getName()));
                 }
@@ -368,7 +369,7 @@ public class PrivilegeCheckerV2 {
         Database db = GlobalStateMgr.getCurrentState().getDb(id);
         if (db != null && !db.isInfoSchemaDb()) {
             for (Table table : db.getTables()) {
-                if (table == null || !table.isOlapOrLakeTable()) {
+                if (table == null || !table.isOlapOrCloudNativeTable()) {
                     continue;
                 }
                 TableName tableNameNew = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -1023,6 +1024,12 @@ public class PrivilegeCheckerV2 {
         }
 
         @Override
+        public Void visitExecuteScriptStatement(ExecuteScriptStmt statement, ConnectContext context) {
+            checkStmtOperatePrivilege(context);
+            return null;
+        }
+
+        @Override
         public Void visitCreateRoleStatement(CreateRoleStmt statement, ConnectContext context) {
             if (!PrivilegeActions.checkSystemAction(context, PrivilegeType.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
@@ -1332,7 +1339,11 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
-            visitCreateTableAsSelectStatement(statement.getCreateTableAsSelectStmt(), context);
+            if (statement.getCreateTableAsSelectStmt() != null) {
+                visitCreateTableAsSelectStatement(statement.getCreateTableAsSelectStmt(), context);
+            } else {
+                visitInsertStatement(statement.getInsertStmt(), context);
+            }
             return null;
         }
 

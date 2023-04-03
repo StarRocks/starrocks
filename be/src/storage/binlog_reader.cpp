@@ -102,7 +102,7 @@ Status BinlogReader::get_next(ChunkPtr* chunk, int64_t max_version_exclusive) {
             }
 
             if (status.is_end_of_file()) {
-                _binlog_file_reader.reset();
+                _release_binlog_file();
             }
         }
         if (_binlog_file_reader == nullptr) {
@@ -219,13 +219,14 @@ void BinlogReader::_swap_output_and_data_chunk(Chunk* output_chunk) {
 }
 
 Status BinlogReader::_seek_binlog_file_reader(int64_t version, int64_t seq_id) {
-    auto status_or = _binlog_manager->find_binlog_meta(version, seq_id);
+    auto status_or = _binlog_manager->find_binlog_file(version, seq_id);
     if (!status_or.ok()) {
         return status_or.status();
     }
-    _file_meta = status_or.value();
-    std::string file_path = _binlog_manager->get_binlog_file_path(_file_meta->id());
-    _binlog_file_reader = std::make_shared<BinlogFileReader>(file_path, _file_meta);
+    _binlog_file_holder = status_or.value();
+    BinlogFileMetaPBPtr& file_meta = _binlog_file_holder->file_meta();
+    std::string file_path = _binlog_manager->get_binlog_file_path(file_meta->id());
+    _binlog_file_reader = std::make_shared<BinlogFileReader>(file_path, file_meta);
     RETURN_IF_ERROR(_binlog_file_reader->seek(version, seq_id));
     return Status::OK();
 }
@@ -288,17 +289,19 @@ void BinlogReader::_release_segment_iterator(bool release_rowset) {
     }
 }
 
-void BinlogReader::_reset() {
-    _release_segment_iterator(true);
-
+void BinlogReader::_release_binlog_file() {
     if (_binlog_file_reader != nullptr) {
         _binlog_file_reader.reset();
     }
 
-    if (_file_meta != nullptr) {
-        _file_meta.reset();
+    if (_binlog_file_holder != nullptr) {
+        _binlog_file_holder.reset();
     }
+}
 
+void BinlogReader::_reset() {
+    _release_segment_iterator(true);
+    _release_binlog_file();
     _log_entry_info = nullptr;
 }
 
