@@ -189,7 +189,7 @@ build_openssl() {
 
     LDFLAGS="-L${TP_LIB_DIR}" \
     LIBDIR="lib" \
-    ./Configure --prefix=$TP_INSTALL_DIR -zlib no-shared no-tests ${OPENSSL_PLATFORM}
+    ./Configure --prefix=$TP_INSTALL_DIR -lz -no-shared ${OPENSSL_PLATFORM}
     make -j$PARALLEL
     make install_sw
 
