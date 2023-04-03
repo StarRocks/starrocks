@@ -884,7 +884,7 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithFormat) {
                                                      FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_forma_32(_utils->get_fn_ctx(), columns).value();
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
 
         //ASSERT_TRUE(result->is_numeric());
 
