@@ -14,6 +14,6 @@ where
 AGGREGATE ([GLOBAL] aggregate [{38: count=count(38: count)}] group by [[]] having [null]
     EXCHANGE GATHER
         AGGREGATE ([LOCAL] aggregate [{38: count=count(1)}] group by [[]] having [null]
-            SCAN (mv[lineitem_mv] columns[90: l_shipyear] predicate[null])
+            SCAN (mv[lineitem_mv] columns[140: l_shipyear] predicate[null])
 [end]
 

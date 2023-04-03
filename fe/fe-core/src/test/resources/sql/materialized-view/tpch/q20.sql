@@ -51,9 +51,9 @@ TOP-N (order by [[2: s_name ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[17]
                             SCAN (table[part] columns[17: p_partkey, 18: p_name] predicate[18: p_name LIKE sienna%])
                     EXCHANGE SHUFFLE[30]
-                        AGGREGATE ([GLOBAL] aggregate [{149: sum=sum(149: sum)}] group by [[122: l_partkey, 120: l_suppkey]] having [null]
-                            EXCHANGE SHUFFLE[122, 120]
-                                AGGREGATE ([LOCAL] aggregate [{149: sum=sum(123: sum_qty)}] group by [[122: l_partkey, 120: l_suppkey]] having [null]
-                                    SCAN (mv[lineitem_agg_mv2] columns[120: l_suppkey, 121: l_shipdate, 122: l_partkey, 123: sum_qty] predicate[121: l_shipdate >= 1993-01-01 AND 121: l_shipdate < 1994-01-01])
+                        AGGREGATE ([GLOBAL] aggregate [{149: sum=sum(149: sum)}] group by [[78: l_partkey, 76: l_suppkey]] having [null]
+                            EXCHANGE SHUFFLE[78, 76]
+                                AGGREGATE ([LOCAL] aggregate [{149: sum=sum(79: sum_qty)}] group by [[78: l_partkey, 76: l_suppkey]] having [null]
+                                    SCAN (mv[lineitem_agg_mv2] columns[76: l_suppkey, 77: l_shipdate, 78: l_partkey, 79: sum_qty] predicate[77: l_shipdate >= 1993-01-01 AND 77: l_shipdate < 1994-01-01])
 [end]
 

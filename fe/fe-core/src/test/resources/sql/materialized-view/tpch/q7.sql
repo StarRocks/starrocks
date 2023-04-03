@@ -41,9 +41,9 @@ order by
 [result]
 TOP-N (order by [[42: n_name ASC NULLS FIRST, 46: n_name ASC NULLS FIRST, 49: year ASC NULLS FIRST]])
     TOP-N (order by [[42: n_name ASC NULLS FIRST, 46: n_name ASC NULLS FIRST, 49: year ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{193: sum=sum(193: sum)}] group by [[141: n_name1, 142: n_name2, 143: l_shipyear]] having [null]
-            EXCHANGE SHUFFLE[141, 142, 143]
-                AGGREGATE ([LOCAL] aggregate [{193: sum=sum(144: sum_saleprice)}] group by [[141: n_name1, 142: n_name2, 143: l_shipyear]] having [null]
-                    SCAN (mv[lineitem_mv_agg_mv2] columns[140: l_shipdate, 141: n_name1, 142: n_name2, 143: l_shipyear, 144: sum_saleprice] predicate[140: l_shipdate <= 1996-12-31 AND 140: l_shipdate >= 1995-01-01 AND 140: l_shipdate < 1997-01-01 AND 141: n_name1 = CANADA AND 142: n_name2 = IRAN OR 141: n_name1 = IRAN AND 142: n_name2 = CANADA AND 141: n_name1 IN (CANADA, IRAN) AND 142: n_name2 IN (IRAN, CANADA)])
+        AGGREGATE ([GLOBAL] aggregate [{243: sum=sum(243: sum)}] group by [[76: n_name1, 77: n_name2, 78: l_shipyear]] having [null]
+            EXCHANGE SHUFFLE[76, 77, 78]
+                AGGREGATE ([LOCAL] aggregate [{243: sum=sum(79: sum_saleprice)}] group by [[76: n_name1, 77: n_name2, 78: l_shipyear]] having [null]
+                    SCAN (mv[lineitem_mv_agg_mv2] columns[75: l_shipdate, 76: n_name1, 77: n_name2, 78: l_shipyear, 79: sum_saleprice] predicate[75: l_shipdate <= 1996-12-31 AND 75: l_shipdate >= 1995-01-01 AND 75: l_shipdate < 1997-01-01 AND 76: n_name1 = CANADA AND 77: n_name2 = IRAN OR 76: n_name1 = IRAN AND 77: n_name2 = CANADA AND 76: n_name1 IN (CANADA, IRAN) AND 77: n_name2 IN (IRAN, CANADA)])
 [end]
 
