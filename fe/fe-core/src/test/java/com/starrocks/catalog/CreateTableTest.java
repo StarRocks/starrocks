@@ -46,7 +46,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -63,7 +63,7 @@ public class CreateTableTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
-        DataNode be = UtFrameUtils.addMockBackend(10002);
+        Backend be = UtFrameUtils.addMockBackend(10002);
         be.setIsDecommissioned(true);
         UtFrameUtils.addMockBackend(10003);
         UtFrameUtils.addMockBackend(10004);
@@ -443,6 +443,22 @@ public class CreateTableTest {
         System.out.println("columns = " + columns);
         Assert.assertTrue(columns.contains("`sum_decimal` decimal128(38, 4) SUM"));
         Assert.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
+    }
+
+    @Test
+    public void testDecimal() throws Exception {
+        String sql = "CREATE TABLE create_decimal_tbl\n" +
+                "(\n" +
+                "    c1 decimal(38, 1),\n" +
+                "    c2 numeric(38, 1),\n" +
+                "    c3 number(38, 1) \n" +
+                ")\n" +
+                "DUPLICATE KEY(c1)\n" +
+                "DISTRIBUTED BY HASH(c1) BUCKETS 1\n" +
+                "PROPERTIES(\"replication_num\" = \"1\");";
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
     }
 
     @Test(expected = AnalysisException.class)
