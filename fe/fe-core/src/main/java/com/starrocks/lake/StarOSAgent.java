@@ -41,6 +41,8 @@ import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
+import com.staros.proto.WorkerGroupDetailInfo;
+import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
@@ -53,6 +55,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -480,6 +483,9 @@ public class StarOSAgent {
         return backendIds;
     }
 
+
+    // ---------------------------------------- meta group ----------------------------------------------------
+
     public void createMetaGroup(long metaGroupId, List<Long> shardGroupIds) throws DdlException {
         prepare();
 
@@ -533,14 +539,104 @@ public class StarOSAgent {
         return false; // return false if any error happens
     }
 
-    // Mocked
+    // ---------------------------------------- worker group ----------------------------------------------------
+
     public long createWorkerGroup(String size) throws DdlException {
-        return GlobalStateMgr.getCurrentState().getNextId();
+        // size should be S, M, L, XL...
+        WorkerGroupSpec spec = WorkerGroupSpec.newBuilder().setSize(size).build();
+        // owner means tenant, now there is only one tenant, so pass "Starrocks" to starMgr
+        String owner = "Starrocks";
+        WorkerGroupDetailInfo result = null;
+        try {
+            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
+                    Collections.emptyMap());
+        } catch (StarClientException e) {
+            LOG.warn("Failed to create worker group. error: {}", e.getMessage());
+            throw new DdlException("Failed to create worker group. error: " + e.getMessage());
+        }
+        return result.getGroupId();
     }
 
     public void deleteWorkerGroup(long groupId) throws DdlException {
+        try {
+            client.deleteWorkerGroup(serviceId, groupId);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to delete worker group {}. error: {}", groupId, e.getMessage());
+            throw new DdlException("Failed to delete worker group. error: " + e.getMessage());
+        }
     }
 
     public void modifyWorkerGroup(long groupId, String size) throws DdlException {
+        WorkerGroupDetailInfo updatedInfo = null;
+        WorkerGroupSpec newSpec = WorkerGroupSpec.newBuilder().setSize(size).build();
+        try {
+            updatedInfo = client.alterWorkerGroupSpec(serviceId, groupId, newSpec);
+        } catch (StarClientException e) {
+            LOG.warn("Failed to update worker group size. error: {}", e.getMessage());
+            throw new DdlException("Failed to update worker group size. error: " + e.getMessage());
+        }
+    }
+
+    // ---------------------------------------- worker ----------------------------------------------------
+
+    private Backend workerToBackend(WorkerInfo workerInfo) {
+        String workerAddr = workerInfo.getIpPort();
+        String[] pair = workerAddr.split(":");
+        int heartbeatPort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("be_heartbeat_port"));
+        int bePort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("be_port"));
+        int beHttpPort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("be_http_port"));
+        int beBrpcPort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("be_brpc_port"));
+
+        Backend backend = new Backend(workerInfo.getWorkerId(), pair[0], heartbeatPort);
+        backend.setIsAlive(true);
+        backend.setBePort(bePort);
+        backend.setHttpPort(beHttpPort);
+        backend.setBrpcPort(beBrpcPort);
+        return backend;
+    }
+
+    public Backend getWorkerById(long workerId) throws UserException {
+        prepare();
+        try {
+            WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerId);
+            return workerToBackend(workerInfo);
+        } catch (StarClientException e) {
+            throw new UserException("Failed to get worker by id. error: " + e.getMessage());
+        }
+    }
+
+    public List<Backend> getWorkersByWorkerGroup(List<Long> workerGroupIds) throws UserException {
+        prepare();
+        try {
+            List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.listWorkerGroup(serviceId, workerGroupIds, true);
+            List<Backend> backends = Lists.newArrayList();
+            for (WorkerGroupDetailInfo detailInfo : workerGroupDetailInfos) {
+                List<WorkerInfo> workerInfos = detailInfo.getWorkersInfoList();
+                for (WorkerInfo workerInfo : workerInfos) {
+                    backends.add(workerToBackend(workerInfo));
+                }
+            }
+            return backends;
+        } catch (StarClientException e) {
+            throw new UserException("Failed to get workers by group id. error: " + e.getMessage());
+        }
+    }
+
+    public List<Backend> getWorkers() throws UserException {
+        prepare();
+        try {
+            List<WorkerGroupDetailInfo> workerGroupDetailInfos = client.listWorkerGroup(serviceId, Lists.newArrayList(), true);
+            List<Backend> backends = Lists.newArrayList();
+            for (WorkerGroupDetailInfo detailInfo : workerGroupDetailInfos) {
+                List<WorkerInfo> workerInfos = detailInfo.getWorkersInfoList();
+                for (WorkerInfo workerInfo : workerInfos) {
+                    backends.add(workerToBackend(workerInfo));
+                }
+            }
+
+            return backends;
+        } catch (StarClientException e) {
+            throw new UserException("Failed to get workers. error: " + e.getMessage());
+        }
     }
 }

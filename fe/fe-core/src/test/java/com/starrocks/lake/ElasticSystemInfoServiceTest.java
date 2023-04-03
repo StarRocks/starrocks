@@ -28,7 +28,7 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.List;
 
-public class LakeSystemInfoServiceTest {
+public class ElasticSystemInfoServiceTest {
     private SystemInfoService service;
     private long clusterId;
 
