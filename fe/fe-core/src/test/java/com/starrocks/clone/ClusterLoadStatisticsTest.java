@@ -43,6 +43,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import org.junit.Assert;
@@ -130,7 +131,7 @@ public class ClusterLoadStatisticsTest {
         be3.setDisks(ImmutableMap.copyOf(disks));
         be3.setAlive(true);
 
-        systemInfoService = new SystemInfoService();
+        systemInfoService = new LocalSystemInfoService();
         systemInfoService.addBackend(be1);
         systemInfoService.addBackend(be2);
         systemInfoService.addBackend(be3);

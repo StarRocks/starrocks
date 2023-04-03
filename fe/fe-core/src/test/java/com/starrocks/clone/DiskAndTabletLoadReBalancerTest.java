@@ -38,6 +38,7 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import mockit.Expectations;
@@ -79,7 +80,7 @@ public class DiskAndTabletLoadReBalancerTest {
         long pathHash2 = 2222L;
         long pathHash3 = 3333L;
 
-        SystemInfoService infoService = new SystemInfoService();
+        SystemInfoService infoService = new LocalSystemInfoService();
 
         infoService.addBackend(genBackend(beId1, "host1", 2 * tabletDataSize,
                 3 * tabletDataSize, 5 * tabletDataSize, pathHash1));
@@ -219,7 +220,7 @@ public class DiskAndTabletLoadReBalancerTest {
         long pathHash3 = 3333L;
         long pathHash4 = 4444L;
 
-        SystemInfoService infoService = new SystemInfoService();
+        SystemInfoService infoService = new LocalSystemInfoService();
 
         infoService.addBackend(genBackend(beId1, "host1", 2 * tabletDataSize,
                 3 * tabletDataSize, 5 * tabletDataSize, pathHash1));
@@ -403,7 +404,7 @@ public class DiskAndTabletLoadReBalancerTest {
         diskInfoMap2.put(disk21.getRootPath(), disk21);
         be2.setDisks(ImmutableMap.copyOf(diskInfoMap2));
 
-        SystemInfoService infoService = new SystemInfoService();
+        SystemInfoService infoService = new LocalSystemInfoService();
         infoService.addBackend(be1);
         infoService.addBackend(be2);
 

@@ -17,7 +17,6 @@ package com.starrocks.lake;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -39,10 +38,9 @@ import com.starrocks.thrift.TStorageMedium;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * ElasticSystemInfoService for cloudNative table.
@@ -63,6 +61,7 @@ public class ElasticSystemInfoService extends SystemInfoService {
 
     @Override
     public boolean isSingleBackendAndComputeNode(long clusterId) {
+        throw new SemanticException("not implemented");
     }
 
     @Override
@@ -117,6 +116,7 @@ public class ElasticSystemInfoService extends SystemInfoService {
 
     @Override
     public Backend getBackend(long backendId) {
+        throw new SemanticException("not implemented");
     }
 
     @Override
@@ -165,6 +165,7 @@ public class ElasticSystemInfoService extends SystemInfoService {
 
     @Override
     public Backend getBackendWithBePort(String host, int bePort) {
+        throw new SemanticException("not implemented");
     }
 
     @Override
@@ -345,5 +346,20 @@ public class ElasticSystemInfoService extends SystemInfoService {
 
     @Override
     public void updatePathInfo(List<DiskInfo> addedDisks, List<DiskInfo> removedDisks) {
+    }
+
+    @Override
+    public ComputeNode getBackendOrComputeNode(long nodeId) {
+        throw new SemanticException("not implemented");
+    }
+
+    @Override
+    public Stream<ComputeNode> backendAndComputeNodeStream() {
+        throw new SemanticException("not implemented");
+    }
+
+    @Override
+    public void addComputeNode(ComputeNode computeNode) {
+        throw new SemanticException("not implemented");
     }
 }

@@ -42,6 +42,7 @@ import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -163,7 +164,7 @@ public class DeleteHandlerTest {
         };
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());
 
-        SystemInfoService systemInfoService = new SystemInfoService();
+        SystemInfoService systemInfoService = new LocalSystemInfoService();
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();

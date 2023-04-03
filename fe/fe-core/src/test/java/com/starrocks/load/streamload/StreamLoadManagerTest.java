@@ -26,6 +26,7 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
@@ -92,7 +93,7 @@ public class StreamLoadManagerTest {
         };
 
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());
-        SystemInfoService systemInfoService = new SystemInfoService();
+        SystemInfoService systemInfoService = new LocalSystemInfoService();
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();

@@ -57,6 +57,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.List;
+import java.util.stream.Stream;
 
 /**
  * abstract SystemInfoService.
@@ -68,6 +69,8 @@ public abstract class SystemInfoService {
     public abstract void addComputeNodes(List<Pair<String, Integer>> hostPortPairs) throws DdlException;
 
     public abstract boolean isSingleBackendAndComputeNode(long clusterId);
+
+    public abstract void addComputeNode(ComputeNode cn);
 
     /**
      * @param hostPortPairs : backend's host and port
@@ -262,4 +265,8 @@ public abstract class SystemInfoService {
     // update the path info when disk report
     // there is only one thread can update path info, so no need to worry about concurrency control
     public abstract void updatePathInfo(List<DiskInfo> addedDisks, List<DiskInfo> removedDisks);
+
+    public abstract ComputeNode getBackendOrComputeNode(long nodeId);
+
+    public abstract Stream<ComputeNode> backendAndComputeNodeStream();
 }

@@ -51,7 +51,7 @@ public class SystemInfoServiceTest {
             SecurityException,
             IllegalArgumentException,
             IllegalAccessException {
-        service = new SystemInfoService();
+        service = new LocalSystemInfoService();
         Field field = FrontendOptions.class.getDeclaredField("useFqdn");
         field.setAccessible(true);
         field.set(null, true);

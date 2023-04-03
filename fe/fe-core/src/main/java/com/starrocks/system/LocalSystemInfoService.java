@@ -87,6 +87,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * SystemInfoService for local olap table.
@@ -139,6 +140,16 @@ public class LocalSystemInfoService extends SystemInfoService {
             }
         }
         return null;
+    }
+
+    /**
+     * For test.
+     */
+    @Override
+    public void addComputeNode(ComputeNode computeNode) {
+        Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
+        copiedComputeNodes.put(computeNode.getId(), computeNode);
+        idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
     }
 
     // Final entry of adding compute node
@@ -359,7 +370,7 @@ public class LocalSystemInfoService extends SystemInfoService {
             db.readLock();
             try {
                 db.getTables().stream()
-                        .filter(table -> table.isLocalTable())
+                        .filter(table -> table.isOlapTableOrMaterializedView())
                         .map(table -> (OlapTable) table)
                         .filter(table -> table.getTableProperty().getReplicationNum() == 1)
                         .forEach(table -> {
@@ -1124,5 +1135,19 @@ public class LocalSystemInfoService extends SystemInfoService {
         ImmutableMap<Long, DiskInfo> newPathInfos = ImmutableMap.copyOf(copiedPathInfos);
         pathHashToDishInfoRef = newPathInfos;
         LOG.debug("update path infos: {}", newPathInfos);
+    }
+
+    @Override
+    public ComputeNode getBackendOrComputeNode(long nodeId) {
+        ComputeNode backend = idToBackendRef.get(nodeId);
+        if (backend == null) {
+            backend =  idToComputeNodeRef.get(nodeId);
+        }
+        return backend;
+    }
+
+    @Override
+    public Stream<ComputeNode> backendAndComputeNodeStream() {
+        return Stream.concat(idToBackendRef.values().stream(), idToComputeNodeRef.values().stream());
     }
 }

@@ -43,6 +43,7 @@ import com.starrocks.clone.TabletSchedCtx.Type;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -106,7 +107,7 @@ public class TabletSchedCtxTest {
         be2.setDisks(ImmutableMap.copyOf(disks));
         be2.setAlive(true);
 
-        systemInfoService = new SystemInfoService();
+        systemInfoService = new LocalSystemInfoService();
         systemInfoService.addBackend(be1);
         systemInfoService.addBackend(be2);
 

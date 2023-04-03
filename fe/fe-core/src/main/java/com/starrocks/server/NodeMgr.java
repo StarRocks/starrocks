@@ -53,6 +53,7 @@ import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.http.meta.MetaBaseAction;
+import com.starrocks.lake.ElasticSystemInfoService;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.Storage;
@@ -65,6 +66,7 @@ import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceUsage;
@@ -131,7 +133,8 @@ public class NodeMgr {
         this.leaderRpcPort = 0;
         this.leaderHttpPort = 0;
         this.leaderIp = "";
-        this.systemInfo = new SystemInfoService();
+        this.systemInfo = Config.deployment_form.equalsIgnoreCase("saas") ?
+                new ElasticSystemInfoService(globalStateMgr.getStarOSAgent()) : new LocalSystemInfoService();
         this.heartbeatMgr = new HeartbeatMgr(systemInfo, !isCheckpoint);
         this.brokerMgr = new BrokerMgr();
         this.stateMgr = globalStateMgr;
@@ -178,7 +181,8 @@ public class NodeMgr {
     public SystemInfoService getOrCreateSystemInfo(Integer clusterId) {
         SystemInfoService systemInfoService = systemInfoMap.get(clusterId);
         if (systemInfoService == null) {
-            systemInfoService = new SystemInfoService();
+            systemInfoService = Config.deployment_form.equalsIgnoreCase("saas") ?
+                    new ElasticSystemInfoService(this.stateMgr.getStarOSAgent()) : new LocalSystemInfoService();
             systemInfoMap.put(clusterId, systemInfoService);
         }
         return systemInfoService;

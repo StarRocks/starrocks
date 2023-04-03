@@ -57,6 +57,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetPassVar;
+import com.starrocks.system.LocalSystemInfoService;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;
@@ -69,7 +70,7 @@ import java.util.concurrent.BlockingQueue;
 public class AccessTestUtil {
 
     public static SystemInfoService fetchSystemInfoService() {
-        return new SystemInfoService();
+        return new LocalSystemInfoService();
     }
 
     public static Auth fetchAdminAccess() {
