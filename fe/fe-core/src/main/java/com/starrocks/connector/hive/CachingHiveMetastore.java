@@ -312,8 +312,10 @@ public class CachingHiveMetastore implements IHiveMetastore {
         HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveTblName);
         Table updatedTable = loadTable(hiveTableName);
         tableCache.put(hiveTableName, updatedTable);
+
+        List<String> updatedPartitionKeys = loadPartitionKeys(hiveTableName);
         if (enableListNameCache) {
-            partitionKeysCache.put(hiveTableName, loadPartitionKeys(hiveTableName));
+            partitionKeysCache.put(hiveTableName, updatedPartitionKeys);
         }
 
         HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) updatedTable;
@@ -323,7 +325,6 @@ public class CachingHiveMetastore implements IHiveMetastore {
             partitionCache.put(hivePartitionName, updatedPartition);
             tableStatsCache.put(hiveTableName, loadTableStatistics(hiveTableName));
         } else {
-            List<String> existNames = loadPartitionKeys(hiveTableName);
             List<HivePartitionName> presentPartitionNames;
             List<HivePartitionName> presentPartitionStatistics;
 
@@ -331,14 +332,15 @@ public class CachingHiveMetastore implements IHiveMetastore {
                 presentPartitionNames = getPresentPartitionNames(partitionCache, hiveDbName, hiveTblName);
                 presentPartitionStatistics = getPresentPartitionNames(partitionStatsCache, hiveDbName, hiveTblName);
             } else {
-                presentPartitionNames = presentPartitionStatistics = existNames.stream()
+                presentPartitionNames = presentPartitionStatistics = updatedPartitionKeys.stream()
                         .map(partitionKey -> HivePartitionName.of(hiveDbName, hiveTblName, partitionKey))
                         .collect(Collectors.toList());
             }
 
-            refreshPartitions(presentPartitionNames, existNames, this::loadPartitionsByNames, partitionCache);
+            refreshPartitions(presentPartitionNames, updatedPartitionKeys, this::loadPartitionsByNames, partitionCache);
             if (Config.enable_refresh_hive_partitions_statistics) {
-                refreshPartitions(presentPartitionStatistics, existNames, this::loadPartitionsStatistics, partitionStatsCache);
+                refreshPartitions(presentPartitionStatistics, updatedPartitionKeys,
+                        this::loadPartitionsStatistics, partitionStatsCache);
             }
         }
     }
