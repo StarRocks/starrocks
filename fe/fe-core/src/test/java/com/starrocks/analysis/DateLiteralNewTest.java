@@ -27,6 +27,14 @@ public class DateLiteralNewTest {
         Assert.assertEquals("2022-12-12 16:20:17.123456", dateLiteral.getStringValue());
         Assert.assertEquals(123456, dateLiteral.getMicrosecond());
         Assert.assertEquals(20221212162017.123456, dateLiteral.getDoubleValue(), 0.000001);
+
+        dateLiteral = new DateLiteral("2023-03-29 01:01:01.12", Type.DATETIME);
+        Assert.assertEquals("2023-03-29 01:01:01.120000", dateLiteral.getStringValue());
+        Assert.assertEquals(120000, dateLiteral.getMicrosecond());
+
+        dateLiteral = new DateLiteral("2023-03-29 01:01:01.1234", Type.DATETIME);
+        Assert.assertEquals("2023-03-29 01:01:01.123400", dateLiteral.getStringValue());
+        Assert.assertEquals(123400, dateLiteral.getMicrosecond());
     }
 
     @Test

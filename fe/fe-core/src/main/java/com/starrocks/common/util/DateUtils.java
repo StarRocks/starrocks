@@ -162,7 +162,7 @@ public class DateUtils {
                         if (isOutputFormat) {
                             builder.padNext(6, '0');
                         }
-                        builder.appendValue(ChronoField.MICRO_OF_SECOND, 1, 6, SignStyle.NORMAL);
+                        builder.appendFraction(ChronoField.MICRO_OF_SECOND, 1, 6, false);
                         break;
                     case 'u': // %u Week (00..53), where Monday is the first day of the week
                         builder.appendValueReduced(ChronoField.ALIGNED_WEEK_OF_YEAR, 2, 2, 0);
