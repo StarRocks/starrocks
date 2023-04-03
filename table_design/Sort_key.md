@@ -12,9 +12,9 @@
 
 在更新模型中，排序列就是通过 `UNIQUE KEY` 关键字指定的列。
 
-在主键模型中，排序列就是主键列，通过 `PRIMARY KEY` 关键字指定。
+自 3.0 版本起，主键模型解耦了主键列和排序列，排序列通过 `ORDER BY` 关键字指定，主键列通过 `PRIMARY KEY` 关键字指定。
 
-在定义排序列时，需要注意以下几点：
+在明细模型、聚合模型、更新模型中定义排序列时，需要注意以下几点：
 
 - 排序列必须从定义的第一列开始、并且是连续的。
 
@@ -95,7 +95,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 ### 主键模型
 
-创建一个名为 `site_access_primary` 的主键模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
+创建一个名为 `site_access_primary` 的主键模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 为主键列，`site_id` 和 `city_code` 为排序列。
 
 建表语句如下：
 
@@ -107,8 +107,9 @@ CREATE TABLE site_access_primary
     user_id INT,
     pv BIGINT DEFAULT '0'
 )
-PRIMARY KEY(site_id, city_code)
-DISTRIBUTED BY HASH(site_id) BUCKETS 10;
+PRIMARY KEY(site_id)
+DISTRIBUTED BY HASH(site_id) BUCKETS 10
+ORDER BY(site_id,city_code);
 ```
 
 ## 排序效果
