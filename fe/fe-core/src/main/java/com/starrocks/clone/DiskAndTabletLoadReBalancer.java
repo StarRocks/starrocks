@@ -1601,7 +1601,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     if (!table.needSchedule(false)) {
                         continue;
                     }
-                    if (table.isLakeTable()) {
+                    if (table.isCloudNativeTable()) {
                         // replicas are managed by StarOS and cloud storage.
                         continue;
                     }
