@@ -100,7 +100,7 @@ A set of parameters about how StarRocks integrates with the metastore of your da
 If you choose Hive metastore as the metastore of your data source, configure `MetastoreParams` as follows:
 
 ```SQL
-"iceberg.catalog.hive.metastore.uris" = "<hive_metastore_uri>"
+"hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
 > **NOTE**
@@ -111,7 +111,7 @@ The following table describes the parameter you need to configure in `MetastoreP
 
 | Parameter                           | Required | Description                                                  |
 | ----------------------------------- | -------- | ------------------------------------------------------------ |
-| iceberg.catalog.hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>","thrift://<metastore_IP_address_2>:<metastore_port_2>","thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+| hive.metastore.uris                 | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>","thrift://<metastore_IP_address_2>:<metastore_port_2>","thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
 ###### AWS Glue
 
@@ -256,7 +256,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
       "type" = "iceberg",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2",
-      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
   );
   ```
 
@@ -287,7 +287,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2",
-      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
   );
   ```
 
@@ -321,7 +321,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
       "aws.s3.region" = "us-west-2",
-      "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
   );
   ```
 
@@ -477,7 +477,7 @@ You can enable automatic incremental update for a single Iceberg catalog or for 
   PROPERTIES
   (
       "type" = "iceberg",
-      "iceberg.catalog.hive.metastore.uris" = "thrift://102.168.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://102.168.xx.xx:9083",
        ....
       "enable_hms_events_incremental_sync" = "true"
   );
