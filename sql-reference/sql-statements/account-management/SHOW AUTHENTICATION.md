@@ -2,7 +2,7 @@
 
 ## 功能
 
-查看当前用户或当前集群所有用户的认证信息。每个用户都有权限查看自己的认证信息，但只有拥有全局 `GRANT_PRIV` 权限的用户才可以查看所有用户的认证信息或指定的其他用户的认证信息。
+查看当前用户或当前集群所有用户的认证信息。每个用户都有权限查看自己的认证信息，但只有拥有 `user_admin` 角色的用户才可以查看所有用户的认证信息或指定用户的认证信息。
 
 ## 语法
 
@@ -27,7 +27,7 @@ SHOW [ALL] AUTHENTICATION [FOR USERNAME]
 
 | **字段**          | **说明**                                                     |
 | ----------------- | ------------------------------------------------------------ |
-| UserIdentity      | 用户身份。                                                   |
+| UserIdentity      | 用户标识。                                                   |
 | Password          | 是否使用密码登录到 StarRocks 集群。<ul><li>`Yes`：使用密码登录。</li><li>`No`：不使用密码登录。</li></ul> |
 | AuthPlugin        | 使用的认证接口，包括三种：`MYSQL_NATIVE_PASSWORD`，`AUTHENTICATION_LDAP_SIMPLE`，`AUTHENTICATION_KERBEROS`。如未使用认证接口，则返回 `NULL`。 |
 | UserForAuthPlugin | 使用 LDAP 或 Kerberos 认证的用户名称。如未使用认证，则返回 `NULL`。 |

@@ -2,7 +2,9 @@
 
 ## 功能
 
-查看当前集群中所有已创建角色的信息，包括角色名称，角色拥有的权限以及拥有该角色的用户。
+查看当前系统中的所有角色。如果要查看角色的权限信息，可以使用 `SHOW GRANTS FOR ROLE <role_name>;`，具体参见 [SHOW GRANTS](..)。
+
+> 说明：只有 `user_admin` 角色有权限执行该语句。
 
 ## 语法
 
@@ -10,39 +12,33 @@
 SHOW ROLES
 ```
 
-## 返回结果说明
+返回字段说明：
 
-```undefined
-+------+--------+--------------+---------------+------------+---------------+
-| Name | Users  | GlobalPrivs  | DatabasePrivs | TablePrivs | ResourcePrivs |
-+------+--------+--------------+---------------+------------+---------------+
-```
-
-返回结果中的参数说明如下：
-
-| **参数**      | **说明**                                                     |
-| ------------- | ------------------------------------------------------------ |
-| Name          | 角色名称。                                                   |
-| Users         | 拥有该角色的用户。                                           |
-| GlobalPrivs   | 全局权限，包括以下几种：<ul><li>`NODE_PRIV`：集群节点操作权限。</li><li>`ADMIN_PRIV`：除集群节点操作权限以外的所有权限。</li><li>所有数据库及库中所有表的相关权限，如读取数据和导入数据等。</li></ul> |
-| DatabasePrivs | 某一数据库相关的权限，比如删除库、读取数据和导入数据等。     |
-| TablePrivs    | 某一数据表相关的权限，比如删除表、读取数据和导入数据等。     |
-| ResourcePrivs | 资源相关的权限，当前仅支持授予资源的使用权限。               |
-
-当前支持的权限列表，参见 [GRANT](/sql-reference/sql-statements/account-management/GRANT.md)。
+| **字段** | **描述**   |
+| -------- | ---------- |
+| Name     | 角色名称。 |
 
 ## 示例
 
-查看所有已创建的角色。
+查看当前系统中的所有角色。
 
 ```Plain
-SHOW ROLES;
-
-+-------------------------+----------------------------+-----------------------+-------------------------------------+------------------------------------+--------------------+
-| Name                    | Users                      | GlobalPrivs           | DatabasePrivs                       | TablePrivs                         | ResourcePrivs      |
-+-------------------------+----------------------------+-----------------------+-------------------------------------+------------------------------------+--------------------+
-| admin                   |                            | Admin_priv            | NULL                                | NULL                               | NULL               |
-| default_cluster:analyst | 'default_cluster:mike'@'%' | NULL                  | default_cluster:db.*: Select_priv   | default_cluster:db.tbl: Load_priv  | hive2: Usage_priv  |
-| operator                | 'root'@'%'                 | Node_priv Admin_priv  | NULL                                | NULL                               | NULL               |
-+-------------------------+----------------------------+-----------------------+-------------------------------------+------------------------------------+--------------------+
+mysql> SHOW ROLES;
++---------------+
+| Name          |
++---------------+
+| root          |
+| db_admin      |
+| cluster_admin |
+| user_admin    |
+| public        |
+| testrole      |
++---------------+
 ```
+
+## 相关参考
+
+- [CREATE ROLE](CREATE%20ROLE.md)
+- [ALTER USER](ALTER%20USER.md)
+- [SET ROLE](SET%20ROLE.md)
+- [DROP ROLE](DROP%20ROLE.md)

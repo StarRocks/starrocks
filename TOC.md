@@ -103,8 +103,10 @@
       + [黑名单管理](/administration/Blacklist.md)
       + [文件管理器](/administration/filemanager.md)
   + [数据恢复](/administration/Data_recovery.md)
-  + 管理用户权限及认证
-    + [用户权限](/administration/User_privilege.md)
+  + 管理用户权限
+    + [权限系统总览](/administration/privilege_overview.md)
+    + [权限项](/administration/privilege_item.md)
+    + [管理用户权限](/administration/User_privilege.md)
     + [认证方式](/administration/Authentication.md)
   + 性能调优
     + [查询分析](/administration/Query_planning.md)
@@ -121,11 +123,14 @@
       + [EXECUTE AS](/sql-reference/sql-statements/account-management/EXECUTE%20AS.md)
       + [GRANT](/sql-reference/sql-statements/account-management/GRANT.md)
       + [REVOKE](/sql-reference/sql-statements/account-management/REVOKE.md)
+      + [SET DEFAULT ROLE](/sql-reference/sql-statements/account-management/SET%20DEFAULT%20ROLE.md)
       + [SET PASSWORD](/sql-reference/sql-statements/account-management/SET%20PASSWORD.md)
       + [SET PROPERTY](/sql-reference/sql-statements/account-management/SET%20PROPERTY.md)
+      + [SET ROLE](/sql-reference/sql-statements/account-management/SET%20ROLE.md)
       + [SHOW AUTHENTICATION](/sql-reference/sql-statements/account-management/SHOW%20AUTHENTICATION.md)
       + [SHOW GRANTS](/sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
       + [SHOW ROLES](/sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
+      + [SHOW USERS](/sql-reference/sql-statements/account-management/SHOW%20USERS.md)
     + 集群管理
       + [ADD SQLBLACKLIST](/sql-reference/sql-statements/Administration/ADD%20SQLBLACKLIST.md)
       + [ADMIN CANCEL REPAIR TABLE](/sql-reference/sql-statements/Administration/ADMIN%20CANCEL%20REPAIR.md)
@@ -443,6 +448,7 @@
       + [regexp_extract](/sql-reference/sql-functions/string-functions/regexp_extract.md)
       + [regexp_replace](/sql-reference/sql-functions/string-functions/regexp_replace.md)
     + 工具函数
+      + [current_role](/sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](/sql-reference/sql-functions/utility-functions/current_version.md)
       + [host_name](/sql-reference/sql-functions/utility-functions/host_name.md)
       + [isnull](/sql-reference/sql-functions/utility-functions/isnull.md)

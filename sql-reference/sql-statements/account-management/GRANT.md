@@ -2,136 +2,184 @@
 
 ## 功能
 
-您可以使用该语句进行如下操作：
+该语句可用于将权限授予给角色或用户，以及将角色授予给用户或其他角色。
 
-- 将指定权限授予某用户或某角色。
-- 将指定角色授予某用户。注意，仅 StarRocks 2.4 及以上版本支持该功能。
-- 授予用户 `a` IMPERSONATE 用户 `b` 的权限。授予后，用户 `a` 即可执行 [EXECUTE AS](../account-management/EXECUTE%20AS.md) 语句以用户 `b` 的身份执行操作。注意，仅 StarRocks 2.4 及以上版本支持该功能。
+有关权限项的详细信息，参见 [权限项](../../../administration/privilege_item.md)。
+
+您可以使用 [SHOW GRANTS](SHOW%20GRANTS.md) 来查看权限授予的信息。通过 [REVOKE](REVOKE.md) 来撤销权限或角色。
 
 ## 语法
 
-- 将数据库和表的指定权限授予某用户或某角色。如果授予的角色不存在，那么系统会自动创建该角色。
+### 授予权限给用户或者角色
 
-    ```SQL
-    GRANT privilege_list ON db_name[.tbl_name] TO {user_identity | ROLE 'role_name'}
-    ```
+```SQL
+# System 相关
 
-- 将资源的指定权限授予某用户或某角色。如果授予的角色不存在，那么系统会自动创建该角色。
+GRANT  
+    { CREATE RESOURCE GROUP | CREATE RESOURCE | CREATE EXTERNAL CATALOG | REPOSITORY | BLACKLIST | FILE | OPERATE | ALL [PRIVILEGES]} 
+    ON SYSTEM
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
 
-    ```SQL
-    GRANT privilege_list ON RESOURCE 'resource_name' TO {user_identity | ROLE 'role_name'};
-    ```
+# resource group 相关
 
-- 授予用户 `a` 以用户 `b` 的身份执行操作的权限。
+GRANT  
+    { ALTER | DROP | ALL [PRIVILEGES] } 
+    ON { RESOURCE GROUP <resource_name> [, < resource_name >,...] ｜ ALL RESOURCE GROUPS} 
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
 
-    ```SQL
-    GRANT IMPERSONATE ON user_identity_b TO user_identity_a;
-    ```
+# resource 相关
 
-- 将指定角色的权限授予某用户。指定角色必须存在。
+GRANT 
+    { USAGE | ALTER | DROP | ALL [PRIVILEGES] } 
+    ON { RESOURCE <resource_name> [, < resource_name >,...] ｜ ALL RESOURCES} 
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
 
-    ```SQL
-    GRANT 'role_name' TO user_identity;
-    ```
+# global udf 相关
 
-## 参数说明
+GRANT { 
+    { USAGE | DROP | ALL [PRIVILEGES]} 
+    ON { GLOBAL FUNCTION <function_name> [, < function_name >,...]    
+       | ALL GLOBAL FUNCTIONS }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
 
-### privilege_list
+# internal catalog 相关
 
-授予某用户或某角色的指定权限。如果要一次性授予某用户或某角色多种权限，需要用逗号 (`,`) 将不同权限分隔开。支持权限如下：
+GRANT 
+    { USAGE | CREATE DATABASE | ALL [PRIVILEGES]} 
+    ON CATALOG default_catalog
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
 
-- `NODE_PRIV`：集群节点操作权限，如节点上下线。
-- `ADMIN_PRIV`：除 `NODE_PRIV` 以外的所有权限。
-- `GRANT_PRIV`：操作权限，如创建用户和角色、删除用户和角色、授权、撤权、和设置账户密码等。
-- `SELECT_PRIV`：数据库和表的读取权限。
-- `LOAD_PRIV`：数据库和表的导入权限。
-- `ALTER_PRIV`：数据库和表的结构变更权限。
-- `CREATE_PRIV`：数据库和表的创建权限。
-- `DROP_PRIV`：数据库和表的删除权限。
-- `USAGE_PRIV`：资源的使用权限。
+# external catalog 相关
 
-以上部分权限可划分为三类：
+GRANT  
+   { USAGE | DROP | ALL [PRIVILEGES] } 
+   ON { CATALOG <catalog_name> [, <catalog_name>,...] | ALL CATALOGS}
+   TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
 
-- 节点权限：`NODE_PRIV`
-- 库表权限：`SELECT_PRIV`、`LOAD_PRIV`、`ALTER_PRIV`、`CREATE_PRIV`、`DROP_PRIV`
-- 资源权限：`USAGE_PRIV`
+# Database 相关
 
-### db_name [.tbl_name]
+GRANT 
+    { ALTER | DROP | CREATE TABLE | CREATE VIEW | CREATE FUNCTION | CREATE MATERIALIZED VIEW | ALL [PRIVILEGES] } 
+    ON { DATABASE <database_name> [, <database_name>,...] | ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ] ;
+  
+*注意：需要执行 set catalog 之后才能使用。
 
-指定的数据库和表。支持以下格式：
+# Table 相关
 
-- `*.*`：所有数据库及库中所有表，即全局权限。
-- `db.*`：指定数据库及库中所有表。
-- `db.tbl`：指定数据库下的指定表。
+GRANT  
+    { ALTER | DROP | SELECT | INSERT | EXPORT | UPDATE | DELETE | ALL [PRIVILEGES]} 
+    ON { TABLE <table_name> [, < table_name >,...]
+       | ALL TABLES IN 
+           { { DATABASE <database_name> [,<database_name>,...] } | ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
 
-> **说明**
->
-> 当使用 `db.*` 或 `db.tbl` 格式时，指定数据库和指定表可以是不存在的数据库和表。
+*注意：需要执行 set catalog 之后才能使用。
+注意：table还可以用db.tbl的方式来进行表示
+GRANT <priv> ON TABLE db.tbl TO {ROLE <rolename> | USER <username>};
 
-### resource_name
+# View 相关
 
-指定的资源。支持以下格式：
+GRANT  
+    { ALTER | DROP | SELECT | ALL [PRIVILEGES]} 
+    ON { VIEW <view_name> [, < view_name >,...]
+       ｜ ALL VIEWS IN 
+           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    
+*注意：需要执行 set catalog 之后才能使用。
+注意：view 还可以用db.view的方式来进行表示。
+GRANT <priv> ON VIEW db.view TO {ROLE <rolename> | USER <username>};
 
-- `*`：所有资源。
-- `resource`：指定资源。
+# materialized view 相关
 
-> **说明**
->
-> 当使用 `resource` 格式时，指定资源可以是不存在的资源。
+GRANT { 
+    { SELECT | ALTER | REFRESH | DROP | ALL [PRIVILEGES]} 
+    ON { MATERIALIZED VIEW <mv_name> [, < mv_name >,...]
+       ｜ ALL MATERIALIZED VIEWS IN 
+           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    
+* 注意：需要执行 set catalog 之后才能使用。 
+mv 还可以用db.mv的方式来进行表示。
+GRANT <priv> ON MATERIALIZED_VIEW db.mv TO {ROLE <rolename> | USER <username>};
 
-### user_identity
+# function 相关
 
-该参数由两部分组成：`user_name` 和 `host`。 `user_name` 表示用户名。`host` 表示用户的主机地址，可以不指定，也可以指定为域名。如不指定，host 默认值为 `%`，表示该用户可以从任意 host 连接 StarRocks。如指定 `host` 为域名，权限的生效时间可能会有 1 分钟左右的延迟。`user_identity` 必须是使用 CREATE USER 语句创建的。
+GRANT { 
+    { USAGE | DROP | ALL [PRIVILEGES]} 
+    ON { FUNCTION <function_name> [, < function_name >,...]
+       ｜ ALL FUNCTIONS IN 
+           { { DATABASE <database_name> [,<database_name>,...] }| ALL DATABASES }
+    TO { ROLE | USER} {<role_name>|<user_identity>} [ WITH GRANT OPTION ];
+    
+*注意：需要执行 set catalog 之后才能使用。
+function 还可以用 db.function 的方式来进行表示。
+GRANT <priv> ON FUNCTION db.function TO {ROLE <rolename> | USER <username>};
 
-### role_name
+# user 相关
 
-角色名。
+GRANT IMPERSONATE ON USER <user_identity> TO USER <user_identity> [ WITH GRANT OPTION ];
+```
+
+### 授予角色给用户或者其他角色
+
+```SQL
+GRANT <role_name> [,<role_name>, ...] TO ROLE <role_name>；
+GRANT <role_name> [,<role_name>, ...] TO USER <user_identity>；
+```
 
 ## 示例
 
 示例一：将所有数据库及库中所有表的读取权限授予用户 `jack` 。
 
 ```SQL
-GRANT SELECT_PRIV ON *.* TO 'jack'@'%';
+GRANT SELECT ON *.* TO 'jack'@'%';
 ```
 
 示例二：将数据库 `db1` 及库中所有表的导入权限授予角色 `my_role`。
 
 ```SQL
-GRANT LOAD_PRIV ON db1.* TO ROLE 'my_role';
+GRANT INSERT ON db1.* TO ROLE 'my_role';
 ```
 
 示例三：将数据库 `db1` 和表 `tbl1` 的读取、结构变更和导入权限授予用户 `jack`。
 
 ```SQL
-GRANT SELECT_PRIV,ALTER_PRIV,LOAD_PRIV ON db1.tbl1 TO 'jack'@'192.8.%';
+GRANT SELECT,ALTER,INSERT ON db1.tbl1 TO 'jack'@'192.8.%';
 ```
 
 示例四：将所有资源的使用权限授予用户 `jack`。
 
 ```SQL
-GRANT USAGE_PRIV ON RESOURCE * TO 'jack'@'%';
+GRANT USAGE ON RESOURCE * TO 'jack'@'%';
 ```
 
 示例五：将资源 spark_resource 的使用权限授予用户 `jack`。
 
 ```SQL
-GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO 'jack'@'%';
+GRANT USAGE ON RESOURCE 'spark_resource' TO 'jack'@'%';
 ```
 
 示例六：将资源 spark_resource 的使用权限授予角色 `my_role` 。
 
 ```SQL
-GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO ROLE 'my_role';
+GRANT USAGE ON RESOURCE 'spark_resource' TO ROLE 'my_role';
 ```
 
-示例七：将角色 `my_role` 授予用户 `jack`。
+示例七：将表 `sr_member` 的 SELECT 权限授予给用户 `jack`，并允许 `jack` 将此权限授予其他用户或角色（通过在 SQL 中指定 WITH GRANT OPTION）：
 
 ```SQL
-GRANT 'my_role' TO 'jack'@'%';
+GRANT SELECT ON TABLE sr_member TO USER jack@'172.10.1.10' WITH GRANT OPTION;
 ```
 
-示例八：授予用户 `jack` 以用户 `rose` 的身份执行操作的权限。
+示例八：将系统预置角色 `db_admin`、`user_admin` 以及 `cluster_admin` 赋予给平台运维角色。
+
+```SQL
+GRANT db_admin, user_admin, cluster_admin TO USER user_platform;
+```
+
+示例九：授予用户 `jack` 以用户 `rose` 的身份执行操作的权限。
 
 ```SQL
 GRANT IMPERSONATE ON 'rose'@'%' TO 'jack'@'%';
