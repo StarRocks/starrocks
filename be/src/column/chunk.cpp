@@ -180,6 +180,12 @@ void Chunk::append_tuple_column(const ColumnPtr& column, TupleId tuple_id) {
     check_or_die();
 }
 
+void Chunk::append_default() {
+    for (const auto& column : _columns) {
+        column->append_default();
+    }
+}
+
 void Chunk::remove_column_by_index(size_t idx) {
     DCHECK_LT(idx, _columns.size());
     _columns.erase(_columns.begin() + idx);
