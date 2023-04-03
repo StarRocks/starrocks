@@ -413,6 +413,7 @@ template <LogicalType LT, typename = guard::Guard>
 struct LeadLagState {
     using T = AggDataValueType<LT>;
     T value;
+    int64_t offset = 0;
     T default_value;
     bool is_null = false;
     bool defualt_is_null = false;
@@ -421,8 +422,6 @@ struct LeadLagState {
 template <LogicalType LT, bool ignoreNulls, bool isLag, typename T = RunTimeCppType<LT>>
 class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<LT>, T> {
     using InputColumnType = typename ValueWindowFunction<LT, FirstValueState<LT>, T>::InputColumnType;
-
-    mutable int64_t offset = 0;
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).value = {};
@@ -433,9 +432,9 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         DCHECK(arg1->is_constant());
         const auto* offset_column = down_cast<const ConstColumn*>(arg1);
         if (offset_column->is_nullable()) {
-            offset = 0;
+            this->data(state).offset = 0;
         } else {
-            offset = ColumnHelper::get_const_value<LogicalType::TYPE_BIGINT>(arg1);
+            this->data(state).offset = ColumnHelper::get_const_value<LogicalType::TYPE_BIGINT>(arg1);
         }
 
         // get default value
@@ -467,6 +466,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         // for lead/lag, [peer_group_start, peer_group_end] equals to [partition_start, partition_end]
         // when lead/lag called, the whole partitoin's data has already been here, so we can just check all the way to the begining or the end
         if (ignoreNulls) {
+            const int64_t offset = this->data(state).offset;
             // lead(v1 ignore nulls, <offset>) has window `ROWS BETWEEN UNBOUNDED PRECEDING AND <offset> FOLLOWING`
             //      frame_start = partition_start
             //      frame_end = current_row + <offset> + 1
