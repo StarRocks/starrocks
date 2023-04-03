@@ -433,3 +433,66 @@ jobs:
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'StarRocksTest/result/*.xml'
+
+  SQL-Tester:
+    runs-on: self-hosted
+    name: SQL-Tester
+    needs: deploy
+    if: always() && needs.deploy.result == 'success'
+    timeout-minutes: 30
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      CLUSTER_NAME: admit-default
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
+      - name: Checkout PR
+        run: |
+          BRANCH=${{steps.branch.outputs.branch}}
+          git checkout $BRANCH;
+          git pull;
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout $BRANCH_NAME;
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+
+      - name: Prepare Tools
+        run: |
+          cd ${{ github.workspace }}
+          rm -rf .actions
+          mkdir -p .actions/nose-report-action
+          cd .actions/nose-report-action
+          git clone https://github.com/StarRocks/action-junit-report.git .
+
+      - name: Run Case (${{ needs.deploy.outputs.fe }})
+        run: |
+          cd ${{ github.workspace }}
+          rm -rf ./elastic-service
+          ln -s /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          ./bin/run-sql-tester.sh
+
+      - name: UT Reports
+        uses: ./.actions/nose-report-action
+        if: success() || failure()
+        with:
+          check_name: 'SQL-Tester Results'
+          fail_on_failure: true
+          detailed_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          report_paths: 'test/*.xml'
