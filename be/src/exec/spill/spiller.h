@@ -115,13 +115,13 @@ public:
 
     bool has_output_data() { return _reader->has_output_data(); }
 
-    size_t spilled_append_rows() { return _spilled_append_rows; }
+    size_t spilled_append_rows() const { return _spilled_append_rows; }
 
-    size_t restore_read_rows() { return _restore_read_rows; }
+    size_t restore_read_rows() const { return _restore_read_rows; }
 
-    bool spilled() { return spilled_append_rows() > 0; }
+    bool spilled() const { return spilled_append_rows() > 0; }
 
-    bool restore_finished() { return _reader->restore_finished(); }
+    bool restore_finished() const { return _reader->restore_finished(); }
 
     void cancel() { _writer->cancel(); }
 
