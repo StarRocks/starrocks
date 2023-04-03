@@ -67,12 +67,13 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.metric.GaugeMetric;
 import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.persist.DataNodeTabletsInfo;
+import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.system.Backend.BackendStatus;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.DataNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -164,7 +165,7 @@ public class ReportHandler extends Daemon {
         String host = tBackend.getHost();
         int bePort = tBackend.getBe_port();
         long beId;
-        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
         if (backend != null) {
             beId = backend.getId();
         } else {
@@ -438,9 +439,9 @@ public class ReportHandler extends Daemon {
         handleSetTabletBinlogConfig(backendId, backendTablets);
 
         final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
-        DataNode reportBackend = currentSystemInfo.getBackend(backendId);
+        Backend reportBackend = currentSystemInfo.getBackend(backendId);
         if (reportBackend != null) {
-            DataNode.DataNodeStatus backendStatus = reportBackend.getBackendStatus();
+            BackendStatus backendStatus = reportBackend.getBackendStatus();
             backendStatus.lastSuccessReportTabletsTime = TimeUtils.longToTimeString(start);
         }
 
@@ -498,7 +499,7 @@ public class ReportHandler extends Daemon {
     private static void diskReport(long backendId, Map<String, TDisk> backendDisks) {
         LOG.debug("begin to handle disk report from backend {}", backendId);
         long start = System.currentTimeMillis();
-        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {
             LOG.warn("backend doesn't exist. id: " + backendId);
             return;
@@ -515,7 +516,7 @@ public class ReportHandler extends Daemon {
     private static void workgroupReport(long backendId, List<TWorkGroup> workGroups) {
         LOG.debug("begin to handle workgroup report from backend{}", backendId);
         long start = System.currentTimeMillis();
-        DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {
             LOG.warn("backend does't exist. id: " + backendId);
         }
@@ -806,7 +807,7 @@ public class ReportHandler extends Daemon {
                                         LOG.warn("tablet {} has only one replica {} on backend {}"
                                                         + " and it is lost, set it as bad",
                                                 tabletId, replica.getId(), backendId);
-                                        DataNodeTabletsInfo tabletsInfo = new DataNodeTabletsInfo(backendId);
+                                        BackendTabletsInfo tabletsInfo = new BackendTabletsInfo(backendId);
                                         tabletsInfo.setBad(true);
                                         ReplicaPersistInfo replicaPersistInfo = ReplicaPersistInfo.createForReport(
                                                 dbId, tableId, partitionId, indexId, tabletId, backendId,
@@ -1042,7 +1043,7 @@ public class ReportHandler extends Daemon {
                 tabletRecoveryMap.size(), backendId);
 
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-        DataNodeTabletsInfo backendTabletsInfo = new DataNodeTabletsInfo(backendId);
+        BackendTabletsInfo backendTabletsInfo = new BackendTabletsInfo(backendId);
         backendTabletsInfo.setBad(true);
         for (Long dbId : tabletRecoveryMap.keySet()) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);

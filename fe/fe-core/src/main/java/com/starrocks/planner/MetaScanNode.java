@@ -26,7 +26,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TMetaScanNode;
@@ -88,7 +88,7 @@ public class MetaScanNode extends ScanNode {
                     LOG.error("no queryable replica found in tablet {}. visible version {}",
                             tabletId, visibleVersion);
                     if (LOG.isDebugEnabled()) {
-                        if (olapTable.isCloudNativeTable()) {
+                        if (olapTable.isCloudNativeTableOrMaterializedView()) {
                             LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId,
                                     ((LakeTablet) tablet).getShardId(),
                                     tablet.getBackendIds());
@@ -105,7 +105,7 @@ public class MetaScanNode extends ScanNode {
                 Collections.shuffle(allQueryableReplicas);
                 boolean tabletIsNull = true;
                 for (Replica replica : allQueryableReplicas) {
-                    DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
                     if (backend == null) {
                         LOG.debug("replica {} not exists", replica.getBackendId());
                         continue;
@@ -137,7 +137,7 @@ public class MetaScanNode extends ScanNode {
 
     @Override
     protected void toThrift(TPlanNode msg) {
-        if (olapTable.isCloudNativeTable()) {
+        if (olapTable.isCloudNativeTableOrMaterializedView()) {
             msg.node_type = TPlanNodeType.LAKE_META_SCAN_NODE;
         } else {
             msg.node_type = TPlanNodeType.META_SCAN_NODE;

@@ -97,8 +97,8 @@ import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.statistic.StatsConstants;
-import com.starrocks.system.DataNode;
-import com.starrocks.system.DataNodeCoreStat;
+import com.starrocks.system.Backend;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.codec.binary.Hex;
@@ -257,12 +257,12 @@ public class UtFrameUtils {
         createMinStarRocksCluster(false);
     }
 
-    public static DataNode addMockBackend(int backendId) throws Exception {
+    public static Backend addMockBackend(int backendId) throws Exception {
         // start be
         MockedBackend backend = new MockedBackend("127.0.0.1");
 
         // add be
-        DataNode be = new DataNode(backendId, backend.getHost(), backend.getHeartBeatPort());
+        Backend be = new Backend(backendId, backend.getHost(), backend.getHeartBeatPort());
         Map<String, DiskInfo> disks = Maps.newHashMap();
         DiskInfo diskInfo1 = new DiskInfo(backendId + "/path1");
         diskInfo1.setTotalCapacityB(1000000);
@@ -558,9 +558,9 @@ public class UtFrameUtils {
         }
         // mock be core stat
         for (Map.Entry<Long, Integer> entry : replayDumpInfo.getNumOfHardwareCoresPerBe().entrySet()) {
-            DataNodeCoreStat.setNumOfHardwareCoresOfBe(entry.getKey(), entry.getValue());
+            BackendCoreStat.setNumOfHardwareCoresOfBe(entry.getKey(), entry.getValue());
         }
-        DataNodeCoreStat.setCachedAvgNumOfHardwareCores(replayDumpInfo.getCachedAvgNumOfHardwareCores());
+        BackendCoreStat.setCachedAvgNumOfHardwareCores(replayDumpInfo.getCachedAvgNumOfHardwareCores());
 
         // mock table row count
         for (Map.Entry<String, Map<String, Long>> entry : replayDumpInfo.getPartitionRowCountMap().entrySet()) {

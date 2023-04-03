@@ -198,6 +198,7 @@ import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.EmptyStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.FunctionArgsDef;
@@ -3135,6 +3136,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new SetWarehouseStmt(warehouseName, createPos(context));
     }
 
+    @Override
+    public ParseNode visitExecuteScriptStatement(StarRocksParser.ExecuteScriptStatementContext context) {
+        long beId = Long.parseLong(context.INTEGER_VALUE().getText());
+        StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+        String script = stringLiteral.getStringValue();
+        return new ExecuteScriptStmt(beId, script, createPos(context));
+    }
+
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------
 
     @Override
@@ -6006,7 +6015,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 scale = Integer.parseInt(context.scale.getText());
             }
         }
-        if (context.DECIMAL() != null) {
+        if (context.DECIMAL() != null || context.NUMBER() != null || context.NUMERIC() != null) {
             if (precision != null) {
                 if (scale != null) {
                     return ScalarType.createUnifiedDecimalType(precision, scale);

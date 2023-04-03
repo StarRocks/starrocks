@@ -43,7 +43,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
@@ -86,9 +86,9 @@ public class DataProperty implements Writable {
     public static DataProperty getInferredDefaultDataProperty() {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         SystemInfoService infoService = globalStateMgr.getClusterInfo();
-        List<DataNode> backends = infoService.getBackends();
+        List<Backend> backends = infoService.getBackends();
         Set<TStorageMedium> mediumSet = Sets.newHashSet();
-        for (DataNode backend : backends) {
+        for (Backend backend : backends) {
             if (backend.hasPathHash()) {
                 mediumSet.addAll(backend.getDisks().values().stream()
                         .filter(v -> v.getState() == DiskInfo.DiskState.ONLINE)

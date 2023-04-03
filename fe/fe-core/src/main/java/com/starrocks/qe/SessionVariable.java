@@ -40,7 +40,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
-import com.starrocks.system.DataNodeCoreStat;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
@@ -1219,9 +1219,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 return pipelineDop;
             }
             if (maxPipelineDop <= 0) {
-                return DataNodeCoreStat.getDefaultDOP();
+                return BackendCoreStat.getDefaultDOP();
             }
-            return Math.min(maxPipelineDop, DataNodeCoreStat.getDefaultDOP());
+            return Math.min(maxPipelineDop, BackendCoreStat.getDefaultDOP());
         } else {
             return parallelExecInstanceNum;
         }
@@ -1233,9 +1233,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 return pipelineDop;
             }
             if (maxPipelineDop <= 0) {
-                return DataNodeCoreStat.getSinkDefaultDOP();
+                return BackendCoreStat.getSinkDefaultDOP();
             }
-            return Math.min(maxPipelineDop, DataNodeCoreStat.getSinkDefaultDOP());
+            return Math.min(maxPipelineDop, BackendCoreStat.getSinkDefaultDOP());
         } else {
             return parallelExecInstanceNum;
         }

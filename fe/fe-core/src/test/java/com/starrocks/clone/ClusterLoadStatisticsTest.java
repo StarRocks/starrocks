@@ -42,7 +42,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
 import org.junit.Assert;
@@ -54,9 +54,9 @@ import java.util.Map;
 
 public class ClusterLoadStatisticsTest {
 
-    private DataNode be1;
-    private DataNode be2;
-    private DataNode be3;
+    private Backend be1;
+    private Backend be2;
+    private Backend be3;
 
     private GlobalStateMgr globalStateMgr;
     private SystemInfoService systemInfoService;
@@ -65,7 +65,7 @@ public class ClusterLoadStatisticsTest {
     @Before
     public void setUp() {
         // be1
-        be1 = new DataNode(10001, "192.168.0.1", 9051);
+        be1 = new Backend(10001, "192.168.0.1", 9051);
         Map<String, DiskInfo> disks = Maps.newHashMap();
         DiskInfo diskInfo1 = new DiskInfo("/path1");
         diskInfo1.setTotalCapacityB(1000000);
@@ -89,7 +89,7 @@ public class ClusterLoadStatisticsTest {
         be1.setAlive(true);
 
         // be2
-        be2 = new DataNode(10002, "192.168.0.2", 9052);
+        be2 = new Backend(10002, "192.168.0.2", 9052);
         disks = Maps.newHashMap();
         diskInfo1 = new DiskInfo("/path1");
         diskInfo1.setTotalCapacityB(2000000);
@@ -107,7 +107,7 @@ public class ClusterLoadStatisticsTest {
         be2.setAlive(true);
 
         // be3
-        be3 = new DataNode(10003, "192.168.0.3", 9053);
+        be3 = new Backend(10003, "192.168.0.3", 9053);
         disks = Maps.newHashMap();
         diskInfo1 = new DiskInfo("/path1");
         diskInfo1.setTotalCapacityB(4000000);

@@ -122,8 +122,12 @@ public class RangePartitionDesc extends PartitionDesc {
                     throw new AnalysisException("Batch build partition for hour interval only supports " +
                             "partition column as DATETIME type");
                 }
-                this.singleRangePartitionDescs.addAll(multiRangePartitionDesc.
-                        convertToSingle(isAutoPartitionTable, firstPartitionColumn.getType(), otherProperties));
+                PartitionConvertContext context = new PartitionConvertContext();
+                context.setAutoPartitionTable(isAutoPartitionTable);;
+                context.setFirstPartitionColumnType(firstPartitionColumn.getType());
+                context.setProperties(otherProperties);
+
+                this.singleRangePartitionDescs.addAll(multiRangePartitionDesc.convertToSingle(context));
             }
         }
 

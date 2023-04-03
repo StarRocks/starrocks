@@ -29,9 +29,9 @@ import com.starrocks.proto.PPulsarMetaProxyRequest;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PStringPair;
-import com.starrocks.rpc.DataNodeServiceClient;
+import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -140,12 +140,12 @@ public class PulsarUtil {
                     throw new LoadException("Failed to send proxy request. No alive backends");
                 }
                 Collections.shuffle(backendIds);
-                DataNode be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
+                Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
                 request.timeout = Config.routine_load_pulsar_timeout_second;
-                Future<PPulsarProxyResult> future = DataNodeServiceClient.getInstance().getPulsarInfo(address, request);
+                Future<PPulsarProxyResult> future = BackendServiceClient.getInstance().getPulsarInfo(address, request);
                 PPulsarProxyResult result = future.get(Config.routine_load_pulsar_timeout_second, TimeUnit.SECONDS);
                 TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                 if (code != TStatusCode.OK) {

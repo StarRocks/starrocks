@@ -755,8 +755,6 @@ CONF_Bool(parquet_late_materialization_enable, "true");
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 CONF_Int32(io_tasks_per_scan_operator, "4");
-CONF_Bool(scan_node_always_shared_scan, "false");
-CONF_Bool(connector_scan_node_always_shared_scan, "true");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
@@ -918,5 +916,4 @@ CONF_mInt64(txn_info_history_size, "20000");
 CONF_mInt32(update_cache_evict_internal_sec, "11");
 CONF_mBool(enable_auto_evict_update_cache, "true");
 
-CONF_Bool(enable_preload_column_mode_update_cache, "true");
 } // namespace starrocks::config

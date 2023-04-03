@@ -19,7 +19,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.Random;
@@ -45,8 +44,6 @@ public class DecommissionTest {
         PseudoCluster.getInstance().shutdown(false);
     }
 
-    //TODO: this ut will fail when the system load is high.
-    @Ignore
     @Test
     public void testDecommission() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
@@ -64,7 +61,7 @@ public class DecommissionTest {
             insertSqls[i] = PseudoCluster.buildInsertSql("test", tableNames[i]);
             cluster.runSqls("test", createTableSqls[i], insertSqls[i], insertSqls[i], insertSqls[i]);
         }
-        final PseudoDataNode decommissionBE = cluster.getBackend(10001);
+        final PseudoBackend decommissionBE = cluster.getBackend(10001);
         int oldTabletNum = decommissionBE.getTabletManager().getNumTablet();
         cluster.runSql(null, String.format("ALTER SYSTEM DECOMMISSION BACKEND \"%s\"", decommissionBE.getHostHeartbeatPort()));
         Random rand = new Random(0);

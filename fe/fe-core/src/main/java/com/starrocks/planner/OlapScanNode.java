@@ -59,6 +59,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
@@ -75,7 +76,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TLakeScanNode;
@@ -95,6 +96,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -396,7 +398,7 @@ public class OlapScanNode extends ScanNode {
             Collections.shuffle(replicas);
             boolean tabletIsNull = true;
             for (Replica replica : replicas) {
-                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
                 if (backend == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -458,7 +460,7 @@ public class OlapScanNode extends ScanNode {
                 LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
                         tabletId, visibleVersion, replicaInfos);
                 if (LOG.isDebugEnabled()) {
-                    if (olapTable.isCloudNativeTable()) {
+                    if (olapTable.isCloudNativeTableOrMaterializedView()) {
                         LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((LakeTablet) tablet).getShardId(),
                                 tablet.getBackendIds());
                     } else {
@@ -483,7 +485,7 @@ public class OlapScanNode extends ScanNode {
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
-                DataNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
                 if (backend == null) {
                     LOG.debug("replica {} not exists", replica.getBackendId());
                     continue;
@@ -752,7 +754,7 @@ public class OlapScanNode extends ScanNode {
             }
         }
 
-        if (olapTable.isCloudNativeTable()) {
+        if (olapTable.isCloudNativeTableOrMaterializedView()) {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
             msg.lake_scan_node =
                     new TLakeScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
@@ -777,7 +779,7 @@ public class OlapScanNode extends ScanNode {
             if (!bucketExprs.isEmpty()) {
                 msg.lake_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
             }
-        } else { // If you find yourself changing this code block, see also the above code block, i.e, if (olapTable.isLakeTable) { ... }.
+        } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
                     new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
@@ -866,7 +868,7 @@ public class OlapScanNode extends ScanNode {
     @Override
     public boolean canDoReplicatedJoin() {
         // TODO(wyb): necessary to support?
-        if (olapTable.isCloudNativeTable()) {
+        if (olapTable.isCloudNativeTableOrMaterializedView()) {
             return false;
         }
         ConnectContext ctx = ConnectContext.get();
@@ -1109,7 +1111,7 @@ public class OlapScanNode extends ScanNode {
         List<Integer> dictIntIds = dictStringIds.stream().map(dictStringIdToIntIds::get).collect(Collectors.toList());
         scanNode.setDict_string_ids(dictStringIds);
         scanNode.setDict_int_ids(dictIntIds);
-        planNode.setNode_type(olapTable.isCloudNativeTable() ?
+        planNode.setNode_type(olapTable.isCloudNativeTableOrMaterializedView() ?
                 TPlanNodeType.LAKE_SCAN_NODE : TPlanNodeType.OLAP_SCAN_NODE);
         planNode.setOlap_scan_node(scanNode);
         normalizeConjuncts(normalizer, planNode, conjuncts);
