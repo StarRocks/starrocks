@@ -2156,4 +2156,15 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_experimental_temporary_table = false;
+
+    /**
+     * only use compute node, test for multi-warehouse
+     */
+    @ConfField(mutable = true)
+    public static boolean only_use_compute_node = false;
+
+    /**
+     * deployment form, on-premise or saas
+     */
+    public static String deployment_form = "on_premise";
 }
