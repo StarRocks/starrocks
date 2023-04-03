@@ -32,7 +32,7 @@ The expression that assigns new values to the column.
 
 `from_item`
 
-One or more other tables in the database. These tables can be joined with the table to be updated based on the condition specified in the WHERE clause. The values of the rows in the result set are used to update the values for the specified columns in the matched rows in the table to be updated. For example, if the FROM clause is 'FROM t1 WHERE t0.pk = t1.pk', StarRocks converts the table expression in the FROM clause to 't0 JOIN t1 ON t0.pk=t1.pk' when executing the UPDATE statement.
+One or more other tables in the database. These tables can be joined with the table to be updated based on the condition specified in the WHERE clause. The values of the rows in the result set are used to update the values for the specified columns in the matched rows in the table to be updated. For example, if the FROM clause is `FROM t1 WHERE t0.pk = t1.pk`, StarRocks converts the table expression in the FROM clause to `t0 JOIN t1 ON t0.pk=t1.pk` when executing the UPDATE statement.
 
 `where_condition`
 
