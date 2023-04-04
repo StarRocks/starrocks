@@ -982,7 +982,8 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         // A tablet will be regarded using the 1GB size
         // And also the number will not be larger than the calBucketNumAccordingToBackends()
-        bucketNum = (int) Math.min(bucketNum, maxDataSize / FeConstants.AUTO_DISTRIBUTION_UNIT);
+        long speculateTabletNum = (maxDataSize + FeConstants.AUTO_DISTRIBUTION_UNIT - 1) / FeConstants.AUTO_DISTRIBUTION_UNIT;
+        bucketNum = (int) Math.min(bucketNum, speculateTabletNum);
         if (bucketNum == 0) {
             bucketNum = 1;
         }
