@@ -81,7 +81,6 @@ OPTS=$(getopt \
   -l 'clean' \
   -l 'with-gcov' \
   -l 'without-gcov' \
-  -l 'use-jemalloc' \
   -l 'help' \
   -- "$@")
 
@@ -104,7 +103,7 @@ if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
 
-USE_JEMALLOC=OFF
+USE_JEMALLOC=ON
 
 HELP=0
 if [ $# == 1 ] ; then
@@ -129,7 +128,6 @@ else
             --ut) RUN_UT=1   ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
-            --use-jemalloc) USE_JEMALLOC=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             --) shift ;  break ;;
@@ -156,7 +154,6 @@ echo "Get params:
     RUN_UT              -- $RUN_UT
     WITH_GCOV           -- $WITH_GCOV
     USE_AVX2            -- $USE_AVX2
-    USE_JEMALLOC        -- $USE_JEMALLOC
 "
 
 # Clean and build generated code
