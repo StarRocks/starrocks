@@ -16,10 +16,15 @@ package com.starrocks.warehouse;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
+import org.jline.utils.Log;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -30,6 +35,8 @@ public class Cluster implements Writable {
     private long id;
     @SerializedName(value = "wgid")
     private long workerGroupId;
+    @SerializedName(value = "computeNodeList")
+    private List<ComputeNode> computeNodeList = new ArrayList<>();
 
     public Cluster(long id) {
         this.id = id;
