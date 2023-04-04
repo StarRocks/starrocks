@@ -73,10 +73,12 @@ import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TLakeScanNode;
@@ -485,10 +487,16 @@ public class OlapScanNode extends ScanNode {
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                // TODO: need to refactor after be split into cn + dn
+                ComputeNode backend =  GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
                 if (backend == null) {
-                    LOG.debug("replica {} not exists", replica.getBackendId());
-                    continue;
+                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                        backend = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(replica.getBackendId());
+                    }
+                    if (backend == null) {
+                        LOG.debug("replica {} not exists", replica.getBackendId());
+                        continue;
+                    }
                 }
                 String ip = backend.getHost();
                 int port = backend.getBePort();

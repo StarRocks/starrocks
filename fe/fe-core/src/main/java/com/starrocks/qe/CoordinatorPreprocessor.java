@@ -56,6 +56,7 @@ import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -428,7 +429,9 @@ public class CoordinatorPreprocessor {
         ImmutableMap<Long, ComputeNode> idToComputeNode
                 = ImmutableMap.copyOf(GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode());
         int useComputeNodeNumber = connectContext.getSessionVariable().getUseComputeNodes();
-        if (useComputeNodeNumber < 0 || useComputeNodeNumber >= idToComputeNode.size()) {
+        if (useComputeNodeNumber < 0
+                || useComputeNodeNumber >= idToComputeNode.size()
+                || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             return idToComputeNode;
         } else {
             Map<Long, ComputeNode> computeNodes = new HashMap<>();
@@ -514,8 +517,14 @@ public class CoordinatorPreprocessor {
             if (fragment.getDataPartition() == DataPartition.UNPARTITIONED) {
                 Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostport;
-                if (usedComputeNode) {
+                if (usedComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
                     execHostport = SimpleScheduler.getComputeNodeHost(this.idToComputeNode, backendIdRef);
+                    // TODO: need to refactor after be split into cn + dn
+                    if (execHostport == null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                        execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
+                    }
+                    // for debug
+                    LOG.info("this.idToComputeNode is {}", idToComputeNode);
                 } else {
                     execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
                 }
@@ -1879,7 +1888,8 @@ public class CoordinatorPreprocessor {
                 Reference<Long> backendIdRef = new Reference<>();
                 TNetworkAddress execHostPort = SimpleScheduler.getHost(minLocation.backend_id,
                         scanRangeLocations.getLocations(),
-                        idToBackend, backendIdRef);
+                        idToBackend, idToComputeNode, backendIdRef);
+
                 if (execHostPort == null) {
                     throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR
                             + backendInfosString(false));
@@ -1981,7 +1991,8 @@ public class CoordinatorPreprocessor {
                 //fill scanRangeParamsList
                 List<TScanRangeLocations> locations = scanNode.bucketSeq2locations.get(bucketSeq);
                 if (!bucketSeqToAddress.containsKey(bucketSeq)) {
-                    getExecHostPortForFragmentIDAndBucketSeq(locations.get(0), fragmentId, bucketSeq, idToBackend);
+                    getExecHostPortForFragmentIDAndBucketSeq(locations.get(0), fragmentId, bucketSeq,
+                            idToBackend, idToComputeNode);
                 }
 
                 for (TScanRangeLocations location : locations) {
@@ -2037,7 +2048,8 @@ public class CoordinatorPreprocessor {
         // Make sure each host have average bucket to scan
         private void getExecHostPortForFragmentIDAndBucketSeq(TScanRangeLocations seqLocation,
                                                               PlanFragmentId fragmentId, Integer bucketSeq,
-                                                              ImmutableMap<Long, Backend> idToBackend)
+                                                              ImmutableMap<Long, Backend> idToBackend,
+                                                              ImmutableMap<Long, ComputeNode> idToComputeNode)
                 throws UserException {
             Map<Long, Integer> buckendIdToBucketCountMap = fragmentIdToBackendIdBucketCountMap.get(fragmentId);
             int maxBucketNum = Integer.MAX_VALUE;
@@ -2058,7 +2070,7 @@ public class CoordinatorPreprocessor {
             buckendIdToBucketCountMap.put(buckendId, buckendIdToBucketCountMap.get(buckendId) + 1);
             Reference<Long> backendIdRef = new Reference<>();
             TNetworkAddress execHostPort =
-                    SimpleScheduler.getHost(buckendId, seqLocation.locations, idToBackend, backendIdRef);
+                    SimpleScheduler.getHost(buckendId, seqLocation.locations, idToBackend, idToComputeNode, backendIdRef);
             if (execHostPort == null) {
                 throw new UserException(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR
                         + backendInfosString(false));

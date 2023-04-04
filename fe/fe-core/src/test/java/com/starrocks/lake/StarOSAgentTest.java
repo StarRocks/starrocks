@@ -401,7 +401,7 @@ public class StarOSAgentTest {
                 "Failed to get backend by worker. worker id",
                 () -> starosAgent.getPrimaryComputeNodeIdByShard(10L));
 
-        Assert.assertEquals(Sets.newHashSet(), starosAgent.getBackendIdsByShard(10L));
+        Assert.assertEquals(Sets.newHashSet(), starosAgent.getBackendIdsByShard(10L, 0));
 
         workerToBackend.put(1L, 10001L);
         workerToBackend.put(2L, 10002L);
@@ -410,7 +410,8 @@ public class StarOSAgentTest {
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
         Assert.assertEquals(10001L, starosAgent.getPrimaryComputeNodeIdByShard(10L));
-        Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L), starosAgent.getBackendIdsByShard(10L));
+        Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L),
+                starosAgent.getBackendIdsByShard(10L, 0));
     }
 
     @Test

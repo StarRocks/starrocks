@@ -246,7 +246,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public Set<Long> getBackendIdsByShard(long shardId) throws UserException {
+        public Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
             Set<Long> results = new HashSet<>();
             shardInfos.stream().filter(x -> x.getShardId() == shardId).forEach(y -> {
                 for (ReplicaInfo info : y.getReplicaInfoList()) {

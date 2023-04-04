@@ -40,6 +40,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
@@ -76,12 +77,20 @@ public class SimpleScheduler {
     public static TNetworkAddress getHost(long backendId,
                                           List<TScanRangeLocation> locations,
                                           ImmutableMap<Long, Backend> backends,
+                                          ImmutableMap<Long, ComputeNode> computeNodes,
                                           Reference<Long> backendIdRef) {
+
         if (locations == null || backends == null) {
             return null;
         }
         LOG.debug("getHost backendID={}, backendSize={}", backendId, backends.size());
-        Backend backend = backends.get(backendId);
+
+        // TODO: need to refactor after be split into cn + dn
+        ComputeNode backend = backends.get(backendId);
+        if (backend == null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            backend = computeNodes.get(backendId);
+        }
+
         lock.lock();
         try {
             if (backend != null && backend.isAlive() && !blacklistBackends.containsKey(backendId)) {
@@ -93,7 +102,7 @@ public class SimpleScheduler {
                         continue;
                     }
                     // choose the first alive backend(in analysis stage, the locations are random)
-                    Backend candidateBackend = backends.get(location.backend_id);
+                    ComputeNode candidateBackend = backends.get(location.backend_id);
                     if (candidateBackend != null && candidateBackend.isAlive()
                             && !blacklistBackends.containsKey(location.backend_id)) {
                         backendIdRef.setRef(location.backend_id);

@@ -47,7 +47,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -449,8 +449,8 @@ public class StarOSAgent {
         throw new UserException("Failed to get primary backend. shard id: " + shardId);
     }
 
-    public Set<Long> getBackendIdsByShard(long shardId) throws UserException {
-        List<ReplicaInfo> replicas = getShardReplicas(shardId);
+    public Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws UserException {
+        List<ReplicaInfo> replicas = getShardReplicas(shardId, workerGroupId);
 
         Set<Long> backendIds = Sets.newHashSet();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
@@ -470,12 +470,12 @@ public class StarOSAgent {
                         //  saveImage(). Refer to: https://starrocks.atlassian.net/browse/SR-16340
                         if (workerInfo.getWorkerPropertiesMap().containsKey("be_port")) {
                             int bePort = Integer.parseInt(workerInfo.getWorkerPropertiesMap().get("be_port"));
-                            Backend be = GlobalStateMgr.getCurrentSystemInfo()
-                                    .getBackendWithBePort(pair[0], bePort);
-                            if (be == null) {
+                            ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo()
+                                    .getComputeNodeWithBePort(pair[0], bePort);
+                            if (cn == null) {
                                 LOG.warn("can't find backendId with bePort:{} for {}.", bePort, workerAddr);
                             } else {
-                                backendId = be.getId();
+                                backendId = cn.getId();
                             }
                         }
                         // Can't find the backendId, give up

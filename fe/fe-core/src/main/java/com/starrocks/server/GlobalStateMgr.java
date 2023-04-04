@@ -268,6 +268,7 @@ import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
@@ -289,6 +290,7 @@ import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -525,10 +527,26 @@ public class GlobalStateMgr {
     public TNodesInfo createNodesInfo(Integer clusterId) {
         TNodesInfo nodesInfo = new TNodesInfo();
         SystemInfoService systemInfoService = getOrCreateSystemInfo(clusterId);
-        for (Long id : systemInfoService.getBackendIds(false)) {
-            Backend backend = systemInfoService.getBackend(id);
-            nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+        // use default warehouse
+        Warehouse warehouse = warehouseMgr.getDefaultWarehouse();
+        com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
+        // TODO: need to refactor after be split into cn + dn
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA &&
+                !cluster.getComputeNodeIds().isEmpty()) {
+            for (Long cnId : cluster.getComputeNodeIds()) {
+                ComputeNode cn = systemInfoService.getBackend(cnId);
+                if (cn == null) {
+                    cn = systemInfoService.getComputeNode(cnId);
+                }
+                nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getHost(), cn.getBrpcPort()));
+            }
+        } else {
+            for (Long id : systemInfoService.getBackendIds(false)) {
+                Backend backend = systemInfoService.getBackend(id);
+                nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+            }
         }
+
         return nodesInfo;
     }
 

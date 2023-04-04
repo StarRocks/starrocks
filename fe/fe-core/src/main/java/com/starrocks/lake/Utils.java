@@ -30,7 +30,9 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -106,11 +108,17 @@ public class Utils {
         List<Long> txnIds = Lists.newArrayList(txnId);
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
-        List<Backend> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
+        List<ComputeNode> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
         for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            Backend backend = systemInfoService.getBackend(entry.getKey());
+            // TODO: need to refactor after be split into cn + dn
+            ComputeNode backend = systemInfoService.getBackend(entry.getKey());
             if (backend == null) {
-                throw new NoAliveBackendException("Backend been dropped while building publish version request");
+                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                    backend = systemInfoService.getComputeNode(entry.getKey());
+                }
+                if (backend == null) {
+                    throw new NoAliveBackendException("Backend been dropped while building publish version request");
+                }
             }
             PublishVersionRequest request = new PublishVersionRequest();
             request.baseVersion = baseVersion;
