@@ -4,6 +4,8 @@
 
 Activates a role, along with all of its associated privileges, for the current session.
 
+This command is supported from v3.0.
+
 ## Syntax
 
 ```SQL
@@ -56,3 +58,12 @@ SELECT CURRENT_ROLE();
 | db_admin           |
 +--------------------+
 ```
+
+## References
+
+- [CREATE ROLE](CREATE%20ROLE.md): creates a role.
+- [GRANT](GRANT.md): assigns roles to users or other roles.
+- [ALTER USER](ALTER%20USER.md): modifies roles.
+- [SHOW ROLES](SHOW%20ROLES.md): show all roles in the system.
+- [current_role](../../sql-functions/utility-functions/current_role.md): show roles of the current user.
+- [DROP ROLE](DROP%20ROLE.md): drops a role.

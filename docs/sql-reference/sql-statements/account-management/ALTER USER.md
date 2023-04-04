@@ -99,3 +99,10 @@ ALTER USER 'jack'@'192.168.%' DEFAULT ROLE NONE;
 ```
 
 > Note: By default, the `public` role is still activated for the user.
+
+## References
+
+- [CREATE USER](CREATE%20USER.md)
+- [GRANT](GRANT.md)
+- [SHOW USERS](SHOW%20USERS.md)
+- [DROP USER](DROP%20USER.md)
