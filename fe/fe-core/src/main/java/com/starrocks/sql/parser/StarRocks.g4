@@ -1732,6 +1732,14 @@ expressionOrDefault
     : expression | DEFAULT
     ;
 
+mapExpressionList
+    : mapExpression (',' mapExpression)*
+    ;
+
+mapExpression
+    : key=expression ':' value=expression
+    ;
+
 expressionSingleton
     : expression EOF
     ;
@@ -1741,7 +1749,6 @@ expression
     | NOT expression                                                                      #logicalNot
     | left=expression operator=(AND|LOGICAL_AND) right=expression                         #logicalBinary
     | left=expression operator=(OR|LOGICAL_OR) right=expression                           #logicalBinary
-    | key=expression ':' value=expression                                                 #mapExpression
     ;
 
 expressionList
@@ -1810,7 +1817,7 @@ primaryExpression
     | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
     | arrayType? '[' (expressionList)? ']'                                                #arrayConstructor
-    | mapType? '{' (expressionList)? '}'                                                  #mapConstructor
+    | mapType? '{' (mapExpressionList)? '}'                                               #mapConstructor
     | value=primaryExpression '[' index=valueExpression ']'                               #collectionSubscript
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | primaryExpression ARROW string                                                      #arrowExpression

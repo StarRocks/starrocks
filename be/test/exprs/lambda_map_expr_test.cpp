@@ -93,7 +93,7 @@ protected:
         return e;
     }
 
-    void create_lambda_expr(TypeDescriptor& type_map) {
+    void create_lambda_expr(const TypeDescriptor& type_map) {
         // create lambda functions
         TExprNode tlambda_func;
         tlambda_func.opcode = TExprOpcode::ADD;

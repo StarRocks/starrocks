@@ -57,7 +57,7 @@ public:
         uint32_t curr_offset = 0;
         array_offsets->append(curr_offset);
         for (size_t i = 0; i < num_rows; i++) {
-            for (const auto element : element_columns) {
+            for (const auto& element : element_columns) {
                 array_elements->append(*element, i, 1);
             }
             curr_offset += num_elements;

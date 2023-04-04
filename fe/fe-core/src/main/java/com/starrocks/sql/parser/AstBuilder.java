@@ -392,6 +392,7 @@ import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -5449,16 +5450,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.mapType() != null) {
             type = getMapType(context.mapType());
         }
-
         List<Expr> exprs;
-        if (context.expressionList() != null) {
-            if (!(context.expressionList().expression(0) instanceof StarRocksParser.MapExpressionContext)) {
-                throw new ParsingException(PARSER_ERROR_MSG.invalidMapFormat(),
-                        createPos(context.expressionList().expression(0)));
-            }
-            List<ValueList> rowValues = visit(context.expressionList().expression(), ValueList.class);
+        if (context.mapExpressionList() != null) {
+            List<ValueList> rowValues = visit(context.mapExpressionList().mapExpression(), ValueList.class);
             List<List<Expr>> rows = rowValues.stream().map(ValueList::getRow).collect(toList());
-            exprs = rows.stream().flatMap(x -> x.stream()).collect(Collectors.toList());
+            exprs = rows.stream().flatMap(Collection::stream).collect(Collectors.toList());
         } else {
             exprs = Collections.emptyList();
         }

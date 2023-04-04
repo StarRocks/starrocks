@@ -539,7 +539,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         String sql = Deencapsulation.invoke(sampleStatisticsCollectJob, "buildSampleInsertSQL",
                 dbid, olapTable.getId(), Lists.newArrayList("v1", "count"), 100L);
-        assertContains(sql, "`stats`.`tcount`  Tablet(10117)");
+        assertContains(sql, "`stats`.`tcount`  Tablet(16474)");
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
 
         FullStatisticsCollectJob fullStatisticsCollectJob = new FullStatisticsCollectJob(
