@@ -53,6 +53,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
@@ -64,6 +65,7 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -75,6 +77,7 @@ import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -88,6 +91,7 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -121,6 +125,8 @@ public class SystemInfoService {
 
     public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
             throws DdlException {
+
+        Map<Long, ComputeNode> computeNodes = new HashMap<>();
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
             if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
@@ -132,7 +138,7 @@ public class SystemInfoService {
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            addComputeNode(pair.first, pair.second);
+            computeNodes.putAll(addComputeNode(pair.first, pair.second));
         }
     }
 
@@ -156,20 +162,30 @@ public class SystemInfoService {
     }
 
     // Final entry of adding compute node
-    private void addComputeNode(String host, int heartbeatPort) throws DdlException {
+    private Map<Long, ComputeNode> addComputeNode(String host, int heartbeatPort) throws DdlException {
+        Map<Long, ComputeNode> computeNodes = new HashMap<>();
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         // update idToComputor
         Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
         copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
+        computeNodes.put(newComputeNode.getId(), newComputeNode);
         idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
 
         setComputeNodeOwner(newComputeNode);
 
+        // add it to warehouse
+        if (Config.only_use_compute_node) {
+            String currentWh = ConnectContext.get().getCurrentWarehouse();
+            Warehouse currentWarehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(currentWh);
+            currentWarehouse.addNodes(computeNodes);
+        }
+
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
         LOG.info("finished to add {} ", newComputeNode);
-    }
 
+        return computeNodes;
+    }
     private void setComputeNodeOwner(ComputeNode computeNode) {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
@@ -508,7 +524,7 @@ public class SystemInfoService {
         return -1L;
     }
 
-    public long getComputeNodeWithStarletPort(String host, int starletPort) {
+    public long getComputeNodeIdWithStarletPort(String host, int starletPort) {
         ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
         for (ComputeNode cn : idToComputeNode.values()) {
             if (cn.getHost().equals(host) && cn.getStarletPort() == starletPort) {
@@ -992,6 +1008,14 @@ public class SystemInfoService {
                 // This happens in loading image when fe is restarted, because loadCluster is after loadComputeNode,
                 // cluster is not created. CN in cluster will be updated in loadCluster.
             }
+        }
+
+        // add it to warehouse
+        if (Config.only_use_compute_node) {
+            String warehouseName = newComputeNode.getWarehouseName();
+            Map<Long, ComputeNode> cns  = new HashMap<>();
+            cns.put(newComputeNode.getId(), newComputeNode);
+            GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName).addNodes(cns);
         }
     }
 

@@ -69,8 +69,6 @@ import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
-import com.starrocks.persist.AlterWhClusterOplog;
-import com.starrocks.persist.AlterWhPropertyOplog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
@@ -216,15 +214,6 @@ public class JournalEntity implements Writable {
                 data = ResumeWarehouseLog.read(in);
                 isRead = true;
                 break;
-            }
-            case OperationType.OP_ALTER_WH_ADD_CLUSTER:
-            case OperationType.OP_ALTER_WH_REMOVE_CLUSTER: {
-                data = AlterWhClusterOplog.read(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_ALTER_WH_MOD_PROP: {
-                data = AlterWhPropertyOplog.read(in);
             }
             case OperationType.OP_SAVE_AUTO_INCREMENT_ID:
             case OperationType.OP_DELETE_AUTO_INCREMENT_ID: {

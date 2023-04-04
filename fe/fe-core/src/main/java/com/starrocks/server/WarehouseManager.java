@@ -24,16 +24,15 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.persist.AlterWhPropertyOplog;
 import com.starrocks.persist.OpWarehouseLog;
 import com.starrocks.persist.ResumeWarehouseLog;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.warehouse.Cluster;
+import com.starrocks.warehouse.LocalWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -52,6 +51,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
 
+    public static final String DEFAULT_WAREHOUSE_NAME = "default_warehouse";
+
     private Map<Long, Warehouse> idToWh = new HashMap<>();
     @SerializedName(value = "fullNameToWh")
     private Map<String, Warehouse> fullNameToWh = new HashMap<>();
@@ -61,20 +62,27 @@ public class WarehouseManager implements Writable {
     public static final ImmutableList<String> WAREHOUSE_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Warehouse")
             .add("State")
-            .add("Size")
-            .add("MinCluster")
-            .add("MaxCluster")
             .add("ClusterCount")
-            .add("TotalPending")
-            .add("TotalRunning")
             .build();
 
     public WarehouseManager() {
     }
 
+    public void initDefaultWarehouse() {
+        createWarehouse(DEFAULT_WAREHOUSE_NAME, null);
+    }
+
     public Warehouse getWarehouse(String warehouseName) {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return fullNameToWh.get(warehouseName);
+        }
+    }
+
+    public Warehouse getAnyAvailableWarehouse() {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return fullNameToWh.entrySet().
+                    stream().filter(e -> e.getValue().getAnyAvailableCluster().getComputeNodeMap().size() > 0).
+                    findAny().map(Map.Entry::getValue).orElse(null);
         }
     }
 
@@ -95,7 +103,7 @@ public class WarehouseManager implements Writable {
                     "Warehouse '%s' already exists", warehouseName);
 
             long id = GlobalStateMgr.getCurrentState().getNextId();
-            Warehouse wh = new Warehouse(id, warehouseName, properties);
+            Warehouse wh = new LocalWarehouse(id, warehouseName);
             fullNameToWh.put(wh.getFullName(), wh);
             idToWh.put(wh.getId(), wh);
             wh.setExist(true);
@@ -185,85 +193,6 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public void alterWarehouse(AlterWarehouseStmt stmt) throws DdlException {
-        String warehouseName = stmt.getFullWhName();
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(fullNameToWh.containsKey(warehouseName),
-                    "Warehouse '%s' doesn't exist", warehouseName);
-            if (stmt.getOpType() == AlterWarehouseStmt.OpType.ADD_CLUSTER) {
-                // add cluster
-                addCluster(stmt.getFullWhName());
-            } else if (stmt.getOpType() == AlterWarehouseStmt.OpType.REMOVE_CLUSTER) {
-                // remove cluster
-                removeCluster(stmt.getFullWhName());
-            } else {
-                // modify some property
-                Map<String, String> properties = stmt.getProperties();
-                modifyProperty(stmt.getFullWhName(), properties);
-            }
-        }
-    }
-
-    private void addCluster(String warehouseName) throws DdlException {
-        Warehouse wh = fullNameToWh.get(warehouseName);
-        wh.addCluster();
-    }
-
-    private void removeCluster(String warehouseName) throws DdlException {
-        Warehouse wh = fullNameToWh.get(warehouseName);
-        wh.removeCluster();
-    }
-
-    private void modifyProperty(String warehouseName, Map<String, String> properties) throws DdlException {
-        boolean isChanged = false;
-        Warehouse wh = fullNameToWh.get(warehouseName);
-        if (properties != null) {
-            if (properties.get("size") != null) {
-                wh.setSize(properties.get("size"));
-                wh.modifyCluterSize();
-                isChanged = true;
-            }
-
-            if (properties.get("min_cluster") != null) {
-                wh.setMinCluster(Integer.valueOf(properties.get("min_cluster")));
-                isChanged = true;
-            }
-
-            if (properties.get("max_cluster") != null) {
-                wh.setMaxCluster(Integer.valueOf(properties.get("max_cluster")));
-                isChanged = true;
-            }
-        }
-
-        if (isChanged) {
-            AlterWhPropertyOplog log = new AlterWhPropertyOplog(warehouseName, properties);
-            GlobalStateMgr.getCurrentState().getEditLog().logModifyWhProperty(log);
-        }
-
-        LOG.info("alter warehouse properties {}, warehouse name: {}", properties, warehouseName);
-    }
-
-    public void replayModifyProperty(String warehouseName, Map<String, String> properties) {
-        Warehouse wh = fullNameToWh.get(warehouseName);
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
-            if (properties != null) {
-                if (properties.get("size") != null) {
-                    wh.setSize(properties.get("size"));
-                }
-
-                if (properties.get("min_cluster") != null) {
-                    wh.setMinCluster(Integer.valueOf(properties.get("min_cluster")));
-                }
-
-                if (properties.get("max_cluster") != null) {
-                    wh.setMaxCluster(Integer.valueOf(properties.get("max_cluster")));
-                }
-            }
-            LOG.info("replay alter warehouse properties {}, warehouse name: {}", properties, warehouseName);
-        }
-
-    }
-
     // warehouse meta persistence api
     public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
         checksum ^= fullNameToWh.size();
@@ -320,5 +249,4 @@ public class WarehouseManager implements Writable {
             return result;
         }
     }
-
 }

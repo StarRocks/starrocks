@@ -866,9 +866,6 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitAlterWarehouseStatement(AlterWarehouseStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getWarehouseMgr().alterWarehouse(stmt);
-            });
             return null;
         }
 

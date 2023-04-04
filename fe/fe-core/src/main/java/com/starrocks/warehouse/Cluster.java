@@ -16,36 +16,67 @@ package com.starrocks.warehouse;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
+import org.jline.utils.Log;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Cluster implements Writable {
     @SerializedName(value = "id")
     private long id;
     @SerializedName(value = "wgid")
     private long workerGroupId;
+    @SerializedName(value = "cnMaps")
+    private Map<Long, ComputeNode> computeNodeMap = new HashMap<>();
 
-    // Note: we only record running sqls number and pending sqls in Warehouse and Cluster
-    // We suppose that sql queue tool has nothing to do with  Cluster,
-    // Cluster offers related interfaces and sql queue tool will update counter according to the implementation of sqls.
-    private AtomicInteger numRunningSqls;
+    public Cluster(long id) {
+        this.id = id;
+        // in Shared_data RunMode, need to create a workerGroup
+        if (RunMode.allowCreateLakeTable()) {
+            try {
+                workerGroupId = GlobalStateMgr.getCurrentStarOSAgent().createWorkerGroup("x0");
+            } catch (DdlException e) {
+                Log.warn(e);
+                System.exit(-1);
+            }
+        }
+    }
 
     public Cluster(long id, long workerGroupId) {
         this.id = id;
         this.workerGroupId = workerGroupId;
     }
 
-    // set the associated worker group id when resizing
-    /*    public void setWorkerGroupId(long id) {
-        this.workerGroupId = id;
-    }*/
+    public void addNodes(Map<Long, ComputeNode> cns, String warehouseName) {
+        computeNodeMap.putAll(cns);
+        if (RunMode.allowCreateLakeTable()) {
+            // add worker to group
+            for (Map.Entry<Long, ComputeNode> entry : cns.entrySet()) {
+                ComputeNode computeNode = entry.getValue();
+                computeNode.setWorkerGroupId(workerGroupId);
+                computeNode.setWarehouseName(warehouseName);
+            }
+        }
+    }
+
+    public Map<Long, ComputeNode> getComputeNodeMap() {
+        return computeNodeMap;
+    }
+
+    public void clearComputeNodes() {
+        computeNodeMap.clear();
+    }
 
     public long getWorkerGroupId() {
         return workerGroupId;
@@ -61,12 +92,6 @@ public class Cluster implements Writable {
     public int getPendingSqls() {
         return -1;
     }
-    /*    public int setRunningSqls(int val) {
-        return 1;
-    }
-    public int addAndGetRunningSqls(int delta) {
-        return 1;
-    }*/
 
     public void getProcNodeData(BaseProcResult result) {
         result.addRow(Lists.newArrayList(String.valueOf(this.getId()),

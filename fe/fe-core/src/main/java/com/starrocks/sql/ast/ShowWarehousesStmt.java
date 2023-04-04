@@ -24,17 +24,14 @@ import com.starrocks.sql.parser.NodePosition;
 // Show warehouse statement.
 public class ShowWarehousesStmt extends ShowStmt {
     private static final String WH_COL = "Warehouse";
+
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column(WH_COL, ScalarType.createVarchar(256)))
                     .addColumn(new Column("State", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Size", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("MinCluster", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("MaxCluster", ScalarType.createVarchar(20)))
                     .addColumn(new Column("ClusterCount", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("TotalPending", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("TotalRunning", ScalarType.createVarchar(20)))
                     .build();
+
     private final String pattern;
     private Expr where;
 

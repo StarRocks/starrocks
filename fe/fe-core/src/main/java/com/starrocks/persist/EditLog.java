@@ -158,27 +158,6 @@ public class EditLog {
                     warehouseMgr.replayCreateWarehouse(wh);
                     break;
                 }
-                case OperationType.OP_ALTER_WH_ADD_CLUSTER: {
-                    AlterWhClusterOplog log = (AlterWhClusterOplog) journal.getData();
-                    String warehouseName = log.getWarehouseName();
-                    Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
-                    warehouse.replayAddCluster(log);
-                    break;
-                }
-                case OperationType.OP_ALTER_WH_REMOVE_CLUSTER: {
-                    AlterWhClusterOplog log = (AlterWhClusterOplog) journal.getData();
-                    String warehouseName = log.getWarehouseName();
-                    Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
-                    warehouse.replayRemoveCluster(log);
-                    break;
-                }
-                case OperationType.OP_ALTER_WH_MOD_PROP: {
-                    AlterWhPropertyOplog log = (AlterWhPropertyOplog) journal.getData();
-                    String warehouseName = log.getWarehouseName();
-                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replayModifyProperty(warehouseName, log.getProperties());
-                    break;
-                }
                 case OperationType.OP_SUSPEND_WH: {
                     OpWarehouseLog log = (OpWarehouseLog) journal.getData();
                     String warehouseName = log.getWarehouseName();
@@ -1130,18 +1109,6 @@ public class EditLog {
 
     public void logCreateWarehouse(Warehouse warehouse) {
         logEdit(OperationType.OP_CREATE_WH, warehouse);
-    }
-
-    public void logAddCluster(AlterWhClusterOplog log) {
-        logEdit(OperationType.OP_ALTER_WH_ADD_CLUSTER, log);
-    }
-
-    public void logRemoveCluster(AlterWhClusterOplog log) {
-        logEdit(OperationType.OP_ALTER_WH_REMOVE_CLUSTER, log);
-    }
-
-    public void logModifyWhProperty(AlterWhPropertyOplog log) {
-        logEdit(OperationType.OP_ALTER_WH_MOD_PROP, log);
     }
 
     public void logSuspendWarehouse(OpWarehouseLog log) {

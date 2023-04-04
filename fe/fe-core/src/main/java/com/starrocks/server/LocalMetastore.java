@@ -215,6 +215,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
@@ -1786,8 +1787,8 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, List<Partition> partitions)
-            throws DdlException {
+    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table,
+                                                            List<Partition> partitions) throws DdlException {
         List<CreateReplicaTask> tasks = new ArrayList<>();
         for (Partition partition : partitions) {
             tasks.addAll(buildCreateReplicaTasks(dbId, table, partition));
@@ -1795,8 +1796,8 @@ public class LocalMetastore implements ConnectorMetadata {
         return tasks;
     }
 
-    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table, Partition partition)
-            throws DdlException {
+    private List<CreateReplicaTask> buildCreateReplicaTasks(long dbId, OlapTable table,
+                                                            Partition partition) throws DdlException {
         ArrayList<CreateReplicaTask> tasks = new ArrayList<>((int) partition.getReplicaCount());
         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
             tasks.addAll(buildCreateReplicaTasks(dbId, table, partition, index));
@@ -1812,7 +1813,20 @@ public class LocalMetastore implements ConnectorMetadata {
             if (table.isCloudNativeTableOrMaterializedView()) {
                 long primaryComputeNodeId = -1;
                 try {
-                    primaryComputeNodeId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
+                    if (Config.only_use_compute_node) {
+                        // it is ok for cloudnative table to build tablet in any warehouse
+                        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAnyAvailableWarehouse();
+                        if (warehouse != null) {
+                            primaryComputeNodeId = ((LakeTablet) tablet).
+                                    getPrimaryComputeNodeId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
+                        } else {
+                            throw new DdlException("no available waerehouse for create tablet");
+                        }
+                    } else {
+                        primaryComputeNodeId = ((LakeTablet) tablet).
+                                getPrimaryComputeNodeId();
+                    }
+
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }

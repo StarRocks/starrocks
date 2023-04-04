@@ -100,6 +100,13 @@ public class ComputeNode implements IComputable, Writable {
     private volatile int cpuUsedPermille = 0;
     private volatile long lastUpdateResourceUsageMs = 0;
 
+    // for shared_data runmode
+    @SerializedName("warehouseName")
+    private String warehouseName;
+
+    @SerializedName("workerGroupId")
+    private long workerGroupId = -1;
+
     public ComputeNode() {
         this.host = "";
         this.version = "";
@@ -143,6 +150,22 @@ public class ComputeNode implements IComputable, Writable {
 
     public boolean getLastWriteFail() {
         return this.lastWriteFail;
+    }
+
+    public void setWorkerGroupId(long workerGroupId) {
+        this.workerGroupId = workerGroupId;
+    }
+
+    public long getWorkerGroupId() {
+        return workerGroupId;
+    }
+
+    public void setWarehouseName(String warehouseName) {
+        this.warehouseName = warehouseName;
+    }
+
+    public String getWarehouseName() {
+        return warehouseName;
     }
 
     public int getStarletPort() {
