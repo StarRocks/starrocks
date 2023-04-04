@@ -112,9 +112,11 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
@@ -400,7 +402,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     if (listingViews) {
                         View view = (View) table;
                         String ddlSql = view.getInlineViewDef();
-                        Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(view.getQueryStatement());
+                        QueryStatement queryStatement = view.getQueryStatement();
+                        Analyzer.analyze(queryStatement, new ConnectContext());
+                        Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(queryStatement);
                         for (TableName tableName : allTables.keySet()) {
                             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                                 Table tbl = db.getTable(tableName.getTbl());
