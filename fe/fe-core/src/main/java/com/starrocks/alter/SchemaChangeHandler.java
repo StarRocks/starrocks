@@ -49,6 +49,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
+import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
@@ -1497,6 +1498,13 @@ public class SchemaChangeHandler extends AlterHandler {
                                     olapTable.getName() +
                                     " is not a dynamic partition table. Use command `HELP ALTER TABLE` " +
                                     "to see how to change a normal table to a dynamic partition table.");
+                        }
+                    }
+                    if (properties.containsKey(DynamicPartitionProperty.BUCKETS)) {
+                        String colocateGroup = olapTable.getColocateGroup();
+                        if (colocateGroup != null) {
+                            throw new DdlException("The table has a colocate group:" + colocateGroup + ". so cannot " +
+                                    "modify dynamic_partition.buckets. Colocate tables must have same bucket number.");
                         }
                     }
                     Catalog.getCurrentCatalog().modifyTableDynamicPartition(db, olapTable, properties);
