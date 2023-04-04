@@ -78,6 +78,8 @@ public abstract class Warehouse implements Writable {
 
     public abstract void setClusters(Map<Long, Cluster> clusters) throws DdlException;
 
+    public abstract void initDefaultCluster();
+
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
