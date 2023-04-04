@@ -2,7 +2,7 @@
 
 Deletes data rows from a table based on the specified conditions. The table can be a partitioned or non-partitioned table.
 
-For Duplicate Key, Aggregate Key, and Unique Key tables, you can delete data from specified partitions. However, the Primary Key table does not allow you to do so. From v2.3, Primary Key tables support complete `DELETE...WHERE` semantics, which allows you to delete data rows based on the primary key, any column, or the results of a subquery.
+For Duplicate Key, Aggregate Key, and Unique Key tables, you can delete data from specified partitions. However, Primary Key tables do not allow you to do so. From v2.3, Primary Key tables support complete `DELETE...WHERE` semantics, which allows you to delete data rows based on the primary key, any column, or the results of a subquery. From v3.0, StarRocks enriches the `DELETE...WHERE` semantics with multi-table joins and common table expressions (CTEs). If you need to join Primary Key tables with other tables in the database, you can reference these other tables in the USING clause or CTE.
 
 ## Usage notes
 
@@ -152,15 +152,20 @@ From v2.3, Primary Key tables support complete `DELETE...WHERE` semantics, which
 ### Syntax
 
 ```SQL
-DELETE FROM <table_name> WHERE <condition>;
+[ WITH <with_query> [, ...] ]
+DELETE FROM <table_name>
+[ USING <from_item> [, ...] ]
+[ WHERE <where_condition> ]
 ```
 
 ### Parameters
 
-| **Parameter**         | **Required** | **Description**                                                     |
-| :--------------- | :------- | :----------------------------------------------------------- |
-| `table_name`     | Yes      | The table from which you want to delete data.   |
-| `condition`      | Yes      | The conditions based on which to delete data. You can specify one or more conditions. This parameter is required to prevent misoperations from deleting the entire table. |
+|   **Parameter**   | **Required** | **Description**                                              |
+| :---------------: | :----------- | :----------------------------------------------------------- |
+|   `with_query`    | No           | One or more CTEs that can be referenced by name in a DELETE statement. CTEs are temporary result sets that can improve the readability of complex statements. |
+|   `table_name`    | Yes          | The table from which you want to delete data.                |
+|    `from_item`    | No           | One or more other tables in the database. These tables can be joined with the table being operated based on the condition specified in the WHERE clause. Based on the result set of the join query, StarRocks deletes the matched rows from the table being operated. For example, if the USING clause is `USING t1 WHERE t0.pk = t1.pk;`, StarRocks converts the table expression in the USING clause to `t0 JOIN t1 ON t0.pk=t1.pk;` when executing the DELETE statement. |
+| `where_condition` | Yes          | The condition based on which you want to delete rows. Only rows that meet the WHERE condition can be deleted. This parameter is required, because it helps prevent you from accidentally deleting the entire table. If you want to delete the entire table, you can use 'WHERE true'. |
 
 ### Limits
 
@@ -360,4 +365,25 @@ select * from score_board;
 |    3 | Sam  |    22 |
 +------+------+-------+
 2 rows in set (0.00 sec)
+```
+
+##### Delete data by using multi-table join or CTE
+
+To delete all movies produced by the producer "foo", you can execute the following statement:
+
+```SQL
+DELETE FROM films USING producers
+WHERE producer_id = producers.id
+    AND producers.name = 'foo';
+```
+
+You can also use a CTE to rewrite the above statement to improve readability.
+
+```SQL
+WITH foo_producers as (
+    SELECT * from producers
+    where producers.name = 'foo'
+)
+DELETE FROM films USING foo_producers
+WHERE producer_id = foo_producers.id;
 ```
