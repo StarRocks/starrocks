@@ -123,14 +123,17 @@ public class ReplayMetadataMgr extends MetadataMgr {
         return res;
     }
 
+    @Override
     public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
         return replayTableMap.get(catalogName).get(dbName).get(tableName).partitionNames;
     }
 
+    @Override
     public Database getDb(String catalogName, String dbName) {
         return new Database(idGen++, dbName);
     }
 
+    @Override
     public Table getTable(String catalogName, String dbName, String tblName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return super.getTable(catalogName, dbName, tblName);
@@ -142,6 +145,7 @@ public class ReplayMetadataMgr extends MetadataMgr {
         return replayTableMap.get(catalogName).get(dbName).get(tblName).table;
     }
 
+    @Override
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
@@ -165,8 +169,13 @@ public class ReplayMetadataMgr extends MetadataMgr {
         return resStatistics.build();
     }
 
+    @Override
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
         return Lists.newArrayList(MOCKED_FILES);
+    }
+
+    @Override
+    public void dropTable(String catalogName, String dbName, String tblName) {
     }
 
     private static class HiveTableInfo {
