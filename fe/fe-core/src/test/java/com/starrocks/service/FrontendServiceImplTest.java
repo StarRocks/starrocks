@@ -31,9 +31,13 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
+import com.starrocks.thrift.TGetTablesParams;
+import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
+import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -223,7 +227,8 @@ public class FrontendServiceImplTest {
                         "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
                         "PARTITION BY time_slice(event_day, interval 5 day)\n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
-                        "PROPERTIES(\"replication_num\" = \"1\");");
+                        "PROPERTIES(\"replication_num\" = \"1\");")
+                .withView("create view v as select * from site_access_empty");
     }
 
     @AfterClass
@@ -393,6 +398,20 @@ public class FrontendServiceImplTest {
         Config.max_automatic_partition_number = 4096;
     }
 
+    @Test
+    public void testListTableStatus() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesParams request = new TGetTablesParams();
+        request.setDb("test");
+        TUserIdentity tUserIdentity = new TUserIdentity();
+        tUserIdentity.setUsername("root");
+        tUserIdentity.setHost("%");
+        tUserIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(tUserIdentity);
+        request.setType(TTableType.VIEW);
+        TListTableStatusResult result = impl.listTableStatus(request);
+        Assert.assertEquals(1, result.tables.size());
+    }
 
     @Test
     public void testCreatePartitionApiHour() throws TException {
