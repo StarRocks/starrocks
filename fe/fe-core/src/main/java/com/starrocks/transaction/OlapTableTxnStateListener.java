@@ -250,7 +250,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         // add publish version tasks. set task to null as a placeholder.
         // tasks will be created when publishing version.
         for (long backendId : totalInvolvedBackends) {
-            txnState.addPublishVersionTask(backendId, null);
+            txnState.addInvolvedBackends(backendId);
         }
     }
 

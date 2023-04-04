@@ -248,6 +248,7 @@ public class TransactionState implements Writable {
 
     // these states need not be serialized
     private final Map<Long, PublishVersionTask> publishVersionTasks; // Only for OlapTable
+    private final Set<Long> involvedBackends; // Only for OlapTable
     private boolean hasSendTask;
     private long publishVersionTime = -1;
     private long publishVersionFinishTime = -1;
@@ -294,6 +295,7 @@ public class TransactionState implements Writable {
         this.reason = "";
         this.errorReplicas = Sets.newHashSet();
         this.publishVersionTasks = Maps.newHashMap();
+        this.involvedBackends = Sets.newHashSet();
         this.hasSendTask = false;
         this.latch = new CountDownLatch(1);
         this.txnSpan = TraceManager.startNoopSpan();
@@ -318,6 +320,7 @@ public class TransactionState implements Writable {
         this.reason = "";
         this.errorReplicas = Sets.newHashSet();
         this.publishVersionTasks = Maps.newHashMap();
+        this.involvedBackends = Sets.newHashSet();
         this.hasSendTask = false;
         this.latch = new CountDownLatch(1);
         this.callbackId = callbackId;
@@ -339,6 +342,9 @@ public class TransactionState implements Writable {
     // Only for OlapTable
     public void addPublishVersionTask(Long backendId, PublishVersionTask task) {
         this.publishVersionTasks.put(backendId, task);
+    }
+    public void addInvolvedBackends(Long backendId) {
+        this.involvedBackends.add(backendId);
     }
 
     public void setHasSendTask(boolean hasSendTask) {
@@ -692,8 +698,13 @@ public class TransactionState implements Writable {
         return publishVersionTasks;
     }
 
+    public Set<Long> getInvolvedBackends() {
+        return involvedBackends;
+    }
+
     public void clearAfterPublished() {
         publishVersionTasks.clear();
+        involvedBackends.clear();
         finishChecker = null;
     }
 
@@ -882,8 +893,8 @@ public class TransactionState implements Writable {
             return tasks;
         }
 
-        Set<Long> publishBackends = this.getPublishVersionTasks().keySet();
-        // public version tasks are not persisted in globalStateMgr, so publishBackends may be empty.
+        Set<Long> publishBackends = this.getInvolvedBackends();
+        // involved backends are not persisted in globalStateMgr, so publishBackends may be empty.
         // We have to send publish version task to all backends
         if (publishBackends.isEmpty()) {
             // note: tasks are sent to all backends including dead ones, or else
