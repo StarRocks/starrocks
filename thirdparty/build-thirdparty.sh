@@ -833,6 +833,21 @@ build_vpack() {
     make install
 }
 
+# jemalloc
+build_jemalloc() {
+    OLD_CFLAGS=$CFLAGS
+    check_if_source_exist $JEMALLOC_SOURCE
+
+    unset CFLAGS
+    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
+    cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
+    ./configure --prefix=${TP_INSTALL_DIR} --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared
+    make -j$PARALLEL
+    make install
+    mv $TP_INSTALL_DIR/lib/libjemalloc.a $TP_INSTALL_DIR/lib/libjemalloc_for_starrocks.a
+    export CFLAGS=$OLD_CFLAGS
+}
+
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
 export CPPFLAGS=$CXXFLAGS
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
@@ -875,6 +890,7 @@ build_mariadb
 build_aliyun_oss_jars
 build_aws_cpp_sdk
 build_vpack
+build_jemalloc
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
