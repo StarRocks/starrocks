@@ -91,6 +91,15 @@ template <typename T>
 void ObjectColumn<T>::append_selective(const starrocks::vectorized::Column& src, const uint32_t* indexes, uint32_t from,
                                        uint32_t size) {
     const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
+    for (uint32_t j = 0; j < size; ++j) {
+        append(obj_col.get_object(indexes[from + j]));
+    }
+}
+
+template <typename T>
+void ObjectColumn<T>::shallow_append_selective(const starrocks::vectorized::Column& src, const uint32_t* indexes,
+                                               uint32_t from, uint32_t size) {
+    const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
     if constexpr (std::is_same_v<T, BitmapValue>) {
         for (uint32_t j = 0; j < size; ++j) {
             append({*obj_col.get_object(indexes[from + j]), false});
