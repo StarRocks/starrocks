@@ -137,10 +137,7 @@ public class WarehouseStmtTest {
         stmt = AnalyzeTestUtil.analyzeSuccess(alterSql);
         Assert.assertTrue(stmt instanceof AlterWarehouseStmt);
         DDLStmtExecutor.execute(stmt, connectCtx);
-        Assert.assertEquals("medium", warehouseMgr.getWarehouse("warehouse_1").getSize());
 
-        warehouseMgr.dropWarehouse(new DropWarehouseStmt(false,"warehouse_1"));
-        Assert.assertFalse(warehouseMgr.warehouseExists("warehouse_1"));
     }
 
     @Test

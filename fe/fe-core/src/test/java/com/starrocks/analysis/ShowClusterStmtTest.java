@@ -76,7 +76,6 @@ public class ShowClusterStmtTest {
 
         AlterWarehouseStmt addClusterStmt = (AlterWarehouseStmt)
                 UtFrameUtils.parseStmtWithNewParser("alter warehouse testWh add cluster", ctx);
-        GlobalStateMgr.getCurrentState().getWarehouseMgr().alterWarehouse(addClusterStmt);
 
         ShowClustersStmt stmt = new ShowClustersStmt("testWh");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
