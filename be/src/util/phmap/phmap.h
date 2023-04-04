@@ -2836,7 +2836,7 @@ public:
     }
 
     template <class K = key_type, class F>
-    iterator lazy_emplace_with_hash(size_t hashval, const key_arg<K>& key, F&& f) {
+    iterator lazy_emplace_with_hash(const key_arg<K>& key, size_t hashval, F&& f) {
         Inner& inner = sets_[subidx(hashval)];
         auto& set = inner.set_;
         typename Lockable::UniqueLock m(inner);
