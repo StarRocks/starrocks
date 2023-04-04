@@ -147,6 +147,7 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
     RETURN_IF_ERROR(_join_builder->append_chunk_to_spill_buffer(state, chunk));
 
     if (_is_first_time_spill) {
+        _is_first_time_spill = false;
         _hash_table_slice_iterator = _convert_hash_map_to_chunk();
         RETURN_IF_ERROR(_join_builder->append_spill_task(state, _hash_table_slice_iterator));
     }
