@@ -79,6 +79,7 @@ Both the following examples reset the password of `jack` to `54321`:
   ```SQL
   SET PASSWORD FOR jack@'172.10.1.10' = PASSWORD('54321');
   ```
+
 - Reset the password using ALTER USER:
 
   ```SQL
@@ -89,13 +90,13 @@ Both the following examples reset the password of `jack` to `54321`:
 
 If you have lost the password of the `root` user and cannot connect to StarRocks, you can reset it by following these procedures:
 
-1. Add the following configuration item to the configuration files **fe****/conf/fe.conf** of **all FE nodes** to disable user authentication:
+1. Add the following configuration item to the configuration files **fe/conf/fe.conf** of **all FE nodes** to disable user authentication:
 
    ```YAML
    enable_auth_check = false
    ```
 
-2. Restart **all** **FE** **nodes** to allow the configuration to take effect.
+2. Restart **all FE nodes** to allow the configuration to take effect.
 
    ```Bash
    ./fe/bin/stop_fe.sh
@@ -114,13 +115,13 @@ If you have lost the password of the `root` user and cannot connect to StarRocks
    SET PASSWORD for root = PASSWORD('xxxxxx');
    ```
 
-5. Re-enable user authentication by setting the configuration item `enable_auth_check` to `true` in the configuration files **fe****/conf/fe.conf** of **all FE nodes**.
+5. Re-enable user authentication by setting the configuration item `enable_auth_check` to `true` in the configuration files **fe/conf/fe.conf** of **all FE nodes**.
 
    ```YAML
    enable_auth_check = true
    ```
 
-6. Restart **all** **FE** **nodes** to allow the configuration to take effect.
+6. Restart **all FE nodes** to allow the configuration to take effect.
 
    ```Bash
    ./fe/bin/stop_fe.sh
@@ -217,11 +218,11 @@ DROP ROLE example_role;
 
 ### Enable all roles
 
-The default roles of a user are roles that are automatically activated each time the user connects to the StarRocks cluster. 
+The default roles of a user are roles that are automatically activated each time the user connects to the StarRocks cluster.
 
-If you want to enable all the roles (default and granted roles) for all StarRocks users when they connect to the StarRocks cluster, you can perform the following operation. 
+If you want to enable all the roles (default and granted roles) for all StarRocks users when they connect to the StarRocks cluster, you can perform the following operation.
 
-This operation requires the system privilige OPERATE.
+This operation requires the system privilege OPERATE.
 
 ```SQL
 SET GLOBAL activate_all_roles_on_login = TRUE;
@@ -339,7 +340,7 @@ SHOW USERS;
 
 Usually, a company-owned StarRocks cluster is managed by a sole service provider and maintains multiple lines of business (LOBs), each of which uses one or more databases.
 
-As shown below, a StarRocks cluster's users include members from the service provider and two LOBs (A and B). Each LOB is operated by two roles - analysts and executives. Analysts generate and analyze business statements, and executives query the statements. 
+As shown below, a StarRocks cluster's users include members from the service provider and two LOBs (A and B). Each LOB is operated by two roles - analysts and executives. Analysts generate and analyze business statements, and executives query the statements.
 
 ![User Privileges](../assets/user_privilege_1.jpg)
 

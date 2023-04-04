@@ -122,7 +122,7 @@
       + [SET PASSWORD](./sql-reference/sql-statements/account-management/SET%20PASSWORD.md)
       + [SET PROPERTY](./sql-reference/sql-statements/account-management/SET%20PROPERTY.md)
       + [SET ROLE](./sql-reference/sql-statements/account-management/SET%20ROLE.md)
-      + [SHOW AUTHENTICATION](./sql-reference/sql-statements/data-definition/SHOW%20AUTHENTICATION.md)
+      + [SHOW AUTHENTICATION](./sql-reference/sql-statements/account-management/SHOW%20AUTHENTICATION.md)
       + [SHOW GRANTS](./sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
       + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
       + [SHOW USERS](./sql-reference/sql-statements/account-management/SHOW%20USERS.md)
