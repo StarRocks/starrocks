@@ -510,15 +510,21 @@ void Tablet::_delete_unused_binlog() {
     if (_binlog_manager == nullptr) {
         return;
     }
+
+    bool binlog_enable = false;
     {
         int64_t now = UnixSeconds();
         std::shared_lock rdlock(_meta_lock);
         auto config = _tablet_meta->get_binlog_config();
-        if (config != nullptr) {
+        binlog_enable = config != nullptr && config->binlog_enable;
+        if (binlog_enable) {
             _binlog_manager->check_expire_and_capacity(now, config->binlog_ttl_second, config->binlog_max_size);
         }
     }
-    _binlog_manager->delete_unused_binlog();
+
+    if (binlog_enable) {
+        _binlog_manager->delete_unused_binlog();
+    }
 }
 
 void Tablet::delete_expired_inc_rowsets() {
