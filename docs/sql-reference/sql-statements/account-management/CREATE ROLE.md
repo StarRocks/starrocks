@@ -28,3 +28,9 @@ Note that the created role name cannot be the same as [system-defined roles](../
   ```sql
   CREATE ROLE role1;
   ```
+
+## References
+
+- [GRANT](GRANT.md)
+- [SHOW ROLES](SHOW%20ROLES.md)
+- [DROP ROLE](DROP%20ROLE.md)

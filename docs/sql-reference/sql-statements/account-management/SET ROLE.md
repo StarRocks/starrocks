@@ -64,4 +64,6 @@ SELECT CURRENT_ROLE();
 - [CREATE ROLE](CREATE%20ROLE.md): creates a role.
 - [GRANT](GRANT.md): assigns roles to users or other roles.
 - [ALTER USER](ALTER%20USER.md): modifies roles.
+- [SHOW ROLES](SHOW%20ROLES.md): show all roles in the system.
+- [current_role](../../sql-functions/utility-functions/current_role.md): show roles of the current user.
 - [DROP ROLE](DROP%20ROLE.md): drops a role.
