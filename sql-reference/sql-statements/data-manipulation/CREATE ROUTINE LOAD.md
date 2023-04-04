@@ -430,7 +430,7 @@ FROM KAFKA
 );
 ```
 
-#### 设置 `skip_header`、`trim_space`、`enclose` 和 `escape`
+#### 设置 `trim_space`、`enclose` 和 `escape`
 
 假设 Kafka 集群的 Topic `test_csv` 存在如下 CSV 格式的数据，其中 CSV 数据中列的含义依次是订单编号、支付日期、顾客姓名、国籍、性别、支付金额。
 
