@@ -123,9 +123,7 @@ private:
             return std::make_tuple(_idx2subcol[i], _def_levels[i], _rep_levels[i]);
         }
 
-        int size() const {
-            return _def_levels.size();
-        }
+        int size() const { return _def_levels.size(); }
 
     public:
         const int16_t _max_rep_level;
@@ -141,25 +139,34 @@ private:
 
     std::size_t _get_current_rg_written_bytes() const;
 
-    Status _add_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
+    Status _add_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+                             ::parquet::schema::NodePtr node, ColumnPtr col);
 
-    Status _add_struct_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
+    Status _add_struct_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+                                    ::parquet::schema::NodePtr node, ColumnPtr col);
 
-    Status _add_array_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
+    Status _add_array_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+                                   ::parquet::schema::NodePtr node, ColumnPtr col);
 
-    Status _add_map_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
+    Status _add_map_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+                                 ::parquet::schema::NodePtr node, ColumnPtr col);
 
-    Status _add_varchar_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
+    Status _add_varchar_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+                                     ::parquet::schema::NodePtr node, ColumnPtr col);
 
-    Status _add_date_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
+    Status _add_date_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+                                  ::parquet::schema::NodePtr node, ColumnPtr col);
 
-    Status _add_datetime_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
+    Status _add_datetime_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+                                      ::parquet::schema::NodePtr node, ColumnPtr col);
 
     template <LogicalType lt, ::parquet::Type::type pt>
-    Status _add_int_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
+    Status _add_int_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+                                 ::parquet::schema::NodePtr node, ColumnPtr col);
 
     template <LogicalType lt, ::parquet::Type::type pt>
-    Status _add_decimal_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
+    Status _add_decimal_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+                                     ::parquet::schema::NodePtr node, ColumnPtr col);
 
 protected:
     std::shared_ptr<ParquetOutputStream> _outstream;
@@ -175,23 +182,7 @@ protected:
     std::vector<int64_t> _buffered_values_estimate;
 
 private:
-    int _col_idx{0}; // used to track column writer
-
-    constexpr static unordered_map<LogicalType, ::parquet::Type::type> ltype2ptype{
-            {LogicalType::BOOLEAN, ::parquet::Type::BOOLEAN},
-            {LogicalType::TINYINT, ::parquet::Type::INT32},
-            {LogicalType::SMALLINT, ::parquet::Type::INT32},
-            {LogicalType::INT, ::parquet::Type::INT32},
-            {LogicalType::BIGINT, ::parquet::Type::INT64},
-            {LogicalType::LARGEINT, ::parquet::Type::INT96},
-            {LogicalType::DATE, ::parquet::Type::INT32},
-            {LogicalType::DATETIME, ::parquet::Type::INT64},
-            {LogicalType::TIMESTAMP, ::parquet::Type::INT64},
-            {LogicalType::FLOAT, ::parquet::Type::FLOAT},
-            {LogicalType::DOUBLE, ::parquet::Type::DOUBLE},
-            {LogicalType::VARCHAR, ::parquet::Type::BYTE_ARRAY},
-            {LogicalType::DECIMALV2, ::parquet::Type::FIXED_LEN_BYTE_ARRAY},
-    };
+    int _col_idx{0}; // used to track column writer index
 };
 
 class SyncFileWriter : public FileWriterBase {

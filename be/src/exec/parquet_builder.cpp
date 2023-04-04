@@ -15,10 +15,7 @@
 #include "parquet_builder.h"
 
 #include <arrow/buffer.h>
-#include <arrow/io/file.h>
-#include <arrow/io/interfaces.h>
 #include <parquet/arrow/writer.h>
-#include <parquet/exception.h>
 
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -28,10 +25,8 @@
 #include "common/logging.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
-#include "gutil/casts.h"
 #include "gutil/endian.h"
 #include "runtime/exec_env.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 
