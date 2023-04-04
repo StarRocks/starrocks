@@ -536,7 +536,7 @@ Status CSVReader::next_record(Record* record) {
 }
 
 Status CSVReader::_expand_buffer() {
-    if (UNLIKELY(_storage.size() >= kMaxBufferSize)) {
+    if (UNLIKELY(_storage.size() > kMaxBufferSize)) {
         return Status::InternalError("CSV line length exceed limit " + std::to_string(kMaxBufferSize));
     }
     size_t new_capacity = std::min(_storage.size() * 2, kMaxBufferSize);
@@ -553,7 +553,7 @@ Status CSVReader::_expand_buffer() {
 // _expand_buffer must ensure that there is no data in the buffer. However, after we introduced the state machine parser,
 // this constraint became too strong and we introduced a more relaxed buffer expansion function.
 Status CSVReader::_expand_buffer_loosely() {
-    if (UNLIKELY(_storage.size() >= kMaxBufferSize)) {
+    if (UNLIKELY(_storage.size() > kMaxBufferSize)) {
         return Status::InternalError("CSV line length exceed limit " + std::to_string(kMaxBufferSize));
     }
     size_t new_capacity = std::min(_storage.size() * 2, kMaxBufferSize);
