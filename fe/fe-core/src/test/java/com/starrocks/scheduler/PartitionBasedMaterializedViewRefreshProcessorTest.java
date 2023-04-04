@@ -859,7 +859,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 "CREATE MATERIALIZED VIEW `hive_join_internal_mv`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
-                "REFRESH DEFERRED MANUAL\n" +
+                "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
