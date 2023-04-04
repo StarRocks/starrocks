@@ -117,6 +117,12 @@ Status RawSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chunk, TaskE
 template <class TaskExecutor, class MemGuard>
 Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
     auto captured_mem_table = std::move(_mem_table);
+    auto defer = DeferOp([&]() {
+        if (captured_mem_table) {
+            std::lock_guard _(_mutex);
+            _mem_table_pool.emplace(std::move(captured_mem_table));
+        }
+    });
     if (captured_mem_table == nullptr) {
         return Status::OK();
     }
