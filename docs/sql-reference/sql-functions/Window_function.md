@@ -367,7 +367,7 @@ Returns the value of the row that lags the current row by `offset` rows. This fu
 Syntax:
 
 ~~~Haskell
-LAG(expr [IGNORE NULLS] [, offset[, default]])
+LAG(expr [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ~~~
 
