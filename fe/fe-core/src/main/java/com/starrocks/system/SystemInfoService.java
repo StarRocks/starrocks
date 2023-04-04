@@ -104,8 +104,6 @@ public abstract class SystemInfoService {
 
     public abstract Backend getBackend(long backendId);
 
-    public abstract Boolean checkWorkerHealthy(long workerId);
-
     public abstract ComputeNode getComputeNode(long computeNodeId);
 
     public abstract boolean checkBackendAvailable(long backendId);
@@ -164,9 +162,6 @@ public abstract class SystemInfoService {
                                                                   boolean isCreate, TStorageMedium storageMedium);
 
     public abstract List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate);
-
-    public abstract List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
-                                                   long clusterId);
 
     public abstract ImmutableMap<Long, Backend> getIdToBackend();
 

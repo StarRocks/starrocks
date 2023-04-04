@@ -64,7 +64,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.system.Backend.BackendState;
@@ -451,11 +450,6 @@ public class LocalSystemInfoService extends SystemInfoService {
     }
 
     @Override
-    public Boolean checkWorkerHealthy(long workerId) {
-        throw new SemanticException("not implemented");
-    }
-
-    @Override
     public Backend getBackend(long backendId) {
         return idToBackendRef.get(backendId);
     }
@@ -689,11 +683,6 @@ public class LocalSystemInfoService extends SystemInfoService {
         final List<Backend> backends =
                 getBackends().stream().filter(v -> !v.diskExceedLimit()).collect(Collectors.toList());
         return seqChooseBackendIds(backendNum, needAvailable, isCreate, backends);
-    }
-
-    @Override
-    public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate, long clusterId) {
-        return seqChooseBackendIds(backendNum, needAvailable, isCreate);
     }
 
     // choose backends by round-robin

@@ -53,7 +53,6 @@ import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.http.meta.MetaBaseAction;
-import com.starrocks.lake.ElasticSystemInfoService;
 import com.starrocks.leader.MetaHelper;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.Storage;
