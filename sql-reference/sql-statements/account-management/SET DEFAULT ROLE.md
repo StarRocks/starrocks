@@ -2,7 +2,7 @@
 
 ## 功能
 
-设置用户登录时默认激活的角色。
+设置用户登录时默认激活的角色。该命令从 3.0 版本开始支持。
 
 ## 语法
 
@@ -25,7 +25,7 @@ SET DEFAULT ROLE NONE [TO <user_identity>];
 
 普通用户可以设置自己的默认角色，`user_admin` 可以为其他用户设置默认角色。设定时，请确认用户已经拥有对应角色。
 
-用户可以通过 [SHOW GRANTS](SHOW%20GRANTS.md) 查看拥有的角色。
+可以通过 [SHOW GRANTS](SHOW%20GRANTS.md) 查看拥有的角色。
 
 ## 示例
 

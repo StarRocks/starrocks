@@ -2,7 +2,7 @@
 
 ## 功能
 
-返回 map 中所有 key 或 value 进行 Lambda 函数运算后的 map 值。该函数从 3.0 版本开始支持。
+返回 map 中所有 key 或 value 进行 [Lambda](../Lambda_expression.md) 函数运算后的 map 值。该函数从 3.0 版本开始支持。
 
 StarRocks 从 2.5 版本开始支持查询数据湖中的复杂数据类型 MAP 和 STRUCT。您可以通过 StarRocks 提供的 external catalog 方式来查询 Apache Hive™，Apache Hudi，Apache Iceberg 中的 MAP 和 STRUCT 数据。仅支持查询 ORC 和 Parquet 类型文件。
 
@@ -30,7 +30,7 @@ MAP map_apply(lambda_func, any_map)
 
 ## 示例
 
-以下示例使用 map_from_arrays() 生成 map 值 `{1:"ab",3:"cd"}`。然后使用 Lambda 函数对 map 中的 key 加 1，对 value 计算字符长度，比如 "ab" 的字符长度是 2。
+以下示例使用 [map_from_arrays](map_from_arrays.md) 生成 map 值 `{1:"ab",3:"cd"}`。然后使用 Lambda 函数对 map 中的 key 加 1，对 value 计算字符长度，比如 "ab" 的字符长度是 2。
 
 ```SQL
 mysql> select map_apply((k,v)->(k+1,length(v)), col_map) from (select map_from_arrays([1,3],["ab","cd"]) as col_map)A;
@@ -56,7 +56,3 @@ mysql> select map_apply((k,v)->(k+1,length(v)), col_map) from (select map_from_a
 |{2:2,null:2}                                      |
 +--------------------------------------------------+
 ```
-
-## 参考文档
-
-[map_apply](map_apply.md), [Lambda 表达式](../Lambda_expression.md)

@@ -2,7 +2,7 @@
 
 ## 功能
 
-在当前会话下，激活当前用户拥有权限的角色。
+在当前会话下，激活当前用户拥有权限的角色。该命令从 3.0 版本开始支持。
 
 ## 语法
 
@@ -54,3 +54,12 @@ SET ROLE ALL;
     | db_admin           |
     +--------------------+
     ```
+
+## 相关文档
+
+- [CREATE ROLE](CREATE%20ROLE.md): 创建角色。
+- [GRANT](GRANT.md): 将角色分配给用户或其他角色。
+- [ALTER USER](ALTER%20USER.md): 修改角色。
+- [SHOW ROLES](SHOW%20ROLES.md): 查看当前系统所有角色。
+- [current_role](../../sql-functions/utility-functions/current_role.md): 查看当前用户拥有的角色。
+- [DROP ROLE](DROP%20ROLE.md): 删除角色。
