@@ -79,7 +79,7 @@ You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation information of an external catalog. The following example queries the creation information of a JDBC catalog named `jdbc0`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a JDBC catalog named `jdbc0`:
 
 ```SQL
 SHOW CREATE CATALOG jdbc0;
