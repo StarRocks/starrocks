@@ -197,7 +197,9 @@ std::shared_ptr<::parquet::schema::GroupNode> ParquetBuildHelper::make_schema(
 
     for (int i = 0; i < output_expr_ctxs.size(); i++) {
         auto column_expr = output_expr_ctxs[i]->root();
-        auto nodePtr = _make_schema_node(file_column_names[i], column_expr->type(), ::parquet::Repetition::OPTIONAL);
+        auto nodePtr = _make_schema_node(
+                file_column_names[i], column_expr->type(),
+                column_expr->is_nullable() ? ::parquet::Repetition::OPTIONAL : ::parquet::Repetition::REQUIRED);
         DCHECK(nodePtr != nullptr);
         fields.push_back(nodePtr);
     }
