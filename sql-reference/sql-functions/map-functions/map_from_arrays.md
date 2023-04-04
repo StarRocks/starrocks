@@ -4,6 +4,8 @@
 
 将两个 ARRAY 数组作为 key 和 value 组合成一个 MAP 对象。
 
+该命令从 3.0 版本开始支持。
+
 ## 语法
 
 ```Haskell

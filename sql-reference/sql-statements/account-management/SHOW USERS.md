@@ -2,7 +2,7 @@
 
 ## 功能
 
-查看当前系统中的所有用户。注意这里的用户不是用户名，而是用户标识 (user identity)。更多信息，参见 [CREATE USER](CREATE%20USER.md)。
+查看当前系统中的所有用户。注意这里的用户不是用户名，而是用户标识 (user identity)。更多信息，参见 [CREATE USER](CREATE%20USER.md)。该命令从 3.0 版本开始支持。
 
 您可以通过 `SHOW GRANTS FOR <user_identity>;` 来查看某个用户的权限，参见 [SHOW GRANTS](SHOW%20GRANTS.md)。
 

@@ -4,10 +4,9 @@
 
 创建一个角色。角色创建后，您可以将指定权限（比如数据库和表的读取权限和资源的使用权限等）授予该角色，也可以将该角色授予某个用户。拥有该角色的用户即拥有该角色的相关权限。有关权限的详细说明，参见 [GRANT](/sql-reference/sql-statements/account-management/GRANT.md)。
 
-> 说明：
+> **说明**
 >
-> - 只有拥有 `GRANT_PRIV` 或 `ADMIN_PRIV` 权限的用户才可以创建角色。
-> - StarRocks 的两个系统角色 admin 和 operator 均拥有 `ADMIN_PRIV` 权限，所以拥有这两个系统角色的用户可以创建角色。
+> 只有拥有 `GRANT` 权限或 `user_admin` 角色的用户才可以创建角色。
 
 ## 语法
 

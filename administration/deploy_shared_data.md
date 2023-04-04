@@ -16,6 +16,8 @@ StarRocks 存算分离集群架构如下：
 
 ![Shared-data Architecture](../assets/share_data_arch.png)
 
+该功能从 3.0 版本开始支持。
+
 ## 部署 StarRocks 存算分离集群
 
 StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署方式类似。唯一不同的是 FE 和 BE 的配置文件 **fe.conf** 和 **be.conf** 中的配置项。本小节仅列出部署 StarRocks 存算分离集群时需要添加到配置文件中的 FE 和 BE 配置项。有关部署 StarRocks 集群的详细说明，请参阅 [部署 StarRocks](../quick_start/Deploy.md)。
@@ -34,7 +36,7 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 | aws_s3_region                       | 需访问的 S3 存储空间的地区，如 `us-west-2`。                 |
 | aws_s3_endpoint                     | 访问 S3 存储空间的连接地址，如 `https://s3.us-west-2.amazonaws.com`。 |
 | aws_s3_use_aws_sdk_default_behavior | 是否使用 AWS SDK 默认的认证凭证。有效值：`true` 和 `false` (默认)。 |
-| aws_s3_use_instance_profile         | 是否使用 Instance Profile 或 Assumed Role 作为安全凭证访问 S3。有效值：`true` 和 `false` (默认)。如果您使用 IAM 用户凭证（Access Key 和 Secret Key）访问 S3，则需要将此项设为 `false`，并指定 `aws_s3_access_key` 和 `aws_s3_secret_key`。如果您使用 Instance Profile 访问 S3，则需要将此项设为 `true`。如果您使用 Assumed Role 访问 S3，则需要将此项设为 `true`，并指定 `aws_s3_iam_role_arn`。如果您使用外部 AWS 账户通过 Assumed Role 认证访问 S3，则需要额外指定 `aws_s3_external_id`。 |
+| aws_s3_use_instance_profile         | 是否使用 Instance Profile 或 Assumed Role 作为安全凭证访问 S3。有效值：`true` 和 `false` (默认)。<ul><li>如果您使用 IAM 用户凭证（Access Key 和 Secret Key）访问 S3，则需要将此项设为 `false`，并指定 `aws_s3_access_key` 和 `aws_s3_secret_key`。</li><li>如果您使用 Instance Profile 访问 S3，则需要将此项设为 `true`。</li><li>如果您使用 Assumed Role 访问 S3，则需要将此项设为 `true`，并指定 `aws_s3_iam_role_arn`。</li><li>如果您使用外部 AWS 账户通过 Assumed Role 认证访问 S3，则需要额外指定 `aws_s3_external_id`。</li></ul> |
 | aws_s3_access_key                   | 访问 S3 存储空间的 Access Key。                              |
 | aws_s3_secret_key                   | 访问 S3 存储空间的 Secret Key。                              |
 | aws_s3_iam_role_arn                 | 有访问 S3 存储空间权限 IAM Role 的 ARN。                     |
