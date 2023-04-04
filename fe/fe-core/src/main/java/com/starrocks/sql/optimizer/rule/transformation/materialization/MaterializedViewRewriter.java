@@ -139,9 +139,8 @@ public class MaterializedViewRewriter {
             // query: a left outer join b
             // mv: a inner join b inner join c
             for (TableScanDesc queryScanDesc : queryTableScanDescs) {
-                if (!mvTableScanDescs.stream().anyMatch(scanDesc -> scanDesc.getTable().equals(queryScanDesc.getTable())
-                        && (queryScanDesc.getParentJoinType() == null
-                        || scanDesc.getParentJoinType().equals(queryScanDesc.getParentJoinType())))) {
+                if (queryScanDesc.getParentJoinType() != null
+                        && !mvTableScanDescs.stream().anyMatch(scanDesc -> scanDesc.isMatch(queryScanDesc))) {
                     return false;
                 }
             }
