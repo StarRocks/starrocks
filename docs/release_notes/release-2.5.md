@@ -1,5 +1,31 @@
 # StarRocks version 2.5
 
+## 2.5.4
+
+Release date: April 4, 2023
+
+### Improvements
+
+- Optimized the performance of rewriting queries on materialized views during query planning. The amount of time taken for query planning is reduced by about 70%. [#19579](https://github.com/StarRocks/starrocks/pull/19579)
+- Optimized the type inference logic. If a query like `SELECT sum(CASE WHEN XXX);` contains a constant `0`, such as `SELECT sum(CASE WHEN k1 = 1 THEN v1 ELSE 0 END) FROM test;`, pre-aggregation is automatically enabled to accelerate the query. [#19474](https://github.com/StarRocks/starrocks/pull/19474)
+- Supported using `SHOW CREATE VIEW` to view the creation statement of a materialized view. [#19999](https://github.com/StarRocks/starrocks/pull/19999)
+- Supported transmitting packets that are 2 GB or larger in size for a single bRPC request between BE nodes. [#20283](https://github.com/StarRocks/starrocks/pull/20283) [#20230](https://github.com/StarRocks/starrocks/pull/20230)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- After queries on materialized views are rewritten, the global dictionary for low-cardinality optimization does not take effect. [#19615](https://github.com/StarRocks/starrocks/pull/19615)
+- If a query on materialized views fails to be rewritten, the query fails. [#19774](https://github.com/StarRocks/starrocks/pull/19774)
+- If a materialized view is created based on a Primary Key or Unique Key table, queries on that materialized view cannot be rewritten. [#19600](https://github.com/StarRocks/starrocks/pull/19600)
+- The column names of materialized views are case-sensitive. However, when you create a table, the table is successfully created without an error message even if column names are incorrect in the `PROPERTIES` of the table creation statement, and moreover the rewriting of queries on materialized views created on that table fails. [#19780](https://github.com/StarRocks/starrocks/pull/19780)
+- After a query on materialized views is rewritten, the query plan ma contain partition column-based, invalid predicates, which affect query performance. [#19784](https://github.com/StarRocks/starrocks/pull/19784)
+- When data is loaded into a newly created partition, queries on materialized views may fail to be rewritten. [#20323](https://github.com/StarRocks/starrocks/pull/20323)
+- Configuring `"storage_medium" = "SSD"` at the creation of materialized views causes the refresh of the materialized views to fail. [#19539](https://github.com/StarRocks/starrocks/pull/19539) [#19626](https://github.com/StarRocks/starrocks/pull/19626)
+- Concurrent compaction may happen on Primary Key tables. [#19692](https://github.com/StarRocks/starrocks/pull/19692)
+- Compaction does not occur promptly after a large number of DELETE operations. [#19623](https://github.com/StarRocks/starrocks/pull/19623)
+- If the expression of a statement contains multiple low-cardinality columns, the expression may fail to be properly rewritten. As a result, the global dictionary for low-cardinality optimization does not take effect. [#20161](https://github.com/StarRocks/starrocks/pull/20161)
+
 ## 2.5.3
 
 Release date: March 10, 2023
