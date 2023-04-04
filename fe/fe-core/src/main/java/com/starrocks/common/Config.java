@@ -2162,9 +2162,4 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean only_use_compute_node = false;
-
-    /**
-     * deployment form, on-premise or saas
-     */
-    public static String deployment_form = "on_premise";
 }

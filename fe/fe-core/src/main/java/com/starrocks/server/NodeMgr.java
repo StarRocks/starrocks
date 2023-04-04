@@ -133,8 +133,7 @@ public class NodeMgr {
         this.leaderRpcPort = 0;
         this.leaderHttpPort = 0;
         this.leaderIp = "";
-        this.systemInfo = Config.deployment_form.equalsIgnoreCase("saas") ?
-                new ElasticSystemInfoService(globalStateMgr.getStarOSAgent()) : new LocalSystemInfoService();
+        this.systemInfo = new LocalSystemInfoService();
         this.heartbeatMgr = new HeartbeatMgr(systemInfo, !isCheckpoint);
         this.brokerMgr = new BrokerMgr();
         this.stateMgr = globalStateMgr;
@@ -181,8 +180,7 @@ public class NodeMgr {
     public SystemInfoService getOrCreateSystemInfo(Integer clusterId) {
         SystemInfoService systemInfoService = systemInfoMap.get(clusterId);
         if (systemInfoService == null) {
-            systemInfoService = Config.deployment_form.equalsIgnoreCase("saas") ?
-                    new ElasticSystemInfoService(this.stateMgr.getStarOSAgent()) : new LocalSystemInfoService();
+            systemInfoService = new LocalSystemInfoService();
             systemInfoMap.put(clusterId, systemInfoService);
         }
         return systemInfoService;
