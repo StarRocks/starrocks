@@ -15,7 +15,7 @@ Release date: March 31, 2023
 - The [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md) attribute is supported to provide globally unique IDs, which simplifies data management.
 - [Automatic partitioning and partitioning expressions](../table_design/automatic_partitioning.md) are supported, which makes partition creation easier to use and more flexible.
 - Primary Key tables support more complete [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md) and [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md) syntax, including the use of CTEs and references to multiple tables.
-- Added Load Profile for Broker Load and INSERT INTO jobs. You can view the details of a load job by querying the load profile. The usage is the same as [Analyze query profile](../administration/query_profile.md)).
+- Added Load Profile for Broker Load and INSERT INTO jobs. You can view the details of a load job by querying the load profile. The usage is the same as [Analyze query profile](../administration/query_profile.md).
 
 **Data Lake Analytics**
 
@@ -60,7 +60,7 @@ Release date: March 31, 2023
 **Query engine**
 
 - All operators are supported in the pipeline engine. Non-pipeline code will be removed in later versions.
-- Improved [big query positioning](../administration/monitor_manage_big_queries.md) and added big query log. [SHOW PROCESSLIST](../sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md) supports viewing CPU and memory information.
+- Improved [Big Query Positioning](../administration/monitor_manage_big_queries.md) and added big query log. [SHOW PROCESSLIST](../sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md) supports viewing CPU and memory information.
 - Optimized Outer Join Reorder.
 - Optimized error messages in the SQL parsing stage, providing more accurate error positioning and clearer error messages.
 
@@ -71,7 +71,7 @@ Release date: March 31, 2023
 
 **Functions**
 
-Window functions [lead](../sql-reference/sql-functions/Window_function.md#lead) and [lag](../sql-reference/sql-functions/Window_function.md#lag)) support `IGNORE NULLS`.
+Window functions [lead](../sql-reference/sql-functions/Window_function.md#lead) and [lag](../sql-reference/sql-functions/Window_function.md#la) support `IGNORE NULLS`.
 
 ### Bug Fixes
 
