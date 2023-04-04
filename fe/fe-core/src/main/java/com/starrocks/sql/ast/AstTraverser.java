@@ -61,18 +61,27 @@ public class AstTraverser<R, C> extends AstVisitor<R, C> {
             node.getCteRelations().forEach(this::visit);
         }
 
-        for (OrderByElement orderByElement : node.getOrderBy()) {
-            visit(orderByElement.getExpr());
+        if (node.getOrderBy() != null) {
+            for (OrderByElement orderByElement : node.getOrderBy()) {
+                visit(orderByElement.getExpr());
+            }
         }
 
-        node.getOutputExpression().forEach(this::visit);
+        if (node.getOutputExpression() != null) {
+            node.getOutputExpression().forEach(this::visit);
+        }
 
         if (node.getPredicate() != null) {
             visit(node.getPredicate());
         }
 
-        node.getGroupBy().forEach(this::visit);
-        node.getAggregate().forEach(this::visit);
+        if (node.getGroupBy() != null) {
+            node.getGroupBy().forEach(this::visit);
+        }
+
+        if (node.getAggregate() != null) {
+            node.getAggregate().forEach(this::visit);
+        }
 
         if (node.getHaving() != null) {
             visit(node.getHaving());
