@@ -119,6 +119,8 @@ if [[ $(ulimit -n) -lt 60000 ]]; then
   ulimit -n 65535
 fi
 
+export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:30000,dirty_decay_ms:30000,lg_tcache_max:23,metadata_thp:auto,background_thread:true"
+
 if [ ${RUN_DAEMON} -eq 1 ]; then
     nohup ${STARROCKS_HOME}/lib/starrocks_be "$@" >> $LOG_DIR/be.out 2>&1 </dev/null &
 else
