@@ -332,7 +332,7 @@ The following examples create a Hive catalog named `hive_catalog_hms` or `hive_c
   );
   ```
 
-### View Hive catalogs
+## View Hive catalogs
 
 You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
@@ -340,15 +340,15 @@ You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation information of an external catalog. The following example queries the creation information of a Hive catalog named `hive_catalog_glue`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Hive catalog named `hive_catalog_glue`:
 
 ```SQL
 SHOW CREATE CATALOG hive_catalog_glue;
 ```
 
-### Drop a Hive catalog
+## Drop a Hive catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop a Hive catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop an external catalog.
 
 The following example drops a Hive catalog named `hive_catalog_glue`:
 
