@@ -416,7 +416,7 @@ struct LeadLagState {
     int64_t offset = 0;
     T default_value;
     bool is_null = false;
-    bool defualt_is_null = false;
+    bool default_is_null = false;
 };
 
 template <LogicalType LT, bool ignoreNulls, bool isLag, typename T = RunTimeCppType<LT>>
@@ -442,7 +442,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         DCHECK(arg2->is_constant());
         const auto* default_column = down_cast<const ConstColumn*>(arg2);
         if (default_column->is_nullable()) {
-            this->data(state).defualt_is_null = true;
+            this->data(state).default_is_null = true;
         } else {
             auto value = ColumnHelper::get_const_value<LT>(arg2);
             AggDataTypeTraits<LT>::assign_value(this->data(state).default_value, value);
@@ -455,7 +455,7 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
         // frame_end <= frame_start is for lag function
         // frame_end > peer_group_end is for lead function
         if ((frame_end <= frame_start) | (frame_end > peer_group_end)) {
-            if (this->data(state).defualt_is_null) {
+            if (this->data(state).default_is_null) {
                 this->data(state).is_null = true;
             } else {
                 this->data(state).value = this->data(state).default_value;
@@ -511,7 +511,11 @@ class LeadLagWindowFunction final : public ValueWindowFunction<LT, LeadLagState<
             DCHECK_GE(value_index, peer_group_start);
             DCHECK_LE(value_index, peer_group_end);
             if (cnt > 0 || value_index == peer_group_end || columns[0]->is_null(value_index)) {
-                this->data(state).is_null = true;
+                if (this->data(state).default_is_null) {
+                    this->data(state).is_null = true;
+                } else {
+                    this->data(state).value = this->data(state).default_value;
+                }
             } else {
                 const Column* data_column = ColumnHelper::get_data_column(columns[0]);
                 const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
