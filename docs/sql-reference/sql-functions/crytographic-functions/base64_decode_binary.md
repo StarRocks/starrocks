@@ -16,7 +16,7 @@ base64_decode_binary(str);
 
 ## Return value
 
-Returns a value of the BINARY type. If the input is NULL or an invalid Base64 string, NULL is returned. If the input is empty, an error is returned.
+Returns a value of the VARBINARY type. If the input is NULL or an invalid Base64 string, NULL is returned. If the input is empty, an error is returned.
 
 This function accepts only one string. More than one input string causes an error.
 
