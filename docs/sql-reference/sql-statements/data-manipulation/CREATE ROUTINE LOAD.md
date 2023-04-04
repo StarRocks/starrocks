@@ -432,7 +432,7 @@ FROM KAFKA
 );
 ```
 
-#### Setting skip_header, trim_space, enclose, and escape
+#### Setting trim_space, enclose, and escape
 
 Suppose you want to load CSV-formatted data from a Kafka topic named `test_csv`. Every message in the dataset includes six columns: order ID, payment date, customer name, nationality, gender, and price.
 
