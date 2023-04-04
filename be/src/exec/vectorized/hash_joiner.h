@@ -96,7 +96,6 @@ struct HashJoinerParam {
     std::set<SlotId> _output_slots;
 
     const TJoinDistributionMode::type _distribution_mode;
-    bool _is_buildable = false;
 };
 
 class HashJoiner final : public pipeline::ContextWithDependency {
@@ -150,8 +149,6 @@ public:
     Status create_runtime_filters(RuntimeState* state);
 
     void reference_hash_table(HashJoiner* src_join_builder);
-
-    bool is_buildable() const { return _is_buildable; }
 
     // These two methods are used only by the hash join builder.
     void set_builder_finished();
@@ -375,8 +372,6 @@ private:
     // hash table doesn't have reserved data
     bool _ht_has_remain = false;
     // right table have not output data for right outer join/right semi join/right anti join/full outer join
-
-    const bool _is_buildable;
 
     // These two fields are used only by the hash join builder.
     const std::vector<HashJoinerPtr>& _read_only_join_probers;
