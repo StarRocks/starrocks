@@ -1805,15 +1805,15 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {
             if (table.isCloudNativeTableOrMaterializedView()) {
-                long primaryBackendId = -1;
+                long primaryComputeNodeId = -1;
                 try {
-                    primaryBackendId = ((LakeTablet) tablet).getPrimaryBackendId();
+                    primaryComputeNodeId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }
 
                 CreateReplicaTask task = new CreateReplicaTask(
-                        primaryBackendId,
+                        primaryComputeNodeId,
                         dbId,
                         table.getId(),
                         partition.getId(),

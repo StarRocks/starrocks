@@ -79,7 +79,7 @@ public class LakeTablet extends Tablet {
         this.rowCount = rowCount;
     }
 
-    public long getPrimaryBackendId() throws UserException {
+    public long getPrimaryComputeNodeId() throws UserException {
         return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryComputeNodeIdByShard(getShardId());
     }
 
