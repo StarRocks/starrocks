@@ -322,6 +322,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
+    public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
 
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
@@ -883,6 +884,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
 
+    @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR)
+    private int connectorIoTasksPerScanOperator = 16;
+
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateBlockCache = true;
 
@@ -895,6 +899,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getIoTasksPerScanOperator() {
         return ioTasksPerScanOperator;
+    }
+
+    public int getConnectorIoTasksPerScanOperator() {
+        return connectorIoTasksPerScanOperator;
     }
 
     @VarAttr(name = ENABLE_QUERY_CACHE)
