@@ -80,7 +80,7 @@ public class LakeTablet extends Tablet {
     }
 
     public long getPrimaryBackendId() throws UserException {
-        return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryBackendIdByShard(getShardId());
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryComputeNodeIdByShard(getShardId());
     }
 
     @Override

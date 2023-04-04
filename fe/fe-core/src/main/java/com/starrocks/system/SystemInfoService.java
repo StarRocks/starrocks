@@ -508,6 +508,16 @@ public class SystemInfoService {
         return -1L;
     }
 
+    public long getComputeNodeWithStarletPort(String host, int starletPort) {
+        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
+        for (ComputeNode cn : idToComputeNode.values()) {
+            if (cn.getHost().equals(host) && cn.getStarletPort() == starletPort) {
+                return cn.getId();
+            }
+        }
+        return -1L;
+    }
+
     public static TNetworkAddress toBrpcHost(TNetworkAddress host) throws Exception {
         ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
