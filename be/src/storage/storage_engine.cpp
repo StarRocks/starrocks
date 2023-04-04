@@ -139,6 +139,14 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
         threads.emplace_back([data_dir] {
+            auto res = data_dir->load();
+            if (!res.ok()) {
+                LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
+            }
+        });
+        Thread::set_thread_name(threads.back(), "load_data_dir");
+
+        threads.emplace_back([data_dir] {
             if (config::manual_compact_before_data_dir_load) {
                 uint64_t live_sst_files_size_before = 0;
                 if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
@@ -158,12 +166,8 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
                               << data_dir->get_meta()->get_stats();
                 }
             }
-            auto res = data_dir->load();
-            if (!res.ok()) {
-                LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
-            }
         });
-        Thread::set_thread_name(threads.back(), "load_data_dir");
+        Thread::set_thread_name(threads.back(), "compact_data_dir");
     }
     for (auto& thread : threads) {
         thread.join();
