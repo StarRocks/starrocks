@@ -24,7 +24,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.sql.plan.PlanTestNoneDBBase;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -43,16 +43,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class StatisticsCollectJobTest extends PlanTestBase {
-
+public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     private static long t0StatsTableId = 0;
 
     private static LocalDateTime t0UpdateTime = LocalDateTime.of(2022, 1, 1, 1, 1, 1);
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        PlanTestBase.beforeClass();
+        PlanTestNoneDBBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        String dbName = "test";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
         starRocksAssert.withTable("CREATE TABLE `t0_stats` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -214,7 +215,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumns().toString());
         Assert.assertTrue(jobs.get(1) instanceof FullStatisticsCollectJob);
         fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(1);
-        Assert.assertEquals("[v4, v5, v6]", fullStatisticsCollectJob.getColumns().toString());
+        Assert.assertEquals("[v1, v2, v3, v4, v5]", fullStatisticsCollectJob.getColumns().toString());
     }
 
     @Test
@@ -538,7 +539,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
 
         String sql = Deencapsulation.invoke(sampleStatisticsCollectJob, "buildSampleInsertSQL",
                 dbid, olapTable.getId(), Lists.newArrayList("v1", "count"), 100L);
-        assertContains(sql, "`stats`.`tcount`  Tablet(16465)");
+        assertContains(sql, "`stats`.`tcount`  Tablet(10117)");
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
 
         FullStatisticsCollectJob fullStatisticsCollectJob = new FullStatisticsCollectJob(
@@ -732,7 +733,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
             SampleStatisticsCollectJob fjb = (SampleStatisticsCollectJob) jobs.get(0);
             Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumns().toString());
         }
-        
+
         {
             new MockUp<Partition>() {
                 @Mock
