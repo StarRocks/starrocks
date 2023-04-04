@@ -1030,6 +1030,7 @@ public class Coordinator {
                             LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
                                     errMsg, code, pair.first.fragmentId,
                                     pair.first.address.hostname, pair.first.address.port);
+                            profileDoneSignal.markedCountDown(pair.first.fragmentInstanceId(), -1L);
                             if (errorBackendExecState == null) {
                                 errorBackendExecState = pair.first;
                                 errorCode = code;
