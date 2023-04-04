@@ -122,7 +122,16 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
     RETURN_IF_ERROR(_data_source_provider->init(_pool, state));
     _estimate_scan_row_bytes();
+    _adjust_io_tasks_per_scan_operator(state);
     return Status::OK();
+}
+
+void ConnectorScanNode::_adjust_io_tasks_per_scan_operator(RuntimeState* state) {
+    const TQueryOptions& options = state->query_options();
+    _io_tasks_per_scan_operator = config::connector_io_tasks_per_scan_operator;
+    if (options.__isset.connector_io_tasks_per_scan_operator) {
+        _io_tasks_per_scan_operator = options.connector_io_tasks_per_scan_operator;
+    }
 }
 
 void ConnectorScanNode::_estimate_scan_row_bytes() {
