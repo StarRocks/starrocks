@@ -56,6 +56,7 @@ import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
@@ -170,7 +171,12 @@ public class RoutineLoadManager implements Writable {
         slotLock.lock();
         try {
             Set<Long> aliveBeIds = Sets.newHashSet();
+
+            // TODO: need to refactor after be split into cn + dn
             aliveBeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true));
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                aliveBeIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(true));
+            }
 
             // add new be
             for (Long beId : aliveBeIds) {

@@ -44,7 +44,8 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
@@ -100,9 +101,15 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No backend alive.");
         }
 
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
+        ComputeNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
         if (backend == null) {
-            throw new DdlException("No backend alive.");
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                backend = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendIds.get(0));
+            }
+
+            if (backend == null) {
+                throw new DdlException("No backend or compute node alive.");
+            }
         }
 
         TNetworkAddress redirectAddr = new TNetworkAddress(backend.getHost(), backend.getHttpPort());

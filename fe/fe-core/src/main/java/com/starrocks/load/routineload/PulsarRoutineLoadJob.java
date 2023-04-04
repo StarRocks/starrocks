@@ -45,6 +45,7 @@ import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
@@ -206,7 +207,11 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     @Override
     public int calculateCurrentConcurrentTaskNum() throws MetaNotFoundException {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        // TODO: need to refactor after be split into cn + dn
         int aliveBeNum = systemInfoService.getAliveBackendNumber();
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            aliveBeNum += systemInfoService.getAliveComputeNodeNumber();
+        }
         int partitionNum = currentPulsarPartitions.size();
         if (desireTaskConcurrentNum == 0) {
             desireTaskConcurrentNum = Config.max_routine_load_task_concurrent_num;

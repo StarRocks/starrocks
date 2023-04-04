@@ -49,7 +49,8 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRoutineLoadTask;
@@ -320,9 +321,15 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     }
 
     private void submitTask(long beId, TRoutineLoadTask tTask) throws LoadException {
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+        // TODO: need to refactor after be split into cn + dn
+        ComputeNode backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
         if (backend == null) {
-            throw new LoadException("failed to send tasks to backend " + beId + " because not exist");
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                backend = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(beId);
+            }
+            if (backend == null) {
+                throw new LoadException("failed to send tasks to backend " + beId + " because not exist");
+            }
         }
 
         TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBePort());

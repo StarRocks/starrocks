@@ -31,7 +31,8 @@ import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PStringPair;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
@@ -136,11 +137,19 @@ public class PulsarUtil {
             TNetworkAddress address = new TNetworkAddress();
             try {
                 List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+                // TODO: need to refactor after be split into cn + dn
+                if ((RunMode.getCurrentRunMode() == RunMode.SHARED_DATA)) {
+                    backendIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getComputeNodeIds(true));
+                }
                 if (backendIds.isEmpty()) {
                     throw new LoadException("Failed to send proxy request. No alive backends");
                 }
                 Collections.shuffle(backendIds);
-                Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
+                // TODO: need to refactor after be split into cn + dn
+                ComputeNode be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendIds.get(0));
+                if (be == null && RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                    be = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendIds.get(0));
+                }
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
