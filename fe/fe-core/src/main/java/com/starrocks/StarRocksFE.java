@@ -101,7 +101,14 @@ public class StarRocksFE {
             // check command line options
             checkCommandLineOptions(cmdLineOpts);
 
+<<<<<<< HEAD
             LOG.info("StarRocks FE starting...");
+=======
+            // check meta dir
+            MetaHelper.checkMetaDir();
+
+            LOG.info("StarRocks FE starting, version: {}-{}", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH);
+>>>>>>> f660218b4 (opt (#20991))
 
             FrontendOptions.init();
             ExecuteEnv.setup();
@@ -135,7 +142,11 @@ public class StarRocksFE {
             }
         } catch (Throwable e) {
             LOG.error("StarRocksFE start failed", e);
+<<<<<<< HEAD
             e.printStackTrace();
+=======
+            System.exit(-1);
+>>>>>>> f660218b4 (opt (#20991))
         }
     }
 
