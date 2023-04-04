@@ -110,6 +110,10 @@ INTO TABLE <table_name>
   )
   ```
   
+  > **说明**
+  >
+  > `format_type_options` 在 3.0 及以后版本支持。
+
   选项说明见下表。
   
   | **参数**    | **说明**                                                     |

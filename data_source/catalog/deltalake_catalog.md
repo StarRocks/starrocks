@@ -318,7 +318,7 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   );
   ```
 
-### 查看 Delta Lake Catalog
+## 查看 Delta Lake Catalog
 
 您可以通过 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
@@ -326,15 +326,15 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) 查询某个 External Catalog 的创建信息。例如，通过如下命令查询 Delta Lake Catalog `deltalake_catalog_glue` 的创建信息：
+您也可以通过 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Delta Lake Catalog `deltalake_catalog_glue` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG deltalake_catalog_glue;
 ```
 
-### 删除 Delta Lake Catalog
+## 删除 Delta Lake Catalog
 
-您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) 删除一个 Delta Lake Catalog。
+您可以通过 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) 删除某个 External Catalog。
 
 例如，通过如下命令删除 Delta Lake Catalog `deltalake_catalog_glue`：
 
