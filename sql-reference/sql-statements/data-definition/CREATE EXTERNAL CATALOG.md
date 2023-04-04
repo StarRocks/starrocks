@@ -123,5 +123,5 @@ PROPERTIES(
 ## 相关操作
 
 - 如要查看所有 Catalog，参见 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md)。
-- 如要查看某个 External Catalog 的创建信息，参见 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md)。
+- 如要查看某个 External Catalog 的创建语句，参见 [SHOW CREATE CATALOG](/sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md)。
 - 如要删除 External Catalog，参见 [DROP CATALOG](/sql-reference/sql-statements/data-definition/DROP%20CATALOG.md)。
