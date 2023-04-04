@@ -120,7 +120,7 @@ starlet_port = <starlet_port>
 
 | **Configuration item** | **Description**                |
 | ---------------------- | ------------------------------ |
-| starlet_port           | The BE heartbeat service port. |
+| starlet_port           | The BE heartbeat service port. Default value: `9070`.|
 
 > **NOTE**
 >
