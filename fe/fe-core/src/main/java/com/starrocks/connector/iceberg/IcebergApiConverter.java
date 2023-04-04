@@ -20,6 +20,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
 import org.apache.iceberg.FileFormat;
@@ -33,6 +34,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
@@ -44,7 +46,8 @@ public class IcebergApiConverter {
     public static final String PARTITION_NULL_VALUE = "null";
 
     public static IcebergTable toIcebergTable(Table nativeTbl, String catalogName, String remoteDbName,
-                                              String remoteTableName, String nativeCatalogType) {
+                                              String remoteTableName, String nativeCatalogType,
+                                              Optional<IcebergMetricsReporter> metricsReporter) {
         IcebergTable.Builder tableBuilder = IcebergTable.builder()
                 .setId(CONNECTOR_ID_GENERATOR.getNextId().asInt())
                 .setSrTableName(remoteTableName)
@@ -54,7 +57,8 @@ public class IcebergApiConverter {
                 .setRemoteTableName(remoteTableName)
                 .setNativeTable(nativeTbl)
                 .setFullSchema(toFullSchemas(nativeTbl))
-                .setIcebergProperties(toIcebergProps(nativeCatalogType));
+                .setIcebergProperties(toIcebergProps(nativeCatalogType))
+                .setMetricsReporter(metricsReporter);
 
         return tableBuilder.build();
     }

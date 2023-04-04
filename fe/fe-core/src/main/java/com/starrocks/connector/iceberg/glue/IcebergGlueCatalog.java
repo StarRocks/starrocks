@@ -21,6 +21,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.hive.HiveTableOperations;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import org.apache.hadoop.conf.Configuration;
@@ -45,6 +46,7 @@ import org.apache.thrift.TException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
@@ -74,11 +76,25 @@ public class IcebergGlueCatalog extends BaseMetastoreCatalog implements IcebergC
     }
 
     @Override
+    public Table loadTable(TableIdentifier tableIdentifier, Optional<IcebergMetricsReporter> metricsReporter)
+            throws StarRocksConnectorException {
+        return loadTable(tableIdentifier, null, null, metricsReporter);
+    }
+
+    @Override
     public Table loadTable(TableIdentifier tableId, String tableLocation,
                            Map<String, String> properties) throws StarRocksConnectorException {
+        return loadTable(tableId, tableLocation, properties, Optional.empty());
+    }
+
+    private Table loadTable(TableIdentifier tableId, String tableLocation, Map<String, String> properties,
+                            Optional<IcebergMetricsReporter> metricsReporter) throws StarRocksConnectorException {
         Preconditions.checkState(tableId != null);
         try {
             TableOperations ops = this.newTableOps(tableId);
+            if (metricsReporter.isPresent()) {
+                return new BaseTable(ops, fullTableName(this.name(), tableId), metricsReporter.get());
+            }
             return new BaseTable(ops, fullTableName(this.name(), tableId));
         } catch (Exception e) {
             throw new StarRocksConnectorException(String.format(

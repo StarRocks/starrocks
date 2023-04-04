@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.hive.HiveTableOperations;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import mockit.Expectations;
@@ -30,6 +31,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 
@@ -110,11 +112,11 @@ public class IcebergMetadataTest {
                                   @Mocked HiveTableOperations hiveTableOperations) {
         new Expectations() {
             {
-                icebergHiveCatalog.loadTable(TableIdentifier.of("db", "tbl"));
+                icebergHiveCatalog.loadTable(TableIdentifier.of("db", "tbl"), (Optional<IcebergMetricsReporter>) any);
                 result = new BaseTable(hiveTableOperations, "tbl");
                 minTimes = 0;
 
-                icebergHiveCatalog.loadTable(TableIdentifier.of("db", "tbl2"));
+                icebergHiveCatalog.loadTable(TableIdentifier.of("db", "tbl2"), (Optional<IcebergMetricsReporter>) any);
                 result = new StarRocksConnectorException("not found");
             }
         };
