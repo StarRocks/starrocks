@@ -449,6 +449,9 @@ public class FunctionSet {
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
+    // dict query function
+    public static final String DICT_MAPPING = "dict_mapping";
+
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
     private static final Set<Type> STDDEV_ARG_TYPE =

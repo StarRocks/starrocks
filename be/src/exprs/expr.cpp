@@ -54,6 +54,7 @@
 #include "exprs/column_ref.h"
 #include "exprs/compound_predicate.h"
 #include "exprs/condition_expr.h"
+#include "exprs/dict_query_expr.h"
 #include "exprs/dictmapping_expr.h"
 #include "exprs/function_call_expr.h"
 #include "exprs/in_predicate.h"
@@ -386,6 +387,9 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     case TExprNodeType::CLONE_EXPR:
         *expr = pool->add(new CloneExpr(texpr_node));
+        break;
+    case TExprNodeType::DICT_QUERY_EXPR:
+        *expr = pool->add(new DictQueryExpr(texpr_node));
         break;
     case TExprNodeType::ARRAY_SLICE_EXPR:
     case TExprNodeType::AGG_EXPR:

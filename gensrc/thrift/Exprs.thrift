@@ -82,6 +82,7 @@ enum TExprNodeType {
   MAP_ELEMENT_EXPR,
   BINARY_LITERAL,
   MAP_EXPR,
+  DICT_QUERY_EXPR,
 }
 
 struct TAggregateExpr {
@@ -171,6 +172,15 @@ struct TFunctionCallExpr {
   2: optional i32 vararg_start_idx
 }
 
+struct TDictQueryExpr {
+  1: required string db_name
+  2: required string tbl_name
+  3: required map<i64, i64> partition_version
+  4: required list<string> key_fields
+  5: required string value_field
+  6: required bool strict_mode
+}
+
 // This is essentially a union over the subclasses of Expr.
 struct TExprNode {
   1: required TExprNodeType node_type
@@ -219,6 +229,8 @@ struct TExprNode {
   52: optional bool is_nullable
   53: optional Types.TTypeDesc child_type_desc
   54: optional bool is_monotonic
+
+  55: optional TDictQueryExpr dict_query_expr
 }
 
 struct TPartitionLiteral {
