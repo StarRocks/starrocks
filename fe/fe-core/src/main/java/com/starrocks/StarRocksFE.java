@@ -121,7 +121,7 @@ public class StarRocksFE {
             // check meta dir
             MetaHelper.checkMetaDir();
 
-            LOG.info("StarRocks FE starting...");
+            LOG.info("StarRocks FE starting, version: {}-{}", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH);
 
             FrontendOptions.init(args);
             ExecuteEnv.setup();
@@ -182,6 +182,7 @@ public class StarRocksFE {
             }
         } catch (Throwable e) {
             LOG.error("StarRocksFE start failed", e);
+            System.exit(-1);
         }
     }
 
