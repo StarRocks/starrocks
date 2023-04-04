@@ -108,6 +108,10 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
   )
   ```
 
+  > **NOTE**
+  >
+  > `format_type_options` is supported in v3.0 and later.
+
   The following table describes the options.
 
   | **Parameter** | **Description**                                              |

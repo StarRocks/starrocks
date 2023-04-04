@@ -473,7 +473,7 @@ SELECT /*+ SET_VAR
 
   The value is an integer. Default value: 1024000.
 
-* sql_dialect
+* sql_dialect  (supported in v3.0 and later)
 
   The SQL dialect that is used. For example, you can run the `set sql_dialect = 'trino';` command to set the SQL dialect to Trino, so you can use Trino-specific SQL syntax and functions in your queries.
 
