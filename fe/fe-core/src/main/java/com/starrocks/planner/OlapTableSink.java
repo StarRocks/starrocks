@@ -75,6 +75,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.Load;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
