@@ -2,7 +2,7 @@
 
 ## Description
 
-Queries the creation information of an external catalog, such as a Hive, Iceberg, Hudi, or Delta Lake catalog. See [Hive Catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg Catalog](../../../data_source/catalog/iceberg_catalog.md), [Hudi Catalog](../../../data_source/catalog/hudi_catalog.md), and [Delta Lake Catalog](../../../data_source/catalog/deltalake_catalog.md). Note that authentication-related information in the return result will be anonymized.
+Queries the creation statement of an external catalog, such as a Hive, Iceberg, Hudi, or Delta Lake catalog. See [Hive Catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg Catalog](../../../data_source/catalog/iceberg_catalog.md), [Hudi Catalog](../../../data_source/catalog/hudi_catalog.md), and [Delta Lake Catalog](../../../data_source/catalog/deltalake_catalog.md). Note that authentication-related information in the return result will be anonymized.
 
 This command is supported from v3.0 onwards.
 
@@ -16,7 +16,7 @@ SHOW CREATE CATALOG <catalog_name>;
 
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
-| catalog_name  | Yes          | The name of the catalog whose creation information you want to view. |
+| catalog_name  | Yes          | The name of the catalog whose creation statement you want to view. |
 
 ## Return result
 
@@ -33,7 +33,7 @@ SHOW CREATE CATALOG <catalog_name>;
 
 ## Examples
 
-The following example queries the creation information of a Hive catalog named `hive_catalog_hms`:
+The following example queries the creation statement of a Hive catalog named `hive_catalog_hms`:
 
 ```SQL
 SHOW CREATE CATALOG hive_catalog_hms;
