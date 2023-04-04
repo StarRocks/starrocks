@@ -220,6 +220,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
@@ -1847,7 +1848,15 @@ public class LocalMetastore implements ConnectorMetadata {
             if (table.isCloudNativeTableOrMaterializedView()) {
                 long primaryComputeNodeId = -1;
                 try {
-                    primaryComputeNodeId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
+                    // it is ok for cloudnative table to build tablet in any warehouse
+                    Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                    if (warehouse != null) {
+                        primaryComputeNodeId = ((LakeTablet) tablet).
+                                getPrimaryComputeNodeId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
+                    } else {
+                        primaryComputeNodeId = ((LakeTablet) tablet).
+                                getPrimaryComputeNodeId();
+                    }
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }

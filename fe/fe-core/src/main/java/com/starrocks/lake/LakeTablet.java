@@ -79,13 +79,18 @@ public class LakeTablet extends Tablet {
     }
 
     public long getPrimaryComputeNodeId() throws UserException {
-        return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryComputeNodeIdByShard(getShardId());
+        return getPrimaryComputeNodeId(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+    }
+
+    public long getPrimaryComputeNodeId(long clusterId) throws UserException {
+        return GlobalStateMgr.getCurrentStarOSAgent().
+                getPrimaryComputeNodeIdByShard(getShardId(), clusterId);
     }
 
     @Override
     public Set<Long> getBackendIds() {
         try {
-            return GlobalStateMgr.getCurrentState().getStarOSAgent().getBackendIdsByShard(getShardId());
+            return GlobalStateMgr.getCurrentStarOSAgent().getBackendIdsByShard(getShardId());
         } catch (UserException e) {
             LOG.warn("Failed to get backends by shard. tablet id: {}", getId(), e);
             return Sets.newHashSet();
