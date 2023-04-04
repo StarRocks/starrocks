@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.statistic;
 
 import com.google.common.base.Preconditions;
@@ -95,10 +94,11 @@ public class StatisticExecutor {
             sql = StatisticSQLBuilder.buildQuerySampleStatisticsSQL(dbId, tableId, columnNames);
         }
 
-        return executeDQL(context, sql);
+        return executeStatisticDQL(context, sql);
     }
 
-    public void dropTableStatistics(ConnectContext statsConnectCtx, Long tableIds, StatsConstants.AnalyzeType analyzeType) {
+    public void dropTableStatistics(ConnectContext statsConnectCtx, Long tableIds,
+                                    StatsConstants.AnalyzeType analyzeType) {
         String sql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, analyzeType);
         LOG.debug("Expire statistic SQL: {}", sql);
 
@@ -114,11 +114,11 @@ public class StatisticExecutor {
 
     public List<TStatisticData> queryHistogram(ConnectContext statsConnectCtx, Long tableId, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildQueryHistogramStatisticsSQL(tableId, columnNames);
-        return executeDQL(statsConnectCtx, sql);
+        return executeStatisticDQL(statsConnectCtx, sql);
     }
 
     public List<TStatisticData> queryMCV(ConnectContext statsConnectCtx, String sql) {
-        return executeDQL(statsConnectCtx, sql);
+        return executeStatisticDQL(statsConnectCtx, sql);
     }
 
     public void dropHistogram(ConnectContext statsConnectCtx, Long tableId, List<String> columnNames) {
@@ -152,9 +152,8 @@ public class StatisticExecutor {
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(" + version + " as bigint), " +
-                "dict_merge(" +  StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+                "dict_merge(" + StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
                 " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
-
 
         ConnectContext context = StatisticUtils.buildConnectContext();
         context.setThreadLocalInfo();
@@ -172,12 +171,12 @@ public class StatisticExecutor {
 
     public List<TStatisticData> queryTableStats(ConnectContext context, Long tableId) {
         String sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(tableId);
-        return executeDQL(context, sql);
+        return executeStatisticDQL(context, sql);
     }
 
     public List<TStatisticData> queryTableStats(ConnectContext context, Long tableId, Long partitionId) {
         String sql = StatisticSQLBuilder.buildQueryTableStatisticsSQL(tableId, partitionId);
-        return executeDQL(context, sql);
+        return executeStatisticDQL(context, sql);
     }
 
     private static List<TStatisticData> deserializerStatisticData(List<TResultBatch> sqlResult) throws TException {
@@ -195,7 +194,8 @@ public class StatisticExecutor {
         if (version == StatsConstants.STATISTIC_DATA_VERSION
                 || version == StatsConstants.STATISTIC_DICT_VERSION
                 || version == StatsConstants.STATISTIC_HISTOGRAM_VERSION
-                || version == StatsConstants.STATISTIC_TABLE_VERSION) {
+                || version == StatsConstants.STATISTIC_TABLE_VERSION
+                || version == StatsConstants.STATISTIC_BATCH_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
@@ -222,7 +222,7 @@ public class StatisticExecutor {
 
         try {
             GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
-            //Only update running status without edit log, make restart job status is failed
+            // Only update running status without edit log, make restart job status is failed
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
             GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
@@ -261,7 +261,16 @@ public class StatisticExecutor {
         return analyzeStatus;
     }
 
-    private List<TStatisticData> executeDQL(ConnectContext context, String sql) {
+    public List<TStatisticData> executeStatisticDQL(ConnectContext context, String sql) {
+        List<TResultBatch> sqlResult = executeDQL(context, sql);
+        try {
+            return deserializerStatisticData(sqlResult);
+        } catch (TException e) {
+            throw new SemanticException(e.getMessage());
+        }
+    }
+
+    private List<TResultBatch> executeDQL(ConnectContext context, String sql) {
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
@@ -269,11 +278,7 @@ public class StatisticExecutor {
         if (!sqlResult.second.ok()) {
             throw new SemanticException(sqlResult.second.getErrorMsg());
         } else {
-            try {
-                return deserializerStatisticData(sqlResult.first);
-            } catch (TException e) {
-                throw new SemanticException(e.getMessage());
-            }
+            return sqlResult.first;
         }
     }
 }

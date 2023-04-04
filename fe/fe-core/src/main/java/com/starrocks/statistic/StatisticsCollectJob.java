@@ -95,7 +95,7 @@ public abstract class StatisticsCollectJob {
         return properties;
     }
 
-    public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
+    protected void collectStatisticSync(String sql, ConnectContext context) throws Exception {
         int count = 0;
         int maxRetryTimes = 5;
         do {

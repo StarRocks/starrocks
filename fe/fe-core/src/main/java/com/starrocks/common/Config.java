@@ -1518,6 +1518,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static double statistic_auto_collect_ratio = 0.8;
 
+    @ConfField(mutable = true)
+    public static double statistics_full_collect_buffer = 1024 * 1024 * 20; // 20MB
+
     // If the health in statistic_full_collect_interval is lower than this value,
     // choose collect sample statistics first
     @ConfField(mutable = true)
