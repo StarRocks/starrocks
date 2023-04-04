@@ -128,11 +128,10 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 void ConnectorScanNode::_adjust_io_tasks_per_scan_operator(RuntimeState* state) {
     const TQueryOptions& options = state->query_options();
-    int32_t ratio = config::io_tasks_connector_max_ratio;
-    if (options.__isset.io_tasks_connector_max_ratio) {
-        ratio = options.io_tasks_connector_max_ratio;
+    _io_tasks_per_scan_operator = config::connector_io_tasks_per_scan_operator;
+    if (options.__isset.connector_io_tasks_per_scan_operator) {
+        _io_tasks_per_scan_operator = options.connector_io_tasks_per_scan_operator;
     }
-    _io_tasks_per_scan_operator *= ratio;
 }
 
 void ConnectorScanNode::_estimate_scan_row_bytes() {
