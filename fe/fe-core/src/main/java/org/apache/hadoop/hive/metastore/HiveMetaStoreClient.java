@@ -32,16 +32,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.connector.hive;
+package org.apache.hadoop.hive.metastore;
 
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.common.ValidWriteIdList;
-import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
-import org.apache.hadoop.hive.metastore.IMetaStoreClient;
-import org.apache.hadoop.hive.metastore.PartitionDropOptions;
-import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.api.AggrStats;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.Catalog;
@@ -188,8 +184,8 @@ import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.getDefaultCa
  * ,getTableColumnStatistics, getPartitionColumnStatistics.
  * Newly added method should cover hive0/1/2/3 metastore server.
  */
-public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseable {
-    private static final Logger LOG = LogManager.getLogger(HiveMetaStoreThriftClient.class);
+public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
+    private static final Logger LOG = LogManager.getLogger(HiveMetaStoreClient.class);
 
     ThriftHiveMetastore.Iface client = null;
     private TTransport transport = null;
@@ -224,15 +220,15 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
 
     private final ClientCapabilities version;
 
-    public HiveMetaStoreThriftClient(Configuration conf) throws MetaException {
+    public HiveMetaStoreClient(Configuration conf) throws MetaException {
         this(conf, null, true);
     }
 
-    public HiveMetaStoreThriftClient(Configuration conf, HiveMetaHookLoader hookLoader) throws MetaException {
+    public HiveMetaStoreClient(Configuration conf, HiveMetaHookLoader hookLoader) throws MetaException {
         this(conf, hookLoader, true);
     }
 
-    public HiveMetaStoreThriftClient(Configuration conf, HiveMetaHookLoader hookLoader, Boolean allowEmbedded)
+    public HiveMetaStoreClient(Configuration conf, HiveMetaHookLoader hookLoader, Boolean allowEmbedded)
             throws MetaException {
 
         if (conf == null) {
