@@ -21,6 +21,7 @@
 #include "http/action/pprof_actions.h"
 #include "http/action/snapshot_action.h"
 #include "http/action/stream_load.h"
+#include "http/action/transaction_stream_load.h"
 #include "http/default_path_handlers.h"
 #include "http/download_action.h"
 #include "http/ev_http_server.h"
@@ -46,6 +47,31 @@ HttpServiceCN::~HttpServiceCN() {
 
 Status HttpServiceCN::start() {
     add_default_path_handlers(_web_page_handler.get(), _env->process_mem_tracker());
+
+    // register load
+    auto* stream_load_action = new StreamLoadAction(_env);
+    _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/{table}/_stream_load", stream_load_action);
+    _http_handlers.emplace_back(stream_load_action);
+
+    // Currently, we only support single-DB and single-table transactions.
+    // In the future, when we support multi-table transactions across DBs,
+    // we can keep the interface compatible, and users do not need to modify the URL.
+    //
+    // BeginTrasaction:     POST /api/transaction/begin
+    // CommitTransaction:   POST /api/transaction/commit
+    // RollbackTransaction: POST /api/transaction/rollback
+    // PrepreTransaction:   POST /api/transaction/prepare
+    //
+    // ListTransactions:    POST /api/transaction/list
+    auto* transaction_manager_action = new TransactionManagerAction(_env);
+    _ev_http_server->register_handler(HttpMethod::POST, "/api/transaction/{txn_op}", transaction_manager_action);
+    _ev_http_server->register_handler(HttpMethod::PUT, "/api/transaction/{txn_op}", transaction_manager_action);
+    _http_handlers.emplace_back(transaction_manager_action);
+
+    // LoadData:            PUT /api/transaction/load
+    auto* transaction_stream_load_action = new TransactionStreamLoadAction(_env);
+    _ev_http_server->register_handler(HttpMethod::PUT, "/api/transaction/load", transaction_stream_load_action);
+    _http_handlers.emplace_back(transaction_stream_load_action);
 
     // Register CN health action
     auto* health_action = new HealthAction(_env);

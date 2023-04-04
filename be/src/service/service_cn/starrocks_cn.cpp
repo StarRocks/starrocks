@@ -24,6 +24,7 @@
 #include "runtime/exec_env.h"
 #include "service/brpc.h"
 #include "service/service.h"
+#include "service/service_be/lake_service.h"
 #include "service/service_cn/internal_service.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
@@ -57,9 +58,11 @@ void start_cn() {
 
     starrocks::ComputeNodeInternalServiceImpl<starrocks::PInternalService> internal_service(exec_env);
     starrocks::ComputeNodeInternalServiceImpl<doris::PBackendService> compute_service(exec_env);
+    starrocks::LakeServiceImpl lake_service(exec_env);
 
     brpc_server.AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server.AddService(&compute_service, brpc::SERVER_DOESNT_OWN_SERVICE);
+    brpc_server.AddService(&lake_service, brpc::SERVER_DOESNT_OWN_SERVICE);
 
     brpc::ServerOptions options;
     if (starrocks::config::brpc_num_threads != -1) {
@@ -71,7 +74,7 @@ void start_cn() {
         exit(1);
     }
 
-    // 3. Start http service.
+    // 3. Start HTTP service.
     std::unique_ptr<starrocks::HttpServiceCN> http_service = std::make_unique<starrocks::HttpServiceCN>(
             exec_env, starrocks::config::be_http_port, starrocks::config::be_http_num_workers);
     if (auto status = http_service->start(); !status.ok()) {
