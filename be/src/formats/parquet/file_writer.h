@@ -27,6 +27,8 @@
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
@@ -81,7 +83,7 @@ public:
 
 private:
     static ::parquet::schema::NodePtr _make_schema_node(const std::string& name, const TypeDescriptor& type_desc,
-                                                                     ::parquet::Repetition::type rep_type);
+                                                        ::parquet::Repetition::type rep_type);
 };
 
 class FileWriterBase {
@@ -103,56 +105,61 @@ protected:
     virtual void _flush_row_group() = 0;
 
 private:
+    class Context {
+    public:
+        Context(int max_rep_level, size_t estimated_size = 0) : _max_rep_level(max_rep_level) {
+            _idx2subcol.reserve(estimated_size);
+            _def_levels.reserve(estimated_size);
+            _rep_levels.reserve(estimated_size);
+        }
+
+        void append(int idx, int16_t def_level, int16_t rep_level) {
+            _idx2subcol.push_back(idx);
+            _def_levels.push_back(def_level);
+            _rep_levels.push_back(rep_level);
+        }
+
+        std::tuple<int, int16_t, int16_t> get(int i) const {
+            return std::make_tuple(_idx2subcol[i], _def_levels[i], _rep_levels[i]);
+        }
+
+        int size() const {
+            return _def_levels.size();
+        }
+
+    public:
+        const int16_t _max_rep_level;
+        constexpr static int kNULL = -1;
+
+    private:
+        std::vector<int> _idx2subcol;
+        std::vector<int16_t> _def_levels;
+        std::vector<int16_t> _rep_levels;
+    };
+
     void _generate_rg_writer();
 
     std::size_t _get_current_rg_written_bytes() const;
 
-    Status _add_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                             const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                             int16_t max_rep_level, const std::vector<bool>& is_null,
-                             const std::map<int, int>& mapping);
+    Status _add_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
 
-    Status _add_struct_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                    const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                    int16_t max_rep_level, const std::vector<bool>& is_null,
-                                    const std::map<int, int>& mapping);
+    Status _add_struct_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
 
-    Status _add_array_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                   const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                   int16_t max_rep_level, const std::vector<bool>& is_null,
-                                   const std::map<int, int>& mapping);
+    Status _add_array_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
 
-    Status _add_map_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                 const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                 int16_t max_rep_level, const std::vector<bool>& is_null,
-                                 const std::map<int, int>& mapping);
+    Status _add_map_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
 
-    Status _add_varchar_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                     const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                     int16_t max_rep_level, const std::vector<bool>& is_null,
-                                     const std::map<int, int>& mapping);
+    Status _add_varchar_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
 
-    Status _add_date_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                  const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                  int16_t max_rep_level, const std::vector<bool>& is_null,
-                                  const std::map<int, int>& mapping);
+    Status _add_date_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
 
-    Status _add_datetime_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                      const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                      int16_t max_rep_level, const std::vector<bool>& is_null,
-                                      const std::map<int, int>& mapping);
+    Status _add_datetime_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
 
     template <LogicalType lt, ::parquet::Type::type pt>
-    Status _add_int_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                 const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                 int16_t max_rep_level, const std::vector<bool>& is_null,
-                                 const std::map<int, int>& mapping);
+    Status _add_int_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
 
     template <LogicalType lt, ::parquet::Type::type pt>
-    Status _add_decimal_column_chunk(const TypeDescriptor& type_desc, const ColumnPtr col,
-                                     const std::vector<int16_t>& def_level, const std::vector<int16_t>& rep_level,
-                                     int16_t max_rep_level, const std::vector<bool>& is_null,
-                                     const std::map<int, int>& mapping);
+    Status _add_decimal_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc, ::parquet::schema::NodePtr node, ColumnPtr col);
 
 protected:
     std::shared_ptr<ParquetOutputStream> _outstream;
@@ -166,7 +173,25 @@ protected:
     const static int64_t kDefaultMaxRowGroupSize = 128 * 1024 * 1024; // 128MB
     int64_t _max_row_group_size = kDefaultMaxRowGroupSize;
     std::vector<int64_t> _buffered_values_estimate;
-    int _col_idx{0};
+
+private:
+    int _col_idx{0}; // used to track column writer
+
+    constexpr static unordered_map<LogicalType, ::parquet::Type::type> ltype2ptype{
+            {LogicalType::BOOLEAN, ::parquet::Type::BOOLEAN},
+            {LogicalType::TINYINT, ::parquet::Type::INT32},
+            {LogicalType::SMALLINT, ::parquet::Type::INT32},
+            {LogicalType::INT, ::parquet::Type::INT32},
+            {LogicalType::BIGINT, ::parquet::Type::INT64},
+            {LogicalType::LARGEINT, ::parquet::Type::INT96},
+            {LogicalType::DATE, ::parquet::Type::INT32},
+            {LogicalType::DATETIME, ::parquet::Type::INT64},
+            {LogicalType::TIMESTAMP, ::parquet::Type::INT64},
+            {LogicalType::FLOAT, ::parquet::Type::FLOAT},
+            {LogicalType::DOUBLE, ::parquet::Type::DOUBLE},
+            {LogicalType::VARCHAR, ::parquet::Type::BYTE_ARRAY},
+            {LogicalType::DECIMALV2, ::parquet::Type::FIXED_LEN_BYTE_ARRAY},
+    };
 };
 
 class SyncFileWriter : public FileWriterBase {
