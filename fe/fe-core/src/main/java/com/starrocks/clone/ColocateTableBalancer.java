@@ -167,6 +167,10 @@ public class ColocateTableBalancer extends LeaderDaemon {
      *      Otherwise, mark the group as stable
      */
     protected void runAfterCatalogReady() {
+        if (Config.tablet_sched_disable_colocate_balance) {
+            return;
+        }
+
         relocateAndBalanceGroup();
         matchGroup();
     }
@@ -210,10 +214,6 @@ public class ColocateTableBalancer extends LeaderDaemon {
      *  A    B    C    D
      */
     private void relocateAndBalanceGroup() {
-        if (Config.tablet_sched_disable_colocate_balance) {
-            return;
-        }
-
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         ColocateTableIndex colocateIndex = globalStateMgr.getColocateTableIndex();
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
