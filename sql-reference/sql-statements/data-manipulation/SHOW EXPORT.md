@@ -73,7 +73,7 @@ FinishTime: 2023-03-20 11:16:26
 - `QueryId`：当前查询的 ID。
 - `State`：导出作业的状态，包括：
   - `PENDING`：导出作业待调度。
-  - `EXPORING`：导出作业正在执行中。
+  - `EXPORTING`：导出作业正在执行中。
   - `FINISHED`：导出作业成功。
   - `CANCELLED`：导出作业失败。
 - `Progress`：导出作业的进度。该进度以查询计划为单位。假设导出作业一共分为 10 个查询计划，当前已完成 3 个，则进度为 30%。有关查询计划的原理，参见[“使用 EXPORT 导出数据 > 导出流程”](../../../unloading/Export.md#导出流程)。
@@ -110,7 +110,7 @@ FinishTime: 2023-03-20 11:16:26
   WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
   ```
 
-- 查询指定数据库 `example_db` 下状态为 `exporting` 的导出作业，并按 `StartTime` 对返回的导出作业记录进行升序排序：
+- 查询指定数据库 `example_db` 下状态为 `EXPORTING` 的导出作业，并按 `StartTime` 对返回的导出作业记录进行升序排序：
 
   ```SQL
   SHOW EXPORT FROM example_db
