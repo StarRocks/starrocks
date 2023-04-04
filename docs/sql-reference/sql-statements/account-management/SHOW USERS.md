@@ -2,7 +2,7 @@
 
 ## Description
 
-Displays all users in the system. Users mentioned here are user identities, not user names. For more information about user identities, see [Overview of privileges](../../../administration/privilege_overview.md).
+Displays all users in the system. Users mentioned here are user identities, not user names. For more information about user identities, see [CREATE USER](CREATE%20USER.md). This command is supported from v3.0.
 
 You can use `SHOW GRANTS FOR <user_identity>;` to view the privileges of a specific user. For more information, see [SHOW GRANTS](SHOW%20GRANTS.md).
 

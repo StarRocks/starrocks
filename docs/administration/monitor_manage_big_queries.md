@@ -10,6 +10,8 @@ The overall idea of handling big queries in StarRocks is as follows:
 2. Monitor big queries in real-time, and terminate those who bypass the precautions.
 3. Analyze audit logs and Big Query Logs to study the patterns of big queries, and fine-tune the precaution mechanisms you set earlier.
 
+This feature is supported from v3.0.
+
 ## Set precautions against big queries
 
 StarRocks provides two precautionary instruments for dealing with big queries - resource groups and query queues. You can use resource groups to stop big queries from being executed. Query queues, on the other hand, can help you queue the incoming queries when the concurrency threshold or resource limit is reached, preventing system overload.
@@ -66,6 +68,7 @@ After the query queue feature is enabled, you can then define the rules to trigg
   ```SQL
   SET GLOBAL query_queue_concurrency_limit = 100;
   ```
+
 - Specify the memory usage ratio threshold for triggering the query queue.
 
   The following example sets the memory usage ratio threshold to `0.9`:
@@ -73,6 +76,7 @@ After the query queue feature is enabled, you can then define the rules to trigg
   ```SQL
   SET GLOBAL query_queue_mem_used_pct_limit = 0.9;
   ```
+
 - Specify the CPU usage ratio threshold for triggering the query queue.
 
   The following example sets the CPU usage permille (CPU usage * 1000) threshold to `800`:
@@ -90,6 +94,7 @@ You can also decide how to deal with these queued queries by configuring the max
   ```SQL
   SET GLOBAL query_queue_max_queued_queries = 100;
   ```
+
 - Specify the maximum timeout of a pending query in a queue. When this threshold is reached, the corresponding query is rejected.
 
   The following example sets the maximum timeout to `480` seconds:
@@ -209,6 +214,7 @@ After Big Query Logs are enabled, you can then define the rules to trigger Big Q
   ```SQL
   SET GLOBAL big_query_log_cpu_second_threshold = 600;
   ```
+
 - Specify the scan data size threshold for triggering Big Query Logs.
 
   The following example sets the scan data size threshold to `10737418240` bytes (10 GB):
@@ -216,6 +222,7 @@ After Big Query Logs are enabled, you can then define the rules to trigger Big Q
   ```SQL
   SET GLOBAL big_query_log_scan_bytes_threshold = 10737418240;
   ```
+  
 - Specify the scan row count threshold for triggering Big Query Logs.
 
   The following example sets the scan row count threshold to `1500000000`:
