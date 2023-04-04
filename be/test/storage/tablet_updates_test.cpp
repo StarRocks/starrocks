@@ -575,6 +575,7 @@ public:
     void test_noncontinous_commit(bool enable_persistent_index);
     void test_noncontinous_meta_save_load(bool enable_persistent_index);
     void test_save_meta(bool enable_persistent_index);
+    void test_load_from_pb(bool enable_persistent_index);
     void test_remove_expired_versions(bool enable_persistent_index);
     void test_apply(bool enable_persistent_index, bool has_merge_condition);
     void test_concurrent_write_read_and_gc(bool enable_persistent_index);
@@ -1225,6 +1226,65 @@ TEST_F(TabletUpdatesTest, save_meta) {
 
 TEST_F(TabletUpdatesTest, save_meta_with_persistent_index) {
     test_save_meta(true);
+}
+
+void TabletUpdatesTest::test_load_from_pb(bool enable_persistent_index) {
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(enable_persistent_index);
+
+    // Prepare records for test
+    const int N = 30;
+    std::vector<int64_t> keys;
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+
+    {
+        const int N = 10;
+        std::vector<int64_t> keys;
+        for (int64_t i = 0; i < N; i++) {
+            keys.emplace_back(i);
+        }
+        Int64Column deletes_1;
+        deletes_1.append_numbers(keys.data(), sizeof(int64_t) * 5);
+        ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys, &deletes_1)).ok());
+
+        keys.clear();
+        for (int64_t i = 0; i < N; i++) {
+            keys.emplace_back(i + 10);
+        }
+        Int64Column deletes_2;
+        deletes_2.append_numbers(keys.data(), sizeof(int64_t) * 5);
+        ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys, &deletes_2)).ok());
+
+        ASSERT_EQ(4, _tablet->updates()->version_history_count());
+        ASSERT_EQ(4, _tablet->updates()->max_version());
+
+        ASSERT_EQ(30, read_tablet(_tablet, 2));
+        ASSERT_EQ(25, read_tablet(_tablet, 3));
+        ASSERT_EQ(20, read_tablet(_tablet, 4));
+
+        _tablet->save_meta();
+    }
+
+    {
+        auto tablet1 = load_same_tablet_from_store(_tablet);
+        ASSERT_EQ(4, tablet1->updates()->version_history_count());
+        ASSERT_EQ(4, tablet1->updates()->max_version());
+
+        ASSERT_EQ(30, read_tablet(tablet1, 2));
+        ASSERT_EQ(25, read_tablet(tablet1, 3));
+        ASSERT_EQ(20, read_tablet(tablet1, 4));
+    }
+}
+
+TEST_F(TabletUpdatesTest, load_from_pb) {
+    test_load_from_pb(false);
+}
+
+TEST_F(TabletUpdatesTest, load_from_pb_with_persistent_index) {
+    test_load_from_pb(true);
 }
 
 void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_index) {

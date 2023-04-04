@@ -433,6 +433,13 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id, TSchemaHas
 Status TabletMetaManager::walk(
         KVStore* meta,
         std::function<bool(long /*tablet_id*/, long /*schema_hash*/, std::string_view /*meta*/)> const& func) {
+    return walk_until_timeout(meta, func, -1);
+}
+
+Status TabletMetaManager::walk_until_timeout(
+        KVStore* meta,
+        std::function<bool(long /*tablet_id*/, long /*schema_hash*/, std::string_view /*meta*/)> const& func,
+        int64_t timeout_sec) {
     auto traverse_header_func = [&func](std::string_view key, std::string_view value) -> bool {
         TTabletId tablet_id;
         TSchemaHash schema_hash;
@@ -442,7 +449,7 @@ Status TabletMetaManager::walk(
         }
         return func(tablet_id, schema_hash, value);
     };
-    return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func);
+    return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func, timeout_sec);
 }
 
 std::string json_to_string(const rapidjson::Value& val_obj) {
@@ -996,6 +1003,35 @@ Status TabletMetaManager::get_del_vector(KVStore* meta, TTabletId tablet_id, uin
     VLOG(3) << strings::Substitute("get_del_vec in-meta tablet_id=$0 segment_id=$1 version=$2 actual_version=$3",
                                    tablet_id, segment_id, version, delvec ? delvec->version() : -1);
     return st;
+}
+
+Status TabletMetaManager::del_vector_iterate(KVStore* meta, TTabletId tablet_id, uint32_t lower, uint32_t upper,
+                                             const std::function<bool(uint32_t, int64_t, std::string_view)>& func) {
+    std::string lower_key = encode_del_vector_key(tablet_id, lower, INT64_MAX);
+    std::string upper_key = encode_del_vector_key(tablet_id, upper, 0);
+
+    Status st;
+    st = meta->iterate_range(
+            META_COLUMN_FAMILY_INDEX, lower_key, upper_key, [&](std::string_view key, std::string_view value) -> bool {
+                TTabletId dummy;
+                uint32_t segment_id;
+                int64_t version;
+                DelVectorPtr del_vec;
+                decode_del_vector_key(key, &dummy, &segment_id, &version);
+                DCHECK_EQ(tablet_id, dummy);
+                if (!func(segment_id, version, value)) {
+                    std::string msg = strings::Substitute("fail to get delvecs. tablet:$0 rowset:$1", tablet_id, lower);
+                    LOG(WARNING) << msg;
+                    st = Status::InternalError(msg);
+                    return false;
+                }
+                return true;
+            });
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to iterate rocksdb delvecs. tablet_id=" << tablet_id << " rowset=" << lower;
+        return st;
+    }
+    return Status::OK();
 }
 
 using DeleteVectorList = TabletMetaManager::DeleteVectorList;
