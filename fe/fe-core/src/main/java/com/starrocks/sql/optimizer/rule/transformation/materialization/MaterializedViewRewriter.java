@@ -132,6 +132,19 @@ public class MaterializedViewRewriter {
                     joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin())) {
                 return false;
             }
+            List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
+            List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression);
+            // there should be at least one same join type in mv scan descs for every query scan desc.
+            // to forbid rewrite for:
+            // query: a left outer join b
+            // mv: a inner join b inner join c
+            for (TableScanDesc queryScanDesc : queryTableScanDescs) {
+                if (!mvTableScanDescs.stream().anyMatch(scanDesc -> scanDesc.getTable().equals(queryScanDesc.getTable())
+                        && (queryScanDesc.getParentJoinType() == null
+                        || scanDesc.getParentJoinType().equals(queryScanDesc.getParentJoinType())))) {
+                    return false;
+                }
+            }
         } else {
             return false;
         }

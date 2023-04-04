@@ -113,4 +113,13 @@ public class MaterializedViewSSBTest extends MaterializedViewTestBase {
         PlanTestBase.assertContains(plan, "lineorder_flat_mv");
         PlanTestBase.assertNotContains(plan, "LO_ORDERDATE <= 19950100");
     }
+
+    @Test
+    public void testJoinTypeMismatchRewriteForViewDelta() throws Exception {
+        String query = "select sum(lo_linenumber) from `lineorder`" +
+                " LEFT OUTER JOIN `dates`" +
+                " ON `lineorder`.`lo_orderdate` = `dates`.`d_datekey` WHERE `lineorder`.`lo_orderdate` = 19961001;";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertNotContains(plan, "lineorder_flat_mv");
+    }
 }
