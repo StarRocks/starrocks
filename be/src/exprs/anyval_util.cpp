@@ -110,7 +110,7 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
         for (auto child : type.children) {
             if (child.is_unknown_type()) {
                 // TODO(SmithCruise)
-                // For Map type, if map's key or value is pruned, that column's type will be set to unkown for
+                // For Map type, if map's key or value is pruned, that column's type will be set to unknown for
                 // partial materialize.
                 // We should not use TYPE_UNKNOWN in the future, use another type, it may misleading other people.
                 FunctionContext::TypeDesc child_out;
