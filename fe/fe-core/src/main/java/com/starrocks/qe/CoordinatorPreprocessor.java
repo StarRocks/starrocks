@@ -1018,7 +1018,7 @@ public class CoordinatorPreprocessor {
         queryOptions.setEnable_populate_block_cache(sv.getEnablePopulateBlockCache());
         queryOptions.setHudi_mor_force_jni_reader(sv.getHudiMORForceJNIReader());
         queryOptions.setIo_tasks_per_scan_operator(sv.getIoTasksPerScanOperator());
-        queryOptions.setIo_tasks_connector_max_ratio(sv.getIoTasksConnectorMaxRatio());
+        queryOptions.setConnector_io_tasks_per_scan_operator(sv.getConnectorIoTasksPerScanOperator());
 
         // set scan ranges/locations for scan nodes
         for (ScanNode scanNode : scanNodes) {
