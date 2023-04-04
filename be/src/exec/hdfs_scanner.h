@@ -38,6 +38,7 @@ class RuntimeFilterProbeCollector;
 class FooterCache {
 public:
     explicit FooterCache(size_t capacity);
+    ~FooterCache() = default;
     bool get(const std::string& key, std::string* value);
     void put(const std::string& key, const std::string& value);
 

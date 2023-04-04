@@ -20,6 +20,8 @@
 #include "io/shared_buffered_input_stream.h"
 #include "util/compression/stream_compression.h"
 #include "util/lru_cache.h"
+#include "util/defer_op.h"
+
 namespace starrocks {
 
 FooterCache::FooterCache(size_t capacity) : _cache(capacity) {}
@@ -43,7 +45,8 @@ void FooterCache::put(const std::string& key, const std::string& value) {
     size_t size = value.size();
     char* buf = (char*)malloc(size);
     memcpy(buf, value.data(), size);
-    _cache.insert(k, buf, size, cache_deleter, CachePriority::NORMAL);
+    Cache::Handle* handle = _cache.insert(k, buf, size, cache_deleter, CachePriority::NORMAL);
+    DeferOp defer([this, handle]() { _cache.release(handle); });
     return;
 }
 
