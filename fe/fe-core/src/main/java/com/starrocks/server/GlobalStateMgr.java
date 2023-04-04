@@ -583,6 +583,11 @@ public class GlobalStateMgr {
             RunMode.detectRunMode();
         }
 
+        if (RunMode.name().equalsIgnoreCase("shared_nothing") && Config.deployment_form == "saas") {
+            String msg = "deployment_form should be on_premise when deployment_form is saas, will exit now.";
+            LOG.error(msg);
+        }
+
         if (RunMode.allowCreateLakeTable()) {
             this.starOSAgent = new StarOSAgent();
         }
