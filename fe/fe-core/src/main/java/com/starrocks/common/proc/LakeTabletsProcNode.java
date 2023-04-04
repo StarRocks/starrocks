@@ -65,7 +65,7 @@ public class LakeTabletsProcNode implements ProcNodeInterface {
     public List<List<Comparable>> fetchComparableResult() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(index);
-        Preconditions.checkState(table.isCloudNativeTable());
+        Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
 
         List<List<Comparable>> tabletInfos = Lists.newArrayList();
         db.readLock();

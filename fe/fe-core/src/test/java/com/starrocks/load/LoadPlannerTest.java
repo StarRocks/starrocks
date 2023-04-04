@@ -18,7 +18,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.StringLiteral;
@@ -42,9 +41,10 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerScanRangeParams;
@@ -83,7 +83,7 @@ public class LoadPlannerTest {
     private int maxBrokerConcurrency;
 
     // backends
-    private ImmutableMap<Long, DataNode> idToBackend;
+    private ImmutableMap<Long, Backend> idToBackend;
 
     private static ConnectContext ctx;
     private boolean strictMode = false;
@@ -112,11 +112,11 @@ public class LoadPlannerTest {
         maxBrokerConcurrency = Config.max_broker_concurrency;
 
         // backends
-        Map<Long, DataNode> idToBackendTmp = Maps.newHashMap();
-        DataNode b1 = new DataNode(0L, "host0", 9050);
+        Map<Long, Backend> idToBackendTmp = Maps.newHashMap();
+        Backend b1 = new Backend(0L, "host0", 9050);
         b1.setAlive(true);
         idToBackendTmp.put(0L, b1);
-        DataNode b2 = new DataNode(1L, "host1", 9050);
+        Backend b2 = new Backend(1L, "host1", 9050);
         b2.setAlive(true);
         idToBackendTmp.put(1L, b2);
         idToBackend = ImmutableMap.copyOf(idToBackendTmp);

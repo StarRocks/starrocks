@@ -119,9 +119,19 @@ static const AggregateFunction* get_function(const std::string& name, LogicalTyp
         }
     }
 
+    if (func_version > 5) {
+        if (name == "array_agg") {
+            func_name = "array_agg2";
+        }
+    }
+
     if (binary_type == TFunctionBinaryType::BUILTIN) {
-        return AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type,
-                                                                     is_window_function, is_null);
+        auto func = AggregateFuncResolver::instance()->get_aggregate_info(func_name, arg_type, return_type,
+                                                                          is_window_function, is_null);
+        if (func != nullptr) {
+            return func;
+        }
+        return AggregateFuncResolver::instance()->get_general_info(func_name, is_window_function, is_null);
     } else if (binary_type == TFunctionBinaryType::SRJAR) {
         return getJavaUDAFFunction(is_null);
     }

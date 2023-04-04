@@ -666,7 +666,7 @@ public class MvUtils {
     private static List<ScalarOperator> compensatePartitionPredicateForOlapScan(LogicalOlapScanOperator olapScanOperator,
                                                                                 ColumnRefFactory columnRefFactory) {
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
-        Preconditions.checkState(olapScanOperator.getTable().isNativeTable());
+        Preconditions.checkState(olapScanOperator.getTable().isNativeTableOrMaterializedView());
         OlapTable olapTable = (OlapTable) olapScanOperator.getTable();
 
         if (olapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
@@ -842,8 +842,8 @@ public class MvUtils {
         for (OptExpression scanExpr : scanExprs) {
             LogicalScanOperator scanOperator = (LogicalScanOperator) scanExpr.getOp();
             Table scanTable = scanOperator.getTable();
-            if ((scanTable.isNativeTable() && !scanTable.equals(partitionTableAndColumns.first))
-                    || (!scanTable.isNativeTable()) && !scanTable.getTableIdentifier().equals(
+            if ((scanTable.isNativeTableOrMaterializedView() && !scanTable.equals(partitionTableAndColumns.first))
+                    || (!scanTable.isNativeTableOrMaterializedView()) && !scanTable.getTableIdentifier().equals(
                     partitionTableAndColumns.first.getTableIdentifier())) {
                 continue;
             }
@@ -856,9 +856,9 @@ public class MvUtils {
     }
 
     private static List<Range<PartitionKey>> getLatestPartitionRangeForTable(Table partitionByTable,
-                                                                      Column partitionColumn,
-                                                                      MaterializedView mv,
-                                                                      Set<String> mvPartitionNamesToRefresh) {
+                                                                             Column partitionColumn,
+                                                                             MaterializedView mv,
+                                                                             Set<String> mvPartitionNamesToRefresh) {
         Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable);
         List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
                 modifiedPartitionNames);
@@ -874,7 +874,7 @@ public class MvUtils {
     }
 
     private static List<Range<PartitionKey>> getLatestPartitionRangeForNativeTable(OlapTable partitionTable,
-                                                                            Set<String> modifiedPartitionNames) {
+                                                                                   Set<String> modifiedPartitionNames) {
         // partitions that will be excluded
         Set<Long> filteredIds = Sets.newHashSet();
         for (Partition p : partitionTable.getPartitions()) {
@@ -887,8 +887,8 @@ public class MvUtils {
     }
 
     private static List<Range<PartitionKey>> getLatestPartitionRange(Table table, Column partitionColumn,
-                                                              Set<String> modifiedPartitionNames) {
-        if (table.isNativeTable()) {
+                                                                     Set<String> modifiedPartitionNames) {
+        if (table.isNativeTableOrMaterializedView()) {
             return getLatestPartitionRangeForNativeTable((OlapTable) table, modifiedPartitionNames);
         } else {
             Map<String, Range<PartitionKey>> partitionMap;

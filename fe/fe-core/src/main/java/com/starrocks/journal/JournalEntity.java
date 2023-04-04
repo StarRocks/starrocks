@@ -135,8 +135,8 @@ import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.system.DataNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.Warehouse;
@@ -395,8 +395,8 @@ public class JournalEntity implements Writable {
             case OperationType.OP_ADD_BACKEND:
             case OperationType.OP_DROP_BACKEND:
             case OperationType.OP_BACKEND_STATE_CHANGE: {
-                data = new DataNode();
-                ((DataNode) data).readFields(in);
+                data = new Backend();
+                ((Backend) data).readFields(in);
                 isRead = true;
                 break;
             }

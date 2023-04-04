@@ -43,6 +43,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 [NEGATIVE]INTO TABLE <table_name>
 [PARTITION (<partition_name>[, <partition_name> ...])]
 [FORMAT AS "CSV | Parquet | ORC"]
+[(fomat_type_options)]
 [COLUMNS TERMINATED BY "<column_separator>"]
 [(column_list)]
 [COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
@@ -94,6 +95,27 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 - `FORMAT AS`
 
   Specifies the format of the data file. Valid values: `CSV`, `Parquet`, and `ORC`. By default, if you do not specify this parameter, StarRocks determines the data file format based on the filename extension **.csv**, **.parquet**, or **.orc** specified in the `file_path` parameter.
+
+- `format_type_options`
+
+  Specifies CSV format options when `FORMAT AS` is set to `CSV`. Syntax:
+
+  ```JSON
+  (
+      key = value
+      key = value
+      ...
+  )
+  ```
+
+  The following table describes the options.
+
+  | **Parameter** | **Description**                                              |
+  | ------------- | ------------------------------------------------------------ |
+  | skip_header   | Specifies whether to skip the first rows of the data file when the data file is in CSV format. Type: INTEGER. Default value: `0`.<br>In some CSV-formatted data files, the first rows at the beginning are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip the first rows of the data file during data loading. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.<br>The first rows at the beginning in the data file must be separated by using the row separator that you specify in the load statement or command. For example, for Stream Load, the `row_delimiter` parameter is used to specify the row separator. |
+  | trim_space    | Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br>For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br>Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (\|) as the column separator and double quotation marks (`"`) as the `enclose`-specified character:<br>`\|"Love StarRocks"\| \|" Love StarRocks "\| \| "Love StarRocks" \|`<br>If you set `trim_space` to `true`, StarRocks processes the preceding field values as follows:<br>`\|"Love StarRocks"\| \|" Love StarRocks "\| \|"Love StarRocks"\|` |
+  | enclose       | Specifies the character that is used to wrap the field values in the data file according to [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).<br>All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.<br>If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file. |
+  | escape        | Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br>**NOTE**<br>The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br>Two examples are as follows:<ul><li>When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.</li><li>Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.</li></ul> |
 
 - `COLUMNS TERMINATED BY`
 
@@ -705,6 +727,40 @@ WITH BROKER
 > **NOTE**
 >
 > In the preceding example, the values extracted from the partition field `data_time` are strings that contain `%3A`, such as `2020-02-17 00%3A00%3A00`. Therefore, you need to use the `str_to_date` function to convert the strings into DATETIME-type data before they are loaded into `data_time` of `table8`.
+
+#### Setting `format_type_options`
+
+Your StarRocks database `test_db` contains a table named `table13`. The table consists of three columns, which are `col1`, `col2`, and `col3` in sequence.
+
+Your data file `example13.csv` also consists of three columns, which are mapped in sequence onto `col2`, `col1`, and `col3` of `table13`.
+
+If you want to load all data from `example13.csv` into `table13`, with the intention of skipping the first two rows of `example13.csv`, removing the spaces preceding and following column separators, and setting `enclose` to `\` and `escape` to `\`, run the following command:
+
+```SQL
+LOAD LABEL test_db.label13
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/*/example13.csv")
+    INTO TABLE table13
+    COLUMNS TERMINATED BY ","
+    FORMAT AS "CSV"
+    (
+        skip_header = 2
+        trim_space = TRUE
+        enclose = "\""
+        escape = "\\"
+    )
+    (col2, col1, col3)
+)
+WITH BROKER
+(
+    "username" = "hdfs_username",
+    "password" = "hdfs_password"
+)
+PROPERTIES
+(
+    "timeout" = "3600"
+);
+```
 
 ### Load Parquet data
 

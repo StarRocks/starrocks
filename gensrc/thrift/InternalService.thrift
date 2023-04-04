@@ -49,7 +49,6 @@ include "RuntimeFilter.thrift"
 
 // constants for function version
 enum TFunctionVersion {
-    FUNC_VERSION_UNIX_TIMESTAMP_INT64 = 5,
     RUNTIME_FILTER_SERIALIZE_VERSION_2 = 6,
 }
 
@@ -186,7 +185,8 @@ struct TQueryOptions {
   77: optional i64 spill_operator_max_bytes;
   85: optional TSpillMode spill_mode;
   
-  83: optional i32 io_tasks_per_scan_operator = 4;
+  86: optional i32 io_tasks_per_scan_operator = 4;
+  87: optional i32 connector_io_tasks_per_scan_operator = 16;
 }
 
 

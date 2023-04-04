@@ -17,7 +17,7 @@
 
 package com.starrocks.common.publish;
 
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 
 // Helper class for Listener.
 public abstract class Listeners {
@@ -28,11 +28,11 @@ public abstract class Listeners {
         if (NO_OP_LISTENER == null) {
             NO_OP_LISTENER = new Listener() {
                 @Override
-                public void onResponse(DataNode node) {
+                public void onResponse(Backend node) {
                 }
 
                 @Override
-                public void onFailure(DataNode node, Throwable t) {
+                public void onFailure(Backend node, Throwable t) {
                 }
             };
         }

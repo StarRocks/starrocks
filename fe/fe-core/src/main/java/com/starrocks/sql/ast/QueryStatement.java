@@ -17,12 +17,19 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.OutFileClause;
 import com.starrocks.analysis.RedirectStatus;
+import com.starrocks.qe.OriginStatement;
 
 public class QueryStatement extends StatementBase {
     private final QueryRelation queryRelation;
 
     // represent the "INTO OUTFILE" clause
     protected OutFileClause outFileClause;
+
+    public QueryStatement(QueryRelation queryRelation, OriginStatement originStatement) {
+        super(queryRelation.getPos());
+        this.queryRelation = queryRelation;
+        this.origStmt = originStatement;
+    }
 
     public QueryStatement(QueryRelation queryRelation) {
         super(queryRelation.getPos());

@@ -40,7 +40,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.VariableMgr.VarAttr;
-import com.starrocks.system.DataNodeCoreStat;
+import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TQueryOptions;
@@ -322,6 +322,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
+    public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
 
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
@@ -889,6 +890,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
 
+    @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR)
+    private int connectorIoTasksPerScanOperator = 16;
+
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateBlockCache = true;
 
@@ -901,6 +905,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getIoTasksPerScanOperator() {
         return ioTasksPerScanOperator;
+    }
+
+    public int getConnectorIoTasksPerScanOperator() {
+        return connectorIoTasksPerScanOperator;
     }
 
     @VarAttr(name = ENABLE_QUERY_CACHE)
@@ -1225,9 +1233,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 return pipelineDop;
             }
             if (maxPipelineDop <= 0) {
-                return DataNodeCoreStat.getDefaultDOP();
+                return BackendCoreStat.getDefaultDOP();
             }
-            return Math.min(maxPipelineDop, DataNodeCoreStat.getDefaultDOP());
+            return Math.min(maxPipelineDop, BackendCoreStat.getDefaultDOP());
         } else {
             return parallelExecInstanceNum;
         }
@@ -1239,9 +1247,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 return pipelineDop;
             }
             if (maxPipelineDop <= 0) {
-                return DataNodeCoreStat.getSinkDefaultDOP();
+                return BackendCoreStat.getSinkDefaultDOP();
             }
-            return Math.min(maxPipelineDop, DataNodeCoreStat.getSinkDefaultDOP());
+            return Math.min(maxPipelineDop, BackendCoreStat.getSinkDefaultDOP());
         } else {
             return parallelExecInstanceNum;
         }

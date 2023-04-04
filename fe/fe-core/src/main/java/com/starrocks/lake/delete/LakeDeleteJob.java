@@ -46,7 +46,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DeleteStmt;
-import com.starrocks.system.DataNode;
+import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TabletCommitInfo;
 import org.apache.logging.log4j.LogManager;
@@ -75,7 +75,7 @@ public class LakeDeleteJob extends DeleteJob {
     @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
     public void run(DeleteStmt stmt, Database db, Table table, List<Partition> partitions)
             throws DdlException, QueryStateException {
-        Preconditions.checkState(table.isLakeTable());
+        Preconditions.checkState(table.isCloudNativeTable());
 
         db.readLock();
         try {
@@ -102,7 +102,7 @@ public class LakeDeleteJob extends DeleteJob {
                     beToTablets.size());
             SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
             for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-                DataNode backend = systemInfoService.getBackend(entry.getKey());
+                Backend backend = systemInfoService.getBackend(entry.getKey());
                 if (backend == null) {
                     throw new DdlException("Backend " + entry.getKey() + " has been dropped");
                 }

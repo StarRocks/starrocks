@@ -60,7 +60,7 @@ You can build StarRocks by `clang` too
 CC=clang CXX=clang++ ./build.sh --be
 ```
 
-Then you can see the following similar message in the building message
+Then you can see the following similar message in the build message
 
 ```
 -- compiler Clang version 14.0.0
