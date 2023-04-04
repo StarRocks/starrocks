@@ -674,7 +674,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_copy_probe_column(ColumnPtr* src_co
         }
     } else {
         ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), to_nullable);
-        dest_column->append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
+        dest_column->shallow_append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
         (*chunk)->append_column(std::move(dest_column), slot->id());
     }
 }
@@ -689,7 +689,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_copy_probe_nullable_column(ColumnPt
         (*chunk)->append_column(*src_column, slot->id());
     } else {
         ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
-        dest_column->append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
+        dest_column->shallow_append_selective(**src_column, _probe_state->probe_index.data(), 0, _probe_state->count);
         (*chunk)->append_column(std::move(dest_column), slot->id());
     }
 }
@@ -699,7 +699,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& 
                                                                const SlotDescriptor* slot, bool to_nullable) {
     if (to_nullable) {
         auto data_column = src_column->clone_empty();
-        data_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
+        data_column->shallow_append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
 
         // When left outer join is executed,
         // build_index[i] Equal to 0 means it is not found in the hash table,
@@ -716,7 +716,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& 
         (*chunk)->append_column(std::move(dest_column), slot->id());
     } else {
         auto dest_column = src_column->clone_empty();
-        dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
+        dest_column->shallow_append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
         (*chunk)->append_column(std::move(dest_column), slot->id());
     }
 }
@@ -726,7 +726,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_copy_build_nullable_column(const Co
                                                                         const SlotDescriptor* slot) {
     ColumnPtr dest_column = src_column->clone_empty();
 
-    dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
+    dest_column->shallow_append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
 
     // When left outer join is executed,
     // build_index[i] Equal to 0 means it is not found in the hash table,

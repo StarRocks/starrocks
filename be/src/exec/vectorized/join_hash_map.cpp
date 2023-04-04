@@ -454,11 +454,11 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, con
                 if (_table_items->build_chunk->is_tuple_exist(iter->first)) {
                     ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter->first);
                     ColumnPtr& dest_column = _table_items->build_chunk->get_tuple_column_by_id(iter->first);
-                    dest_column->append(*src_column, 0, src_column->size());
+                    dest_column->shallow_append(*src_column, 0, src_column->size());
                 } else {
                     ColumnPtr& src_column = chunk->get_tuple_column_by_id(iter->first);
                     ColumnPtr dest_column = BooleanColumn::create(_table_items->row_count + 1, 1);
-                    dest_column->append(*src_column, 0, src_column->size());
+                    dest_column->shallow_append(*src_column, 0, src_column->size());
                     _table_items->build_chunk->append_tuple_column(dest_column, iter->first);
                 }
             }

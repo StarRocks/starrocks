@@ -83,7 +83,7 @@ void CrossJoinLeftOperator::_copy_probe_rows_with_index_base_probe(vectorized::C
             auto* const_col = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(src_col);
             // repeat the constant value from probe table for copy_number times
             _buf_selective.assign(copy_number, 0);
-            dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, copy_number);
+            dest_col->shallow_append_selective(*const_col->data_column(), &_buf_selective[0], 0, copy_number);
         } else {
             // repeat the value from probe table for copy_number times
             dest_col->append_value_multiple_times(*src_col.get(), start_row, copy_number, false);
@@ -100,7 +100,7 @@ void CrossJoinLeftOperator::_copy_probe_rows_with_index_base_build(vectorized::C
             dest_col->append_nulls(copy_number);
         } else {
             // repeat the value from probe table for copy_number times
-            dest_col->append(*src_col.get(), start_row, copy_number);
+            dest_col->shallow_append(*src_col.get(), start_row, copy_number);
         }
     } else {
         if (src_col->is_constant()) {
@@ -108,10 +108,10 @@ void CrossJoinLeftOperator::_copy_probe_rows_with_index_base_build(vectorized::C
             auto* const_col = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(src_col);
             // repeat the constant value from probe table for copy_number times
             _buf_selective.assign(copy_number, 0);
-            dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, copy_number);
+            dest_col->shallow_append_selective(*const_col->data_column(), &_buf_selective[0], 0, copy_number);
         } else {
             // repeat the value from probe table for copy_number times
-            dest_col->append(*src_col.get(), start_row, copy_number);
+            dest_col->shallow_append(*src_col.get(), start_row, copy_number);
         }
     }
 }
@@ -125,16 +125,16 @@ void CrossJoinLeftOperator::_copy_build_rows_with_index_base_probe(vectorized::C
             auto* const_col = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(src_col);
             // repeat the constant value for copy_number times
             _buf_selective.assign(row_count, 0);
-            dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, row_count);
+            dest_col->shallow_append_selective(*const_col->data_column(), &_buf_selective[0], 0, row_count);
         } else {
-            dest_col->append(*src_col.get(), start_row, row_count);
+            dest_col->shallow_append(*src_col.get(), start_row, row_count);
         }
     } else {
         if (src_col->is_constant()) {
             // current can't reach here
             dest_col->append_nulls(row_count);
         } else {
-            dest_col->append(*src_col.get(), start_row, row_count);
+            dest_col->shallow_append(*src_col.get(), start_row, row_count);
         }
     }
 }
@@ -148,7 +148,7 @@ void CrossJoinLeftOperator::_copy_build_rows_with_index_base_build(vectorized::C
             auto* const_col = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(src_col);
             // repeat the constant value for copy_number times
             _buf_selective.assign(row_count, 0);
-            dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, row_count);
+            dest_col->shallow_append_selective(*const_col->data_column(), &_buf_selective[0], 0, row_count);
         } else {
             dest_col->append_value_multiple_times(*src_col.get(), start_row, row_count, false);
         }
