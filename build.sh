@@ -81,6 +81,7 @@ OPTS=$(getopt \
   -l 'clean' \
   -l 'with-gcov' \
   -l 'without-gcov' \
+  -l 'use-jemalloc' \
   -l 'help' \
   -- "$@")
 
@@ -103,6 +104,7 @@ if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
 
+USE_JEMALLOC=OFF
 
 HELP=0
 if [ $# == 1 ] ; then
@@ -127,6 +129,7 @@ else
             --ut) RUN_UT=1   ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
+            --use-jemalloc) USE_JEMALLOC=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
             --) shift ;  break ;;
@@ -153,6 +156,7 @@ echo "Get params:
     RUN_UT              -- $RUN_UT
     WITH_GCOV           -- $WITH_GCOV
     USE_AVX2            -- $USE_AVX2
+    USE_JEMALLOC        -- $USE_JEMALLOC
 "
 
 # Clean and build generated code
@@ -189,7 +193,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     mkdir -p ${CMAKE_BUILD_DIR}
     cd ${CMAKE_BUILD_DIR}
     ${CMAKE_CMD} .. -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} -DSTARROCKS_HOME=${STARROCKS_HOME} -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-                    -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV} -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+                    -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV} -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DUSE_JEMALLOC=$USE_JEMALLOC
     time make -j${PARALLEL}
     make install
     cd ${STARROCKS_HOME}
