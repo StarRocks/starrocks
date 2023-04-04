@@ -16,6 +16,8 @@ The architecture of the shared-data StarRocks cluster is as follows:
 
 ![Shared-data Architecture](../assets/share_data_arch.png)
 
+This feature is supported from v3.0.
+
 ## Deploy a shared-data StarRocks cluster
 
 The deployment of a shared-data StarRocks cluster is similar to that of a classic StarRocks cluster. The only difference is the parameters in the configuration files of FE and BE **fe.conf** and **be.conf**. This section only lists the FE and BE configuration items you need to add to the configuration files when you deploy a shared-data StarRocks cluster. For detailed instructions on deploying a StarRocks cluster, see [Deploy StarRocks](../quick_start/Deploy.md).
@@ -26,14 +28,14 @@ Before starting FE, add the following configuration items in the FE configuratio
 
 | **Configuration item**              | **Description**                                              |
 | ----------------------------------- | ------------------------------------------------------------ |
-| run_mode                            | The running mode of the StarRocks cluster. Valid values: `shared_data` and `shared_nothing` (Default). `shared_data` indicates running StarRocks in shared-data mode. `shared_nothing` indicates running StarRocks in classic mode.<br />**CAUTION**<br />You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.<br />DO NOT change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a classic cluster to a shared-data cluster or vice versa is not supported. |
+| run_mode                            | The running mode of the StarRocks cluster. Valid values: `shared_data` and `shared_nothing` (Default). <br>`shared_data` indicates running StarRocks in shared-data mode. `shared_nothing` indicates running StarRocks in classic mode.<br />**CAUTION**<br />You cannot adopt the `shared_data` and `shared_nothing` modes simultaneously for a StarRocks cluster. Mixed deployment is not supported.<br />DO NOT change `run_mode` after the cluster is deployed. Otherwise, the cluster fails to restart. The transformation from a classic cluster to a shared-data cluster or vice versa is not supported. |
 | cloud_native_meta_port              | The cloud-native meta service RPC port. Default: `6090`.     |
 | cloud_native_storage_type           | The type of object storage you use. Valid value: `S3` (Default). |
 | aws_s3_path                         | The S3 path used to store data. It consists of the name of your S3 bucket and the sub-path (if any) under it. |
 | aws_s3_endpoint                     | The endpoint used to access your S3 bucket, for example, `https://s3.us-west-2.amazonaws.com`. |
 | aws_s3_region                       | The region in which your S3 bucket resides, for example, `us-west-2`. |
 | aws_s3_use_aws_sdk_default_behavior | Whether to use the default authentication credential of AWS SDK. Valid values: `true` and `false` (Default). |
-| aws_s3_use_instance_profile         | Whether to use Instance Profile and Assumed Role as credential methods for accessing S3. Valid values: `true` and `false` (Default). If you use IAM user-based credential (Access Key and Secret Key) to access S3, you must specify this item as `false`, and specify `aws_s3_access_key` and `aws_s3_secret_key`. If you use Instance Profile to access S3, you must specify this item as `true`. If you use Assumed Role to access S3, you must specify this item as `true`, and specify `aws_s3_iam_role_arn`. And if you use an external AWS account,  you must also specify `aws_s3_external_id`. |
+| aws_s3_use_instance_profile         | Whether to use Instance Profile and Assumed Role as credential methods for accessing S3. Valid values: `true` and `false` (Default). <ul><li>If you use IAM user-based credential (Access Key and Secret Key) to access S3, you must specify this item as `false`, and specify `aws_s3_access_key` and `aws_s3_secret_key`. </li><li>If you use Instance Profile to access S3, you must specify this item as `true`. </li><li>If you use Assumed Role to access S3, you must specify this item as `true`, and specify `aws_s3_iam_role_arn`. </li><li>And if you use an external AWS account,  you must also specify `aws_s3_external_id`.</li></ul> |
 | aws_s3_access_key                   | The Access Key ID used to access your S3 bucket.             |
 | aws_s3_secret_key                   | The Secret Access Key used to access your S3 bucket.         |
 | aws_s3_iam_role_arn                 | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
