@@ -18,6 +18,7 @@ package com.starrocks.connector.iceberg;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -25,6 +26,7 @@ import org.apache.thrift.TException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Interface for Iceberg catalogs.
@@ -43,6 +45,13 @@ public interface IcebergCatalog {
      * Loads a native Iceberg table based on the information in 'feTable'.
      */
     Table loadTable(TableIdentifier tableIdentifier) throws StarRocksConnectorException;
+
+    /**
+     * Loads a native Iceberg table based on the information in 'feTable',
+     * with scan metrics reporter
+     */
+    Table loadTable(TableIdentifier tableIdentifier, Optional<IcebergMetricsReporter> metricsReporter)
+            throws StarRocksConnectorException;
 
     /**
      * Loads a native Iceberg table based on 'tableId' or 'tableLocation'.

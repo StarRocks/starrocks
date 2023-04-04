@@ -20,6 +20,7 @@ import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Namespace;
@@ -30,6 +31,7 @@ import org.apache.thrift.TException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
@@ -44,6 +46,12 @@ public class IcebergRESTCatalog extends RESTCatalog implements IcebergCatalog {
     @Override
     public Table loadTable(IcebergTable table) throws StarRocksConnectorException {
         return super.loadTable(TableIdentifier.of(table.getRemoteDbName(), table.getRemoteTableName()));
+    }
+
+    @Override
+    public Table loadTable(TableIdentifier tableId, Optional<IcebergMetricsReporter> metricsReporter)
+        throws StarRocksConnectorException {
+        return super.loadTable(tableId);
     }
 
     @Override
