@@ -26,7 +26,6 @@ import java.util.Map;
 
 // on-premise
 public class LocalWarehouse extends Warehouse {
-
     @SerializedName(value = "cluster")
     Cluster cluster;
 
@@ -34,6 +33,11 @@ public class LocalWarehouse extends Warehouse {
         super(id, name);
         long clusterId = GlobalStateMgr.getCurrentState().getNextId();
         cluster = new Cluster(clusterId);
+    }
+
+    @Override
+    public void initDefaultCluster() {
+        cluster.init();
     }
 
     @Override

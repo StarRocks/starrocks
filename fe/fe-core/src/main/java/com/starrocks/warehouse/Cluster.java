@@ -16,10 +16,15 @@ package com.starrocks.warehouse;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -28,6 +33,8 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class Cluster implements Writable {
+    private static final Logger LOG = LogManager.getLogger(Cluster.class);
+
     @SerializedName(value = "id")
     private long id;
     @SerializedName(value = "wgid")
@@ -44,8 +51,23 @@ public class Cluster implements Writable {
         this.workerGroupId = workerGroupId;
     }
 
+    public void init() {
+        if (RunMode.allowCreateLakeTable()) {
+            try {
+                workerGroupId = GlobalStateMgr.getCurrentStarOSAgent().createWorkerGroup("x0");
+            } catch (DdlException e) {
+                LOG.warn(e);
+                System.exit(-1);
+            }
+        }
+    }
+
     public long getId() {
         return id;
+    }
+
+    public long getWorkerGroupId() {
+        return workerGroupId;
     }
 
     public int getRunningSqls() {
