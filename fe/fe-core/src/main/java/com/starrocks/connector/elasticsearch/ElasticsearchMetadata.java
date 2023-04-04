@@ -28,23 +28,21 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
+import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 // TODO add meta cache
 public class ElasticsearchMetadata
         implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(EsTable.class);
 
-
     private final EsRestClient esRestClient;
     private final Map<String, String> properties;
-    private final String catalogName;
     public static final String DEFAULT_DB = "default";
     public static final long DEFAULT_DB_ID = 1L;
 
-    public ElasticsearchMetadata(EsRestClient esRestClient, String catalogName, Map<String, String> properties) {
+
+    public ElasticsearchMetadata(EsRestClient esRestClient, Map<String, String> properties) {
         this.esRestClient = esRestClient;
-        this.catalogName = catalogName;
         this.properties = properties;
     }
 
@@ -77,9 +75,9 @@ public class ElasticsearchMetadata
         try {
             List<Column> columns = EsUtil.convertColumnSchema(esRestClient, tableName);
             properties.put(EsTable.INDEX, tableName);
-            EsTable esTable = new EsTable(CONNECTOR_ID_GENERATOR.getNextId().asInt()
-                    , tableName, columns, properties, new SinglePartitionInfo());
-            esTable.setComment("created by internal es catalog");
+            EsTable esTable = new EsTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+                    tableName, columns, properties, new SinglePartitionInfo());
+            esTable.setComment("created by external es catalog");
             esTable.syncTableMetaData(esRestClient);
             return esTable;
         } catch (Exception e) {

@@ -17,7 +17,6 @@
 
 package com.starrocks.connector.elasticsearch;
 
-import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
 
@@ -84,7 +83,7 @@ public class EsUtilTest {
         assertTrue(singleKey.has("index"));
     }
 
-    @Test(expected = JSONException.class)
+    @Test(expected = ClassCastException.class)
     public void testGetJsonObjectWithException() {
         JSONObject json = new JSONObject(jsonStr);
         // only support json object could not get string value directly from this api, exception will be threw

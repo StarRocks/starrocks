@@ -44,7 +44,7 @@ public class ElasticsearchConnector
     public ConnectorMetadata getMetadata() {
         if (metadata == null) {
             try {
-                metadata = new ElasticsearchMetadata(esRestClient, catalogName, esConfig.getProperties());
+                metadata = new ElasticsearchMetadata(esRestClient, esConfig.getProperties());
             } catch (StarRocksConnectorException e) {
                 LOG.error("Failed to create elasticsearch metadata on [catalog : {}]", catalogName, e);
                 throw e;

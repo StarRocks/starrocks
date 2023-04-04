@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.PartitionDesc;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class ElasticSearchTableFactory implements AbstractTableFactory {
@@ -43,7 +44,15 @@ public class ElasticSearchTableFactory implements AbstractTableFactory {
         String tableName = stmt.getTableName();
 
         // create columns
-        List<Column> baseSchema = stmt.getColumns();
+        List<Column> baseSchema = stmt.getColumnDefs().stream()
+                .map(ref -> new Column(ref.getName(),
+                        ref.getType(),
+                        ref.isKey(),
+                        ref.getAggregateType(),
+                        ref.isAllowNull(),
+                        ref.getDefaultValueDef(),
+                        "by es comment"))
+                .collect(Collectors.toList());
         // metastore is null when external table
         if (null != metastore) {
             metastore.validateColumns(baseSchema);

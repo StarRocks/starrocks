@@ -30,7 +30,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class CreateTableStmt extends DdlStmt {
     private boolean ifNotExists;
@@ -141,15 +140,6 @@ public class CreateTableStmt extends DdlStmt {
             this.columnDefs = Lists.newArrayList();
         } else {
             this.columnDefs = columnDefinitions;
-            columns = columnDefs.stream()
-                    .map(ref -> new Column(ref.getName(),
-                            ref.getType(),
-                            ref.isKey(),
-                            ref.getAggregateType(),
-                            ref.isAllowNull(),
-                            ref.getDefaultValueDef(),
-                            "comment"))
-                    .collect(Collectors.toList());
         }
         this.indexDefs = indexDefs;
         this.engineName = engineName;

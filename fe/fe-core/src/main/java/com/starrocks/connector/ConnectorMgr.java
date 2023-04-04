@@ -16,9 +16,6 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.server.MetadataMgr;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
