@@ -108,6 +108,22 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
     case TYPE_MAP:
     case TYPE_STRUCT:
         out.type = type.type;
+<<<<<<< HEAD
+=======
+        for (auto child : type.children) {
+            if (child.is_unknown_type()) {
+                // TODO(SmithCruise)
+                // For Map type, if map's key or value is pruned, that column's type will be set to unknown for
+                // partial materialize.
+                // We should not use TYPE_UNKNOWN in the future, use another type, it may misleading other people.
+                FunctionContext::TypeDesc child_out;
+                child_out.type = TYPE_UNKNOWN;
+                out.children.emplace_back(child_out);
+            } else {
+                out.children.emplace_back(column_type_to_type_desc(child));
+            }
+        }
+>>>>>>> 68668b57c ([BugFix] Fix DCHECK failed when run map's function (#20988))
         break;
     case TYPE_DECIMAL32:
         out.type = TYPE_DECIMAL32;
@@ -129,6 +145,7 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
         break;
     case TYPE_FUNCTION:
         out.type = TYPE_FUNCTION;
+        break;
     case TYPE_VARBINARY:
         out.type = TYPE_VARBINARY;
         out.len = type.len;
