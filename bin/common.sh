@@ -52,6 +52,32 @@ export_env_from_conf() {
     done < $1
 }
 
+check_os_conf() {
+  if [ -f /proc/sys/vm/overcommit_memory ]; then
+    overcommit_memory=$(cat /proc/sys/vm/overcommit_memory)
+    if [ "$overcommit_memory" != "1" ]; then
+      echo "[WARNING] It is recommended to set /proc/sys/vm/overcommit_memory to 1, " \
+           "otherwise OOM will occur in some scenarios"
+    fi
+  fi
+
+  if [ -f /proc/sys/vm/swappiness ]; then
+    swappiness=$(cat /proc/sys/vm/swappiness)
+    if [ "$swappiness" != "0" ]; then
+      echo "[WARNING] It is recommended to close swap, otherwise turning on swap will cause some performance " \
+        "jitter problems and in extreme cases it will cause StarRocks to be unstable"
+    fi
+  fi
+
+  if [ -f /proc/sys/vm/max_map_count ]; then
+    max_map_count=$(cat /proc/sys/vm/max_map_count)
+    if [ "$max_map_count" -lt 200000 ]; then
+      echo "[WARNING] It is recommended to set vm.max_map_count larger then 200000, " \
+           "otherwise in a high-concurrency scenario, mmap exceeding the limit will cause a memory allocation error"
+    fi
+  fi
+}
+
 # Read the config [mem_limit] from configuration file of BE and set the upper limit of TCMalloc memory allocation
 # if mem_limit is not set, use 90% of machine memory
 export_mem_limit_from_conf() {

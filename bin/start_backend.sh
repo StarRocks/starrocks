@@ -56,6 +56,8 @@ done
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
 source $STARROCKS_HOME/bin/common.sh
 
+check_os_conf
+
 export_shared_envvars
 if [ ${RUN_BE} -eq 1 ] ; then
     export_env_from_conf $STARROCKS_HOME/conf/be.conf
@@ -133,7 +135,6 @@ export CLASSPATH=$STARROCKS_HOME/conf:$STARROCKS_HOME/lib/jni-packages/*:$HADOOP
 # ================= native section =====================
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
 export_cachelib_lib_path
-
 
 # ================== kill/start =======================
 if [ ! -d $LOG_DIR ]; then
