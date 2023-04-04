@@ -142,6 +142,9 @@ Status LogBlockContainer::append_data(const std::vector<Slice>& data) {
 }
 
 Status LogBlockContainer::flush() {
+    if (config::experimental_spill_skip_sync) {
+        return Status::OK();
+    }
     return _writable_file->flush(WritableFile::FLUSH_ASYNC);
 }
 
