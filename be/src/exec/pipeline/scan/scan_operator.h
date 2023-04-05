@@ -76,7 +76,7 @@ public:
 
     void set_query_ctx(const QueryContextPtr& query_ctx);
 
-    virtual bool can_pickup_morsel(RuntimeState* state, int chunk_source_index) const { return true; }
+    virtual int available_pickup_morsel_count() const { return _io_tasks_per_scan_operator; }
 
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;

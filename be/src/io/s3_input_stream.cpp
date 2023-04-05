@@ -48,8 +48,6 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
     request.SetKey(_object);
     request.SetRange(std::move(range));
 
-    // int random_variable = std::rand();
-    // usleep((200 + random_variable % 300) * 1000);
     if (config::io_sleep_ms > 0) {
         usleep(config::io_sleep_ms * 1000);
     }
