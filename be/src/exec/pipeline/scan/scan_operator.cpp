@@ -73,6 +73,8 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
     _peak_scan_task_queue_size_counter = _unique_metrics->AddHighWaterMarkCounter(
             "PeakScanTaskQueueSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+    _peak_io_tasks_counter = _unique_metrics->AddHighWaterMarkCounter(
+            "PeakIOTasks", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
 
     RETURN_IF_ERROR(do_prepare(state));
 
@@ -272,10 +274,11 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
 
         if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
             RETURN_IF_ERROR(_trigger_next_scan(state, i));
-        } else {
+        } else if (can_pickup_morsel(state, i)) {
             RETURN_IF_ERROR(_pickup_morsel(state, i));
         }
     }
+    _peak_io_tasks_counter->set(_num_running_io_tasks);
 
     return Status::OK();
 }

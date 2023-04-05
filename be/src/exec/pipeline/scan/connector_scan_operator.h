@@ -77,6 +77,15 @@ public:
     ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
+    bool can_pickup_morsel(RuntimeState* state, int chunk_source_index) const;
+
+private:
+    struct PickupMorselState {
+        int64_t last_update_time = 0;
+        int32_t morsel_log_size = 0;
+        int32_t morsel_alloc_count = 1;
+    };
+    mutable PickupMorselState _pickup_morsel_state;
 };
 
 class ConnectorChunkSource : public ChunkSource {

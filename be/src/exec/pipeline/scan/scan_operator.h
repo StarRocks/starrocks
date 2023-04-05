@@ -76,6 +76,8 @@ public:
 
     void set_query_ctx(const QueryContextPtr& query_ctx);
 
+    virtual bool can_pickup_morsel(RuntimeState* state, int chunk_source_index) const { return true; }
+
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 
@@ -173,6 +175,7 @@ private:
     RuntimeProfile::HighWaterMarkCounter* _peak_scan_task_queue_size_counter = nullptr;
     // The total number of the original tablets in this fragment instance.
     RuntimeProfile::Counter* _tablets_counter = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* _peak_io_tasks_counter = nullptr;
 };
 
 class ScanOperatorFactory : public SourceOperatorFactory {

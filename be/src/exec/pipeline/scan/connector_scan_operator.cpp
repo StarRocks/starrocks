@@ -152,6 +152,39 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
     return scan_node->connector_type();
 }
 
+bool ConnectorScanOperator::can_pickup_morsel(RuntimeState* state, int chunk_source_index) const {
+    PickupMorselState& pick = _pickup_morsel_state;
+
+    bool is_full = is_buffer_full();
+    if (is_full) {
+        pick.morsel_log_size = 0;
+        pick.morsel_alloc_count = 1;
+        return false;
+    }
+    if (pick.morsel_alloc_count > 0) {
+        pick.morsel_alloc_count -= 1;
+        return true;
+    }
+
+    DCHECK(!is_full);
+    DCHECK(pick.morsel_alloc_count == 0);
+
+    // to avoid frequent schedule.
+    int64_t now = GetCurrentTimeMicros();
+    constexpr int64_t CHECK_INTERVAL = 10 * 1000;
+    if ((now - pick.last_update_time) < (CHECK_INTERVAL * (1LL << pick.morsel_log_size))) {
+        return false;
+    }
+
+    pick.last_update_time = now;
+    if ((1 << (pick.morsel_log_size + 1)) <= _io_tasks_per_scan_operator) {
+        pick.morsel_log_size = pick.morsel_log_size + 1;
+    }
+    pick.morsel_alloc_count = (1 << pick.morsel_log_size);
+    pick.morsel_alloc_count -= 1;
+    return true;
+}
+
 // ==================== ConnectorChunkSource ====================
 ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile,
                                            MorselPtr&& morsel, ScanOperator* op, ConnectorScanNode* scan_node,
