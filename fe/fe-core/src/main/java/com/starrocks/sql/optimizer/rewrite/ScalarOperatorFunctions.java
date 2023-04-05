@@ -411,6 +411,43 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(utcStartTime);
     }
 
+    @ConstantFunction(name = "next_day", argTypes = {DATETIME, VARCHAR}, returnType = DATE)
+    public static ConstantOperator nextDay(ConstantOperator date, ConstantOperator dow) {
+        int dateDowValue = date.getDate().getDayOfWeek().getValue();
+        switch (dow.getVarchar()) {
+            case "Sunday":
+            case "Sun":
+            case "Su":
+                return ConstantOperator.createDate(date.getDate().plusDays((13 - dateDowValue) % 7 + 1));
+            case "Monday":
+            case "Mon":
+            case "Mo":
+                return ConstantOperator.createDate(date.getDate().plusDays((7 - dateDowValue) % 7 + 1));
+            case "Tuesday":
+            case "Tue":
+            case "Tu":
+                return ConstantOperator.createDate(date.getDate().plusDays((8 - dateDowValue) % 7 + 1));
+            case "Wednesday":
+            case "Wed":
+            case "We":
+                return ConstantOperator.createDate(date.getDate().plusDays((9 - dateDowValue) % 7 + 1));
+            case "Thursday":
+            case "Thu":
+            case "Th":
+                return ConstantOperator.createDate(date.getDate().plusDays((10 - dateDowValue) % 7 + 1));
+            case "Friday":
+            case "Fri":
+            case "Fr":
+                return ConstantOperator.createDate(date.getDate().plusDays((11 - dateDowValue) % 7 + 1));
+            case "Saturday":
+            case "Sat":
+            case "Sa":
+                return ConstantOperator.createDate(date.getDate().plusDays((12 - dateDowValue) % 7 + 1));
+            default:
+                throw new IllegalArgumentException(dow + " not supported in next_day dow_string");
+        }
+    }
+
     /**
      * Math function
      */

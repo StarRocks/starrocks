@@ -551,6 +551,46 @@ public class ScalarOperatorFunctionsTest {
         assertEquals(now, ScalarOperatorFunctions.curDate().getDate());
     }
 
+
+    @Test
+    public void nextDay() {
+        String[][] nextDayTestCases = {
+                {"Sunday", "2015-03-29T09:23:55"},
+                {"Monday", "2015-03-30T09:23:55"},
+                {"Tuesday", "2015-03-24T09:23:55"},
+                {"Wednesday", "2015-03-25T09:23:55"},
+                {"Thursday", "2015-03-26T09:23:55"},
+                {"Friday", "2015-03-27T09:23:55"},
+                {"Saturday", "2015-03-28T09:23:55"},
+
+                {"Sun", "2015-03-29T09:23:55"},
+                {"Mon", "2015-03-30T09:23:55"},
+                {"Tue", "2015-03-24T09:23:55"},
+                {"Wed", "2015-03-25T09:23:55"},
+                {"Thu", "2015-03-26T09:23:55"},
+                {"Fri", "2015-03-27T09:23:55"},
+                {"Sat", "2015-03-28T09:23:55"},
+
+                {"Su", "2015-03-29T09:23:55"},
+                {"Mo", "2015-03-30T09:23:55"},
+                {"Tu", "2015-03-24T09:23:55"},
+                {"We", "2015-03-25T09:23:55"},
+                {"Th", "2015-03-26T09:23:55"},
+                {"Fr", "2015-03-27T09:23:55"},
+                {"Sa", "2015-03-28T09:23:55"},
+        };
+
+        for (String[] testCase : nextDayTestCases) {
+            ConstantOperator dow = ConstantOperator.createVarchar(testCase[0]);
+            assertEquals(testCase[1],
+                    ScalarOperatorFunctions.nextDay(O_DT_20150323_092355, dow).getDate().toString());
+        }
+
+        Assert.assertThrows("undefine_dow not supported in next_day dow_string", IllegalArgumentException.class,
+                () -> ScalarOperatorFunctions.nextDay(O_DT_20150323_092355, ConstantOperator.createVarchar("undefine_dow"))
+                        .getVarchar());
+    }
+
     @Test
     public void floor() {
         assertEquals(100, ScalarOperatorFunctions.floor(O_FLOAT_100).getBigint());
