@@ -18,6 +18,8 @@
 #include <chrono>
 #include <limits>
 
+#include "column/fixed_length_column.h"
+#include "column/vectorized_fwd.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "runtime/runtime_state.h"
 #include "util/defer_op.h"
@@ -39,17 +41,20 @@ void merge(const SortDescs& descs, InputSegment& left, InputSegment& right, Outp
     size_t li, ri;
     detail::_eval_diagonal_intersection(descs, left, right, dest.total_len, parallel_idx, degree_of_parallelism, &li,
                                         &ri);
+
+    const bool is_last_parallelism = (parallel_idx == degree_of_parallelism - 1);
     const size_t start_di = parallel_idx * dest.total_len / degree_of_parallelism;
     const size_t next_start_di = (parallel_idx + 1) * dest.total_len / degree_of_parallelism;
-    const size_t length = next_start_di - start_di;
+    const size_t length = is_last_parallelism ? (dest.total_len - start_di) : (next_start_di - start_di);
 
     detail::_do_merge_along_merge_path(descs, left, li, right, ri, dest, start_di, length);
 
     dest.run.reset_range();
 
-    if (parallel_idx == degree_of_parallelism - 1) {
+    if (is_last_parallelism) {
         left.forward = li - left.start;
         right.forward = ri - right.start;
+        DCHECK_EQ(left.forward + right.forward, dest.total_len);
     }
 }
 
@@ -169,7 +174,7 @@ void detail::_do_merge_along_merge_path(const SortDescs& descs, const InputSegme
         size_t offset = std::numeric_limits<size_t>::max();
 
         // Auxiliary data structure for Chunk::append
-        std::optional<std::pair<size_t, size_t>> range;
+        std::pair<size_t, size_t> range;
 
         MergeIterator(const InputSegment& input) : input(input) {}
     };
@@ -196,15 +201,7 @@ void detail::_do_merge_along_merge_path(const SortDescs& descs, const InputSegme
 
     auto append = [](const MergeIterator& src_it, OutputSegment& dest) {
         auto column_append = [](auto& src_column, auto& dest_column, const MergeIterator& it) {
-            if (!it.range.has_value()) {
-                if (src_column->is_null(it.offset)) {
-                    dest_column->append_nulls(1);
-                } else {
-                    dest_column->append_datum(src_column->get(it.offset));
-                }
-            } else {
-                dest_column->append(*src_column, it.range.value().first, it.range.value().second);
-            }
+            dest_column->append(*src_column, it.range.first, it.range.second);
         };
         for (size_t col = 0; col < src_it.run->orderby.size(); col++) {
             auto& src_column = src_it.run->orderby[col];
@@ -222,7 +219,6 @@ void detail::_do_merge_along_merge_path(const SortDescs& descs, const InputSegme
         DCHECK(it.run != nullptr);
         if (it.offset >= it.run->end_index()) {
             it.run = nullptr;
-            it.range.reset();
             do {
                 it.run_idx++;
                 if (it.run_idx >= it.input.runs.num_chunks()) {
@@ -235,8 +231,8 @@ void detail::_do_merge_along_merge_path(const SortDescs& descs, const InputSegme
     };
 
     size_t di = start_di;
-    while (di - start_di < length && di < dest.total_len) {
-        const size_t max_step = std::min(length - (di - start_di), dest.total_len - di);
+    while (di - start_di < length) {
+        const size_t max_step = length - (di - start_di);
         if (li >= left.start + left.len) {
             // Left input has already been exhausted
             DCHECK_GT(r_it.run->end_index(), r_it.offset);
@@ -246,7 +242,6 @@ void detail::_do_merge_along_merge_path(const SortDescs& descs, const InputSegme
             r_it.range = std::make_pair(r_it.offset, remain);
             append(r_it, dest);
             r_it.offset += remain;
-            r_it.range.reset();
             forward_iterator(r_it);
         } else if (ri >= right.start + right.len) {
             // Right input has already been exhausted
@@ -257,7 +252,6 @@ void detail::_do_merge_along_merge_path(const SortDescs& descs, const InputSegme
             l_it.range = std::make_pair(l_it.offset, remain);
             append(l_it, dest);
             l_it.offset += remain;
-            l_it.range.reset();
             forward_iterator(l_it);
         } else {
             auto range_first_process = [&dest, &append, &forward_iterator, max_step](
@@ -296,22 +290,13 @@ void detail::_do_merge_along_merge_path(const SortDescs& descs, const InputSegme
 
                 DCHECK_GE(previous_offset, original_offset);
                 it.offset = original_offset;
-                if (original_offset == previous_offset) {
-                    di++;
-                    index++;
-                    append(it, dest);
-                    it.offset++;
-                    forward_iterator(it);
-                } else {
-                    const size_t len = previous_offset + 1 - original_offset;
-                    it.range = std::make_pair(original_offset, len);
-                    di += len;
-                    index += len;
-                    append(it, dest);
-                    it.offset += len;
-                    it.range.reset();
-                    forward_iterator(it);
-                }
+                const size_t len = previous_offset + 1 - original_offset;
+                it.range = std::make_pair(original_offset, len);
+                di += len;
+                index += len;
+                append(it, dest);
+                it.offset += len;
+                forward_iterator(it);
             };
 
             auto compare = [&descs, &l_it, &r_it]() {
@@ -326,27 +311,36 @@ void detail::_do_merge_along_merge_path(const SortDescs& descs, const InputSegme
             }
         }
     }
-    DCHECK_LE(di - start_di, length);
-    DCHECK_LE(di, dest.total_len);
+    DCHECK_EQ(di - start_di, length);
+    DCHECK_EQ(dest.run.chunk->num_rows(), length);
+}
+
+bool detail::Node::parent_input_full() {
+    if (_parent == nullptr) {
+        return false;
+    }
+    return _parent->input_full(this);
 }
 
 void detail::MergeNode::process_input(int32_t parallel_idx) {
-    if (input_finished()) {
+    _setup_input();
+
+    if (!has_more_output() || parent_input_full()) {
         return;
     }
-
-    _setup_input();
 
     DCHECK(_global_2_local_parallel_idx.find(parallel_idx) != _global_2_local_parallel_idx.end());
     const int32_t local_parallel_idx = _global_2_local_parallel_idx[parallel_idx];
     DCHECK(_output_segments[local_parallel_idx] == nullptr);
 
     InputSegment* primitive = nullptr;
-    if (_left_input->runs.num_chunks() > 0) {
-        primitive = _left_input.get();
-    } else if (_right_input->runs.num_chunks() > 0) {
-        primitive = _right_input.get();
+    if (_left_buffer.runs.num_chunks() > 0) {
+        primitive = &_left_buffer;
+    } else if (_right_buffer.runs.num_chunks() > 0) {
+        primitive = &_right_buffer;
     } else {
+        DCHECK_EQ(_left_buffer.len, 0);
+        DCHECK_EQ(_right_buffer.len, 0);
         return;
     }
     ChunkPtr dest_chunk = primitive->runs.chunks[0].chunk->clone_empty();
@@ -358,14 +352,43 @@ void detail::MergeNode::process_input(int32_t parallel_idx) {
 
     _output_segments[local_parallel_idx] = std::make_unique<OutputSegment>(std::move(dest_run), _merge_length);
 
-    merge(_merger->sort_descs(), *_left_input, *_right_input, *_output_segments[local_parallel_idx], local_parallel_idx,
+    merge(_merger->sort_descs(), _left_buffer, _right_buffer, *_output_segments[local_parallel_idx], local_parallel_idx,
           _global_2_local_parallel_idx.size());
 }
 
+[[maybe_unused]] size_t output_segment_size(const std::vector<OutputSegmentPtr>& output_segments) {
+    size_t size = 0;
+    for (auto& output_segment : output_segments) {
+        if (output_segment != nullptr) {
+            size += output_segment->run.num_rows();
+        }
+    }
+    return size;
+}
+
 void detail::MergeNode::process_input_done() {
-    _left_input->move_forward();
-    _right_input->move_forward();
+    DCHECK_EQ(_left_buffer.forward + _right_buffer.forward, _merge_length);
+    DCHECK(_output_segments.empty() || _output_segments.size() == _global_2_local_parallel_idx.size());
+    DCHECK_EQ(output_segment_size(_output_segments), _merge_length);
+
+    _left_buffer.move_forward();
+    _right_buffer.move_forward();
+    _merge_length = 0;
+
     _input_ready = false;
+}
+
+bool detail::MergeNode::has_more_output() {
+    return !_left->eos() || !_right->eos() || _left_buffer.len > 0 || _right_buffer.len > 0;
+}
+
+bool detail::MergeNode::input_full(Node* child) {
+    if (child == _left) {
+        return _left_buffer.len >= 2 * _merger->streaming_batch_size();
+    } else {
+        DCHECK_EQ(child, _right);
+        return _right_buffer.len >= 2 * _merger->streaming_batch_size();
+    }
 }
 
 void detail::MergeNode::_setup_input() {
@@ -375,60 +398,58 @@ void detail::MergeNode::_setup_input() {
         return;
     }
 
-    DCHECK(output_empty());
+    DCHECK(_output_segments.empty());
     SortedRuns left_runs;
     SortedRuns right_runs;
-    std::vector<OutputSegmentPtr> left_output_segments(_left->output_segments());
-    std::vector<OutputSegmentPtr> right_output_segments(_right->output_segments());
+    std::vector<OutputSegmentPtr> left_output_segments(std::move(_left->output_segments()));
+    std::vector<OutputSegmentPtr> right_output_segments(std::move(_right->output_segments()));
 
     for (auto& output : left_output_segments) {
-        if (output != nullptr) {
+        if (output != nullptr && output->run.num_rows() > 0) {
             left_runs.chunks.push_back(std::move(output->run));
         }
     }
     for (auto& output : right_output_segments) {
-        if (output != nullptr) {
+        if (output != nullptr && output->run.num_rows() > 0) {
             right_runs.chunks.push_back(std::move(output->run));
         }
     }
 
-    if (_left_input == nullptr) {
-        _left_input = std::make_unique<InputSegment>(std::move(left_runs), 0, left_runs.num_rows());
-    } else {
-        _left_input->len += left_runs.num_rows();
-        _left_input->runs.merge_runs(left_runs);
+    if (left_runs.num_rows() > 0) {
+        _left_buffer.len += left_runs.num_rows();
+        _left_buffer.runs.merge_runs(left_runs);
     }
-    if (_right_input == nullptr) {
-        _right_input = std::make_unique<InputSegment>(std::move(right_runs), 0, right_runs.num_rows());
-    } else {
-        _right_input->len += right_runs.num_rows();
-        _right_input->runs.merge_runs(right_runs);
+    if (right_runs.num_rows() > 0) {
+        _right_buffer.len += right_runs.num_rows();
+        _right_buffer.runs.merge_runs(right_runs);
     }
 
-    // DCHECK(_left_input->runs.is_sorted(_merger->sort_descs()));
-    // DCHECK(_right_input->runs.is_sorted(_merger->sort_descs()));
+    // CHECK(_left_buffer.runs.is_sorted(_merger->sort_descs()));
+    // CHECK(_right_buffer.runs.is_sorted(_merger->sort_descs()));
 
     const size_t streaming_batch_size = _merger->streaming_batch_size();
     auto get_min = [](size_t n1, size_t n2, size_t n3) { return std::min(std::min(n1, n2), n3); };
 
-    if (_left->dependency_finished() && _right->dependency_finished()) {
-        _merge_length = _left_input->len + _right_input->len;
-    } else if (_left->dependency_finished()) {
-        if (_left_input->len > 0) {
-            _merge_length = get_min(_left_input->len, _right_input->len, streaming_batch_size);
+    if (parent_input_full()) {
+        _merge_length = 0;
+    } else if (_left->eos() && _right->eos()) {
+        _merge_length = std::min(_left_buffer.len + _right_buffer.len, streaming_batch_size);
+    } else if (_left->eos()) {
+        if (_left_buffer.len > 0) {
+            _merge_length = get_min(_left_buffer.len, _right_buffer.len, streaming_batch_size);
         } else {
-            if (_right_input->len < streaming_batch_size) {
+            if (_right_buffer.len < streaming_batch_size) {
                 // Just wait for more data
                 _merge_length = 0;
             } else {
                 _merge_length = streaming_batch_size;
             }
         }
-    } else if (_right->dependency_finished()) {
-        if (_right_input->len > 0) {
-            _merge_length = get_min(_left_input->len, _right_input->len, streaming_batch_size);
+    } else if (_right->eos()) {
+        if (_right_buffer.len > 0) {
+            _merge_length = get_min(_left_buffer.len, _right_buffer.len, streaming_batch_size);
         } else {
-            if (_left_input->len < streaming_batch_size) {
+            if (_left_buffer.len < streaming_batch_size) {
                 // Just wait for more data
                 _merge_length = 0;
             } else {
@@ -436,7 +457,7 @@ void detail::MergeNode::_setup_input() {
             }
         }
     } else {
-        if (_left_input->len < streaming_batch_size || _right_input->len < streaming_batch_size) {
+        if (_left_buffer.len < streaming_batch_size || _right_buffer.len < streaming_batch_size) {
             // Just wait for more data
             _merge_length = 0;
         } else {
@@ -451,31 +472,74 @@ void detail::MergeNode::_setup_input() {
 void detail::LeafNode::process_input(int32_t parallel_idx) {
     DCHECK_EQ(degree_of_parallelism(), 1);
 
-    if (input_finished()) {
+    if (!has_more_output() || parent_input_full()) {
         return;
     }
 
     size_t output_size = 0;
-    DCHECK(output_empty());
+    DCHECK(_output_segments.empty());
 
     while (!_provider_eos) {
         ChunkPtr chunk;
-        if (!_provider(false, &chunk, &_provider_eos)) {
-            break;
+        {
+            SCOPED_TIMER(_merger->get_metrics(parallel_idx)._provider_timer);
+            if (!_provider(false, &chunk, &_provider_eos)) {
+                break;
+            }
         }
         if (chunk == nullptr || chunk->is_empty()) {
             continue;
         }
+
         Columns orderby;
         for (auto* expr : _merger->sort_exprs()) {
             auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk.get());
             orderby.push_back(column);
         }
-        SortedRun run(std::move(chunk), std::move(orderby));
-        auto output_segment = std::make_unique<OutputSegment>(std::move(run), chunk->num_rows());
 
-        output_size += output_segment->total_len;
-        _output_segments.push_back(std::move(output_segment));
+        auto add_to_output_segments = [this, &output_size](ChunkPtr& standard_chunk, Columns& standard_orderby) {
+            const size_t num_rows = standard_chunk->num_rows();
+            SortedRun run(std::move(standard_chunk), std::move(standard_orderby));
+            auto output_segment = std::make_unique<OutputSegment>(std::move(run), num_rows);
+
+            output_size += output_segment->total_len;
+            _output_segments.push_back(std::move(output_segment));
+        };
+
+        if (_late_materialization) {
+            SCOPED_TIMER(_merger->get_metrics(parallel_idx)._late_materialization_generate_ordinal_timer);
+            if (chunk->num_rows() <= MergePathCascadeMerger::MAX_CHUNK_SIZE) {
+                const size_t num_rows = chunk->num_rows();
+                const size_t chunk_id = _merger->add_original_chunk(std::move(chunk));
+                chunk = _generate_ordinal(chunk_id, num_rows);
+                add_to_output_segments(chunk, orderby);
+            } else {
+                size_t offset = 0;
+                while (offset < chunk->num_rows()) {
+                    const size_t num_rows =
+                            std::min(chunk->num_rows() - offset, MergePathCascadeMerger::MAX_CHUNK_SIZE);
+                    ChunkPtr standard_chunk = chunk->clone_empty(num_rows);
+                    standard_chunk->append(*chunk, offset, num_rows);
+                    DCHECK_EQ(standard_chunk->num_rows(), num_rows);
+                    const size_t chunk_id = _merger->add_original_chunk(std::move(standard_chunk));
+                    standard_chunk = _generate_ordinal(chunk_id, num_rows);
+
+                    Columns standard_orderby;
+                    for (const auto& column : orderby) {
+                        ColumnPtr standard_column = column->clone_empty();
+                        standard_column->reserve(num_rows);
+                        standard_column->append(*column, offset, num_rows);
+                        standard_orderby.push_back(std::move(standard_column));
+                    }
+
+                    add_to_output_segments(standard_chunk, standard_orderby);
+
+                    offset += num_rows;
+                }
+            }
+        } else {
+            add_to_output_segments(chunk, orderby);
+        }
 
         if (output_size >= _merger->streaming_batch_size()) {
             break;
@@ -483,15 +547,35 @@ void detail::LeafNode::process_input(int32_t parallel_idx) {
     }
 }
 
-MergePathCascadeMerger::MergePathCascadeMerger(const int32_t degree_of_parallelism,
+ChunkPtr detail::LeafNode::_generate_ordinal(size_t chunk_id, size_t num_rows) {
+    static TypeDescriptor s_type_desc = TypeDescriptor(TYPE_BIGINT);
+    static Chunk::SlotHashMap s_slot_map = {{0, 0}};
+    ColumnPtr ordinal_column = ColumnHelper::create_column(s_type_desc, false);
+    ordinal_column->resize(num_rows);
+    auto* raw_array = down_cast<Int64Column*>(ordinal_column.get())->get_data().data();
+
+    for (size_t row = 0; row < num_rows; row++) {
+        raw_array[row] =
+                (static_cast<int64_t>(chunk_id) << MergePathCascadeMerger::OFFSET_BITS) | static_cast<int64_t>(row);
+    }
+
+    Columns columns;
+    columns.push_back(std::move(ordinal_column));
+    return std::make_shared<Chunk>(columns, s_slot_map);
+}
+
+MergePathCascadeMerger::MergePathCascadeMerger(const size_t chunk_size, const int32_t degree_of_parallelism,
                                                std::vector<ExprContext*> sort_exprs, const SortDescs& sort_descs,
-                                               std::vector<MergePathChunkProvider> chunk_providers,
-                                               const size_t chunk_size)
-        : _chunk_size(chunk_size),
+                                               const TupleDescriptor* tuple_desc, const int64_t offset,
+                                               const int64_t limit, std::vector<MergePathChunkProvider> chunk_providers)
+        : _chunk_size(chunk_size > MAX_CHUNK_SIZE ? MAX_CHUNK_SIZE : chunk_size),
           _streaming_batch_size(chunk_size * degree_of_parallelism),
           _degree_of_parallelism(degree_of_parallelism),
           _sort_exprs(std::move(sort_exprs)),
           _sort_descs(std::move(sort_descs)),
+          _tuple_desc(tuple_desc),
+          _offset(offset),
+          _limit(limit),
           _chunk_providers(std::move(chunk_providers)),
           _process_cnts(degree_of_parallelism),
           _output_chunks(degree_of_parallelism) {
@@ -502,20 +586,20 @@ MergePathCascadeMerger::MergePathCascadeMerger(const int32_t degree_of_paralleli
 }
 
 bool MergePathCascadeMerger::is_current_stage_finished(int32_t parallel_idx) {
-    if (_is_forwarding_stage.load(std::memory_order_relaxed)) {
+    if (_is_forwarding_stage.load(std::memory_order_seq_cst)) {
         return true;
     }
 
     return parallel_idx >= _working_parallelism ? true
-                                                : _process_cnts[parallel_idx].load(std::memory_order_relaxed) == 0;
+                                                : _process_cnts[parallel_idx].load(std::memory_order_seq_cst) == 0;
 }
 
 bool MergePathCascadeMerger::is_pending(int32_t parallel_idx) {
-    if (_is_forwarding_stage.load(std::memory_order_relaxed)) {
+    if (_is_forwarding_stage.load(std::memory_order_seq_cst)) {
         return true;
     }
 
-    if (_stage.load(std::memory_order_relaxed) != detail::Stage::PENDING) {
+    if (_stage.load(std::memory_order_seq_cst) != detail::Stage::PENDING) {
         return false;
     }
 
@@ -524,7 +608,7 @@ bool MergePathCascadeMerger::is_pending(int32_t parallel_idx) {
     }
 
     for (auto* leaf : _leafs) {
-        if (leaf->is_pending()) {
+        if (leaf->provider_pending()) {
             return true;
         }
     }
@@ -546,7 +630,7 @@ bool MergePathCascadeMerger::is_pending(int32_t parallel_idx) {
 }
 
 bool MergePathCascadeMerger::is_finished() {
-    if (_is_forwarding_stage.load(std::memory_order_relaxed)) {
+    if (_is_forwarding_stage.load(std::memory_order_seq_cst)) {
         return false;
     }
 
@@ -560,7 +644,7 @@ ChunkPtr MergePathCascadeMerger::try_get_next(const int32_t parallel_idx) {
         return chunk;
     }
 
-    detail::Stage stage = _stage.load(std::memory_order_relaxed);
+    detail::Stage stage = _stage.load(std::memory_order_seq_cst);
 
     COUNTER_UPDATE(_metrics[parallel_idx].stage_counter, 1);
     COUNTER_UPDATE(_metrics[parallel_idx].stage_counters[stage], 1);
@@ -596,6 +680,10 @@ void MergePathCascadeMerger::bind_profile(int32_t parallel_idx, RuntimeProfile* 
     auto& metrics = _metrics[parallel_idx];
     metrics.profile = profile;
 
+    metrics.profile->add_info_string("Limit", std::to_string(_limit));
+    metrics.profile->add_info_string("Offset", std::to_string(_offset));
+    metrics.profile->add_info_string("StreamingBatchSize", std::to_string(_streaming_batch_size));
+
     const std::string overall_stage_timer_name = "OverallStageTime";
     metrics.stage_timer = ADD_TIMER(metrics.profile, overall_stage_timer_name);
 
@@ -614,6 +702,14 @@ void MergePathCascadeMerger::bind_profile(int32_t parallel_idx, RuntimeProfile* 
             ADD_CHILD_TIMER(metrics.profile, "6-PendingStageTime", overall_stage_timer_name);
     metrics.stage_timers[detail::Stage::FINISHED] =
             ADD_CHILD_TIMER(metrics.profile, "7-FinishedStageTime", overall_stage_timer_name);
+    metrics._provider_timer = ADD_CHILD_TIMER(metrics.profile, "ProviderTime", "3-ProcessStageTime");
+    metrics._late_materialization_generate_ordinal_timer =
+            ADD_CHILD_TIMER(metrics.profile, "LateMaterializationGenerateOrdinalTime", "3-ProcessStageTime");
+    metrics._late_materialization_restore_from_ordinal_timer =
+            ADD_CHILD_TIMER(metrics.profile, "LateMaterializationRestoreFromOrdinalTime", "4-SplitChunkStageTime");
+    metrics._late_materialization_max_buffer_chunk_num = metrics.profile->add_counter(
+            "LateMaterializationMaxBufferChunkNum", TUnit::UNIT,
+            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM, TCounterMergeType::SKIP_FIRST_MERGE));
 
     const std::string overall_stage_counter_name = "OverallStageCount";
     metrics.stage_counter = ADD_COUNTER(metrics.profile, overall_stage_counter_name, TUnit::UNIT);
@@ -635,38 +731,51 @@ void MergePathCascadeMerger::bind_profile(int32_t parallel_idx, RuntimeProfile* 
             ADD_CHILD_COUNTER(metrics.profile, "7-FinishedStageCount", TUnit::UNIT, overall_stage_counter_name);
 }
 
+size_t MergePathCascadeMerger::add_original_chunk(ChunkPtr&& chunk) {
+    std::lock_guard<std::mutex> l(_m);
+    const size_t chunk_id = _chunk_id_generator++;
+    const size_t chunk_size = chunk->num_rows();
+    DCHECK_LE(chunk_size, MAX_CHUNK_SIZE);
+    _original_chunk_buffer.emplace_back(std::move(chunk), chunk_size);
+    _max_buffer_chunk_num = std::max(_max_buffer_chunk_num, _original_chunk_buffer.size());
+    return chunk_id;
+}
+
 bool MergePathCascadeMerger::_is_current_stage_done() {
     return std::all_of(_process_cnts.begin(), _process_cnts.begin() + _working_parallelism,
-                       [](auto& cnt) { return cnt.load(std::memory_order_relaxed) == 0; });
+                       [](auto& cnt) { return cnt.load(std::memory_order_seq_cst) == 0; });
 }
 
 void MergePathCascadeMerger::_forward_stage(const detail::Stage& stage, int32_t worker_num,
                                             std::vector<size_t>* process_cnts) {
     // Enter critical section
-    _is_forwarding_stage.store(true, std::memory_order_relaxed);
+    _is_forwarding_stage.store(true, std::memory_order_seq_cst);
 
-    _stage.store(stage, std::memory_order_relaxed);
+    _stage.store(stage, std::memory_order_seq_cst);
+    DCHECK_GT(worker_num, 0);
     _working_parallelism = worker_num;
     for (auto& cnt : _process_cnts) {
-        cnt.store(1, std::memory_order_relaxed);
+        cnt.store(1, std::memory_order_seq_cst);
     }
     if (process_cnts != nullptr) {
         for (size_t i = 0; i < worker_num; i++) {
-            _process_cnts[i].store((*process_cnts)[i], std::memory_order_relaxed);
+            _process_cnts[i].store((*process_cnts)[i], std::memory_order_seq_cst);
         }
     }
 
     // Exit critical section
-    _is_forwarding_stage.store(false, std::memory_order_relaxed);
+    _is_forwarding_stage.store(false, std::memory_order_seq_cst);
 }
 
 void MergePathCascadeMerger::_init() {
     DCHECK(_stage == detail::Stage::INIT);
 
+    _init_late_materialization();
+
     std::vector<detail::NodePtr> leaf_nodes;
     for (auto& _chunk_provider : _chunk_providers) {
-        auto leaf_node = std::make_unique<detail::LeafNode>(this);
-        leaf_node->set_provider(std::move(_chunk_provider));
+        auto leaf_node = std::make_unique<detail::LeafNode>(this, _late_materialization);
+        leaf_node->set_provider(_chunk_provider);
         _leafs.push_back(leaf_node.get());
         leaf_nodes.push_back(std::move(leaf_node));
     }
@@ -684,6 +793,8 @@ void MergePathCascadeMerger::_init() {
             auto& right = current_level[i + 1];
 
             auto merge_node = std::make_unique<detail::MergeNode>(this, left.get(), right.get());
+            left->bind_parent(merge_node.get());
+            right->bind_parent(merge_node.get());
             next_level.push_back(std::move(merge_node));
         }
 
@@ -708,58 +819,101 @@ void MergePathCascadeMerger::_prepare() {
     }
 
     auto& current_level = _levels[_level_idx];
-    const size_t active_size =
-            std::count_if(current_level.begin(), current_level.end(), [](const auto& node) { return !node->eos(); });
-    // In the context of global merge, the number of LeafNode is defined by sender num,
-    // which may greater than the degree_of_parallelism. So in this situation, one parallelism may need to
-    // handle more than one nodes.
-    const bool overloaded = active_size > _degree_of_parallelism;
-    const auto avg_local_degree_of_parallelism = _degree_of_parallelism / std::max(1ul, active_size);
+    // Nodes need to get chunk from provider or perform merge algorithm.
+    const size_t heavy_process_num = std::count_if(current_level.begin(), current_level.end(), [](const auto& node) {
+        return !node->eos() && !node->parent_input_full();
+    });
+    // Nodes only need to merge output segments from its children into its input buffer.
+    const size_t light_process_num = std::count_if(current_level.begin(), current_level.end(), [](const auto& node) {
+        return !node->is_leaf() && !node->eos() && node->parent_input_full();
+    });
 
-    int32_t parallel_idx = 0;
-    int32_t working_parallelism = overloaded ? _degree_of_parallelism : 0;
+    if (heavy_process_num + light_process_num == 0) {
+        // All nodes of current level is finished
+        _level_idx++;
+        _forward_stage(detail::Stage::PREPARE, 1);
+        return;
+    }
+
+    int32_t working_parallelism;
     std::vector<size_t> process_cnts;
     process_cnts.assign(_degree_of_parallelism, 0);
-
     std::for_each(_working_nodes.begin(), _working_nodes.end(), [](auto& nodes) { nodes.clear(); });
 
-    for (const auto& node : current_level) {
-        if (node->eos()) {
-            continue;
-        }
-        size_t local_degree_of_parallelism;
-        if (overloaded) {
-            local_degree_of_parallelism = 1;
-        } else {
-            if (node->is_leaf()) {
-                local_degree_of_parallelism = 1;
-            } else if (working_parallelism + avg_local_degree_of_parallelism > _degree_of_parallelism) {
-                DCHECK_LE(working_parallelism, _degree_of_parallelism);
-                local_degree_of_parallelism = _degree_of_parallelism - working_parallelism;
-            } else {
-                local_degree_of_parallelism = avg_local_degree_of_parallelism;
-            }
-            working_parallelism += local_degree_of_parallelism;
-        }
+    if (heavy_process_num > 0) {
+        // In the context of global merge, the number of LeafNode is defined by sender num,
+        // which may greater than the degree_of_parallelism. So in this situation, one parallelism may need to
+        // handle more than one nodes.
+        const bool overloaded = heavy_process_num > _degree_of_parallelism;
+        const auto avg_local_degree_of_parallelism = _degree_of_parallelism / heavy_process_num;
 
-        std::unordered_map<int32_t, int32_t> global_2_local_parallel_idx;
-        for (size_t local_parallel_idx = 0; local_parallel_idx < local_degree_of_parallelism; local_parallel_idx++) {
-            if (parallel_idx >= _degree_of_parallelism) {
-                // Reuse parallelism if overloaded
-                DCHECK(overloaded);
+        int32_t parallel_idx = 0;
+        working_parallelism = overloaded ? _degree_of_parallelism : 0;
+
+        for (const auto& node : current_level) {
+            if (node->eos() || node->parent_input_full()) {
+                continue;
+            }
+            size_t local_degree_of_parallelism;
+            if (overloaded) {
+                local_degree_of_parallelism = 1;
+            } else {
+                if (node->is_leaf()) {
+                    local_degree_of_parallelism = 1;
+                } else if (working_parallelism + avg_local_degree_of_parallelism > _degree_of_parallelism) {
+                    DCHECK_LE(working_parallelism, _degree_of_parallelism);
+                    local_degree_of_parallelism = _degree_of_parallelism - working_parallelism;
+                } else {
+                    local_degree_of_parallelism = avg_local_degree_of_parallelism;
+                }
+                working_parallelism += local_degree_of_parallelism;
+            }
+
+            std::unordered_map<int32_t, int32_t> global_2_local_parallel_idx;
+            for (size_t local_parallel_idx = 0; local_parallel_idx < local_degree_of_parallelism;
+                 local_parallel_idx++) {
+                if (parallel_idx >= _degree_of_parallelism) {
+                    // Reuse parallelism if overloaded
+                    DCHECK(overloaded);
+                    parallel_idx = 0;
+                }
+
+                global_2_local_parallel_idx[parallel_idx] = local_parallel_idx;
+                _working_nodes[parallel_idx].push_back(node.get());
+                process_cnts[parallel_idx]++;
+                ++parallel_idx;
+            }
+
+            node->bind_parallel_idxs(std::move(global_2_local_parallel_idx));
+        }
+    } else {
+        const bool overloaded = light_process_num > _degree_of_parallelism;
+        working_parallelism = overloaded ? _degree_of_parallelism : light_process_num;
+    }
+
+    if (light_process_num > 0) {
+        // For light process nodes, we can only share the working_parallelism with heavy process nodes.
+        int32_t parallel_idx = 0;
+        for (const auto& node : current_level) {
+            if (node->is_leaf() || node->eos() || !node->parent_input_full()) {
+                continue;
+            }
+            if (parallel_idx >= working_parallelism) {
                 parallel_idx = 0;
             }
 
+            const size_t local_parallel_idx = 0;
+            std::unordered_map<int32_t, int32_t> global_2_local_parallel_idx;
+
             global_2_local_parallel_idx[parallel_idx] = local_parallel_idx;
             _working_nodes[parallel_idx].push_back(node.get());
-
             process_cnts[parallel_idx]++;
-
-            ++parallel_idx;
+            node->bind_parallel_idxs(std::move(global_2_local_parallel_idx));
+            parallel_idx++;
         }
-
-        node->bind_parallel_idxs(std::move(global_2_local_parallel_idx));
     }
+
+    DCHECK_GT(working_parallelism, 0);
 
     _finish_current_stage(0, [this, working_parallelism, &process_cnts]() {
         _forward_stage(detail::Stage::PROCESS, working_parallelism, &process_cnts);
@@ -767,7 +921,7 @@ void MergePathCascadeMerger::_prepare() {
 }
 
 void MergePathCascadeMerger::_process(int32_t parallel_idx) {
-    const size_t cnt = _process_cnts[parallel_idx].load(std::memory_order_relaxed);
+    const size_t cnt = _process_cnts[parallel_idx].load(std::memory_order_seq_cst);
     DCHECK_GT(cnt, 0);
 
     auto* node = _working_nodes[parallel_idx][cnt - 1];
@@ -787,13 +941,18 @@ void MergePathCascadeMerger::_split_chunk(int32_t parallel_idx) {
     DeferOp defer([this, parallel_idx]() {
         _finish_current_stage(parallel_idx, [this]() {
             if (_root->is_leaf()) {
-                for (auto&& output_segment : _root->output_segments()) {
-                    _flat_output_chunks.push_back(std::move(output_segment->run.chunk));
+                DCHECK(!_late_materialization);
+                for (auto& output_segment : _root->output_segments()) {
+                    if (output_segment->run.chunk != nullptr && !output_segment->run.chunk->is_empty()) {
+                        _flat_output_chunks.push_back(std::move(output_segment->run.chunk));
+                    }
                 }
             } else {
                 for (auto& chunks : _output_chunks) {
                     for (auto& chunk : chunks) {
-                        _flat_output_chunks.push_back(std::move(chunk));
+                        if (chunk != nullptr && !chunk->is_empty()) {
+                            _flat_output_chunks.push_back(std::move(chunk));
+                        }
                     }
                 }
             }
@@ -809,6 +968,10 @@ void MergePathCascadeMerger::_split_chunk(int32_t parallel_idx) {
         return;
     }
 
+    if (_root->output_segments().empty()) {
+        return;
+    }
+
     // If root is MergeNode, then will use all the available parallelism
     DCHECK_EQ(_degree_of_parallelism, _root->output_segments().size());
     if (_root->output_segments()[parallel_idx] == nullptr) {
@@ -816,7 +979,7 @@ void MergePathCascadeMerger::_split_chunk(int32_t parallel_idx) {
     }
     SortedRun big_run = std::move(_root->output_segments()[parallel_idx]->run);
     DCHECK(big_run.chunk != nullptr);
-    // DCHECK(big_run.is_sorted(_sort_descs));
+    // CHECK(big_run.is_sorted(_sort_descs));
 
     size_t remain_size = big_run.num_rows();
     while (remain_size > 0) {
@@ -824,6 +987,9 @@ void MergePathCascadeMerger::_split_chunk(int32_t parallel_idx) {
         DCHECK(chunk != nullptr);
         DCHECK_GE(remain_size, chunk->num_rows());
         remain_size -= chunk->num_rows();
+        if (_late_materialization) {
+            chunk = _restore_from_ordinal(parallel_idx, chunk);
+        }
         _output_chunks[parallel_idx].push_back(std::move(chunk));
     }
 }
@@ -835,9 +1001,10 @@ void MergePathCascadeMerger::_fetch_chunk(int32_t parallel_idx, ChunkPtr& chunk)
             return;
         }
         _finish_current_stage(parallel_idx, [this]() {
-            DCHECK(_root->output_empty());
+            DCHECK(_root->output_segments().empty());
             _reset_output();
-            if (_root->eos()) {
+            if (_short_circuit || _root->eos()) {
+                _finishing();
                 _forward_stage(detail::FINISHED, _working_parallelism);
             } else if (_has_pending_node()) {
                 _find_unfinished_level();
@@ -858,16 +1025,183 @@ void MergePathCascadeMerger::_fetch_chunk(int32_t parallel_idx, ChunkPtr& chunk)
 
     if (_output_idx < _flat_output_chunks.size()) {
         chunk = std::move(_flat_output_chunks[_output_idx++]);
+        DCHECK(chunk != nullptr);
+        _process_limit(chunk);
     }
 
-    finished = _output_idx >= _flat_output_chunks.size();
+    finished = _short_circuit || _output_idx >= _flat_output_chunks.size();
+}
+
+void MergePathCascadeMerger::_finishing() {
+    std::for_each(_metrics.begin(), _metrics.end(), [this](auto& metrics) {
+        COUNTER_UPDATE(metrics._late_materialization_max_buffer_chunk_num, _max_buffer_chunk_num);
+    });
+}
+
+void MergePathCascadeMerger::_init_late_materialization() {
+    DeferOp defer([this]() {
+        std::for_each(_metrics.begin(), _metrics.end(), [this](auto& metrics) {
+            metrics.profile->add_info_string("LateMaterialization", _late_materialization ? "true" : "false");
+        });
+    });
+
+    if (_chunk_providers.size() <= 2) {
+        _late_materialization = false;
+        return;
+    }
+
+    const auto level_size = static_cast<size_t>(std::ceil(std::log2(_chunk_providers.size())));
+    size_t materialized_cost = 0;
+    for (auto* slot : _tuple_desc->slots()) {
+        // nullable column always contribute 1 byte to materialized cost.
+        materialized_cost += slot->is_nullable();
+        if (slot->type().is_string_type()) {
+            // Slice is 16 bytes
+            materialized_cost += 16;
+        } else {
+            materialized_cost += std::max<int>(1, slot->type().get_slot_size());
+        }
+    }
+    const size_t total_original_cost = materialized_cost * level_size;
+
+    // For late materialization, a auxiliary column(Int64Column) will be added to record the
+    // original chunk id and row offset.
+    // And in terms of locality, the larger the level, the worse the locality will be, so we need to apply
+    // a locality decay factor for the late materialization
+    double locality_decay_factor;
+    if (level_size <= 2) {
+        locality_decay_factor = 1.1;
+    } else if (level_size == 3) {
+        locality_decay_factor = 1.25;
+    } else if (level_size == 4) {
+        locality_decay_factor = 1.45;
+    } else if (level_size == 5) {
+        locality_decay_factor = 1.7;
+    } else {
+        locality_decay_factor = 2;
+    }
+    static TypeDescriptor s_auxiliary_column_type = TypeDescriptor(TYPE_BIGINT);
+    const size_t total_late_materialized_cost =
+            s_auxiliary_column_type.get_slot_size() * level_size + materialized_cost * locality_decay_factor;
+
+    _late_materialization = total_late_materialized_cost <= total_original_cost;
+}
+
+ChunkPtr MergePathCascadeMerger::_restore_from_ordinal(int32_t parallel_idx, const ChunkPtr& chunk) {
+    SCOPED_TIMER(_metrics[parallel_idx]._late_materialization_restore_from_ordinal_timer);
+
+    if (chunk == nullptr || chunk->is_empty()) {
+        return nullptr;
+    }
+
+    const auto& ordinals = down_cast<Int64Column*>(chunk->get_column_by_index(0).get())->get_data();
+
+    ChunkPtr output = nullptr;
+
+    const size_t num_rows = chunk->num_rows();
+    int64_t prev_chunk_id = -1;
+    size_t prev_row = std::numeric_limits<size_t>::max();
+    size_t range_start = std::numeric_limits<size_t>::max();
+
+    auto get_original_pair = [this](size_t chunk_id) -> std::pair<ChunkPtr, size_t>& {
+        std::lock_guard<std::mutex> l(_m);
+        DCHECK_GE(chunk_id, _dequeued_chunk_num);
+        return _original_chunk_buffer[chunk_id - _dequeued_chunk_num];
+    };
+
+    auto append_original = [this, &get_original_pair](ChunkPtr& output, size_t chunk_id, size_t offset, size_t count) {
+        auto& pair = get_original_pair(chunk_id);
+        output->append(*pair.first, offset, count);
+
+        std::lock_guard<std::mutex> l(_m);
+        DCHECK_GE(pair.second, count);
+        pair.second -= count;
+        if (pair.second == 0) {
+            if (chunk_id == _dequeued_chunk_num) {
+                _original_chunk_buffer.pop_front();
+                _dequeued_chunk_num++;
+
+                while (!_original_chunk_buffer.empty() && _original_chunk_buffer.front().second == 0) {
+                    _original_chunk_buffer.pop_front();
+                    _dequeued_chunk_num++;
+                }
+            }
+        }
+    };
+
+    for (int64_t ordinal : ordinals) {
+        const auto chunk_id = static_cast<size_t>(ordinal) >> OFFSET_BITS;
+        const auto row = static_cast<size_t>(ordinal) & MAX_CHUNK_SIZE;
+        if (prev_chunk_id == -1) {
+            auto& pair = get_original_pair(chunk_id);
+            output = pair.first->clone_empty(num_rows);
+            prev_chunk_id = chunk_id;
+            prev_row = row;
+            range_start = row;
+            continue;
+        }
+        if (chunk_id == prev_chunk_id && row == prev_row + 1) {
+            prev_row = row;
+            continue;
+        }
+
+        // append previous range
+        append_original(output, prev_chunk_id, range_start, prev_row - range_start + 1);
+
+        prev_chunk_id = chunk_id;
+        range_start = row;
+        prev_row = row;
+    }
+
+    // append last part
+    append_original(output, prev_chunk_id, range_start, prev_row - range_start + 1);
+
+    return output;
+}
+
+void MergePathCascadeMerger::_process_limit(ChunkPtr& chunk) {
+    if (_limit < 0) {
+        return;
+    }
+    const size_t current_num_rows = chunk->num_rows();
+    if (_output_row_num + current_num_rows < _offset) {
+        // Just drop it
+        chunk = nullptr;
+    } else {
+        // Now _output_row_num + current_num_rows >= _offset
+        size_t front_drop_size;
+        if (_output_row_num >= _offset) {
+            // Keep all
+            front_drop_size = 0;
+        } else {
+            front_drop_size = _offset - _output_row_num;
+        }
+        if (front_drop_size > 0) {
+            DCHECK_GE(chunk->num_rows(), front_drop_size);
+            for (auto& column : chunk->columns()) {
+                column->remove_first_n_values(front_drop_size);
+            }
+        }
+
+        if (_output_row_num + current_num_rows >= _offset + _limit) {
+            const size_t back_drop_size = _output_row_num + current_num_rows - (_offset + _limit);
+            if (back_drop_size > 0) {
+                DCHECK_GE(chunk->num_rows(), back_drop_size);
+                for (auto& column : chunk->columns()) {
+                    column->resize(column->size() - back_drop_size);
+                }
+            }
+            _short_circuit = true;
+        }
+    }
+    _output_row_num += current_num_rows;
 }
 
 void MergePathCascadeMerger::_find_unfinished_level() {
     _level_idx = 0;
     while (_level_idx < _levels.size()) {
         for (const auto& node : _levels[_level_idx]) {
-            if (!node->input_finished()) {
+            if (node->has_more_output()) {
                 return;
             }
         }
@@ -879,7 +1213,7 @@ void MergePathCascadeMerger::_finish_current_stage(int32_t parallel_idx,
                                                    const std::function<void()>& stage_done_action) {
     std::lock_guard<std::mutex> l(_m);
     DCHECK_GT(_process_cnts[parallel_idx], 0);
-    _process_cnts[parallel_idx].fetch_sub(1, std::memory_order_relaxed);
+    _process_cnts[parallel_idx].fetch_sub(1, std::memory_order_seq_cst);
     if (_is_current_stage_done()) {
         stage_done_action();
     }
@@ -887,7 +1221,7 @@ void MergePathCascadeMerger::_finish_current_stage(int32_t parallel_idx,
 
 bool MergePathCascadeMerger::_has_pending_node() {
     for (auto* leaf : _leafs) {
-        if (leaf->is_pending()) {
+        if (leaf->provider_pending()) {
             return true;
         }
     }
@@ -901,4 +1235,5 @@ void MergePathCascadeMerger::_reset_output() {
     _flat_output_chunks.clear();
     _output_idx = 0;
 }
+
 } // namespace starrocks::merge_path
