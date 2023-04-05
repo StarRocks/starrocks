@@ -581,7 +581,7 @@ public class MaterializedViewAnalyzer {
                             icebergTable.getDb().equals(baseTableInfo.getDbName()) &&
                             table.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
                         slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
-                                baseTableInfo.getDbName(), table.getName()));
+                                baseTableInfo.getDbName(), icebergTable.getTable()));
                         break;
                     }
                 }
