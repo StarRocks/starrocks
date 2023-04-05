@@ -37,20 +37,6 @@ Status ChunkSource::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-StatusOr<ChunkPtr> ChunkSource::get_next_chunk_from_buffer() {
-    ChunkPtr chunk = nullptr;
-    _chunk_buffer.try_get(_scan_operator_seq, &chunk);
-    return chunk;
-}
-
-bool ChunkSource::has_output() const {
-    return !_chunk_buffer.empty(_scan_operator_seq);
-}
-
-bool ChunkSource::has_shared_output() const {
-    return !_chunk_buffer.all_empty();
-}
-
 void ChunkSource::pin_chunk_token(ChunkBufferTokenPtr chunk_token) {
     _chunk_token = std::move(chunk_token);
 }
