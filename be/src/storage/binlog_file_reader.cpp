@@ -404,4 +404,100 @@ Status BinlogFileReader::parse_page_header(RandomAccessFile* read_file, int64_t 
     return Status::OK();
 }
 
+Status BinlogFileReader::scan_pages_to_load(int64_t file_id, RandomAccessFile* read_file, int64_t file_size,
+                                            BinlogFileLoadFilter* filter, BinlogFileMetaPB* file_meta) {
+    std::unique_ptr<BinlogFileHeaderPB> file_header = std::make_unique<BinlogFileHeaderPB>();
+    int64_t read_file_size;
+    RETURN_IF_ERROR(page_file_header(read_file, file_size, file_header.get(), &read_file_size));
+    file_meta->Clear();
+    file_meta->set_id(file_id);
+    std::unordered_set<int64_t> rowsets;
+    int64_t file_pos = read_file_size;
+    int64_t num_pages = 0;
+    std::unique_ptr<PageHeaderPB> page_header = std::make_unique<PageHeaderPB>();
+    Status status;
+    while (true) {
+        status = parse_page_header(read_file, file_size, file_pos, num_pages, page_header.get(), &read_file_size);
+        if (!status.ok()) {
+            break;
+        }
+
+        if (!filter->is_valid_seq(page_header->version(), page_header->end_seq_id())) {
+            break;
+        }
+
+        bool all_rowset_valid = true;
+        for (auto rowset_id : page_header->rowsets()) {
+            if (!filter->is_valid_rowset(rowset_id)) {
+                all_rowset_valid = false;
+                break;
+            }
+        }
+        if (!all_rowset_valid) {
+            break;
+        }
+
+        if (num_pages == 0) {
+            file_meta->set_start_version(page_header->version());
+            file_meta->set_start_seq_id(page_header->start_seq_id());
+            file_meta->set_start_timestamp_in_us(page_header->timestamp_in_us());
+        }
+
+        file_meta->set_end_version(page_header->version());
+        file_meta->set_end_seq_id(page_header->end_seq_id());
+        file_meta->set_end_timestamp_in_us(page_header->timestamp_in_us());
+
+        for (auto rowset_id : page_header->rowsets()) {
+            rowsets.insert(rowset_id);
+        }
+
+        num_pages += 1;
+        file_pos += read_file_size + page_header->compressed_size();
+    }
+    if (num_pages == 0) {
+        return Status::Corruption("There is no valid pages");
+    }
+
+    file_meta->set_num_pages(num_pages);
+    file_meta->set_file_size(file_pos);
+    for (auto rid : rowsets) {
+        file_meta->add_rowsets(rid);
+    }
+
+    return Status::OK();
+}
+
+StatusOr<std::shared_ptr<BinlogFileMetaPB>> BinlogFileReader::load(int64_t file_id, std::string& file_path,
+                                                                   BinlogFileLoadFilter* filter) {
+    // TODO how to distinguish corruption and invalid meta
+    std::shared_ptr<FileSystem> fs;
+    ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(file_path))
+    ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(file_path))
+    ASSIGN_OR_RETURN(auto file_size, read_file->get_size())
+
+    std::shared_ptr<BinlogFileMetaPB> file_meta = std::make_shared<BinlogFileMetaPB>();
+    Status st = parse_file_footer(read_file.get(), file_size, file_meta.get());
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to parse binlog file footer " << file_path << ", " << st;
+    } else {
+        // verify the file meta from footer is valid
+        if (filter->is_valid_seq(file_meta->end_version(), file_meta->end_seq_id())) {
+            bool all_rowset_valid = true;
+            for (auto rowset_id : file_meta->rowsets()) {
+                if (!filter->is_valid_rowset(rowset_id)) {
+                    all_rowset_valid = false;
+                    break;
+                }
+            }
+            if (all_rowset_valid) {
+                return file_meta;
+            }
+        }
+        LOG(WARNING) << "Binlog file footer not matches the filter, file path: " << file_path;
+    }
+
+    RETURN_IF_ERROR(scan_pages_to_load(file_id, read_file.get(), file_size, filter, file_meta.get()));
+    return file_meta;
+}
+
 } // namespace starrocks

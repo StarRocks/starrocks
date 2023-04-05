@@ -29,6 +29,7 @@ namespace starrocks {
 
 class MockRowsetFetcher;
 class BinlogFileInfo;
+class PartialRowsetInfo;
 
 class BinlogManagerTest : public BinlogTestBase {
 public:
@@ -105,6 +106,8 @@ protected:
                                 std::vector<std::shared_ptr<BinlogFileInfo>>& binlog_files, int32_t num_version,
                                 int32_t num_binlog_files);
     void test_binlog_delete(bool expired, bool overcapacity);
+    void generate_binlog_file(int64_t file_id, std::vector<PartialRowsetInfo>& rowset_datas,
+                              std::vector<BinlogFileMetaPBPtr>* metas_for_each_page);
 
     int64_t _next_rowset_uid;
     std::unique_ptr<TabletSchema> _tablet_schema;
@@ -124,6 +127,10 @@ public:
     }
 
     void add_rowset(int64_t uid, RowsetSharedPtr rowset) {
+        if (_rowsets.count(uid) > 0) {
+            return;
+        }
+
         _rowsets[uid] = rowset;
         _total_rowset_data_size += rowset->data_disk_size();
     }
@@ -771,6 +778,166 @@ TEST_F(BinlogManagerTest, test_wait_reader) {
     ASSERT_EQ(params.size(), binlog_manager->unused_binlog_file_ids().get_size());
 
     verify_unused_binlog_files(binlog_manager.get(), binlog_file_infos, 0, params.size() - 1);
+}
+
+struct PartialRowsetInfo {
+    int64_t version;
+    int64_t rowset_id;
+    int32_t start_seg_index;
+    int32_t end_seg_index;
+    int32_t num_rows_per_seg;
+    int64_t timestamp;
+
+    static PartialRowsetInfo create(int64_t version, int64_t rowset_id, int32_t start_seg_index, int32_t end_seg_index,
+                                    int32_t num_rows_per_seg) {
+        PartialRowsetInfo info;
+        info.version = version;
+        info.rowset_id = rowset_id;
+        info.start_seg_index = start_seg_index;
+        info.end_seg_index = end_seg_index;
+        info.num_rows_per_seg = num_rows_per_seg;
+        info.timestamp = info.version * 1000000;
+        return info;
+    }
+};
+
+void BinlogManagerTest::generate_binlog_file(int64_t file_id, std::vector<PartialRowsetInfo>& rowset_datas,
+                                             std::vector<BinlogFileMetaPBPtr>* metas_for_each_page) {
+    std::string file_path = BinlogUtil::binlog_file_path(_binlog_file_dir, file_id);
+    std::shared_ptr<BinlogFileWriter> file_writer =
+            std::make_shared<BinlogFileWriter>(file_id, file_path, 1024 * 1024 * 1024, LZ4_FRAME);
+    ASSERT_OK(file_writer->init());
+    BinlogFileMetaPBPtr file_meta = std::make_shared<BinlogFileMetaPB>();
+    std::unordered_set<int64_t> rowset_ids;
+    for (PartialRowsetInfo& rowset_data : rowset_datas) {
+        int64_t start_seq_id = rowset_data.start_seg_index * rowset_data.num_rows_per_seg;
+        ASSERT_OK(file_writer->begin(rowset_data.version, start_seq_id, rowset_data.timestamp));
+        if (metas_for_each_page->empty()) {
+            file_meta->set_id(file_id);
+            file_meta->set_start_version(rowset_data.version);
+            file_meta->set_start_seq_id(start_seq_id);
+            file_meta->set_start_timestamp_in_us(rowset_data.timestamp);
+            file_meta->set_num_pages(0);
+        }
+        file_meta->add_rowsets(rowset_data.rowset_id);
+        for (int32_t seg_index = rowset_data.start_seg_index; seg_index <= rowset_data.end_seg_index; seg_index++) {
+            RowsetSegInfo info(rowset_data.rowset_id, seg_index);
+            ASSERT_OK(file_writer->add_insert_range(info, 0, rowset_data.num_rows_per_seg));
+            rowset_ids.insert(rowset_data.rowset_id);
+            if (seg_index < rowset_data.end_seg_index) {
+                ASSERT_OK(file_writer->force_flush_page(false));
+            } else {
+                ASSERT_OK(file_writer->commit(true));
+            }
+            file_meta->set_end_version(rowset_data.version);
+            file_meta->set_end_seq_id((seg_index + 1) * rowset_data.num_rows_per_seg - 1);
+            file_meta->set_end_timestamp_in_us(rowset_data.timestamp);
+            file_meta->set_num_pages(file_meta->num_pages() + 1);
+            file_meta->set_file_size(_fs->get_file_size(file_path).value());
+            std::shared_ptr<BinlogFileMetaPB> meta = std::make_shared<BinlogFileMetaPB>();
+            meta->CopyFrom(*file_meta);
+            metas_for_each_page->push_back(meta);
+        }
+    }
+    ASSERT_OK(file_writer->close(true));
+}
+
+TEST_F(BinlogManagerTest, test_init) {
+    // mock rowsets and only use them to get data size Rowset#data_disk_size()
+    std::vector<RowsetSharedPtr> mock_rowsets;
+    for (int i = 1; i <= 5; i++) {
+        RowsetSharedPtr rowset;
+        int num_rows = std::rand() % 10000 + 1;
+        create_rowset(i, {num_rows}, rowset);
+        mock_rowsets.push_back(rowset);
+    }
+
+    std::shared_ptr<MockRowsetFetcher> rowset_fetcher = std::make_shared<MockRowsetFetcher>();
+    std::shared_ptr<BinlogManager> binlog_manager = std::make_shared<BinlogManager>(
+            std::rand(), _binlog_file_dir, 100 * 1024 * 1024, 1024 * 1024, LZ4_FRAME, rowset_fetcher);
+
+    std::vector<BinlogFileMetaPBPtr> expect_metas;
+
+    // file1: all data is valid
+    std::vector<PartialRowsetInfo> binlog_file_info_1;
+    binlog_file_info_1.push_back(PartialRowsetInfo::create(1, 1, 0, 4, 100));
+    rowset_fetcher->add_rowset(1, mock_rowsets[1 % mock_rowsets.size()]);
+    binlog_file_info_1.push_back(PartialRowsetInfo::create(2, 2, 0, 3, 100));
+    rowset_fetcher->add_rowset(2, mock_rowsets[2 % mock_rowsets.size()]);
+    std::vector<BinlogFileMetaPBPtr> binlog_page_metas_1;
+    generate_binlog_file(1, binlog_file_info_1, &binlog_page_metas_1);
+    expect_metas.push_back(binlog_page_metas_1.back());
+
+    // file2: only version 2 is valid
+    std::vector<PartialRowsetInfo> binlog_file_info_2;
+    binlog_file_info_2.push_back(PartialRowsetInfo::create(2, 2, 4, 6, 100));
+    binlog_file_info_2.push_back(PartialRowsetInfo::create(3, 3, 0, 4, 100));
+    rowset_fetcher->add_rowset(3, mock_rowsets[3 % mock_rowsets.size()]);
+    std::vector<BinlogFileMetaPBPtr> binlog_page_metas_2;
+    generate_binlog_file(2, binlog_file_info_2, &binlog_page_metas_2);
+    expect_metas.push_back(binlog_page_metas_2[2]);
+
+    // file3: all data is valid
+    std::vector<PartialRowsetInfo> binlog_file_info_3;
+    binlog_file_info_3.push_back(PartialRowsetInfo::create(3, 3, 0, 6, 100));
+    binlog_file_info_3.push_back(PartialRowsetInfo::create(4, 4, 0, 2, 100));
+    rowset_fetcher->add_rowset(4, mock_rowsets[4 % mock_rowsets.size()]);
+    std::vector<BinlogFileMetaPBPtr> binlog_page_metas_3;
+    generate_binlog_file(3, binlog_file_info_3, &binlog_page_metas_3);
+    expect_metas.push_back(binlog_page_metas_3.back());
+
+    // file4: no data is valid
+    std::vector<PartialRowsetInfo> binlog_file_info_4;
+    binlog_file_info_4.push_back(PartialRowsetInfo::create(5, 5, 0, 2, 100));
+    std::vector<BinlogFileMetaPBPtr> binlog_page_metas_4;
+    generate_binlog_file(4, binlog_file_info_4, &binlog_page_metas_4);
+
+    // file5: no data is valid
+    std::vector<PartialRowsetInfo> binlog_file_info_5;
+    binlog_file_info_5.push_back(PartialRowsetInfo::create(5, 5, 0, 1, 100));
+    std::vector<BinlogFileMetaPBPtr> binlog_page_metas_5;
+    generate_binlog_file(5, binlog_file_info_5, &binlog_page_metas_5);
+
+    // file6: all data is valid
+    std::vector<PartialRowsetInfo> binlog_file_info_6;
+    binlog_file_info_6.push_back(PartialRowsetInfo::create(5, 5, 0, 6, 100));
+    rowset_fetcher->add_rowset(5, mock_rowsets[5 % mock_rowsets.size()]);
+    binlog_file_info_6.push_back(PartialRowsetInfo::create(6, 6, 0, 1, 100));
+    rowset_fetcher->add_rowset(6, mock_rowsets[6 % mock_rowsets.size()]);
+    std::vector<BinlogFileMetaPBPtr> binlog_page_metas_6;
+    generate_binlog_file(6, binlog_file_info_6, &binlog_page_metas_6);
+    expect_metas.push_back(binlog_page_metas_6.back());
+
+    ASSERT_OK(binlog_manager->init());
+
+    LsnMap& alive_binlog_files = binlog_manager->alive_binlog_files();
+    RowsetCountMap& rowset_count_map = binlog_manager->alive_rowset_count_map();
+    ASSERT_EQ(expect_metas.size(), alive_binlog_files.size());
+    RowsetCountMap expect_rowset_count;
+    int64_t expect_total_binlog_file_size = 0;
+    int64_t expect_total_rowset_data_size = 0;
+    for (auto& meta : expect_metas) {
+        int128_t lsn = BinlogUtil::get_lsn(meta->start_version(), meta->start_seq_id());
+        ASSERT_EQ(1, alive_binlog_files.count(lsn));
+        verify_file_meta(meta.get(), alive_binlog_files[lsn]->file_meta());
+        expect_total_binlog_file_size += meta->file_size();
+
+        for (auto rowset_id : meta->rowsets()) {
+            expect_rowset_count[rowset_id] += 1;
+            if (expect_rowset_count[rowset_id] == 1) {
+                expect_total_rowset_data_size += rowset_fetcher->get_rowset(rowset_id)->data_disk_size();
+            }
+        }
+    }
+
+    ASSERT_EQ(expect_rowset_count.size(), rowset_count_map.size());
+    for (auto it = expect_rowset_count.begin(); it != expect_rowset_count.end(); it++) {
+        ASSERT_EQ(1, rowset_count_map.count(it->first));
+        ASSERT_EQ(it->second, rowset_count_map[it->first]);
+    }
+
+    ASSERT_EQ(expect_total_binlog_file_size, binlog_manager->total_alive_binlog_file_size());
+    ASSERT_EQ(expect_total_rowset_data_size, binlog_manager->total_alive_rowset_data_size());
 }
 
 } // namespace starrocks

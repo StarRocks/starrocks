@@ -120,6 +120,11 @@ public:
     std::string schema_debug_string() const;
     std::string debug_string() const;
 
+    // Load incremental rowsets to the tablet in DataDir#load.
+    Status load_rowset(const RowsetSharedPtr& rowset);
+    // finish loading rowsets
+    Status finish_load_rowsets();
+
     // operation in rowsets
     Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
     void modify_rowsets(const vector<RowsetSharedPtr>& to_add, const vector<RowsetSharedPtr>& to_delete,

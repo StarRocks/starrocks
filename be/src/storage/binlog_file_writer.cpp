@@ -526,6 +526,10 @@ void BinlogFileWriter::_reset_pending_context() {
     _pending_page_context->page_content.Clear();
 }
 
+Status BinlogFileWriter::force_flush_page(bool end_version) {
+    return _flush_page(end_version);
+}
+
 StatusOr<std::shared_ptr<BinlogFileWriter>> BinlogFileWriter::reopen(int64_t file_id, const std::string& file_path,
                                                                      int32_t page_size,
                                                                      CompressionTypePB compression_type,

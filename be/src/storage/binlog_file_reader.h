@@ -49,6 +49,14 @@ struct PageContext {
     PageContentPB page_content;
 };
 
+// Used to filter useless data when loading binlog file
+class BinlogFileLoadFilter {
+public:
+    virtual bool is_valid_seq(int64_t version, int64_t seq_id) = 0;
+
+    virtual bool is_valid_rowset(int64_t rowset_version) = 0;
+};
+
 // Read log entries in the binlog file.
 //
 // How to use
@@ -88,6 +96,19 @@ public:
 
     static Status parse_page_header(RandomAccessFile* read_file, int64_t file_size, int64_t file_pos,
                                     int64_t page_index, PageHeaderPB* page_header_pb, int64_t* read_file_size);
+
+    // Scan the pages in the binlog file to load file meta. Return Status::OK() if there is valid data
+    // matching the filter. Returns Status::NotFound() if there is no valid data. Other status will be
+    // returned if errors happens, such as I/O error.
+    static Status scan_pages_to_load(int64_t file_id, RandomAccessFile* read_file, int64_t file_size,
+                                     BinlogFileLoadFilter* filter, BinlogFileMetaPB* file_meta);
+
+    // Load the file meta from the binlog file. This method first try to get the file meta from the
+    // file footer. If the footer not exists, will scan pages to get the file meta. Return Status::OK()
+    // if there is valid data matching the filter. Returns Status::NotFound() if there is no valid data.
+    // Other status will be returned if errors happens, such as I/O error.
+    static StatusOr<std::shared_ptr<BinlogFileMetaPB>> load(int64_t file_id, std::string& file_path,
+                                                            BinlogFileLoadFilter* filter);
 
 private:
     Status _seek(int64_t version, int64_t seq_id);

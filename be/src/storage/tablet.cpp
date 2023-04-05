@@ -239,6 +239,52 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
     return st;
 }
 
+Status Tablet::load_rowset(const RowsetSharedPtr& rowset) {
+    Status st = add_rowset(rowset, false);
+    if (!st.ok() && !st.is_already_exist()) {
+        return st;
+    }
+
+    std::unique_lock wrlock(_meta_lock);
+    auto config = _tablet_meta->get_binlog_config();
+    if (config == nullptr || !config->binlog_enable) {
+        return st;
+    }
+
+    auto rs = _inc_rs_version_map.find(rowset->version());
+    if (rs != _inc_rs_version_map.end()) {
+        // this should not happen
+        DCHECK(rowset->rowset_id() == rs->second->rowset_id())
+                << "Find an incremental rowset with the same version but different ids for tablet: " << full_name()
+                << ". The version is " << rowset->version() << ", and ids are " << rowset->rowset_id() << " and "
+                << rs->second->rowset_id();
+    } else {
+        _tablet_meta->add_inc_rs_meta(rowset->rowset_meta());
+        _inc_rs_version_map[rowset->version()] = rowset;
+    }
+
+    return st;
+}
+
+Status Tablet::finish_load_rowsets() {
+    if (keys_type() != DUP_KEYS) {
+        return Status::OK();
+    }
+
+    std::unique_lock wrlock(_meta_lock);
+    auto config = _tablet_meta->get_binlog_config();
+    if (config == nullptr || !config->binlog_enable) {
+        return Status::OK();
+    }
+
+    Status status = _binlog_manager->init();
+    if (!status.ok()) {
+        LOG(WARNING) << "Fail to initialize binlog for tablet " << tablet_id() << ", " << status;
+    }
+
+    return status;
+}
+
 Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
     CHECK(!_updates) << "updatable tablet should not call add_rowset";
     DCHECK(rowset != nullptr);

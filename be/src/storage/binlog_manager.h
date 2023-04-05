@@ -93,6 +93,21 @@ private:
     Tablet& _tablet;
 };
 
+class BinlogFileLoadFilterImpl : public BinlogFileLoadFilter {
+public:
+    BinlogFileLoadFilterImpl(int64_t max_version, int64_t max_seq_id, RowsetFetcher* rowset_fetcher);
+
+    bool is_valid_seq(int64_t version, int64_t seq_id) override;
+
+    bool is_valid_rowset(int64_t rowset_id) override;
+
+private:
+    // less than <_max_version, _max_seq_id>
+    int64_t _max_version;
+    int64_t _max_seq_id;
+    RowsetFetcher* _rowset_fetcher;
+};
+
 class BinlogRange {
 public:
     BinlogRange(int64_t start_version, int64_t start_seq_id, int64_t end_version, int64_t end_seq_id)
@@ -175,6 +190,8 @@ public:
                   CompressionTypePB compression_type, std::shared_ptr<RowsetFetcher> rowset_fetcher);
 
     ~BinlogManager();
+
+    Status init();
 
     //  The process of an ingestion is as following, and protected by Tablet#_meta_lock to ensure there is
     //  no concurrent ingestion for duplicate key table
@@ -279,6 +296,7 @@ private:
     void _apply_build_result(BinlogBuildResult* result);
     void _check_wait_reader_binlog_files();
     void _check_alive_binlog_files(int64_t current_second, int64_t binlog_ttl_second, int64_t binlog_max_size);
+    Status _check_init_failure();
 
     int64_t _tablet_id;
     // binlog storage directory
@@ -286,8 +304,11 @@ private:
     int64_t _max_file_size;
     int32_t _max_page_size;
     CompressionTypePB _compression_type;
-
     std::shared_ptr<RowsetFetcher> _rowset_fetcher;
+
+    // Whether there is failure when initializing the BinlogManager.
+    // If true, will decline to generate new binlog and read requests
+    std::atomic<bool> _init_failure{false};
 
     // file id for the next binlog file. Protected by Tablet#_meta_lock
     std::atomic<int64_t> _next_file_id = 0;

@@ -140,7 +140,7 @@ void BinlogTestBase::verify_log_entry_info(const std::shared_ptr<TestLogEntryInf
 }
 
 void BinlogTestBase::verify_file_meta(BinlogFileMetaPB* expect_file_meta,
-                                      const std::shared_ptr<BinlogFileMetaPB>& actual_file_meta) {
+                                      std::shared_ptr<BinlogFileMetaPB>& actual_file_meta) {
     ASSERT_EQ(expect_file_meta->id(), actual_file_meta->id());
     ASSERT_EQ(expect_file_meta->start_version(), actual_file_meta->start_version());
     ASSERT_EQ(expect_file_meta->start_seq_id(), actual_file_meta->start_seq_id());
