@@ -141,6 +141,6 @@ public class AnalyzeAlterTableStatementTest {
 
     @Test
     public void testAlterTableComment() {
-        analyzeSuccess("alter table t0 comment \"new comment\"");
+        analyzeSuccess("alter table t0 comment = \"new comment\"");
     }
 }
