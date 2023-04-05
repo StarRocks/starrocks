@@ -159,11 +159,21 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
 int ConnectorScanOperator::available_pickup_morsel_count() const {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
     [[maybe_unused]] PickupMorselState& pick = _pickup_morsel_state;
-    bool is_full = is_buffer_full();
-    if (is_full) {
+    // bool is_full = is_buffer_full();
+    // if (is_full) {
+    //     return 0;
+    // }
+
+    size_t chunk_number = num_buffered_chunks();
+    size_t threshold = _buffer_unplug_threshold();
+    if (chunk_number >= threshold) {
         return 0;
     }
-    // submit 1/4 io tasks per scan operator.
+    // submit 1/ 8 io tasks
+    if (2 * chunk_number >= threshold) {
+        return std::max(1, _io_tasks_per_scan_operator >> 3);
+    }
+    // submit 1/4 io tasks
     return std::max(1, _io_tasks_per_scan_operator >> 2);
 }
 
