@@ -85,6 +85,7 @@ private:
         int32_t morsel_log_size = 0;
         int32_t morsel_alloc_count = 1;
     };
+    bool _enable_adaptive_io_tasks = false;
     mutable PickupMorselState _pickup_morsel_state;
 };
 

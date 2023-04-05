@@ -187,6 +187,7 @@ struct TQueryOptions {
   
   86: optional i32 io_tasks_per_scan_operator = 4;
   87: optional i32 connector_io_tasks_per_scan_operator = 16;
+  88: optional bool enable_connector_adaptive_io_tasks = true;
 }
 
 

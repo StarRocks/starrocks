@@ -61,8 +61,12 @@ ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t i
         : ScanOperator(factory, id, driver_sequence, dop, scan_node) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
+    const TQueryOptions& options = state->query_options();
     bool shared_scan = _scan_node->is_shared_scan_enabled();
     _unique_metrics->add_info_string("SharedScan", shared_scan ? "True" : "False");
+    if (options.__isset.enable_connector_adaptive_io_tasks) {
+        _enable_adaptive_io_tasks = options.enable_connector_adaptive_io_tasks;
+    }
     return Status::OK();
 }
 
@@ -153,6 +157,8 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
 }
 
 bool ConnectorScanOperator::can_pickup_morsel(RuntimeState* state, int chunk_source_index) const {
+    if (!_enable_adaptive_io_tasks) return true;
+
     PickupMorselState& pick = _pickup_morsel_state;
 
     bool is_full = is_buffer_full();
