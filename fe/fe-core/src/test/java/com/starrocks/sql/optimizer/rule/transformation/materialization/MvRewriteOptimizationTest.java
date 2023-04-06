@@ -2019,9 +2019,14 @@ public class MvRewriteOptimizationTest {
         query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` ";
         plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_5", "orders",
+<<<<<<< HEAD
                 "PARTITION PREDICATES: (((15: o_orderdate < '1991-01-01') OR (15: o_orderdate >= '1991-02-01')) AND" +
                         " ((15: o_orderdate < '1991-03-01') OR (15: o_orderdate >= '1993-12-31')))" +
                         " OR (15: o_orderdate IS NULL)");
+=======
+                "PARTITION PREDICATES: (15: o_orderdate < '1991-01-01') OR (15: o_orderdate >= '1991-02-01'), " +
+                        "(15: o_orderdate < '1991-03-01') OR (15: o_orderdate >= '1993-12-31')");
+>>>>>>> 3ff71b90f ([UT] Fix unstable UT (#21069))
 
         // TODO(Ken Huang): This should support query rewrite
         query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` " +
