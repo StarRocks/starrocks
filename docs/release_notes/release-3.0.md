@@ -69,10 +69,6 @@ Release date: March 31, 2023
 - Optimized metadata statistics collection.
 - Supports using [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md) to query the schema information of an external table and using [SHOW CREATE CATALOG](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation statement of an external catalog.
 
-**Functions**
-
-Window functions [lead](../sql-reference/sql-functions/Window_function.md#lead) and [lag](../sql-reference/sql-functions/Window_function.md#la) support `IGNORE NULLS`.
-
 ### Bug Fixes
 
 - Some URLs in the license header of StarRocks' source file cannot be accessed. #[2224](https://github.com/StarRocks/starrocks/issues/2224)
