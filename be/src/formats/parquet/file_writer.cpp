@@ -372,7 +372,7 @@ Status FileWriterBase::write(Chunk* chunk) {
 }
 
 Status FileWriterBase::_add_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                         ::parquet::schema::NodePtr node, ColumnPtr col) {
+                                         const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     switch (type_desc.type) {
     case TYPE_STRUCT: {
         return _add_struct_column_chunk(parent_ctx, type_desc, node, col);
@@ -443,7 +443,7 @@ Status FileWriterBase::_add_column_chunk(const Context& parent_ctx, const TypeDe
 }
 
 Status FileWriterBase::_add_struct_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                                ::parquet::schema::NodePtr node, ColumnPtr col) {
+                                                const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     DCHECK(type_desc.type == TYPE_STRUCT);
     auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
 
@@ -483,7 +483,7 @@ Status FileWriterBase::_add_struct_column_chunk(const Context& parent_ctx, const
 }
 
 Status FileWriterBase::_add_array_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                               ::parquet::schema::NodePtr node, ColumnPtr col) {
+                                               const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     DCHECK(type_desc.type == TYPE_ARRAY);
     auto outer_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
     auto mid_node = std::static_pointer_cast<::parquet::schema::GroupNode>(outer_node->field(0));
@@ -523,7 +523,7 @@ Status FileWriterBase::_add_array_column_chunk(const Context& parent_ctx, const 
 }
 
 Status FileWriterBase::_add_map_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                             ::parquet::schema::NodePtr node, ColumnPtr col) {
+                                             const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     DCHECK(type_desc.type == TYPE_MAP);
     auto outer_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
     auto mid_node = std::static_pointer_cast<::parquet::schema::GroupNode>(outer_node->field(0));
@@ -576,7 +576,7 @@ Status FileWriterBase::_add_map_column_chunk(const Context& parent_ctx, const Ty
 }
 
 Status FileWriterBase::_add_varchar_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                                 ::parquet::schema::NodePtr node, ColumnPtr col) {
+                                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
         const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
@@ -614,7 +614,7 @@ Status FileWriterBase::_add_varchar_column_chunk(const Context& parent_ctx, cons
 }
 
 Status FileWriterBase::_add_date_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                              ::parquet::schema::NodePtr node, ColumnPtr col) {
+                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
         const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
@@ -649,7 +649,7 @@ Status FileWriterBase::_add_date_column_chunk(const Context& parent_ctx, const T
 }
 
 Status FileWriterBase::_add_datetime_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                                  ::parquet::schema::NodePtr node, ColumnPtr col) {
+                                                  const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
         const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
@@ -684,7 +684,7 @@ Status FileWriterBase::_add_datetime_column_chunk(const Context& parent_ctx, con
 
 template <LogicalType lt, ::parquet::Type::type pt>
 Status FileWriterBase::_add_int_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                             ::parquet::schema::NodePtr node, ColumnPtr col) {
+                                             const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
         const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
@@ -719,7 +719,7 @@ Status FileWriterBase::_add_int_column_chunk(const Context& parent_ctx, const Ty
 
 template <LogicalType lt, ::parquet::Type::type pt>
 Status FileWriterBase::_add_decimal_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                                 ::parquet::schema::NodePtr node, ColumnPtr col) {
+                                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
         const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();

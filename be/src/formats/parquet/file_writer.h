@@ -39,11 +39,15 @@ namespace starrocks::parquet {
 class ParquetOutputStream : public arrow::io::OutputStream {
 public:
     ParquetOutputStream(std::unique_ptr<starrocks::WritableFile> wfile);
+
     ~ParquetOutputStream() override;
 
     arrow::Status Write(const void* data, int64_t nbytes) override;
+
     arrow::Status Write(const std::shared_ptr<arrow::Buffer>& data) override;
+
     arrow::Status Close() override;
+
     arrow::Result<int64_t> Tell() const override;
 
     bool closed() const override { return _is_closed; };
@@ -91,14 +95,21 @@ public:
     FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
                    const std::vector<ExprContext*>& output_expr_ctxs);
+
     virtual ~FileWriterBase() = default;
 
     Status init();
+
     Status write(Chunk* chunk);
+
     std::size_t file_size() const;
+
     void set_max_row_group_size(int64_t rg_size) { _max_row_group_size = rg_size; }
+
     std::shared_ptr<::parquet::FileMetaData> metadata() const { return _file_metadata; }
+
     Status split_offsets(std::vector<int64_t>& splitOffsets) const;
+
     virtual bool closed() const = 0;
 
 protected:
@@ -107,7 +118,7 @@ protected:
 private:
     class Context {
     public:
-        Context(int max_rep_level, size_t estimated_size = 0) : _max_rep_level(max_rep_level) {
+        Context(int16_t max_rep_level, size_t estimated_size = 0) : _max_rep_level(max_rep_level) {
             _idx2subcol.reserve(estimated_size);
             _def_levels.reserve(estimated_size);
             _rep_levels.reserve(estimated_size);
@@ -140,33 +151,33 @@ private:
     std::size_t _get_current_rg_written_bytes() const;
 
     Status _add_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                             ::parquet::schema::NodePtr node, ColumnPtr col);
+                             const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
     Status _add_struct_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                    ::parquet::schema::NodePtr node, ColumnPtr col);
+                                    const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
     Status _add_array_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                   ::parquet::schema::NodePtr node, ColumnPtr col);
+                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
     Status _add_map_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                 ::parquet::schema::NodePtr node, ColumnPtr col);
+                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
     Status _add_varchar_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                     ::parquet::schema::NodePtr node, ColumnPtr col);
+                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
     Status _add_date_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                  ::parquet::schema::NodePtr node, ColumnPtr col);
+                                  const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
     Status _add_datetime_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                      ::parquet::schema::NodePtr node, ColumnPtr col);
+                                      const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
     template <LogicalType lt, ::parquet::Type::type pt>
     Status _add_int_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                 ::parquet::schema::NodePtr node, ColumnPtr col);
+                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
     template <LogicalType lt, ::parquet::Type::type pt>
     Status _add_decimal_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                     ::parquet::schema::NodePtr node, ColumnPtr col);
+                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
 protected:
     std::shared_ptr<ParquetOutputStream> _outstream;
@@ -191,13 +202,16 @@ public:
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
                    const std::vector<ExprContext*>& output_expr_ctxs)
             : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs) {}
+
     ~SyncFileWriter() override = default;
 
     Status close();
+
     bool closed() const override { return _closed; }
 
 private:
     void _flush_row_group() override;
+
     bool _closed = false;
 };
 
@@ -218,6 +232,7 @@ public:
         auto lock = std::unique_lock(_m);
         return !_rg_writer_closing;
     }
+
     bool closed() const override { return _closed.load(); }
 
     std::string file_name() const { return _file_name; }
