@@ -42,6 +42,7 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -96,6 +97,29 @@ public class CreateTableTest {
                         "`k13` decimal(27,9)) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY " +
                         "time_slice(k2, interval 1 hour) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) " +
                         "PROPERTIES ( \"storage_format\" = \"v2\");"
+        );
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testCreateUnsupportedType() throws Exception {
+        createTable(
+                "CREATE TABLE test.ods_warehoused (\n" +
+                        " warehouse_id                                bigint(20)                 COMMENT        ''\n" +
+                        ",company_id                                        bigint(20)                 COMMENT        ''\n" +
+                        ",company_name                                string                        COMMENT        ''\n" +
+                        ",is_sort_express_by_cost        tinyint(1)                COMMENT        ''\n" +
+                        ",is_order_intercepted                tinyint(1)                COMMENT        ''\n" +
+                        ",intercept_time_type                tinyint(3)                 COMMENT        ''\n" +
+                        ",intercept_time                                time                        COMMENT        ''\n" +
+                        ",intercept_begin_time                time                        COMMENT        ''\n" +
+                        ",intercept_end_time                        time                        COMMENT        ''\n" +
+                        ")\n" +
+                        "PRIMARY KEY(warehouse_id)\n" +
+                        "COMMENT \"\"\n" +
+                        "DISTRIBUTED BY HASH(warehouse_id)\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
         );
     }
 
