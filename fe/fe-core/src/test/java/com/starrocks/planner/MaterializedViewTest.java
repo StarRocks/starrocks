@@ -1658,6 +1658,19 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testViewDeltaJoinUKFK14() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join dependents using (empid)"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + "left outer join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
     public void testViewDeltaColumnCaseSensitiveOnDuplicate() throws Exception {
         {
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +

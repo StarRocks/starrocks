@@ -61,11 +61,27 @@ public class TableScanDesc {
     }
 
     public boolean isMatch(TableScanDesc other) {
-        boolean matched =  table.equals(other.table) && parentJoinType.equals(other.parentJoinType);
-        if (parentJoinType.isLeftOuterJoin()) {
-            matched = matched && isLeft == other.isLeft;
+        boolean matched =  table.equals(other.table);
+        if (!matched) {
+            return false;
         }
-        return matched;
+
+        // for
+        // query: a inner join c
+        // mv: a left outer join b inner join c
+        if (parentJoinType.isInnerJoin()) {
+            return other.parentJoinType.isInnerJoin() || (other.parentJoinType.isLeftOuterJoin() && other.isLeft);
+        }
+
+        // for
+        // query: a left join c
+        // mv: a inner join b left join c
+        if (parentJoinType.isLeftOuterJoin()) {
+            return (isLeft && other.parentJoinType.isInnerJoin())
+                    || (other.parentJoinType.isLeftOuterJoin() && isLeft == other.isLeft);
+        }
+
+        return false;
     }
 
     @Override
