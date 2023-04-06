@@ -81,6 +81,8 @@ private:
 
     void _update_status(Status&& status);
 
+    Status _status() const;
+
     Status _push_probe_chunk(RuntimeState* state, const ChunkPtr& chunk);
 
 private:
@@ -104,7 +106,7 @@ private:
     bool _is_finishing = false;
 
     NoBlockCountDownLatch _latch;
-    std::mutex _mutex;
+    mutable std::mutex _mutex;
     Status _operator_status;
 
     std::shared_ptr<spill::IOTaskExecutor> _executor;

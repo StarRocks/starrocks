@@ -15,8 +15,10 @@
 #include "exec/spill/input_stream.h"
 
 #include <algorithm>
+#include <memory>
 #include <utility>
 
+#include "exec/spill/block_manager.h"
 #include "exec/spill/serde.h"
 #include "runtime/sorted_chunks_merger.h"
 #include "util/blocking_queue.hpp"
@@ -175,9 +177,8 @@ Status BufferedInputStream::prefetch(SerdeContext& ctx) {
 
 class UnorderedInputStream : public SpillInputStream {
 public:
-    UnorderedInputStream(const std::vector<BlockPtr>& input_blocks, SerdePtr serde)
-            : SpillInputStream(input_blocks), _serde(std::move(serde)) {}
-
+    UnorderedInputStream(std::vector<BlockPtr> input_blocks, SerdePtr serde)
+            : _input_blocks(std::move(input_blocks)), _serde(std::move(serde)) {}
     ~UnorderedInputStream() override = default;
 
     StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) override;
@@ -187,6 +188,8 @@ public:
     void close() override;
 
 private:
+    std::vector<BlockPtr> _input_blocks;
+    std::shared_ptr<BlockReader> _current_reader;
     size_t _current_idx = 0;
     SerdePtr _serde;
 };
@@ -197,9 +200,13 @@ StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(SerdeContext& ctx) {
     }
 
     while (true) {
-        auto res = _serde->deserialize(ctx, _input_blocks[_current_idx]);
+        if (_current_reader == nullptr) {
+            _current_reader = _input_blocks[_current_idx]->get_reader();
+        }
+        auto res = _serde->deserialize(ctx, _current_reader.get());
         if (res.status().is_end_of_file()) {
             _input_blocks[_current_idx].reset();
+            _current_reader.reset();
             _current_idx++;
             if (_current_idx >= _input_blocks.size()) {
                 return Status::EndOfFile("end of stream");
@@ -218,8 +225,7 @@ void UnorderedInputStream::close() {}
 
 class OrderedInputStream : public SpillInputStream {
 public:
-    OrderedInputStream(const std::vector<BlockPtr>& blocks, RuntimeState* state)
-            : SpillInputStream(blocks), _merger(state) {}
+    OrderedInputStream(const std::vector<BlockPtr>& blocks, RuntimeState* state) : _merger(state) {}
 
     ~OrderedInputStream() override = default;
 
@@ -237,6 +243,7 @@ public:
     Status prefetch(SerdeContext& ctx) override;
 
 private:
+    std::vector<BlockPtr> _input_blocks;
     // multiple buffered stream
     std::vector<InputStreamPtr> _input_streams;
     starrocks::CascadeChunkMerger _merger;
