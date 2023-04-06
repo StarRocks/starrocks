@@ -39,10 +39,13 @@ import java.util.Map;
 public class Log4jConfig extends XmlConfiguration {
     private static final long serialVersionUID = 1L;
 
-    private static String xmlConfTemplate = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
+    private static String xmlConfTemplateAppenders = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
             "\n" +
             "<Configuration status=\"info\" packages=\"com.starrocks.common\">\n" +
             "  <Appenders>\n" +
+            "    <Console name=\"ConsoleErr\" target=\"SYSTEM_ERR\" follow=\"true\">\n" +
+            "      <PatternLayout pattern=\"%d{yyyy-MM-dd HH:mm:ss,SSS} %p (%t|%tid) [%C{1}.%M():%L] %m%n\"/>\n" +
+            "    </Console>\n" +
             "    <RollingFile name=\"Sys\" fileName=\"${sys_log_dir}/fe.log\" filePattern=\"${sys_log_dir}/fe.log.${sys_file_pattern}-%i\">\n" +
             "      <PatternLayout charset=\"UTF-8\">\n" +
             "        <Pattern>%d{yyyy-MM-dd HH:mm:ss,SSS} %p (%t|%tid) [%C{1}.%M():%L] %m%n</Pattern>\n" +
@@ -103,7 +106,29 @@ public class Log4jConfig extends XmlConfiguration {
             "        </Delete>\n" +
             "      </DefaultRolloverStrategy>\n" +
             "    </RollingFile>\n" +
+<<<<<<< HEAD
             "  </Appenders>\n" +
+=======
+            "    <RollingFile name=\"BigQueryFile\" fileName=\"${big_query_log_dir}/fe.big_query.log\" filePattern=\"${big_query_log_dir}/fe.big_query.log.${big_query_file_pattern}-%i\">\n" +
+            "      <PatternLayout charset=\"UTF-8\">\n" +
+            "        <Pattern>%d{yyyy-MM-dd HH:mm:ss,SSS} [%c{1}] %m%n</Pattern>\n" +
+            "      </PatternLayout>\n" +
+            "      <Policies>\n" +
+            "        <TimeBasedTriggeringPolicy/>\n" +
+            "        <SizeBasedTriggeringPolicy size=\"${big_query_roll_maxsize}MB\"/>\n" +
+            "      </Policies>\n" +
+            "      <DefaultRolloverStrategy max=\"${sys_roll_num}\" fileIndex=\"min\">\n" +
+            "        <Delete basePath=\"${big_query_log_dir}/\" maxDepth=\"1\" followLinks=\"true\">\n" +
+            "          <IfFileName glob=\"fe.big_query.log.*\" />\n" +
+            "          <IfLastModified age=\"${big_query_log_delete_age}\" />\n" +
+            "        </Delete>\n" +
+            "      </DefaultRolloverStrategy>\n" +
+            "    </RollingFile>\n" +
+            "  </Appenders>\n";
+
+    // Predefined loggers to write log to file
+    private static String xmlConfTemplateFileLoggers =
+>>>>>>> 35044f9eb ([Enhancement] Enhance FE/BE to output logs to console directly (#20967))
             "  <Loggers>\n" +
             "    <Root level=\"${sys_log_level}\">\n" +
             "      <AppenderRef ref=\"Sys\"/>\n" +
@@ -131,6 +156,15 @@ public class Log4jConfig extends XmlConfiguration {
             "  </Loggers>\n" +
             "</Configuration>";
 
+    // Predefined console logger, all logs will be written to console
+    private static String xmlConfTemplateConsoleLoggers =
+            "  <Loggers>\n" +
+            "    <Root level=\"${sys_log_level}\">\n" +
+            "      <AppenderRef ref=\"ConsoleErr\"/>\n" +
+            "    </Root>\n" +
+            "    <!--REPLACED BY AUDIT AND VERBOSE MODULE NAMES-->\n" +
+            "  </Loggers>\n" +
+            "</Configuration>";
     private static StrSubstitutor strSub;
     private static String sysLogLevel;
     private static String[] verboseModules;
@@ -138,7 +172,8 @@ public class Log4jConfig extends XmlConfiguration {
     private static String[] dumpModules;
 
     private static void reconfig() throws IOException {
-        String newXmlConfTemplate = xmlConfTemplate;
+        String newXmlConfTemplate = xmlConfTemplateAppenders;
+        newXmlConfTemplate += Config.sys_log_to_console ? xmlConfTemplateConsoleLoggers : xmlConfTemplateFileLoggers;
 
         // sys log config
         String sysLogDir = Config.sys_log_dir;
