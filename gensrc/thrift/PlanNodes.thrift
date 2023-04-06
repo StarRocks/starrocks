@@ -428,6 +428,11 @@ struct TSchemaScanNode {
   18: optional string type
   19: optional string state
   20: optional i64 limit
+  21: optional i64 log_start_ts;
+  22: optional i64 log_end_ts;
+  23: optional string log_level;
+  24: optional string log_pattern;
+  25: optional i64 log_limit;
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode

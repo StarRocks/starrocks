@@ -16,6 +16,7 @@
 
 #include <google/protobuf/util/json_util.h>
 
+#include "common/greplog.h"
 #include "common/logging.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -123,6 +124,7 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&get_stack_trace_for_thread>("get_stack_trace_for_thread");
         cls.funcStaticExt<&get_stack_trace_for_threads>("get_stack_trace_for_threads");
         cls.funcStaticExt<&get_stack_trace_for_all_threads>("get_stack_trace_for_all_threads");
+        cls.funcStaticExt<&grep_log_as_string>("grep_log_as_string");
         REG_METHOD(ExecEnv, process_mem_tracker);
         REG_METHOD(ExecEnv, query_pool_mem_tracker);
         REG_METHOD(ExecEnv, load_mem_tracker);
