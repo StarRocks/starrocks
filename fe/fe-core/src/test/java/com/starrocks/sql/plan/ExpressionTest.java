@@ -689,10 +689,10 @@ public class ExpressionTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  2:SORT\n" +
                 "  |  order by: <slot 8> 8: array_sum ASC\n" +
                 "  |  offset:"));
-        Assert.assertTrue(plan.contains("  1:Project\n" +
+        Assert.assertTrue(plan, plan.contains("  1:Project\n" +
                 "  |  <slot 6> : 2: c1\n" +
                 "  |  <slot 8> : array_sum(array_map(<slot 4> -> " +
-                "CAST(<slot 4> AS SMALLINT) + 1, ARRAY<tinyint(4)>[1]))"));
+                "CAST(<slot 4> AS SMALLINT) + 1, [1]))"));
     }
 
     @Test

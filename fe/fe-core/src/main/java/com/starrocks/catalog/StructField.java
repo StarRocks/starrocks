@@ -47,11 +47,6 @@ public class StructField {
         this(name, type, null);
     }
 
-    // Unnamed struct field
-    public StructField(Type type) {
-        this(null, type, null);
-    }
-
     public String getComment() {
         return comment;
     }

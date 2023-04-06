@@ -206,28 +206,28 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  |  <slot 3> : 3: c2\n" +
                 "  |  <slot 4> : 3: c2[1]");
         sql = "select array[array[1,2],array[3,4]][1][2]";
-        assertPlanContains(sql, "ARRAY<ARRAY<tinyint(4)>>[[1,2],[3,4]][1][2]");
+        assertPlanContains(sql, "[[1,2],[3,4]][1][2]");
 
         sql = "select array[][1]";
-        assertPlanContains(sql, "ARRAY<boolean>[][1]");
+        assertPlanContains(sql, "[][1]");
 
         sql = "select array[v1 = 1, v2 = 2, true] from t0";
-        assertPlanContains(sql, "<slot 4> : ARRAY<boolean>[1: v1 = 1,2: v2 = 2,TRUE]");
+        assertPlanContains(sql, "<slot 4> : [1: v1 = 1,2: v2 = 2,TRUE]");
 
         sql = "select array[v1,v2] from t0";
-        assertPlanContains(sql, "ARRAY<bigint(20)>[1: v1,2: v2]");
+        assertPlanContains(sql, "[1: v1,2: v2]");
 
 
         sql = "select array[NULL][1] + 1, array[1,2,3][1] + array[array[1,2,3],array[1,1,1]][2][2];";
         assertPlanContains(sql, "1:Project\n" +
                 "  |  <slot 2> : NULL\n" +
-                "  |  <slot 3> : CAST(ARRAY<tinyint(4)>[1,2,3][1] AS SMALLINT) + CAST(ARRAY<ARRAY<tinyint(4)>>" +
+                "  |  <slot 3> : CAST([1,2,3][1] AS SMALLINT) + CAST(" +
                 "[[1,2,3],[1,1,1]][2][2] AS SMALLINT)");
 
         sql = "select c0, c2[1] + array[1,2,3][1] as v, sum(c2[1]) from test_array group by c0, v order by v";
         assertPlanContains(sql, "1:Project\n" +
                 "  |  <slot 1> : 1: c0\n" +
-                "  |  <slot 4> : CAST(7: expr AS BIGINT) + CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT)\n" +
+                "  |  <slot 4> : CAST(7: expr AS BIGINT) + CAST([1,2,3][1] AS BIGINT)\n" +
                 "  |  <slot 5> : 7: expr\n" +
                 "  |  common expressions:\n" +
                 "  |  <slot 7> : 3: c2[1]");
@@ -239,7 +239,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "array_distinct(2: c1)");
 
         sql =  "select array_intersect(c1, array['star','rocks']) from test_array";
-        assertPlanContains(sql, "array_intersect(2: c1, ARRAY<varchar>['star','rocks'])");
+        assertPlanContains(sql, "array_intersect(2: c1, ['star','rocks'])");
 
         sql = "select array_join(c1, '_') from test_array";
         assertPlanContains(sql, "array_join(2: c1, '_')");
@@ -251,16 +251,16 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "array_min(2: c1)");
 
         sql = "select array_position(array[1,2,3], 2) from test_array";
-        assertPlanContains(sql, "array_position(ARRAY<tinyint(4)>[1,2,3], 2)");
+        assertPlanContains(sql, "array_position([1,2,3], 2)");
 
         sql = "select array_remove(array[1,2,3], 2) from test_array";
-        assertPlanContains(sql, "array_remove(ARRAY<tinyint(4)>[1,2,3], 2)");
+        assertPlanContains(sql, "array_remove([1,2,3], 2)");
 
         sql = "select array_sort(c1) from test_array";
         assertPlanContains(sql, "array_sort(2: c1)");
 
         sql =  "select arrays_overlap(c1, array['star','rocks']) from test_array";
-        assertPlanContains(sql, "arrays_overlap(2: c1, ARRAY<varchar>['star','rocks'])");
+        assertPlanContains(sql, "arrays_overlap(2: c1, ['star','rocks'])");
     }
 
     @Test

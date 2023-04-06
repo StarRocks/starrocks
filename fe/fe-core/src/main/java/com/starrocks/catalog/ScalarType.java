@@ -614,6 +614,9 @@ public class ScalarType extends Type implements Cloneable {
             case FUNCTION:
                 stringBuilder.append(type.toString().toLowerCase());
                 break;
+            case NULL_TYPE:
+                stringBuilder.append(type);
+                break;
             default:
                 stringBuilder.append("unknown type: ").append(type);
                 break;
