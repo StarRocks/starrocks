@@ -473,12 +473,16 @@ SELECT /*+ SET_VAR
 
   The value is an integer. Default value: 1024000.
 
-* sql_dialect  (supported in v3.0 and later)
+* sql_dialect  (v3.0 and later)
 
   The SQL dialect that is used. For example, you can run the `set sql_dialect = 'trino';` command to set the SQL dialect to Trino, so you can use Trino-specific SQL syntax and functions in your queries.
 
-* io_tasks_per_scan_operator
+* io_tasks_per_scan_operator (v3.0 and later)
 
-  The number of io tasks issued by a scan operator simutaneously. Increase this value when accessing remote storage system like HDFS/S3 if latency is high. However the higher this value, the more memory consumption.
+  The number of concurrent I/O tasks that can be issued by a scan operator. Increase this value if you want to access remote storage systems such as HDFS or S3 but the latency is high. However, a larger value causes more memory consumption.
 
-  The value is an interger. Default value: 4.
+  The value is an integer. Default value: 4.
+
+* range_pruner_max_predicate (v3.0 and later)
+
+  The maximum number of IN predicates that can be used for Range partition pruning. Default value: 100. A value larger than 100 may cause the system to scan all tablets, which compromises the query performance.

@@ -36,6 +36,7 @@ Following are the reserved keywords supported by StarRocks.
 - AS
 - ASC
 - AUTHENTICATION
+- AUTO_INCREMENT (v3.0 and later)
 
 ### B
 
@@ -62,6 +63,7 @@ Following are the reserved keywords supported by StarRocks.
 - CURRENT_TIME
 - CURRENT_TIMESTAMP
 - CURRENT_USER
+- CURRENT_ROLE (v3.0 and later)
 
 ### D
 
@@ -82,6 +84,7 @@ Following are the reserved keywords supported by StarRocks.
 - DOUBLE
 - DROP
 - DUAL
+- DEFERRED (v3.0 and later)
 
 ### E
 
@@ -90,6 +93,8 @@ Following are the reserved keywords supported by StarRocks.
 - EXISTS
 - EXPLAIN
 - EXPORT
+- ENCLOSE (v3.0 and later)
+- ESCAPE (v3.0 and later)
 
 ### F
 
@@ -130,6 +135,7 @@ Following are the reserved keywords supported by StarRocks.
 - INTERSECT
 - INTO
 - IS
+- IMMEDIATE (v3.0 and later)
 
 ### J
 
@@ -184,6 +190,7 @@ Following are the reserved keywords supported by StarRocks.
 - PERCENTILE
 - PRIMARY
 - PROCEDURE
+- PRIVILEGES (v3.0 and later)
 
 ### Q
 
@@ -217,6 +224,7 @@ Following are the reserved keywords supported by StarRocks.
 - SMALLINT
 - SYSTEM
 - SWAP
+- SKIP_HEADER (v3.0 and later)
 
 ### T
 
@@ -226,6 +234,7 @@ Following are the reserved keywords supported by StarRocks.
 - TINYINT
 - TO
 - TRUE
+- TRIM_SPACE (v3.0 and later)
 
 ### U
 
@@ -240,6 +249,7 @@ Following are the reserved keywords supported by StarRocks.
 
 - VALUES
 - VARCHAR
+- VARBINARY (v3.0 and later)
 
 ### W
 
