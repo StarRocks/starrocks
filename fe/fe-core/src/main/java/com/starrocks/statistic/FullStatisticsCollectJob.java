@@ -15,7 +15,6 @@
 package com.starrocks.statistic;
 
 import com.google.common.base.Joiner;
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -68,7 +67,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
     private final List<Long> partitionIdList;
 
-    private final StringBuilder sqlBuffer = new StringBuilder();
+    private final List<String> sqlBuffer = Lists.newArrayList();
     private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
 
     public FullStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columns,
@@ -135,10 +134,11 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         StatisticExecutor executor = new StatisticExecutor();
         List<TStatisticData> dataList = executor.executeStatisticDQL(context, sql);
 
-        List<String> params = Lists.newArrayList();
-        List<Expr> row = Lists.newArrayList();
         String tableName = db.getOriginName() + "." + table.getName();
         for (TStatisticData data : dataList) {
+            List<String> params = Lists.newArrayList();
+            List<Expr> row = Lists.newArrayList();
+
             String partitionName = table.getPartition(data.getPartitionId()).getName();
 
             params.add(String.valueOf(table.getId()));
@@ -169,14 +169,9 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             row.add(new StringLiteral(data.getMin())); // min, 200 byte
             row.add(nowFn()); // update time, 8 byte
 
-            Preconditions.checkState(params.size() == row.size());
             rowsBuffer.add(row);
+            sqlBuffer.add("(" + String.join(", ", params) + ")");
         }
-        if (sqlBuffer.length() > 1) {
-            sqlBuffer.append(", ");
-        }
-        sqlBuffer.append("(").append(String.join(", ", params)).append(")");
-
         flushInsertStatisticsData(context, false);
     }
 
@@ -200,6 +195,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
                 return;
             }
 
+            LOG.debug("statistics insert sql : " + insertStmt.getOrigStmt().originStmt);
             StmtExecutor executor = new StmtExecutor(context, insertStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
@@ -215,7 +211,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
                     throw new DdlException(context.getState().getErrorMessage());
                 }
             } else {
-                sqlBuffer.delete(0, sqlBuffer.length());
+                sqlBuffer.clear();
                 rowsBuffer.clear();
                 return;
             }
@@ -225,7 +221,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private StatementBase createInsertStmt() {
-        String sql = "INSERT INTO column_statistics values " + sqlBuffer + ";";
+        String sql = "INSERT INTO column_statistics values " + String.join(", ", sqlBuffer) + ";";
         List<String> names = Lists.newArrayList("column_0", "column_1", "column_2", "column_3",
                 "column_4", "column_5", "column_6", "column_7", "column_8", "column_9",
                 "column_10", "column_11", "column_12");
