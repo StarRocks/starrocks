@@ -283,10 +283,31 @@ start_fe()
         done
     fi
 
+<<<<<<< HEAD
     log_stderr "run start_fe.sh with additional options: '$opts'"
     # register EXIT trap handler to do clean up work
     #trap exit_fe_exit EXIT
     #trap exit_fe_term SIGTERM
+=======
+    if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
+        opts+=" --logconsole"
+    fi
+    log_stderr "first start with no meta run start_fe.sh with additional options: '$opts'"
+    $STARROCKS_HOME/bin/start_fe.sh $opts
+}
+
+start_fe_with_meta()
+{
+    local opts=""
+    if [[ "x$HOST_TYPE" != "x" ]] ; then
+        opts+=" --host_type $HOST_TYPE"
+    fi
+
+    if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
+        opts+=" --logconsole"
+    fi
+    log_stderr "start with meta run start_fe.sh with additional options: '$opts'"
+>>>>>>> 35044f9eb ([Enhancement] Enhance FE/BE to output logs to console directly (#20967))
     $STARROCKS_HOME/bin/start_fe.sh $opts
 }
 
