@@ -36,7 +36,9 @@ package com.starrocks.task;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.ClientPool;
+import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TAgentServiceVersion;
@@ -170,13 +172,27 @@ public class AgentBatchTask implements Runnable {
             TNetworkAddress address = null;
             boolean ok = false;
             try {
-                ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendId);
-                if (computeNode == null || !computeNode.isAlive()) {
-                    continue;
+                String host = "";
+                int port = 0;
+                if (Config.only_use_compute_node) {
+                    ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendId);
+                    if (computeNode == null || !computeNode.isAlive()) {
+                        continue;
+                    }
+                    host = computeNode.getHost();
+                    port = computeNode.getBePort();
+                } else {
+                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                    if (backend == null || !backend.isAlive()) {
+                        continue;
+                    }
+                    host = backend.getHost();
+                    port = backend.getBePort();
                 }
+
                 List<AgentTask> tasks = this.backendIdToTasks.get(backendId);
                 // create AgentClient
-                address = new TNetworkAddress(computeNode.getHost(), computeNode.getBePort());
+                address = new TNetworkAddress(host, port);
                 client = ClientPool.backendPool.borrowObject(address);
                 List<TAgentTaskRequest> agentTaskRequests = new LinkedList<TAgentTaskRequest>();
                 for (AgentTask task : tasks) {
