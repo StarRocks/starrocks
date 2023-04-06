@@ -166,4 +166,10 @@ trap exit_clean SIGTERM
 
 update_conf_from_configmap
 log_stderr "run start_cn.sh"
-$STARROCKS_HOME/bin/start_cn.sh
+
+addition_args=
+if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
+    # env var `LOG_CONSOLE=1` can be added to enable logging to console
+    addition_args="--logconsole"
+fi
+$STARROCKS_HOME/bin/start_cn.sh $addition_args
