@@ -396,7 +396,7 @@ PROPERTIES("replication_num" = "3",
 
 - When you create a table, you can create BITMAP indexes or Bloom Filter indexes on the columns except for primary key columns.
 
-- Since version 2.4.0, the Primary Key model supports synchronous and asynchronous materialized views.
+- Since version 2.4.0, you can create asynchronous materialized views based on Primary Key tables.
 
 ### What to do next
 
