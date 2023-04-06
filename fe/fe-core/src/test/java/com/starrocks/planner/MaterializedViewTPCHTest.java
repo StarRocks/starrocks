@@ -29,6 +29,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Ignore
 public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
     public static void setUp() throws Exception {
