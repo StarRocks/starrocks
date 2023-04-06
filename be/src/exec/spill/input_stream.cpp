@@ -225,7 +225,8 @@ void UnorderedInputStream::close() {}
 
 class OrderedInputStream : public SpillInputStream {
 public:
-    OrderedInputStream(const std::vector<BlockPtr>& blocks, RuntimeState* state) : _merger(state) {}
+    OrderedInputStream(std::vector<BlockPtr> blocks, RuntimeState* state)
+            : _input_blocks(std::move(blocks)), _merger(state) {}
 
     ~OrderedInputStream() override = default;
 
