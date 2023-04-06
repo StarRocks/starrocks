@@ -77,7 +77,7 @@ OutPut Exchange Id: 08
 |  other join predicates: (((((20: p_brand = 'Brand#45') AND (23: p_container IN ('SM CASE', 'SM BOX', 'SM PACK', 'SM PKG'))) AND ((5: l_quantity >= 5) AND (5: l_quantity <= 15))) AND (22: p_size <= 5)) OR ((((20: p_brand = 'Brand#11') AND (23: p_container IN ('MED BAG', 'MED BOX', 'MED PKG', 'MED PACK'))) AND ((5: l_quantity >= 15) AND (5: l_quantity <= 25))) AND (22: p_size <= 10))) OR ((((20: p_brand = 'Brand#21') AND (23: p_container IN ('LG CASE', 'LG BOX', 'LG PACK', 'LG PKG'))) AND ((5: l_quantity >= 25) AND (5: l_quantity <= 35))) AND (22: p_size <= 15))
 |  build runtime filters:
 |  - filter_id = 0, build_expr = (17: p_partkey), remote = true
-|  output columns: 6, 7
+|  output columns: 5, 6, 7, 20, 22, 23
 |  cardinality: 19277
 |  column statistics:
 |  * l_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2856.1332873207584] ESTIMATE
