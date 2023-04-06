@@ -1,9 +1,9 @@
 # Quick start: Deploy StarRocks with Docker
 
 This quickstart provides a guide to:
-* Use [Docker](https://docs.docker.com/engine/install/) to deploy StarRocks with one FE and one BE.
-* Connect to StarRocks with MySQL client
-* Create a table, insert some data and query it.
+* Use [Docker](https://docs.docker.com/engine/install) to deploy StarRocks with one FE and one BE.
+* Connect to StarRocks with MySQL client.
+* Create a table, insert some data, and query data.
 
 ## Prerequisites
 
@@ -11,31 +11,39 @@ This quickstart provides a guide to:
 2. MySQL client
 
 ## Step 1: Deploy
+
 To choose a StarRocks version, go to the [StarRocks Dockerhub repository](https://hub.docker.com/r/starrocks/allin1-ubuntu/tags) and choose a version based on the version tag.
+
+For example, to deploy StarRocks v2.5.4, run the following command:
+
 ```sh
 docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 -itd starrocks/allin1-ubuntu:2.5.4
 ```
 
-Then you can check the container status with:
+Then you can check the container status using the following command:
+
 ```sh
 docker ps
 ```
 
 ## Step 2: Connect to StarRocks
 
-StarRocks needs some time to get ready, it is recommended to wait at least 30 seconds before connecting.
+StarRocks needs some time to get ready. We recommend that you wait at least 30 seconds before connecting.
+
 ```sh
 mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
 ```
 
-## Step 3: Using StarRocks
+## Step 3: Use StarRocks
 
-Use the following commands to check the status of FE and BE. If  `Alive` shows true for both FE and BE, StarRocks is healthy and ready to go.
+Use the following commands to check the status of FE and BE. If `Alive` shows `true` for both FE and BE, StarRocks is healthy and ready to go.
 
 FE
+
 ```SQL
 SHOW PROC '/frontends'\G
 ```
+
 ```plaintext
 StarRocks > SHOW PROC '/frontends'\G
 *************************** 1. row ***************************
@@ -58,10 +66,13 @@ ReplayedJournalId: 944
 1 row in set (0.05 sec)
 
 ```
+
 BE
+
 ```SQL
 SHOW PROC '/backends'\G
 ```
+
 ```plaintext
 StarRocks > SHOW PROC '/backends'\G
 *************************** 1. row ***************************
@@ -92,8 +103,8 @@ ClusterDecommissioned: false
            MemUsedPct: 0.24 %
            CpuUsedPct: 0.5 %
 1 row in set (0.03 sec)
-
 ```
+
 Now you can create a table and insert some data.
 
 **_NOTE:_** This quickstart deploys one BE, you need to add `properties ("replication_num" = "1")` in the CREATE TABLE clause, so only one replica of data is persisted in the BE.
@@ -107,7 +118,9 @@ CREATE TABLE tbl(c1 int, c2 int) distributed by hash(c1) properties ("replicatio
 
 INSERT INTO tbl VALUES (1, 1), (2, 2), (3, 3);
 ```
+
 Query the data
+
 ```plaintext
 StarRocks > SELECT * FROM tbl;
 +------+------+
