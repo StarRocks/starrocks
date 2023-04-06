@@ -116,9 +116,9 @@ public:
     }
 
 protected:
-    bool _reach_eof() override;
+    bool _reach_eof() const override;
 
-    connector::StreamDataSource* _get_stream_data_source() {
+    connector::StreamDataSource* _get_stream_data_source() const {
         return down_cast<connector::StreamDataSource*>(_data_source.get());
     }
 

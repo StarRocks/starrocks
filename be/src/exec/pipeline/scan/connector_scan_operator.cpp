@@ -79,6 +79,14 @@ ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int3
                                                   std::move(morsel), this, scan_node, factory->get_chunk_buffer());
 }
 
+void ConnectorScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int index) {
+    ChunkSourcePtr cs = _chunk_sources[index];
+    if (cs) {
+        _closed_chunk_source_total_running_time += cs->get_total_running_time();
+    }
+    ScanOperator::_close_chunk_source_unlocked(state, index);
+}
+
 void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& active_inputs = factory->get_active_inputs();
@@ -158,23 +166,19 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
 
 int ConnectorScanOperator::available_pickup_morsel_count() const {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
-    [[maybe_unused]] PickupMorselState& pick = _pickup_morsel_state;
-    // bool is_full = is_buffer_full();
-    // if (is_full) {
-    //     return 0;
-    // }
 
-    size_t chunk_number = num_buffered_chunks();
-    size_t threshold = _buffer_unplug_threshold();
-    if (chunk_number >= threshold) {
-        return 0;
+    int64_t chunk_source_running_time = _closed_chunk_source_total_running_time;
+
+    for (int i = 0; i < _io_tasks_per_scan_operator; i++) {
+        ChunkSourcePtr cs = _chunk_sources[i];
+        if (_is_io_task_running[i] && (cs != nullptr)) {
+            chunk_source_running_time += cs->get_total_running_time();
+        }
     }
-    // submit 1/ 8 io tasks
-    if (2 * chunk_number >= threshold) {
-        return std::max(1, _io_tasks_per_scan_operator >> 3);
-    }
-    // submit 1/4 io tasks
-    return std::max(1, _io_tasks_per_scan_operator >> 2);
+
+    int64_t scan_op_runing_time = _total_running_time;
+    int exp = int(chunk_source_running_time * 1.0 / scan_op_runing_time + 0.5);
+    return exp - _num_running_io_tasks;
 }
 
 // ==================== ConnectorChunkSource ====================

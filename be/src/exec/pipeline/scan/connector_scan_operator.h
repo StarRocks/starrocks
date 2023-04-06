@@ -63,6 +63,7 @@ public:
     Status do_prepare(RuntimeState* state) override;
     void do_close(RuntimeState* state) override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
+
     connector::ConnectorType connector_type();
 
     // TODO: refactor it into the base class
@@ -79,10 +80,11 @@ public:
     void set_buffer_finished() override;
     int available_pickup_morsel_count() const override;
 
+protected:
+    void _close_chunk_source_unlocked(RuntimeState* state, int index) override;
+
 private:
-    struct PickupMorselState {};
     bool _enable_adaptive_io_tasks = true;
-    mutable PickupMorselState _pickup_morsel_state;
 };
 
 class ConnectorChunkSource : public ChunkSource {
@@ -97,7 +99,7 @@ public:
     const std::string get_custom_coredump_msg() const override;
 
 protected:
-    virtual bool _reach_eof() { return _limit != -1 && _rows_read >= _limit; }
+    virtual bool _reach_eof() const { return _limit != -1 && _rows_read >= _limit; }
     Status _open_data_source(RuntimeState* state);
 
     connector::DataSourcePtr _data_source;

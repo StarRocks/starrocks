@@ -77,6 +77,7 @@ public:
     void set_query_ctx(const QueryContextPtr& query_ctx);
 
     virtual int available_pickup_morsel_count() const { return _io_tasks_per_scan_operator; }
+    void update_total_running_time(int64_t value) { _total_running_time += value; }
 
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
@@ -151,6 +152,9 @@ protected:
     RuntimeProfile::Counter* _morsels_counter = nullptr;
     RuntimeProfile::Counter* _buffer_unplug_counter = nullptr;
     RuntimeProfile::Counter* _submit_task_counter = nullptr;
+
+    int64_t _total_running_time = 0;
+    int64_t _closed_chunk_source_total_running_time = 0;
 
 private:
     int32_t _io_task_retry_cnt = 0;

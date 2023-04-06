@@ -77,7 +77,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
             "PeakIOTasks", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
 
     RETURN_IF_ERROR(do_prepare(state));
-
     return Status::OK();
 }
 

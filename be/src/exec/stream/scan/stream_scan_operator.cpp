@@ -359,7 +359,7 @@ void StreamChunkSource::reset_status() {
     _get_stream_data_source()->reset_status();
 }
 
-bool StreamChunkSource::_reach_eof() {
+bool StreamChunkSource::_reach_eof() const {
     connector::StreamDataSource* data_source = _get_stream_data_source();
     return (_epoch_rows_limit != -1 && data_source->num_rows_read_in_epoch() >= _epoch_rows_limit) ||
            (_epoch_time_limit != -1 && data_source->cpu_time_spent_in_epoch() >= _epoch_time_limit);
