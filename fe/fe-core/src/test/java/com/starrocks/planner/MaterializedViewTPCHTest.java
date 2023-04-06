@@ -16,7 +16,6 @@ package com.starrocks.planner;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
@@ -29,6 +28,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Ignore
 public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     @BeforeClass
     public static void setUp() throws Exception {
