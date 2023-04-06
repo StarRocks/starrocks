@@ -49,7 +49,7 @@ public:
     DEFINE_VECTORIZED_FN(hll_empty);
 
     DEFINE_VECTORIZED_FN(hll_serialize);
-    
+
     DEFINE_VECTORIZED_FN(hll_deserialize);
 };
 

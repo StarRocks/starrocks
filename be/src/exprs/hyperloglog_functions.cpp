@@ -85,8 +85,7 @@ DEFINE_UNARY_FN_WITH_IMPL(HllSerializeImpl, hll) {
     return std::string(data, size);
 }
 
-
-StatusOr<ColumnPtr> HyperloglogFunctions::hll_serialize(FunctionContext* context, const Columns& columns) {    
+StatusOr<ColumnPtr> HyperloglogFunctions::hll_serialize(FunctionContext* context, const Columns& columns) {
     return VectorizedStringStrictUnaryFunction<HllSerializeImpl>::evaluate<TYPE_HLL, TYPE_VARCHAR>(columns[0]);
 }
 
@@ -111,6 +110,5 @@ StatusOr<ColumnPtr> HyperloglogFunctions::hll_deserialize(FunctionContext* conte
         return hll_column;
     }
 }
-
 
 } // namespace starrocks
