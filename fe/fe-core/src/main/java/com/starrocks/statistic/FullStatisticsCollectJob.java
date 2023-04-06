@@ -22,6 +22,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -115,10 +116,10 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         flushInsertStatisticsData(context, true);
     }
 
-    private Expr hllDeserialize(String hll) {
-        Function fn = Expr.getBuiltinFunction("hll_deserialize", new Type[] {Type.VARCHAR},
+    private Expr hllDeserialize(byte[] hll) {
+        Function fn = Expr.getBuiltinFunction("hll_deserialize", new Type[] {Type.VARBINARY},
                 Function.CompareMode.IS_IDENTICAL);
-        FunctionCallExpr fe = new FunctionCallExpr("hll_deserialize", Lists.newArrayList(new StringLiteral(hll)));
+        FunctionCallExpr fe = new FunctionCallExpr("hll_deserialize", Lists.newArrayList(new VarBinaryLiteral(hll)));
         fe.setFn(fn);
         fe.setType(fn.getReturnType());
         return fe;
@@ -165,6 +166,22 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             row.add(new StringLiteral(table.getPartition(data.getPartitionId()).getName())); // partition name, 10 byte
             row.add(new IntLiteral(data.getRowCount(), Type.BIGINT)); // row count, 8 byte
             row.add(new IntLiteral((long) data.getDataSize(), Type.BIGINT)); // data size, 8 byte
+
+            // StringBuilder sb = new StringBuilder();
+            // for (int i = 0; i < data.getHll().length; i++) {
+            //     sb.append(((int) data.getHll()[i]));
+            // }
+            //
+            // String hll = new String(data.getHll());
+            // LOG.info("hktest, byte: " + sb);
+            // LOG.info("hktest: str : " + hll);
+            //
+            // StringBuilder sb1 = new StringBuilder();
+            // for (int i = 0; i < hll.getBytes().length; i++) {
+            //     sb1.append(((int) hll.getBytes()[i]));
+            // }
+            // LOG.info("hktest: dstr: " + sb1);
+
             row.add(hllDeserialize(data.getHll())); // hll, 16 kB
             row.add(new IntLiteral(data.getNullCount(), Type.BIGINT)); // null count, 8 byte
             row.add(new StringLiteral(data.getMax())); // max, 200 byte
