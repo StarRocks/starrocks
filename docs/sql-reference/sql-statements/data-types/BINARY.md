@@ -139,9 +139,8 @@ mysql> select id, from_binary(j, 'hex') from test_binary;
 ```
 
 
-## 限制和注意事项
+## Limitations and Notes
 
-- 当前 BINARY/VARBINARY 类型的数据最大长度和字符串类型相同。
-- 支持 BINARY/VARBINARY 类型的列存在于明细模型、主键模型、更新模型的表中，但不支持存在于聚合模型的表中。
-- 暂不支持 BINARY/VARBINARY 类型的列作为分区键、分桶键、维度列（DUPLICATE KEY、PRIMARY KEY、UNIQUE KEY），并且不支持用于 JOIN、GROUP BY、ORDER BY 子句。
-- BINARY只是VARBINARY的别名，用法同VARBINARY完全相同，BINARY(M)/VARBINARY(M) 不会对没有对齐的长度做补齐操作；
+- Currently, the maximum data length of the `BINARY`/`VARBINARY` type is the same as that of the string type.
+- Columns of `BINARY`/`VARBINARY` type are not currently supported as partition keys, bucket keys, and dimension columns (DUPLICATE KEY, PRIMARY KEY, UNIQUE KEY), and are not supported for JOIN, GROUP BY, and ORDER BY clauses.
+- `BINARY` is just an alias of `VARBINARY`, the usage is exactly the same as `VARBINARY`, `BINARY(M)`/`VARBINARY(M)` will not fill the unaligned length;
