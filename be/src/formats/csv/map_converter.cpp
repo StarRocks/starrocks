@@ -88,7 +88,8 @@ bool MapConverter::split_map_key_value(Slice s, std::vector<Slice>& keys, std::v
             }
             values.push_back(Slice(s.data + last_index, i - last_index));
             last_index = i + 1;
-        } else if (!in_quote && map_nest_level == 0 && i + 1 == s.size) {
+        }
+        if (!in_quote && map_nest_level == 0 && i + 1 == s.size) {
             if (i + 1 == last_index) {
                 return false;
             }
@@ -96,7 +97,7 @@ bool MapConverter::split_map_key_value(Slice s, std::vector<Slice>& keys, std::v
             last_index = i + 1;
         }
     }
-    if (map_nest_level != 0 || in_quote || last_index != s.size) {
+    if (map_nest_level != 0 || in_quote || values.size() != keys.size()) {
         return false;
     }
     return true;
