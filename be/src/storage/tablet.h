@@ -266,6 +266,7 @@ private:
     std::mutex _ingest_lock;
     std::mutex _base_lock;
     std::mutex _cumulative_lock;
+    mutable std::mutex _tablet_meta_lock;
 
     std::shared_mutex _migration_lock;
     // should use with migration lock.
@@ -333,30 +334,37 @@ inline void Tablet::set_cumulative_layer_point(int64_t new_point) {
 }
 
 inline KeysType Tablet::keys_type() const {
+    std::lock_guard l(_tablet_meta_lock);
     return _tablet_meta->tablet_schema().keys_type();
 }
 
 inline size_t Tablet::num_columns() const {
+    std::lock_guard l(_tablet_meta_lock);
     return _tablet_meta->tablet_schema().num_columns();
 }
 
 inline size_t Tablet::num_key_columns() const {
+    std::lock_guard l(_tablet_meta_lock);
     return _tablet_meta->tablet_schema().num_key_columns();
 }
 
 inline size_t Tablet::num_short_key_columns() const {
+    std::lock_guard l(_tablet_meta_lock);
     return _tablet_meta->tablet_schema().num_short_key_columns();
 }
 
 inline size_t Tablet::num_rows_per_row_block() const {
+    std::lock_guard l(_tablet_meta_lock);
     return _tablet_meta->tablet_schema().num_rows_per_row_block();
 }
 
 inline size_t Tablet::next_unique_id() const {
+    std::lock_guard l(_tablet_meta_lock);
     return _tablet_meta->tablet_schema().next_column_unique_id();
 }
 
 inline size_t Tablet::field_index(const string& field_name) const {
+    std::lock_guard l(_tablet_meta_lock);
     return _tablet_meta->tablet_schema().field_index(field_name);
 }
 

@@ -158,6 +158,7 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
             LOG(WARNING) << "failed to save new local tablet_meta when clone: " << st;
             break;
         }
+        std::lock_guard l(_tablet_meta_lock);
         _tablet_meta = new_tablet_meta;
     } while (false);
 
@@ -532,10 +533,12 @@ Status Tablet::_capture_consistent_rowsets_unlocked(const std::vector<Version>& 
 // TODO(lingbin): what is the difference between version_for_delete_predicate() and
 // version_for_load_deletion()? should at least leave a comment
 bool Tablet::version_for_delete_predicate(const Version& version) {
+    std::lock_guard l(_tablet_meta_lock);
     return _tablet_meta->version_for_delete_predicate(version);
 }
 
 AlterTabletTaskSharedPtr Tablet::alter_task() {
+    std::lock_guard l(_tablet_meta_lock);
     return _tablet_meta->alter_task();
 }
 
@@ -1099,6 +1102,7 @@ int Tablet::version_count() const {
     if (_updates) {
         return _updates->version_count();
     } else {
+        std::lock_guard l(_tablet_meta_lock);
         return _tablet_meta->version_count();
     }
 }
@@ -1107,6 +1111,7 @@ Version Tablet::max_version() const {
     if (_updates) {
         return Version(0, _updates->max_version());
     } else {
+        std::lock_guard l(_tablet_meta_lock);
         return _tablet_meta->max_version();
     }
 }
