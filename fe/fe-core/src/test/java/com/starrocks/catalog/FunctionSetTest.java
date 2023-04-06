@@ -251,7 +251,7 @@ public class FunctionSetTest {
         fn = functionSet.getFunction(desc, Function.CompareMode.IS_SUPERTYPE_OF);
         Assert.assertNotNull(fn);
         Assert.assertEquals(Type.INT, fn.getReturnType());
-        Assert.assertEquals(new ArrayType(Type.NULL), fn.getArgs()[0]);
+        Assert.assertEquals(new ArrayType(Type.BOOLEAN), fn.getArgs()[0]);
 
         // array_generate(SmallInt,Int,BigInt)
         argTypes = new Type[] {Type.SMALLINT, Type.INT, Type.BIGINT};
