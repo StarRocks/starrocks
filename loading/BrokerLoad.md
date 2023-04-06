@@ -257,7 +257,7 @@ WITH BROKER
 );
 ```
 
-#### 从 华为云 OBS 导入
+#### 从华为云 OBS 导入
 
 可以通过如下语句，把华为云 OBS 存储空间 `bucket_obs` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
 
