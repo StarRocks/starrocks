@@ -17,6 +17,7 @@
 #include "column/type_traits.h"
 #include "exec/schema_scanner/schema_be_compactions_scanner.h"
 #include "exec/schema_scanner/schema_be_configs_scanner.h"
+#include "exec/schema_scanner/schema_be_logs_scanner.h"
 #include "exec/schema_scanner/schema_be_metrics_scanner.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "exec/schema_scanner/schema_be_threads_scanner.h"
@@ -137,6 +138,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaBeConfigsScanner>();
     case TSchemaTableType::SCH_BE_THREADS:
         return std::make_unique<SchemaBeThreadsScanner>();
+    case TSchemaTableType::SCH_BE_LOGS:
+        return std::make_unique<SchemaBeLogsScanner>();
     case TSchemaTableType::SCH_FE_TABLET_SCHEDULES:
         return std::make_unique<SchemaFeTabletSchedulesScanner>();
     case TSchemaTableType::SCH_BE_COMPACTIONS:
