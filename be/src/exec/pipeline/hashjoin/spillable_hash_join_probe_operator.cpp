@@ -202,7 +202,7 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         res->fnv_hash(hash_values.data(), 0, num_rows);
     }
 
-    auto& exexutor = _join_builder->io_executor();
+    auto& executor = _join_builder->io_executor();
     auto partition_processer = [&chunk, this, state, &hash_values](spill::SpilledPartition* probe_partition,
                                                                    const std::vector<uint32_t>& selection, int32_t from,
                                                                    int32_t size) {
@@ -231,7 +231,7 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         }
         probe_partition->num_rows += size;
     };
-    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(state, chunk, hash_column.get(), partition_processer, exexutor,
+    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(state, chunk, hash_column.get(), partition_processer, executor,
                                                       spill::MemTrackerGuard(tls_mem_tracker)));
 
     return Status::OK();
