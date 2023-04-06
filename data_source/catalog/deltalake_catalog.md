@@ -101,7 +101,7 @@ StarRocks 访问 Delta Lake 集群元数据服务的相关参数配置。
 
 `MetastoreParams` 包含如下参数。
 
-| 参数                | 是否必须 | 描述                                                         |
+| 参数                | 是否必须   | 说明                                                         |
 | ------------------- | -------- | ------------------------------------------------------------ |
 | hive.metastore.uris | 是       | HMS 的 URI。格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。<br>如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>","thrift://<HMS IP 地址 2>:<HMS 端口号 2>","thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
 
@@ -137,7 +137,7 @@ StarRocks 访问 Delta Lake 集群元数据服务的相关参数配置。
 
 `MetastoreParams` 包含如下参数。
 
-| 参数                          | 是否必须 | 描述                                                         |
+| 参数                          | 是否必须   | 说明                                                         |
 | ----------------------------- | -------- | ------------------------------------------------------------ |
 | hive.metastore.type           | 是       | Delta Lake 集群所使用的元数据服务的类型。设置为 `glue`。           |
 | aws.glue.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
@@ -186,15 +186,37 @@ StarRocks 访问 Delta Lake 集群文件存储的相关参数配置。
 
 `StorageCredentialParams` 包含如下参数。
 
-| 参数                        | 是否必须 | 描述                                                         |
+| 参数                        | 是否必须   | 说明                                                         |
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
-| "aws.s3.iam_role_arn"       | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。这样，StarRocks 在使用 Delta Lake Catalog 访问 Delta Lake 数据时将会担任该 IAM Role。 |
-| "aws.s3.region"             | 是       | AWS S3 Bucket 所在的地域。示例：`us-west-1`。                |
-| "aws.s3.access_key"         | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。这样，StarRocks 在使用 Delta Lake Catalog 访问 Delta Lake 数据时将会担任该 IAM Role。 |
-| "aws.s3.secret_key"         | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。这样，StarRocks 在使用 Delta Lake Catalog 访问 Delta Lake 数据时将会担任该 IAM Role。 |
+| aws.s3.iam_role_arn         | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。这样，StarRocks 在使用 Delta Lake Catalog 访问 Delta Lake 数据时将会担任该 IAM Role。 |
+| aws.s3.region               | 是       | AWS S3 Bucket 所在的地域。示例：`us-west-1`。                |
+| aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。这样，StarRocks 在使用 Delta Lake Catalog 访问 Delta Lake 数据时将会担任该 IAM Role。 |
+| aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。这样，StarRocks 在使用 Delta Lake Catalog 访问 Delta Lake 数据时将会担任该 IAM Role。 |
 
 有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
+
+##### AWS S3 兼容存储
+
+如果选择 AWS S3 兼容存储（如 MinIO）作为 Hive 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+
+```SQL
+"aws.s3.enable_ssl" = "<true >",
+"aws.s3.enable_path_style_access" = "<true>",
+"aws.s3.endpoint" = "<s3_endpoint>",
+"aws.s3.access_key" = "<iam_user_access_key>",
+"aws.s3.secret_key" = "<iam_user_secret_key>"
+```
+
+`StorageCredentialParams` 包含如下参数。
+
+| 参数                             | 是否必须   | 说明                                                  |
+| -------------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.enable_ssl                | Yes      | 是否开启 SSL 连接。取值范围：`true` 和 `false`。默认值：`true`。 |
+| aws.s3.enable_path_style_access  | Yes      | 是否开启路径类型 URL 访问 (Path-Style URL Access)。取值范围：`true` 和 `false`。默认值：`false`。 |
+| aws.s3.endpoint                  | Yes      | 用于访问 AWS S3 Bucket 的 Endpoint。 |
+| aws.s3.access_key                | Yes      | IAM User 的 Access Key。 |
+| aws.s3.secret_key                | Yes      | IAM User 的 Secret Key。 |
 
 #### `MetadataUpdateParams`
 
@@ -204,7 +226,7 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
 
 如果 Delta Lake 数据更新频率较高，那么您可以对这些参数进行调优，从而优化自动异步更新策略的性能。
 
-| 参数                                   | 是否必须 | 描述                                                         |
+| 参数                                   | 是否必须  | 说明                                                         |
 | -------------------------------------- | -------- | ------------------------------------------------------------ |
 | enable_metastore_cache            | 否       | 指定 StarRocks 是否缓存 Delta Lake 表的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
 | enable_remote_file_cache               | 否       | 指定 StarRocks 是否缓存 Delta Lake 表或分区的数据文件的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
