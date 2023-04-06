@@ -274,28 +274,6 @@ If the source data is stored in a Google GCS bucket, provide the following confi
 | fs.s3a.secret.key | The Secret Key that you can use to access the Google GCS bucket. |
 | fs.s3a.endpoint   | The endpoint that you can use to access the Google GCS bucket. |
 
-##### AWS S3-compatible storage
-
-If the source data is stored in an AWS S3-compatible storage system, such as MinIO, provide the following configurations:
-
-```SQL
-"aws.s3.enable_ssl" = "<true>",
-"aws.s3.enable_path_style_access" = "<true>",
-"aws.s3.endpoint" = "<s3_endpoint>",
-"aws.s3.access_key" = "<iam_user_access_key>",
-"aws.s3.secret_key" = "<iam_user_secret_key>"
-```
-
-The following table describes the parameters.
-
-| Parameter                        | Required | Description                                                  |
-| -------------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection. Valid values: `true` and `false`. Default value: `true`. |
-| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style URL access. Valid values: `true` and `false`. Default value: `false`. |
-| aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your AWS S3 bucket. |
-| aws.s3.access_key                | Yes      | The access key of your AWS IAM user. |
-| aws.s3.secret_key                | Yes      | The secret key of your AWS IAM user. |
-
 > **NOTE**
 >
 > Broker Load supports accessing Google GCS only according to the S3A protocol. Therefore, when you load data from Google GCS, you must replace the prefix in the GCS URI you pass as a file path into `DATA INFILE` with `s3a://`.
