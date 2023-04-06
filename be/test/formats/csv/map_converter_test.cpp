@@ -84,7 +84,6 @@ TEST(MapConverterTest, test_read_write_nest_map) {
     EXPECT_TRUE(conv->read_string(col.get(), "{11:{1:\"abc\",2:NULL,1:NULL},22:{NULL:NULL},22:{2:\"unique\"}}",
                                   Converter::Options())); // duplicated keys
 
-
     EXPECT_EQ(6, col->size());
     // {}
     EXPECT_EQ(0, col->get(0).get_map().size());
@@ -111,7 +110,10 @@ TEST(MapConverterTest, test_read_write_nest_map) {
     ASSERT_TRUE(conv->write_string(&buff, *col, 4, Converter::Options()).ok());
     ASSERT_TRUE(conv->write_string(&buff, *col, 5, Converter::Options()).ok());
     ASSERT_TRUE(buff.finalize().ok());
-    ASSERT_EQ("{}{1:{}}{1:{1:\"abc\",2:null},2:{3:\"\"}}{null:{null:null}}{null:{null:\"NULL\"},-20308764:{33:\"\"}}{11:{2:null,1:null},22:{2:\"unique\"}}", buff.as_string());
+    ASSERT_EQ(
+            "{}{1:{}}{1:{1:\"abc\",2:null},2:{3:\"\"}}{null:{null:null}}{null:{null:\"NULL\"},-20308764:{33:\"\"}}{11:{"
+            "2:null,1:null},22:{2:\"unique\"}}",
+            buff.as_string());
 }
 
 } // namespace starrocks::csv
