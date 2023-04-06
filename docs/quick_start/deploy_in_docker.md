@@ -1,7 +1,7 @@
 # Quick start: Deploy StarRocks with Docker
 
 This quickstart provides a guide to:
-* Use [Docker](https://docs.docker.com/engine/instal/) to deploy StarRocks with one FE and one BE.
+* Use [Docker](https://docs.docker.com/engine/install/) to deploy StarRocks with one FE and one BE.
 * Connect to StarRocks with MySQL client.
 * Create a table, insert some data, and query it.
 
