@@ -37,13 +37,13 @@
 #include <boost/preprocessor/repetition/repeat_from_to.hpp>
 
 #include "util/bit_packing.h"
-#include "util/bitpacking/unpack_def.h"
-#include "util/bitpacking/extend_8u.h"
 #include "util/bitpacking/extend_16u.h"
 #include "util/bitpacking/extend_32u.h"
-#include "util/bitpacking/unpack_8u.h"
+#include "util/bitpacking/extend_8u.h"
 #include "util/bitpacking/unpack_16u.h"
 #include "util/bitpacking/unpack_32u.h"
+#include "util/bitpacking/unpack_8u.h"
+#include "util/bitpacking/unpack_def.h"
 
 namespace starrocks {
 

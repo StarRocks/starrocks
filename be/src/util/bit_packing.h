@@ -50,8 +50,9 @@ public:
                                                            int64_t num_values, OutType* __restrict__ out);
 
     template <typename OutType>
-    static std::pair<const uint8_t*, int64_t> UnpackValuesSIMD(int bit_width, const uint8_t* __restrict__ in, int64_t in_bytes,
-                                                        int64_t num_values, OutType* __restrict__ out);
+    static std::pair<const uint8_t*, int64_t> UnpackValuesSIMD(int bit_width, const uint8_t* __restrict__ in,
+                                                               int64_t in_bytes, int64_t num_values,
+                                                               OutType* __restrict__ out);
 
     /// Same as Unpack32Values() but templated by BIT_WIDTH.
     template <typename OutType, int BIT_WIDTH>

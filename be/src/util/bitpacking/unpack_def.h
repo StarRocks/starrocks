@@ -13,10 +13,9 @@
 // limitations under the License.
 #pragma once
 
+#include <immintrin.h>
 #include <stdint.h>
 #include <stdio.h>
-
-#include <immintrin.h>
 
 #define OWN_ALIGNED_ARRAY(array_declaration, alignment) array_declaration __attribute__((aligned(alignment)))
 #define OWN_ALIGNED_64_ARRAY(array_declaration) OWN_ALIGNED_ARRAY(array_declaration, 64u)

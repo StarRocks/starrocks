@@ -103,7 +103,8 @@ template <typename OutType>
 const uint8_t* unpack_Nu16u(const uint8_t* src_ptr, uint32_t values_to_read, uint32_t bit_width, OutType* dst_ptr);
 
 template <>
-inline const uint8_t* unpack_Nu16u(const uint8_t* src_ptr, uint32_t values_to_read, uint32_t bit_width, uint16_t* dst_ptr) {
+inline const uint8_t* unpack_Nu16u(const uint8_t* src_ptr, uint32_t values_to_read, uint32_t bit_width,
+                                   uint16_t* dst_ptr) {
     uint32_t mask = OWN_BIT_MASK(bit_width);
     uint32_t next_word;
     uint32_t bits_in_buf = OWN_WORD_WIDTH;
@@ -137,7 +138,8 @@ inline const uint8_t* unpack_Nu16u(const uint8_t* src_ptr, uint32_t values_to_re
 }
 
 template <>
-inline const uint8_t* unpack_Nu16u(const uint8_t* src_ptr, uint32_t values_to_read, uint32_t bit_width, uint32_t* dst_ptr) {
+inline const uint8_t* unpack_Nu16u(const uint8_t* src_ptr, uint32_t values_to_read, uint32_t bit_width,
+                                   uint32_t* dst_ptr) {
     uint32_t mask = OWN_BIT_MASK(bit_width);
     uint32_t next_word;
     uint32_t bits_in_buf = OWN_WORD_WIDTH;
@@ -171,7 +173,8 @@ inline const uint8_t* unpack_Nu16u(const uint8_t* src_ptr, uint32_t values_to_re
 }
 
 template <>
-inline const uint8_t* unpack_Nu16u(const uint8_t* src_ptr, uint32_t values_to_read, uint32_t bit_width, uint64_t* dst_ptr) {
+inline const uint8_t* unpack_Nu16u(const uint8_t* src_ptr, uint32_t values_to_read, uint32_t bit_width,
+                                   uint64_t* dst_ptr) {
     uint32_t mask = OWN_BIT_MASK(bit_width);
     uint32_t next_word;
     uint32_t bits_in_buf = OWN_WORD_WIDTH;

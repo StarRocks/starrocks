@@ -104,4 +104,3 @@ inline void extend_8u64u(const __m512i src, uint64_t* dst_ptr) {
     _mm512_storeu_si512(dst_ptr, result);
     dst_ptr += 8u;
 }
-
