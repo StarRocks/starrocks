@@ -37,7 +37,6 @@ abstract class AzureStorageCloudCredential implements CloudCredential {
 
     protected Map<String, String> generatedConfigurationMap = new HashMap<>();
 
-
     @Override
     public void applyToConfiguration(Configuration configuration) {
         for (Map.Entry<String, String> entry : generatedConfigurationMap.entrySet()) {

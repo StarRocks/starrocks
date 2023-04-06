@@ -16,6 +16,7 @@ package com.starrocks.credential.gcp;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudProperty;
 import com.starrocks.thrift.TCloudType;
@@ -45,6 +46,11 @@ public class GCPCloudConfiguration implements CloudConfiguration {
     @Override
     public void applyToConfiguration(Configuration configuration) {
         gcpCloudCredential.applyToConfiguration(configuration);
+    }
+
+    @Override
+    public CloudType getCloudType() {
+        return CloudType.GCP;
     }
 
     @Override

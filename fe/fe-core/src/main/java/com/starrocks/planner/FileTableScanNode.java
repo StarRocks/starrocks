@@ -25,6 +25,7 @@ import com.starrocks.connector.RemoteFileBlockDesc;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -43,9 +44,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class FileTableScanNode extends ScanNode {
-    private List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
-    private FileTable fileTable;
-    private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+    private final List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
+    private final FileTable fileTable;
+    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private CloudConfiguration cloudConfiguration = null;
 
     public FileTableScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -63,7 +64,7 @@ public class FileTableScanNode extends ScanNode {
     }
 
     private void setupCredential() {
-        cloudConfiguration = CloudConfigurationFactory.tryBuildForStorage(fileTable.getFileProperties());
+        cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(fileTable.getFileProperties());
     }
 
     @Override
@@ -194,8 +195,11 @@ public class FileTableScanNode extends ScanNode {
             msg.hdfs_scan_node.setTable_name(fileTable.getName());
         }
 
-        if (cloudConfiguration != null) {
-            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+        // TODO(SmithCruise)
+        // We only set cloudConfiguration when CloudType is non-default.
+        // Because BE didn't handle CloudType.DEFAULT situation now
+        if (cloudConfiguration != null && cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+           TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
