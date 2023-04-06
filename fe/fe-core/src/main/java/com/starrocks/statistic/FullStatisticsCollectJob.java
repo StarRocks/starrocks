@@ -55,18 +55,12 @@ import java.util.Map;
 public class FullStatisticsCollectJob extends StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(FullStatisticsCollectJob.class);
 
-    private static final String COLLECT_FULL_STATISTIC_TEMPLATE =
-            "SELECT $tableId, $partitionId, '$columnName', $dbId," +
-                    " '$dbName.$tableName', '$partitionName'," +
-                    " COUNT(1), $dataSize, $countDistinctFunction, $countNullFunction, $maxFunction, $minFunction, NOW() "
-                    + "FROM `$dbName`.`$tableName` partition `$partitionName`";
-
     private static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT
             ", '$columnName'" + // VARCHAR
             ", cast(COUNT(1) as BIGINT)" + // BIGINT
             ", cast($dataSize as BIGINT)" + // BIGINT
-            ", $hllFunction" + // VARCHAR
+            ", $hllFunction" + // VARBINARY
             ", cast($countNullFunction as BIGINT)" + // BIGINT
             ", $maxFunction" + // VARCHAR
             ", $minFunction " + // VARCHAR
@@ -143,13 +137,16 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
         List<String> params = Lists.newArrayList();
         List<Expr> row = Lists.newArrayList();
+        String tableName = db.getOriginName() + "." + table.getName();
         for (TStatisticData data : dataList) {
+            String partitionName = table.getPartition(data.getPartitionId()).getName();
+
             params.add(String.valueOf(table.getId()));
             params.add(String.valueOf(data.getPartitionId()));
             params.add("'" + data.getColumnName() + "'");
             params.add(String.valueOf(db.getId()));
-            params.add("'" + db.getOriginName() + "." + table.getName() + "'");
-            params.add("'" + table.getPartition(data.getPartitionId()).getName() + "'");
+            params.add("'" + tableName + "'");
+            params.add("'" + partitionName + "'");
             params.add(String.valueOf(data.getRowCount()));
             params.add(String.valueOf(data.getDataSize()));
             params.add("hll_deserialize('mockData')");
@@ -162,26 +159,10 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             row.add(new IntLiteral(data.getPartitionId(), Type.BIGINT)); // partition id, 8 byte
             row.add(new StringLiteral(data.getColumnName())); // column name, 20 byte
             row.add(new IntLiteral(db.getId(), Type.BIGINT)); // db id, 8 byte
-            row.add(new StringLiteral(db.getOriginName() + "." + table.getName())); // table name, 50 byte
-            row.add(new StringLiteral(table.getPartition(data.getPartitionId()).getName())); // partition name, 10 byte
+            row.add(new StringLiteral(tableName)); // table name, 50 byte
+            row.add(new StringLiteral(partitionName)); // partition name, 10 byte
             row.add(new IntLiteral(data.getRowCount(), Type.BIGINT)); // row count, 8 byte
             row.add(new IntLiteral((long) data.getDataSize(), Type.BIGINT)); // data size, 8 byte
-
-            // StringBuilder sb = new StringBuilder();
-            // for (int i = 0; i < data.getHll().length; i++) {
-            //     sb.append(((int) data.getHll()[i]));
-            // }
-            //
-            // String hll = new String(data.getHll());
-            // LOG.info("hktest, byte: " + sb);
-            // LOG.info("hktest: str : " + hll);
-            //
-            // StringBuilder sb1 = new StringBuilder();
-            // for (int i = 0; i < hll.getBytes().length; i++) {
-            //     sb1.append(((int) hll.getBytes()[i]));
-            // }
-            // LOG.info("hktest: dstr: " + sb1);
-
             row.add(hllDeserialize(data.getHll())); // hll, 16 kB
             row.add(new IntLiteral(data.getNullCount(), Type.BIGINT)); // null count, 8 byte
             row.add(new StringLiteral(data.getMax())); // max, 200 byte
@@ -203,6 +184,9 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         // about 17kb
         long bufferSize = 17L * 1024 * rowsBuffer.size();
         if (bufferSize < Config.statistics_full_collect_buffer && !force) {
+            return;
+        }
+        if (rowsBuffer.isEmpty()) {
             return;
         }
 
@@ -241,7 +225,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private StatementBase createInsertStmt() {
-        String sql = "INSERT INTO column_statistics values " + sqlBuffer;
+        String sql = "INSERT INTO column_statistics values " + sqlBuffer + ";";
         List<String> names = Lists.newArrayList("column_0", "column_1", "column_2", "column_3",
                 "column_4", "column_5", "column_6", "column_7", "column_8", "column_9",
                 "column_10", "column_11", "column_12");
@@ -306,35 +290,4 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));
         return builder.toString();
     }
-
-    // private String buildCollectFullStatisticSQL(Database database, Table table, Partition partition,
-    //                                             String columnName) {
-    //     StringBuilder builder = new StringBuilder();
-    //     VelocityContext context = new VelocityContext();
-    //     Column column = table.getColumn(columnName);
-    //
-    //     context.put("dbId", database.getId());
-    //     context.put("tableId", table.getId());
-    //     context.put("partitionId", partition.getId());
-    //     context.put("columnName", columnName);
-    //     context.put("dbName", database.getOriginName());
-    //     context.put("tableName", table.getName());
-    //     context.put("partitionName", partition.getName());
-    //     context.put("dataSize", getDataSize(column));
-    //
-    //     if (!column.getType().canStatistic()) {
-    //         context.put("countDistinctFunction", "hll_empty()");
-    //         context.put("countNullFunction", "0");
-    //         context.put("maxFunction", "''");
-    //         context.put("minFunction", "''");
-    //     } else {
-    //         context.put("countDistinctFunction", "IFNULL(hll_raw(`" + columnName + "`), hll_empty())");
-    //         context.put("countNullFunction", "COUNT(1) - COUNT(`" + columnName + "`)");
-    //         context.put("maxFunction", getMinMaxFunction(column, StatisticUtils.quoting(columnName), true));
-    //         context.put("minFunction", getMinMaxFunction(column, StatisticUtils.quoting(columnName), false));
-    //     }
-    //
-    //     builder.append(build(context, COLLECT_FULL_STATISTIC_TEMPLATE));
-    //     return builder.toString();
-    // }
 }
