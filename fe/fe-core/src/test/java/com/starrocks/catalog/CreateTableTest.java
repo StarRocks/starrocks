@@ -32,7 +32,18 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.system.SystemInfoService;
+=======
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.system.Backend;
+import com.starrocks.utframe.StarRocksAssert;
+>>>>>>> 647f89e49 (Fix unsupported type reporting NPE (#21000))
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -63,6 +74,44 @@ public class CreateTableTest {
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
     }
 
+<<<<<<< HEAD
+=======
+    @Test(expected = DdlException.class)
+    public void testNotSpecifyReplicateNum() throws Exception {
+        createTable(
+                "CREATE TABLE test.`duplicate_table_with_null` ( `k1`  date, `k2`  datetime,`k3`  " +
+                        "char(20), `k4`  varchar(20), `k5`  boolean, `k6`  tinyint, `k7`  smallint, " +
+                        "`k8`  int, `k9`  bigint, `k10` largeint, `k11` float, `k12` double, " +
+                        "`k13` decimal(27,9)) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY " +
+                        "time_slice(k2, interval 1 hour) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) " +
+                        "PROPERTIES ( \"storage_format\" = \"v2\");"
+        );
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testCreateUnsupportedType() throws Exception {
+        createTable(
+                "CREATE TABLE test.ods_warehoused (\n" +
+                        " warehouse_id                                bigint(20)                 COMMENT        ''\n" +
+                        ",company_id                                        bigint(20)                 COMMENT        ''\n" +
+                        ",company_name                                string                        COMMENT        ''\n" +
+                        ",is_sort_express_by_cost        tinyint(1)                COMMENT        ''\n" +
+                        ",is_order_intercepted                tinyint(1)                COMMENT        ''\n" +
+                        ",intercept_time_type                tinyint(3)                 COMMENT        ''\n" +
+                        ",intercept_time                                time                        COMMENT        ''\n" +
+                        ",intercept_begin_time                time                        COMMENT        ''\n" +
+                        ",intercept_end_time                        time                        COMMENT        ''\n" +
+                        ")\n" +
+                        "PRIMARY KEY(warehouse_id)\n" +
+                        "COMMENT \"\"\n" +
+                        "DISTRIBUTED BY HASH(warehouse_id)\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
+        );
+    }
+
+>>>>>>> 647f89e49 (Fix unsupported type reporting NPE (#21000))
     @Test
     public void testNormal() throws DdlException {
 
