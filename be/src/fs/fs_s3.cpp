@@ -263,8 +263,10 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const FSOptions& opts) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
+    // TODO(SmithCruise) If CloudType is DEFAULT, we should use hadoop sdk to access file,
+    // otherwise user's core-site.xml will not take effect in s3 sdk
     if ((hdfs_properties != nullptr && hdfs_properties->__isset.cloud_configuration) ||
-        opts.cloud_configuration != nullptr) {
+        (opts.cloud_configuration != nullptr && opts.cloud_configuration->cloud_type != TCloudType::DEFAULT)) {
         // Use CloudConfiguration instead of original logic
         const TCloudConfiguration& tCloudConfiguration = (opts.cloud_configuration != nullptr)
                                                                  ? *opts.cloud_configuration
