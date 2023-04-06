@@ -391,7 +391,7 @@ PROPERTIES("replication_num" = "1",
 
 - 创建表时，支持为除了主键之外的列创建 BITMAP、Bloom Filter 等索引。
 
-- 自 2.4 版本起，主键模型支持同步和异步物化视图。
+- 自 2.4 版本起，支持基于主键模型的表创建[异步物化视图](../using_starrocks/Materialized_view.md)。
 
 ### 下一步
 
