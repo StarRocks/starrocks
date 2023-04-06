@@ -240,17 +240,6 @@ public:
 
     bool has_large_column() const override { return false; }
 
-    class BigObjectHelper {
-    public:
-        static bool is_big_object() {
-            if constexpr (std::is_same_v<ValueType, BitmapValue>) {
-                return true;
-            } else {
-                return false;
-            }
-        }
-    };
-
 private:
     // add this to avoid warning clang-diagnostic-overloaded-virtual
     using Column::append;
