@@ -1,5 +1,31 @@
 # StarRocks version 2.5
 
+## 2.5.4
+
+发布日期： 2023 年 4 月 4 日
+
+### 功能优化
+
+- 优化查询规划阶段物化视图查询改写的性能，降低约 70% 的规划耗时。[#19579](https://github.com/StarRocks/starrocks/pull/19579)
+- 优化类型推断，如果查询 `SELECT sum(CASE WHEN XXX)FROM xxx;` 中包含常量 `0`，例如 `SELECT sum(CASE WHEN k1 = 1 THEN v1 ELSE 0 END) FROM test;`，则预聚合自动开启以加速查询。[#19474](https://github.com/StarRocks/starrocks/pull/19474)
+- 支持使用 `SHOW CREATE VIEW` 查看物化视图的创建语句。[#19999](https://github.com/StarRocks/starrocks/pull/19999)
+- BE 节点之间单次 bRPC 请求支持传输超过 2 GB 的数据包。[#20283](https://github.com/StarRocks/starrocks/pull/20283) [#20230](https://github.com/StarRocks/starrocks/pull/20230)
+
+### 问题修复
+
+修复了如下问题：
+
+- 物化视图查询改写后，低基数全局字典优化不生效。[#19615](https://github.com/StarRocks/starrocks/pull/19615)
+- 物化视图查询无法改写，导致查询失败。[#19774](https://github.com/StarRocks/starrocks/pull/19774)
+- 基于主键模型或更新模型的表创建物化视图，物化视图查询无法改写。[#19600](https://github.com/StarRocks/starrocks/pull/19600)
+- 物化视图的列名大小写敏感， 建表时 `PROPERTIES` 中列名大小写错误，仍然返回建表成功，未能返回报错提示，并且基于该表的物化视图查询无法改写。[#19780](https://github.com/StarRocks/starrocks/pull/19780)
+- 物化视图查询改写后，执行计划中可能产生基于分区列的无效谓词，影响查询速度。[#19784](https://github.com/StarRocks/starrocks/pull/19784)
+- 导入数据至新创建的分区后，物化视图查询可能无法改写。[#20323](https://github.com/StarRocks/starrocks/pull/20323)
+- 创建物化视图时配置 `"storage_medium" = "SSD"` ，导致物化视图刷新失败。[#19539](https://github.com/StarRocks/starrocks/pull/19539) [#19626](https://github.com/StarRocks/starrocks/pull/19626)
+- 主键模型的表可能会并行 Compaction。[#19692](https://github.com/StarRocks/starrocks/pull/19692)
+- 大量 DELETE 操作后 Compaction 不及时。[#19623](https://github.com/StarRocks/starrocks/pull/19623)
+- 如果语句的表达式中含有多个低基数列时，表达式改写可能出错，进而导致低基数全局字典优化不生效。[#20161](https://github.com/StarRocks/starrocks/pull/20161)
+
 ## 2.5.3
 
 发布日期： 2023 年 3 月 10 日
