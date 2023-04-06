@@ -40,9 +40,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -768,4 +771,32 @@ public class AnalyzerUtils {
         }
         return null;
     }
+
+    public static Type replaceNullType2Boolean(Type type) {
+        if (type.isNull()) {
+            return Type.BOOLEAN;
+        } else if (type.isArrayType()) {
+            Type childType = ((ArrayType) type).getItemType();
+            Type newType = replaceNullType2Boolean(childType);
+            if (!childType.equals(newType)) {
+                return new ArrayType(newType);
+            }
+        } else if (type.isMapType()) {
+            Type keyType = ((MapType) type).getKeyType();
+            Type valueType = ((MapType) type).getValueType();
+            Type nkt = replaceNullType2Boolean(keyType);
+            Type nvt = replaceNullType2Boolean(valueType);
+            if (!keyType.equals(nkt) || !valueType.equals(nvt)) {
+                return new MapType(nkt, nvt);
+            }
+        } else if (type.isStructType()) {
+            ArrayList<StructField> newFields = Lists.newArrayList();
+            for (StructField sf : ((StructType) type).getFields()) {
+                newFields.add(new StructField(sf.getName(), replaceNullType2Boolean(sf.getType()), sf.getComment()));
+            }
+            return new StructType(newFields);
+        }
+        return type;
+    }
+
 }

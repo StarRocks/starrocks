@@ -440,6 +440,7 @@ public class DecimalV3FunctionAnalyzer {
                 int precision = PrimitiveType.getMaxPrecisionOfDecimal(PrimitiveType.DECIMAL128);
                 int scale = decimalType.getScalarScale();
                 ScalarType retType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
+                newFn.setArgsType(new Type[] {new ArrayType(decimalType)});
                 if (FunctionSet.ARRAY_AVG.equals(fn.functionName())) {
                     // avg on decimal complies with Snowflake-style
                     ArithmeticExpr.TypeTriple triple =
