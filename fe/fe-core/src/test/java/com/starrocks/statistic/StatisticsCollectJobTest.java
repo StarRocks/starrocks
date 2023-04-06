@@ -549,9 +549,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE,
                 Maps.newHashMap());
-        sql = Deencapsulation.invoke(fullStatisticsCollectJob, "buildCollectFullStatisticSQL",
-                db, olapTable, olapTable.getPartition("tcount"),
-                "count");
+        sql = Deencapsulation.invoke(fullStatisticsCollectJob, "buildBatchCollectFullStatisticSQL",
+                olapTable, olapTable.getPartition("tcount"), "count");
         assertContains(sql, "`stats`.`tcount` partition `tcount`");
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
     }
