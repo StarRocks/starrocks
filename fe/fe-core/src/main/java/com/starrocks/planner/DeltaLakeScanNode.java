@@ -30,7 +30,6 @@ import com.starrocks.connector.delta.DeltaLakeConnector;
 import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.connector.delta.ExpressionConverter;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.credential.CloudType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TCloudConfiguration;

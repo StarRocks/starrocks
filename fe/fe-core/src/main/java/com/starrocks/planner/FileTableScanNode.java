@@ -196,7 +196,7 @@ public class FileTableScanNode extends ScanNode {
         }
 
         if (cloudConfiguration != null) {
-           TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
