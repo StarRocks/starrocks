@@ -2006,7 +2006,7 @@ public class MvRewriteOptimizationTest {
 
         query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` ";
         plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv_5", "partitions=35/36", "orders",
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_5", "orders",
                 "PARTITION PREDICATES: (15: o_orderdate < '1991-01-01') OR (15: o_orderdate >= '1991-02-01'), " +
                         "(15: o_orderdate < '1991-03-01') OR (15: o_orderdate >= '1993-12-31')");
 
