@@ -89,4 +89,5 @@ public class SystemId {
     public static final long BE_COMPACTIONS_ID = 35L;
 
     public static final long BE_THREADS_ID = 36L;
+    public static final long BE_LOGS_ID = 37L;
 }
