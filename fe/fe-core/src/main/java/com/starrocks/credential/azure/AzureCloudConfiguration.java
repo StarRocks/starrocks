@@ -15,6 +15,7 @@
 package com.starrocks.credential.azure;
 
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCloudProperty;
 import com.starrocks.thrift.TCloudType;
@@ -43,6 +44,11 @@ public class AzureCloudConfiguration implements CloudConfiguration {
     @Override
     public void applyToConfiguration(Configuration configuration) {
         azureStorageCloudCredential.applyToConfiguration(configuration);
+    }
+
+    @Override
+    public CloudType getCloudType() {
+        return CloudType.AZURE;
     }
 
     @Override
