@@ -67,15 +67,15 @@ public class TableScanDesc {
         }
 
         // for
-        // query: a inner join c
-        // mv: a left outer join b inner join c
+        // query: a left join c
+        // mv: a inner join b left join c
         if (parentJoinType.isInnerJoin()) {
             return other.parentJoinType.isInnerJoin() || (other.parentJoinType.isLeftOuterJoin() && other.isLeft);
         }
 
         // for
-        // query: a left join c
-        // mv: a inner join b left join c
+        // query: a inner join c
+        // mv: a left outer join b inner join c
         if (parentJoinType.isLeftOuterJoin()) {
             return (isLeft && other.parentJoinType.isInnerJoin())
                     || (other.parentJoinType.isLeftOuterJoin() && isLeft == other.isLeft);
