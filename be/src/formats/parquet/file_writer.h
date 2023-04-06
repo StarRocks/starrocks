@@ -140,7 +140,6 @@ private:
         const int16_t _max_rep_level;
         constexpr static int kNULL = -1;
 
-    private:
         std::vector<int> _idx2subcol;
         std::vector<int16_t> _def_levels;
         std::vector<int16_t> _rep_levels;
@@ -150,34 +149,37 @@ private:
 
     std::size_t _get_current_rg_written_bytes() const;
 
-    Status _add_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+    Status _add_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
-    Status _add_struct_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                    const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
-
-    Status _add_array_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
-
-    Status _add_map_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
-
-    Status _add_varchar_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+    Status _add_boolean_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                      const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
-    Status _add_date_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+    template <LogicalType lt, ::parquet::Type::type pt>
+    Status _add_int_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
+
+    template <LogicalType lt, ::parquet::Type::type pt>
+    Status _add_decimal_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
+
+    Status _add_varchar_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
+
+    Status _add_date_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
-    Status _add_datetime_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+    Status _add_datetime_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                       const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
-    template <LogicalType lt, ::parquet::Type::type pt>
-    Status _add_int_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
+    Status _add_struct_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                    const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
-    template <LogicalType lt, ::parquet::Type::type pt>
-    Status _add_decimal_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
-                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
+    Status _add_array_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
+
+    Status _add_map_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
 protected:
     std::shared_ptr<ParquetOutputStream> _outstream;

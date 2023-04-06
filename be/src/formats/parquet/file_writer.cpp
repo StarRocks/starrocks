@@ -221,30 +221,6 @@ std::shared_ptr<::parquet::WriterProperties> ParquetBuildHelper::make_properties
                                                                  const TypeDescriptor& type_desc,
                                                                  ::parquet::Repetition::type rep_type) {
     switch (type_desc.type) {
-    case TYPE_STRUCT: {
-        DCHECK(type_desc.children.size() == type_desc.field_names.size());
-        ::parquet::schema::NodeVector fields;
-        for (size_t i = 0; i < type_desc.children.size(); i++) {
-            auto child = _make_schema_node(type_desc.field_names[i], type_desc.children[i],
-                                           ::parquet::Repetition::OPTIONAL); // use optional as default
-            fields.push_back(child);
-        }
-        return ::parquet::schema::GroupNode::Make(name, rep_type, fields);
-    }
-    case TYPE_ARRAY: {
-        DCHECK(type_desc.children.size() == 1);
-        auto element = _make_schema_node("element", type_desc.children[0],
-                                         ::parquet::Repetition::OPTIONAL); // use optional as default
-        auto list = ::parquet::schema::GroupNode::Make("list", ::parquet::Repetition::REPEATED, {element});
-        return ::parquet::schema::GroupNode::Make(name, rep_type, {list}, ::parquet::LogicalType::List());
-    }
-    case TYPE_MAP: {
-        DCHECK(type_desc.children.size() == 2);
-        auto key = _make_schema_node("key", type_desc.children[0], ::parquet::Repetition::REQUIRED);
-        auto value = _make_schema_node("value", type_desc.children[1], ::parquet::Repetition::OPTIONAL);
-        auto key_value = ::parquet::schema::GroupNode::Make("key_value", ::parquet::Repetition::REPEATED, {key, value});
-        return ::parquet::schema::GroupNode::Make(name, rep_type, {key_value}, ::parquet::LogicalType::Map());
-    }
     case TYPE_BOOLEAN: {
         return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::None(),
                                                       ::parquet::Type::BOOLEAN);
@@ -315,6 +291,30 @@ std::shared_ptr<::parquet::WriterProperties> ParquetBuildHelper::make_properties
                 name, rep_type, ::parquet::LogicalType::Decimal(type_desc.precision, type_desc.scale),
                 ::parquet::Type::FIXED_LEN_BYTE_ARRAY, 16);
     }
+    case TYPE_STRUCT: {
+        DCHECK(type_desc.children.size() == type_desc.field_names.size());
+        ::parquet::schema::NodeVector fields;
+        for (size_t i = 0; i < type_desc.children.size(); i++) {
+            auto child = _make_schema_node(type_desc.field_names[i], type_desc.children[i],
+                                           ::parquet::Repetition::OPTIONAL); // use optional as default
+            fields.push_back(child);
+        }
+        return ::parquet::schema::GroupNode::Make(name, rep_type, fields);
+    }
+    case TYPE_ARRAY: {
+        DCHECK(type_desc.children.size() == 1);
+        auto element = _make_schema_node("element", type_desc.children[0],
+                                         ::parquet::Repetition::OPTIONAL); // use optional as default
+        auto list = ::parquet::schema::GroupNode::Make("list", ::parquet::Repetition::REPEATED, {element});
+        return ::parquet::schema::GroupNode::Make(name, rep_type, {list}, ::parquet::LogicalType::List());
+    }
+    case TYPE_MAP: {
+        DCHECK(type_desc.children.size() == 2);
+        auto key = _make_schema_node("key", type_desc.children[0], ::parquet::Repetition::REQUIRED);
+        auto value = _make_schema_node("value", type_desc.children[1], ::parquet::Repetition::OPTIONAL);
+        auto key_value = ::parquet::schema::GroupNode::Make("key_value", ::parquet::Repetition::REPEATED, {key, value});
+        return ::parquet::schema::GroupNode::Make(name, rep_type, {key_value}, ::parquet::LogicalType::Map());
+    }
     default: {
         return {};
     }
@@ -371,70 +371,70 @@ Status FileWriterBase::write(Chunk* chunk) {
     return Status::OK();
 }
 
-Status FileWriterBase::_add_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+Status FileWriterBase::_add_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                          const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     switch (type_desc.type) {
-    case TYPE_STRUCT: {
-        return _add_struct_column_chunk(parent_ctx, type_desc, node, col);
-    }
-    case TYPE_ARRAY: {
-        return _add_array_column_chunk(parent_ctx, type_desc, node, col);
-    }
-    case TYPE_MAP: {
-        return _add_map_column_chunk(parent_ctx, type_desc, node, col);
-    }
     case TYPE_BOOLEAN: {
-        return _add_int_column_chunk<TYPE_BOOLEAN, ::parquet::Type::BOOLEAN>(parent_ctx, type_desc, node, col);
+        return _add_boolean_column_chunk(ctx, type_desc, node, col);
     }
     case TYPE_FLOAT: {
-        return _add_int_column_chunk<TYPE_FLOAT, ::parquet::Type::FLOAT>(parent_ctx, type_desc, node, col);
+        return _add_int_column_chunk<TYPE_FLOAT, ::parquet::Type::FLOAT>(ctx, type_desc, node, col);
     }
     case TYPE_DOUBLE: {
-        return _add_int_column_chunk<TYPE_DOUBLE, ::parquet::Type::DOUBLE>(parent_ctx, type_desc, node, col);
+        return _add_int_column_chunk<TYPE_DOUBLE, ::parquet::Type::DOUBLE>(ctx, type_desc, node, col);
     }
     case TYPE_TINYINT: {
-        return _add_int_column_chunk<TYPE_TINYINT, ::parquet::Type::INT32>(parent_ctx, type_desc, node, col);
+        return _add_int_column_chunk<TYPE_TINYINT, ::parquet::Type::INT32>(ctx, type_desc, node, col);
     }
     case TYPE_UNSIGNED_TINYINT: {
-        return _add_int_column_chunk<TYPE_UNSIGNED_TINYINT, ::parquet::Type::INT32>(parent_ctx, type_desc, node, col);
+        return _add_int_column_chunk<TYPE_UNSIGNED_TINYINT, ::parquet::Type::INT32>(ctx, type_desc, node, col);
     }
     case TYPE_SMALLINT: {
-        return _add_int_column_chunk<TYPE_SMALLINT, ::parquet::Type::INT32>(parent_ctx, type_desc, node, col);
+        return _add_int_column_chunk<TYPE_SMALLINT, ::parquet::Type::INT32>(ctx, type_desc, node, col);
     }
     case TYPE_UNSIGNED_SMALLINT: {
-        return _add_int_column_chunk<TYPE_UNSIGNED_SMALLINT, ::parquet::Type::INT32>(parent_ctx, type_desc, node, col);
+        return _add_int_column_chunk<TYPE_UNSIGNED_SMALLINT, ::parquet::Type::INT32>(ctx, type_desc, node, col);
     }
     case TYPE_INT: {
-        return _add_int_column_chunk<TYPE_INT, ::parquet::Type::INT32>(parent_ctx, type_desc, node, col);
+        return _add_int_column_chunk<TYPE_INT, ::parquet::Type::INT32>(ctx, type_desc, node, col);
     }
     case TYPE_UNSIGNED_INT: {
-        return _add_int_column_chunk<TYPE_UNSIGNED_INT, ::parquet::Type::INT32>(parent_ctx, type_desc, node, col);
+        return _add_int_column_chunk<TYPE_UNSIGNED_INT, ::parquet::Type::INT32>(ctx, type_desc, node, col);
     }
     case TYPE_BIGINT: {
-        return _add_int_column_chunk<TYPE_BIGINT, ::parquet::Type::INT64>(parent_ctx, type_desc, node, col);
+        return _add_int_column_chunk<TYPE_BIGINT, ::parquet::Type::INT64>(ctx, type_desc, node, col);
     }
     case TYPE_UNSIGNED_BIGINT: {
-        return _add_int_column_chunk<TYPE_UNSIGNED_BIGINT, ::parquet::Type::INT64>(parent_ctx, type_desc, node, col);
+        return _add_int_column_chunk<TYPE_UNSIGNED_BIGINT, ::parquet::Type::INT64>(ctx, type_desc, node, col);
     }
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
-        return _add_varchar_column_chunk(parent_ctx, type_desc, node, col);
+        return _add_varchar_column_chunk(ctx, type_desc, node, col);
     }
     case TYPE_DATETIME: {
-        return _add_datetime_column_chunk(parent_ctx, type_desc, node, col);
+        return _add_datetime_column_chunk(ctx, type_desc, node, col);
     }
     case TYPE_DATE: {
-        return _add_date_column_chunk(parent_ctx, type_desc, node, col);
+        return _add_date_column_chunk(ctx, type_desc, node, col);
     }
     case TYPE_DECIMAL32: {
-        return _add_decimal_column_chunk<TYPE_DECIMAL32, ::parquet::Type::INT32>(parent_ctx, type_desc, node, col);
+        return _add_decimal_column_chunk<TYPE_DECIMAL32, ::parquet::Type::INT32>(ctx, type_desc, node, col);
     }
     case TYPE_DECIMAL64: {
-        return _add_decimal_column_chunk<TYPE_DECIMAL64, ::parquet::Type::INT64>(parent_ctx, type_desc, node, col);
+        return _add_decimal_column_chunk<TYPE_DECIMAL64, ::parquet::Type::INT64>(ctx, type_desc, node, col);
     }
     case TYPE_DECIMAL128: {
-        return _add_decimal_column_chunk<TYPE_DECIMAL128, ::parquet::Type::FIXED_LEN_BYTE_ARRAY>(parent_ctx, type_desc,
-                                                                                                 node, col);
+        return _add_decimal_column_chunk<TYPE_DECIMAL128, ::parquet::Type::FIXED_LEN_BYTE_ARRAY>(ctx, type_desc, node,
+                                                                                                 col);
+    }
+    case TYPE_STRUCT: {
+        return _add_struct_column_chunk(ctx, type_desc, node, col);
+    }
+    case TYPE_ARRAY: {
+        return _add_array_column_chunk(ctx, type_desc, node, col);
+    }
+    case TYPE_MAP: {
+        return _add_map_column_chunk(ctx, type_desc, node, col);
     }
     default: {
         return Status::InvalidArgument(fmt::format("Type {} is not supported", type_desc.debug_string()));
@@ -442,7 +442,7 @@ Status FileWriterBase::_add_column_chunk(const Context& parent_ctx, const TypeDe
     }
 }
 
-Status FileWriterBase::_add_struct_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+Status FileWriterBase::_add_struct_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     DCHECK(type_desc.type == TYPE_STRUCT);
     auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
@@ -455,26 +455,26 @@ Status FileWriterBase::_add_struct_column_chunk(const Context& parent_ctx, const
 
     const auto data_column = ColumnHelper::get_data_column(col.get());
     const auto struct_column = down_cast<StructColumn*>(data_column);
-    Context ctx(parent_ctx._max_rep_level, parent_ctx.size() + struct_column->size());
+    Context child_ctx(ctx._max_rep_level, ctx.size() + data_column->size());
 
     int subcol_size = 0;
-    for (auto i = 0; i < parent_ctx.size(); i++) {
-        auto [idx, def_level, rep_level] = parent_ctx.get(i);
+    for (auto i = 0; i < ctx.size(); i++) {
+        auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL) {
-            ctx.append(Context::kNULL, def_level, rep_level);
+            child_ctx.append(Context::kNULL, def_level, rep_level);
             continue;
         }
         if (nulls[idx]) {
-            ctx.append(Context::kNULL, def_level, rep_level);
+            child_ctx.append(Context::kNULL, def_level, rep_level);
             subcol_size++;
             continue;
         }
-        ctx.append(subcol_size++, def_level, rep_level);
+        child_ctx.append(subcol_size++, def_level, rep_level);
     }
 
     for (size_t i = 0; i < type_desc.children.size(); i++) {
         auto sub_col = struct_column->field_column(type_desc.field_names[i]);
-        auto ret = _add_column_chunk(ctx, type_desc.children[i], group_node->field(i), sub_col);
+        auto ret = _add_column_chunk(child_ctx, type_desc.children[i], group_node->field(i), sub_col);
         if (!ret.ok()) {
             return ret;
         }
@@ -482,7 +482,7 @@ Status FileWriterBase::_add_struct_column_chunk(const Context& parent_ctx, const
     return Status::OK();
 }
 
-Status FileWriterBase::_add_array_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+Status FileWriterBase::_add_array_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                                const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     DCHECK(type_desc.type == TYPE_ARRAY);
     auto outer_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
@@ -498,31 +498,31 @@ Status FileWriterBase::_add_array_column_chunk(const Context& parent_ctx, const 
     const auto array_column = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto elements = array_column->elements_column();
     const auto offsets = array_column->offsets_column()->get_data();
-    Context ctx(parent_ctx._max_rep_level + 1, parent_ctx.size() + elements->size());
+    Context child_ctx(ctx._max_rep_level + 1, ctx.size() + elements->size());
 
     int subcol_size = 0;
-    for (auto i = 0; i < parent_ctx.size(); i++) {
-        auto [idx, def_level, rep_level] = parent_ctx.get(i);
+    for (auto i = 0; i < ctx.size(); i++) {
+        auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || nulls[idx]) {
-            ctx.append(def_level, rep_level, Context::kNULL);
+            child_ctx.append(def_level, rep_level, Context::kNULL);
             continue;
         }
         auto array_size = offsets[idx + 1] - offsets[idx];
         if (array_size == 0) {
-            ctx.append(def_level + outer_node->is_optional(), rep_level, Context::kNULL);
+            child_ctx.append(def_level + outer_node->is_optional(), rep_level, Context::kNULL);
             continue;
         }
-        ctx.append(def_level + outer_node->is_optional() + inner_node->is_optional(), rep_level, subcol_size++);
+        child_ctx.append(def_level + outer_node->is_optional() + inner_node->is_optional(), rep_level, subcol_size++);
         for (auto offset = 1; offset < array_size; offset++) {
-            ctx.append(def_level + outer_node->is_optional() + inner_node->is_optional(), ctx._max_rep_level,
-                       subcol_size++);
+            child_ctx.append(def_level + outer_node->is_optional() + inner_node->is_optional(), ctx._max_rep_level,
+                             subcol_size++);
         }
     }
 
-    return _add_column_chunk(ctx, type_desc.children[0], inner_node, elements);
+    return _add_column_chunk(child_ctx, type_desc.children[0], inner_node, elements);
 }
 
-Status FileWriterBase::_add_map_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+Status FileWriterBase::_add_map_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     DCHECK(type_desc.type == TYPE_MAP);
     auto outer_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
@@ -541,12 +541,12 @@ Status FileWriterBase::_add_map_column_chunk(const Context& parent_ctx, const Ty
     const auto values = map_column->values_column();
     const auto offsets = map_column->offsets_column()->get_data();
 
-    Context key_ctx(parent_ctx._max_rep_level + 1, parent_ctx.size() + keys->size());
-    Context value_ctx(parent_ctx._max_rep_level + 1, parent_ctx.size() + values->size());
+    Context key_ctx(ctx._max_rep_level + 1, ctx.size() + keys->size());
+    Context value_ctx(ctx._max_rep_level + 1, ctx.size() + values->size());
 
     int subcol_size = 0;
-    for (auto i = 0; i < parent_ctx.size(); i++) {
-        auto [idx, def_level, rep_level] = parent_ctx.get(i);
+    for (auto i = 0; i < ctx.size(); i++) {
+        auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || nulls[idx]) {
             key_ctx.append(Context::kNULL, def_level, rep_level);
             value_ctx.append(Context::kNULL, def_level, rep_level);
@@ -575,7 +575,7 @@ Status FileWriterBase::_add_map_column_chunk(const Context& parent_ctx, const Ty
     return _add_column_chunk(value_ctx, type_desc.children[1], value_node, values);
 }
 
-Status FileWriterBase::_add_varchar_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+Status FileWriterBase::_add_varchar_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                                  const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
@@ -592,20 +592,25 @@ Status FileWriterBase::_add_varchar_column_chunk(const Context& parent_ctx, cons
     auto col_writer = down_cast<::parquet::ByteArrayWriter*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
-    auto write = [&](int16_t def_level, int16_t rep_level, unsigned char* ptr, auto len) {
-        ::parquet::ByteArray value;
-        value.ptr = reinterpret_cast<const uint8_t*>(ptr);
-        value.len = len;
-        col_writer->WriteBatch(1, &def_level, &rep_level, &value);
-    };
-
-    for (auto i = 0; i < parent_ctx.size(); i++) {
-        auto [idx, def_level, rep_level] = parent_ctx.get(i);
+    std::vector<::parquet::ByteArray> values;
+    values.reserve(ctx.size());
+    for (auto i = 0; i < ctx.size(); i++) {
+        auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
-            write(def_level, rep_level, nullptr, 0);
+            values.emplace_back(0, nullptr);
             continue;
         }
-        write(def_level + node->is_optional(), rep_level, vb.data() + vo[idx], vo[idx + 1] - vo[idx]);
+        auto len = static_cast<uint32_t>(vo[idx + 1] - vo[idx]);
+        auto ptr = reinterpret_cast<const uint8_t*>(vb.data() + vo[idx]);
+        values.emplace_back(len, ptr);
+    }
+
+    if (node->is_required()) {
+        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
+    } else {
+        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](int x) { return x + 1; });
+        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
+        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](int x) { return x - 1; });
     }
 
     _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
@@ -613,7 +618,7 @@ Status FileWriterBase::_add_varchar_column_chunk(const Context& parent_ctx, cons
     return Status::OK();
 }
 
-Status FileWriterBase::_add_date_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+Status FileWriterBase::_add_date_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                               const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
@@ -628,19 +633,24 @@ Status FileWriterBase::_add_date_column_chunk(const Context& parent_ctx, const T
     auto col_writer = down_cast<::parquet::Int32Writer*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
-    auto write = [&](int16_t def_level, int16_t rep_level, int32_t value) {
-        col_writer->WriteBatch(1, &def_level, &rep_level, &value);
-    };
-
-    for (auto i = 0; i < parent_ctx.size(); i++) {
-        auto [idx, def_level, rep_level] = parent_ctx.get(i);
+    std::vector<int32_t> values;
+    values.reserve(ctx.size());
+    for (auto i = 0; i < ctx.size(); i++) {
+        auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
-            write(def_level, rep_level, -1);
+            values.push_back(-1);
             continue;
         }
-        // TODO: add util function
-        int32_t unix_days = raw_col[idx]._julian - DateValue::create(1970, 1, 1)._julian;
-        write(def_level + node->is_optional(), rep_level, unix_days);
+        int32_t unix_days = raw_col[idx]._julian - DateValue::create(1970, 1, 1)._julian; // TODO: add util function
+        values.push_back(unix_days);
+    }
+
+    if (node->is_required()) {
+        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
+    } else {
+        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](int x) { return x + 1; });
+        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
+        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](int x) { return x - 1; });
     }
 
     _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
@@ -648,7 +658,7 @@ Status FileWriterBase::_add_date_column_chunk(const Context& parent_ctx, const T
     return Status::OK();
 }
 
-Status FileWriterBase::_add_datetime_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+Status FileWriterBase::_add_datetime_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
@@ -663,18 +673,24 @@ Status FileWriterBase::_add_datetime_column_chunk(const Context& parent_ctx, con
     auto col_writer = down_cast<::parquet::Int64Writer*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
-    auto write = [&](int16_t def_level, int16_t rep_level, int64_t value) {
-        col_writer->WriteBatch(1, &def_level, &rep_level, &value);
-    };
-
-    for (auto i = 0; i < parent_ctx.size(); i++) {
-        auto [idx, def_level, rep_level] = parent_ctx.get(i);
+    std::vector<int64_t> values;
+    values.reserve(ctx.size());
+    for (auto i = 0; i < ctx.size(); i++) {
+        auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
-            write(def_level, rep_level, -1);
+            values.push_back(-1);
             continue;
         }
-        write(def_level + node->is_optional(), rep_level,
-              raw_col[idx].to_unix_second() * 1000); // seconds -> milliseconds
+        int64_t milliseconds = raw_col[idx].to_unix_second() * 1000;
+        values.push_back(milliseconds);
+    }
+
+    if (node->is_required()) {
+        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
+    } else {
+        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](int x) { return x + 1; });
+        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
+        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](int x) { return x - 1; });
     }
 
     _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
@@ -683,7 +699,7 @@ Status FileWriterBase::_add_datetime_column_chunk(const Context& parent_ctx, con
 }
 
 template <LogicalType lt, ::parquet::Type::type pt>
-Status FileWriterBase::_add_int_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+Status FileWriterBase::_add_int_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
@@ -699,17 +715,61 @@ Status FileWriterBase::_add_int_column_chunk(const Context& parent_ctx, const Ty
             down_cast<::parquet::TypedColumnWriter<::parquet::PhysicalType<pt>>*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
-    auto write = [&](int16_t def_level, int16_t rep_level, typename ::parquet::type_traits<pt>::value_type value) {
-        col_writer->WriteBatch(1, &def_level, &rep_level, &value);
-    };
-
-    for (auto i = 0; i < parent_ctx.size(); i++) {
-        auto [idx, def_level, rep_level] = parent_ctx.get(i);
+    using physical_type = typename ::parquet::type_traits<pt>::value_type;
+    std::vector<physical_type> values;
+    values.reserve(ctx.size());
+    for (auto i = 0; i < ctx.size(); i++) {
+        auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
-            write(def_level, rep_level, -1);
+            values.push_back(-1);
             continue;
         }
-        write(def_level + node->is_optional(), rep_level, raw_col[idx]);
+        values.push_back(raw_col[idx]);
+    }
+
+    if (node->is_required()) {
+        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
+    } else {
+        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](int x) { return x + 1; });
+        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
+        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](int x) { return x - 1; });
+    }
+
+    _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+    _col_idx++;
+    return Status::OK();
+}
+
+Status FileWriterBase::_add_boolean_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
+    unsigned char* nulls = nullptr;
+    if (col->is_nullable()) {
+        const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
+        nulls = null_column->get_data().data();
+    }
+
+    const auto data_column = ColumnHelper::get_data_column(col.get());
+    const auto raw_col = down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(data_column)->get_data().data();
+
+    _generate_rg_writer();
+    auto col_writer = down_cast<::parquet::BoolWriter*>(_rg_writer->column(_col_idx));
+    DCHECK(col_writer != nullptr);
+
+    auto values = new bool[ctx.size()];
+    for (auto i = 0; i < ctx.size(); i++) {
+        auto [idx, def_level, rep_level] = ctx.get(i);
+        if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
+            continue;
+        }
+        values[i] = raw_col[idx];
+    }
+
+    if (node->is_required()) {
+        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values);
+    } else {
+        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](int x) { return x + 1; });
+        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values);
+        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](int x) { return x - 1; });
     }
 
     _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
@@ -718,7 +778,7 @@ Status FileWriterBase::_add_int_column_chunk(const Context& parent_ctx, const Ty
 }
 
 template <LogicalType lt, ::parquet::Type::type pt>
-Status FileWriterBase::_add_decimal_column_chunk(const Context& parent_ctx, const TypeDescriptor& type_desc,
+Status FileWriterBase::_add_decimal_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                                  const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
@@ -734,23 +794,38 @@ Status FileWriterBase::_add_decimal_column_chunk(const Context& parent_ctx, cons
             down_cast<::parquet::TypedColumnWriter<::parquet::PhysicalType<pt>>*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
-    auto write = [&](int16_t def_level, int16_t rep_level, RunTimeCppType<lt> value) {
-        if constexpr (pt == ::parquet::Type::FIXED_LEN_BYTE_ARRAY) {
-            auto big_endian_value = BigEndian::FromHost128(value);
-            ::parquet::FixedLenByteArray flba(reinterpret_cast<const uint8_t*>(&big_endian_value));
-            col_writer->WriteBatch(1, &def_level, &rep_level, &flba);
-        } else {
-            col_writer->WriteBatch(1, &def_level, &rep_level, &value);
-        }
-    };
+    using physical_type = typename ::parquet::type_traits<pt>::value_type;
+    std::vector<physical_type> values;
+    values.reserve(ctx.size());
 
-    for (auto i = 0; i < parent_ctx.size(); i++) {
-        auto [idx, def_level, rep_level] = parent_ctx.get(i);
-        if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
-            write(def_level, rep_level, -1);
-            continue;
+    if constexpr (pt == ::parquet::Type::FIXED_LEN_BYTE_ARRAY) {
+        for (auto i = 0; i < ctx.size(); i++) {
+            auto [idx, def_level, rep_level] = ctx.get(i);
+            if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
+                values.emplace_back(nullptr);
+                continue;
+            }
+            auto big_endian_value = BigEndian::FromHost128(raw_col[idx]);
+            auto ptr = reinterpret_cast<const uint8_t*>(&big_endian_value);
+            values.emplace_back(ptr);
         }
-        write(def_level + node->is_optional(), rep_level, raw_col[idx]);
+    } else {
+        for (auto i = 0; i < ctx.size(); i++) {
+            auto [idx, def_level, rep_level] = ctx.get(i);
+            if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
+                values.push_back(-1);
+                continue;
+            }
+            values.push_back(raw_col[idx]);
+        }
+    }
+
+    if (node->is_required()) {
+        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
+    } else {
+        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](int x) { return x + 1; });
+        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
+        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](int x) { return x - 1; });
     }
 
     _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
