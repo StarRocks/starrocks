@@ -141,7 +141,7 @@ public abstract class RunMode {
 
         @Override
         public short getDefaultReplicationNum() {
-            return 3;
+            return 1;
         }
     }
 }

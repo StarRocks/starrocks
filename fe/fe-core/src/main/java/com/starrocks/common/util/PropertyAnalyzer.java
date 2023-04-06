@@ -397,6 +397,7 @@ public class PropertyAnalyzer {
             if (RunMode.defaultReplicationNum() > backendIds.size()) {
                 throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
                         + ", less than " + RunMode.defaultReplicationNum());
+                }
             }
         } else {
             if (replicationNum > backendIds.size()) {

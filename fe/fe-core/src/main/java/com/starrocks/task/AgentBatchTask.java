@@ -184,7 +184,11 @@ public class AgentBatchTask implements Runnable {
 
                 List<AgentTask> tasks = this.backendIdToTasks.get(backendId);
                 // create AgentClient
+<<<<<<< HEAD
                 address = new TNetworkAddress(host, port);
+=======
+                address = new TNetworkAddress(computeNode.getHost(), computeNode.getBePort());
+>>>>>>> 70aba0568d (create tables only by cn)
                 client = ClientPool.backendPool.borrowObject(address);
                 List<TAgentTaskRequest> agentTaskRequests = new LinkedList<TAgentTaskRequest>();
                 for (AgentTask task : tasks) {
