@@ -18,11 +18,13 @@ import com.starrocks.credential.aliyun.AliyunCloudConfigurationFactory;
 import com.starrocks.credential.aws.AWSCloudConfigurationFactory;
 import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
 import com.starrocks.credential.gcp.GCPCloudConfigurationFactory;
+import com.starrocks.thrift.TCloudConfiguration;
+import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
 
 public abstract class CloudConfigurationFactory {
-    public static CloudConfiguration tryBuildForStorage(Map<String, String> properties) {
+    public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties) {
         CloudConfigurationFactory factory = new AWSCloudConfigurationFactory(properties);
         CloudConfiguration cloudConfiguration = factory.buildForStorage();
         if (cloudConfiguration != null) {
@@ -46,7 +48,34 @@ public abstract class CloudConfigurationFactory {
         if (cloudConfiguration != null) {
             return cloudConfiguration;
         }
-        return cloudConfiguration;
+        return buildDefaultCloudConfiguration();
+    }
+
+    // If user didn't specific any credential, we create DefaultCloudConfiguration instead.
+    // It will use Hadoop default constructor instead, user can put core-site.xml into java CLASSPATH to control
+    // authentication manually
+    public static CloudConfiguration buildDefaultCloudConfiguration() {
+        return new CloudConfiguration() {
+            @Override
+            public void toThrift(TCloudConfiguration tCloudConfiguration) {
+
+            }
+
+            @Override
+            public void applyToConfiguration(Configuration configuration) {
+
+            }
+
+            @Override
+            public CloudType getCloudType() {
+                return CloudType.DEFAULT;
+            }
+
+            @Override
+            public String getCredentialString() {
+                return "default";
+            }
+        };
     }
 
     protected abstract CloudConfiguration buildForStorage();

@@ -127,7 +127,7 @@ public class HiveMetastoreApiConverter {
             HudiConnector connector = (HudiConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
                     getConnector(catalogName);
             CloudConfiguration cloudConfiguration = connector.getCloudConfiguration();
-            HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(null, cloudConfiguration);
+            HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
             configuration = hdfsEnvironment.getConfiguration();
         }
 

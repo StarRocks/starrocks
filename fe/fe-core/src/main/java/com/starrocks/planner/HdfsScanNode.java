@@ -26,6 +26,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.connector.RemoteScanRangeLocations;
 import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -53,11 +54,11 @@ import static com.starrocks.thrift.TExplainLevel.VERBOSE;
  * TODO: Dictionary pruning
  */
 public class HdfsScanNode extends ScanNode {
-    private RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
+    private final RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
 
     private HiveTable hiveTable = null;
     private CloudConfiguration cloudConfiguration = null;
-    private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
 
     public HdfsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -203,7 +204,10 @@ public class HdfsScanNode extends ScanNode {
             msg.hdfs_scan_node.setTable_name(hiveTable.getName());
         }
 
-        if (cloudConfiguration != null) {
+        // TODO(SmithCruise)
+        // We only set cloudConfiguration when CloudType is non-default.
+        // Because BE didn't handle CloudType.DEFAULT situation now
+        if (cloudConfiguration != null && cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
