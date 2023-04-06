@@ -26,6 +26,7 @@ add_library(Formats STATIC
         csv/decimalv3_converter.cpp
         csv/float_converter.cpp
         csv/json_converter.cpp
+        csv/map_converter.cpp
         csv/numeric_converter.cpp
         csv/nullable_converter.cpp
         csv/default_value_converter.cpp
