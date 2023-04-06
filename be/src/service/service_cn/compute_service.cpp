@@ -14,10 +14,18 @@
 
 #include "compute_service.h"
 
+#include "agent/agent_server.h"
+#include "runtime/exec_env.h"
+
 namespace starrocks {
 
-ComputeService::ComputeService(ExecEnv* exec_env) : BackendServiceBase(exec_env) {}
+ComputeService::ComputeService(ExecEnv* exec_env)
+        : BackendServiceBase(exec_env), _agent_server(exec_env->agent_server()) {}
 
 ComputeService::~ComputeService() = default;
+
+void ComputeService::submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) {
+    _agent_server->submit_tasks(return_value, tasks);
+}
 
 } // namespace starrocks

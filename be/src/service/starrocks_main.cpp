@@ -244,31 +244,29 @@ int main(int argc, char** argv) {
     Aws::InitAPI(aws_sdk_options);
 
     std::vector<starrocks::StorePath> paths;
-    if (!without_storage) {
-        auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
-        if (!olap_res.ok()) {
-            LOG(FATAL) << "parse config storage path failed, path=" << starrocks::config::storage_root_path;
-            exit(-1);
-        }
-        auto it = paths.begin();
-        for (; it != paths.end();) {
-            if (!starrocks::check_datapath_rw(it->path)) {
-                if (starrocks::config::ignore_broken_disk) {
-                    LOG(WARNING) << "read write test file failed, path=" << it->path;
-                    it = paths.erase(it);
-                } else {
-                    LOG(FATAL) << "read write test file failed, path=" << it->path;
-                    exit(-1);
-                }
+    auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
+    if (!olap_res.ok()) {
+        LOG(FATAL) << "parse config storage path failed, path=" << starrocks::config::storage_root_path;
+        exit(-1);
+    }
+    auto it = paths.begin();
+    for (; it != paths.end();) {
+        if (!starrocks::check_datapath_rw(it->path)) {
+            if (starrocks::config::ignore_broken_disk) {
+                LOG(WARNING) << "read write test file failed, path=" << it->path;
+                it = paths.erase(it);
             } else {
-                ++it;
+                LOG(FATAL) << "read write test file failed, path=" << it->path;
+                exit(-1);
             }
+        } else {
+            ++it;
         }
+    }
 
-        if (paths.empty()) {
-            LOG(FATAL) << "All disks are broken, exit.";
-            exit(-1);
-        }
+    if (paths.empty()) {
+        LOG(FATAL) << "All disks are broken, exit.";
+        exit(-1);
     }
 
     // Initilize libcurl here to avoid concurrent initialization.
