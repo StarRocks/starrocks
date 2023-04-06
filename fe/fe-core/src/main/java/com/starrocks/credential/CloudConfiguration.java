@@ -28,6 +28,4 @@ public interface CloudConfiguration {
     // So we need to generate an identifier for different CloudCredential, and used it as cache key.
     // getCredentialString() Method just like toString()
     String getCredentialString();
-
-    CloudType getCloudType();
 }
