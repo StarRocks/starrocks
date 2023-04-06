@@ -313,9 +313,6 @@ BE dynamic parameters are as follows.
 
 | Configuration item | Default | Unit | Description |
 | ------------------ | ------- | ---- | ----------- |
-| tc_use_memory_min | 0 | Byte | The minimum size of the TCMalloc-reserved memory. StarRocks does not return the released memory resource to the operating system if the size of the memory resource is less than this value. |
-| tc_free_memory_rate | 0 | % | The maximum ratio of the TCMalloc-reserved memory size to the total memory size occupied by TCMalloc. StarRocks does not return the released memory resource to the operating system if the size ratio of the released memory to the total memory used by TCMalloc is less than this value. Range: [0,100]. |
-| tc_gc_period | 60 | Second | The duration of a TCMalloc garbage collection (GC) cycle. |
 | report_task_interval_seconds | 10 | Second | The time interval at which to report the state of a task. A task can be creating a table, dropping a table, loading data, or changing a table schema. |
 | report_disk_state_interval_seconds | 60 | Second | The time interval at which to report the storage volume state, which includes the size of data within the volume. |
 | report_tablet_interval_seconds | 60 | Second | The time interval at which to report the most updated version of all tablets. |
