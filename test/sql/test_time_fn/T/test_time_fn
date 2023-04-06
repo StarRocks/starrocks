@@ -1,0 +1,27 @@
+-- name: test_next_day
+CREATE TABLE IF NOT EXISTS `next_day_test` (
+  `d1` DATE,
+  `d2` DATETIME
+)
+DISTRIBUTED BY HASH(`d1`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+
+INSERT INTO `next_day_test`(d1, d2)
+VALUES ('2023-04-01', '2023-04-01 20:13:14'),
+       ('2023-04-02', '2023-04-02 20:13:14'),
+       ('2023-04-03', '2023-04-03 20:13:14'),
+       ('2023-04-04', '2023-04-04 20:13:14'),
+       ('2023-04-05', '2023-04-05 20:13:14'),
+       ('2023-04-06', '2023-04-06 20:13:14'),
+       ('2023-04-07', '2023-04-07 20:13:14');
+
+
+SELECT next_day('2023-04-05', 'Mo');
+SELECT next_day('2023-04-05', 'Tue');
+SELECT next_day('2023-04-05', 'Wednesday');
+SELECT next_day('2023-04-05 20:13:14', 'Thursday');
+SELECT d1, next_day(d1, 'Fr'), d2, next_day(d2, 'Fr') FROM next_day_test order by d1;
+SELECT d1, next_day(d1, 'Sat'), d2, next_day(d2,'Sat') FROM next_day_test order by d1;
+SELECT d1, next_day(d1, 'Sunday'), d2, next_day(d2, 'Sunday') FROM next_day_test order by d1;
