@@ -108,4 +108,10 @@ update_conf_from_configmap
 collect_env_info
 add_self $svc_name || exit $?
 log_stderr "run start_be.sh"
-$STARROCKS_HOME/bin/start_be.sh
+
+addition_args=
+if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
+    # env var `LOG_CONSOLE=1` can be added to enable logging to console
+    addition_args="--logconsole"
+fi
+$STARROCKS_HOME/bin/start_be.sh $addition_args
