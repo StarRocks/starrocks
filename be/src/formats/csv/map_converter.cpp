@@ -68,7 +68,8 @@ bool MapConverter::split_map_key_value(Slice s, std::vector<Slice>& keys, std::v
     bool in_quote = false;
     int map_nest_level = 0;
     int last_index = 0;
-    for (size_t i = 0; i < s.size; i++) {
+    size_t i = 0;
+    for (; i < s.size; i++) {
         char c = s[i];
         if (c == '"') {
             in_quote = !in_quote;
@@ -89,13 +90,12 @@ bool MapConverter::split_map_key_value(Slice s, std::vector<Slice>& keys, std::v
             values.push_back(Slice(s.data + last_index, i - last_index));
             last_index = i + 1;
         }
-        if (!in_quote && map_nest_level == 0 && i + 1 == s.size) {
-            if (i + 1 == last_index) {
-                return false;
-            }
-            values.push_back(Slice(s.data + last_index, i + 1 - last_index));
-            last_index = i + 1;
+    }
+    if (!in_quote && map_nest_level == 0 && i == s.size) {
+        if (i == last_index) {
+            return false;
         }
+        values.push_back(Slice(s.data + last_index, i - last_index));
     }
     if (map_nest_level != 0 || in_quote || values.size() != keys.size()) {
         return false;
