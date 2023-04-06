@@ -384,7 +384,13 @@ PROPERTIES("replication_num" = "3",
 
 - The Primary Key model does not support materialized views.
 
+<<<<<<< HEAD
 - You cannot use the ALTER TABLE statement to change the data types of the primary key columns and reorder metric columns. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
+=======
+- When you create a table, you can create BITMAP indexes or Bloom Filter indexes on the columns except for primary key columns.
+
+- Since version 2.4.0, you can create asynchronous materialized views based on Primary Key tables.
+>>>>>>> 74864fac2 (bugfix in 3.0 docs (#20978))
 
 ### What to do next
 
