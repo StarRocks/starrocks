@@ -439,32 +439,36 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
 
 // The more tasks you submit, the less priority you get.
 int OlapScanNode::_compute_priority(int32_t num_submitted_tasks) {
-    // int nice = 20;
-    // while (nice > 0 && num_submitted_tasks > (22 - nice) * (20 - nice) * 6) {
-    //     --nice;
-    // }
-    // return nice;
-    if (num_submitted_tasks < 5) return 20;
-    if (num_submitted_tasks < 19) return 19;
-    if (num_submitted_tasks < 49) return 18;
-    if (num_submitted_tasks < 91) return 17;
-    if (num_submitted_tasks < 145) return 16;
-    if (num_submitted_tasks < 211) return 15;
-    if (num_submitted_tasks < 289) return 14;
-    if (num_submitted_tasks < 379) return 13;
-    if (num_submitted_tasks < 481) return 12;
-    if (num_submitted_tasks < 595) return 11;
-    if (num_submitted_tasks < 721) return 10;
-    if (num_submitted_tasks < 859) return 9;
-    if (num_submitted_tasks < 1009) return 8;
-    if (num_submitted_tasks < 1171) return 7;
-    if (num_submitted_tasks < 1345) return 6;
-    if (num_submitted_tasks < 1531) return 5;
-    if (num_submitted_tasks < 1729) return 4;
-    if (num_submitted_tasks < 1939) return 3;
-    if (num_submitted_tasks < 2161) return 2;
-    if (num_submitted_tasks < 2395) return 1;
-    return 0;
+    if (config::enable_scanner_debug_priority) {
+        return 20;
+    } else {
+        // int nice = 20;
+        // while (nice > 0 && num_submitted_tasks > (22 - nice) * (20 - nice) * 6) {
+        //     --nice;
+        // }
+        // return nice;
+        if (num_submitted_tasks < 5) return 20;
+        if (num_submitted_tasks < 19) return 19;
+        if (num_submitted_tasks < 49) return 18;
+        if (num_submitted_tasks < 91) return 17;
+        if (num_submitted_tasks < 145) return 16;
+        if (num_submitted_tasks < 211) return 15;
+        if (num_submitted_tasks < 289) return 14;
+        if (num_submitted_tasks < 379) return 13;
+        if (num_submitted_tasks < 481) return 12;
+        if (num_submitted_tasks < 595) return 11;
+        if (num_submitted_tasks < 721) return 10;
+        if (num_submitted_tasks < 859) return 9;
+        if (num_submitted_tasks < 1009) return 8;
+        if (num_submitted_tasks < 1171) return 7;
+        if (num_submitted_tasks < 1345) return 6;
+        if (num_submitted_tasks < 1531) return 5;
+        if (num_submitted_tasks < 1729) return 4;
+        if (num_submitted_tasks < 1939) return 3;
+        if (num_submitted_tasks < 2161) return 2;
+        if (num_submitted_tasks < 2395) return 1;
+        return 0;
+    }
 }
 
 bool OlapScanNode::_submit_scanner(TabletScanner* scanner, bool blockable) {
