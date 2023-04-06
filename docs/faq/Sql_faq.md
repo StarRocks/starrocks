@@ -8,7 +8,7 @@ To solve this problem, increase the value of the `memory_limitation_per_thread_f
 
 ## Does StarRocks support caching query results?
 
-StarRocks does not directly cache final query results. From v2.5 onwards, StarRocks uses the Query Cache feature to save the intermediate results of first-stage aggregation in the cache. New queries that are semantically equivalent to previous queries can reuse the cached computation results to accelerate computations. Query cache uses BE memory. For more information, see [Query cache](../using_starrocks/query_cache.md).
+StarRocks does not directly cache final query results. StarRocks uses page cache to cache original data on BE memory. This allows subsequent queries to reuse the cached data and accelerates queries. You can enable Page Cache by setting the BE parameter `disable_storage_page_cache` to `false`. You can set the `storage_page_cache_limit` parameter in the `be.conf` file to specify the size of the page cache. The default value is 0. After you set this parameter, restart BEs for the settings to take effect.
 
 ## When a `Null` is included in the calculation, the calculation results of functions are false except for the ISNULL() function
 
