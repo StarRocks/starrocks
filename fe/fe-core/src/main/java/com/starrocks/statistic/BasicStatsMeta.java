@@ -123,14 +123,16 @@ public class BasicStatsMeta implements Writable {
             if (updateTime.isAfter(loadTimes)) {
                 continue;
             }
-            // promise new partitions row count
-            loadTimes = loadTimes.plusSeconds(Config.tablet_stat_update_interval_second * 2L);
-            if (LocalDateTime.now().isBefore(loadTimes)) {
-                continue;
-            }
 
             updatePartitionCount++;
             updatePartitionRowCount += partition.getRowCount();
+        }
+
+        // promise new partitions row count
+        LocalDateTime updateRowCountTimes = GlobalStateMgr.getCurrentTabletStatMgr().getLastWorkTimestamp();
+        if (StatisticUtils.getTableLastUpdateTime(table).plusSeconds(Config.tablet_stat_update_interval_second)
+                .isAfter(updateRowCountTimes)) {
+            updatePartitionRowCount += updateRows;
         }
 
         double updateRatio;
