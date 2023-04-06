@@ -223,6 +223,9 @@ start_fe_no_meta()
         done
     fi
 
+    if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
+        opts+=" --logconsole"
+    fi
     log_stderr "first start with no meta run start_fe.sh with additional options: '$opts'"
     $STARROCKS_HOME/bin/start_fe.sh $opts
 }
@@ -234,6 +237,9 @@ start_fe_with_meta()
         opts+=" --host_type $HOST_TYPE"
     fi
 
+    if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
+        opts+=" --logconsole"
+    fi
     log_stderr "start with meta run start_fe.sh with additional options: '$opts'"
     $STARROCKS_HOME/bin/start_fe.sh $opts
 }
