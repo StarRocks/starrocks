@@ -193,6 +193,8 @@ private:
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
+    RuntimeProfile::Counter* _debug_submit_scanner_timer = nullptr;
+    RuntimeProfile::Counter* _debug_runtime_filter_timer = nullptr;
 };
 
 } // namespace starrocks::vectorized

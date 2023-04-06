@@ -64,6 +64,8 @@ Status OlapScanNode::prepare(RuntimeState* state) {
     _tablet_counter = ADD_COUNTER(runtime_profile(), "TabletCount ", TUnit::UNIT);
     _io_task_counter = ADD_COUNTER(runtime_profile(), "IOTaskCount ", TUnit::UNIT);
     _task_concurrency = ADD_COUNTER(runtime_profile(), "ScanConcurrency ", TUnit::UNIT);
+    _debug_submit_scanner_timer = ADD_TIMER(runtime_profile(), "debug_submit_scanner_timer");
+    _debug_runtime_filter_timer = ADD_TIMER(runtime_profile(), "debug_runtime_filter_timer");
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(_olap_scan_node.tuple_id);
     _init_counter(state);
     if (_tuple_desc == nullptr) {
@@ -127,6 +129,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
 
     {
+        SCOPED_TIMER(_debug_submit_scanner_timer);
         std::unique_lock<std::mutex> l(_mtx);
         const int32_t num_closed = _closed_scanners.load(std::memory_order_acquire);
         const int32_t num_pending = _pending_scanners.size();
@@ -143,6 +146,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     }
 
     if (_result_chunks.blocking_get(chunk)) {
+        SCOPED_TIMER(_debug_runtime_filter_timer);
         // If the second argument of `_fill_chunk_pool` is false *AND* the column pool is empty,
         // the column object in the chunk will be destroyed and its memory will be deallocated
         // when the last remaining shared_ptr owning it is destroyed, otherwise the column object
