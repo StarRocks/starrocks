@@ -30,8 +30,15 @@
 #include "util/runtime_profile.h"
 namespace starrocks::vectorized {
 
+std::atomic<int32_t> OlapScanNode::_s_running_scan_thread = 0;
+
 OlapScanNode::OlapScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-        : ScanNode(pool, tnode, descs), _olap_scan_node(tnode.olap_scan_node), _status(Status::OK()) {}
+        : ScanNode(pool, tnode, descs), _olap_scan_node(tnode.olap_scan_node), _status(Status::OK()) {
+    static std::once_flag once_flag;
+    std::call_once(once_flag, [] {
+      REGISTER_GAUGE_STARROCKS_METRIC(debug_running_scan_threads, [&]() { return _s_running_scan_thread.load(); });
+    });
+}
 
 Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
@@ -222,8 +229,10 @@ void OlapScanNode::_fill_chunk_pool(int count, bool force_column_pool) {
 }
 
 void OlapScanNode::_scanner_thread(TabletScanner* scanner) {
+    _s_running_scan_thread++;
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(scanner->runtime_state()->instance_mem_tracker());
     DeferOp op([&] {
+        _s_running_scan_thread--;
         tls_thread_status.set_mem_tracker(prev_tracker);
         _running_threads.fetch_sub(1, std::memory_order_release);
     });

@@ -120,6 +120,8 @@ private:
     // scanner concurrency
     size_t _scanner_concurrency();
 
+    static std::atomic<int32_t> _s_running_scan_thread;
+
     TOlapScanNode _olap_scan_node;
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     RuntimeState* _runtime_state = nullptr;
