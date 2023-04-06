@@ -535,6 +535,10 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_output(ChunkPtr* probe_chunk,
             } else {
                 _copy_probe_nullable_column(&column, chunk, slot);
             }
+        } else {
+            ColumnPtr default_column = ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
+            default_column->append_default(_probe_state->count);
+            (*chunk)->append_column(std::move(default_column), slot->id());
         }
     }
 }
@@ -595,6 +599,10 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_build_output(ChunkPtr* chunk) {
             } else {
                 _copy_build_nullable_column(column, chunk, slot);
             }
+        } else {
+            ColumnPtr default_column = ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
+            default_column->append_default(_probe_state->count);
+            (*chunk)->append_column(std::move(default_column), slot->id());
         }
     }
 }
