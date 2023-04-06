@@ -61,7 +61,11 @@ public class TableScanDesc {
     }
 
     public boolean isMatch(TableScanDesc other) {
-        return table.equals(other.table) && parentJoinType.equals(other.parentJoinType) && isLeft == other.isLeft;
+        boolean matched =  table.equals(other.table) && parentJoinType.equals(other.parentJoinType);
+        if (parentJoinType.isLeftOuterJoin()) {
+            matched = matched && isLeft == other.isLeft;
+        }
+        return matched;
     }
 
     @Override
