@@ -29,8 +29,8 @@
 namespace starrocks {
 
 ParquetScanner::ParquetScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
-                               ScannerCounter* counter)
-        : FileScanner(state, profile, scan_range.params, counter),
+                               ScannerCounter* counter, bool schema_only)
+        : FileScanner(state, profile, scan_range.params, counter, schema_only),
           _scan_range(scan_range),
           _next_file(0),
           _curr_file_reader(nullptr),
@@ -393,6 +393,23 @@ Status ParquetScanner::open_next_reader() {
                                                                  _state->timezone());
         return Status::OK();
     }
+}
+
+Status ParquetScanner::get_schema(std::vector<std::string>* col_names, std::vector<TypeDescriptor>* col_types) {
+    std::shared_ptr<RandomAccessFile> file;
+    // TODO(fw): Infer schema from more files.
+    const TBrokerRangeDesc& range_desc = _scan_range.ranges[0];
+    Status st = create_random_access_file(range_desc, _scan_range.broker_addresses[0], _scan_range.params,
+                                          CompressionTypePB::NO_COMPRESSION, &file);
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to create random-access files. status: " << st.to_string();
+        return st;
+    }
+    _conv_ctx.current_file = file->filename();
+    auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0);
+    auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
+                                                              range_desc.start_offset, range_desc.size);
+    return parquet_reader->get_schema(col_names, col_types);
 }
 
 void ParquetScanner::close() {

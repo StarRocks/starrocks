@@ -495,6 +495,17 @@ message PPulsarProxyResult {
     optional PPulsarBacklogBatchProxyResult pulsar_backlog_batch_result = 102;
 };
 
+message PGetFileSchemaRequest {
+    // unused, just for preventing jprotobuf error "no field use annotation @com.baidu.bjf.remoting.protobuf.annotation.Protobuf ..."
+    optional int32 pad = 1;
+};
+
+message PGetFileSchemaResult {
+    required StatusPB status = 1;
+    repeated string column_names = 2;
+    repeated PTypeDesc column_types = 3;
+};
+
 message PMVMaintenanceTaskRequest {
 };
 
@@ -527,6 +538,7 @@ service PInternalService {
     rpc collect_query_statistics(PCollectQueryStatisticsRequest) returns (PCollectQueryStatisticsResult);
     rpc get_info(PProxyRequest) returns (PProxyResult);
     rpc get_pulsar_info(PPulsarProxyRequest) returns (PPulsarProxyResult);
+    rpc get_file_schema(PGetFileSchemaRequest) returns (PGetFileSchemaResult);
 
     // Transmit vectorized data between backends.
     rpc transmit_chunk(PTransmitChunkParams) returns (PTransmitChunkResult);

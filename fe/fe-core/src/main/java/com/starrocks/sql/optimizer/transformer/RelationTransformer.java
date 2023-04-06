@@ -558,6 +558,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     new LogicalJDBCScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                             columnMetaToColRefMap, Operator.DEFAULT_LIMIT,
                             null, null);
+        } else if (Table.TableType.TEMPORARY_EXTERNAL_TABLE.equals(node.getTable().getType())) {
+            scanOperator = new LogicalFileScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
+                    columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else {
             throw new StarRocksPlannerException("Not support table type: " + node.getTable().getType(),
                     ErrorType.UNSUPPORTED);

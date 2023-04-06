@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTempExtTableScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -116,6 +117,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalFileScan(LogicalFileScanOperator node, C context) {
+        return visitLogicalTableScan(node, context);
+    }
+
+    public R visitLogicalTempExtTableScan(LogicalTempExtTableScanOperator node, C context) {
         return visitLogicalTableScan(node, context);
     }
 

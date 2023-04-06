@@ -24,6 +24,7 @@
 #include "common/logging.h"
 #include "fmt/format.h"
 #include "runtime/descriptors.h"
+#include "parquet/schema.h"
 
 namespace starrocks {
 // ====================================================================================================================
@@ -71,8 +72,7 @@ Status ParquetReaderWrap::next_selected_row_group() {
     return Status::EndOfFile("End of row group");
 }
 
-Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs,
-                                              const std::string& timezone) {
+Status ParquetReaderWrap::_init_parquet_reader() {
     try {
         parquet::ArrowReaderProperties arrow_reader_properties;
         /*
@@ -127,6 +127,20 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
 
         _timezone = timezone;
 
+        return Status::OK();
+    } catch (parquet::ParquetException& e) {
+        std::stringstream str_error;
+        str_error << "Init parquet reader fail. " << e.what();
+        LOG(WARNING) << str_error.str() << " filename: " << _filename;
+        return Status::InternalError(fmt::format("{}. filename: {}", str_error.str(), _filename));
+    }
+}
+
+Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs,
+                                              const std::string& timezone) {
+
+    RETURN_IF_ERROR(_init_parquet_reader());
+    try {
         if (_current_line_of_group == 0) { // the first read
             RETURN_IF_ERROR(column_indices(tuple_slot_descs));
             arrow::Status status = _reader->GetRecordBatchReader({_current_group}, _parquet_column_ids, &_rb_batch);
@@ -164,6 +178,43 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
         LOG(WARNING) << str_error.str() << " filename: " << _filename;
         return Status::InternalError(fmt::format("{}. filename: {}", str_error.str(), _filename));
     }
+}
+
+Status ParquetReaderWrap::get_schema(std::vector<std::string>* col_names, std::vector<TypeDescriptor>* col_types) {
+    RETURN_IF_ERROR(_init_parquet_reader());
+
+    auto schema = _file_metadata->schema();
+    for (int i = 0; i < schema->num_columns(); ++i) {
+        auto column = schema->Column(i);
+        auto physical_type = column->physical_type();
+
+        auto name = column->name();
+        TypeDescriptor tp;
+
+        switch (physical_type) {
+        case parquet::Type::BOOLEAN:
+            tp = TypeDescriptor(TYPE_BOOLEAN);
+            break;
+        case parquet::Type::INT32:
+        case parquet::Type::INT64:
+        case parquet::Type::INT96:
+            tp = TypeDescriptor(TYPE_LARGEINT);
+            break;
+        case parquet::Type::FLOAT:
+        case parquet::Type::DOUBLE:
+            tp = TypeDescriptor(TYPE_DOUBLE);
+            break;
+        case parquet::Type::BYTE_ARRAY:
+            tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
+            break;
+        default:
+            return Status::NotSupported("Unknown physical type");
+        }
+
+        col_names->push_back(name);
+        col_types->push_back(tp);
+    }
+    return Status::OK();
 }
 
 void ParquetReaderWrap::close() {
@@ -306,6 +357,11 @@ Status ParquetChunkReader::next_batch(RecordBatchPtr* batch) {
     }
     *batch = _parquet_reader->get_batch();
     return Status::OK();
+}
+
+Status ParquetChunkReader::get_schema(std::vector<std::string>* col_names, std::vector<TypeDescriptor>* col_types) {
+    RETURN_IF_ERROR(_parquet_reader->init_parquet_reader(_src_slot_descs, _time_zone));
+    return _parquet_reader->get_schema(col_names, col_types);
 }
 
 using StarRocksStatusCode = ::starrocks::TStatusCode::type;

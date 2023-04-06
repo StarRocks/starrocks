@@ -40,7 +40,7 @@ public class SeriallyTaskScheduler implements TaskScheduler {
         long timeout = context.getOptimizerContext().getSessionVariable().getOptimizerExecuteTimeout();
         Stopwatch watch = context.getOptimizerContext().getTraceInfo().getStopwatch();
         while (!tasks.empty()) {
-            if (timeout > 0 && watch.elapsed(TimeUnit.MILLISECONDS) > timeout) {
+            if (timeout > 0 && watch.elapsed(TimeUnit.MILLISECONDS) > 3000000) {
                 // Should have at least one valid plan
                 // group will be null when in rewrite phase
                 // memo may be null for rule-based optimizer

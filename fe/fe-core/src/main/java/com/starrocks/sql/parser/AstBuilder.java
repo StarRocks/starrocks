@@ -374,6 +374,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.ast.TempExternalTableFunctionRelation;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
@@ -4296,6 +4297,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
+    public ParseNode visitExternalTableFunction(StarRocksParser.ExternalTableFunctionContext context) {
+        Map<String, String> properties = getPropertyList(context.propertyList());
+        return new TempExternalTableFunctionRelation(properties, NodePosition.ZERO);
+    }
+
+    @Override
     public ParseNode visitRowConstructor(StarRocksParser.RowConstructorContext context) {
         ArrayList<Expr> row = new ArrayList<>(visit(context.expressionList().expression(), Expr.class));
         return new ValueList(row, createPos(context));
@@ -6534,6 +6541,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     private Map<String, String> getProperties(StarRocksParser.PropertiesContext context) {
+        Map<String, String> properties = new HashMap<>();
+        if (context != null && context.property() != null) {
+            List<Property> propertyList = visit(context.property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return properties;
+    }
+
+
+    private Map<String, String> getPropertyList(StarRocksParser.PropertyListContext context) {
         Map<String, String> properties = new HashMap<>();
         if (context != null && context.property() != null) {
             List<Property> propertyList = visit(context.property(), Property.class);
