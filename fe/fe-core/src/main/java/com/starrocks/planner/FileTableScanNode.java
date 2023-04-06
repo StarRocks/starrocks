@@ -195,11 +195,8 @@ public class FileTableScanNode extends ScanNode {
             msg.hdfs_scan_node.setTable_name(fileTable.getName());
         }
 
-        // TODO(SmithCruise)
-        // We only set cloudConfiguration when CloudType is non-default.
-        // Because BE didn't handle CloudType.DEFAULT situation now
-        if (cloudConfiguration != null && cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-           TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+        if (cloudConfiguration != null) {
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);
         }
