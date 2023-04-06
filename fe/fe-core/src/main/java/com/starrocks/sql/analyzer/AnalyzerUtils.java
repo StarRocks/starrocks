@@ -17,9 +17,11 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Predicate;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
@@ -391,8 +393,8 @@ public class AnalyzerUtils {
         return tables;
     }
 
-    public static Map<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
-        Map<String, TableRelation> tableRelations = Maps.newHashMap();
+    public static Multimap<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
+        Multimap<String, TableRelation> tableRelations = ArrayListMultimap.create();
         new AnalyzerUtils.TableRelationCollector(tableRelations).visit(statementBase);
         return tableRelations;
     }
@@ -528,9 +530,9 @@ public class AnalyzerUtils {
 
     private static class TableRelationCollector extends TableCollector {
 
-        private final Map<String, TableRelation> tableRelations;
+        private final Multimap<String, TableRelation> tableRelations;
 
-        public TableRelationCollector(Map<String, TableRelation> tableRelations) {
+        public TableRelationCollector(Multimap<String, TableRelation> tableRelations) {
             super(null);
             this.tableRelations = tableRelations;
         }

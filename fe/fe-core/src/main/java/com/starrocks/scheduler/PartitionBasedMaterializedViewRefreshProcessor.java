@@ -20,6 +20,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
@@ -696,9 +697,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         Analyzer.analyze(insertStmt, ctx);
         // after analyze, we could get the table meta info of the tableRelation.
         QueryStatement queryStatement = insertStmt.getQueryStatement();
-        Map<String, TableRelation> tableRelations =
+        Multimap<String, TableRelation> tableRelations =
                 AnalyzerUtils.collectAllTableRelation(queryStatement);
-        for (Map.Entry<String, TableRelation> nameTableRelationEntry : tableRelations.entrySet()) {
+        for (Map.Entry<String, TableRelation> nameTableRelationEntry : tableRelations.entries()) {
             Set<String> tablePartitionNames = sourceTablePartitions.get(nameTableRelationEntry.getKey());
             TableRelation tableRelation = nameTableRelationEntry.getValue();
             tableRelation.setPartitionNames(
