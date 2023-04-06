@@ -80,17 +80,19 @@ public:
     void set_buffer_finished() override;
     int available_pickup_morsel_count() const override;
 
-protected:
-    void _close_chunk_source_unlocked(RuntimeState* state, int index) override;
-
 private:
+    struct PickupMorselState {
+        int64_t _last_check_time = 0;
+        int32_t _last_window_size = 0;
+    };
+    mutable PickupMorselState _pickup_morsel_state;
     bool _enable_adaptive_io_tasks = true;
 };
 
 class ConnectorChunkSource : public ChunkSource {
 public:
-    ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                         ScanOperator* op, ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
+    ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                         ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
 
     ~ConnectorChunkSource() override;
 

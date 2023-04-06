@@ -29,13 +29,14 @@ class RuntimeProfile;
 
 namespace pipeline {
 
+class ScanOperator;
 class BalancedChunkBuffer;
 class ChunkBufferToken;
 using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
 
 class ChunkSource {
 public:
-    ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+    ChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                 BalancedChunkBuffer& chunk_buffer);
 
     virtual ~ChunkSource() = default;
@@ -55,7 +56,6 @@ public:
     int64_t get_cpu_time_spent() const { return _cpu_time_spent_ns; }
     int64_t get_scan_rows() const { return _scan_rows_num; }
     int64_t get_scan_bytes() const { return _scan_bytes; }
-    int64_t get_total_running_time() const { return _total_running_time_ns; }
 
     RuntimeProfile::Counter* scan_timer() { return _scan_timer; }
     RuntimeProfile::Counter* io_task_wait_timer() { return _io_task_wait_timer; }
@@ -80,6 +80,7 @@ protected:
     // if it runs in the worker thread owned by other workgroup, which has running drivers.
     static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 5'000'000L;
 
+    ScanOperator* _scan_op;
     const int32_t _scan_operator_seq;
     RuntimeProfile* _runtime_profile;
     // The morsel will own by pipeline driver
@@ -89,9 +90,6 @@ protected:
     int64_t _cpu_time_spent_ns = 0;
     int64_t _scan_rows_num = 0;
     int64_t _scan_bytes = 0;
-
-    // NOTE: These counters are maintained by ChunkSource class.
-    std::atomic<int64_t> _total_running_time_ns = 0;
 
     BalancedChunkBuffer& _chunk_buffer;
     Status _status = Status::OK();

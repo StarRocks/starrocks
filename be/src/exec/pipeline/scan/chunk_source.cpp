@@ -18,13 +18,15 @@
 
 #include "common/statusor.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
 namespace starrocks::pipeline {
 
-ChunkSource::ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+ChunkSource::ChunkSource(ScanOperator* scan_op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                          BalancedChunkBuffer& chunk_buffer)
-        : _scan_operator_seq(scan_operator_id),
+        : _scan_op(scan_op),
+          _scan_operator_seq(scan_op->get_driver_sequence()),
           _runtime_profile(runtime_profile),
           _morsel(std::move(morsel)),
           _chunk_buffer(chunk_buffer),
@@ -94,7 +96,7 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             break;
         }
     }
-    _total_running_time_ns += time_spent_ns;
+    _scan_op->update_chunk_source_total_running_time(time_spent_ns);
     return _status;
 }
 

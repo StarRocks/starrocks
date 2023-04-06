@@ -75,16 +75,8 @@ void ConnectorScanOperator::do_close(RuntimeState* state) {}
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    return std::make_shared<ConnectorChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
-                                                  std::move(morsel), this, scan_node, factory->get_chunk_buffer());
-}
-
-void ConnectorScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int index) {
-    ChunkSourcePtr cs = _chunk_sources[index];
-    if (cs) {
-        _closed_chunk_source_total_running_time += cs->get_total_running_time();
-    }
-    ScanOperator::_close_chunk_source_unlocked(state, index);
+    return std::make_shared<ConnectorChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(),
+                                                  std::move(morsel), scan_node, factory->get_chunk_buffer());
 }
 
 void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
@@ -166,26 +158,33 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
 
 int ConnectorScanOperator::available_pickup_morsel_count() const {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
+    PickupMorselState& state = _pickup_morsel_state;
 
-    int64_t chunk_source_running_time = _closed_chunk_source_total_running_time;
-
-    for (int i = 0; i < _io_tasks_per_scan_operator; i++) {
-        ChunkSourcePtr cs = _chunk_sources[i];
-        if (_is_io_task_running[i] && (cs != nullptr)) {
-            chunk_source_running_time += cs->get_total_running_time();
+    if (!is_buffer_full()) {
+        int64_t now = GetCurrentTimeMicros();
+        int count = std::min(1 << state._last_window_size, _io_tasks_per_scan_operator;
+        if ((now - state._last_check_time) > (config::io_check_ms * 1000)) {
+            state._last_check_time = now;
+            state._last_window_size = std::min(state._last_window_size + 1, 16);
+            VLOG_FILE << "[XXX] !full. P = " << count;
+            return count;
         }
+        return 0;
     }
+    state._last_check_time = 0;
+    state._last_window_size = 0;
 
-    int64_t scan_op_runing_time = _total_running_time;
-    int exp = int(chunk_source_running_time * 1.0 / scan_op_runing_time + 0.5);
+    int64_t cs_time = _chunk_source_total_running_time.load();
+    int64 op_time = _total_running_time;
+    int exp = std::max(1, int(cs_time * 0.5 / (op_time + 1) + 0.5));
+    VLOG_FILE << "[XXX] full. estimate P. cs time = " << cs_time << ", op_time = " << op_time << ", exp = " << exp;
     return exp - _num_running_io_tasks;
 }
 
 // ==================== ConnectorChunkSource ====================
-ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile,
-                                           MorselPtr&& morsel, ScanOperator* op, ConnectorScanNode* scan_node,
-                                           BalancedChunkBuffer& chunk_buffer)
-        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), chunk_buffer),
+ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                                           ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
+        : ChunkSource(op, runtime_profile, std::move(morsel), chunk_buffer),
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),
