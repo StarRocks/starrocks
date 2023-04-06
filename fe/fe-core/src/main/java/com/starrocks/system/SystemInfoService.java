@@ -592,6 +592,10 @@ public class SystemInfoService {
         return idToBackendRef.size();
     }
 
+    public int getAliveComputeNodeNumber() {
+        return getComputeNodeIds(true).size();
+    }
+
     public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
         ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
         for (ComputeNode computeNode : idToComputeNode.values()) {
@@ -663,6 +667,21 @@ public class SystemInfoService {
         }
         return backendIds;
     }
+
+    public List<Long> getAvailableComputeNodeIds() {
+        ImmutableMap<Long, ComputeNode>  idToComputeNode = idToComputeNodeRef;
+        List<Long> computeNodeIds = Lists.newArrayList(idToComputeNode.keySet());
+
+        Iterator<Long> iter = computeNodeIds.iterator();
+        while (iter.hasNext()) {
+            ComputeNode cn = this.getComputeNode(iter.next());
+            if (cn == null || !cn.isAvailable()) {
+                iter.remove();
+            }
+        }
+        return computeNodeIds;
+    }
+
 
     public List<Backend> getBackends() {
         return idToBackendRef.values().asList();
@@ -1092,6 +1111,10 @@ public class SystemInfoService {
     }
 
     public void checkClusterCapacity() throws DdlException {
+        if (RunMode.getCurrentRunMode() != RunMode.SHARED_DATA) {
+            return;
+        }
+
         if (getClusterAvailableCapacityB() <= 0L) {
             throw new DdlException("Cluster has no available capacity");
         }

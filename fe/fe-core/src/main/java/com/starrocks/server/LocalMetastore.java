@@ -1671,19 +1671,19 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitions.isEmpty()) {
             return;
         }
-        int numAliveBackends = systemInfoService.getAliveBackendNumber();
+        int numAliveCNs = systemInfoService.getAliveComputeNodeNumber();
         int numReplicas = 0;
         for (Partition partition : partitions) {
             numReplicas += partition.getReplicaCount();
         }
 
-        if (partitions.size() >= 3 && numAliveBackends >= 3 && numReplicas >= numAliveBackends * 500) {
+        if (partitions.size() >= 3 && numAliveCNs >= 3 && numReplicas >= numAliveCNs * 500) {
             LOG.info("creating {} partitions of table {} concurrently", partitions.size(), table.getName());
-            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
-        } else if (numAliveBackends > 0) {
-            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
+            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveCNs);
+        } else if (numAliveCNs > 0) {
+            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveCNs);
         } else {
-            throw new DdlException("no alive backend");
+            throw new DdlException("no alive compute nodes");
         }
     }
 
