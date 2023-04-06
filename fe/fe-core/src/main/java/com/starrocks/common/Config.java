@@ -227,7 +227,8 @@ public class Config extends ConfigBase {
      * Used to limit the maximum number of partitions that can be created when creating a dynamic partition table,
      * to avoid creating too many partitions at one time.
      */
-    @ConfField(mutable = true) public static int max_dynamic_partition_num = 500;
+    @ConfField(mutable = true)
+    public static int max_dynamic_partition_num = 500;
 
     /**
      * plugin_dir:
@@ -1942,7 +1943,7 @@ public class Config extends ConfigBase {
     // Enables or disables SSL connections to AWS services. Not support for now
     // @ConfField
     // public static String aws_s3_enable_ssl = "true";
-    
+
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
@@ -2156,4 +2157,8 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_experimental_temporary_table = false;
+
+    @ConfField(mutable = true)
+    public static long max_per_node_grep_log_limit = 500000;
+
 }
