@@ -10,7 +10,7 @@ When a new data record is inserted, StarRocks automatically assigns a globally u
 - Join tables: When multiple tables are joined, `AUTO_INCREMENT` columns can be used as Join Keys, which can expedite queries compared to using columns whose data types are UUID and STRING.
 - Count the number of distinct values in a high-cardinality column: An `AUTO_INCREMENT` column can be used to represent the unique value column in a dictionary. Compared to directly counting distinct STRING values, counting distinct integer values of the`AUTO_INCREMENT` column can sometimes improve the query speed by several times or even tens of times.
 
-You need to specify `AUTO_INCREMENT` columns in the CREATE TABLE statement. The data types of `AUTO_INCREMENT` columns must be BIGINT. The values for an AUTO_INCREMENT column can be [implicitly assigned](#Assign values implicitly) or [explicitly specified](#Specify values explicitly). They start from 1, and increment by 1 for each new record.
+You need to specify `AUTO_INCREMENT` columns in the CREATE TABLE statement. The data types of `AUTO_INCREMENT` columns must be BIGINT. The values for an AUTO_INCREMENT column can be [implicitly assigned](#assign-values-implicitly) or [explicitly specified](#specify-values-explicitly). They start from 1, and increment by 1 for each new record.
 
 ## Basic operations
 

@@ -2,6 +2,8 @@
 
 Switches to a specified catalog in the current session.
 
+This command is supported from v3.0 onwards.
+
 ## Syntax
 
 ```SQL
