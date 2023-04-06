@@ -363,12 +363,6 @@ public class HdfsFsManager {
         if (cloudConfiguration == null) {
             return;
         }
-        if (cloudConfiguration.getCloudType() == CloudType.DEFAULT) {
-            // TODO(SmithCruise)
-            // We only set cloudConfiguration when CloudType is non-default.
-            // Because BE didn't handle CloudType.DEFAULT situation now
-            return;
-        }
         TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
         cloudConfiguration.toThrift(tCloudConfiguration);
         tHdfsProperties.setCloud_configuration(tCloudConfiguration);
