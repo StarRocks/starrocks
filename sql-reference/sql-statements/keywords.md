@@ -36,6 +36,7 @@
 - AS
 - ASC
 - AUTHENTICATION
+- AUTO_INCREMENT (3.0 及以后)
 
 ### B
 
@@ -59,6 +60,7 @@
 - CROSS
 - CUBE
 - CURRENT_DATE
+- CURRENT_ROLE (3.0 及以后)
 - CURRENT_TIME
 - CURRENT_TIMESTAMP
 - CURRENT_USER
@@ -73,6 +75,7 @@
 - DECIMAL64
 - DECIMAL128
 - DEFAULT
+- DEFERRED (3.0 及以后)
 - DELETE
 - DENSE_RANK
 - DESC
@@ -86,6 +89,8 @@
 ### E
 
 - ELSE
+- ENCLOSE (3.0 及以后)
+- ESCAPE (3.0 及以后)
 - EXCEPT
 - EXISTS
 - EXPLAIN
@@ -120,6 +125,7 @@
 
 - IF
 - IGNORE
+- IMMEDIATE (3.0 及以后)
 - IN
 - INDEX
 - INFILE
@@ -183,6 +189,7 @@
 - PARTITION
 - PERCENTILE
 - PRIMARY
+- PRIVILEGES (3.0 及以后)
 - PROCEDURE
 
 ### Q
@@ -215,6 +222,7 @@
 - SET_VAR
 - SHOW
 - SMALLINT
+- SKIP_HEADER (3.0 及以后)
 - SYSTEM
 - SWAP
 
@@ -225,6 +233,7 @@
 - THEN
 - TINYINT
 - TO
+- TRIM_SPACE (3.0 及以后)
 - TRUE
 
 ### U
@@ -239,6 +248,7 @@
 ### V
 
 - VALUES
+- VARBINARY (3.0 及以后)
 - VARCHAR
 
 ### W
