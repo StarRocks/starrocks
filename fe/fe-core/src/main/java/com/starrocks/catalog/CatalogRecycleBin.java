@@ -526,6 +526,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             db.createTable(table);
             LOG.info("recover db[{}] with table[{}]: {}", dbId, table.getId(), table.getName());
             iterator.remove();
+            nameToTableInfo.remove(dbId, table.getName());
             removeRecycleMarkers(table.getId());
             tableNames.remove(table.getName());
         }
