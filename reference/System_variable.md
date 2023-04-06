@@ -473,6 +473,12 @@ SELECT /*+ SET_VAR
 
   设置生效的 SQL 语法。例如，执行 `set sql_dialect = 'trino';` 命令可以切换为 Trino 语法，这样您就可以在查询中使用 Trino 特有的 SQL 语法和函数。
 
+* io_tasks_per_scan_operator (3.0 及以后)
+
+  每个 Scan 算子能同时下发的 I/0 任务的数量。如果使用远端存储系统（比如 HDFS 或 S3）且时延较长，可以增加该值。但是值过大会增加内存消耗。
+
+  取值为整数。默认值：4。
+
 * range_pruner_max_predicate (3.0 及以后)
   
   设置进行 Range 分区裁剪时，最多能使用的 IN 谓词的个数，默认值：100。如果超过该值，会扫描全部 tablet，降低查询性能。

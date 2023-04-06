@@ -268,7 +268,6 @@ from mail_merge;
 * 字符串类型：CHAR、VARCHAR
 * 时间类型：DATE、DATETIME
 * 从 2.5 版本开始，`LAG()` 函数支持查询 BITMAP 和 HLL 类型的数据。
-* 从 3.0 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果当前行之前若干行的值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回当前行之前第一个出现的非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
 
 **语法：**
 
@@ -282,8 +281,7 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 * `expr`: 需要计算的目标字段。
 * `offset`: 偏移量，表示向前查找的行数，必须为**正整数**。如果未指定，默认按照 1 处理。
 * `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。
-
-示例一：lag 中未指定 IGNORE NULLS
+* `IGNORE NULLS`：从 3.0 版本开始，`LAG()` 支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认返回结果会包含 NULL 值。比如，如果指定的当前行之前的第 `offset` 行的值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，向前遍历 `offset` 行时会忽略取值为 NULL 的行，继续向前遍历非 NULL 值。如果未找到非 NULL 值，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
 
 以下示例计算 `stock_ticker` 表中股票 JDR **前一天**的收盘价 `closing_price`。`default` 设置为 0，表示如果没有符合条件的行，则返回 0，比如下面示例中返回结果的第一行。
 
@@ -313,40 +311,6 @@ order by closing_date;
 | JDR          | 2014-09-19 00:00:00 | 13.98         | 14.75             |
 +--------------+---------------------+---------------+-------------------+
 ~~~
-
-示例二：lag 中指定了 IGNORE NULLS
-
-~~~SQL
-CREATE TABLE test_tbl (col_1 INT, col_2 INT)
-DISTRIBUTED BY HASH(col_1) BUCKETS 3;
-
-INSERT INTO test_tbl VALUES 
-    (1, 5),
-    (2, 4),
-    (3, NULL),
-    (4, 2),
-    (5, NULL),
-    (6, NULL),
-    (7, 6);
-~~~
-
-~~~Plain
-SELECT col_1, col_2, LAG(col_2 IGNORE NULLS) OVER (ORDER BY col_1) 
-FROM test_tbl ORDER BY col_1;
-+-------+-------+---------------------------------------+
-| col_1 | col_2 | lag(col_2) OVER (ORDER BY col_1 ASC ) |
-+-------+-------+---------------------------------------+
-|     1 |     5 |                                  NULL |
-|     2 |     4 |                                     5 |
-|     3 |  NULL |                                     4 |
-|     4 |     2 |                                     4 |
-|     5 |  NULL |                                     2 |
-|     6 |  NULL |                                     2 |
-|     7 |     6 |                                     2 |
-+-------+-------+---------------------------------------+
-~~~
-
-示例中第 4 行 的 2，其前一行为 NULL，因为指定了 IGNORE NULLs，因此返回距离它最近的 第 2 行 的 4。
 
 <br/>
 
@@ -397,8 +361,6 @@ from mail_merge;
 
 `LEAD()` 支持的数据类型与 [LAG](#使用-lag-窗口函数) 相同。
 
-* 从 3.0 版本开始支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认会包含 NULL 值。比如，如果指定的当前行之后若干行的值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，会返回当前行之后第一个出现的非 NULL 值。如果所有值都为 NULL，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
-
 语法：
 
 ~~~Haskell
@@ -411,8 +373,7 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 * `expr`: 需要计算的目标字段。
 * `offset`: 偏移量，表示向后查找的行数，必须为**正整数**。如果未指定，默认按照 1 处理。
 * `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。
-
-示例一：lead 中未指定 IGNORE NULLS
+* `IGNORE NULLS`：从 3.0 版本开始，`LEAD()` 支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认返回结果会包含 NULL 值。比如，如果指定的当前行之后的第 `offset` 行的值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，向后遍历 `offset` 行时会忽略取值为 NULL 的行，继续向后遍历非 NULL 值。如果未找到非 NULL 值，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
 
 以下示例计算第二天的收盘价对比当天收盘价的走势，即第二天收盘价比当天高还是低。
 
@@ -446,41 +407,7 @@ order by closing_date;
 +--------------+---------------------+---------------+---------------+
 ~~~
 
-示例二：lead 中指定了 IGNORE NULLS
-
-~~~SQL
-CREATE TABLE test_tbl (col_1 INT, col_2 INT)
-DISTRIBUTED BY HASH(col_1) BUCKETS 3;
-
-INSERT INTO test_tbl VALUES 
-    (1, 5),
-    (2, 4),
-    (3, NULL),
-    (4, 2),
-    (5, NULL),
-    (6, NULL),
-    (7, 6);
-~~~
-
-~~~Plain
-SELECT col_1, col_2, LEAD(col_2 IGNORE NULLS) OVER (ORDER BY col_1) 
-FROM test_tbl ORDER BY col_1;
-+-------+-------+----------------------------------------+
-| col_1 | col_2 | lead(col_2) OVER (ORDER BY col_1 ASC ) |
-+-------+-------+----------------------------------------+
-|     1 |     5 |                                      4 |
-|     2 |     4 |                                      2 |
-|     3 |  NULL |                                      2 |
-|     4 |     2 |                                      6 |
-|     5 |  NULL |                                      6 |
-|     6 |  NULL |                                      6 |
-|     7 |     6 |                                   NULL |
-+-------+-------+----------------------------------------+
-~~~
-
-示例中第 2 行 的 4，其后一行为 NULL，因为指定了 IGNORE NULLs，因此返回距离它最近的 第 4 行 的 2。
-
-<br/>
+<br>
 
 ## 使用 MAX() 窗口函数
 
