@@ -70,8 +70,7 @@
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
-    + [Deploy StarRocks in Docker](./administration/deploy_with_docker.md)
-    + [Compile StarRocks](./administration/Build_in_docker.md)
+    + [Deploy StarRocks in Docker](./quick_start/deploy_in_docker.md)
     + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/sr_operator.md)
     + [Deploy CN](./administration/deploy_cn.md)
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
@@ -603,7 +602,9 @@
   + [Contribute to StarRocks](./developers/How_to_Contribute.md)
   + Development Environment
     + [IDEA](./developers/development-environment/IDEA.md)
-    + [Build_StarRocks_on_Ubuntu](./developers/build-starrocks/build_starrocks_on_ubuntu.md)
+    + [Build StarRocks on Ubuntu](./developers/build-starrocks/build_starrocks_on_ubuntu.md)
+    + [Build StarRocks in Docker](./developers/build-starrocks/Build_in_docker.md)
+    + [Build Handbook](./developers/build-starrocks/handbook.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
 + Release Notes

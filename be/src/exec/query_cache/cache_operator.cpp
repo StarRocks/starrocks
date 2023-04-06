@@ -67,15 +67,15 @@ struct PerLaneBuffer {
         }
         // CRITICAL!!!: we should append last empty chunk to the empty buffer to guarantee that pull_chunk method
         // would fetch a chunk and reset_lane.
-        if (!chunk->is_empty() || (chunks.empty() && chunk->owner_info().is_last_chunk())) {
+        // We must guarantee happen-before invariant as follows:
+        // append EOS chunk[PLBS_TOTAL] -> propulate_cache[PLBS_POPULATE] -> pull last EOS chunk -> release_lane
+        if (!chunk->is_empty() || chunk->owner_info().is_last_chunk()) {
             chunks.push_back(chunk);
             num_rows += chunk->num_rows();
             num_bytes += chunk->bytes_usage();
         }
 
-        if (chunk->owner_info().is_last_chunk()) {
-            state = chunk->owner_info().is_last_chunk() ? PLBS_TOTAL : PLBS_PARTIAL;
-        }
+        state = chunk->owner_info().is_last_chunk() ? PLBS_TOTAL : PLBS_PARTIAL;
     }
 
     bool has_chunks() const { return next_chunk_idx < chunks.size(); }
@@ -86,7 +86,7 @@ struct PerLaneBuffer {
         }
     }
 
-    bool can_release() {
+    bool can_release() const {
         return (state == PLBS_POPULATE || state == PLBS_PASSTHROUGH || state == PLBS_HIT_TOTAL) && !has_chunks();
     }
 

@@ -491,6 +491,7 @@ public class MaterializedViewAnalyzer {
                     throw new SemanticException("Materialized view partition column in partition exp " +
                             "must be base table partition column");
                 }
+                partitionColumns.forEach(partitionColumn1 -> checkPartitionColumnType(partitionColumn1));
             } else {
                 throw new SemanticException("Materialized view related base table partition type:" +
                         partitionInfo.getType().name() + "not supports");
@@ -498,14 +499,15 @@ public class MaterializedViewAnalyzer {
         }
 
         private void checkPartitionColumnWithBaseHMSTable(SlotRef slotRef, HiveMetaStoreTable table) {
-            List<String> partitionColumnNames = table.getPartitionColumnNames();
+            List<Column> partitionColumns = table.getPartitionColumns();
             if (table.isUnPartitioned()) {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
             } else {
                 boolean found = false;
-                for (String partitionColumn : partitionColumnNames) {
-                    if (partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                for (Column partitionColumn : partitionColumns) {
+                    if (partitionColumn.getName().equalsIgnoreCase(slotRef.getColumnName())) {
+                        checkPartitionColumnType(partitionColumn);
                         found = true;
                         break;
                     }
@@ -526,8 +528,9 @@ public class MaterializedViewAnalyzer {
             } else {
                 boolean found = false;
                 for (PartitionField partitionField : partitionSpec.fields()) {
-                    String partitionColumn = partitionField.name();
-                    if (partitionColumn.equalsIgnoreCase(slotRef.getColumnName())) {
+                    String partitionColumnName = partitionField.name();
+                    if (partitionColumnName.equalsIgnoreCase(slotRef.getColumnName())) {
+                        checkPartitionColumnType(table.getColumn(partitionColumnName));
                         found = true;
                         break;
                     }
@@ -578,10 +581,18 @@ public class MaterializedViewAnalyzer {
                             icebergTable.getDb().equals(baseTableInfo.getDbName()) &&
                             table.getTableIdentifier().equals(baseTableInfo.getTableIdentifier())) {
                         slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
-                                baseTableInfo.getDbName(), table.getName()));
+                                baseTableInfo.getDbName(), icebergTable.getTable()));
                         break;
                     }
                 }
+            }
+        }
+
+        private void checkPartitionColumnType(Column partitionColumn) {
+            PrimitiveType type = partitionColumn.getPrimitiveType();
+            if (!type.isFixedPointType() && !type.isDateType()) {
+                throw new SemanticException("Materialized view partition exp column:"
+                        + partitionColumn.getName() + " with type "  + type + " not supported");
             }
         }
 
