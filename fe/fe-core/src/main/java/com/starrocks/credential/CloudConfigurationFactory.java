@@ -18,6 +18,12 @@ import com.starrocks.credential.aliyun.AliyunCloudConfigurationFactory;
 import com.starrocks.credential.aws.AWSCloudConfigurationFactory;
 import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
 import com.starrocks.credential.gcp.GCPCloudConfigurationFactory;
+<<<<<<< HEAD
+=======
+import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.TCloudType;
+import org.apache.hadoop.conf.Configuration;
+>>>>>>> e17842d3c ([BugFix] Fix not support core-site.xml in data lake (#21100))
 
 import java.util.Map;
 
@@ -46,7 +52,38 @@ public abstract class CloudConfigurationFactory {
         if (cloudConfiguration != null) {
             return cloudConfiguration;
         }
+<<<<<<< HEAD
         return cloudConfiguration;
+=======
+        return buildDefaultCloudConfiguration();
+    }
+
+    // If user didn't specific any credential, we create DefaultCloudConfiguration instead.
+    // It will use Hadoop default constructor instead, user can put core-site.xml into java CLASSPATH to control
+    // authentication manually
+    public static CloudConfiguration buildDefaultCloudConfiguration() {
+        return new CloudConfiguration() {
+            @Override
+            public void toThrift(TCloudConfiguration tCloudConfiguration) {
+                tCloudConfiguration.cloud_type = TCloudType.DEFAULT;
+            }
+
+            @Override
+            public void applyToConfiguration(Configuration configuration) {
+
+            }
+
+            @Override
+            public CloudType getCloudType() {
+                return CloudType.DEFAULT;
+            }
+
+            @Override
+            public String getCredentialString() {
+                return "default";
+            }
+        };
+>>>>>>> e17842d3c ([BugFix] Fix not support core-site.xml in data lake (#21100))
     }
 
     protected abstract CloudConfiguration buildForStorage();
