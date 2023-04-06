@@ -397,7 +397,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
         // Until _probe_chunk be done.
         if (_probe_chunk_index == _probe_chunk->num_rows()) {
             // step 2:
-            // if left chunk is bigger than right, we shuld scan left based on right.
+            // if left chunk is bigger than right, we should scan left based on right.
             if (_probe_chunk_index > _number_of_build_rows - _build_chunks_size) {
                 if (row_count > _probe_chunk_index - _probe_rows_index) {
                     row_count = _probe_chunk_index - _probe_rows_index;
