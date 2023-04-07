@@ -14,6 +14,7 @@
 
 package com.starrocks.warehouse;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.server.GlobalStateMgr;
@@ -33,7 +34,10 @@ public class LocalWarehouse extends Warehouse {
 
     @Override
     public void getProcNodeData(BaseProcResult result) {
-
+        result.addRow(Lists.newArrayList(this.getFullName(),
+                this.getState().toString(),
+                String.valueOf(this.getTotalPendingSqls()),
+                String.valueOf(this.getTotalRunningSqls())));
     }
 
     @Override

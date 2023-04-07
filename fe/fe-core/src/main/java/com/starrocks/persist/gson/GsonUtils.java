@@ -124,6 +124,9 @@ import com.starrocks.system.BackendHbResponse;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.system.HeartbeatResponse;
+import com.starrocks.warehouse.ElasticWarehouse;
+import com.starrocks.warehouse.LocalWarehouse;
+import com.starrocks.warehouse.Warehouse;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -253,6 +256,12 @@ public class GsonUtils {
                     .registerSubtype(CatalogPEntryObject.class, CatalogPEntryObject.class.getSimpleName())
                     .registerSubtype(ResourceGroupPEntryObject.class,
                             ResourceGroupPEntryObject.class.getSimpleName());
+
+    private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
+            .of(Warehouse.class, "clazz")
+            .registerSubtype(ElasticWarehouse.class, ElasticWarehouse.class.getSimpleName())
+            .registerSubtype(LocalWarehouse.class, LocalWarehouse.class.getSimpleName());
+
 
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));

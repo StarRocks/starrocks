@@ -19,13 +19,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.proc.DbsProcDir;
-import com.starrocks.common.proc.ExternalDbsProcDir;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.AlterWhClusterOplog;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -56,7 +53,6 @@ public class ElasticWarehouse extends Warehouse {
     public ElasticWarehouse() {
         super(0, null);
     }
-
 
     public ElasticWarehouse(long id, String name, Map<String, String> properties) {
         super(id, name);
@@ -270,18 +266,14 @@ public class ElasticWarehouse extends Warehouse {
     }
 
     public class ClusterProcNode implements ProcDirInterface {
-
         @Override
         public boolean register(String name, ProcNodeInterface node) {
             return false;
         }
 
         @Override
-        public ProcNodeInterface lookup(String catalogName) throws AnalysisException {
-            if (CatalogMgr.isInternalCatalog(catalogName)) {
-                return new DbsProcDir(GlobalStateMgr.getCurrentState());
-            }
-            return new ExternalDbsProcDir(catalogName);
+        public ProcNodeInterface lookup(String warehouseName) throws AnalysisException {
+            return new ClusterProcNode();
         }
 
         @Override
@@ -303,5 +295,4 @@ public class ElasticWarehouse extends Warehouse {
             return result;
         }
     }
-
 }
