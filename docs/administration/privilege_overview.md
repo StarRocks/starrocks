@@ -99,7 +99,7 @@ Active roles allow users to apply the privileges of the role under the current s
 
 Default roles are automatically activated when the user logs in to the cluster. It can be a role owned by one or more users. The administrator can set default roles using the `DEFAULT ROLE` keyword in [CREATE USER](../sql-reference/sql-statements/account-management/CREATE%20USER.md) and can change default roles using [ALTER USER](../sql-reference/sql-statements/account-management/ALTER%20USER.md).
 
-Users can also change their default roles using [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET%20DEFAULT%20ROLE.md).
+Users can also change their default roles using [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md).
 
 Default roles provide basic privilege protection for users. For example, User A has `role_query` and `role_delete`, which has query and delete privilege respectively. We recommend that you only use `role_query` as the default role to prevent data loss caused by high-risk operations such as `DELETE` or `TRUNCATE`. If you need to perform these operations, you can do it after manually setting active roles.
 
