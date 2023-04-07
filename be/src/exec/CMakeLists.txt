@@ -132,11 +132,13 @@ set(EXEC_FILES
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
+    sorting/merge_path.cpp
     sorting/merge_cascade.cpp
     sorting/sort_column.cpp
     sorting/sort_permute.cpp
     connector_scan_node.cpp
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
+    pipeline/exchange/exchange_parallel_merge_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp
     pipeline/exchange/local_exchange.cpp
@@ -187,6 +189,7 @@ set(EXEC_FILES
     pipeline/sort/local_partition_topn_context.cpp
     pipeline/sort/local_merge_sort_source_operator.cpp
     pipeline/sort/spillable_partition_sort_sink_operator.cpp
+    pipeline/sort/local_parallel_merge_sort_source_operator.cpp
     pipeline/sort/sort_context.cpp
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
