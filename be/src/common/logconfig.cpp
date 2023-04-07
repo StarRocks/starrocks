@@ -30,6 +30,7 @@
 #include "gutil/stringprintf.h"
 #include "runtime/current_thread.h"
 #include "util/logging.h"
+#include "util/stack_util.h"
 
 namespace starrocks {
 

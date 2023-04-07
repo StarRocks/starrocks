@@ -22,6 +22,8 @@
 package com.starrocks.rpc;
 
 import com.baidu.jprotobuf.pbrpc.ProtobufRPC;
+import com.starrocks.proto.ExecuteCommandRequestPB;
+import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
@@ -52,5 +54,8 @@ public interface PBackendService {
 
     @ProtobufRPC(serviceName = "PBackendService", methodName = "get_info", onceTalkTimeout = 10000)
     Future<PProxyResult> getInfo(PProxyRequest request);
+
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "execute_command", onceTalkTimeout = 60000)
+    Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request);
 }
 

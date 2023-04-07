@@ -91,6 +91,7 @@ set(RUNTIME_FILES
     global_dicts.cpp
     current_thread.cpp
     runtime_filter_cache.cpp
+    command_executor.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}
