@@ -66,7 +66,6 @@ public:
 
     connector::ConnectorType connector_type();
 
-    // TODO: refactor it into the base class
     void attach_chunk_source(int32_t source_index) override;
     void detach_chunk_source(int32_t source_index) override;
     bool has_shared_chunk_source() const override;
@@ -79,14 +78,16 @@ public:
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
     int update_pickup_morsel_state() override;
+    void finish_process() override;
 
 private:
     struct PickupMorselState {
+        bool adjusted_io_tasks = false;        
         int64_t last_check_full_time = 0;
         int64_t last_check_empty_time = 0;
         int max_io_tasks = 0;
     };
-    PickupMorselState _pickup_morsel_state;
+    mutable PickupMorselState _pickup_morsel_state;
     bool _enable_adaptive_io_tasks = true;
 };
 

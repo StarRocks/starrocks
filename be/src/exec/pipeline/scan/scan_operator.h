@@ -79,6 +79,7 @@ public:
     virtual int update_pickup_morsel_state() { return _io_tasks_per_scan_operator; }
     void update_total_running_time(int64_t value) { _total_running_time += value; }
     void update_chunk_source_total_running_time(int64_t value) { _chunk_source_total_running_time += value; }
+    virtual void finish_process() {}
 
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;

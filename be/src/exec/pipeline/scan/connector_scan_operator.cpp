@@ -156,44 +156,75 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
     return scan_node->connector_type();
 }
 
+void ConnectorScanOperator::finish_process() {
+    PickupMorselState& state = _pickup_morsel_state;
+    state.adjusted_io_tasks = false;
+}
+
 int ConnectorScanOperator::update_pickup_morsel_state() {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
 
+    // auto f = [&]() {
+    //     PickupMorselState& state = _pickup_morsel_state;
+    //     int64_t threshold = config::connector_adaptive_io_tasks_interval_ms * 1000;
+    //     int64_t now = GetCurrentTimeMicros();
+
+    //     if (_num_running_io_tasks == 0) {
+    //         state.last_check_empty_time = now;
+    //         return 1;
+    //     }
+
+    //     // if buffer full, decrease max io tasks.(to avoid frequent update)
+    //     if (is_buffer_full()) {
+    //         state.last_check_empty_time = now;
+
+    //         if ((now - state.last_check_full_time) > threshold) {
+    //             state.last_check_full_time = now;
+    //             state.max_io_tasks -= 1;
+    //             VLOG_FILE << "[XXX] is buffer full. update to " << state.max_io_tasks;
+    //             return state.max_io_tasks;
+    //         }
+    //     }
+    //     state.last_check_full_time = now;
+
+    //     // if buffer is not enough, submit one task
+    //     if (num_buffered_chunks() < _buffer_unplug_threshold()) {
+    //         if ((now - state.last_check_empty_time) > threshold) {
+    //             state.last_check_empty_time = now;
+    //             int io_tasks = _num_running_io_tasks + 1;
+    //             VLOG_FILE << "[XXX] is not unplug. update to " << io_tasks;
+    //             return io_tasks;
+    //         }
+    //     }
+
+    //     state.last_check_empty_time = now;
+    //     state.max_io_tasks = std::max(state.max_io_tasks, _num_running_io_tasks.load());
+    //     VLOG_FILE << "[XXX] pickup morsel. P = " << state.max_io_tasks;
+    //     return state.max_io_tasks;
+    // };
+
     auto f = [&]() {
         PickupMorselState& state = _pickup_morsel_state;
-        int64_t threshold = config::connector_adaptive_io_tasks_interval_ms * 1000;
-        int64_t now = GetCurrentTimeMicros();
+        int current_io_tasks = _num_running_io_tasks.load();
+        if (state.adjusted_io_tasks) return current_io_tasks;        
+        state.adjusted_io_tasks = false;
 
-        if (_num_running_io_tasks == 0) {
-            state.last_check_empty_time = now;
-            return 1;
-        }
+        if (current_io_tasks == 0) return 1;
 
         // if buffer full, decrease max io tasks.(to avoid frequent update)
         if (is_buffer_full()) {
-            state.last_check_empty_time = now;
-
-            if ((now - state.last_check_full_time) > threshold) {
-                state.last_check_full_time = now;
-                state.max_io_tasks -= 1;
-                VLOG_FILE << "[XXX] is buffer full. update to " << state.max_io_tasks;
-                return state.max_io_tasks;
-            }
+            state.max_io_tasks -= 1;
+            VLOG_FILE << "[XXX] is full. update to " << state.max_io_tasks;
+            return state.max_io_tasks;
         }
-        state.last_check_full_time = now;
-
         // if buffer is not enough, submit one task
         if (num_buffered_chunks() < _buffer_unplug_threshold()) {
-            if ((now - state.last_check_empty_time) > threshold) {
-                state.last_check_empty_time = now;
-                int io_tasks = _num_running_io_tasks + 1;
-                VLOG_FILE << "[XXX] is not unplug. update to " << io_tasks;
-                return io_tasks;
-            }
+            int io_tasks = current_io_tasks + 1;
+            VLOG_FILE << "[XXX] is not unplug. update to " << io_tasks;
+            return io_tasks;
         }
 
-        state.last_check_empty_time = now;
-        state.max_io_tasks = std::max(state.max_io_tasks, _num_running_io_tasks.load());
+        state.max_io_tasks = std::max(state.max_io_tasks, current_io_tasks);
         VLOG_FILE << "[XXX] pickup morsel. P = " << state.max_io_tasks;
         return state.max_io_tasks;
     };
