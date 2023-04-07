@@ -59,7 +59,12 @@ public class CachedStatisticStorage implements StatisticStorage {
             .buildAsync(new ColumnHistogramStatsCacheLoader());
 
     @Override
-    public TableStatistic getTableStatistic(Long tableId, Long partitionId) {
+    public TableStatistic getTableStatistic(Table table, Long tableId, Long partitionId) {
+        // get Statistics Table column info, just return default column statistics
+        if (StatisticUtils.statisticTableBlackListCheck(table.getId())) {
+            return TableStatistic.unknown();
+        }
+
         try {
             CompletableFuture<Optional<TableStatistic>> result =
                     tableStatsCache.get(new TableStatsCacheKey(tableId, partitionId));

@@ -22,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 public interface StatisticStorage {
-    default TableStatistic getTableStatistic(Long tableId, Long partitionId) {
+    default TableStatistic getTableStatistic(Table table, Long tableId, Long partitionId) {
         return TableStatistic.unknown();
     }
 
