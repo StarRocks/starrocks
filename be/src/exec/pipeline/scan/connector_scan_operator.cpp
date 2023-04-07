@@ -206,8 +206,8 @@ int ConnectorScanOperator::update_pickup_morsel_state() {
     auto f = [&]() {
         PickupMorselState& state = _pickup_morsel_state;
         int current_io_tasks = _num_running_io_tasks.load();
-        if (state.adjusted_io_tasks) return current_io_tasks;        
-        state.adjusted_io_tasks = false;
+        if (state.adjusted_io_tasks) return current_io_tasks;
+        state.adjusted_io_tasks = true;
 
         if (current_io_tasks == 0) return 1;
 
