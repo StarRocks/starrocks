@@ -189,13 +189,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         int maxRetryTimes = 5;
         StatementBase insertStmt = createInsertStmt();
         do {
-            // don't work if not leader, because origin statement is a mock SQL and can't forward to leader
-            if (!(GlobalStateMgr.getCurrentState().isLeader())) {
-                LOG.info("Statistics collect fail because this isn't leader");
-                return;
-            }
-
-            LOG.debug("statistics insert sql : " + insertStmt.getOrigStmt().originStmt);
+            LOG.debug("statistics insert sql size:" + rowsBuffer.size());
             StmtExecutor executor = new StmtExecutor(context, insertStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
