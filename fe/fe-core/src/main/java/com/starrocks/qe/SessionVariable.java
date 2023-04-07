@@ -315,6 +315,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
+    public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
 
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
@@ -862,6 +863,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_SORT_AGGREGATE)
     private boolean enableSortAggregate = false;
 
+    @VarAttr(name = ENABLE_PARALLEL_MERGE)
+    private boolean enableParallelMerge = false;
+
     // 1: sort based, 2: hash based
     @VarAttr(name = WINDOW_PARTITION_MODE, flag = VariableMgr.INVISIBLE)
     private int windowPartitionMode = 1;
@@ -882,6 +886,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableSortAggregate(boolean enableSortAggregate) {
         this.enableSortAggregate = enableSortAggregate;
+    }
+
+    public boolean isEnableParallelMerge() {
+        return enableParallelMerge;
+    }
+
+    public void setEnableParallelMerge(boolean enableParallelMerge) {
+        this.enableParallelMerge = enableParallelMerge;
     }
 
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
