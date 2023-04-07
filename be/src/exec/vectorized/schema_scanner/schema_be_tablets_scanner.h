@@ -40,6 +40,8 @@ struct TabletBasicInfo {
     int64_t schema_hash{0};
 };
 
+namespace vectorized {
+
 class SchemaBeTabletsScanner : public vectorized::SchemaScanner {
 public:
     SchemaBeTabletsScanner();
@@ -56,5 +58,7 @@ private:
     size_t _cur_idx{0};
     static SchemaScanner::ColumnDesc _s_columns[];
 };
+
+} // namespace vectorized
 
 } // namespace starrocks

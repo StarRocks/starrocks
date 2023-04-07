@@ -457,7 +457,6 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
-        @Override
         public Void visitSetUserPropertyStatement(SetUserPropertyStmt statement, ConnectContext context) {
             String user = statement.getUser();
             if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())

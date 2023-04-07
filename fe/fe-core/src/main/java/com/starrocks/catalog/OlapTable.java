@@ -1487,7 +1487,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     + "Do not allow create materialized view");
         }
         // check if all tablets are healthy, and no tablet is in tablet scheduler
-        long unhealthyTabletId  = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
+        long unhealthyTabletId = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
                 GlobalStateMgr.getCurrentState().getTabletScheduler());
         if (unhealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
             throw new DdlException("Table [" + name + "] is not stable. "
@@ -1895,7 +1895,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getCompressionType();
     }
 
-
     public boolean hasUniqueConstraints() {
         List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
         return uniqueConstraint != null;
@@ -2050,4 +2049,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
         }
         return properties;
     }
+
+    @Override
+    public boolean supportsUpdate() {
+        return getKeysType() == KeysType.PRIMARY_KEYS;
+    }
+
 }

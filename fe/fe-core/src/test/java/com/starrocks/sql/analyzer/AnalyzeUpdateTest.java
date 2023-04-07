@@ -31,7 +31,7 @@ public class AnalyzeUpdateTest {
     @Test
     public void testSingle() {
         analyzeFail("update tjson set v_json = '' where v_int = 1",
-                "only support updating primary key table");
+                "does not support update");
 
         analyzeFail("update tprimary set pk = 2 where pk = 1",
                 "primary key column cannot be updated:");
