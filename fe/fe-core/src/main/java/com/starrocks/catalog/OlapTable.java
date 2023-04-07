@@ -577,20 +577,6 @@ public class OlapTable extends Table {
         }
     }
 
-    public boolean isAbortDelete() {
-        boolean abortDelete = false;
-        if (keysType == keysType.PRIMARY_KEYS) {
-            for (Column col : getBaseSchema()) {
-                if (col.isAutoIncrement() && !col.isKey()) {
-                    abortDelete = true;
-                    break;
-                }
-            }
-        }
-
-        return abortDelete;
-    }
-
     public Status resetIdsForRestore(GlobalStateMgr globalStateMgr, Database db, int restoreReplicationNum) {
         // table id
         id = globalStateMgr.getNextId();
