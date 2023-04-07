@@ -222,7 +222,7 @@ public class TransactionLoadAction extends RestBaseAction {
             int channelId = Integer.parseInt(channelIdStr);
             TransactionResult resp = new TransactionResult();
             TNetworkAddress redirectAddr = GlobalStateMgr.getCurrentState().getStreamLoadManager().executeLoadTask(
-                    label, channelId, request.getRequest().headers(), resp);
+                    label, channelId, request.getRequest().headers(), resp, dbName, tableName);
             if (!resp.stateOK() || resp.containMsg()) {
                 sendResult(request, response, resp);
                 return;
