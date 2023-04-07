@@ -216,10 +216,10 @@ Status SortedChunksMerger::get_next_for_pipeline(ChunkPtr* chunk, std::atomic<bo
 
     /*
      * Because compute thread couldn't blocking in pipeline, and merge-sort is
-     * accept chunks from network in default, so if chunk hasn't come compute thread
-     * should exit this operator and come back when you have data.
-     * STEP 0 as the process to collect merged result.
-     * STEP 1 as the process to drive cursor move to next row then execute STEP 0.
+     * accept chunks from network in default, so if chunk hasn't come, this process
+     * should exit get back when data is arrived.
+     * STEP 0 denotes the process of collecting merged result.
+     * STEP 1 denotes the process to driving cursor move to next row then execute STEP 0.
      * STEP 2 is almost like STEP 1 except it is executed when data is ready. 
      * 
      */

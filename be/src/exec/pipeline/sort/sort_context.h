@@ -53,6 +53,12 @@ public:
     void incr_sinker() { ++_num_partition_sinkers; }
     const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters() { return _build_runtime_filters; }
     void add_partition_chunks_sorter(const std::shared_ptr<ChunksSorter>& chunks_sorter);
+    ChunksSorter* get_chunks_sorter(int32_t driver_sequence) {
+        DCHECK_LT(driver_sequence, _chunks_sorter_partitions.size());
+        return _chunks_sorter_partitions[driver_sequence].get();
+    }
+    const std::vector<ExprContext*>& sort_exprs() const { return _sort_exprs; }
+    const SortDescs& sort_descs() const { return _sort_desc; }
 
     void finish_partition(uint64_t partition_rows);
     bool is_partition_sort_finished() const;
