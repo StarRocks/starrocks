@@ -24,9 +24,9 @@
 
 using starrocks::vectorized::fill_column_with_slot;
 
-namespace starrocks {
+namespace starrocks::vectorized {
 
-vectorized::SchemaScanner::ColumnDesc SchemaBeTabletsScanner::_s_columns[] = {
+SchemaScanner::ColumnDesc SchemaBeTabletsScanner::_s_columns[] = {
         {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},         {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"PARTITION_ID", TYPE_BIGINT, sizeof(int64_t), false},  {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"NUM_VERSION", TYPE_BIGINT, sizeof(int64_t), false},   {"MAX_VERSION", TYPE_BIGINT, sizeof(int64_t), false},
@@ -205,4 +205,4 @@ Status SchemaBeTabletsScanner::get_next(vectorized::ChunkPtr* chunk, bool* eos) 
     return fill_chunk(chunk);
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

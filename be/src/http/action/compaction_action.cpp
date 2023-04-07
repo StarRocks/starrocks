@@ -97,23 +97,13 @@ Status get_params(HttpRequest* req, uint64_t* tablet_id) {
     return Status::OK();
 }
 
-Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_result) {
-    bool expected = false;
-    if (!_running.compare_exchange_strong(expected, true)) {
-        return Status::TooManyTasks("Manual compaction task is running");
-    }
-    DeferOp defer([&]() { _running = false; });
-    auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_compaction"));
-
-    uint64_t tablet_id;
-    RETURN_IF_ERROR(get_params(req, &tablet_id));
-
+Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compaction_type,
+                                       const string& rowset_ids_string) {
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     RETURN_IF(tablet == nullptr, Status::InvalidArgument(fmt::format("Not Found tablet:{}", tablet_id)));
 
     auto* mem_tracker = ExecEnv::GetInstance()->compaction_mem_tracker();
     if (tablet->updates() != nullptr) {
-        string rowset_ids_string = req->param("rowset_ids");
         if (rowset_ids_string.empty()) {
             RETURN_IF_ERROR(tablet->updates()->compaction(mem_tracker));
         } else {
@@ -137,11 +127,9 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
             }
             RETURN_IF_ERROR(tablet->updates()->compaction(mem_tracker, rowset_ids));
         }
-        *json_result = R"({"status": "Success", "msg": "compaction task executed successful"})";
         return Status::OK();
     }
 
-    std::string compaction_type = req->param(PARAM_COMPACTION_TYPE);
     if (compaction_type != to_string(CompactionType::BASE_COMPACTION) &&
         compaction_type != to_string(CompactionType::CUMULATIVE_COMPACTION)) {
         return Status::NotSupported(fmt::format("unsupport compaction type:{}", compaction_type));
@@ -217,6 +205,22 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
     } else {
         __builtin_unreachable();
     }
+    return Status::OK();
+}
+
+Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_result) {
+    bool expected = false;
+    if (!_running.compare_exchange_strong(expected, true)) {
+        return Status::TooManyTasks("Manual compaction task is running");
+    }
+    DeferOp defer([&]() { _running = false; });
+    auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_compaction"));
+
+    uint64_t tablet_id;
+    RETURN_IF_ERROR(get_params(req, &tablet_id));
+    std::string compaction_type = req->param(PARAM_COMPACTION_TYPE);
+    string rowset_ids_string = req->param("rowset_ids");
+    RETURN_IF_ERROR(do_compaction(tablet_id, compaction_type, rowset_ids_string));
     *json_result = R"({"status": "Success", "msg": "compaction task executed successful"})";
     return Status::OK();
 }

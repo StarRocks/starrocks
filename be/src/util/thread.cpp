@@ -78,7 +78,7 @@ public:
     // already been removed, this is a no-op.
     void remove_thread(const pthread_t& pthread_id, const std::string& category);
 
-    void get_thread_infos(std::vector<BeThreadInfo>& infos);
+    void get_thread_infos(std::vector<vectorized::BeThreadInfo>& infos);
 
 private:
     // Container class for any details we want to capture about a thread
@@ -172,11 +172,11 @@ void ThreadMgr::remove_thread(const pthread_t& pthread_id, const std::string& ca
     ANNOTATE_IGNORE_READS_AND_WRITES_END();
 }
 
-void ThreadMgr::get_thread_infos(std::vector<BeThreadInfo>& infos) {
+void ThreadMgr::get_thread_infos(std::vector<vectorized::BeThreadInfo>& infos) {
     std::lock_guard l(_lock);
     for (const auto& category : _thread_categories) {
         for (const auto& thread : category.second) {
-            BeThreadInfo& info = infos.emplace_back();
+            vectorized::BeThreadInfo& info = infos.emplace_back();
             info.group = thread.second.category();
             info.name = thread.second.name();
             info.pthread_id = thread.first;
@@ -187,7 +187,7 @@ void ThreadMgr::get_thread_infos(std::vector<BeThreadInfo>& infos) {
     }
 }
 
-void Thread::get_thread_infos(std::vector<BeThreadInfo>& infos) {
+void Thread::get_thread_infos(std::vector<vectorized::BeThreadInfo>& infos) {
     GoogleOnceInit(&once, &init_threadmgr);
     thread_manager->get_thread_infos(infos);
 }

@@ -19,7 +19,7 @@
 #include "exec/vectorized/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 
-namespace starrocks {
+namespace starrocks::vectorized {
 
 struct BeThreadInfo {
     std::string group;
@@ -29,8 +29,6 @@ struct BeThreadInfo {
     bool idle{false};
     int64_t finished_tasks{0};
 };
-
-namespace vectorized {
 
 class SchemaBeThreadsScanner : public SchemaScanner {
 public:
@@ -49,5 +47,4 @@ private:
     static SchemaScanner::ColumnDesc _s_columns[];
 };
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
