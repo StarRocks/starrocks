@@ -24,6 +24,7 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.UserException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
 import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
 import com.starrocks.thrift.TBrokerFD;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -44,7 +45,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.net.URISyntaxException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Enumeration;
@@ -60,13 +60,6 @@ import java.util.concurrent.TimeUnit;
 
 class ConfigurationWrap extends Configuration {
     private static final Logger LOG = LogManager.getLogger(ConfigurationWrap.class);
-
-    ConfigurationWrap() {
-    }
-
-    ConfigurationWrap(boolean loadDefaults) {
-        super(loadDefaults);
-    }
 
     public String parseRegionFromEndpoint(TObjectStoreType tObjectStoreType, String endPoint) {
         if (tObjectStoreType == TObjectStoreType.S3) {
@@ -206,16 +199,11 @@ class ConfigurationWrap extends Configuration {
                     }
             }
         }
-        return;
     }
 }
 
 class HDFSConfigurationWrap extends HdfsConfiguration {
     public HDFSConfigurationWrap() {
-    }
-
-    public HDFSConfigurationWrap(boolean loadDefaults) {
-        super(loadDefaults);
     }
 
     public void convertHDFSConfToProperties(THdfsProperties tProperties) {
@@ -224,13 +212,10 @@ class HDFSConfigurationWrap extends HdfsConfiguration {
         while (enums.hasMoreElements()) {
             String key = enums.nextElement();
             String value = props.getProperty(key);
-            switch (key) {
-                case HdfsFsManager.FS_HDFS_IMPL_DISABLE_CACHE:
-                    tProperties.setDisable_cache(Boolean.parseBoolean(value));
-                    break;
+            if (key.equals(HdfsFsManager.FS_HDFS_IMPL_DISABLE_CACHE)) {
+                tProperties.setDisable_cache(Boolean.parseBoolean(value));
             }
         }
-        return;
     }
 }
 
@@ -252,6 +237,7 @@ public class HdfsFsManager {
     private static final String ADL_SCHEMA = "adl";
     private static final String WASB_SCHEMA = "wasb";
     private static final String WASBS_SCHEMA = "wasbs";
+    private static final String GCS_SCHEMA = "gs";
     private static final String USER_NAME_KEY = "username";
     private static final String PASSWORD_KEY = "password";
     // arguments for ha hdfs
@@ -312,14 +298,15 @@ public class HdfsFsManager {
     public static final String FS_ADL_IMPL_DISABLE_CACHE = "fs.adl.impl.disable.cache";
     public static final String FS_WASB_IMPL_DISABLE_CACHE = "fs.wasb.impl.disable.cache";
     public static final String FS_WASBS_IMPL_DISABLE_CACHE = "fs.wasbs.impl.disable.cache";
+    public static final String FS_GS_IMPL_DISABLE_CACHE = "fs.gs.impl.disable.cache";
 
-    private ScheduledExecutorService handleManagementPool = Executors.newScheduledThreadPool(1);
+    private final ScheduledExecutorService handleManagementPool = Executors.newScheduledThreadPool(1);
 
     private int readBufferSize = 128 << 10; // 128k
     private int writeBufferSize = 128 << 10; // 128k
 
-    private ConcurrentHashMap<HdfsFsIdentity, HdfsFs> cachedFileSystem;
-    private HdfsFsStreamManager ioStreamManager;
+    private final ConcurrentHashMap<HdfsFsIdentity, HdfsFs> cachedFileSystem;
+    private final HdfsFsStreamManager ioStreamManager;
 
     public HdfsFsManager() {
         cachedFileSystem = new ConcurrentHashMap<>();
@@ -351,12 +338,7 @@ public class HdfsFsManager {
     /**
      * visible for test
      *
-     * @param path
-     * @param tProperties
      * @return BrokerFileSystem with different FileSystem based on scheme
-     * @throws UserException
-     * @throws URISyntaxException
-     * @throws Exception
      */
     public HdfsFs getFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
@@ -365,42 +347,34 @@ public class HdfsFsManager {
         if (Strings.isNullOrEmpty(scheme)) {
             throw new UserException("invalid path. scheme is null");
         }
-        HdfsFs brokerFileSystem = null;
         switch (scheme) {
             case HDFS_SCHEME:
             case VIEWFS_SCHEME:
-                brokerFileSystem = getDistributedFileSystem(scheme, path, loadProperties, tProperties);
-                break;
+                return getDistributedFileSystem(scheme, path, loadProperties, tProperties);
             case S3A_SCHEME:
-                brokerFileSystem = getS3AFileSystem(path, loadProperties, tProperties);
-                break;
+                return getS3AFileSystem(path, loadProperties, tProperties);
             case OSS_SCHEME:
-                brokerFileSystem = getOSSFileSystem(path, loadProperties, tProperties);
-                break;
+                return getOSSFileSystem(path, loadProperties, tProperties);
             case COS_SCHEME:
-                brokerFileSystem = getCOSFileSystem(path, loadProperties, tProperties);
-                break;
+                return getCOSFileSystem(path, loadProperties, tProperties);
             case KS3_SCHEME:
-                brokerFileSystem = getKS3FileSystem(path, loadProperties, tProperties);
-                break;
+                return getKS3FileSystem(path, loadProperties, tProperties);
             case OBS_SCHEME:
-                brokerFileSystem = getOBSFileSystem(path, loadProperties, tProperties);
-                break;
+                return getOBSFileSystem(path, loadProperties, tProperties);
             case ABFS_SCHEMA:
             case ABFSS_SCHEMA:
             case ADL_SCHEMA:
             case WASB_SCHEMA:
             case WASBS_SCHEMA:
-                brokerFileSystem = getAzureFileSystem(path, loadProperties, tProperties);
-                break;
+                return getAzureFileSystem(path, loadProperties, tProperties);
+            case GCS_SCHEMA:
+                return getGoogleFileSystem(path, loadProperties, tProperties);
             default:
                 // If all above match fails, then we will read the settings from hdfs-site.xml, core-site.xml of FE,
                 // and try to create a universal file system. The reason why we can do this is because hadoop/s3
                 // SDK is compatible with nearly all file/object storage system
-                brokerFileSystem = getUniversalFileSystem(path, loadProperties, tProperties);
-                break;
+                return getUniversalFileSystem(path, loadProperties, tProperties);
         }
-        return brokerFileSystem;
     }
 
     /**
@@ -414,14 +388,6 @@ public class HdfsFsManager {
      * <p>
      * Configs related to viewfs in core-site.xml and hdfs-site.xml should be copied
      * to the broker conf directory.
-     *
-     * @param path
-     * @param loadProperties
-     * @param tProperties
-     * @return
-     * @throws UserException
-     * @throws URISyntaxException
-     * @throws Exception
      */
     public HdfsFs getDistributedFileSystem(String scheme, String path, Map<String, String> loadProperties,
                                            THdfsProperties tProperties) throws UserException {
@@ -462,11 +428,9 @@ public class HdfsFsManager {
         }
 
         String hdfsUgi = username + "," + password;
-        HdfsFsIdentity fileSystemIdentity = null;
-        HdfsFs fileSystem = null;
-        fileSystemIdentity = new HdfsFsIdentity(host, hdfsUgi);
+        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, hdfsUgi);
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        fileSystem = cachedFileSystem.get(fileSystemIdentity);
+        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
         if (fileSystem == null) {
             // it means it is removed concurrently by checker thread
             return null;
@@ -489,12 +453,8 @@ public class HdfsFsManager {
                 }
                 FileSystem dfsFileSystem = null;
                 if (ugi != null) {
-                    dfsFileSystem = ugi.doAs(new PrivilegedExceptionAction<FileSystem>() {
-                        @Override
-                        public FileSystem run() throws Exception {
-                            return FileSystem.get(pathUri.getUri(), conf);
-                        }
-                    });
+                    dfsFileSystem = ugi.doAs(
+                            (PrivilegedExceptionAction<FileSystem>) () -> FileSystem.get(pathUri.getUri(), conf));
                 } else {
                     dfsFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 }
@@ -531,13 +491,6 @@ public class HdfsFsManager {
      * <p>
      * file system handle is cached, the identity is endpoint + bucket +
      * accessKey_secretKey
-     *
-     * @param path
-     * @param loadProperties
-     * @return
-     * @throws UserException
-     * @throws URISyntaxException
-     * @throws Exception
      */
     public HdfsFs getS3AFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
@@ -552,8 +505,8 @@ public class HdfsFsManager {
         String awsCredProvider = loadProperties.getOrDefault(FS_S3A_AWS_CRED_PROVIDER, null);
 
         CloudConfiguration cloudConfiguration =
-                CloudConfigurationFactory.tryBuildForStorage(loadProperties);
-        if (cloudConfiguration != null) {
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             String host = S3A_SCHEME + "://" + pathUri.getUri().getHost();
             fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.getCredentialString());
         } else {
@@ -582,7 +535,7 @@ public class HdfsFsManager {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
                 Configuration conf = new ConfigurationWrap();
-                if (cloudConfiguration != null) {
+                if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
                     cloudConfiguration.applyToConfiguration(conf);
                 } else {
                     if (!accessKey.isEmpty()) {
@@ -628,13 +581,6 @@ public class HdfsFsManager {
     /**
      * Support for Azure Storage File System
      * Support abfs://, abfs://, adl://, wasb://, wasbs://
-     *
-     * @param path
-     * @param loadProperties
-     * @return
-     * @throws UserException
-     * @throws URISyntaxException
-     * @throws Exception
      */
     public HdfsFs getAzureFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
@@ -644,11 +590,7 @@ public class HdfsFsManager {
         loadProperties.put(AzureCloudConfigurationFactory.AZURE_PATH_KEY, path);
 
         CloudConfiguration cloudConfiguration =
-                CloudConfigurationFactory.tryBuildForStorage(loadProperties);
-
-        if (cloudConfiguration == null) {
-            throw new UserException("Illegal azure load properties");
-        }
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
 
         String host = pathUri.getUri().getScheme() + "://" + pathUri.getUri().getHost();
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.getCredentialString());
@@ -696,17 +638,62 @@ public class HdfsFsManager {
     }
 
     /**
+     * Support for Google Cloud Storage File System
+     * Support gs://
+     */
+    public HdfsFs getGoogleFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
+        WildcardURI pathUri = new WildcardURI(path);
+
+        CloudConfiguration cloudConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
+
+        String host = pathUri.getUri().getScheme() + "://" + pathUri.getUri().getHost();
+        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.getCredentialString());
+
+        cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
+        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
+        if (fileSystem == null) {
+            // it means it is removed concurrently by checker thread
+            return null;
+        }
+        fileSystem.getLock().lock();
+        try {
+            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
+                // this means the file system is closed by file system checker thread
+                // it is a corner case
+                return null;
+            }
+            if (fileSystem.getDFSFileSystem() == null) {
+                LOG.info("could not find file system for path " + path + " create a new one");
+                // create a new filesystem
+                Configuration conf = new ConfigurationWrap();
+                cloudConfiguration.applyToConfiguration(conf);
+
+                // Always disable hadoop's cache for azure storage
+                conf.set(FS_GS_IMPL_DISABLE_CACHE, "true");
+
+                FileSystem azureFileSystem = FileSystem.get(pathUri.getUri(), conf);
+                fileSystem.setFileSystem(azureFileSystem);
+                fileSystem.setConfiguration(conf);
+            }
+            if (tProperties != null) {
+                tryWriteCloudCredentialToProperties(cloudConfiguration, tProperties);
+            }
+            return fileSystem;
+        } catch (Exception e) {
+            LOG.error("errors while connect to " + path, e);
+            throw new UserException(e);
+        } finally {
+            fileSystem.getLock().unlock();
+        }
+    }
+
+    /**
      * visible for test
      * <p>
      * file system handle is cached, the identity is endpoint + bucket +
      * accessKey_secretKey
-     *
-     * @param path
-     * @param loadProperties
-     * @return
-     * @throws UserException
-     * @throws URISyntaxException
-     * @throws Exception
      */
     public HdfsFs getKS3FileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
@@ -722,9 +709,8 @@ public class HdfsFsManager {
         String host = KS3_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
         String ks3aUgi = accessKey + "," + secretKey;
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, ks3aUgi);
-        HdfsFs fileSystem = null;
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        fileSystem = cachedFileSystem.get(fileSystemIdentity);
+        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
         if (fileSystem == null) {
             // it means it is removed concurrently by checker thread
             return null;
@@ -777,13 +763,6 @@ public class HdfsFsManager {
      * <p>
      * file system handle is cached, the identity is endpoint + bucket +
      * accessKey_secretKey
-     *
-     * @param path
-     * @param loadProperties
-     * @return
-     * @throws UserException
-     * @throws URISyntaxException
-     * @throws Exception
      */
     public HdfsFs getOBSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
@@ -855,12 +834,6 @@ public class HdfsFsManager {
      * visible for test
      * <p>
      * file system handle is cached, the identity is endpoint + bucket + accessKey_secretKey
-     *
-     * @param path
-     * @param properties
-     * @return
-     * @throws URISyntaxException
-     * @throws Exception
      */
     public HdfsFs getUniversalFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties) 
             throws UserException {
@@ -879,7 +852,7 @@ public class HdfsFsManager {
         }
 
         // skip xxx:// first
-        int bucketEndIndex = path.indexOf("://", 0);
+        int bucketEndIndex = path.indexOf("://");
 
         // find the end of bucket, for example for xxx://abc/def, we will take xxx://abc as host
         if (bucketEndIndex != -1) {
@@ -938,13 +911,6 @@ public class HdfsFsManager {
      * <p>
      * file system handle is cached, the identity is endpoint + bucket +
      * accessKey_secretKey
-     *
-     * @param path
-     * @param loadProperties
-     * @return
-     * @throws UserException
-     * @throws URISyntaxException
-     * @throws Exception
      */
     public HdfsFs getOSSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
@@ -960,9 +926,8 @@ public class HdfsFsManager {
         String host = OSS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
         String ossUgi = accessKey + "," + secretKey;
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, ossUgi);
-        HdfsFs fileSystem = null;
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        fileSystem = cachedFileSystem.get(fileSystemIdentity);
+        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
         if (fileSystem == null) {
             // it means it is removed concurrently by checker thread
             return null;
@@ -1016,8 +981,6 @@ public class HdfsFsManager {
      * file system handle is cached, the identity is endpoint + bucket +
      * accessKey_secretKey
      * for cos
-     *
-     * @throws UserException
      */
     public HdfsFs getCOSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
@@ -1033,9 +996,8 @@ public class HdfsFsManager {
         String host = COS_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
         String cosUgi = accessKey + "," + secretKey;
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cosUgi);
-        HdfsFs fileSystem = null;
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        fileSystem = cachedFileSystem.get(fileSystemIdentity);
+        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
         if (fileSystem == null) {
             // it means it is removed concurrently by checker thread
             return null;

@@ -12,22 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-namespace cpp starrocks
-namespace java com.starrocks.thrift
+package com.starrocks.credential;
 
-enum TCloudType {
+public enum CloudType {
+    // Means nothing, don't do anything
     DEFAULT,
     AWS,
     AZURE,
     GCP
-}
-
-struct TCloudProperty {
-    1: required string key;
-    2: required string value;
-}
-
-struct TCloudConfiguration {
-    1: optional TCloudType cloud_type;
-    2: optional list<TCloudProperty> cloud_properties;
 }
