@@ -68,7 +68,8 @@ public class Partition implements PartitionInfo {
 
     @Override
     public long getModifiedTime() {
-        return Long.parseLong(parameters.get(TRANSIENT_LAST_DDL_TIME));
+        String ddlTime = parameters.get(TRANSIENT_LAST_DDL_TIME);
+        return Long.parseLong(ddlTime != null ? ddlTime : "0");
     }
 
     @Override

@@ -15,8 +15,10 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.base.Objects;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
@@ -59,6 +61,8 @@ public class CacheUpdateProcessor {
     // Record the latest synced event id when processing hive events
     private long lastSyncedEventId = -1;
 
+    private final Map<BasePartitionInfo, Long> partitionUpdatedTimes;
+
     public CacheUpdateProcessor(String catalogName,
                                 IHiveMetastore metastore,
                                 RemoteFileIO remoteFileIO,
@@ -71,6 +75,7 @@ public class CacheUpdateProcessor {
                 ? Optional.of((CachingRemoteFileIO) remoteFileIO) : Optional.empty();
         this.executor = executor;
         this.isRecursive = isRecursive;
+        this.partitionUpdatedTimes = Maps.newHashMap();
         if (enableHmsEventsIncrementalSync) {
             setLastSyncedEventId(metastore.getCurrentEventId());
         }
@@ -85,15 +90,72 @@ public class CacheUpdateProcessor {
         }
     }
 
-    public void refreshTableWithExecutor(Table table, boolean onlyCachedPartitions, ExecutorService executor) {
+    public void refreshTableBackground(Table table, boolean onlyCachedPartitions, ExecutorService executor) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-        metastore.refreshTable(hmsTbl.getDbName(), hmsTbl.getTableName(), onlyCachedPartitions);
-        refreshRemoteFiles(hmsTbl.getTableLocation(), Operator.UPDATE, getExistPaths(hmsTbl), onlyCachedPartitions,
-                executor);
+        List<HivePartitionName> refreshPartitionNames = metastore.refreshTableBackground(
+                hmsTbl.getDbName(), hmsTbl.getTableName(), onlyCachedPartitions);
+
+        if (refreshPartitionNames != null) {
+            Map<BasePartitionInfo, Partition> updatedPartitions = getUpdatedPartitions(hmsTbl, refreshPartitionNames);
+            if (!updatedPartitions.isEmpty()) {
+                // update partition remote files cache
+                List<String> updatedPaths = updatedPartitions.values().stream().map(Partition::getFullPath)
+                        .map(path -> path.endsWith("/") ? path : path + "/")
+                        .collect(Collectors.toList());
+                refreshRemoteFilesBackground(hmsTbl.getTableLocation(), updatedPaths, onlyCachedPartitions, executor);
+
+                LOG.info("{}.{}.{} partitions has updated, updated partition size is {}, " +
+                                "refresh partition and file success", hmsTbl.getCatalogName(), hmsTbl.getDbName(),
+                        hmsTbl.getTableName(), updatedPartitions.size());
+            }
+
+            // update partitionUpdatedTimes
+            updatedPartitions.entrySet().stream().filter(entry -> entry.getValue().getModifiedTime() != 0).
+                    forEach(entry -> partitionUpdatedTimes.put(entry.getKey(), entry.getValue().getModifiedTime()));
+            Map<HivePartitionName, Partition> cachedPartitions = metastore.getAllCachedPartitions();
+            partitionUpdatedTimes.keySet().removeIf(basePartitionInfo -> !cachedPartitions.containsKey(
+                    HivePartitionName.of(basePartitionInfo.dbName, basePartitionInfo.tableName,
+                            basePartitionInfo.partitionName)));
+        }
     }
 
     public Set<HiveTableName> getCachedTableNames() {
         return ((CachingHiveMetastore) metastore).getCachedTableNames();
+    }
+
+    private Map<BasePartitionInfo, Partition> getUpdatedPartitions(HiveMetaStoreTable table,
+                                                                   List<HivePartitionName> refreshPartitionNames) {
+        String dbName = table.getDbName();
+        String tblName = table.getTableName();
+
+        Map<BasePartitionInfo, Partition> toCheckUpdatedPartitionInfoMap = Maps.newHashMap();
+        if (table.isUnPartitioned()) {
+            Partition partition = metastore.getPartition(dbName, tblName, Lists.newArrayList());
+            BasePartitionInfo partitionInfo = new BasePartitionInfo(dbName, tblName, tblName);
+            toCheckUpdatedPartitionInfoMap.put(partitionInfo, partition);
+        } else {
+            Map<HivePartitionName, Partition> partitions = metastore.getCachedPartitions(refreshPartitionNames);
+            for (Map.Entry<HivePartitionName, Partition> partitionEntry : partitions.entrySet()) {
+                Optional<String> partitionName = partitionEntry.getKey().getPartitionNames();
+                partitionName.ifPresent(s -> toCheckUpdatedPartitionInfoMap.put(new BasePartitionInfo(dbName, tblName, s),
+                                partitionEntry.getValue()));
+            }
+        }
+
+        Map<BasePartitionInfo, Partition> updatedPartitions = Maps.newHashMap();
+        for (Map.Entry<BasePartitionInfo, Partition> checkPartition : toCheckUpdatedPartitionInfoMap.entrySet()) {
+            BasePartitionInfo checkPartitionKey = checkPartition.getKey();
+            Partition partition = checkPartition.getValue();
+            if (!partitionUpdatedTimes.containsKey(checkPartitionKey)) {
+                updatedPartitions.put(checkPartitionKey, partition);
+            } else {
+                if (partitionUpdatedTimes.get(checkPartitionKey) != partition.getModifiedTime()) {
+                    updatedPartitions.put(checkPartitionKey, partition);
+                }
+            }
+        }
+
+        return updatedPartitions;
     }
 
     private List<String> getExistPaths(HiveMetaStoreTable table) {
@@ -155,14 +217,26 @@ public class CacheUpdateProcessor {
         }
     }
 
-    private void refreshRemoteFiles(String tableLocation, Operator operator, List<String> existPaths,
-                                    boolean onlyCachedPartitions) {
-        refreshRemoteFiles(tableLocation, operator, existPaths, onlyCachedPartitions, executor);
+    private void refreshRemoteFilesBackground(String tableLocation, List<String> updatePaths,
+                                              boolean onlyCachedPartitions, ExecutorService refreshExecutor) {
+        if (remoteFileIO.isPresent()) {
+            List<RemotePathKey> presentPathKey = updatePaths.stream().map(path -> RemotePathKey.of(path, isRecursive))
+                    .collect(Collectors.toList());
+            if (onlyCachedPartitions) {
+                List<RemotePathKey> cachedPathKey = remoteFileIO.get().getPresentPathKeyInCache(tableLocation,
+                        isRecursive);
+                presentPathKey = cachedPathKey.stream().filter(pathKey -> {
+                    String pathWithSlash = pathKey.getPath().endsWith("/") ? pathKey.getPath() : pathKey.getPath() + "/";
+                    return updatePaths.contains(pathWithSlash);
+                }).collect(Collectors.toList());
+            }
+
+            refreshRemoteFilesImpl(tableLocation, presentPathKey, Lists.newArrayList(), refreshExecutor);
+        }
     }
 
-
     private void refreshRemoteFiles(String tableLocation, Operator operator, List<String> existPaths,
-                                    boolean onlyCachedPartitions, ExecutorService refreshExecutor) {
+                                    boolean onlyCachedPartitions) {
         if (remoteFileIO.isPresent()) {
             List<RemotePathKey> presentPathKey;
             if (onlyCachedPartitions) {
@@ -172,23 +246,36 @@ public class CacheUpdateProcessor {
                         .map(path -> RemotePathKey.of(path, isRecursive))
                         .collect(Collectors.toList());
             }
-            List<Future<?>> futures = Lists.newArrayList();
+            List<RemotePathKey> updateKeys = Lists.newArrayList();
+            List<RemotePathKey> invalidateKeys = Lists.newArrayList();
             presentPathKey.forEach(pathKey -> {
                 String pathWithSlash = pathKey.getPath().endsWith("/") ? pathKey.getPath() : pathKey.getPath() + "/";
                 if (operator == Operator.UPDATE && existPaths.contains(pathWithSlash)) {
-                    futures.add(refreshExecutor.submit(() -> remoteFileIO.get().updateRemoteFiles(pathKey)));
+                    updateKeys.add(pathKey);
                 } else {
-                    futures.add(refreshExecutor.submit(() -> remoteFileIO.get().invalidatePartition(pathKey)));
+                    invalidateKeys.add(pathKey);
                 }
             });
 
-            for (Future<?> future : futures) {
-                try {
-                    future.get();
-                } catch (InterruptedException | ExecutionException e) {
-                    LOG.error("Failed to update remote files on [{}]", tableLocation, e);
-                    throw new StarRocksConnectorException("Failed to update remote files", e);
-                }
+            refreshRemoteFilesImpl(tableLocation, updateKeys, invalidateKeys, executor);
+        }
+    }
+
+    private void refreshRemoteFilesImpl(String tableLocation, List<RemotePathKey> updateKeys,
+                                        List<RemotePathKey> invalidateKeys,
+                                        ExecutorService refreshExecutor) {
+        List<Future<?>> futures = Lists.newArrayList();
+        updateKeys.forEach(pathKey -> futures.add(refreshExecutor.submit(() ->
+                remoteFileIO.get().updateRemoteFiles(pathKey))));
+        invalidateKeys.forEach(pathKey -> futures.add(refreshExecutor.submit(() ->
+                remoteFileIO.get().invalidatePartition(pathKey))));
+
+        for (Future<?> future : futures) {
+            try {
+                future.get();
+            } catch (InterruptedException | ExecutionException e) {
+                LOG.error("Failed to update remote files on [{}]", tableLocation, e);
+                throw new StarRocksConnectorException("Failed to update remote files", e);
             }
         }
     }
@@ -275,6 +362,37 @@ public class CacheUpdateProcessor {
             return null;
         }
         return ((CachingHiveMetastore) metastore).getNextEventResponse(lastSyncedEventId, catalogName, getAllEvents);
+    }
+
+    private static class BasePartitionInfo {
+        private String dbName;
+        private String tableName;
+        private String partitionName;
+
+        public BasePartitionInfo(String dbName, String tableName, String partitionName) {
+            this.dbName = dbName;
+            this.tableName = tableName;
+            this.partitionName = partitionName;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof BasePartitionInfo)) {
+                return false;
+            }
+            BasePartitionInfo that = (BasePartitionInfo) o;
+            return Objects.equal(dbName, that.dbName) &&
+                    Objects.equal(tableName, that.tableName) &&
+                    Objects.equal(partitionName, that.partitionName);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hashCode(dbName, tableName, partitionName);
+        }
     }
     
 }
