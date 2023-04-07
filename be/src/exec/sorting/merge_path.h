@@ -77,7 +77,7 @@ void merge(const SortDescs& descs, InputSegment& left, InputSegment& right, Outp
 
 namespace detail {
 /**
-     * This method is used to compute the point of intersection between merge path and diagnoal of current parallelism
+     * This method is used to compute the point of intersection between merge path and diagonal of current parallelism
      *
      * @param desc Ordering description.
      * @param left Left side input.
@@ -88,13 +88,13 @@ namespace detail {
      * @param l_start Output param, start index in left for this parallel_idx.
      * @param r_start Output param, start index in right for this parallel_idx.
      */
-void _eval_diagnoal_intersection(const SortDescs& descs, const InputSegment& left, const InputSegment& right,
+void _eval_diagonal_intersection(const SortDescs& descs, const InputSegment& left, const InputSegment& right,
                                  const size_t d_size, const size_t parallel_idx, const size_t degree_of_parallelism,
                                  size_t* l_start, size_t* r_start);
 
 /**
      * Check if the point (left[li], right[ri]) is intersection point.
-     * Assuming M matrix is a matrix conprising of only boolean value
+     * Assuming M matrix is a matrix comprising of only boolean value
      *      if left[i] > right[j], then M[i, j] = true
      *      if left[i] <= right[j], then M[i, j] = false
      * For edge cases (i or j beyond the matrix), think about the merge path, with left in the vertical direction 
@@ -384,6 +384,10 @@ private:
     void _reset_output();
 
 private:
+    // For each MergeNode, there may be multiply threads working on the same merge processing.
+    // And here we need to guarantee that each parallelism can process a certain amount of data. Assuming it
+    // equals to chunk_size right now (can be later optimized), so the total size of the merge should be
+    // chunk_size * degree_of_parallelism, which is called _streaming_batch_size here.
     const size_t _chunk_size;
     const size_t _streaming_batch_size;
 
