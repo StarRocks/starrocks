@@ -174,7 +174,7 @@ public class MvUtils {
                 LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
                 Table table = scanOperator.getTable();
                 Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
-                TableScanDesc tableScanDesc = new TableScanDesc(table, id, scanOperator, null);
+                TableScanDesc tableScanDesc = new TableScanDesc(table, id, scanOperator, null, false);
                 context.getTableScanDescs().add(tableScanDesc);
                 scanContext.getTableIdMap().put(table, ++id);
                 return null;
@@ -182,14 +182,15 @@ public class MvUtils {
 
             @Override
             public Void visitLogicalJoin(OptExpression optExpression, TableScanContext context) {
-                for (OptExpression child : optExpression.getInputs()) {
+                for (int i = 0; i < optExpression.getInputs().size(); i++) {
+                    OptExpression child = optExpression.inputAt(i);
                     if (child.getOp() instanceof LogicalScanOperator) {
                         LogicalScanOperator scanOperator = (LogicalScanOperator) child.getOp();
                         Table table = scanOperator.getTable();
                         Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
                         LogicalJoinOperator joinOperator = optExpression.getOp().cast();
                         TableScanDesc tableScanDesc =
-                                new TableScanDesc(table, id, scanOperator, joinOperator.getJoinType());
+                                new TableScanDesc(table, id, scanOperator, joinOperator.getJoinType(), i == 0);
                         context.getTableScanDescs().add(tableScanDesc);
                         scanContext.getTableIdMap().put(table, ++id);
                     } else {
