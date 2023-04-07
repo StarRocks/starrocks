@@ -90,7 +90,7 @@ namespace detail {
      */
 void _eval_diagnoal_intersection(const SortDescs& descs, const InputSegment& left, const InputSegment& right,
                                  const size_t d_size, const size_t parallel_idx, const size_t degree_of_parallelism,
-                                 size_t& l_start, size_t& r_start);
+                                 size_t* l_start, size_t* r_start);
 
 /**
      * Check if the point (left[li], right[ri]) is intersection point.
@@ -140,12 +140,12 @@ class MergePathCascadeMerger;
 /**
  * LeafNode will use this provider to get data.
  *
- * @param only_check If true, only check if it has more data with fetching chunk
+ * @param only_check_if_has_data If true, only check if it has more data for further fetching
  * @param chunk Output chunk if any
  * @param eos Set to true if this provider reaches eos
  * @return: Return true if it has new data
  */
-using MergePathChunkProvider = std::function<bool(bool only_check, ChunkPtr* chunk, bool* eos)>;
+using MergePathChunkProvider = std::function<bool(bool only_check_if_has_data, ChunkPtr* chunk, bool* eos)>;
 
 namespace detail {
 

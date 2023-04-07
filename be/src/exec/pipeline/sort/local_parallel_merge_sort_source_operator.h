@@ -27,13 +27,13 @@ namespace starrocks::pipeline {
 class SortContext;
 
 // +---------------------------+               +--------------------------------------+
-// | PartitionSortSinkOperator | ------------> | LocalParallelMergeSortSourceOperator |
+// | PartitionSortSinkOperator | ------------> | LocalParallelMergeSortSourceOperator | ------------> output streams
 // +---------------------------+               +--------------------------------------+
 // +---------------------------+               +--------------------------------------+
-// | PartitionSortSinkOperator | ------------> | LocalParallelMergeSortSourceOperator |
+// | PartitionSortSinkOperator | ------------> | LocalParallelMergeSortSourceOperator | no output stream
 // +---------------------------+               +--------------------------------------+
 // +---------------------------+               +--------------------------------------+
-// | PartitionSortSinkOperator | ------------> | LocalParallelMergeSortSourceOperator |
+// | PartitionSortSinkOperator | ------------> | LocalParallelMergeSortSourceOperator | no output stream
 // +---------------------------+               +--------------------------------------+
 //
 // There will be as many LocalParallelMergeSortSourceOperators as degree of parallelism, and

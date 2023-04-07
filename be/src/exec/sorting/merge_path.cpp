@@ -37,13 +37,13 @@ void merge(const SortDescs& descs, InputSegment& left, InputSegment& right, Outp
         return;
     }
     size_t li, ri;
-    detail::_eval_diagnoal_intersection(descs, left, right, dest.total_len, parallel_idx, degree_of_parallelism, li,
-                                        ri);
-    const size_t di = parallel_idx * dest.total_len / degree_of_parallelism;
-    const size_t next_di = (parallel_idx + 1) * dest.total_len / degree_of_parallelism;
-    const size_t length = next_di - di;
+    detail::_eval_diagnoal_intersection(descs, left, right, dest.total_len, parallel_idx, degree_of_parallelism, &li,
+                                        &ri);
+    const size_t start_di = parallel_idx * dest.total_len / degree_of_parallelism;
+    const size_t next_start_di = (parallel_idx + 1) * dest.total_len / degree_of_parallelism;
+    const size_t length = next_start_di - start_di;
 
-    detail::_do_merge_along_merge_path(descs, left, li, right, ri, dest, di, length);
+    detail::_do_merge_along_merge_path(descs, left, li, right, ri, dest, start_di, length);
 
     dest.run.reset_range();
 
@@ -55,7 +55,7 @@ void merge(const SortDescs& descs, InputSegment& left, InputSegment& right, Outp
 
 void detail::_eval_diagnoal_intersection(const SortDescs& descs, const InputSegment& left, const InputSegment& right,
                                          const size_t d_size, const size_t parallel_idx,
-                                         const size_t degree_of_parallelism, size_t& l_start, size_t& r_start) {
+                                         const size_t degree_of_parallelism, size_t* l_start, size_t* r_start) {
     const size_t diag = parallel_idx * d_size / degree_of_parallelism;
     DCHECK(diag < d_size);
 
@@ -78,8 +78,8 @@ void detail::_eval_diagnoal_intersection(const SortDescs& descs, const InputSegm
         bool is_intersection = has_true && has_false;
 
         if (is_intersection) {
-            l_start = left.start + l_offset;
-            r_start = right.start + r_offset;
+            *l_start = left.start + l_offset;
+            *r_start = right.start + r_offset;
             return;
         } else if (has_true) {
             high = l_offset;
@@ -100,8 +100,8 @@ void detail::_eval_diagnoal_intersection(const SortDescs& descs, const InputSegm
         bool is_intersection = has_true && has_false;
 
         if (is_intersection) {
-            l_start = left.start + l_offset;
-            r_start = right.start + r_offset;
+            *l_start = left.start + l_offset;
+            *r_start = right.start + r_offset;
             return;
         }
     }

@@ -133,12 +133,12 @@ std::vector<merge_path::MergePathChunkProvider> DataStreamRecvr::create_merge_pa
     DCHECK(_is_merging);
     std::vector<merge_path::MergePathChunkProvider> chunk_providers;
     for (SenderQueue* q : _sender_queues) {
-        chunk_providers.emplace_back([q](bool only_check, ChunkPtr* chunk, bool* eos) {
+        chunk_providers.emplace_back([q](bool only_check_if_has_data, ChunkPtr* chunk, bool* eos) {
             if (!q->has_chunk()) {
                 return false;
             }
 
-            if (!only_check) {
+            if (!only_check_if_has_data) {
                 Chunk* chunk_ptr;
                 if (q->try_get_chunk(&chunk_ptr)) {
                     chunk->reset(chunk_ptr);

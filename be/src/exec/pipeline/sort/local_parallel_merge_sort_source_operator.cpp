@@ -84,8 +84,8 @@ OperatorPtr LocalParallelMergeSortSourceOperatorFactory::create(int32_t degree_o
         for (int i = 0; i < degree_of_parallelism; i++) {
             auto* chunks_sorter = sort_context->get_chunks_sorter(i);
             DCHECK(chunks_sorter != nullptr);
-            chunk_providers.emplace_back([chunks_sorter](bool only_check, ChunkPtr* chunk, bool* eos) {
-                if (only_check) {
+            chunk_providers.emplace_back([chunks_sorter](bool only_check_if_has_data, ChunkPtr* chunk, bool* eos) {
+                if (only_check_if_has_data) {
                     return true;
                 }
                 chunks_sorter->get_next(chunk, eos);

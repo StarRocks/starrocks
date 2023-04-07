@@ -26,13 +26,13 @@ namespace pipeline {
 //        Sender                                                 Receiver
 //
 // +----------------------+       Network        +-------------------------------------+
-// | ExchangeSinkOperator | -------------------> | ExchangeParallelMergeSourceOperator |
+// | ExchangeSinkOperator | -------------------> | ExchangeParallelMergeSourceOperator | ------------> output streams
 // +----------------------+                      +-------------------------------------+
 // +----------------------+       Network        +-------------------------------------+
-// | ExchangeSinkOperator | -------------------> | ExchangeParallelMergeSourceOperator |
+// | ExchangeSinkOperator | -------------------> | ExchangeParallelMergeSourceOperator | no output stream
 // +----------------------+                      +-------------------------------------+
 // +----------------------+       Network        +-------------------------------------+
-// | ExchangeSinkOperator | -------------------> | ExchangeParallelMergeSourceOperator |
+// | ExchangeSinkOperator | -------------------> | ExchangeParallelMergeSourceOperator | no output stream
 // +----------------------+                ----->+-------------------------------------+
 // +----------------------+      ---------/
 // | ExchangeSinkOperator |-----/

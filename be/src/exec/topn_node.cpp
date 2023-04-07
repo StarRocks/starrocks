@@ -345,7 +345,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     operators_source_with_sort.emplace_back(std::move(source_operator));
     if (need_merge && !is_partition_topn) {
         if (enable_parallel_merge) {
-            // Gather to one channel
+            // This particular source will be executed in a concurrent way, and finally we need to gather them into one
+            // stream to satisfied the ordering property
             operators_source_with_sort =
                     context->maybe_interpolate_local_passthrough_exchange(runtime_state(), operators_source_with_sort);
         }
