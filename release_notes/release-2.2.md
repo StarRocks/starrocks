@@ -1,5 +1,23 @@
 # StarRocks version 2.2
 
+## 2.2.13
+
+发布日期： 2023 年 4 月 6 日
+
+### 功能优化
+
+- 优化部分场景下 bitmap_contains() 函数消耗大量内存和性能慢的问题。([#20616](https://github.com/StarRocks/starrocks/issues/20616))
+- 减少 Compaction 框架对 CPU 资源的消耗。([#11746](https://github.com/StarRocks/starrocks/issues/11746))
+
+## 问题修复
+
+修复了以下问题：
+
+- 提交 Stream Load 作业 时如果提供了错误的 URL 请求地址，导致 FE 内部卡住并且无法接收 HTTP 请求。([#18468](https://github.com/StarRocks/starrocks/issues/18468))
+- FE 收集统计信息导致内存消耗过多，甚至可能发生 OOM。([#16331](https://github.com/StarRocks/starrocks/issues/16331))
+- 一些查询中内存释放处理有问题，导致 BE 崩溃。([#11395](https://github.com/StarRocks/starrocks/issues/11395))
+- TRUNCATE TABLE 后可能发生空指针问题，导致 FE 无法重启。([#16773](https://github.com/StarRocks/starrocks/issues/16773))
+
 ## 2.2.10
 
 发布日期： 2022 年 12 月 2 日
