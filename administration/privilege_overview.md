@@ -96,7 +96,7 @@ StarRocks 提供了几类预置角色（system-defined roles）：
 
 默认角色（Default Role）即为用户登录集群时自动激活的角色，可以是 1 个或多个用户拥有的角色。管理员可以在创建用户时通过 CREATE USER 的 `DEFAULT ROLE` 关键字进行设置，也可以在后续通过 ALTER USER 进行更改。
 
-同时用户也可以通过 [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET%20DEFAULT%20ROLE.md) 更改自己的默认角色。
+同时用户也可以通过 [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) 更改自己的默认角色。
 
 默认角色为用户提供了一道基础的权限屏障。例如，用户 A 拥有 role_query 和 role_delete 两个角色，分别包含了查询和删除的权限。StarRocks 建议您仅将 role_query 作为默认角色，以防止误执行 DELETE 或 TRUNCATE 等高危操作而导致数据丢失。当您确认需要执行上述操作时，可以在手动设置激活角色后执行。
 

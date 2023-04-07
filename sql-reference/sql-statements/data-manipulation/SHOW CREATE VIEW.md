@@ -2,7 +2,9 @@
 
 ## 功能
 
-查看指定逻辑视图的创建语句。只有拥有该视图和视图对应基表的 `SELECT_PRIV` 权限的用户才可以查看。视图创建语句可以帮助您理解视图定义，作为后续修改视图或重建视图的参考。
+查看指定逻辑视图的创建语句 CREATE VIEW。只有拥有该视图和视图对应基表的 `SELECT` 权限的用户才可以查看。视图创建语句可以帮助您理解视图定义，作为后续修改视图或重建视图的参考。
+
+从 2.5.4 版本开始，为了兼容 MySQL 标准语法，支持使用 SHOW CREATE VIEW 来查看异步物化视图的创建语句。该语句将物化视图当做普通视图来处理。
 
 ## 语法
 
@@ -19,7 +21,7 @@ SHOW CREATE VIEW [<db_name>.]<view_name>
 
 ## 返回结果说明
 
-```undefined
+```plain
 +---------+--------------+----------------------+----------------------+
 | View    | Create View  | character_set_client | collation_connection |
 +---------+--------------+----------------------+----------------------+
@@ -36,36 +38,63 @@ SHOW CREATE VIEW [<db_name>.]<view_name>
 
 ## 示例
 
-创建表 `example_table`。
+### 查看逻辑视图创建语句
+
+创建表 `base`。
 
 ```SQL
-CREATE TABLE example_table
+CREATE TABLE base (
+    k1 date,
+    k2 int,
+    v1 int sum)
+PARTITION BY RANGE(k1)
 (
-    k1 TINYINT,
-    k2 DECIMAL(10, 2) DEFAULT "10.5",
-    v1 CHAR(10) REPLACE,
-    v2 INT SUM
+    PARTITION p1 values less than('2020-02-01'),
+    PARTITION p2 values less than('2020-03-01')
 )
-ENGINE = olap
-AGGREGATE KEY(k1, k2)
-DISTRIBUTED BY HASH(k1) BUCKETS 10;
+DISTRIBUTED BY HASH(k2) BUCKETS 3
+PROPERTIES( "replication_num"  = "1");
 ```
 
-在表 `example_table` 上创建视图 `example_view`。
+在表 `base` 上创建视图 `example_view`。
 
 ```SQL
-CREATE VIEW example_view (k1, k2, k3, v1)
-AS SELECT k1, k2, k3, v1 FROM example_table;
+CREATE VIEW example_view (k1, k2, v1)
+AS SELECT k1, k2, v1 FROM base;
 ```
 
 查看视图 `example_view` 的创建语句。
 
 ```Plain
-SHOW CREATE VIEW example_db.example_view;
+SHOW CREATE VIEW example_view;
 
-+--------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
-| View         | Create View                                                                                                                                                                                                                                                                                                                     | character_set_client | collation_connection |
-+--------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
-| example_view | CREATE VIEW `example_view` (k1, k2, k3, v1) COMMENT "VIEW" AS SELECT `default_cluster:db1`.`example_table`.`k1` AS `k1`, `default_cluster:db1`.`example_table`.`k2` AS `k2`, `default_cluster:db1`.`example_table`.`k3` AS `k3`, `default_cluster:db1`.`example_table`.`v1` AS `v1` FROM `default_cluster:db1`.`example_table`; | utf8                 | utf8_general_ci      |
-+--------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
+MySQL [yn_db]> SHOW CREATE VIEW example_view;
++--------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
+| View         | Create View                                                                                                                                         | character_set_client | collation_connection |
++--------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
+| example_view | CREATE VIEW `example_view` (k1, k2, v1) COMMENT "VIEW" AS SELECT `yn_db`.`base`.`k1`, `yn_db`.`base`.`k2`, `yn_db`.`base`.`v1`
+FROM `yn_db`.`base`; | utf8                 | utf8_general_ci      |
++--------------+-----------------------------------------------------------------------------------------------------------------------------------------------------+----------------------+----------------------+
+
+```
+
+### 查看物化视图创建语句
+
+在表 `base` 上创建物化视图 `example_mv`。
+
+```SQL
+CREATE MATERIALIZED VIEW example_mv distributed by hash(k1)
+AS SELECT k1 FROM base;
+```
+
+查看物化视图 `example_mv` 的创建语句。
+
+```Plain
+SHOW CREATE VIEW example_mv;
++------------+----------------------------------------------------------------------------+----------------------+----------------------+
+| View       | Create View                                                                | character_set_client | collation_connection |
++------------+----------------------------------------------------------------------------+----------------------+----------------------+
+| example_mv | CREATE VIEW `example_mv` AS SELECT `yn_db`.`base`.`k1`
+FROM `yn_db`.`base` | utf8                 | utf8_general_ci      |
++------------+------------------------------------------------
 ```

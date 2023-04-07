@@ -35,7 +35,7 @@ CREATE USER jack@'172.10.1.10' IDENTIFIED BY '12345' DEFAULT ROLE 'example_role'
 
 #### 修改用户默认角色
 
-您可以使用 [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET%20DEFAULT%20ROLE.md) 或 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER%20USER.md) 设置用户的默认角色。
+您可以使用 [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) 或 [ALTER USER](../sql-reference/sql-statements/account-management/ALTER%20USER.md) 设置用户的默认角色。
 
 以下两个示例都将 `jack` 的默认角色设置为 `db1_admin`。设置前需要确保 `db1_admin` 角色已经赋予给了 `jack`。
 
