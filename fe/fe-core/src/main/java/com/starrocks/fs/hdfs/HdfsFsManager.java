@@ -361,16 +361,6 @@ public class HdfsFsManager {
         ((ConfigurationWrap) conf).convertObjectStoreConfToProperties(path, tProperties, tObjectStoreType);
     }
 
-    private static void tryWriteCloudCredentialToProperties(CloudConfiguration cloudConfiguration,
-                                                            THdfsProperties tHdfsProperties) {
-        if (cloudConfiguration == null) {
-            return;
-        }
-        TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
-        cloudConfiguration.toThrift(tCloudConfiguration);
-        tHdfsProperties.setCloud_configuration(tCloudConfiguration);
-    }
-
     /**
      * visible for test
      *
@@ -538,7 +528,7 @@ public class HdfsFsManager {
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
         if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-            return getFileSystemByCloudConfiguration(cloudConfiguration, path, loadProperties, tProperties);
+            return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
         }
 
         WildcardURI pathUri = new WildcardURI(path);
@@ -615,7 +605,7 @@ public class HdfsFsManager {
             throws UserException {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
-        return getFileSystemByCloudConfiguration(cloudConfiguration, path, loadProperties, tProperties);
+        return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
     }
 
     /**
@@ -629,7 +619,7 @@ public class HdfsFsManager {
 
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
-        return getFileSystemByCloudConfiguration(cloudConfiguration, path, loadProperties, tProperties);
+        return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
     }
 
     /**
@@ -640,16 +630,15 @@ public class HdfsFsManager {
             throws UserException {
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
-        return getFileSystemByCloudConfiguration(cloudConfiguration, path, loadProperties, tProperties);
+        return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
     }
 
     /**
-     * This function unify s3,
-     * Support for Google Cloud Storage File System
-     * Support gs://
+     * This function create FileSystem by CloudConfiguration
+     * Support s3://, s3a://, abfs://, abfss://, adl://, wasb://, wasbs://, gs://, oss://, obs://, cosn://,
+     * tos://, ks3://
      */
-    private HdfsFs getFileSystemByCloudConfiguration(CloudConfiguration cloudConfiguration,
-                                                     String path, Map<String, String> loadProperties,
+    private HdfsFs getFileSystemByCloudConfiguration(CloudConfiguration cloudConfiguration, String path,
                                                      THdfsProperties tProperties)
             throws UserException {
         Preconditions.checkArgument(cloudConfiguration != null);
@@ -686,7 +675,7 @@ public class HdfsFsManager {
                 conf.set(FS_ADL_IMPL_DISABLE_CACHE, "true");
                 conf.set(FS_WASB_IMPL_DISABLE_CACHE, "true");
                 conf.set(FS_WASBS_IMPL_DISABLE_CACHE, "true");
-                // Disable cache for Google
+                // Disable cache for GCS
                 conf.set(FS_GS_IMPL_DISABLE_CACHE, "true");
                 // Disable cache for OSS
                 conf.set(FS_OSS_IMPL_DISABLE_CACHE, "true");
@@ -704,7 +693,9 @@ public class HdfsFsManager {
                 fileSystem.setConfiguration(conf);
             }
             if (tProperties != null) {
-                tryWriteCloudCredentialToProperties(cloudConfiguration, tProperties);
+                TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+                cloudConfiguration.toThrift(tCloudConfiguration);
+                tProperties.setCloud_configuration(tCloudConfiguration);
             }
             return fileSystem;
         } catch (Exception e) {
@@ -727,7 +718,7 @@ public class HdfsFsManager {
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
         if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-            return getFileSystemByCloudConfiguration(cloudConfiguration, path, loadProperties, tProperties);
+            return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
         }
         // TODO(SmithCruise) Maybe we can delete below code, because KS3 is never support officially
         // We can remove it relevant jars, using S3AFileSystem instead, it can save for 15MB space.
@@ -804,7 +795,7 @@ public class HdfsFsManager {
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
         if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-            return getFileSystemByCloudConfiguration(cloudConfiguration, path, loadProperties, tProperties);
+            return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
         }
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_OBS_ACCESS_KEY, "");
@@ -958,7 +949,7 @@ public class HdfsFsManager {
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
         if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-            return getFileSystemByCloudConfiguration(cloudConfiguration, path, loadProperties, tProperties);
+            return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
         }
 
         WildcardURI pathUri = new WildcardURI(path);
@@ -1035,7 +1026,7 @@ public class HdfsFsManager {
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
         if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-            return getFileSystemByCloudConfiguration(cloudConfiguration, path, loadProperties, tProperties);
+            return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
         }
 
         WildcardURI pathUri = new WildcardURI(path);
@@ -1111,7 +1102,7 @@ public class HdfsFsManager {
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
         // If we don't set new authenticate parameters, we use original way (just for compatible)
         if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-            return getFileSystemByCloudConfiguration(cloudConfiguration, path, loadProperties, tProperties);
+            return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
         }
         // TODO(SmithCruise) Maybe we can delete below code, because TOS is never support officially
         // We can remove it relevant jars, using S3AFileSystem instead.
