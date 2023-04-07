@@ -36,9 +36,7 @@ import java.util.Optional;
 public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
-    public static final String DUMMY_THRIFT_URI = "thrift://127.0.0.1:9083";
     public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("glue", "dlf");
-    
     private final Map<String, String> properties;
     private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
@@ -48,8 +46,8 @@ public class HiveConnector implements Connector {
     public HiveConnector(ConnectorContext context) {
         this.properties = context.getProperties();
         this.catalogName = context.getCatalogName();
-        this.cloudConfiguration = CloudConfigurationFactory.tryBuildForStorage(properties);
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(null, cloudConfiguration);
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new HiveConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
         validate();
@@ -62,10 +60,11 @@ public class HiveConnector implements Connector {
             if (!SUPPORTED_METASTORE_TYPE.contains(hiveMetastoreType)) {
                 throw new SemanticException("hive metastore type [%s] is not supported", hiveMetastoreType);
             }
+        } else {
+            String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
+                    "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
+            Util.validateMetastoreUris(hiveMetastoreUris);
         }
-        String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
-                "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
-        Util.validateMetastoreUris(hiveMetastoreUris);
     }
 
     @Override

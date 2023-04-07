@@ -131,6 +131,7 @@ statement
     | adminCheckTabletsStatement
     | killStatement
     | syncStatement
+    | executeScriptStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -1514,6 +1515,11 @@ setUserPropertyStatement
 
 roleList
     : identifierOrString (',' identifierOrString)*
+    ;
+
+
+executeScriptStatement
+    : ADMIN EXECUTE ON INTEGER_VALUE string
     ;
 
 unsupportedStatement
