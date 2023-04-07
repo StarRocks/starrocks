@@ -222,6 +222,7 @@ Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, Spill
             DCHECK_EQ(hash_data.size() - left_channel_size, right_partition->num_rows - old_rows);
         }
     }
+    DCHECK_EQ(restore_rows, partition->num_rows);
     return Status::OK();
 }
 

@@ -115,15 +115,17 @@ public:
 
     bool has_output_data() { return _reader->has_output_data(); }
 
-    size_t spilled_append_rows() { return _spilled_append_rows; }
+    size_t spilled_append_rows() const { return _spilled_append_rows; }
 
-    size_t restore_read_rows() { return _restore_read_rows; }
+    size_t restore_read_rows() const { return _restore_read_rows; }
 
-    bool spilled() { return spilled_append_rows() > 0; }
+    bool spilled() const { return spilled_append_rows() > 0; }
 
-    bool restore_finished() { return _running_restore_tasks == 0; }
+    bool restore_finished() const { return _reader->restore_finished(); }
 
     void cancel() { _writer->cancel(); }
+
+    void set_finished() { cancel(); }
 
     const auto& options() const { return _opts; }
 
@@ -167,18 +169,11 @@ private:
     ChunkBuilder _chunk_builder;
 
     // stats
-    std::atomic_uint64_t _total_restore_tasks{};
-    std::atomic_uint64_t _running_restore_tasks{};
-    std::atomic_uint64_t _finished_restore_tasks{};
-
-    std::atomic_uint64_t _running_flush_tasks{};
-
     size_t _spilled_append_rows{};
     size_t _restore_read_rows{};
 
     std::shared_ptr<spill::Serde> _serde;
     spill::BlockManager* _block_manager = nullptr;
     std::shared_ptr<spill::BlockGroup> _block_group;
-    std::shared_ptr<spill::SpillInputStream> _input_stream;
 };
 } // namespace starrocks::spill

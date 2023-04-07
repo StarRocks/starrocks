@@ -30,7 +30,7 @@ public:
     ~ColumnarSerde() override = default;
 
     Status serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) override;
-    StatusOr<ChunkUniquePtr> deserialize(SerdeContext& ctx, const BlockPtr block) override;
+    StatusOr<ChunkUniquePtr> deserialize(SerdeContext& ctx, BlockReader* reader) override;
 
 private:
     size_t serialize_size(const ChunkPtr& chunk) const;
@@ -88,11 +88,12 @@ Status ColumnarSerde::serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockP
     return Status::OK();
 }
 
-StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, const BlockPtr block) {
+StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockReader* reader) {
     size_t compressed_size, uncompressed_size;
-    RETURN_IF_ERROR(block->read_fully(&compressed_size, sizeof(size_t)));
-    RETURN_IF_ERROR(block->read_fully(&uncompressed_size, sizeof(size_t)));
-    TRACE_SPILL_LOG << "deserialize chunk from block: " << block->debug_string()
+    RETURN_IF_ERROR(reader->read_fully(&compressed_size, sizeof(size_t)));
+    RETURN_IF_ERROR(reader->read_fully(&uncompressed_size, sizeof(size_t)));
+
+    TRACE_SPILL_LOG << "deserialize chunk from block: " << reader->debug_string()
                     << ", compressed size: " << compressed_size << ", uncompressed size: " << uncompressed_size;
 
     auto& compress_buffer = ctx.compress_buffer;
@@ -101,7 +102,7 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, const Blo
     serialize_buffer.resize(uncompressed_size);
 
     auto buf = reinterpret_cast<uint8_t*>(compress_buffer.data());
-    RETURN_IF_ERROR(block->read_fully(buf, compressed_size));
+    RETURN_IF_ERROR(reader->read_fully(buf, compressed_size));
     // decompress
     Slice input_slice(compress_buffer.data(), compressed_size);
     Slice serialize_slice(serialize_buffer.data(), uncompressed_size);

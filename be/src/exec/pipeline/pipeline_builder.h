@@ -21,6 +21,7 @@
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline.h"
+#include "exec/pipeline/spill_process_channel.h"
 
 namespace starrocks {
 class ExecNode;
@@ -57,6 +58,8 @@ public:
     using PartitionExprsGenerator = std::function<std::vector<ExprContext*>()>;
     OpFactories maybe_interpolate_local_shuffle_exchange(RuntimeState* state, OpFactories& pred_operators,
                                                          const PartitionExprsGenerator& self_partition_exprs_generator);
+
+    void interpolate_spill_process(const SpillProcessChannelFactoryPtr& channel_factory, size_t dop);
 
     // Uses local exchange to gather the output chunks of multiple predecessor pipelines
     // into a new pipeline, which the successor operator belongs to.

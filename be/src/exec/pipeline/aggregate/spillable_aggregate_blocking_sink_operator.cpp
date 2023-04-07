@@ -74,6 +74,9 @@ Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
 }
 
 Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    if (chunk == nullptr || chunk->is_empty()) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
         return AggregateBlockingSinkOperator::push_chunk(state, chunk);
@@ -87,7 +90,7 @@ Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, c
 Status SpillableAggregateBlockingSinkOperator::_spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk) {
     // spill all data
     auto spillable = std::make_shared<Chunk>();
-    RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &spillable));
+    RETURN_IF_ERROR(_aggregator->convert_to_spill_format(chunk.get(), &spillable));
 
     auto executor = _aggregator->spill_channel()->io_executor();
     RETURN_IF_ERROR(

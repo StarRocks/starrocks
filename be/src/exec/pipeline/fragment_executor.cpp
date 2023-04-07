@@ -332,7 +332,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
 
-    if (fragment.__isset.cache_param) {
+    // If spill is turned on, then query cache will be turned off automatically
+    // TODO: Fix
+    if (fragment.__isset.cache_param && !runtime_state->enable_spill()) {
         auto const& tcache_param = fragment.cache_param;
         auto& cache_param = _fragment_ctx->cache_param();
         cache_param.plan_node_id = tcache_param.id;

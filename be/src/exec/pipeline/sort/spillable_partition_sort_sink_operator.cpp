@@ -24,6 +24,7 @@
 #include "exec/spillable_chunks_sorter_sort.h"
 #include "gen_cpp/InternalService_types.h"
 #include "storage/chunk_helper.h"
+#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 Status SpillablePartitionSortSinkOperator::prepare(RuntimeState* state) {
@@ -52,8 +53,6 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
         return Status::Cancelled("runtime state is cancelled");
     }
 
-    RETURN_IF_ERROR(_chunks_sorter->done(state));
-
     // channnel:
     //
     // if has spill task. we should wait all spill task finished then to call finished
@@ -73,19 +72,26 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
                 state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker));
     };
 
-    if (_chunks_sorter->spill_channel()->is_working()) {
-        std::function<StatusOr<ChunkPtr>()> task = [state, io_executor,
-                                                    set_call_back_function]() -> StatusOr<ChunkPtr> {
-            RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-            return Status::EndOfFile("eos");
-        };
+    Status ret_status;
+    auto defer = DeferOp([&]() {
+        Status st = [&]() {
+            if (_chunks_sorter->spill_channel()->is_working()) {
+                std::function<StatusOr<ChunkPtr>()> task = [state, io_executor,
+                                                            set_call_back_function]() -> StatusOr<ChunkPtr> {
+                    RETURN_IF_ERROR(set_call_back_function(state, io_executor));
+                    return Status::EndOfFile("eos");
+                };
+                _chunks_sorter->spill_channel()->add_spill_task({task});
+            } else {
+                RETURN_IF_ERROR(set_call_back_function(state, io_executor));
+            }
+            return Status::OK();
+        }();
+        ret_status = ret_status.ok() ? st : ret_status;
+    });
 
-        _chunks_sorter->spill_channel()->add_spill_task({task});
-    } else {
-        RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-    }
-
-    return Status::OK();
+    ret_status = _chunks_sorter->done(state);
+    return ret_status;
 }
 
 Status SpillablePartitionSortSinkOperator::set_finished(RuntimeState* state) {

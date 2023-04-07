@@ -34,9 +34,8 @@ using InputStreamPtr = std::shared_ptr<SpillInputStream>;
 class SpillInputStream {
 public:
     SpillInputStream() = default;
-    SpillInputStream(std::vector<BlockPtr> input_blocks) : _input_blocks(std::move(input_blocks)) {}
-
     virtual ~SpillInputStream() = default;
+
     virtual StatusOr<ChunkUniquePtr> get_next(SerdeContext& ctx) = 0;
     virtual bool is_ready() = 0;
     virtual void close() = 0;
@@ -50,9 +49,8 @@ public:
 
     static InputStreamPtr union_all(const InputStreamPtr& left, const InputStreamPtr& right);
 
-protected:
+private:
     std::atomic_bool _eof = false;
-    std::vector<BlockPtr> _input_blocks;
 };
 
 // Note: not thread safe

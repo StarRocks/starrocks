@@ -17,6 +17,7 @@
 #include <runtime/runtime_state.h>
 
 #include <memory>
+#include <type_traits>
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
@@ -27,9 +28,13 @@
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
+#include "exec/pipeline/hashjoin/spillable_hash_join_build_operator.h"
+#include "exec/pipeline/hashjoin/spillable_hash_join_probe_operator.h"
 #include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/spill_process_operator.h"
 #include "exprs/expr.h"
 #include "exprs/in_const_predicate.hpp"
 #include "exprs/runtime_filter_bank.h"
@@ -411,7 +416,8 @@ Status HashJoinNode::close(RuntimeState* state) {
     return ExecNode::close(state);
 }
 
-pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+template <class HashJoinerFactory, class HashJoinBuilderFactory, class HashJoinProbeFactory>
+pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
     auto rhs_operators = child(1)->decompose_to_pipeline(context);
@@ -441,6 +447,15 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     size_t num_right_partitions = context->source_operator(rhs_operators)->degree_of_parallelism();
 
+    auto executor = std::make_shared<spill::IOTaskExecutor>(ExecEnv::GetInstance()->pipeline_sink_io_pool());
+    auto build_side_spill_channel_factory =
+            std::make_shared<SpillProcessChannelFactory>(num_right_partitions, std::move(executor));
+
+    if (runtime_state()->enable_spill() &&
+        std::is_same_v<HashJoinBuilderFactory, SpillableHashJoinBuildOperatorFactory>) {
+        context->interpolate_spill_process(build_side_spill_channel_factory, num_right_partitions);
+    }
+
     auto* pool = context->fragment_context()->runtime_state()->obj_pool();
     HashJoinerParam param(pool, _hash_join_node, _id, _type, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
                           _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
@@ -459,12 +474,12 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     std::unique_ptr<PartialRuntimeFilterMerger> partial_rf_merger = std::make_unique<PartialRuntimeFilterMerger>(
             pool, _runtime_join_filter_pushdown_limit * num_right_partitions);
 
-    auto build_op = std::make_shared<HashJoinBuildOperatorFactory>(
-            context->next_operator_id(), id(), hash_joiner_factory, std::move(partial_rf_merger), _distribution_mode);
+    auto build_op = std::make_shared<HashJoinBuilderFactory>(context->next_operator_id(), id(), hash_joiner_factory,
+                                                             std::move(partial_rf_merger), _distribution_mode,
+                                                             build_side_spill_channel_factory);
     this->init_runtime_filter_for_operator(build_op.get(), context, rc_rf_probe_collector);
 
-    auto probe_op =
-            std::make_shared<HashJoinProbeOperatorFactory>(context->next_operator_id(), id(), hash_joiner_factory);
+    auto probe_op = std::make_shared<HashJoinProbeFactory>(context->next_operator_id(), id(), hash_joiner_factory);
     this->init_runtime_filter_for_operator(probe_op.get(), context, rc_rf_probe_collector);
 
     rhs_operators.emplace_back(std::move(build_op));
@@ -503,6 +518,19 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
     }
 
     return lhs_operators;
+}
+
+pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+    // now spill only support INNER_JOIN and LEFT-SEMI JOIN. we could implement LEFT_OUTER_JOIN later
+    if (runtime_state()->enable_spill() &&
+        (_join_type == TJoinOp::INNER_JOIN || _join_type == TJoinOp::LEFT_SEMI_JOIN)) {
+        return _decompose_to_pipeline<HashJoinerFactory, SpillableHashJoinBuildOperatorFactory,
+                                      SpillableHashJoinProbeOperatorFactory>(context);
+    } else {
+        return _decompose_to_pipeline<HashJoinerFactory, HashJoinBuildOperatorFactory, HashJoinProbeOperatorFactory>(
+                context);
+    }
 }
 
 bool HashJoinNode::_has_null(const ColumnPtr& column) {

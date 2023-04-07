@@ -300,6 +300,8 @@ public:
 
     int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
 
+    int64_t spill_operator_max_bytes() const { return _query_options.spill_operator_max_bytes; }
+
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
     std::vector<TTabletCommitInfo>& tablet_commit_infos() { return _tablet_commit_infos; }

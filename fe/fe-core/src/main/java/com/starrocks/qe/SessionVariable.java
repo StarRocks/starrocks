@@ -369,10 +369,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
+    // These parameters are experimental. They may be removed in the future
     public static final String SPILL_MEM_TABLE_SIZE = "spill_mem_table_size";
     public static final String SPILL_MEM_TABLE_NUM = "spill_mem_table_num";
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
     public static final String SPILL_OPERATOR_MIN_BYTES = "spill_operator_min_bytes";
+    public static final String SPILL_OPERATOR_MAX_BYTES = "spill_operator_max_bytes";
 
     // full_sort_max_buffered_{rows,bytes} are thresholds that limits input size of partial_sort
     // in full sort.
@@ -669,14 +671,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = SPILL_MODE)
     private String spillMode = "auto";
 
-    @VarAttr(name = SPILL_MEM_TABLE_SIZE)
+    // These parameters are experimental. They may be removed in the future
+    @VarAttr(name = SPILL_MEM_TABLE_SIZE, flag = VariableMgr.INVISIBLE)
     private int spillMemTableSize = 1024 * 1024 * 100;
-    @VarAttr(name = SPILL_MEM_TABLE_NUM)
+    @VarAttr(name = SPILL_MEM_TABLE_NUM, flag = VariableMgr.INVISIBLE)
     private int spillMemTableNum = 2;
-    @VarAttr(name = SPILL_MEM_LIMIT_THRESHOLD)
+    @VarAttr(name = SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double spillMemLimitThreshold = 0.5;
-    @VarAttr(name = SPILL_OPERATOR_MIN_BYTES)
-    private long spillOperatorMinBytes = 1024 * 1024 * 10;
+    @VarAttr(name = SPILL_OPERATOR_MIN_BYTES, flag = VariableMgr.INVISIBLE)
+    private long spillOperatorMinBytes = 1024L * 1024 * 10;
+    @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)
+    private long spillOperatorMaxBytes = 1024L * 1024 * 1000;
+
 
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
@@ -1295,6 +1301,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getSpillOperatorMinBytes() {
         return this.spillOperatorMinBytes;
+    }
+
+    public long getSpillOperatorMaxBytes() {
+        return this.spillOperatorMaxBytes;
     }
 
     public boolean getForwardToLeader() {
@@ -1978,6 +1988,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpill_mem_table_num(spillMemTableNum);
             tResult.setSpill_mem_limit_threshold(spillMemLimitThreshold);
             tResult.setSpill_operator_min_bytes(spillOperatorMinBytes);
+            tResult.setSpill_operator_max_bytes(spillOperatorMaxBytes);
         }
 
         // Compression Type
