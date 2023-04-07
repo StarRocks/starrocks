@@ -201,7 +201,7 @@ std::shared_ptr<::parquet::schema::GroupNode> ParquetBuildHelper::make_schema(
                 file_column_names[i], column_expr->type(),
                 column_expr->is_nullable() ? ::parquet::Repetition::OPTIONAL : ::parquet::Repetition::REQUIRED);
         DCHECK(nodePtr != nullptr);
-        fields.push_back(nodePtr);
+        fields.push_back(std::move(nodePtr));
     }
 
     return std::static_pointer_cast<::parquet::schema::GroupNode>(
@@ -297,7 +297,7 @@ std::shared_ptr<::parquet::WriterProperties> ParquetBuildHelper::make_properties
         for (size_t i = 0; i < type_desc.children.size(); i++) {
             auto child = _make_schema_node(type_desc.field_names[i], type_desc.children[i],
                                            ::parquet::Repetition::OPTIONAL); // use optional as default
-            fields.push_back(child);
+            fields.push_back(std::move(child));
         }
         return ::parquet::schema::GroupNode::Make(name, rep_type, fields);
     }
@@ -588,7 +588,6 @@ Status FileWriterBase::_add_varchar_column_chunk(const Context& ctx, const TypeD
     auto vo = raw_col->get_offset();
     auto vb = raw_col->get_bytes();
 
-    _generate_rg_writer();
     auto col_writer = down_cast<::parquet::ByteArrayWriter*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
@@ -629,7 +628,6 @@ Status FileWriterBase::_add_date_column_chunk(const Context& ctx, const TypeDesc
     const auto data_column = ColumnHelper::get_data_column(col.get());
     auto raw_col = down_cast<const RunTimeColumnType<TYPE_DATE>*>(data_column)->get_data().data();
 
-    _generate_rg_writer();
     auto col_writer = down_cast<::parquet::Int32Writer*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
@@ -669,7 +667,6 @@ Status FileWriterBase::_add_datetime_column_chunk(const Context& ctx, const Type
     const auto data_column = ColumnHelper::get_data_column(col.get());
     auto raw_col = down_cast<const RunTimeColumnType<TYPE_DATETIME>*>(data_column)->get_data().data();
 
-    _generate_rg_writer();
     auto col_writer = down_cast<::parquet::Int64Writer*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
@@ -710,7 +707,6 @@ Status FileWriterBase::_add_int_column_chunk(const Context& ctx, const TypeDescr
     const auto data_column = ColumnHelper::get_data_column(col.get());
     const auto raw_col = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
 
-    _generate_rg_writer();
     auto col_writer =
             down_cast<::parquet::TypedColumnWriter<::parquet::PhysicalType<pt>>*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
@@ -751,7 +747,6 @@ Status FileWriterBase::_add_boolean_column_chunk(const Context& ctx, const TypeD
     const auto data_column = ColumnHelper::get_data_column(col.get());
     const auto raw_col = down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(data_column)->get_data().data();
 
-    _generate_rg_writer();
     auto col_writer = down_cast<::parquet::BoolWriter*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
@@ -789,7 +784,6 @@ Status FileWriterBase::_add_decimal_column_chunk(const Context& ctx, const TypeD
     const auto data_column = ColumnHelper::get_data_column(col.get());
     const auto raw_col = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
 
-    _generate_rg_writer();
     auto col_writer =
             down_cast<::parquet::TypedColumnWriter<::parquet::PhysicalType<pt>>*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
