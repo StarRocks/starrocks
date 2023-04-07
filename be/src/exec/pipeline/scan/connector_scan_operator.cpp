@@ -72,6 +72,16 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
 
 void ConnectorScanOperator::do_close(RuntimeState* state) {}
 
+bool ConnectorScanOperator::has_output() const {
+    bool ret = ScanOperator::has_output();
+    // when has no output, we need to adjust io tasks next time.
+    if (!ret) {
+        PickupMorselState& state = _pickup_morsel_state;
+        state.adjusted_io_tasks = false;
+    }
+    return ret;
+}
+
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
@@ -156,11 +166,6 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
     return scan_node->connector_type();
 }
 
-void ConnectorScanOperator::finish_process() {
-    PickupMorselState& state = _pickup_morsel_state;
-    state.adjusted_io_tasks = false;
-}
-
 int ConnectorScanOperator::update_pickup_morsel_state() {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
 
@@ -206,27 +211,27 @@ int ConnectorScanOperator::update_pickup_morsel_state() {
     auto f = [&]() {
         PickupMorselState& state = _pickup_morsel_state;
         int current_io_tasks = _num_running_io_tasks.load();
-        if (state.adjusted_io_tasks) return current_io_tasks;
-        state.adjusted_io_tasks = true;
+        // update max io tasks.
+        state.max_io_tasks = std::max(state.max_io_tasks, current_io_tasks);
 
         if (current_io_tasks == 0) return 1;
+        if (state.adjusted_io_tasks) return state.max_io_tasks;
 
-        // if buffer full, decrease max io tasks.(to avoid frequent update)
+        state.adjusted_io_tasks = true;
+
+        int io_tasks = state.max_io_tasks;
         if (is_buffer_full()) {
-            state.max_io_tasks -= 1;
-            VLOG_FILE << "[XXX] is full. update to " << state.max_io_tasks;
-            return state.max_io_tasks;
+            // if buffer full, decrease max io tasks.
+            state.max_io_tasks = std::max(1, state.max_io_tasks - 1);
+            io_tasks = state.max_io_tasks;
+        } else if (num_buffered_chunks() < _buffer_unplug_threshold()) {
+            // if buffer is not enough, submit one task
+            io_tasks = current_io_tasks + 1;
+        } else {
+            // if buffer is enough. then don't do anything.
         }
-        // if buffer is not enough, submit one task
-        if (num_buffered_chunks() < _buffer_unplug_threshold()) {
-            int io_tasks = current_io_tasks + 1;
-            VLOG_FILE << "[XXX] is not unplug. update to " << io_tasks;
-            return io_tasks;
-        }
-
-        state.max_io_tasks = std::max(state.max_io_tasks, current_io_tasks);
-        VLOG_FILE << "[XXX] pickup morsel. P = " << state.max_io_tasks;
-        return state.max_io_tasks;
+        VLOG_FILE << "[XXX] pickup morsel. P = " << io_tasks;
+        return io_tasks;
     };
 
     int value = f();

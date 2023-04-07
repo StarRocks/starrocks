@@ -638,7 +638,6 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
         query_ctx()->incr_cur_scan_rows_num(scan->get_last_scan_rows_num());
         query_ctx()->incr_cur_scan_bytes(scan->get_last_scan_bytes());
         scan->update_total_running_time(time_spent);
-        scan->finish_process();
     }
 
     // Update cpu cost of this query

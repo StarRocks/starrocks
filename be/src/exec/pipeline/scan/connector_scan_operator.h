@@ -62,6 +62,7 @@ public:
 
     Status do_prepare(RuntimeState* state) override;
     void do_close(RuntimeState* state) override;
+    bool has_output() const override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
 
     connector::ConnectorType connector_type();
@@ -78,11 +79,10 @@ public:
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
     int update_pickup_morsel_state() override;
-    void finish_process() override;
 
 private:
     struct PickupMorselState {
-        bool adjusted_io_tasks = false;        
+        bool adjusted_io_tasks = false;
         int64_t last_check_full_time = 0;
         int64_t last_check_empty_time = 0;
         int max_io_tasks = 0;
