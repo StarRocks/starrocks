@@ -28,11 +28,10 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class LocalWarehouseTest {
+public class WarehouseTest {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext connectContext;
 
@@ -98,8 +97,8 @@ public class LocalWarehouseTest {
         ExceptionChecker.expectThrowsNoException(
                 () -> modifyWarehouseProperty("alter warehouse test  set(\"size\"=\"medium\");")
         );
-//        Assert.assertEquals("medium",
-//                GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse("test").getSize());
+        // Assert.assertEquals("medium",
+        //     GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse("test").getSize());
 
         ExceptionChecker.expectThrowsNoException(
                 () -> modifyWarehouseProperty("alter warehouse test set(\"min_cluster\"=\"2\");")

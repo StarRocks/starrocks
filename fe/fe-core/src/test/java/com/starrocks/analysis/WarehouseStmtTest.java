@@ -26,6 +26,7 @@ import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SuspendWarehouseStmt;
+import com.starrocks.warehouse.ElasticWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
@@ -137,7 +138,8 @@ public class WarehouseStmtTest {
         stmt = AnalyzeTestUtil.analyzeSuccess(alterSql);
         Assert.assertTrue(stmt instanceof AlterWarehouseStmt);
         DDLStmtExecutor.execute(stmt, connectCtx);
-        Assert.assertEquals("medium", warehouseMgr.getWarehouse("warehouse_1").getSize());
+        Assert.assertEquals("medium",
+                ((ElasticWarehouse) warehouseMgr.getWarehouse("warehouse_1")).getSize());
 
         warehouseMgr.dropWarehouse(new DropWarehouseStmt(false,"warehouse_1"));
         Assert.assertFalse(warehouseMgr.warehouseExists("warehouse_1"));
