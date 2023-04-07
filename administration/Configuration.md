@@ -309,9 +309,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 | 配置项                                                | 默认值      | 单位   | 描述                                                         |
 | ----------------------------------------------------- | ----------- | ------ | ------------------------------------------------------------ |
-| tc_use_memory_min                                     | 10737418240 | Byte   | Tcmalloc 最小预留内存，小于这个值，StarRocks 不会将空闲内存返还给操作系统。 |
-| tc_free_memory_rate                                   | 20          | %      | Tcmalloc 向操作系统返还内存时，自身所保留的空闲内存占总使用内存的最大比例。<br>如果当前空闲内存的占比小于这个值，那么不会向操作系统返还内存。 |
-| tc_gc_period                                          | 60          | second | Tcmalloc GC 的周期，默认单位是秒。                            |
 | report_task_interval_seconds                          | 10          | second | 汇报单个任务的间隔。建表，删除表，导入，schema change 都可以被认定是任务。 |
 | report_disk_state_interval_seconds                    | 60          | second | 汇报磁盘状态的间隔。汇报各个磁盘的状态，以及其中数据量等。   |
 | report_tablet_interval_seconds                        | 60          | second | 汇报 tablet 的间隔。汇报所有的 tablet 的最新版本。           |
