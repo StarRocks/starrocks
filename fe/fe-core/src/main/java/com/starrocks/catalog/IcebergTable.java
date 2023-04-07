@@ -38,6 +38,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.Snapshot;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -69,6 +70,7 @@ public class IcebergTable extends Table {
 
     private Map<String, String> icebergProperties = Maps.newHashMap();
     private List<Column> partitionColumns;
+    private Optional<Snapshot> snapshot;
 
     public IcebergTable() {
         super(TableType.ICEBERG);
@@ -92,6 +94,7 @@ public class IcebergTable extends Table {
         this.nativeTable = nativeTable;
         this.icebergProperties = icebergProperties;
         this.metricsReporter = metricsReporter;
+        this.snapshot = Optional.ofNullable(nativeTable.currentSnapshot());
     }
 
     public String getCatalogName() {
@@ -117,6 +120,10 @@ public class IcebergTable extends Table {
         } else {
             return Long.toString(id);
         }
+    }
+
+    public Optional<Snapshot> getSnapshot() {
+        return snapshot;
     }
 
     public List<Column> getPartitionColumns() {

@@ -211,7 +211,7 @@ public class IcebergScanNode extends ScanNode {
     }
 
     public void setupScanRangeLocations() throws UserException {
-        Optional<Snapshot> snapshot = Optional.ofNullable(srIcebergTable.getNativeTable().currentSnapshot());
+        Optional<Snapshot> snapshot = srIcebergTable.getSnapshot();
         if (!snapshot.isPresent()) {
             LOG.warn(String.format("Table %s has no snapshot!", srIcebergTable.getRemoteTableName()));
             return;

@@ -28,6 +28,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 
@@ -121,16 +122,44 @@ public class IcebergFileStats {
         return minValues;
     }
 
+    public Optional<Double> getMinValue(Integer fieldId) {
+        return getBoundStatistic(fieldId, minValues);
+    }
+
+    private Optional<Double> getBoundStatistic(Integer fieldId, Map<Integer, Object> boundValues) {
+        if (idToTypeMapping == null || boundValues == null) {
+            return Optional.empty();
+        }
+        if (idToTypeMapping.get(fieldId) == null || boundValues.get(fieldId) == null) {
+            return Optional.empty();
+        }
+        Type.PrimitiveType type = idToTypeMapping.get(fieldId);
+        Object value = boundValues.get(fieldId);
+        return StatUtils.convertObjectToOptionalDouble(type, value);
+    }
+
     public Map<Integer, Object> getMaxValues() {
         return maxValues;
+    }
+
+    public Optional<Double> getMaxValue(Integer fieldId) {
+        return getBoundStatistic(fieldId, maxValues);
     }
 
     public Map<Integer, Long> getNullCounts() {
         return nullCounts;
     }
 
+    public Long getNullCount(Integer fileId) {
+        return nullCounts == null ? null : nullCounts.get(fileId);
+    }
+
     public Map<Integer, Long> getColumnSizes() {
         return columnSizes;
+    }
+
+    public Long getColumnSize(Integer fileId) {
+        return columnSizes == null ? null : columnSizes.get(fileId);
     }
 
     public Set<Integer> getCorruptedStats() {

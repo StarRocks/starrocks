@@ -256,6 +256,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (icebergPredicate.op() != Expression.Operation.TRUE) {
                 scan = scan.filter(icebergPredicate);
             }
+            scan = scan.includeColumnStats();
 
             CloseableIterable<CombinedScanTask> combinedScanTasks = scan.planTasks();
             for (CombinedScanTask combinedScanTask : combinedScanTasks) {
