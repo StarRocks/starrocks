@@ -357,15 +357,19 @@ private:
 
 #define SCOPED_SET_CATCHED(catched) auto VARNAME_LINENUM(catched_setter) = CurrentThreadCatchSetter(catched)
 
-#define SCOPED_SET_TRACE_INFO(driver_id, query_id, fragment_instance_id)     \
-    CurrentThread::current().set_pipeline_driver_id(driver_id);              \
-    CurrentThread::current().set_query_id(query_id);                         \
-    CurrentThread::current().set_fragment_instance_id(fragment_instance_id); \
-    auto VARNAME_LINENUM(defer) = DeferOp([] {                               \
-        CurrentThread::current().set_pipeline_driver_id(0);                  \
-        CurrentThread::current().set_query_id({});                           \
-        CurrentThread::current().set_fragment_instance_id({});               \
-    });
+#define SET_TRACE_INFO(driver_id, query_id, fragment_instance_id) \
+    CurrentThread::current().set_pipeline_driver_id(driver_id);   \
+    CurrentThread::current().set_query_id(query_id);              \
+    CurrentThread::current().set_fragment_instance_id(fragment_instance_id);
+
+#define RESET_TRACE_INFO()                              \
+    CurrentThread::current().set_pipeline_driver_id(0); \
+    CurrentThread::current().set_query_id({});          \
+    CurrentThread::current().set_fragment_instance_id({});
+
+#define SCOPED_SET_TRACE_INFO(driver_id, query_id, fragment_instance_id) \
+    SET_TRACE_INFO(driver_id, query_id, fragment_instance_id)            \
+    auto VARNAME_LINENUM(defer) = DeferOp([] { RESET_TRACE_INFO() });
 
 #define SCOPED_SET_CUSTOM_COREDUMP_MSG(custom_coredump_msg)                \
     CurrentThread::current().set_custom_coredump_msg(custom_coredump_msg); \

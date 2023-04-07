@@ -14,11 +14,23 @@
 
 #pragma once
 
+#include <memory>
+
 #include "common/status.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h"
 
 namespace starrocks::spill {
+
+class BlockReader {
+public:
+    virtual ~BlockReader() = default;
+    // read exacly the specified length of data from Block,
+    // if the Block has reached the end, should return EndOfFile status
+    virtual Status read_fully(void* data, int64_t count) = 0;
+
+    virtual std::string debug_string() = 0;
+};
 
 // Block represents a continuous storage space and is the smallest storage unit of flush and restore in spill task.
 // Block only supports append writing and sequential reading, and neither writing nor reading of Block is guaranteed to be thread-safe.
@@ -32,11 +44,9 @@ public:
     // flush block to somewhere
     virtual Status flush() = 0;
 
-    // read exacly the specified length of data from Block,
-    // if the Block has reached the end, should return EndOfFile status
-    virtual Status read_fully(void* data, int64_t count) = 0;
+    virtual std::shared_ptr<BlockReader> get_reader() = 0;
 
-    virtual std::string debug_string() = 0;
+    virtual std::string debug_string() const = 0;
 
     size_t size() const { return _size; }
 

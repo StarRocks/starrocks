@@ -137,6 +137,16 @@ public:
         }
     }
 
+    virtual void batch_serialize_with_selection(FunctionContext* ctx, size_t chunk_size,
+                                                const Buffer<AggDataPtr>& agg_states, size_t state_offset, Column* to,
+                                                const std::vector<uint8_t>& selection) const {
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (selection[i] == 0) {
+                this->serialize_to_column(ctx, agg_states[i] + state_offset, to);
+            }
+        }
+    }
+
     // Contains a loop with calls to "update" function.
     // You can collect arguments into array "states"
     // and do a single call to "update_batch" for devirtualization and inlining.
@@ -325,6 +335,16 @@ public:
         for (size_t i = 0; i < chunk_size; i++) {
             if (selection[i] == 0) {
                 static_cast<const Derived*>(this)->finalize_to_column(ctx, agg_states[i] + state_offset, to);
+            }
+        }
+    }
+
+    void batch_serialize_with_selection(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                                        size_t state_offset, Column* to,
+                                        const std::vector<uint8_t>& selection) const override {
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (selection[i] == 0) {
+                static_cast<const Derived*>(this)->serialize_to_column(ctx, agg_states[i] + state_offset, to);
             }
         }
     }

@@ -41,6 +41,8 @@ public:
     HashJoinerPtr create_prober(int32_t prober_dop, int32_t prober_driver_seq);
     HashJoinerPtr get_builder(int32_t prober_dop, int32_t prober_driver_seq);
 
+    const starrocks::HashJoinerParam& hash_join_param() { return _param; }
+
 private:
     HashJoinerPtr _create_joiner(HashJoinerMap& joiner_map, int32_t driver_sequence);
 

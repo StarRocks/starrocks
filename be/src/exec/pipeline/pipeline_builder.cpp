@@ -19,6 +19,8 @@
 #include "exec/pipeline/adaptive/collect_stats_sink_operator.h"
 #include "exec/pipeline/adaptive/collect_stats_source_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
+#include "exec/pipeline/noop_sink_operator.h"
+#include "exec/pipeline/spill_process_operator.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/conjugate_operator.h"
@@ -143,6 +145,19 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
     add_pipeline(pred_operators);
 
     return {std::move(local_shuffle_source)};
+}
+
+void PipelineBuilderContext::interpolate_spill_process(const SpillProcessChannelFactoryPtr& spill_channel_factory,
+                                                       size_t dop) {
+    OpFactories spill_process_operators;
+    auto pseudo_plan_node_id = next_pseudo_plan_node_id();
+    auto spill_process_factory = std::make_shared<SpillProcessOperatorFactory>(
+            next_operator_id(), "spill-process", pseudo_plan_node_id, spill_channel_factory);
+    spill_process_factory->set_degree_of_parallelism(dop);
+    spill_process_operators.emplace_back(std::move(spill_process_factory));
+    auto noop_sink_factory = std::make_shared<NoopSinkOperatorFactory>(next_operator_id(), next_pseudo_plan_node_id());
+    spill_process_operators.emplace_back(std::move(noop_sink_factory));
+    add_pipeline(std::move(spill_process_operators));
 }
 
 OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* state,
