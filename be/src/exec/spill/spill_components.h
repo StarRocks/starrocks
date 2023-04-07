@@ -55,6 +55,8 @@ public:
 
     bool has_output_data() { return _stream && _stream->is_ready(); }
 
+    bool restore_finished() const { return _running_restore_tasks == 0; }
+
 protected:
     Spiller* _spiller;
     std::atomic_uint64_t _running_restore_tasks{};
