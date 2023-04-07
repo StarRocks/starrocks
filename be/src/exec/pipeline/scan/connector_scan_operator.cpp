@@ -164,6 +164,11 @@ int ConnectorScanOperator::update_pickup_morsel_state() {
         int64_t threshold = config::connector_adaptive_io_tasks_interval_ms * 1000;
         int64_t now = GetCurrentTimeMicros();
 
+        if (_num_running_io_tasks == 0) {
+            state.last_check_empty_time = now;
+            return 1;
+        }
+
         // if buffer full, decrease max io tasks.(to avoid frequent update)
         if (is_buffer_full()) {
             state.last_check_empty_time = now;
