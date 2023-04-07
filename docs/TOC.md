@@ -118,7 +118,7 @@
       + [EXECUTE AS](./sql-reference/sql-statements/account-management/EXECUTE%20AS.md)
       + [GRANT](./sql-reference/sql-statements/account-management/GRANT.md)
       + [REVOKE](./sql-reference/sql-statements/account-management/REVOKE.md)
-      + [SET DEFAULT ROLE](./sql-reference/sql-statements/account-management/SET%20DEFAULT%20ROLE.md)
+      + [SET DEFAULT ROLE](./sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md)
       + [SET PASSWORD](./sql-reference/sql-statements/account-management/SET%20PASSWORD.md)
       + [SET PROPERTY](./sql-reference/sql-statements/account-management/SET%20PROPERTY.md)
       + [SET ROLE](./sql-reference/sql-statements/account-management/SET%20ROLE.md)

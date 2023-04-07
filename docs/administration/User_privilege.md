@@ -35,7 +35,7 @@ The default role of a user is automatically activated when the user connects to 
 
 #### Alter the default role of a user
 
-You can set the default role of a user using [SET DEFAULT ROLE]((../sql-reference/sql-statements/account-management/SET%20DEFAULT%20ROLE.md).) or [ALTER USER](../sql-reference/sql-statements/account-management/ALTER%20USER.md).
+You can set the default role of a user using [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md) or [ALTER USER](../sql-reference/sql-statements/account-management/ALTER%20USER.md).
 
 Both of the following examples set the default role of `jack` to `db1_admin`. Note that `db1_admin` must have been assigned to `jack`.
 
