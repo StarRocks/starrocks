@@ -15,14 +15,13 @@
 
 package com.starrocks.connector.iceberg.hive;
 
-import com.starrocks.connector.hive.HiveMetaStoreThriftClient;
-import com.starrocks.connector.iceberg.hive.HiveClientPool;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.iceberg.relocated.com.google.common.collect.Lists;
@@ -102,7 +101,7 @@ public class HiveClientPoolTest {
     }
 
     @Test
-    public void testGetTablesFailsForNonReconnectableException(@Mocked HiveMetaStoreThriftClient hmsClient)
+    public void testGetTablesFailsForNonReconnectableException(@Mocked HiveMetaStoreClient hmsClient)
             throws Exception {
         new MockUp<HiveClientPool>() {
             @Mock
@@ -124,8 +123,8 @@ public class HiveClientPoolTest {
 
     @Test
     public void testConnectionFailureRestoreForMetaException(
-            @Mocked HiveMetaStoreThriftClient hmsClient,
-            @Mocked HiveMetaStoreThriftClient newClient) throws Exception {
+            @Mocked HiveMetaStoreClient hmsClient,
+            @Mocked HiveMetaStoreClient newClient) throws Exception {
         new MockUp<HiveClientPool>() {
             @Mock
             protected IMetaStoreClient newClient() {
