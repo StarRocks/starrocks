@@ -20,7 +20,6 @@
 **数据湖分析**
 
 - [Preview] 支持 Presto/Trino 兼容模式，可以自动改写 Presto/Trino 的 SQL。参见[系统变量](../reference/System_variable.md) 中的 `sql_dialect`。
-- 支持 [Global UDF](../sql-reference/sql-functions/JAVA_UDF.md)。
 - [Preview] 支持 [JDBC Catalog](../data_source/catalog/jdbc_catalog.md)。
 - 支持使用 [SET CATALOG](../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 命令来手动选择 Catalog。
 
@@ -31,15 +30,17 @@
 
 **查询**
 
-- [Preview] 支持大查询的算子落盘，可以在内存不足时利用磁盘空间来保证查询稳定执行成功。
+<!--- [Preview] 支持大查询的算子落盘，可以在内存不足时利用磁盘空间来保证查询稳定执行成功。-->
 - [Query Cache](../using_starrocks/query_cache.md) 支持更多使用场景，包括各种 Broadcast Join、Bucket Shuffle Join 等 Join 场景。
 - 动态自适应并行度，可以根据查询并发自适应调节 `pipeline_dop`。
+- 支持 [Global UDF](../sql-reference/sql-functions/JAVA_UDF.md)。
 
-**半结构化数据分析**
+**函数**
 
-- 新增函数 [map_apply](../sql-reference/sql-functions/map-functions/map_apply.md)、[map_filter](../sql-reference/sql-functions/map-functions/map_filter.md)、[transform_keys](../sql-reference/sql-functions/map-functions/transform_keys.md)、[transform_values](../sql-reference/sql-functions/map-functions/transform_values.md)、[map_from_arrays](../sql-reference/sql-functions/map-functions/map_from_arrays.md)。
+- 新增半结构化数据分析相关函数：[map_from_arrays](../sql-reference/sql-functions/map-functions/map_from_arrays.md)、[map_apply](../sql-reference/sql-functions/map-functions/map_apply.md)、[map_filter](../sql-reference/sql-functions/map-functions/map_filter.md)、[transform_keys](../sql-reference/sql-functions/map-functions/transform_keys.md)、[transform_values](../sql-reference/sql-functions/map-functions/transform_values.md)。
 - [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md) 支持 ORDER BY。
 - 新增字符串函数 [replace](../sql-reference/sql-functions/string-functions/replace.md)。
+- 新增工具函数 [current_role](../sql-reference/sql-functions/utility-functions/current_role.md)。
 
 ### 功能优化
 

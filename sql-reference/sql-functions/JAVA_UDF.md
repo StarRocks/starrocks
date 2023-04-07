@@ -1,6 +1,6 @@
 # Java UDF【公测中】
 
-自 2.2.0 版本起，StarRocks 支持使用 Java 语言编写用户定义函数（User Defined Function，简称 UDF）。自 3.0 版本起，StarRocks 支持 Global UDF，您只需要在相关的 SQL 语句中加上 `GLOBAL` 关键字即可。您可以根据业务场景开发自定义函数，扩展 StarRocks 的函数能力。
+自 2.2.0 版本起，StarRocks 支持使用 Java 语言编写用户定义函数（User Defined Function，简称 UDF）。自 3.0 版本起，StarRocks 支持 Global UDF，您只需要在相关的 SQL 语句（CREATE/SHOW/DROP）中加上 `GLOBAL` 关键字，该语句即可全局生效，无需逐个为每个数据库执行此语句。您可以根据业务场景开发自定义函数，扩展 StarRocks 的函数能力。
 
 本文介绍如何编写和使用 UDF。
 
@@ -364,7 +364,7 @@ StarRocks 内提供了两种 Namespace 的 UDF：一种是 Database 级 Namespac
 
 > **注意**
 >
-> 在创建和使用 Global UDF 前，需要联系系统管理员进行赋权。有关更多 Global UDF 权限相关信息，参见 [GRANT](/sql-reference/sql-statements/account-management/GRANT.md)。
+> 在创建和使用 Global UDF 前，需要联系系统管理员获取系统级的 CREATE GLOBAL FUNCTION 权限。关于如何赋权，参见 [GRANT](/sql-reference/sql-statements/account-management/GRANT.md)。
 
 JAR 包上传完成后，您需要在 StarRocks 中，按需创建相对应的 UDF。如果创建 Global UDF，只需要在 SQL 语句中带上 `GLOBAL` 关键字即可。
 
