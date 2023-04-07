@@ -253,6 +253,8 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
 }
 
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
+    int avail_count = update_pickup_morsel_state();
+    
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
     }
@@ -264,7 +266,6 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // traverse the chunk_source array from last visit idx
 
     int cnt = _io_tasks_per_scan_operator;
-    int avail_count = available_pickup_morsel_count();
     while (--cnt >= 0) {
         _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
         int i = _chunk_source_idx;
@@ -464,7 +465,6 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
     if (morsel != nullptr) {
         COUNTER_UPDATE(_morsels_counter, 1);
-
         _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {

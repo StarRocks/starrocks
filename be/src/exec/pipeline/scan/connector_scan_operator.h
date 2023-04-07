@@ -78,14 +78,15 @@ public:
     ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
-    int available_pickup_morsel_count() const override;
+    int update_pickup_morsel_state() override;
 
 private:
     struct PickupMorselState {
-        int64_t _last_check_time = 0;
-        int32_t _last_window_size = 0;
+        int64_t last_check_full_time = 0;
+        int64_t last_check_empty_time = 0;
+        int max_io_tasks = 0;
     };
-    mutable PickupMorselState _pickup_morsel_state;
+    PickupMorselState _pickup_morsel_state;
     bool _enable_adaptive_io_tasks = true;
 };
 

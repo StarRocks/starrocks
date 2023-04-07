@@ -156,29 +156,45 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
     return scan_node->connector_type();
 }
 
-int ConnectorScanOperator::available_pickup_morsel_count() const {
+int ConnectorScanOperator::update_pickup_morsel_state() {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
-    PickupMorselState& state = _pickup_morsel_state;
 
-    if (!is_buffer_full()) {
+    auto f = [&]() {
+        PickupMorselState& state = _pickup_morsel_state;
+        int64_t thres = config::io_check_ms * 1000;
         int64_t now = GetCurrentTimeMicros();
-        int count = std::min(1 << state._last_window_size, _io_tasks_per_scan_operator;
-        if ((now - state._last_check_time) > (config::io_check_ms * 1000)) {
-            state._last_check_time = now;
-            state._last_window_size = std::min(state._last_window_size + 1, 16);
-            VLOG_FILE << "[XXX] !full. P = " << count;
-            return count;
-        }
-        return 0;
-    }
-    state._last_check_time = 0;
-    state._last_window_size = 0;
 
-    int64_t cs_time = _chunk_source_total_running_time.load();
-    int64 op_time = _total_running_time;
-    int exp = std::max(1, int(cs_time * 0.5 / (op_time + 1) + 0.5));
-    VLOG_FILE << "[XXX] full. estimate P. cs time = " << cs_time << ", op_time = " << op_time << ", exp = " << exp;
-    return exp - _num_running_io_tasks;
+        // if buffer full, decrease max io tasks.(to avoid frequent update)
+        if (is_buffer_full()) {
+            state.last_check_empty_time = now;
+
+            if ((now - state.last_check_full_time) > thres) {
+                state.last_check_full_time = now;
+                state.max_io_tasks -= 1;
+                VLOG_FILE << "[XXX] is buffer full. update to " << state.max_io_tasks;
+                return state.max_io_tasks;
+            }
+        }
+        state.last_check_full_time = now;
+
+        // if buffer is not enough, submit one task
+        if (num_buffered_chunks() < _buffer_unplug_threshold()) {
+            if ((now - state.last_check_empty_time) > thres) {
+                state.last_check_empty_time = now;
+                int io_tasks = _num_running_io_tasks + 1;
+                VLOG_FILE << "[XXX] is not unplug. update to " << io_tasks;
+                return io_tasks;
+            }
+        }
+
+        state.last_check_empty_time = now;
+        state.max_io_tasks = std::max(state.max_io_tasks, _num_running_io_tasks.load());
+        VLOG_FILE << "[XXX] pickup morsel. P = " << state.max_io_tasks;
+        return state.max_io_tasks;
+    };
+
+    int value = f();
+    return value - _num_running_io_tasks;
 }
 
 // ==================== ConnectorChunkSource ====================
