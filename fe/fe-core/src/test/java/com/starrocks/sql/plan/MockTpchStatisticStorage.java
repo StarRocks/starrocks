@@ -318,7 +318,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
     }
 
     @Override
-    public TableStatistic getTableStatistic(Table table, Long tableId, Long partitionId) {
+    public TableStatistic getTableStatistic(Long tableId, Long partitionId) {
         return rowCountStats.get(tableId);
     }
 

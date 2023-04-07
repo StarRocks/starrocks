@@ -605,7 +605,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 for (Partition partition : selectedPartitions) {
                     long partitionRowCount;
                     TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
-                            .getTableStatistic(table, table.getId(), partition.getId());
+                            .getTableStatistic(table.getId(), partition.getId());
                     if (tableStatistic.equals(TableStatistic.unknown())) {
                         partitionRowCount = partition.getRowCount();
                     } else {
