@@ -364,18 +364,16 @@ public class OptOlapPartitionPruner {
             newPredicate = newPredicate.accept(shuttle, null);
 
             ScalarOperator value = scalarRewriter.rewrite(newPredicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-            if (value.isConstantRef() && ((ConstantOperator) value).isNull()) {
-                newPredicateFilterNulls = true;
-            } else if (value.equals(ConstantOperator.createBoolean(false))) {
+            if ((value.isConstantRef() && ((ConstantOperator) value).isNull()) ||
+                    value.equals(ConstantOperator.createBoolean(false))) {
                 newPredicateFilterNulls = true;
             }
         }
 
         predicate = predicate.accept(shuttle, null);
         ScalarOperator value = scalarRewriter.rewrite(predicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
-        if (value.isConstantRef() && ((ConstantOperator) value).isNull()) {
-            predicateFilterNulls = true;
-        } else if (value.equals(ConstantOperator.createBoolean(false))) {
+        if ((value.isConstantRef() && ((ConstantOperator) value).isNull())
+                || value.equals(ConstantOperator.createBoolean(false))) {
             predicateFilterNulls = true;
         }
 
