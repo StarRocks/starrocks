@@ -161,14 +161,14 @@ int ConnectorScanOperator::update_pickup_morsel_state() {
 
     auto f = [&]() {
         PickupMorselState& state = _pickup_morsel_state;
-        int64_t thres = config::io_check_ms * 1000;
+        int64_t threshold = config::connector_adaptive_io_tasks_interval_ms * 1000;
         int64_t now = GetCurrentTimeMicros();
 
         // if buffer full, decrease max io tasks.(to avoid frequent update)
         if (is_buffer_full()) {
             state.last_check_empty_time = now;
 
-            if ((now - state.last_check_full_time) > thres) {
+            if ((now - state.last_check_full_time) > threshold) {
                 state.last_check_full_time = now;
                 state.max_io_tasks -= 1;
                 VLOG_FILE << "[XXX] is buffer full. update to " << state.max_io_tasks;
@@ -179,7 +179,7 @@ int ConnectorScanOperator::update_pickup_morsel_state() {
 
         // if buffer is not enough, submit one task
         if (num_buffered_chunks() < _buffer_unplug_threshold()) {
-            if ((now - state.last_check_empty_time) > thres) {
+            if ((now - state.last_check_empty_time) > threshold) {
                 state.last_check_empty_time = now;
                 int io_tasks = _num_running_io_tasks + 1;
                 VLOG_FILE << "[XXX] is not unplug. update to " << io_tasks;

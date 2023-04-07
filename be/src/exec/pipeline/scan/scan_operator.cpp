@@ -254,7 +254,7 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
 
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     int avail_count = update_pickup_morsel_state();
-    
+
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
     }
