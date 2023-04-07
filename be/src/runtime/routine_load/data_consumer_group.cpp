@@ -248,6 +248,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                         if (err) {
                             auto err_msg = strings::Substitute("serdes deserialize avro failed: $0", errstr);
                             LOG(ERROR) << err_msg;
+                            delete msg;
                             return Status::InternalError(err_msg);
                         }
                         DeferOp op([&] { avro_value_decref(&avro); });
@@ -255,6 +256,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                         if (avro_value_to_json(&avro, 1, &as_json)) {
                             auto err_msg = strings::Substitute("avro to json failed: $0", avro_strerror());
                             LOG(ERROR) << err_msg;
+                            delete msg;
                             return Status::InternalError(err_msg);
                         }
                         st = (kafka_pipe.get()->*append_data)(as_json, strlen(as_json), row_delimiter);
