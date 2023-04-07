@@ -90,7 +90,7 @@ public:
 
     static ReusableClosure<T>* create() { return new ReusableClosure<T>(); }
 
-    void addFailedHandler(std::function<void()> fn) { failed_handler = std::move(fn); }
+    void addFailedHandler(std::function<void(const std::string& err_msg)> fn) { failed_handler = std::move(fn); }
     void addSuccessHandler(std::function<void(const T&, bool)> fn) { success_handler = fn; }
 
     void join() {
@@ -124,7 +124,7 @@ public:
         if (cntl.Failed()) {
             LOG(WARNING) << "failed to send brpc batch, error=" << berror(cntl.ErrorCode())
                          << ", error_text=" << cntl.ErrorText();
-            failed_handler();
+            failed_handler(cntl.ErrorText());
         } else {
             success_handler(result, _is_last_rpc);
         }
@@ -138,7 +138,7 @@ private:
     brpc::CallId cid;
     std::atomic<bool> _packet_in_flight{false};
     std::atomic<bool> _is_last_rpc{false};
-    std::function<void()> failed_handler;
+    std::function<void(const std::string& err_msg)> failed_handler;
     std::function<void(const T&, bool)> success_handler;
 };
 
