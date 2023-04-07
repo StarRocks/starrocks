@@ -6,9 +6,9 @@ This topic provides answers to some frequently asked questions about SQL.
 
 To solve this problem, increase the value of the `memory_limitation_per_thread_for_schema_change` parameter in the **be.conf** file. This parameter refers to the maximum storage that can be allocated for a single task to change the scheme. The default value of the maximum storage is 2 GB.
 
-## Does StarRocks have limitations on query result caching?
+## Does StarRocks support caching query results?
 
-StarRocks does not support result caching. StarRocks enables the page cache to cache the query result for repetitive use. This allows subsequent query execution to get results directly from the cache. You can set the `storage_page_cache_limit` parameter in the **be.conf** file to specify the size of the page cache. The default size of the page cache is 20 GB.
+StarRocks does not directly cache final query results. StarRocks uses Page Cache to cache original data from data sources on BE memory. This allows subsequent queries to reuse the cached data and accelerates queries. Page Cache is enabled by default from v2.4. You can specify the size of the page cache by setting the `storage_page_cache_limit` parameter in the `be.conf` file. The default size of the page cache is 20% of the system memory. After you set this parameter, restart BEs for the settings to take effect.
 
 ## When a `Null` is included in the calculation, the calculation results of functions are false except for the ISNULL() function
 
