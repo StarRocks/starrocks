@@ -124,7 +124,7 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 
 ### 配置存算分离集群 BE 节点
 
-在启动 BE 之前，在 BE 配置文件 **be.conf** 中添加以下配置项：
+**在启动 BE 之前**，在 BE 配置文件 **be.conf** 中添加以下配置项：
 
 ```YAML
 starlet_port = <starlet_port>
@@ -133,6 +133,16 @@ starlet_port = <starlet_port>
 | **配置项**   | **描述**                 |
 | ------------ | ------------------------ |
 | starlet_port | 用于 BE 心跳服务的端口。默认值：`9070`。 |
+
+如果要启用本地缓存，在 BE 配置文件 **be.conf** 中添加以下配置项：
+
+```YAML
+starlet_cache_dir = <starlet_cache_dir>
+```
+
+| **配置项**   | **描述**                 |
+| ------------ | ------------------------ |
+| starlet_cache_dir | local disk cache 目录，可配置多个目录，使用冒号 (`:`) 分割。 |
 
 > **说明**
 >
