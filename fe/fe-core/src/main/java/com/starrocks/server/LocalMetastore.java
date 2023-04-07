@@ -4187,15 +4187,24 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // remove the tablets in old partitions
+<<<<<<< HEAD
         for (Tablet tablet : oldTablets) {
             TabletInvertedIndex index = GlobalStateMgr.getCurrentInvertedIndex();
             index.deleteTablet(tablet.getId());
+=======
+        for (Long tabletId : oldTabletIds.keySet()) {
+            GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
+>>>>>>> 018d8b0bd1 ([BugFix] Fix disk space occupation problems of multiple replicas (#20590))
             // Ensure that only the leader records truncate information.
             // TODO(yangzaorang): the information will be lost when failover occurs. The probability of this case
             // happening is small, and the trash data will be deleted by BE anyway, but we need to find a better
             // solution.
             if (!isReplay) {
+<<<<<<< HEAD
                 index.markTabletForceDelete(tablet);
+=======
+                GlobalStateMgr.getCurrentInvertedIndex().markTabletForceDelete(tabletId, oldTabletIds.get(tabletId));
+>>>>>>> 018d8b0bd1 ([BugFix] Fix disk space occupation problems of multiple replicas (#20590))
             }
         }
     }
