@@ -90,6 +90,11 @@ public class Config extends ConfigBase {
     @Deprecated
     @ConfField
     public static String sys_log_roll_mode = "SIZE-MB-1024";
+    /**
+     * Log to file by default. set to `true` if want to log to console
+     */
+    @ConfField
+    public static boolean sys_log_to_console = false;
 
     /**
      * audit_log_dir:
@@ -222,7 +227,8 @@ public class Config extends ConfigBase {
      * Used to limit the maximum number of partitions that can be created when creating a dynamic partition table,
      * to avoid creating too many partitions at one time.
      */
-    @ConfField(mutable = true) public static int max_dynamic_partition_num = 500;
+    @ConfField(mutable = true)
+    public static int max_dynamic_partition_num = 500;
 
     /**
      * plugin_dir:
@@ -1515,13 +1521,13 @@ public class Config extends ConfigBase {
     // If the health in statistic_full_collect_interval is lower than this value,
     // choose collect sample statistics first
     @ConfField(mutable = true)
-    public static double statistic_auto_sample_ratio = 0.3;
+    public static double statistic_auto_collect_sample_threshold = 0.3;
 
     @ConfField(mutable = true)
-    public static long statistic_auto_sample_data_size = 100L * 1024 * 1024 * 1024; // 100G
+    public static long statistic_auto_collect_table_interval_size = 5L * 1024 * 1024 * 1024; // 5G
 
     @ConfField(mutable = true)
-    public static long statistic_auto_collect_interval = 3600L * 12; // unit: second, default 12h
+    public static long statistic_auto_collect_table_interval = 3600L * 12; // unit: second, default 12h
 
     /**
      * Full statistics collection max data size
@@ -1937,7 +1943,7 @@ public class Config extends ConfigBase {
     // Enables or disables SSL connections to AWS services. Not support for now
     // @ConfField
     // public static String aws_s3_enable_ssl = "true";
-    
+
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
@@ -2151,4 +2157,8 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_experimental_temporary_table = false;
+
+    @ConfField(mutable = true)
+    public static long max_per_node_grep_log_limit = 500000;
+
 }

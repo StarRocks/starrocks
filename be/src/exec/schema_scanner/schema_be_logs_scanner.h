@@ -12,22 +12,30 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-namespace cpp starrocks
-namespace java com.starrocks.thrift
+#pragma once
 
-enum TCloudType {
-    DEFAULT,
-    AWS,
-    AZURE,
-    GCP
-}
+#include <cstdint>
 
-struct TCloudProperty {
-    1: required string key;
-    2: required string value;
-}
+#include "common/greplog.h"
+#include "exec/schema_scanner.h"
+#include "gen_cpp/FrontendService_types.h"
 
-struct TCloudConfiguration {
-    1: optional TCloudType cloud_type;
-    2: optional list<TCloudProperty> cloud_properties;
-}
+namespace starrocks {
+
+class SchemaBeLogsScanner : public SchemaScanner {
+public:
+    SchemaBeLogsScanner();
+    ~SchemaBeLogsScanner() override;
+
+    Status start(RuntimeState* state) override;
+    Status get_next(ChunkPtr* chunk, bool* eos) override;
+
+private:
+    Status fill_chunk(ChunkPtr* chunk);
+    int64_t _be_id{0};
+    std::deque<GrepLogEntry> _infos;
+    size_t _cur_idx{0};
+    static SchemaScanner::ColumnDesc _s_columns[];
+};
+
+} // namespace starrocks

@@ -108,7 +108,7 @@ OutPut Exchange Id: 25
 |  other join predicates: [43: L_SUPPKEY, INT, false] != [11: L_SUPPKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 4, build_expr = (9: L_ORDERKEY), remote = false
-|  output columns: 2
+|  output columns: 2, 11, 43
 |  cardinality: 2334117
 |  column statistics:
 |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 40000.0] ESTIMATE
@@ -212,7 +212,7 @@ OutPut Exchange Id: 18
 |  other join predicates: [61: L_SUPPKEY, INT, false] != [11: L_SUPPKEY, INT, false]
 |  build runtime filters:
 |  - filter_id = 2, build_expr = (9: L_ORDERKEY), remote = false
-|  output columns: 2, 9, 11
+|  output columns: 2, 9, 11, 61
 |  cardinality: 4799995
 |  column statistics:
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1000000.0] ESTIMATE

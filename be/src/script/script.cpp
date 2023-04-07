@@ -16,10 +16,12 @@
 
 #include <google/protobuf/util/json_util.h>
 
+#include "common/greplog.h"
 #include "common/logging.h"
 #include "exec/schema_scanner/schema_be_tablets_scanner.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
+#include "http/action/compaction_action.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/storage_engine.h"
@@ -123,6 +125,7 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&get_stack_trace_for_thread>("get_stack_trace_for_thread");
         cls.funcStaticExt<&get_stack_trace_for_threads>("get_stack_trace_for_threads");
         cls.funcStaticExt<&get_stack_trace_for_all_threads>("get_stack_trace_for_all_threads");
+        cls.funcStaticExt<&grep_log_as_string>("grep_log_as_string");
         REG_METHOD(ExecEnv, process_mem_tracker);
         REG_METHOD(ExecEnv, query_pool_mem_tracker);
         REG_METHOD(ExecEnv, load_mem_tracker);
@@ -178,6 +181,15 @@ public:
     }
 
     static std::vector<DataDir*> get_data_dirs() { return StorageEngine::instance()->get_stores(); }
+
+    /**
+     * @param tablet_id
+     * @param type base|cumulative|update
+     * @return
+     */
+    static Status do_compaction(int64_t tablet_id, const string& type) {
+        return CompactionAction::do_compaction(tablet_id, type, "");
+    }
 
     static void bind(ForeignModule& m) {
         {
@@ -292,7 +304,6 @@ public:
             REG_METHOD(TabletUpdates, version_history_count);
             REG_METHOD(TabletUpdates, get_average_row_size);
             REG_METHOD(TabletUpdates, debug_string);
-            REG_METHOD(TabletUpdates, get_compaction_score);
             REG_METHOD(TabletUpdates, get_version_list);
             REG_METHOD(TabletUpdates, get_edit_version);
             REG_METHOD(TabletUpdates, get_rowset_map);
@@ -322,6 +333,7 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, get_tablet);
             REG_STATIC_METHOD(StorageEngineRef, drop_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_data_dirs);
+            REG_STATIC_METHOD(StorageEngineRef, do_compaction);
         }
     }
 };

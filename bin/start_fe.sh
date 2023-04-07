@@ -26,6 +26,7 @@ OPTS=$(getopt \
   -l 'helper:' \
   -l 'host_type:' \
   -l 'debug' \
+  -l 'logconsole' \
   -- "$@")
 
 eval set -- "$OPTS"
@@ -34,12 +35,14 @@ RUN_DAEMON=0
 HELPER=
 HOST_TYPE=
 ENABLE_DEBUGGER=0
+RUN_LOG_CONSOLE=0
 while true; do
     case "$1" in
         --daemon) RUN_DAEMON=1 ; shift ;;
         --helper) HELPER=$2 ; shift 2 ;;
         --host_type) HOST_TYPE=$2 ; shift 2 ;;
         --debug) ENABLE_DEBUGGER=1 ; shift ;;
+        --logconsole) RUN_LOG_CONSOLE=1 ; shift ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -86,7 +89,7 @@ JAVA_VERSION=$(jdk_version)
 final_java_opt=$JAVA_OPTS
 if [[ "$JAVA_VERSION" -gt 8 ]]; then
     if [ -z "$JAVA_OPTS_FOR_JDK_9" ]; then
-        echo "JAVA_OPTS_FOR_JDK_9 is not set in fe.conf" >> $LOG_DIR/fe.out
+        echo "JAVA_OPTS_FOR_JDK_9 is not set in fe.conf"
         exit -1
     fi 
     final_java_opt=$JAVA_OPTS_FOR_JDK_9
@@ -106,9 +109,6 @@ fi
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
 fi
-
-echo "using java version $JAVA_VERSION" >> $LOG_DIR/fe.out
-echo $final_java_opt >> $LOG_DIR/fe.out
 
 # add libs to CLASSPATH
 for f in $STARROCKS_HOME/lib/*.jar; do
@@ -131,8 +131,6 @@ else
     LIMIT=/bin/limit
 fi
 
-echo `date` >> $LOG_DIR/fe.out
-
 if [ x"$HELPER" != x"" ]; then
     # change it to '-helper' to be compatible with code in Frontend
     HELPER="-helper $HELPER"
@@ -143,10 +141,28 @@ if [ x"$HOST_TYPE" != x"" ]; then
     HOST_TYPE="-host_type $HOST_TYPE"
 fi
 
-if [ ${RUN_DAEMON} -eq 1 ]; then
-    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" >> $LOG_DIR/fe.out 2>&1 </dev/null &
+LOG_FILE=$LOG_DIR/fe.out
+
+if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
+    if [ ! -w $STARROCKS_HOME/conf/fe.conf ] ; then
+        # workaround configmap readonly, can't change its content
+        mv $STARROCKS_HOME/conf/fe.conf $STARROCKS_HOME/conf/fe.conf.readonly
+        cp $STARROCKS_HOME/conf/fe.conf.readonly $STARROCKS_HOME/conf/fe.conf
+    fi
+    # force sys_log_to_console = true
+    echo "sys_log_to_console = true" >> $STARROCKS_HOME/conf/fe.conf
 else
-    $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" >> $LOG_DIR/fe.out 2>&1 </dev/null
+    # redirect all subsequent commands' stdout/stderr into $LOG_FILE
+    exec &>> $LOG_FILE
 fi
 
-echo $! > $pidfile
+echo "using java version $JAVA_VERSION"
+echo $final_java_opt
+echo `date`
+
+# StarRocksFE java process will write its process id into $pidfile
+if [ ${RUN_DAEMON} -eq 1 ]; then
+    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" </dev/null &
+else
+    exec $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" </dev/null
+fi

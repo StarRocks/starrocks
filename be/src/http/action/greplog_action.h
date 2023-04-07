@@ -12,22 +12,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-namespace cpp starrocks
-namespace java com.starrocks.thrift
+#pragma once
 
-enum TCloudType {
-    DEFAULT,
-    AWS,
-    AZURE,
-    GCP
-}
+#include <atomic>
 
-struct TCloudProperty {
-    1: required string key;
-    2: required string value;
-}
+#include "common/status.h"
+#include "http/http_handler.h"
 
-struct TCloudConfiguration {
-    1: optional TCloudType cloud_type;
-    2: optional list<TCloudProperty> cloud_properties;
-}
+namespace starrocks {
+
+class GrepLogAction : public HttpHandler {
+public:
+    explicit GrepLogAction() = default;
+
+    ~GrepLogAction() override = default;
+
+    void handle(HttpRequest* req) override;
+};
+
+} // namespace starrocks
