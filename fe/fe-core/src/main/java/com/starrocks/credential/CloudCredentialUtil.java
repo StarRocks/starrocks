@@ -95,7 +95,7 @@ public class CloudCredentialUtil {
             }
             return new AzureStoragePath(storageAccount, container);
         } catch (URISyntaxException exception) {
-            LOG.warn(exception.getMessage());
+            LOG.debug(exception.getMessage());
         }
         // Return empty AzureStoragePath
         return new AzureStoragePath("", "");
