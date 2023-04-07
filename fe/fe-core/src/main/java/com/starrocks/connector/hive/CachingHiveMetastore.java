@@ -183,6 +183,8 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     public Set<HiveTableName> getCachedTableNames() {
+        // use partition cache to get all cached table names because partition cache is more accurate,
+        // table cache will be cached when user use `use catalog.db` command.
         return partitionCache.asMap().keySet().stream().map(hivePartitionName ->
                 HiveTableName.of(hivePartitionName.getDatabaseName(), hivePartitionName.getTableName())).collect(
                 Collectors.toSet());

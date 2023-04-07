@@ -270,7 +270,6 @@ public class CacheUpdateProcessor {
         invalidateKeys.forEach(pathKey -> futures.add(refreshExecutor.submit(() ->
                 remoteFileIO.get().invalidatePartition(pathKey))));
 
-
         for (Future<?> future : futures) {
             try {
                 future.get();

@@ -51,6 +51,7 @@ public interface IHiveMetastore {
 
     Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitions);
 
+    // return refreshed partitions in cache for partitioned table, return empty list for unpartitioned table
     default List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {
         return Lists.newArrayList();
     }
