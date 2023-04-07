@@ -12,7 +12,7 @@ Release date: April 6, 2023
 The following bugs are fixed:
 
 - If the requested URL in a Stream Load job is not correct, the responsible FE hangs and is unable to handle the HTTP request. [#18468](https://github.com/StarRocks/starrocks/issues/18468)
-- When the responsible FE collects statistics, it may consume abnormally large amount of memory, which causes OOM. [#16331](https://github.com/StarRocks/starrocks/issues/16331)
+- When the responsible FE collects statistics, it may consume an abnormally large amount of memory, which causes OOM. [#16331](https://github.com/StarRocks/starrocks/issues/16331)
 - BEs crash if memory release is not properly handled in some queries. [#11395](https://github.com/StarRocks/starrocks/issues/11395)
 - After the command TRUNCATE TABLE is executed, a NullPointerException may occur and the responsible FE fails to restart. [#16773](https://github.com/StarRocks/starrocks/issues/16773)
 
