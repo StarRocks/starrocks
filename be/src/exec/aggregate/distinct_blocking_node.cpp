@@ -21,6 +21,8 @@
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_source_operator.h"
+#include "exec/pipeline/aggregate/sorted_aggregate_streaming_sink_operator.h"
+#include "exec/pipeline/aggregate/sorted_aggregate_streaming_source_operator.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
@@ -123,26 +125,20 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
     return Status::OK();
 }
 
-pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+template <class AggFactory, class SourceFactory, class SinkFactory>
+pipeline::OpFactories DistinctBlockingNode::_decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
+                                                                   pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-
-    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
 
     // shared by sink operator and source operator
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
     auto* upstream_source_op = context->source_operator(ops_with_sink);
     auto operators_generator = [this, should_cache, &upstream_source_op, context](bool post_cache) {
-        AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+        auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
-        std::vector<ExprContext*> partition_expr_ctxs;
-        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &partition_expr_ctxs, runtime_state());
-        Expr::prepare(partition_expr_ctxs, runtime_state());
-        Expr::open(partition_expr_ctxs, runtime_state());
-        auto sink_operator = std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(
-                context->next_operator_id(), id(), aggregator_factory, std::move(partition_expr_ctxs));
-        auto source_operator = std::make_shared<AggregateDistinctBlockingSourceOperatorFactory>(
-                context->next_operator_id(), id(), aggregator_factory);
+        auto sink_operator = std::make_shared<SinkFactory>(context->next_operator_id(), id(), aggregator_factory);
+        auto source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), aggregator_factory);
         context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>{sink_operator, source_operator};
     };
@@ -157,11 +153,6 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
     OpFactories ops_with_source;
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(agg_source_op.get(), context, rc_rf_probe_collector);
-
-    const auto& agg_partition_exprs =
-            down_cast<AggregateDistinctBlockingSinkOperatorFactory*>(agg_sink_op.get())->partition_by_exprs();
-    ops_with_sink =
-            context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink, agg_partition_exprs);
     ops_with_sink.push_back(std::move(agg_sink_op));
 
     // The upstream pipeline may be changed by *maybe_interpolate_local_shuffle_exchange*.
@@ -173,6 +164,44 @@ pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::Pipe
         ops_with_source = context->interpolate_cache_operator(ops_with_sink, ops_with_source, operators_generator);
     }
     context->add_pipeline(ops_with_sink);
+
+    return ops_with_source;
+}
+
+pipeline::OpFactories DistinctBlockingNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+
+    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
+    bool sorted_streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
+    bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
+
+    auto try_interpolate_local_shuffle = [this, context](auto& ops) {
+        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, [this]() {
+            std::vector<ExprContext*> group_by_expr_ctxs;
+            Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs, runtime_state());
+            return group_by_expr_ctxs;
+        });
+    };
+
+    // Local shuffle does not guarantee orderliness, so sorted streaming agg should not be introduced
+    if (!sorted_streaming_aggregate) {
+        ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
+    }
+
+    OpFactories ops_with_source;
+
+    if (sorted_streaming_aggregate) {
+        ops_with_source =
+                _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
+                                       SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context);
+    } else {
+        ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateDistinctBlockingSourceOperatorFactory,
+                                                 AggregateDistinctBlockingSinkOperatorFactory>(ops_with_sink, context);
+    }
+
+    if (_tnode.agg_node.need_finalize && sorted_streaming_aggregate && could_local_shuffle) {
+        ops_with_source = try_interpolate_local_shuffle(ops_with_source);
+    }
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
         may_add_chunk_accumulate_operator(ops_with_source, context, id());
