@@ -40,6 +40,7 @@ import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
@@ -450,6 +451,21 @@ public class TabletInvertedIndex {
             return false;
         } finally {
             readUnlock();
+        }
+    }
+
+    public void markTabletForceDelete(long tabletId, long backendId) {
+        writeLock();
+        try {
+            if (forceDeleteTablets.containsKey(tabletId)) {
+                forceDeleteTablets.get(tabletId).add(tabletId);
+            } else {
+                Set<Long> backendIds = Sets.newHashSet();
+                backendIds.add(tabletId);
+                forceDeleteTablets.put(tabletId, backendIds);
+            }
+        } finally {
+            writeUnlock();
         }
     }
 
