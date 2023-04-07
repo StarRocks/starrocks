@@ -34,6 +34,8 @@ import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.warehouse.Cluster;
+import com.starrocks.warehouse.ElasticWarehouse;
+import com.starrocks.warehouse.LocalWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -51,6 +53,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class WarehouseManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
+
+    public static final String DEFAULT_WAREHOUSE_NAME = "default_warehouse";
 
     private Map<Long, Warehouse> idToWh = new HashMap<>();
     @SerializedName(value = "fullNameToWh")
@@ -70,6 +74,11 @@ public class WarehouseManager implements Writable {
             .build();
 
     public WarehouseManager() {
+    }
+
+    public void initDefaultWarehouse() {
+        createWarehouse(DEFAULT_WAREHOUSE_NAME, null);
+        GlobalStateMgr.getCurrentState().setIsDefaultWarehouseCreated(true);
     }
 
     public Warehouse getWarehouse(String warehouseName) {
@@ -95,7 +104,7 @@ public class WarehouseManager implements Writable {
                     "Warehouse '%s' already exists", warehouseName);
 
             long id = GlobalStateMgr.getCurrentState().getNextId();
-            Warehouse wh = new Warehouse(id, warehouseName, properties);
+            Warehouse wh = new LocalWarehouse(id, warehouseName);
             fullNameToWh.put(wh.getFullName(), wh);
             idToWh.put(wh.getId(), wh);
             wh.setExist(true);
@@ -205,18 +214,18 @@ public class WarehouseManager implements Writable {
     }
 
     private void addCluster(String warehouseName) throws DdlException {
-        Warehouse wh = fullNameToWh.get(warehouseName);
+        ElasticWarehouse wh = (ElasticWarehouse) (fullNameToWh.get(warehouseName));
         wh.addCluster();
     }
 
     private void removeCluster(String warehouseName) throws DdlException {
-        Warehouse wh = fullNameToWh.get(warehouseName);
+        ElasticWarehouse wh = (ElasticWarehouse) (fullNameToWh.get(warehouseName));
         wh.removeCluster();
     }
 
     private void modifyProperty(String warehouseName, Map<String, String> properties) throws DdlException {
         boolean isChanged = false;
-        Warehouse wh = fullNameToWh.get(warehouseName);
+        ElasticWarehouse wh = (ElasticWarehouse) (fullNameToWh.get(warehouseName));
         if (properties != null) {
             if (properties.get("size") != null) {
                 wh.setSize(properties.get("size"));
@@ -244,7 +253,7 @@ public class WarehouseManager implements Writable {
     }
 
     public void replayModifyProperty(String warehouseName, Map<String, String> properties) {
-        Warehouse wh = fullNameToWh.get(warehouseName);
+        ElasticWarehouse wh = (ElasticWarehouse) (fullNameToWh.get(warehouseName));
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             if (properties != null) {
                 if (properties.get("size") != null) {

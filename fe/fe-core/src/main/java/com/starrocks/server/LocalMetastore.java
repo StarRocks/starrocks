@@ -3885,6 +3885,8 @@ public class LocalMetastore implements ConnectorMetadata {
         editLog.logCreateCluster(cluster);
     }
 
+
+
     public long saveCluster(DataOutputStream dos, long checksum) throws IOException {
         final int clusterCount = 1;
         checksum ^= clusterCount;

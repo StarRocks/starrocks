@@ -44,6 +44,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddBackendClause;
@@ -65,6 +66,8 @@ import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.warehouse.Cluster;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -184,6 +187,9 @@ public class SystemHandler extends AlterHandler {
             GlobalStateMgr.getCurrentState().getLoadInstance().setLoadErrorHubInfo(clause.getProperties());
         } else if (alterClause instanceof AddComputeNodeClause) {
             AddComputeNodeClause addComputeNodeClause = (AddComputeNodeClause) alterClause;
+            String currentWh = ConnectContext.get().getCurrentWarehouse();
+            Warehouse currentWarehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(currentWh);
+            Cluster cluster = currentWarehouse.getAnyAvailableCluster();
             GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addComputeNodeClause.getHostPortPairs());
         } else if (alterClause instanceof DropComputeNodeClause) {
             DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) alterClause;
