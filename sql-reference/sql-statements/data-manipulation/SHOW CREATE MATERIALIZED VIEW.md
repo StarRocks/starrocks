@@ -2,18 +2,19 @@
 
 ## 功能
 
-查看指定物化视图定义。
+查看指定[异步物化视图](../../../using_starrocks/Materialized_view.md)的定义。
 
 ## 语法
 
 ```SQL
-SHOW CREATE MATERIALIZED VIEW [database.]mv_name
+SHOW CREATE MATERIALIZED VIEW [db_name.]mv_name
 ```
 
 ## 参数
 
 | **参数** | **必选** | **说明**                     |
 | -------- | -------- | ---------------------------- |
+| db_name   | 否       | 数据库名称。如不指定，则默认查看当前数据库中指定物化视图的定义。 |
 | mv_name  | 是       | 待查看定义的物化视图的名称。 |
 
 ## 返回
