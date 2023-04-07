@@ -54,7 +54,7 @@ public class HiveConnectorInternalMgr {
         this.properties = properties;
         this.hdfsEnvironment = hdfsEnvironment;
         this.enableMetastoreCache = Boolean.parseBoolean(properties.getOrDefault("enable_metastore_cache", "true"));
-        this.hmsConf = new CachingHiveMetastoreConf(properties);
+        this.hmsConf = new CachingHiveMetastoreConf(properties, "hive");
 
         this.enableRemoteFileCache = Boolean.parseBoolean(properties.getOrDefault("enable_remote_file_cache", "true"));
         this.remoteFileConf = new CachingRemoteFileConf(properties);
