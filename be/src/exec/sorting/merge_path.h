@@ -181,8 +181,8 @@ protected:
     // the local parallel_idx which the global parallel_idx corresponds to.
     // For example, there are 4 workers with id 0-3, and there are 2 Node(A and B).
     // Each Node should have two workers, assuming Node A have worker_0 and worker_1,
-    // Node B have worker_2 and worker_3. So Node A need to maintain the mapping of {0->0, 1->0},
-    // and Node B need to maintain the mapping of {2->0, 3->0}, given that the local parallel_idx
+    // Node B have worker_2 and worker_3. So Node A need to maintain the mapping of {0->0, 1->1},
+    // and Node B need to maintain the mapping of {2->0, 3->1}, given that the local parallel_idx
     // always ascending from 0 upwards.
     // pair.first store global parallel_idx, pair.second store local parallel_idx
     std::unordered_map<int32_t, int32_t> _global_2_local_parallel_idx;
