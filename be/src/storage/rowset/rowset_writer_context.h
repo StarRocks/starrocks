@@ -87,7 +87,6 @@ public:
 
     bool miss_auto_increment_column = false;
 
-    bool abort_delete = false;
     // partial update mode
     PartialUpdateMode partial_update_mode = PartialUpdateMode::ROW_MODE;
 };
