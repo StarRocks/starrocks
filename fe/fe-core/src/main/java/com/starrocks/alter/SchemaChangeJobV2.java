@@ -526,8 +526,14 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         // Mark schema changed tablet not to move to trash.
                         long baseTabletId = partitionIndexTabletMap.get(
                                                     partitionId, shadowIdxId).get(shadowTablet.getId());
+<<<<<<< HEAD
                         GlobalStateMgr.getCurrentInvertedIndex().markTabletForceDelete(baseTabletId);
                         List<Replica> replicas = ((LocalTablet) shadowTablet).getReplicas();
+=======
+                        GlobalStateMgr.getCurrentInvertedIndex().
+                                    markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
+                        List<Replica> replicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
+>>>>>>> 81235f6ed ([BugFix] Fix disk space occupation problems of multiple replicas (#20590))
                         int healthyReplicaNum = 0;
                         for (Replica replica : replicas) {
                             if (replica.getLastFailedVersion() < 0

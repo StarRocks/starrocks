@@ -809,8 +809,15 @@ public class ReportHandler extends Daemon {
                 // continue to report them to FE forever and add some processing overhead(the tablet report
                 // process is protected with DB S lock).
                 addDropReplicaTask(batchTask, backendId, tabletId,
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/master/ReportHandler.java
                         -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId));
                 invertedIndex.eraseTabletForceDelete(tabletId);
+=======
+                        -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId, backendId));
+                if (!FeConstants.runningUnitTest) {
+                    invertedIndex.eraseTabletForceDelete(tabletId, backendId);
+                }
+>>>>>>> 81235f6ed ([BugFix] Fix disk space occupation problems of multiple replicas (#20590)):fe/fe-core/src/main/java/com/starrocks/leader/ReportHandler.java
                 ++deleteFromBackendCounter;
                 --maxTaskSendPerBe;
                 continue;

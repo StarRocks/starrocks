@@ -1178,6 +1178,10 @@ public class TabletScheduler extends MasterDaemon {
             // process.
             sendDeleteReplicaTask(replica.getBackendId(), tabletCtx.getTabletId(), tabletCtx.getSchemaHash());
         }
+<<<<<<< HEAD
+=======
+        invertedIndex.markTabletForceDelete(tabletCtx.getTabletId(), replica.getBackendId());
+>>>>>>> 81235f6ed ([BugFix] Fix disk space occupation problems of multiple replicas (#20590))
 
         // write edit log
         ReplicaPersistInfo info = ReplicaPersistInfo.createForDelete(tabletCtx.getDbId(),
