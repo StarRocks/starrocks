@@ -88,6 +88,7 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
@@ -166,7 +167,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitCreateTableLikeStatement(CreateTableLikeStmt statement, ConnectContext session) {
-            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session,  statement.getExistedDbName(),
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(session, statement.getExistedDbName(),
                     statement.getExistedTableName(), PrivPredicate.SELECT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "SELECT");
             }
@@ -520,6 +521,14 @@ public class PrivilegeChecker {
             return null;
         }
 
+        public Void visitExecuteScriptStatement(ExecuteScriptStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "EXECUTE SCRIPT");
+            }
+            return null;
+        }
+
         @Override
         public Void visitUpdateStatement(UpdateStmt statement, ConnectContext session) {
             // For now, the `update` operation requires the `LOAD` privilege.
@@ -718,7 +727,6 @@ public class PrivilegeChecker {
             }
             return null;
         }
-
 
         @Override
         public Void visitAlterDatabaseRename(AlterDatabaseRename statement, ConnectContext session) {
@@ -990,7 +998,7 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
-            if (statement.isAll() || ! context.getCurrentUserIdentity().equals(statement.getUserIdent())) {
+            if (statement.isAll() || !context.getCurrentUserIdentity().equals(statement.getUserIdent())) {
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
                 }
@@ -1001,9 +1009,11 @@ public class PrivilegeChecker {
 
     private static class TablePrivilegeChecker extends AstVisitor<Void, Void> {
         private ConnectContext session;
+
         public TablePrivilegeChecker(ConnectContext session) {
             this.session = session;
         }
+
         @Override
         public Void visitQueryStatement(QueryStatement node, Void context) {
             return visit(node.getQueryRelation());
