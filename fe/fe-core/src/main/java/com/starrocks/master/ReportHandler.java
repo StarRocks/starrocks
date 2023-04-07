@@ -810,7 +810,7 @@ public class ReportHandler extends Daemon {
                 // process is protected with DB S lock).
                 addDropReplicaTask(batchTask, backendId, tabletId,
                         -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId));
-                invertedIndex.eraseTabletForceDelete(tabletId);
+                invertedIndex.eraseTabletForceDelete(tabletId, backendId);
                 ++deleteFromBackendCounter;
                 --maxTaskSendPerBe;
                 continue;
