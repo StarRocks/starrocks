@@ -26,7 +26,8 @@ import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFIn;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDFOPNot;
 import org.apache.hadoop.hive.serde2.typeinfo.PrimitiveTypeInfo;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -43,7 +44,7 @@ public final class ExpressionHelper {
     private static final String HIVE_NOT_OPERATOR = "not";
 
     // TODO "hook" into Hive logging (hive or hive.metastore)
-    private static final Logger LOGGER = Logger.getLogger(ExpressionHelper.class);
+    private static final Logger LOGGER = LogManager.getLogger(ExpressionHelper.class);
 
     private static final List<String> QUOTED_TYPES =
             ImmutableList.of("string", "char", "varchar", "date", "datetime", "timestamp");

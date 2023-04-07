@@ -32,11 +32,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.util.ReflectionUtils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public final class AWSGlueClientFactory implements GlueClientFactory {
 
-    private static final Logger LOGGER = Logger.getLogger(AWSGlueClientFactory.class);
+    private static final Logger LOGGER = LogManager.getLogger(AWSGlueClientFactory.class);
 
     private final HiveConf conf;
 

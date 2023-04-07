@@ -25,7 +25,8 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.starrocks.connector.hive.glue.util.AWSGlueConfig;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -37,7 +38,7 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 public class AWSGlueMetastoreCacheDecorator extends AWSGlueMetastoreBaseDecorator {
 
-    private static final Logger LOGGER = Logger.getLogger(AWSGlueMetastoreCacheDecorator.class);
+    private static final Logger LOGGER = LogManager.getLogger(AWSGlueMetastoreCacheDecorator.class);
 
     private final HiveConf conf;
 

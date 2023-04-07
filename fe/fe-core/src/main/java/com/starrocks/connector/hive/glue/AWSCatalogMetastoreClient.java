@@ -129,7 +129,8 @@ import org.apache.hadoop.hive.metastore.api.WMTrigger;
 import org.apache.hadoop.hive.metastore.api.WMValidateResourcePlanResponse;
 import org.apache.hadoop.hive.metastore.partition.spec.PartitionSpecProxy;
 import org.apache.hadoop.hive.metastore.utils.MetaStoreUtils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.io.IOException;
@@ -153,7 +154,7 @@ import static org.apache.hadoop.hive.metastore.Warehouse.DEFAULT_DATABASE_NAME;
 
 public class AWSCatalogMetastoreClient implements IMetaStoreClient {
     // TODO "hook" into Hive logging (hive or hive.metastore)
-    private static final Logger LOGGER = Logger.getLogger(AWSCatalogMetastoreClient.class);
+    private static final Logger LOGGER = LogManager.getLogger(AWSCatalogMetastoreClient.class);
 
     private final HiveConf conf;
     private final AWSGlue glueClient;
