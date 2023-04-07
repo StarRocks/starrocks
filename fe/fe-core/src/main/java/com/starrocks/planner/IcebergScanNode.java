@@ -52,8 +52,11 @@ import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
+<<<<<<< HEAD
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.types.Types;
+=======
+>>>>>>> ff1fa25a1 ([Enhancement] Add iceberg partition prune info when executing explain verbose query (#21148))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -65,6 +68,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class IcebergScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
@@ -222,6 +227,7 @@ public class IcebergScanNode extends ScanNode {
         // partition -> partitionId
         Map<StructLike, Long> partitionMap = Maps.newHashMap();
 
+<<<<<<< HEAD
         for (CombinedScanTask combinedScanTask : IcebergUtil.getTableScan(
                 srIcebergTable.getIcebergTable(), snapshot.get(), icebergPredicate).planTasks()) {
             for (FileScanTask task : combinedScanTask.files()) {
@@ -229,6 +235,62 @@ public class IcebergScanNode extends ScanNode {
                 LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
                 if (file.fileSizeInBytes() == 0) {
                     continue;
+=======
+        String catalogName = srIcebergTable.getCatalogName();
+        long snapshotId = snapshot.get().snapshotId();
+
+        List<RemoteFileInfo> splits = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFileInfos(
+                catalogName, srIcebergTable, null, snapshotId, predicate);
+
+        if (splits.isEmpty()) {
+            LOG.warn("There is no scan tasks after planFies on {}.{} and predicate: [{}]",
+                    srIcebergTable.getRemoteDbName(), srIcebergTable.getRemoteTableName(), predicate);
+            return;
+        }
+
+        RemoteFileDesc remoteFileDesc = splits.get(0).getFiles().get(0);
+        if (remoteFileDesc == null) {
+            LOG.warn("There is no scan tasks after planFies on {}.{} and predicate: [{}]",
+                    srIcebergTable.getRemoteDbName(), srIcebergTable.getRemoteTableName(), predicate);
+            return;
+        }
+
+        Map<StructLike, Long> partitionKeyToId = Maps.newHashMap();
+        for (FileScanTask task : remoteFileDesc.getIcebergScanTasks()) {
+            DataFile file = task.file();
+            LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
+            if (file.fileSizeInBytes() == 0) {
+                continue;
+            }
+
+            StructLike partition = task.file().partition();
+            partitionKeyToId.putIfAbsent(partition, nextPartitionId());
+
+            TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+
+            THdfsScanRange hdfsScanRange = new THdfsScanRange();
+            hdfsScanRange.setFull_path(file.path().toString());
+            hdfsScanRange.setOffset(task.start());
+            hdfsScanRange.setLength(task.length());
+            // For iceberg table we do not need partition id
+            hdfsScanRange.setPartition_id(-1);
+            hdfsScanRange.setFile_length(file.fileSizeInBytes());
+            hdfsScanRange.setFile_format(IcebergApiConverter.getHdfsFileFormat(file.format()).toThrift());
+
+            hdfsScanRange.setDelete_files(task.deletes().stream().map(source -> {
+                TIcebergDeleteFile target = new TIcebergDeleteFile();
+                target.setFull_path(source.path().toString());
+                target.setFile_content(
+                        source.content() == FileContent.EQUALITY_DELETES ? TIcebergFileContent.EQUALITY_DELETES :
+                                TIcebergFileContent.POSITION_DELETES);
+                target.setLength(source.fileSizeInBytes());
+
+                if (source.content() == FileContent.EQUALITY_DELETES) {
+                    source.equalityFieldIds().forEach(fieldId -> {
+                        equalityDeleteColumns.add(
+                                srIcebergTable.getNativeTable().schema().findColumnName(fieldId));
+                    });
+>>>>>>> ff1fa25a1 ([Enhancement] Add iceberg partition prune info when executing explain verbose query (#21148))
                 }
 
                 StructLike partition = task.file().partition();
@@ -237,7 +299,12 @@ public class IcebergScanNode extends ScanNode {
                     partitionMap.put(partition, partitionId);
                 }
 
+<<<<<<< HEAD
                 TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
+=======
+            TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
+            scanRangeLocations.addToLocations(scanRangeLocation);
+>>>>>>> ff1fa25a1 ([Enhancement] Add iceberg partition prune info when executing explain verbose query (#21148))
 
                 THdfsScanRange hdfsScanRange = new THdfsScanRange();
                 hdfsScanRange.setFull_path(file.path().toString());
@@ -275,7 +342,11 @@ public class IcebergScanNode extends ScanNode {
             }
         }
 
+<<<<<<< HEAD
         scanNodePredicates.setSelectedPartitionIds(partitionMap.values());
+=======
+        scanNodePredicates.setSelectedPartitionIds(partitionKeyToId.values());
+>>>>>>> ff1fa25a1 ([Enhancement] Add iceberg partition prune info when executing explain verbose query (#21148))
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -324,6 +395,16 @@ public class IcebergScanNode extends ScanNode {
                     output.append(prefix).append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
             }
+        }
+
+        if (detailLevel == TExplainLevel.VERBOSE && !isResourceMappingCatalog(srIcebergTable.getCatalogName())) {
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    srIcebergTable.getCatalogName(), srIcebergTable.getRemoteDbName(), srIcebergTable.getRemoteTableName());
+
+            output.append(prefix).append(
+                    String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
+                            partitionNames.size() == 0 ? 1 : partitionNames.size()));
+            output.append("\n");
         }
 
         return output.toString();
