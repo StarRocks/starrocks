@@ -575,6 +575,11 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     for (int32_t i = tablet_shards_range.first; i < tablet_shards_range.second; i++) {
         std::shared_lock rlock(_tablets_shards[i].lock);
         for (auto [tablet_id, tablet_ptr] : _tablets_shards[i].tablet_map) {
+            if (tablet_id != tablet_ptr->tablet_id()) {
+                LOG(WARNING) << "tablet_id=" << tablet_id
+                             << " is not equal to tablet_ptr->tablet_id()=" << tablet_ptr->tablet_id();
+                continue;
+            }
             if (tablet_ptr->keys_type() == PRIMARY_KEYS) {
                 continue;
             }
@@ -657,6 +662,11 @@ TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir*
     for (const auto& tablets_shard : _tablets_shards) {
         std::shared_lock rlock(tablets_shard.lock);
         for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+            if (tablet_id != tablet_ptr->tablet_id()) {
+                LOG(WARNING) << "tablet_id=" << tablet_id
+                             << " is not equal to tablet_ptr->tablet_id()=" << tablet_ptr->tablet_id();
+                continue;
+            }
             if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
                 continue;
             }
