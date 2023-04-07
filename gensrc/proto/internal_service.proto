@@ -298,6 +298,16 @@ message PProxyResult {
     optional PKafkaOffsetBatchProxyResult kafka_offset_batch_result = 102;
 };
 
+message ExecuteCommandRequestPB {
+    optional string command = 1;
+    optional string params = 2;
+};
+
+message ExecuteCommandResultPB {
+    optional StatusPB status = 1;
+    optional string result = 2;
+};
+
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
 service PInternalService {
@@ -315,5 +325,6 @@ service PInternalService {
     rpc transmit_chunk(PTransmitChunkParams) returns (PTransmitChunkResult);
     rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
+    rpc execute_command(ExecuteCommandRequestPB) returns (ExecuteCommandResultPB);
 };
 
