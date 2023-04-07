@@ -63,7 +63,6 @@ struct DeltaWriterOptions {
     std::string merge_condition;
     ReplicaState replica_state;
     bool miss_auto_increment_column = false;
-    bool abort_delete = false;
 };
 
 enum State {

@@ -206,7 +206,6 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_node_id(_node_id);
     request.set_write_quorum(_write_quorum_type);
     request.set_miss_auto_increment_column(_parent->_miss_auto_increment_column);
-    request.set_abort_delete(_parent->_abort_delete);
     request.set_is_incremental(incremental_open);
     request.set_sender_id(_parent->_sender_id);
     for (auto& tablet : tablets) {
@@ -921,7 +920,6 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     if (table_sink.__isset.null_expr_in_auto_increment) {
         _null_expr_in_auto_increment = table_sink.null_expr_in_auto_increment;
         _miss_auto_increment_column = table_sink.miss_auto_increment_column;
-        _abort_delete = table_sink.abort_delete;
         _auto_increment_slot_id = table_sink.auto_increment_slot_id;
     }
     if (table_sink.__isset.write_quorum_type) {

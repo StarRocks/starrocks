@@ -426,7 +426,6 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
 
     if (new_rows == n) {
         _auto_increment_partial_update_states[idx].skip_rewrite = true;
-        return Status::OK();
     }
 
     if (new_rows > 0) {
@@ -446,6 +445,38 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
 
     _auto_increment_partial_update_states[idx].write_column->append_selective(*read_column[0], idxes.data(), 0,
                                                                               idxes.size());
+
+    /*
+     * Suppose we have auto increment ids for the rows which are not exist in the previous version.
+     * The ids are allocated by system for partial update in this case. It is impossible that the ids
+     * contain 0 in the normal case. But if the delete-partial update conflict happen with the previous transaction,
+     * it is possible that the ids contain 0 in current transaction. So if we detect the 0, we should handle
+     * this conflict case with deleting the row directly. This mechanism will cause some potential side effects as follow:
+     *
+     * 1. If the delete-partial update conflict happen, partial update operation maybe lost.
+     * 2. If it is the streamload combine with the delete and partial update ops and manipulate on a row which has existed
+     *    in the previous version, all the partial update ops after delete ops maybe lost for this row if they contained in
+     *    different segment file.
+    */
+    _auto_increment_partial_update_states[idx].delete_pks = _upserts[idx]->clone_empty();
+    std::vector<uint32_t> delete_idxes;
+    const int64* data =
+            reinterpret_cast<const int64*>(_auto_increment_partial_update_states[idx].write_column->raw_data());
+
+    // just check the rows which are not exist in the previous version
+    // because the rows exist in the previous version may contain 0 which are specified by the user
+    for (int i = 0; i < _auto_increment_partial_update_states[idx].rowids.size(); ++i) {
+        uint32_t row_idx = _auto_increment_partial_update_states[idx].rowids[i];
+        if (data[row_idx] == 0) {
+            delete_idxes.emplace_back(row_idx);
+        }
+    }
+
+    if (delete_idxes.size() != 0) {
+        _auto_increment_partial_update_states[idx].delete_pks->append_selective(*_upserts[idx], delete_idxes.data(), 0,
+                                                                                delete_idxes.size());
+    }
+
     return Status::OK();
 }
 
@@ -536,7 +567,8 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
 }
 
 Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
-                                EditVersion latest_applied_version, const PrimaryIndex& index) {
+                                EditVersion latest_applied_version, const PrimaryIndex& index,
+                                std::unique_ptr<Column>& delete_pks) {
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
     if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0 ||
         rowset_meta_pb.txn_meta().has_merge_condition()) {
@@ -610,6 +642,9 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
         _partial_update_states[segment_id].release();
     }
     if (txn_meta.has_auto_increment_partial_update_column_id()) {
+        if (_auto_increment_partial_update_states[segment_id].delete_pks->size() != 0) {
+            delete_pks.swap(_auto_increment_partial_update_states[segment_id].delete_pks);
+        }
         _auto_increment_partial_update_states[segment_id].release();
     }
     return Status::OK();
