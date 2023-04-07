@@ -53,6 +53,10 @@ public class ElasticWarehouse extends Warehouse {
 
     private final ClusterProcNode procNode = new ClusterProcNode();
 
+    public ElasticWarehouse() {
+        super(0, null);
+    }
+
 
     public ElasticWarehouse(long id, String name, Map<String, String> properties) {
         super(id, name);

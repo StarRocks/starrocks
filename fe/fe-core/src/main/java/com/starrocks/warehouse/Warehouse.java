@@ -79,10 +79,6 @@ public abstract class Warehouse implements Writable {
         this.rwLock = new QueryableReentrantReadWriteLock(true);
     }
 
-    public Warehouse() {
-        this(0, null);
-    }
-
     public long getId() {
         return id;
     }

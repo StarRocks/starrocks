@@ -105,6 +105,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.warehouse.ElasticWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -161,14 +162,14 @@ public class EditLog {
                 case OperationType.OP_ALTER_WH_ADD_CLUSTER: {
                     AlterWhClusterOplog log = (AlterWhClusterOplog) journal.getData();
                     String warehouseName = log.getWarehouseName();
-                    Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+                    ElasticWarehouse warehouse = (ElasticWarehouse) globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
                     warehouse.replayAddCluster(log);
                     break;
                 }
                 case OperationType.OP_ALTER_WH_REMOVE_CLUSTER: {
                     AlterWhClusterOplog log = (AlterWhClusterOplog) journal.getData();
                     String warehouseName = log.getWarehouseName();
-                    Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+                    ElasticWarehouse warehouse = (ElasticWarehouse) globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
                     warehouse.replayRemoveCluster(log);
                     break;
                 }

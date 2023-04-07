@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.warehouse.ElasticWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Expectations;
 import mockit.Mock;
@@ -87,7 +88,7 @@ public class WarehouseMgrTest {
         properties.put("min_cluster", "2");
         properties.put("size", "large");
 
-        Warehouse warehouse = new Warehouse(10000, "warehouse_1", properties);
+        Warehouse warehouse = new ElasticWarehouse(10000, "warehouse_1", properties);
         warehouseMgr.replayCreateWarehouse(warehouse);
         Assert.assertTrue(warehouseMgr.warehouseExists("warehouse_1"));
         Assert.assertEquals(Warehouse.WarehouseState.INITIALIZING,
@@ -97,7 +98,7 @@ public class WarehouseMgrTest {
         Assert.assertFalse(warehouseMgr.warehouseExists("warehouse_1"));
 
         Map<String, Warehouse> tempMp = new HashMap<>();
-        tempMp.put("warehouse_1", new Warehouse());
+        tempMp.put("warehouse_1", new ElasticWarehouse());
         Deencapsulation.setField(warehouseMgr, "fullNameToWh", tempMp);
 
         warehouseMgr.replaySuspendWarehouse("warehouse_1");
@@ -145,7 +146,7 @@ public class WarehouseMgrTest {
         Assert.assertEquals(Warehouse.WarehouseState.SUSPENDED, warehouseMgr.getWarehouse("aaa").getState());
         warehouseMgr.resumeWarehouse(new ResumeWarehouseStmt("aaa"));
         Assert.assertEquals(Warehouse.WarehouseState.RUNNING, warehouseMgr.getWarehouse("aaa").getState());
-        Assert.assertEquals(warehouseMgr.getWarehouse("aaa").getMinCluster(),
+        Assert.assertEquals(((ElasticWarehouse) warehouseMgr.getWarehouse("aaa")).getMinCluster(),
                 warehouseMgr.getWarehouse("aaa").getClusters().size());
 
         warehouseMgr.dropWarehouse(new DropWarehouseStmt(false, "aaa"));
