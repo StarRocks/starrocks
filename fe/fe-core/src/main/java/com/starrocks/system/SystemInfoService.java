@@ -53,6 +53,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
@@ -593,7 +594,10 @@ public class SystemInfoService {
     }
 
     public int getAliveComputeNodeNumber() {
-        return getComputeNodeIds(true).size();
+        if (Config.only_use_compute_node) {
+            return getComputeNodeIds(true).size();
+        }
+        return getBackendIds(true).size();
     }
 
     public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
