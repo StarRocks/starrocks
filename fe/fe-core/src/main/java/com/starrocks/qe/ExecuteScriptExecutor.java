@@ -34,6 +34,9 @@ public class ExecuteScriptExecutor {
 
     public static void execute(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
         Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(stmt.getBeId());
+        if (be == null) {
+            throw new UserException("node not found: " + stmt.getBeId());
+        }
         TNetworkAddress address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
         ExecuteCommandRequestPB request = new ExecuteCommandRequestPB();
         request.command = "execute_script";
