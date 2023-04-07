@@ -370,6 +370,12 @@ public class MvUtils {
                 scanExprs.add(optExpression);
                 return null;
             }
+
+            @Override
+            public Void visitPhysicalOlapScan(OptExpression optExpression, Void context) {
+                scanExprs.add(optExpression);
+                return null;
+            }
         };
         expression.getOp().accept(scanCollector, expression, null);
         return scanExprs;

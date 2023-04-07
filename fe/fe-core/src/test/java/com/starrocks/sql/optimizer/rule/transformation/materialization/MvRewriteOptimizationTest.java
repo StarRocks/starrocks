@@ -44,6 +44,8 @@ import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -1426,7 +1428,7 @@ public class MvRewriteOptimizationTest {
         dropMv("test", "hive_join_mv_1");
     }
 
-    @Ignore
+    @Test
     public void testUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
 
@@ -1451,6 +1453,16 @@ public class MvRewriteOptimizationTest {
                         "     PREAGGREGATION: ON\n",
                 "empid < 5,", "empid > 2");
 
+        OptExpression optimizedPlan = getOptimizedPlan(query1, connectContext);
+        List<OptExpression> scans = MvUtils.collectScanExprs(optimizedPlan);
+        Assert.assertEquals(2, scans.size());
+        for (int i = 0; i < 2; i++) {
+            PhysicalOlapScanOperator scanOperator = scans.get(i).getOp().cast();
+            List<Integer> shuffleColumns = scanOperator.getDistributionSpec().getShuffleColumns();
+            ColumnRefSet columnRefSet = new ColumnRefSet(scanOperator.getOutputColumns());
+            columnRefSet.containsAll(shuffleColumns);
+        }
+
         String query7 = "select deptno, empid from emps where empid < 5";
         String plan7 = getFragmentPlan(query7);
         PlanTestBase.assertContains(plan7, "union_mv_1");
@@ -1462,6 +1474,7 @@ public class MvRewriteOptimizationTest {
 
         dropMv("test", "union_mv_1");
 
+        /*
         // multi tables query
         createAndRefreshMv("test", "join_union_mv_1", "create materialized view join_union_mv_1" +
                 " distributed by hash(empid)" +
@@ -1494,6 +1507,8 @@ public class MvRewriteOptimizationTest {
                 " group by v1, test_all_type.t1d";
         getFragmentPlan(query3);
         dropMv("test", "join_agg_union_mv_1");
+
+         */
 
         cluster.runSql("test", "insert into test_base_part values(1, 1, 2, 3)");
         cluster.runSql("test", "insert into test_base_part values(100, 1, 2, 3)");

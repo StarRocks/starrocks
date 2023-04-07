@@ -599,6 +599,26 @@ public class UtFrameUtils {
         }
     }
 
+    private static OptExpression getOptimizedPlan(QueryStatement statement, ConnectContext connectContext) {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+
+        PlannerProfile.ScopedTimer t = PlannerProfile.getScopedTimer("Transformer");
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext)
+                .transform((statement).getQueryRelation());
+        t.close();
+
+        t = PlannerProfile.getScopedTimer("Optimizer");
+        Optimizer optimizer = new Optimizer();
+        OptExpression optimizedPlan = optimizer.optimize(
+                connectContext,
+                logicalPlan.getRoot(),
+                new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()),
+                columnRefFactory);
+        t.close();
+        return optimizedPlan;
+    }
+
     private static Pair<String, ExecPlan> getQueryExecPlan(QueryStatement statement, ConnectContext connectContext) {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
 
@@ -632,6 +652,34 @@ public class UtFrameUtils {
         ExecPlan execPlan = new InsertPlanner().plan(statement, connectContext);
         t.close();
         return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
+    }
+
+    public static OptExpression getOptimizedPlan(ConnectContext connectContext,
+                                                 QueryDumpInfo replayDumpInfo) throws Exception {
+        String replaySql = initMockEnv(connectContext, replayDumpInfo);
+        Map<String, Database> dbs = null;
+        try {
+            PlannerProfile.ScopedTimer st = PlannerProfile.getScopedTimer("Parse");
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
+                    connectContext.getSessionVariable()).get(0);
+            st.close();
+            PlannerProfile.ScopedTimer st1 = PlannerProfile.getScopedTimer("Anazlye");
+            com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+            st1.close();
+
+            dbs = AnalyzerUtils.collectAllDatabase(connectContext, statementBase);
+            lock(dbs);
+
+            if (statementBase instanceof QueryStatement) {
+                return getOptimizedPlan((QueryStatement) statementBase, connectContext);
+            } else {
+                Preconditions.checkState(false, "Do not support the statement");
+                return null;
+            }
+        } finally {
+            unLock(dbs);
+            tearMockEnv();
+        }
     }
 
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
