@@ -95,6 +95,9 @@ public:
     void get_info(google::protobuf::RpcController* controller, const PProxyRequest* request, PProxyResult* response,
                   google::protobuf::Closure* done) override;
 
+    void execute_command(google::protobuf::RpcController* controller, const ExecuteCommandRequestPB* request,
+                         ExecuteCommandResultPB* response, google::protobuf::Closure* done) override;
+
 private:
     void _get_info_impl(const PProxyRequest* request, PProxyResult* response,
                         GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms);

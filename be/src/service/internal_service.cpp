@@ -31,6 +31,7 @@
 #include "gen_cpp/BackendService.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/command_executor.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
@@ -478,6 +479,18 @@ void PInternalServiceImplBase<T>::_get_info_impl(
         LOG(WARNING) << "group id " << group_id << " get kafka info timeout. used time(ms) "
                      << watch.elapsed_time() / 1000 / 1000 << ". error: " << st.to_string();
     }
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::execute_command(google::protobuf::RpcController* controller,
+                                                  const ExecuteCommandRequestPB* request,
+                                                  ExecuteCommandResultPB* response, google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    Status st = starrocks::execute_command(request->command(), request->params(), response->mutable_result());
+    if (!st.ok()) {
+        LOG(WARNING) << "execute_command failed, errmsg=" << st.to_string();
+    }
+    st.to_protobuf(response->mutable_status());
 }
 
 template class PInternalServiceImplBase<PInternalService>;
