@@ -87,7 +87,12 @@ public:
 
     bool miss_auto_increment_column = false;
 
+<<<<<<< HEAD
     bool abort_delete = false;
+=======
+    // partial update mode
+    PartialUpdateMode partial_update_mode = PartialUpdateMode::ROW_MODE;
+>>>>>>> 70631a24f ([Enhancement] remove delete restriction on the auto-increment table(#20702) (#20703))
 };
 
 } // namespace starrocks

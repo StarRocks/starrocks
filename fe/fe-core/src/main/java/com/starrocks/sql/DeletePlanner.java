@@ -27,7 +27,6 @@ import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -81,10 +80,13 @@ public class DeletePlanner {
             TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
             OlapTable table = (OlapTable) deleteStatement.getTable();
+<<<<<<< HEAD
             if (table.isAbortDelete()) {
                 throw new SemanticException(
                     "Delete statement is forbidden when auto increment column is not the Key for Primary Key table.");
             }
+=======
+>>>>>>> 70631a24f ([Enhancement] remove delete restriction on the auto-increment table(#20702) (#20703))
             for (Column column : table.getBaseSchema()) {
                 if (column.isKey()) {
                     SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
