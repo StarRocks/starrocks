@@ -538,4 +538,8 @@ public class Table extends MetaObject implements Writable {
     public List<String> getPartitionColumnNames() {
         return Lists.newArrayList();
     }
+
+    public boolean supportsUpdate() {
+        return false;
+    }
 }
