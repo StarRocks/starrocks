@@ -4467,40 +4467,31 @@ public class LocalMetastore implements ConnectorMetadata {
     public long loadAutoIncrementId(DataInputStream dis, long checksum) throws IOException {
         AutoIncrementInfo info = new AutoIncrementInfo(null);
         info.read(dis);
-        // do the actually update when fe start.
-        if (!isCheckpointThread()) {
-            for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
-                Long tableId = entry.getKey();
-                Long id = entry.getValue();
+        for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
+            Long tableId = entry.getKey();
+            Long id = entry.getValue();
 
-                tableIdToIncrementId.put(tableId, id);
-            }
+            tableIdToIncrementId.put(tableId, id);
         }
         return checksum;
     }
 
     public void replayDeleteAutoIncrementId(AutoIncrementInfo info) throws IOException {
-        // replay when fe start.
-        if (!isCheckpointThread()) {
-            for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
-                Long tableId = entry.getKey();
-                tableIdToIncrementId.remove(tableId);
-            }
+        for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
+            Long tableId = entry.getKey();
+            tableIdToIncrementId.remove(tableId);
         }
     }
 
     public void replayAutoIncrementId(AutoIncrementInfo info) throws IOException {
-        // replay when fe start.
-        if (!isCheckpointThread()) {
-            for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
-                Long tableId = entry.getKey();
-                Long id = entry.getValue();
+        for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
+            Long tableId = entry.getKey();
+            Long id = entry.getValue();
 
-                Long oldId = tableIdToIncrementId.putIfAbsent(tableId, id);
+            Long oldId = tableIdToIncrementId.putIfAbsent(tableId, id);
 
-                if (oldId != null && id > tableIdToIncrementId.get(tableId)) {
-                    tableIdToIncrementId.replace(tableId, id);
-                }
+            if (oldId != null && id > tableIdToIncrementId.get(tableId)) {
+                tableIdToIncrementId.replace(tableId, id);
             }
         }
     }
@@ -4512,14 +4503,19 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         Long newId = oldId + rows;
-        while (!tableIdToIncrementId.replace(tableId, oldId, newId)) {
-            oldId = tableIdToIncrementId.get(tableId);
-            newId = oldId + rows;
-        }
-
         // AUTO_INCREMENT counter overflow
         if (newId < oldId) {
             throw new RuntimeException("AUTO_INCREMENT counter overflow");
+        }
+
+        while (!tableIdToIncrementId.replace(tableId, oldId, newId)) {
+            oldId = tableIdToIncrementId.get(tableId);
+            newId = oldId + rows;
+
+            // AUTO_INCREMENT counter overflow
+            if (newId < oldId) {
+                throw new RuntimeException("AUTO_INCREMENT counter overflow");
+            }
         }
 
         return oldId;
