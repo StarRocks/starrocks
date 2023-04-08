@@ -226,7 +226,7 @@ int ConnectorScanOperator::update_pickup_morsel_state() {
             io_tasks = state.max_io_tasks;
         } else if (num_buffered_chunks() < _buffer_unplug_threshold()) {
             // if buffer is not enough, submit one task
-            io_tasks = current_io_tasks + 1;
+            io_tasks = current_io_tasks + config::connector_io_tasks_update_unit;
         } else {
             // if buffer is enough. then don't do anything.
         }

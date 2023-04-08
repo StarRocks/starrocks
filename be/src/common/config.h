@@ -758,6 +758,7 @@ CONF_Int32(io_tasks_per_scan_operator, "4");
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 CONF_Int32(io_sleep_ms, "0");
 CONF_Int32(connector_adaptive_io_tasks_interval_ms, "50");
+CONF_Int32(connector_io_tasks_update_unit, "1");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
