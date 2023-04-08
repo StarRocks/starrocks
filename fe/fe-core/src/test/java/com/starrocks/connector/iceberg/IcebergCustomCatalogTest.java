@@ -58,6 +58,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_IMPL;
+
 public class IcebergCustomCatalogTest {
 
     @Test
@@ -73,9 +75,9 @@ public class IcebergCustomCatalogTest {
 
         String catalogImpl = IcebergCustomTestingCatalog.class.getName();
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergCatalog customCatalog = (IcebergCustomTestingCatalog) CatalogLoader.custom(
-                "glue_native_catalog", new Configuration(), icebergProperties, catalogImpl)
-                .loadCatalog();
+        icebergProperties.put(ICEBERG_IMPL, catalogImpl);
+        IcebergCatalog customCatalog = (IcebergCustomTestingCatalog) CatalogLoader.loadCatalog(
+                "custom_native_catalog", IcebergCatalogType.CUSTOM_CATALOG, new Configuration(), icebergProperties);
         Assert.assertEquals(IcebergCatalogType.CUSTOM_CATALOG, customCatalog.getIcebergCatalogType());
     }
 
