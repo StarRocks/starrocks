@@ -11,7 +11,7 @@ VARBINARY(M)
 2. `BINARY` is just an alias of `VARBINARY`, the usage is exactly the same as `VARBINARY`;
 3. `BINARY(M)`/`VARBINARY(M)` will not pad the unaligned length;
 
-## 示例
+## Example
 
 ### Create a column of type BINARY
 
