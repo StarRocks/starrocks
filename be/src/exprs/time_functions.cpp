@@ -2222,4 +2222,41 @@ Status TimeFunctions::next_day_close(FunctionContext* context, FunctionContext::
     return Status::OK();
 }
 
+static int weekday_from_dow(const std::string& dow) {
+    const int err_tag = -1, base = 1000;
+    if(dow.length() < 2) {
+        return err_tag;
+    }
+    switch (dow[0] + dow[1] * base) {
+    case 'S' + 'u' * base:
+        return (dow == "Su" || dow == "Sun" || dow == "Sunday") ? 0 : err_tag;
+    case 'M' + 'o' * base:
+        return (dow == "Mo" || dow == "Mon" || dow == "Monday") ? 1 : err_tag;
+    case 'T' + 'u' * base:
+        return (dow == "Tu" || dow == "Tue" || dow == "Tuesday") ? 2 : err_tag;
+    case 'W' + 'e' * base:
+        return (dow == "We" || dow == "Wed" || dow == "Wednesday") ? 3 :err_tag;
+    case 'T' + 'h' * base:
+        return (dow == "Th" || dow == "Thu" || dow == "Thursday") ? 4 : err_tag;
+    case 'F' + 'r' * base:
+        return (dow == "Fr" || dow == "Fri" || dow == "Friday") ? 5 : err_tag;
+    case 'S' + 'a' * base:
+        return (dow == "Sa" || dow == "Sat" || dow == "Saturday") ? 6 : err_tag;
+    default:
+        return err_tag;
+    }
+}
+
+// previous_day
+DEFINE_BINARY_FUNCTION_WITH_IMPL(previous_dayImpl, datetime, dow) {
+    int datetime_weekday = ((DateValue)datetime).weekday();
+    int dow_weekday = weekday_from_dow(dow.to_string());
+    if (dow_weekday != -1) {
+        return (DateValue)timestamp_add<TimeUnit::DAY>(datetime, -((6 + datetime_weekday - dow_weekday) % 7 + 1));
+    } else {
+        throw std::runtime_error(dow.to_string() + " not supported in previous_day dow_string");
+    }
+}
+DEFINE_TIME_CALC_FN(previous_day, TYPE_DATETIME, TYPE_VARCHAR, TYPE_DATE);
+
 } // namespace starrocks

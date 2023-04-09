@@ -606,6 +606,14 @@ public:
     // Process the case where dow is constant in next_day
     static StatusOr<ColumnPtr> next_day_wdc(FunctionContext* context, const Columns& columns);
 
+    /**
+     * Returns the date of the first specified DOW (day of week) that occurs before the input date.
+     * @param: [timestamp, dow]
+     * @paramType columns: [TimestampColumn, BinaryColumn of TYPE_VARCHAR]
+     * @return DateColumn of TYPE_DATE.
+     */
+    DEFINE_VECTORIZED_FN(previous_day);
+
     // Following const variables used to obtains number days of year
     constexpr static int NUMBER_OF_LEAP_YEAR = 366;
     constexpr static int NUMBER_OF_NON_LEAP_YEAR = 365;
