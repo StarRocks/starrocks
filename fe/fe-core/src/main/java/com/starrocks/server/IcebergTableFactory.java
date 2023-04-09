@@ -23,15 +23,20 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.ColumnTypeConverter;
+import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.sql.ast.CreateTableStmt;
 import org.apache.iceberg.types.Types;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 import static com.starrocks.catalog.Resource.ResourceType.ICEBERG;
+import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
+import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 
 public class IcebergTableFactory extends ExternalTableFactory {
     public static final IcebergTableFactory INSTANCE = new IcebergTableFactory();
@@ -60,6 +65,10 @@ public class IcebergTableFactory extends ExternalTableFactory {
 
         validateIcebergColumnType(columns, oIcebergTable);
 
+        IcebergCatalogType catalogType = oIcebergTable.getCatalogType();
+        Optional<IcebergMetricsReporter> metricsReporter = catalogType == HIVE_CATALOG || catalogType == GLUE_CATALOG ?
+                Optional.of(new IcebergMetricsReporter()) : Optional.empty();
+
         IcebergTable.Builder tableBuilder = IcebergTable.builder()
                 .setId(tableId)
                 .setSrTableName(tableName)
@@ -69,6 +78,7 @@ public class IcebergTableFactory extends ExternalTableFactory {
                 .setRemoteTableName(oIcebergTable.getRemoteTableName())
                 .setFullSchema(columns)
                 .setIcebergProperties(properties)
+                .setMetricsReporter(metricsReporter)
                 .setNativeTable(oIcebergTable.getNativeTable());
 
         IcebergTable icebergTable = tableBuilder.build();
