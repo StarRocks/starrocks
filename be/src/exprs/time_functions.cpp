@@ -2106,7 +2106,7 @@ std::string TimeFunctions::info_reported_by_time_slice = "time used with time_sl
 #undef DEFINE_TIME_STRING_UNARY_FN
 #undef DEFINE_TIME_UNARY_FN_EXTEND
 
-int weekday_from_dow_abbreviation(std::string dow) {
+static int weekday_from_dow_abbreviation(const std::string& dow) {
     const int err_tag = -1, base = 1000;
     if (dow.length() < 2) {
         return err_tag;
