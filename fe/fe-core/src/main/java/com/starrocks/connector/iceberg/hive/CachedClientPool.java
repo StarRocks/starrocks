@@ -22,13 +22,13 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.ClientPool;
+import org.apache.iceberg.hive.HiveClientPool;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.thrift.TException;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-// TODO(@caneGuy) refactor with HiveRepository
 public class CachedClientPool implements ClientPool<IMetaStoreClient, TException> {
 
     private static Cache<String, HiveClientPool> clientPoolCache;
