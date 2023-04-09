@@ -135,7 +135,7 @@ public class IcebergTable extends Table {
     }
 
     public Optional<IcebergMetricsReporter.IcebergScanReportWithCounter> reportScanMetrics() {
-        return metricsReporter.isPresent() ? Optional.ofNullable(metricsReporter.get().lastReport()) : Optional.empty();
+        return metricsReporter.map(IcebergMetricsReporter::lastReport);
     }
 
     @Override
