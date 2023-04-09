@@ -16,7 +16,6 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.iceberg.glue.IcebergGlueCatalog;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -27,6 +26,7 @@ import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.hive.IcebergGlueCatalog;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.junit.Assert;
 import org.junit.Test;
