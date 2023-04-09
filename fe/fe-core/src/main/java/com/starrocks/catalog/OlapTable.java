@@ -2030,10 +2030,18 @@ public class OlapTable extends Table {
             }
         } else if (partitionInfo instanceof ListPartitionInfo) {
             ListPartitionInfo listInfo = (ListPartitionInfo) partitionInfo;
-            for (String partName : tempPartitionNames) {
-                Partition partition = tempPartitions.getPartition(partName);
-                CatalogUtils.checkPartitionValuesExistForReplaceListPartition(listInfo, partition);
+            List<Partition> partitionList = new ArrayList<>();
+            for (String partName : partitionNames) {
+                Partition partition = nameToPartition.get(partName);
+                partitionList.add(partition);
             }
+            List<Partition> tempPartitionList = new ArrayList<>();
+            for (String partName : tempPartitionNames) {
+                Partition tempPartition = tempPartitions.getPartition(partName);
+                Preconditions.checkNotNull(tempPartition);
+                tempPartitionList.add(tempPartition);
+            }
+            CatalogUtils.checkTempPartitionMatch(partitionList, tempPartitionList, listInfo, strictRange);
         }
 
         // begin to replace
