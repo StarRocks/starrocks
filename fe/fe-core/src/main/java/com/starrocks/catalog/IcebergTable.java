@@ -123,6 +123,13 @@ public class IcebergTable extends Table {
                 .collect(Collectors.toList());
     }
 
+<<<<<<< HEAD
+=======
+    public Optional<IcebergMetricsReporter.IcebergScanReportWithCounter> reportScanMetrics() {
+        return metricsReporter.map(IcebergMetricsReporter::lastReport);
+    }
+
+>>>>>>> 9b070b37a ([BugFix] fix iceberg metrics reporter npe when using iceberg resource table (#21204))
     @Override
     public String getTableIdentifier() {
         return Joiner.on(":").join(name, ((BaseTable) getNativeTable()).operations().current().uuid());
