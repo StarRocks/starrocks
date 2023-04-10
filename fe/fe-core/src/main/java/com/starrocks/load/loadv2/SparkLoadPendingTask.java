@@ -380,8 +380,8 @@ public class SparkLoadPendingTask extends LoadTask {
             partitionColumnRefs.add(column.getName());
         }
         List<EtlPartition> etlPartitions = Lists.newArrayList();
-        Map<Long, List<List<LiteralExpr>>> idToMultiValues = listPartitionInfo.getMultiLiteralExprValues();
-        Map<Long, List<LiteralExpr>>  idToValues = listPartitionInfo.getLiteralExprValues();
+        Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = listPartitionInfo.getMultiLiteralExprValues();
+        Map<Long, List<LiteralExpr>>  literalExprValues = listPartitionInfo.getLiteralExprValues();
         for (Long partitionId : partitionIds) {
             Partition partition = table.getPartition(partitionId);
             if (partition == null) {
@@ -390,14 +390,14 @@ public class SparkLoadPendingTask extends LoadTask {
             // bucket num
             int bucketNum = partition.getDistributionInfo().getBucketNum();
             // list partition values
-            List<List<LiteralExpr>> multiValueList = idToMultiValues.get(partitionId);
+            List<List<LiteralExpr>> multiValueList = multiLiteralExprValues.get(partitionId);
             List<List<Object>> inKeys = Lists.newArrayList();
             if (multiValueList != null && !multiValueList.isEmpty()) {
                 for (List<LiteralExpr> list : multiValueList) {
                     inKeys.add(initInKeysItem(list));
                 }
             }
-            List<LiteralExpr> valueList = idToValues.get(partitionId);
+            List<LiteralExpr> valueList = literalExprValues.get(partitionId);
             if (valueList != null && !valueList.isEmpty()) {
                 inKeys.add(initInKeysItem(valueList));
             }
