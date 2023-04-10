@@ -46,6 +46,7 @@ public class ShowLoadStmt extends ShowStmt {
     private final LimitElement limitElement;
     private final List<OrderByElement> orderByElements;
 
+    private boolean all = false;
     private String labelValue;
     private String stateValue;
     private boolean isAccurateMatch;
@@ -137,6 +138,14 @@ public class ShowLoadStmt extends ShowStmt {
 
     public void setIsAccurateMatch(boolean isAccurateMatch) {
         this.isAccurateMatch = isAccurateMatch;
+    }
+
+    public void setAll(boolean all) {
+        this.all = all;
+    }
+
+    public boolean isAll() {
+        return this.all;
     }
 
     @Override

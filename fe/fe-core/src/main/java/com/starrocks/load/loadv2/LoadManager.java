@@ -80,6 +80,7 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
@@ -98,11 +99,11 @@ import java.util.stream.Collectors;
 public class LoadManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(LoadManager.class);
 
-    private Map<Long, LoadJob> idToLoadJob = Maps.newConcurrentMap();
-    private Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Maps.newConcurrentMap();
-    private LoadJobScheduler loadJobScheduler;
+    private final Map<Long, LoadJob> idToLoadJob = Maps.newConcurrentMap();
+    private final Map<Long, Map<String, List<LoadJob>>> dbIdToLabelToLoadJobs = Maps.newConcurrentMap();
+    private final LoadJobScheduler loadJobScheduler;
 
-    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public LoadManager(LoadJobScheduler loadJobScheduler) {
         this.loadJobScheduler = loadJobScheduler;
@@ -208,19 +209,16 @@ public class LoadManager implements Writable {
             throw new LoadException("LoadJob " + jobId + " state " + loadJob.getState().name() + ", can not be cancal");
         }
         if (loadJob.isCompleted()) {
-            throw new LoadException("LoadJob " + jobId + " state " + loadJob.getState().name() + ", can not be cancal/publish");
+            throw new LoadException(
+                    "LoadJob " + jobId + " state " + loadJob.getState().name() + ", can not be cancal/publish");
         }
-        switch (jobType) {
-            case INSERT:
-                InsertLoadJob insertLoadJob = (InsertLoadJob) loadJob;
-                insertLoadJob.setLoadFinishOrCancel(failMsg, trackingUrl);
-                break;
-            default:
-                throw new LoadException("Unknown job type [" + jobType.name() + "]");
+        if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
+            InsertLoadJob insertLoadJob = (InsertLoadJob) loadJob;
+            insertLoadJob.setLoadFinishOrCancel(failMsg, trackingUrl);
+        } else {
+            throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
-        return;
     }
-
 
     public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
                                 long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout)
@@ -233,12 +231,11 @@ public class LoadManager implements Writable {
         }
 
         LoadJob loadJob;
-        switch (jobType) {
-            case INSERT:
-                loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout);
-                break;
-            default:
-                throw new LoadException("Unknown job type [" + jobType.name() + "]");
+        if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
+            loadJob =
+                    new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout);
+        } else {
+            throw new LoadException("Unknown job type [" + jobType.name() + "]");
         }
         addLoadJob(loadJob);
         // persistent
@@ -525,7 +522,8 @@ public class LoadManager implements Writable {
                         .flatMap(Collection::stream).collect(Collectors.toList()));
             } else {
                 loadJobList.addAll(dbIdToLabelToLoadJobs.values().stream().flatMap(it -> it.values().stream())
-                        .flatMap(Collection::stream).filter(it -> it.getLabel().equals(labelValue)).collect(Collectors.toList()));
+                        .flatMap(Collection::stream).filter(it -> it.getLabel().equals(labelValue))
+                        .collect(Collectors.toList()));
             }
             return loadJobList;
         } finally {
@@ -536,30 +534,35 @@ public class LoadManager implements Writable {
     public List<LoadJob> getLoadJobsByDb(long dbId, String labelValue, boolean accurateMatch) {
 
         List<LoadJob> loadJobList = Lists.newArrayList();
-        if (!dbIdToLabelToLoadJobs.containsKey(dbId)) {
+        if (dbId != -1 && !dbIdToLabelToLoadJobs.containsKey(dbId)) {
             return loadJobList;
         }
         readLock();
         try {
-            Map<String, List<LoadJob>> labelToLoadJobs = dbIdToLabelToLoadJobs.get(dbId);
+            for (Map<String, List<LoadJob>> dbJobs : dbIdToLabelToLoadJobs.values()) {
+                Map<String, List<LoadJob>> labelToLoadJobs = dbId == -1 ? dbJobs : dbIdToLabelToLoadJobs.get(dbId);
 
-            if (Strings.isNullOrEmpty(labelValue)) {
-                loadJobList.addAll(labelToLoadJobs.values()
-                        .stream().flatMap(Collection::stream).collect(Collectors.toList()));
-            } else {
-                // check label value
-                if (accurateMatch) {
-                    if (!labelToLoadJobs.containsKey(labelValue)) {
-                        return loadJobList;
-                    }
-                    loadJobList.addAll(labelToLoadJobs.get(labelValue));
+                if (Strings.isNullOrEmpty(labelValue)) {
+                    loadJobList.addAll(labelToLoadJobs.values()
+                            .stream().flatMap(Collection::stream).collect(Collectors.toList()));
                 } else {
-                    // non-accurate match
-                    for (Map.Entry<String, List<LoadJob>> entry : labelToLoadJobs.entrySet()) {
-                        if (entry.getKey().contains(labelValue)) {
-                            loadJobList.addAll(entry.getValue());
+                    // check label value
+                    if (accurateMatch) {
+                        if (!labelToLoadJobs.containsKey(labelValue)) {
+                            return loadJobList;
+                        }
+                        loadJobList.addAll(labelToLoadJobs.get(labelValue));
+                    } else {
+                        // non-accurate match
+                        for (Map.Entry<String, List<LoadJob>> entry : labelToLoadJobs.entrySet()) {
+                            if (entry.getKey().contains(labelValue)) {
+                                loadJobList.addAll(entry.getValue());
+                            }
                         }
                     }
+                }
+                if (dbId != -1) {
+                    break;
                 }
             }
             return loadJobList;
@@ -670,12 +673,8 @@ public class LoadManager implements Writable {
         }
 
         long currentTimeMs = System.currentTimeMillis();
-        if (loadJob.isCompleted() &&
-                ((currentTimeMs - loadJob.getFinishTimestamp()) / 1000 <= Config.label_keep_max_second)) {
-            return true;
-        }
-
-        return false;
+        return loadJob.isCompleted() &&
+                ((currentTimeMs - loadJob.getFinishTimestamp()) / 1000 <= Config.label_keep_max_second);
     }
 
     public void initJobProgress(Long jobId, TUniqueId loadId, Set<TUniqueId> fragmentIds,
