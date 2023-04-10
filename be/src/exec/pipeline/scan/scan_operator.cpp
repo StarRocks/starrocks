@@ -251,7 +251,9 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
 }
 
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
-    int avail_count = update_pickup_morsel_state();
+    // to sure to put it here for updating state.
+    // because we want to update state based on raw data.
+    int total_cnt = update_pickup_morsel_state();
 
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
@@ -262,20 +264,32 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
 
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
-
     int cnt = _io_tasks_per_scan_operator;
+    int to_sched[32];
+    int size = 0;
+
+    // pick up already started chunk source.
     while (--cnt >= 0) {
         _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
         int i = _chunk_source_idx;
         if (_is_io_task_running[i]) {
             continue;
         }
-        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
-            RETURN_IF_ERROR(_trigger_next_scan(state, i));
-        } else if (avail_count > 0) {
-            avail_count -= 1;
-            RETURN_IF_ERROR(_pickup_morsel(state, i));
+        if (total_cnt >= 0) {
+            if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
+                RETURN_IF_ERROR(_trigger_next_scan(state, i));
+                total_cnt -= 1;
+            } else {
+                to_sched[size++] = i;
+            }
         }
+    }
+
+    size = std::min(size, total_cnt);
+    // pick up new chunk source.
+    for (int i = 0; i < size; i++) {
+        int idx = to_sched[i];
+        RETURN_IF_ERROR(_pickup_morsel(state, idx));
     }
 
     _peak_io_tasks_counter->set(_num_running_io_tasks);

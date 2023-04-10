@@ -168,20 +168,20 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
 
 int ConnectorScanOperator::update_pickup_morsel_state() {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
+    int current_io_tasks = _num_running_io_tasks.load();
 
     auto f = [&]() {
         const int MIN_IO_TASKS = config::connector_io_tasks_min_size;
         PickupMorselState& state = _pickup_morsel_state;
-        int current_io_tasks = _num_running_io_tasks.load();
         int& io_tasks = state.max_io_tasks;
-        // update max io tasks.
 
+        // update max io tasks.
         io_tasks = std::max(io_tasks, current_io_tasks);
         io_tasks = std::max(io_tasks, MIN_IO_TASKS);
 
         if (state.adjusted_io_tasks) return io_tasks;
-
         state.adjusted_io_tasks = true;
+
         size_t chunks = num_buffered_chunks();
         size_t thres = _buffer_unplug_threshold();
         if (is_buffer_full()) {
@@ -189,21 +189,20 @@ int ConnectorScanOperator::update_pickup_morsel_state() {
             io_tasks = std::max(MIN_IO_TASKS, io_tasks - 1);
             state.update_log_size = 0;
         } else if (chunks < thres) {
-            // if buffer not enough, inc io tasks.
-            int delta = (2 << state.update_log_size);
-            io_tasks = std::min(io_tasks + delta, _io_tasks_per_scan_operator);
-            if ((1 << (state.update_log_size + 1)) <= _io_tasks_per_scan_operator) {
+            int delta = std::max(MIN_IO_TASKS, 2 << state.update_log_size);
+            io_tasks = std::min(current_io_tasks + delta, _io_tasks_per_scan_operator);
+            if ((2 << (state.update_log_size + 1)) <= _io_tasks_per_scan_operator) {
                 state.update_log_size += 1;
             }
         } else {
             // if buffer is enough. then don't do anything.
         }
-        VLOG_FILE << "[XXX] pickup morsel. P = " << io_tasks;
         return io_tasks;
     };
 
     int value = f();
-    return value - _num_running_io_tasks.load();
+    VLOG_FILE << "[XXX] pickup morsel. P = " << value << ", X = " << current_io_tasks;
+    return value - current_io_tasks;
 }
 
 // ==================== ConnectorChunkSource ====================
