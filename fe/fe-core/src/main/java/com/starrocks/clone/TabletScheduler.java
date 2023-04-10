@@ -605,7 +605,7 @@ public class TabletScheduler extends LeaderDaemon {
             if (tbl == null) {
                 throw new SchedException(Status.UNRECOVERABLE, "tbl does not exist");
             }
-            if (tbl.isCloudNativeTable()) {
+            if (tbl.isCloudNativeTableOrMaterializedView()) {
                 throw new SchedException(Status.UNRECOVERABLE, "tablet is managed externally");
             }
 
@@ -1185,8 +1185,7 @@ public class TabletScheduler extends LeaderDaemon {
             // process.
             sendDeleteReplicaTask(replica.getBackendId(), tabletCtx.getTabletId(), tabletCtx.getSchemaHash());
         }
-
-        invertedIndex.markTabletForceDelete(tabletCtx.getTabletId());
+        invertedIndex.markTabletForceDelete(tabletCtx.getTabletId(), replica.getBackendId());
 
         // write edit log
         ReplicaPersistInfo info = ReplicaPersistInfo.createForDelete(tabletCtx.getDbId(),

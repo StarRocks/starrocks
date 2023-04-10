@@ -78,23 +78,60 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     // 3. View: INLINE_VIEW, VIEW
     // 4. External table: MYSQL, OLAP_EXTERNAL, BROKER, ELASTICSEARCH, HIVE, ICEBERG, HUDI, ODBC, JDBC
     public enum TableType {
+        @SerializedName("MYSQL")
         MYSQL,
+        @SerializedName("OLAP")
         OLAP,
+        @SerializedName("OLAP_EXTERNAL")
         OLAP_EXTERNAL,
+        @SerializedName("SCHEMA")
         SCHEMA,
+        @SerializedName("INLINE_VIEW")
         INLINE_VIEW,
+        @SerializedName("VIEW")
         VIEW,
+        @SerializedName("BROKER")
         BROKER,
+        @SerializedName("ELASTICSEARCH")
         ELASTICSEARCH,
+        @SerializedName("HIVE")
         HIVE,
+        @SerializedName("ICEBERG")
         ICEBERG,
+        @SerializedName("HUDI")
         HUDI,
+        @SerializedName("JDBC")
         JDBC,
+        @SerializedName("MATERIALIZED_VIEW")
         MATERIALIZED_VIEW,
-        LAKE,
+        @SerializedName("LAKE") // for backward and rollback compatibility
+        CLOUD_NATIVE,
+        @SerializedName("DELTALAKE")
         DELTALAKE,
+        @SerializedName("FILE")
         FILE,
-        LAKE_MATERIALIZED_VIEW
+        @SerializedName("LAKE_MATERIALIZED_VIEW") // for backward and rollback compatibility
+        CLOUD_NATIVE_MATERIALIZED_VIEW;
+
+        public static String serialize(TableType type) {
+            if (type == CLOUD_NATIVE) {
+                return "LAKE"; // for rollback compatibility
+            }
+            if (type == CLOUD_NATIVE_MATERIALIZED_VIEW) {
+                return "LAKE_MATERIALIZED_VIEW"; // for rollback compatibility
+            }
+            return type.name();
+        }
+
+        public static TableType deserialize(String serializedName) {
+            if ("LAKE".equals(serializedName)) {
+                return CLOUD_NATIVE; // for backward compatibility
+            }
+            if ("LAKE_MATERIALIZED_VIEW".equals(serializedName)) {
+                return CLOUD_NATIVE_MATERIALIZED_VIEW; // for backward compatibility
+            }
+            return TableType.valueOf(serializedName);
+        }
     }
 
     @SerializedName(value = "id")
@@ -223,28 +260,28 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.VIEW;
     }
 
-    public boolean isLocalTable() {
+    public boolean isOlapTableOrMaterializedView() {
         return isOlapTable() || isOlapMaterializedView();
     }
 
-    public boolean isLakeTable() {
-        return type == TableType.LAKE;
-    }
-
-    public boolean isLakeMaterializedView() {
-        return type == TableType.LAKE_MATERIALIZED_VIEW;
-    }
-
     public boolean isCloudNativeTable() {
-        return isLakeTable() || isLakeMaterializedView();
+        return type == TableType.CLOUD_NATIVE;
+    }
+
+    public boolean isCloudNativeMaterializedView() {
+        return type == TableType.CLOUD_NATIVE_MATERIALIZED_VIEW;
+    }
+
+    public boolean isCloudNativeTableOrMaterializedView() {
+        return isCloudNativeTable() || isCloudNativeMaterializedView();
     }
 
     public boolean isMaterializedView() {
-        return isOlapMaterializedView() || isLakeMaterializedView();
+        return isOlapMaterializedView() || isCloudNativeMaterializedView();
     }
 
-    public boolean isNativeTable() {
-        return isLocalTable() || isCloudNativeTable();
+    public boolean isNativeTableOrMaterializedView() {
+        return isOlapTableOrMaterializedView() || isCloudNativeTableOrMaterializedView();
     }
 
     public boolean isHiveTable() {
@@ -264,8 +301,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     }
 
     // for create table
-    public boolean isOlapOrLakeTable() {
-        return isOlapTable() || isLakeTable();
+    public boolean isOlapOrCloudNativeTable() {
+        return isOlapTable() || isCloudNativeTable();
     }
 
     public List<Column> getFullSchema() {
@@ -307,7 +344,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public static Table read(DataInput in) throws IOException {
         Table table;
-        TableType type = TableType.valueOf(Text.readString(in));
+        TableType type = TableType.deserialize(Text.readString(in));
         if (type == TableType.OLAP) {
             table = new OlapTable();
         } else if (type == TableType.MYSQL) {
@@ -334,11 +371,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             table = MaterializedView.read(in);
             table.setTypeRead(true);
             return table;
-        } else if (type == TableType.LAKE) {
+        } else if (type == TableType.CLOUD_NATIVE) {
             table = LakeTable.read(in);
             table.setTypeRead(true);
             return table;
-        } else if (type == TableType.LAKE_MATERIALIZED_VIEW) {
+        } else if (type == TableType.CLOUD_NATIVE_MATERIALIZED_VIEW) {
             table = LakeMaterializedView.read(in);
             table.setTypeRead(true);
             return table;
@@ -354,7 +391,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     @Override
     public void write(DataOutput out) throws IOException {
         // ATTN: must write type first
-        Text.writeString(out, type.name());
+        Text.writeString(out, TableType.serialize(type));
 
         // write last check time
         super.write(out);
@@ -480,7 +517,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             case INLINE_VIEW:
             case VIEW:
             case MATERIALIZED_VIEW:
-            case LAKE_MATERIALIZED_VIEW:
+            case CLOUD_NATIVE_MATERIALIZED_VIEW:
                 return "VIEW";
             case SCHEMA:
                 return "SYSTEM VIEW";
@@ -523,7 +560,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
      * 5. PRIMARY_KEYS table does not support local balance.
      */
     public boolean needSchedule(boolean isLocalBalance) {
-        if (!isLocalTable()) {
+        if (!isOlapTableOrMaterializedView()) {
             return false;
         }
 

@@ -311,7 +311,7 @@ public class BackupRestoreAnalyzer {
         }
 
         if (partitionNames != null) {
-            if (!tbl.isOlapOrLakeTable()) {
+            if (!tbl.isOlapOrCloudNativeTable()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName.getTbl());
             }
 

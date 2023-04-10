@@ -90,6 +90,11 @@ public class Config extends ConfigBase {
     @Deprecated
     @ConfField
     public static String sys_log_roll_mode = "SIZE-MB-1024";
+    /**
+     * Log to file by default. set to `true` if want to log to console
+     */
+    @ConfField
+    public static boolean sys_log_to_console = false;
 
     /**
      * audit_log_dir:
@@ -1682,7 +1687,7 @@ public class Config extends ConfigBase {
      * Enable background refresh all external tables all partitions metadata on internal catalog.
      */
     @ConfField
-    public static boolean enable_background_refresh_connector_metadata = false;
+    public static boolean enable_background_refresh_connector_metadata = true;
 
     /**
      * Enable background refresh all external tables all partitions metadata based on resource in internal catalog.
@@ -1697,10 +1702,16 @@ public class Config extends ConfigBase {
     public static int background_refresh_file_metadata_concurrency = 4;
 
     /**
-     * Background refresh hive external table metadata interval in milliseconds.
+     * Background refresh external table metadata interval in milliseconds.
      */
     @ConfField(mutable = true)
     public static int background_refresh_metadata_interval_millis = 600000;
+
+    /**
+     * The duration of background refresh external table metadata since the table last access.
+     */
+    @ConfField(mutable = true)
+    public static long background_refresh_metadata_time_secs_since_last_access_secs = 3600L * 24L;
 
     /**
      * Enable refresh hive partition statistics.

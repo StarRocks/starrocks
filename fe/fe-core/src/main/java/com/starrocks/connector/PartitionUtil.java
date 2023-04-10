@@ -50,8 +50,8 @@ import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.StructLike;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.spark_project.guava.collect.Sets;
 
 import java.util.ArrayList;
@@ -228,7 +228,7 @@ public class PartitionUtil {
 
     public static Map<String, Range<PartitionKey>> getPartitionRange(Table table, Column partitionColumn)
             throws UserException {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             return ((OlapTable) table).getRangePartitionMap();
         } else if (table.isHiveTable() || table.isHudiTable() || table.isIcebergTable()) {
             return PartitionUtil.getMVPartitionNameWithRange(table, partitionColumn, getPartitionNames(table));

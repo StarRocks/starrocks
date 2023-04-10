@@ -75,7 +75,7 @@ public class LakeDeleteJob extends DeleteJob {
     @java.lang.SuppressWarnings("squid:S2142")  // allow catch InterruptedException
     public void run(DeleteStmt stmt, Database db, Table table, List<Partition> partitions)
             throws DdlException, QueryStateException {
-        Preconditions.checkState(table.isLakeTable());
+        Preconditions.checkState(table.isCloudNativeTable());
 
         db.readLock();
         try {
