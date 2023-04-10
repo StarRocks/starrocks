@@ -44,7 +44,6 @@ import com.starrocks.sql.ast.RevokeRoleStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.checkerframework.framework.util.Contract;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.DataInputStream;
