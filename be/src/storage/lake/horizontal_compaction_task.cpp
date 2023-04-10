@@ -30,7 +30,7 @@ namespace starrocks::lake {
 
 HorizontalCompactionTask::~HorizontalCompactionTask() = default;
 
-Status HorizontalCompactionTask::execute(Stats* stats) {
+Status HorizontalCompactionTask::execute(Progress* progress) {
     ASSIGN_OR_RETURN(auto tablet_schema, _tablet->get_schema());
     const KeysType keys_type = tablet_schema->keys_type();
     int64_t num_rows = 0;
@@ -82,6 +82,11 @@ Status HorizontalCompactionTask::execute(Stats* stats) {
         ChunkHelper::padding_char_columns(char_field_indexes, schema, *tablet_schema, chunk.get());
         RETURN_IF_ERROR(writer->write(*chunk));
         chunk->reset();
+
+        if (progress != nullptr) {
+            progress->update(100 * reader.stats().raw_rows_read / num_rows);
+            VLOG(3) << "Compaction progress: " << progress->value();
+        }
     }
     RETURN_IF_ERROR(writer->finish());
 
@@ -99,12 +104,6 @@ Status HorizontalCompactionTask::execute(Stats* stats) {
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
     Status st = _tablet->put_txn_log(std::move(txn_log));
-    if (st.ok() && stats != nullptr) {
-        stats->input_bytes.fetch_add(num_size, std::memory_order_relaxed);
-        stats->input_rows.fetch_add(num_rows, std::memory_order_relaxed);
-        stats->output_bytes.fetch_add(writer->data_size(), std::memory_order_relaxed);
-        stats->output_rows.fetch_add(writer->num_rows(), std::memory_order_relaxed);
-    }
     return st;
 }
 

@@ -40,6 +40,8 @@ class UpdateManager;
 using TabletMetadataIter = MetadataIterator<TabletMetadataPtr>;
 using TxnLogIter = MetadataIterator<TxnLogPtr>;
 
+class CompactionScheduler;
+
 class TabletManager {
     friend class Tablet;
     friend class MetaFileBuilder;
@@ -147,6 +149,8 @@ public:
 
     UpdateManager* update_mgr();
 
+    CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
+
 private:
     using CacheValue = std::variant<TabletMetadataPtr, TxnLogPtr, TabletSchemaPtr, SegmentPtr, DelVectorPtr>;
 
@@ -172,6 +176,7 @@ private:
 
     LocationProvider* _location_provider;
     std::unique_ptr<Cache> _metacache;
+    std::unique_ptr<CompactionScheduler> _compaction_scheduler;
     UpdateManager* _update_mgr;
 
     bthread_t _gc_checker_tid;
