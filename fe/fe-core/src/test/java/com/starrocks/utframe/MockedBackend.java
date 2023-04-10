@@ -20,6 +20,8 @@ package com.starrocks.utframe;
 import com.google.common.collect.Queues;
 import com.starrocks.common.ClientPool;
 import com.starrocks.master.MasterImpl;
+import com.starrocks.proto.ExecuteCommandRequestPB;
+import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
@@ -27,8 +29,8 @@ import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PQueryStatistics;
-import com.starrocks.proto.StatusPB;
 import com.starrocks.proto.PTriggerProfileReportResult;
+import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BackendServiceProxy;
 import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
@@ -369,5 +371,11 @@ public class MockedBackend {
         public Future<PProxyResult> getInfo(PProxyRequest request) {
             return null;
         }
+
+        @Override
+        public Future<ExecuteCommandResultPB> executeCommandAsync(ExecuteCommandRequestPB request) {
+            return null;
+        }
+
     }
 }

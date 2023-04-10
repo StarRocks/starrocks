@@ -237,6 +237,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitExecuteScriptStatement(ExecuteScriptStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ----------------- Catalog Clause -------------
 
     public R visitCreateCatalogStatement(CreateCatalogStmt statement, C context) {
@@ -268,7 +272,6 @@ public abstract class AstVisitor<R, C> {
     public R visitBackendClause(BackendClause clause, C context) {
         return visitNode(clause, context);
     }
-
 
     public R visitFrontendClause(FrontendClause clause, C context) {
         return visitNode(clause, context);

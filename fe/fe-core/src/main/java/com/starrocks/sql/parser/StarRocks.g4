@@ -53,6 +53,7 @@ statement
     // Admin Set Statement
     | ADMIN SET FRONTEND CONFIG '(' property ')'                                            #adminSetConfig
     | ADMIN SET REPLICA STATUS properties                                                   #adminSetReplicaStatus
+    | ADMIN EXECUTE ON INTEGER_VALUE string                                                 #adminExecuteScript
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem

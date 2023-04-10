@@ -41,6 +41,7 @@ add_library(Webserver STATIC
   http_client.cpp
   action/health_action.cpp
   action/checksum_action.cpp
+  action/greplog_action.cpp
   action/snapshot_action.cpp
   action/reload_tablet_action.cpp
   action/restore_tablet_action.cpp
