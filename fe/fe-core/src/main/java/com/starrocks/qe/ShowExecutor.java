@@ -1267,6 +1267,9 @@ public class ShowExecutor {
         Database db = globalStateMgr.getDb(showStmt.getDbName());
         MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
         long dbId = db.getId();
+        if (showStmt.isAll()) {
+            dbId = -1;
+        }
 
         // combine the List<LoadInfo> of load(v1) and loadManager(v2)
         Set<String> statesValue = showStmt.getStates() == null ? null : showStmt.getStates().stream()
