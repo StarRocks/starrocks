@@ -229,6 +229,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
 import java.util.List;
@@ -1618,6 +1619,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         LOG.info("Receive create partition: {}", request);
 
+        TCreatePartitionResult result;
+        try {
+            result = createPartitionProcess(request);
+        } catch (Throwable t) {
+            LOG.warn(t);
+            result = new TCreatePartitionResult();
+            TStatus errorStatus = new TStatus(RUNTIME_ERROR);
+            errorStatus.setError_msgs(Lists.newArrayList(String.format("txn_id=%d failed. %s",
+                    request.getTxn_id(), t.getMessage())));
+            result.setStatus(errorStatus);
+        }
+
+        return result;
+    }
+
+    @NotNull
+    private static TCreatePartitionResult createPartitionProcess(TCreatePartitionRequest request) {
         long dbId = request.getDb_id();
         long tableId = request.getTable_id();
         TCreatePartitionResult result = new TCreatePartitionResult();
@@ -1800,7 +1818,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         return result;
                     }
                     // replicas[0] will be the primary replica
-                    // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable 
+                    // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable
                     List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
                     tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
                             .collect(Collectors.toList())));
