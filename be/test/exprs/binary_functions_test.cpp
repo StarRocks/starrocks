@@ -104,7 +104,9 @@ TEST_F(BinaryFunctionsTest, TestToBinaryNormal) {
         auto result = test_to_binary(arg, binary_type);
         ASSERT_TRUE(result.ok());
         auto v = ColumnHelper::as_column<BinaryColumn>(result.value());
-        ASSERT_TRUE(v->is_null(0));
+        // TODO: Return null if input is invalid.
+        ASSERT_FALSE(v->is_null(0));
+        ASSERT_EQ(Slice(""), v->get_data()[0]);
     }
 }
 

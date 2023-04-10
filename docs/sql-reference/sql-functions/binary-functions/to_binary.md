@@ -15,8 +15,8 @@ to_bianry(str, [binary_type])
 `str`: the input string(varchar type) to be converted.
 `binary_type`:
 
-- `hex`(default type): `to_binary` will assume the input string is a hex string in which all chars must be in '0123456789abcdef', otherwise null is appended(exceptions will not be thrown) if the input string is not valid. `to_binary` will convert the input string into binary directly, eg "abab" string will be converted to x'abab', the input string is case-insensitive.
-- `encode64`: `to_binary` will assume the input string is a base64-encoded string, otherwise null is appended (exceptions will be not thrown). `to_binary` will decode the base64-encoded string as the binary result, eg "YWJhYg==" string will be converted to x'abab' binary.
+- `hex`(default type): `to_binary` will assume the input string is a hex string in which all chars must be in '0123456789abcdef', otherwise empty is appended(exceptions will not be thrown) if the input string is not valid. `to_binary` will convert the input string into binary directly, eg "abab" string will be converted to x'abab', the input string is case-insensitive.
+- `encode64`: `to_binary` will assume the input string is a base64-encoded string, otherwise empty is appended (exceptions will be not thrown). `to_binary` will decode the base64-encoded string as the binary result, eg "YWJhYg==" string will be converted to x'abab' binary.
 - `utf8`:  `to_binary` will convert the input as a binary type without any transformations.
 
 ## Return value
