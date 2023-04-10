@@ -2132,15 +2132,93 @@ static int weekday_from_dow_abbreviation(const std::string& dow) {
 }
 
 // next_day
-DEFINE_BINARY_FUNCTION_WITH_IMPL(next_dayImpl, datetime, dow) {
-    int datetime_weekday = ((DateValue)datetime).weekday();
-    int dow_weekday = weekday_from_dow_abbreviation(dow.to_string());
-    if (dow_weekday != -1) {
-        return (DateValue)timestamp_add<TimeUnit::DAY>(datetime, (6 + dow_weekday - datetime_weekday) % 7 + 1);
-    } else {
-        throw std::runtime_error(dow.to_string() + " not supported in next_day dow_string");
+StatusOr<ColumnPtr> TimeFunctions::next_day(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (wdc == nullptr) {
+        return next_day_common(context, columns);
     }
+    return next_day_wdc(context, columns);
 }
-DEFINE_TIME_CALC_FN(next_day, TYPE_DATETIME, TYPE_VARCHAR, TYPE_DATE);
+
+StatusOr<ColumnPtr> TimeFunctions::next_day_wdc(FunctionContext* context, const Columns& columns) {
+    auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (wdc->dow_weekday == -2) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
+    }
+    auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_DATE> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (time_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        TimestampValue time = time_viewer.value(row);
+        int datetime_weekday = ((DateValue)time).weekday();
+        auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, (6 + wdc->dow_weekday - datetime_weekday) % 7 + 1);
+        result.append(date);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::next_day_common(FunctionContext* context, const Columns& columns) {
+    auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
+    auto dow_str = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_DATE> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (time_viewer.is_null(row) || dow_str.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        TimestampValue time = time_viewer.value(row);
+        auto dow = dow_str.value(row).to_string();
+        int dow_weekday = weekday_from_dow_abbreviation(dow);
+        if (dow_weekday == -1) {
+            throw std::runtime_error(dow + " not supported in next_day dow_string");
+        }
+        int datetime_weekday = ((DateValue)time).weekday();
+        auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, (6 + dow_weekday - datetime_weekday) % 7 + 1);
+        result.append(date);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+Status TimeFunctions::next_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_constant_column(1)) {
+        return Status::OK();
+    }
+
+    ColumnPtr column = context->get_constant_column(1);
+    auto* wdc = new WeekDayCtx();
+    if (column->only_null()) {
+        wdc->dow_weekday = -2;
+        context->set_function_state(scope, wdc);
+        return Status::OK();
+    }
+
+    Slice slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+    auto dow = slice.to_string();
+    int dow_weekday = weekday_from_dow_abbreviation(dow);
+    if (dow_weekday == -1) {
+        throw std::runtime_error(dow + " not supported in next_day dow_string");
+    }
+    wdc->dow_weekday = dow_weekday;
+    context->set_function_state(scope, wdc);
+    return Status::OK();
+}
+
+Status TimeFunctions::next_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        if (wdc != nullptr) {
+            delete wdc;
+        }
+    }
+
+    return Status::OK();
+}
 
 } // namespace starrocks

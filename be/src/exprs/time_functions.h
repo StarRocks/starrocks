@@ -597,6 +597,15 @@ public:
      */
     DEFINE_VECTORIZED_FN(next_day);
 
+    static Status next_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status next_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    // Process the case where dow is not constant in next_day
+    static StatusOr<ColumnPtr> next_day_common(FunctionContext* context, const Columns& columns);
+
+    // Process the case where dow is constant in next_day
+    static StatusOr<ColumnPtr> next_day_wdc(FunctionContext* context, const Columns& columns);
+
     // Following const variables used to obtains number days of year
     constexpr static int NUMBER_OF_LEAP_YEAR = 366;
     constexpr static int NUMBER_OF_NON_LEAP_YEAR = 365;
@@ -692,6 +701,11 @@ private:
     // method for datetime_trunc and time_slice
     struct DateTruncCtx {
         ScalarFunction function;
+    };
+
+    // weekday context
+    struct WeekDayCtx {
+        int dow_weekday;
     };
 
     template <LogicalType Type>
