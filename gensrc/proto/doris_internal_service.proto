@@ -46,4 +46,6 @@ service PBackendService {
     rpc transmit_chunk(starrocks.PTransmitChunkParams) returns (starrocks.PTransmitChunkResult);
     rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc transmit_runtime_filter(starrocks.PTransmitRuntimeFilterParams) returns (starrocks.PTransmitRuntimeFilterResult);
+
+    rpc execute_command(starrocks.ExecuteCommandRequestPB) returns (starrocks.ExecuteCommandResultPB);
 };

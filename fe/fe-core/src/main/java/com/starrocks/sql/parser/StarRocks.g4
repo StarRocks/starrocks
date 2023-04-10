@@ -89,6 +89,7 @@ statement
     | ADMIN SHOW REPLICA DISTRIBUTION FROM qualifiedName partitionNames?                    #adminShowReplicaDistribution
     | ADMIN SHOW REPLICA STATUS FROM qualifiedName partitionNames?
             (WHERE where=expression)?                                                       #adminShowReplicaStatus
+    | ADMIN EXECUTE ON INTEGER_VALUE string                                                 #adminExecuteScript
 
     // Cluster Mangement Statement
     | alterSystemStatement                                                                  #alterSystem

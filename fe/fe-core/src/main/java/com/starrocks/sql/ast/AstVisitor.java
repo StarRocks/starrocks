@@ -472,7 +472,9 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    // ------------------------------------------- Analyze Statement ---------------------------------------------------
+    public R visitExecuteScriptStatement(ExecuteScriptStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
 
     public R visitAnalyzeStatement(AnalyzeStmt statement, C context) {
         return visitStatement(statement, context);
