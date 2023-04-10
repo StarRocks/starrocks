@@ -27,6 +27,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_meta_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/stack_util.h"
 #include "wrenbind17/wrenbind17.hpp"
@@ -125,6 +126,7 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&get_stack_trace_for_thread>("get_stack_trace_for_thread");
         cls.funcStaticExt<&get_stack_trace_for_threads>("get_stack_trace_for_threads");
         cls.funcStaticExt<&get_stack_trace_for_all_threads>("get_stack_trace_for_all_threads");
+        cls.funcStaticExt<&get_stack_trace_for_function>("get_stack_trace_for_function");
         cls.funcStaticExt<&grep_log_as_string>("grep_log_as_string");
         REG_METHOD(ExecEnv, process_mem_tracker);
         REG_METHOD(ExecEnv, query_pool_mem_tracker);
@@ -191,6 +193,20 @@ public:
         return CompactionAction::do_compaction(tablet_id, type, "");
     }
 
+    static std::string get_tablet_meta_json(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        std::string ret;
+        auto st = TabletMetaManager::get_json_meta(tablet->data_dir(), tablet->tablet_id(), &ret);
+        if (!st.ok()) {
+            return st.to_string();
+        } else {
+            return ret;
+        }
+    }
+
     static void bind(ForeignModule& m) {
         {
             auto& cls = m.klass<TabletBasicInfo>("TabletBasicInfo");
@@ -234,6 +250,7 @@ public:
             REG_METHOD(Tablet, debug_string);
             REG_METHOD(Tablet, support_binlog);
             REG_METHOD(Tablet, updates);
+            REG_METHOD(Tablet, save_meta);
         }
         {
             auto& cls = m.klass<EditVersionPB>("EditVersionPB");
@@ -330,6 +347,7 @@ public:
             auto& cls = m.klass<StorageEngineRef>("StorageEngine");
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_info);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet_infos);
+            REG_STATIC_METHOD(StorageEngineRef, get_tablet_meta_json);
             REG_STATIC_METHOD(StorageEngineRef, get_tablet);
             REG_STATIC_METHOD(StorageEngineRef, drop_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_data_dirs);
