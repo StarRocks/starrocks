@@ -344,13 +344,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
-
     public static final String ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE =
             "enable_materialized_view_view_delta_rewrite";
-
     public static final String ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE =
             "enable_materialized_view_single_table_view_delta_rewrite";
     public static final String ANALYZE_FOR_MV = "analyze_mv";
+    public static final String DEFAULT_MATERIALIZED_VIEW_REFRESH = "default_mv_refresh_strategy";
 
     public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
     public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
@@ -943,6 +942,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = NESTED_MV_REWRITE_MAX_LEVEL)
     private int nestedMvRewriteMaxLevel = 3;
+
+    // Default refresh method of MV
+    // 1. sync: create synchronous materialized view
+    // 2. manual/async: asynchronous materialized view with manual/async methods
+    @VarAttr(name = DEFAULT_MATERIALIZED_VIEW_REFRESH)
+    private String defaultMaterializedViewRefresh = "sync";
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE)
     private boolean enableMaterializedViewRewrite = true;
@@ -1659,6 +1664,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.allowDefaultPartition = allowDefaultPartition;
     }
 
+    public void setDefaultMaterializedViewRefresh(String refresh) {
+        this.defaultMaterializedViewRefresh = refresh;
+    }
+
     /**
      * check cbo_cte_reuse && enable_pipeline
      */
@@ -1812,6 +1821,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isQueryCacheForcePopulate() {
         return queryCacheForcePopulate;
+    }
+
+    public String getDefaultMaterializedViewRefresh() {
+        return defaultMaterializedViewRefresh;
     }
 
     public int getNestedMvRewriteMaxLevel() {

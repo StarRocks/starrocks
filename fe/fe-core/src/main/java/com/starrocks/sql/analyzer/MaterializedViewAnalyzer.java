@@ -264,7 +264,7 @@ public class MaterializedViewAnalyzer {
                 checkPartitionColumnWithBaseTable(statement, aliasTableMap);
             }
             // check and analyze distribution
-            checkDistribution(statement, aliasTableMap);
+            checkDistribution(statement, aliasTableMap, context);
 
             planMVQuery(statement, queryStatement, context);
             return null;
@@ -636,7 +636,8 @@ public class MaterializedViewAnalyzer {
         }
 
         private void checkDistribution(CreateMaterializedViewStatement statement,
-                                       Map<TableName, Table> tableNameTableMap) {
+                                       Map<TableName, Table> tableNameTableMap,
+                                       ConnectContext context) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();
             List<Column> mvColumnItems = statement.getMvColumnItems();
             Map<String, String> properties = statement.getProperties();
@@ -649,7 +650,7 @@ public class MaterializedViewAnalyzer {
                         autoInferReplicationNum(tableNameTableMap).toString());
             }
             if (distributionDesc == null) {
-                if (ConnectContext.get().getSessionVariable().isAllowDefaultPartition()) {
+                if (context.getSessionVariable().isAllowDefaultPartition()) {
                     distributionDesc = new HashDistributionDesc(0,
                             Lists.newArrayList(mvColumnItems.get(0).getName()));
                     statement.setDistributionDesc(distributionDesc);

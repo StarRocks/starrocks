@@ -92,6 +92,7 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.RelationId;
@@ -1457,13 +1458,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
+        String defaultRefresh = "sync";
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null) {
+            defaultRefresh = ctx.getSessionVariable().getDefaultMaterializedViewRefresh();
+        }
         if (refreshSchemeDesc == null) {
-            if (distributionDesc == null) {
+            if (distributionDesc == null && defaultRefresh.equalsIgnoreCase("sync")) {
                 // use old materialized index
                 refreshSchemeDesc = new SyncRefreshSchemeDesc();
-            } else {
+            } else if (defaultRefresh.equalsIgnoreCase("manual")) {
                 // use new manual refresh
-                refreshSchemeDesc = new ManualRefreshSchemeDesc(MaterializedView.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
+                refreshSchemeDesc =
+                        new ManualRefreshSchemeDesc(MaterializedView.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
+            } else if (defaultRefresh.equalsIgnoreCase("async")) {
+                refreshSchemeDesc = new AsyncRefreshSchemeDesc(false, LocalDateTime.now(), null,
+                        MaterializedView.RefreshMoment.IMMEDIATE, createPos(context));
             }
         }
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {

@@ -2596,6 +2596,23 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testWithoutDistribute() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setAllowDefaultPartition(true);
+        starRocksAssert.getCtx().getSessionVariable().setDefaultMaterializedViewRefresh("async");
+        starRocksAssert.withMaterializedView(
+                "create materialized view mv_default_async refresh async as select * from t1");
+        starRocksAssert.dropMaterializedView("mv_default_async");
+
+        starRocksAssert.withMaterializedView(
+                "create materialized view mv_default_async refresh manual as select * from t1");
+        starRocksAssert.dropMaterializedView("mv_default_async");
+
+        starRocksAssert.withMaterializedView(
+                "create materialized view mv_default_async as select * from t1");
+        starRocksAssert.dropMaterializedView("mv_default_async");
+    }
+
+    @Test
     public void testExprAlias() throws Exception {
         testMVColumnAlias("c_1_9 + 1");
         testMVColumnAlias("char_length(c_1_9)");
