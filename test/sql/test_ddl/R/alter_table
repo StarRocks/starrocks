@@ -25,6 +25,6 @@ PROPERTIES (
 "storage_format" = "DEFAULT",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"compression" = "ZSTD"
+"compression" = "LZ4"
 );
 -- !result
