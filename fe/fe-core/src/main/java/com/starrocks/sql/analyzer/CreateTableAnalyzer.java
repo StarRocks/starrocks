@@ -105,6 +105,7 @@ public class CreateTableAnalyzer {
         MetaUtils.normalizationTableName(context, tableNameObject);
 
         final String tableName = tableNameObject.getTbl();
+
         try {
             FeNameFormat.checkTableName(tableName);
         } catch (AnalysisException e) {

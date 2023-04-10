@@ -14,6 +14,7 @@
 
 package com.starrocks.warehouse;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
@@ -38,8 +39,6 @@ public class LocalWarehouse extends Warehouse {
 
     @Override
     public void getProcNodeData(BaseProcResult result) {
-        // for debug
-        LOG.info("enter getProcNodeData");
         result.addRow(Lists.newArrayList(this.getFullName(),
                 this.getState().toString(),
                 String.valueOf(1L)));
@@ -82,7 +81,7 @@ public class LocalWarehouse extends Warehouse {
 
     @Override
     public Map<Long, Cluster> getClusters() throws DdlException {
-        throw new SemanticException("not implemented");
+        return ImmutableMap.of(cluster.getId(), cluster);
     }
 
     @Override
