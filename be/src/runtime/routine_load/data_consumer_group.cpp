@@ -221,6 +221,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
         if (res) {
             VLOG(3) << "get kafka message"
                     << ", partition: " << msg->partition() << ", offset: " << msg->offset() << ", len: " << msg->len();
+            DeferOp msgDeleter([&] { delete msg; });
 
             if (msg->err() == RdKafka::ERR__PARTITION_EOF) {
                 // For transaction producer, producer will append one control msg to the group of msgs,
@@ -282,7 +283,6 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     }
                 }
             }
-            delete msg;
         } else {
             // queue is empty and shutdown
             eos = true;
