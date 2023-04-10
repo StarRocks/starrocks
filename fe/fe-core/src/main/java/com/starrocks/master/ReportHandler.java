@@ -808,8 +808,8 @@ public class ReportHandler extends Daemon {
                 // We need to clean these ghost tablets from current backend, or else it will
                 // continue to report them to FE forever and add some processing overhead(the tablet report
                 // process is protected with DB S lock).
-                addDropReplicaTask(batchTask, backendId, tabletId,
-                        -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId));
+                addDropReplicaTask(batchTask, backendId, tabletId, -1 /* Unknown schema hash */, 
+                            "not found in meta", invertedIndex.tabletForceDelete(tabletId, backendId));
                 invertedIndex.eraseTabletForceDelete(tabletId, backendId);
                 ++deleteFromBackendCounter;
                 --maxTaskSendPerBe;
