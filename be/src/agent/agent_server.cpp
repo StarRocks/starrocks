@@ -284,9 +284,6 @@ AgentServer::Impl::~Impl() {}
 // TODO(lingbin): each task in the batch may have it own status or FE must check and
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.
 void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks) {
-    // for debug
-    LOG(INFO) << "enter submit_tasks";
-
     Status ret_st;
     auto master_address = get_master_address();
     if (master_address.hostname.empty() || master_address.port == 0) {
