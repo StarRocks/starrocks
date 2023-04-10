@@ -22,6 +22,7 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -112,7 +113,8 @@ public class JDBCMetadata implements ConnectorMetadata {
             if (fullSchema.isEmpty()) {
                 return null;
             }
-            return schemaResolver.getTable(0, tblName, fullSchema, dbName, properties);
+            return schemaResolver.getTable(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+                    tblName, fullSchema, dbName, properties);
         } catch (SQLException | DdlException e) {
             LOG.warn(e.getMessage());
             return null;

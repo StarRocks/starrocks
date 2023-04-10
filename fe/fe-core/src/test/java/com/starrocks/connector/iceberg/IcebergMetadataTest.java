@@ -103,7 +103,7 @@ public class IcebergMetadataTest {
         };
 
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
-        Table expectResult = new Table(0, "tbl", ICEBERG, new ArrayList<>());
+        Table expectResult = new Table(100000000, "tbl", ICEBERG, new ArrayList<>());
         Assert.assertEquals(expectResult, metadata.getTable("db", "tbl"));
     }
 
