@@ -6,9 +6,22 @@ select to_binary('qw==', 'ENCODE64');
 select to_binary('qw==', 'encode64');
 select to_binary('ab', 'utf8');
 select to_binary('ab', 'UTF8');
+
 select from_binary(to_binary('ab', 'utf8'), 'utf8');
 select from_binary(to_binary('ab', 'hex'), 'hex');
 select from_binary(to_binary('ab', 'hex'), 'encode64');
+
+-- bad case
+select to_binary('', 'hex');
+select to_binary('', 'utf8');
+select to_binary('', 'encode64');
+select to_binary('1', 'hex');
+select to_binary('XY', 'hex');
+select to_binary('XYZ0', 'hex');
+select to_binary('1', 'encode64');
+select from_binary(to_binary('X', 'hex'), 'hex');
+select from_binary(to_binary('0X', 'hex'), 'hex');
+select from_binary(to_binary('1', 'encode64'), 'hex');
 
 create table t0(c0 INT, c1 varbinary(16), c2 varchar(16)) 
         DUPLICATE KEY(c0) 
