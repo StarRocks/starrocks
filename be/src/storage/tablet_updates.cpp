@@ -2476,7 +2476,9 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
         LOG(WARNING) << "link_from skipped: max_version:" << this->max_version()
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
+        std::unique_lock wrlock(_tablet.get_header_lock());
         _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
         return Status::OK();
     }
     vector<RowsetSharedPtr> rowsets;
@@ -2578,6 +2580,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
         _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
         return Status::OK();
     }
     st = kv_store->write_batch(&wb);
@@ -2625,7 +2628,9 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         LOG(WARNING) << "convert_from skipped: max_version:" << this->max_version()
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
+        std::unique_lock wrlock(_tablet.get_header_lock());
         _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
         return Status::OK();
     }
     std::vector<RowsetSharedPtr> src_rowsets;
@@ -2754,6 +2759,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
         _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
         return Status::OK();
     }
     status = kv_store->write_batch(&wb);
@@ -2847,7 +2853,9 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         LOG(WARNING) << "reorder_from skipped: max_version:" << this->max_version()
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
+        std::unique_lock wrlock(_tablet.get_header_lock());
         _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
         return Status::OK();
     }
     std::vector<RowsetSharedPtr> src_rowsets;
@@ -3032,6 +3040,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
         _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
         return Status::OK();
     }
     status = kv_store->write_batch(&wb);
