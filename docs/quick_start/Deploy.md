@@ -15,17 +15,22 @@ Following these steps, you can deploy a StarRocks instance with only one fronten
 Before deploying StarRocks, make sure the following requirements are satisfied.
 
 - **Hardware**
-  You can follow these steps on relatively elementary hardware, such as a machine with 4 CPU cores and 16 GB of RAM. The CPU MUST support AVX2 instruction sets.
+
+  You can follow these steps on relatively elementary hardware, such as a machine with 4 CPU cores and 16 GB of RAM. In production, we recommend you run StarRocks with CPUs that support the AVX2 instruction sets. Due to a lack of support for the AVX2 instruction sets, ARM architecture is less competitive than x86 architecture in some scenarios.
 
 > **NOTE**
 >
 > You can run `cat /proc/cpuinfo | grep avx2` in your terminal to check if the CPU supports the AVX2 instruction sets.
 
 - **Software**
-  Your machine MUST be running on OS with Linux kernel 3.10 or later. In addition, you must have JDK 1.8 or later and MySQL client 5.5 or later installed on your machine. Please note that JRE is not supported.
+
+  Your machine MUST be running on CentOS 7.0 or later. To run StarRocks on other operating systems, you must [Deploy StarRocks in Docker](../quick_start/deploy_in_docker.md).
+  
+  In addition, you must have JDK (1.8 or later) and MySQL client (5.5 or later) installed on your machine. Please note that JRE is not supported.
 
 - **Environment variable**
-  StarRocks relies on system environment variable `JAVA_HOME` to locate the Java dependency on the machine. Set this environment variable as the directory to which Java is installed, for example, `/opt/jdk1.8.0_301**`**.
+
+  StarRocks relies on system environment variable `JAVA_HOME` to locate the Java dependency on the machine. Set this environment variable as the directory to which Java is installed, for example, **/opt/jdk1.8.0_301**.
 
 > **NOTE**
 >
