@@ -52,8 +52,6 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
     restore_bytes = ADD_COUNTER(profile, "SpillRestoreBytes", TUnit::BYTES);
     serialize_timer = ADD_TIMER(profile, "SpillSerializeTimer");
     deserialize_timer = ADD_TIMER(profile, "SpillDeserializeTimer");
-    // log_block_num = ADD_COUNTER(profile, "SpillLogBlockNum");
-    // log_block_container_num = ADD_COUNTER(profile, "SpillLogBlockContainerNum");
 
 }
 

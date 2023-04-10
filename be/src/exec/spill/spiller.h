@@ -59,8 +59,6 @@ struct SpillProcessMetrics {
     RuntimeProfile::Counter* restore_bytes = nullptr;
     RuntimeProfile::Counter* serialize_timer = nullptr;
     RuntimeProfile::Counter* deserialize_timer = nullptr;
-    RuntimeProfile::Counter* log_block_num = nullptr;
-    RuntimeProfile::Counter* log_block_container_num = nullptr;
 };
 
 // major spill interfaces

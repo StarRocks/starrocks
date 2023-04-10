@@ -63,7 +63,6 @@ Status Spiller::partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, Sp
     if (_chunk_builder.chunk_schema()->empty()) {
         _chunk_builder.chunk_schema()->set_schema(chunk);
         RETURN_IF_ERROR(_serde->prepare());
-        // @TODO init serde
     }
 
     std::vector<uint32_t> indexs;

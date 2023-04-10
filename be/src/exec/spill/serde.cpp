@@ -34,7 +34,6 @@ public:
         if (_encode_context == nullptr) {
             auto column_number = _parent->chunk_builder().column_number();
             auto encode_level = _parent->options().encode_level;
-            LOG(INFO) << "init encode_context, column_number: " << column_number << ", encode_level:" << encode_level;
             _encode_context = serde::EncodeContext::get_encode_context_shared_ptr(column_number, encode_level);
         }
         return Status::OK();
@@ -182,7 +181,6 @@ StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockRead
 
     const uint8_t* read_cursor = reinterpret_cast<uint8_t*>(serialize_buffer.data());
     if (_encode_context == nullptr) {
-        // @TODO deserialize time
         SCOPED_TIMER(_parent->metrics().deserialize_timer);
         for (auto& column : columns) {
             read_cursor = serde::ColumnArraySerde::deserialize(read_cursor, column.get());
