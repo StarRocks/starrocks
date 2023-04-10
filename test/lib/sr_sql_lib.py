@@ -229,7 +229,11 @@ class StarrocksSQLApiLib(object):
                         col_index = 0
                         for col_data in res:
                             if isinstance(col_data, bytes):
-                                res[col_index] = col_data.decode()
+                                try:
+                                    res[col_index] = col_data.decode()
+                                except UnicodeDecodeError as e:
+                                    log.info("decode sql result by utf-8 error, try str")
+                                    res[col_index] = str(col_data)
                             col_index += 1
 
                         result = list(result)
