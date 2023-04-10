@@ -194,6 +194,8 @@ public class SystemHandler extends AlterHandler {
             if (Config.only_use_compute_node) {
                 String currentWh = ConnectContext.get().getCurrentWarehouse();
                 Warehouse currentWarehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(currentWh);
+                // for debug
+                LOG.info("currentWarehouse is {}", currentWarehouse.getFullName());
                 Cluster cluster = currentWarehouse.getAnyAvailableCluster();
                 cluster.addNodes(computeNodeIds);
             }
