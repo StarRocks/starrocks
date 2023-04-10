@@ -187,10 +187,17 @@ public class SystemHandler extends AlterHandler {
             GlobalStateMgr.getCurrentState().getLoadInstance().setLoadErrorHubInfo(clause.getProperties());
         } else if (alterClause instanceof AddComputeNodeClause) {
             AddComputeNodeClause addComputeNodeClause = (AddComputeNodeClause) alterClause;
-            String currentWh = ConnectContext.get().getCurrentWarehouse();
-            Warehouse currentWarehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(currentWh);
-            Cluster cluster = currentWarehouse.getAnyAvailableCluster();
-            GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addComputeNodeClause.getHostPortPairs());
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentSystemInfo().
+                    addComputeNodes(addComputeNodeClause.getHostPortPairs());
+
+            // add it to warehouse
+            if (Config.only_use_compute_node) {
+                String currentWh = ConnectContext.get().getCurrentWarehouse();
+                Warehouse currentWarehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(currentWh);
+                Cluster cluster = currentWarehouse.getAnyAvailableCluster();
+                cluster.addNodes(computeNodeIds);
+            }
+
         } else if (alterClause instanceof DropComputeNodeClause) {
             DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) alterClause;
             GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs());

@@ -119,8 +119,9 @@ public class SystemInfoService {
         pathHashToDishInfoRef = ImmutableMap.<Long, DiskInfo>of();
     }
 
-    public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
+    public List<Long> addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
             throws DdlException {
+        List<Long> computeNodeIds = new ArrayList<>();
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
             if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
@@ -132,8 +133,9 @@ public class SystemInfoService {
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
-            addComputeNode(pair.first, pair.second);
+            computeNodeIds.addAll(addComputeNode(pair.first, pair.second));
         }
+        return computeNodeIds;
     }
 
     private ComputeNode getComputeNodeWithHeartbeatPort(String host, Integer heartPort) {
@@ -156,11 +158,13 @@ public class SystemInfoService {
     }
 
     // Final entry of adding compute node
-    private void addComputeNode(String host, int heartbeatPort) throws DdlException {
+    private List<Long> addComputeNode(String host, int heartbeatPort) throws DdlException {
+        List<Long> computeNodeIds = new ArrayList<>();
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         // update idToComputor
         Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
         copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
+        computeNodeIds.add(newComputeNode.getId());
         idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
 
         setComputeNodeOwner(newComputeNode);
@@ -168,6 +172,8 @@ public class SystemInfoService {
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
         LOG.info("finished to add {} ", newComputeNode);
+
+        return computeNodeIds;
     }
 
     private void setComputeNodeOwner(ComputeNode computeNode) {

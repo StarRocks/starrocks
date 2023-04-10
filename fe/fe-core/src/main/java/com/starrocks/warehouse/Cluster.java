@@ -24,8 +24,8 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Cluster implements Writable {
@@ -34,7 +34,7 @@ public class Cluster implements Writable {
     @SerializedName(value = "wgid")
     private long workerGroupId;
     @SerializedName(value = "cnIds")
-    private Set<Long> cnIds = new HashSet<>();
+    private List<Long> cnIds = new ArrayList<>();
 
     // Note: we only record running sqls number and pending sqls in Warehouse and Cluster
     // We suppose that sql queue tool has nothing to do with  Cluster,
@@ -50,8 +50,8 @@ public class Cluster implements Writable {
         this.workerGroupId = workerGroupId;
     }
 
-    public void addNodes() {
-
+    public void addNodes(List<Long> computeNodeIds) {
+        cnIds.addAll(computeNodeIds);
     }
 
     public void clearComputeNodes() {
