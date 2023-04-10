@@ -234,41 +234,28 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
     // Load delete vectors and update RowsetStats.
     // TODO: save num_dels in rowset meta.
 
-    std::map<uint32_t, std::vector<std::pair<int32_t, DelVectorPtr>>> del_vector_by_rsid;
-    uint32_t max_rsid = 0;
-    uint32_t min_rsid = 1 << 31;
+    std::unordered_map<uint32_t, ssize_t> del_vector_cardinality_by_rssid;
     for (auto& [rsid, rowset] : _rowsets) {
         if (unapplied_rowsets.find(rsid) == unapplied_rowsets.end()) {
-            std::vector<std::pair<int32_t, DelVectorPtr>> del_vectors;
-            del_vectors.resize(rowset->num_segments(), {0, nullptr});
-            del_vector_by_rsid[rsid] = del_vectors;
-            if (max_rsid <= rsid) {
-                max_rsid = rsid + rowset->num_segments();
-            }
-            if (min_rsid >= rsid) {
-                min_rsid = rsid;
+            for (uint32_t i = 0; i < rowset->num_segments(); i++) {
+                del_vector_cardinality_by_rssid[rsid + i] = -1;
             }
         }
     }
 
     RETURN_IF_ERROR(TabletMetaManager::del_vector_iterate(
-            _tablet.data_dir()->get_meta(), _tablet.tablet_id(), min_rsid, max_rsid,
+            _tablet.data_dir()->get_meta(), _tablet.tablet_id(), 0, UINT32_MAX,
             [&](uint32_t segment_id, int64_t version, std::string_view value) -> bool {
-                auto iter = del_vector_by_rsid.lower_bound(segment_id);
-                if (iter == del_vector_by_rsid.end()) {
-                    std::string msg = strings::Substitute("found delete vector of non exist rowset");
-                    LOG(ERROR) << msg;
+                auto iter = del_vector_cardinality_by_rssid.find(segment_id);
+                if (iter == del_vector_cardinality_by_rssid.end()) {
                     return true;
                 }
-                uint32_t rsid = iter->first;
-                uint32_t idx = segment_id - rsid;
-                DCHECK(idx < iter->second.size());
-                if (version >= iter->second[idx].first) {
+                if (iter->second == -1) {
                     DelVectorPtr delvec = std::make_shared<DelVector>();
                     if (!delvec->load(version, value.data(), value.size()).ok()) {
                         return false;
                     }
-                    iter->second[idx] = std::make_pair(version, delvec);
+                    iter->second = delvec->cardinality();
                 }
                 return true;
             }));
@@ -279,19 +266,22 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
         stats->num_rows = rowset->num_rows();
         stats->byte_size = rowset->data_disk_size();
         stats->num_dels = 0;
-        auto iter = del_vector_by_rsid.find(rsid);
-        if (iter != del_vector_by_rsid.end()) {
-            DCHECK(iter->second.size() == rowset->num_segments());
-            for (int i = 0; i < rowset->num_segments(); i++) {
-                stats->num_dels += iter->second[i].second->cardinality();
+        for (int i = 0; i < rowset->num_segments(); i++) {
+            auto itr = del_vector_cardinality_by_rssid.find(rsid + i);
+            if (itr != del_vector_cardinality_by_rssid.end() && itr->second != -1) {
+                stats->num_dels += itr->second;
+            } else {
+                std::string msg = strings::Substitute("delvec not found for rowset $0 segment $1", rsid, i);
+                LOG(ERROR) << msg;
+                DCHECK(false);
             }
-            DCHECK_LE(stats->num_dels, stats->num_rows) << " tabletid:" << _tablet.tablet_id() << " rowset:" << rsid;
         }
+        DCHECK_LE(stats->num_dels, stats->num_rows) << " tabletid:" << _tablet.tablet_id() << " rowset:" << rsid;
         _calc_compaction_score(stats.get());
         std::lock_guard lg(_rowset_stats_lock);
         _rowset_stats.emplace(rsid, std::move(stats));
     }
-    del_vector_by_rsid.clear();
+    del_vector_cardinality_by_rssid.clear();
 
     l2.unlock(); // _rowsets_lock
     _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
@@ -915,8 +905,10 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             state.load_upserts(rowset.get(), i);
             auto& upserts = state.upserts();
             if (upserts[i] != nullptr) {
+                // used for auto increment delete-partial update conflict
+                std::unique_ptr<Column> delete_pks = nullptr;
                 // apply partial rowset segment
-                st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index);
+                st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index, delete_pks);
                 if (!st.ok()) {
                     manager->update_state_cache().remove(state_entry);
                     std::string msg =
@@ -928,6 +920,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
                 }
                 _do_update(rowset_id, i, conditional_column, upserts, index, tablet_id, &new_deletes);
                 manager->index_cache().update_object_size(index_entry, index.memory_usage());
+                if (delete_pks != nullptr) {
+                    index.erase(*delete_pks, &new_deletes);
+                }
             }
             state.release_upserts(i);
         }
@@ -959,8 +954,11 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
                 state.load_upserts(rowset.get(), loaded_upsert);
                 auto& upserts = state.upserts();
                 if (upserts[loaded_upsert] != nullptr) {
+                    // used for auto increment delete-partial update conflict
+                    std::unique_ptr<Column> delete_pks = nullptr;
                     // apply partial rowset segment
-                    st = state.apply(&_tablet, rowset.get(), rowset_id, loaded_upsert, latest_applied_version, index);
+                    st = state.apply(&_tablet, rowset.get(), rowset_id, loaded_upsert, latest_applied_version, index,
+                                     delete_pks);
                     if (!st.ok()) {
                         manager->update_state_cache().remove(state_entry);
                         std::string msg = strings::Substitute(
@@ -972,6 +970,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
                     }
                     _do_update(rowset_id, loaded_upsert, conditional_column, upserts, index, tablet_id, &new_deletes);
                     manager->index_cache().update_object_size(index_entry, index.memory_usage());
+                    if (delete_pks != nullptr) {
+                        index.erase(*delete_pks, &new_deletes);
+                    }
                 }
                 i++;
                 loaded_upsert++;

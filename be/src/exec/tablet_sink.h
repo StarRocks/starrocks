@@ -500,8 +500,6 @@ private:
 
     bool _miss_auto_increment_column = false;
 
-    bool _abort_delete = false;
-
     std::unique_ptr<ThreadPoolToken> _automatic_partition_token;
 
     std::vector<std::vector<std::string>> _partition_not_exist_row_values;

@@ -65,7 +65,7 @@ public class IcebergTable extends Table {
     private String remoteDbName;
     private String remoteTableName;
     private String resourceName;
-    private Optional<IcebergMetricsReporter> metricsReporter;
+    private Optional<IcebergMetricsReporter> metricsReporter = Optional.empty();
 
     private Map<String, String> icebergProperties = Maps.newHashMap();
 
@@ -135,7 +135,7 @@ public class IcebergTable extends Table {
     }
 
     public Optional<IcebergMetricsReporter.IcebergScanReportWithCounter> reportScanMetrics() {
-        return metricsReporter.isPresent() ? Optional.ofNullable(metricsReporter.get().lastReport()) : Optional.empty();
+        return metricsReporter.map(IcebergMetricsReporter::lastReport);
     }
 
     @Override
@@ -261,7 +261,7 @@ public class IcebergTable extends Table {
         private List<Column> fullSchema;
         private Map<String, String> icebergProperties;
         private org.apache.iceberg.Table nativeTable;
-        private Optional<IcebergMetricsReporter> metricsReporter;
+        private Optional<IcebergMetricsReporter> metricsReporter = Optional.empty();
 
         public Builder() {
         }
