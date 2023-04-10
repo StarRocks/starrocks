@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TLoadJobType;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.TransactionState;
@@ -426,11 +427,10 @@ public class BrokerLoadJob extends BulkLoadJob {
     }
 
     @Override
-    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId,
-                              long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
+    public void updateProgess(TReportExecStatusParams params) {
         writeLock();
         try {
-            super.updateProgess(beId, loadId, fragmentId, sinkRows, sinkBytes, sourceRows, sourceBytes, isDone);
+            super.updateProgess(params);
             if (!loadingStatus.getLoadStatistic().getLoadFinish()) {
                 progress = (int) ((double) loadingStatus.getLoadStatistic().totalSourceLoadBytes() /
                         loadingStatus.getLoadStatistic().totalFileSize() * 100);
