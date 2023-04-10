@@ -2365,7 +2365,9 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
         LOG(WARNING) << "link_from skipped: max_version:" << this->max_version()
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
+        std::unique_lock wrlock(_tablet.get_header_lock());
         _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
         return Status::OK();
     }
     vector<RowsetSharedPtr> rowsets;
@@ -2467,6 +2469,7 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
         _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
         return Status::OK();
     }
     st = kv_store->write_batch(&wb);
@@ -2514,7 +2517,9 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         LOG(WARNING) << "convert_from skipped: max_version:" << this->max_version()
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
+        std::unique_lock wrlock(_tablet.get_header_lock());
         _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
         return Status::OK();
     }
     std::vector<RowsetSharedPtr> src_rowsets;
@@ -2643,6 +2648,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
         _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
         return Status::OK();
     }
     status = kv_store->write_batch(&wb);
@@ -2735,7 +2741,9 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         LOG(WARNING) << "reorder_from skipped: max_version:" << this->max_version()
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
+        std::unique_lock wrlock(_tablet.get_header_lock());
         _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
         return Status::OK();
     }
     std::vector<RowsetSharedPtr> src_rowsets;
@@ -2915,6 +2923,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                      << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
                      << " base_tablet:" << base_tablet->tablet_id();
         _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
         return Status::OK();
     }
     status = kv_store->write_batch(&wb);
@@ -3602,6 +3611,30 @@ void TabletUpdates::to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& ro
         RowsetMetaPB& meta_pb = rowset_metas_pb.emplace_back();
         rowset_meta->to_rowset_pb(&meta_pb);
     }
+}
+
+std::vector<std::string> TabletUpdates::get_version_list() const {
+    std::lock_guard wl(_lock);
+    std::vector<std::string> version_list;
+    for (auto& edit_version_info : _edit_version_infos) {
+        version_list.emplace_back(edit_version_info->version.to_string());
+    }
+    return version_list;
+}
+
+std::shared_ptr<EditVersionInfo> TabletUpdates::get_edit_version(const string& version) const {
+    std::lock_guard wl(_lock);
+    for (auto& edit_version_info : _edit_version_infos) {
+        if (edit_version_info->version.to_string() == version) {
+            return std::make_shared<EditVersionInfo>(*edit_version_info);
+        }
+    }
+    return nullptr;
+}
+
+std::shared_ptr<std::unordered_map<uint32_t, RowsetSharedPtr>> TabletUpdates::get_rowset_map() const {
+    std::lock_guard lg(_rowsets_lock);
+    return std::make_shared<std::unordered_map<uint32_t, RowsetSharedPtr>>(_rowsets);
 }
 
 } // namespace starrocks

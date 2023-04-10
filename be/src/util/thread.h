@@ -33,7 +33,9 @@
 
 namespace starrocks {
 
+namespace vectorized {
 class BeThreadInfo;
+}
 
 class Thread : public RefCountedThreadSafe<Thread> {
 public:
@@ -146,7 +148,7 @@ public:
     static void set_thread_name(pthread_t t, const std::string& name);
     static void set_thread_name(std::thread& t, std::string name);
 
-    static void get_thread_infos(std::vector<BeThreadInfo>& infos);
+    static void get_thread_infos(std::vector<vectorized::BeThreadInfo>& infos);
 
 private:
     friend class ThreadJoiner;
