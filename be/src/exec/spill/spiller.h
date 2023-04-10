@@ -149,9 +149,7 @@ public:
 
     const std::shared_ptr<spill::Serde>& serde() { return _serde; }
     BlockManager* block_manager() { return _block_manager; }
-    const ChunkBuilder& chunk_builder() {
-        return _chunk_builder;
-    }
+    const ChunkBuilder& chunk_builder() { return _chunk_builder; }
 
 private:
     Status _get_spilled_task_status() {

@@ -52,7 +52,6 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
     restore_bytes = ADD_COUNTER(profile, "SpillRestoreBytes", TUnit::BYTES);
     serialize_timer = ADD_TIMER(profile, "SpillSerializeTimer");
     deserialize_timer = ADD_TIMER(profile, "SpillDeserializeTimer");
-
 }
 
 Status Spiller::prepare(RuntimeState* state) {

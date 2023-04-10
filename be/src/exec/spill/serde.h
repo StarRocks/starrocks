@@ -37,7 +37,7 @@ class Serde;
 using SerdePtr = std::shared_ptr<Serde>;
 class Serde {
 public:
-    Serde(Spiller* parent): _parent(parent) {}
+    Serde(Spiller* parent) : _parent(parent) {}
     virtual ~Serde() = default;
 
     virtual Status prepare() = 0;
@@ -47,6 +47,7 @@ public:
     virtual StatusOr<ChunkUniquePtr> deserialize(SerdeContext& ctx, BlockReader* reader) = 0;
 
     static StatusOr<SerdePtr> create_serde(Spiller* parent);
+
 protected:
     Spiller* _parent = nullptr;
 };
