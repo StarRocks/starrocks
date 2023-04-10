@@ -30,6 +30,7 @@ import com.starrocks.credential.CloudConfigurationFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
+import org.apache.iceberg.hive.IcebergDLFCatalog;
 import org.apache.iceberg.hive.IcebergGlueCatalog;
 import org.apache.iceberg.hive.IcebergHiveCatalog;
 import org.apache.iceberg.util.ThreadPools;
@@ -81,6 +82,9 @@ public class IcebergConnector implements Connector {
                 break;
             case GLUE_CATALOG:
                 catalogImpl = IcebergGlueCatalog.class.getName();
+                break;
+            case DLF_CATALOG:
+                catalogImpl = IcebergDLFCatalog.class.getName();
                 break;
             case REST_CATALOG:
                 catalogImpl = IcebergRESTCatalog.class.getName();
