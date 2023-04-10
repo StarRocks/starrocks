@@ -32,6 +32,13 @@ public class TransactionResult extends RestBaseResult {
         resultMap.put(key, value);
     }
 
+    public Object getResultEntry(String key) {
+        if (resultMap.containsKey(key)) {
+            return resultMap.get(key);
+        }
+        return null;
+    }
+
     public void setErrorMsg(String errMsg) {
         status = ActionStatus.FAILED;
         msg = errMsg;

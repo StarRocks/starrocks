@@ -60,6 +60,7 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
@@ -185,6 +186,42 @@ public class Coordinator {
     private final CoordinatorPreprocessor coordinatorPreprocessor;
 
     private boolean thriftServerHighLoad;
+
+    // only used for sync stream load profile
+    // so only init relative data structure
+    public Coordinator(StreamLoadPlanner planner, TNetworkAddress address) {
+        TExecPlanFragmentParams params = planner.getExecPlanFragmentParams();
+        queryId = params.getParams().getFragment_instance_id();
+        LOG.info("Execution Profile " + DebugUtil.printId(queryId));
+        queryProfile = new RuntimeProfile("Execution Profile " + DebugUtil.printId(queryId));
+
+        fragmentProfiles = new ArrayList<>();
+        fragmentProfiles.add(new RuntimeProfile("Fragment 0"));
+        queryProfile.addChild(fragmentProfiles.get(0));
+        profileDoneSignal = new MarkedCountDownLatch<>(1);
+        profileDoneSignal.addMark(queryId, -1L /* value is meaningless */);
+
+        BackendExecState backendExecState = new BackendExecState(queryId, address);
+        backendExecStates.put(0, backendExecState);
+
+        attachInstanceProfileToFragmentProfile();
+
+        deltaUrls = Lists.newArrayList();
+        loadCounters = Maps.newHashMap();
+        // for complie
+        descTable = null;
+
+        this.isBlockQuery = true;
+        this.jobId = -1;
+        this.connectContext = null;
+        this.scanNodes = null;
+        this.queryOptions = null;
+        this.queryGlobals = null;
+        this.needReport = true;
+        this.coordinatorPreprocessor = null;
+        this.fragments = null;
+    }
+
 
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
@@ -1843,6 +1880,14 @@ public class Coordinator {
         TNetworkAddress address;
         ComputeNode backend;
         long lastMissingHeartbeatTime = -1;
+
+
+        // fake backendExecState, only user for stream load profile
+        public BackendExecState(TUniqueId fragmentInstanceId, TNetworkAddress address) {
+            String name = "Instance " + DebugUtil.printId(fragmentInstanceId);
+            this.profile = new RuntimeProfile(name);
+            this.profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
+        }
 
         public BackendExecState(PlanFragmentId fragmentId, TNetworkAddress host, int profileFragmentId,
                                 TExecPlanFragmentParams rpcParams,
