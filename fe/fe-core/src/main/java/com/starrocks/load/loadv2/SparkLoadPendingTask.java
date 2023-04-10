@@ -90,6 +90,7 @@ import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -379,8 +380,8 @@ public class SparkLoadPendingTask extends LoadTask {
             partitionColumnRefs.add(column.getName());
         }
         List<EtlPartition> etlPartitions = Lists.newArrayList();
-        Map<Long, List<List<String>>> idToMultiValues = listPartitionInfo.getIdToMultiValues();
-        Map<Long, List<String>> idToValues = listPartitionInfo.getIdToValues();
+        Map<Long, List<List<LiteralExpr>>> idToMultiValues = listPartitionInfo.getMultiLiteralExprValues();
+        Map<Long, List<LiteralExpr>>  idToValues = listPartitionInfo.getLiteralExprValues();
         for (Long partitionId : partitionIds) {
             Partition partition = table.getPartition(partitionId);
             if (partition == null) {
@@ -389,22 +390,34 @@ public class SparkLoadPendingTask extends LoadTask {
             // bucket num
             int bucketNum = partition.getDistributionInfo().getBucketNum();
             // list partition values
-            List<List<String>> multiValueList = idToMultiValues.get(partitionId);
+            List<List<LiteralExpr>> multiValueList = idToMultiValues.get(partitionId);
             List<List<Object>> inKeys = Lists.newArrayList();
             if (multiValueList != null && !multiValueList.isEmpty()) {
-                for (List<String> list : multiValueList) {
-                    inKeys.add(Lists.newArrayList(list));
+                for (List<LiteralExpr> list : multiValueList) {
+                    inKeys.add(initInKeysItem(list));
                 }
             }
-            List<String> valueList = idToValues.get(partitionId);
+            List<LiteralExpr> valueList = idToValues.get(partitionId);
             if (valueList != null && !valueList.isEmpty()) {
-                for (String value : valueList) {
-                    inKeys.add(Lists.newArrayList(value));
-                }
+                inKeys.add(initInKeysItem(valueList));
             }
             etlPartitions.add(new EtlPartition(partitionId, inKeys, bucketNum));
         }
         return etlPartitions;
+    }
+
+    private List<Object> initInKeysItem(List<LiteralExpr> list) {
+        List<Object> curList = new ArrayList<>();
+        for (LiteralExpr literalExpr : list) {
+            Object keyValue;
+            if (literalExpr instanceof DateLiteral) {
+                keyValue = convertDateLiteralToNumber((DateLiteral) literalExpr);
+            } else {
+                keyValue = literalExpr.getRealObjectValue();
+            }
+            curList.add(keyValue);
+        }
+        return curList;
     }
 
     private List<EtlPartition> initEtlRangePartition(
