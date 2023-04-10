@@ -2,8 +2,8 @@
 select to_binary('ab'); 
 select to_binary('ab', 'HEX');
 select to_binary('ab', 'hex');
-select to_binary('ab', 'ENCODE64');
-select to_binary('ab', 'encode64');
+select to_binary('qw==', 'ENCODE64');
+select to_binary('qw==', 'encode64');
 select to_binary('ab', 'utf8');
 select to_binary('ab', 'UTF8');
 select from_binary(to_binary('ab', 'utf8'), 'utf8');
