@@ -24,7 +24,8 @@ import com.starrocks.sql.parser.NodePosition;
 // Show warehouse statement.
 public class ShowWarehousesStmt extends ShowStmt {
     private static final String WH_COL = "Warehouse";
-    private static final ShowResultSetMetaData META_DATA =
+    // for elastic warehouse
+    /* private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column(WH_COL, ScalarType.createVarchar(256)))
                     .addColumn(new Column("State", ScalarType.createVarchar(20)))
@@ -35,6 +36,15 @@ public class ShowWarehousesStmt extends ShowStmt {
                     .addColumn(new Column("TotalPending", ScalarType.createVarchar(20)))
                     .addColumn(new Column("TotalRunning", ScalarType.createVarchar(20)))
                     .build();
+    */
+
+    private static final ShowResultSetMetaData META_DATA =
+            ShowResultSetMetaData.builder()
+                    .addColumn(new Column(WH_COL, ScalarType.createVarchar(256)))
+                    .addColumn(new Column("State", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("ClusterCount", ScalarType.createVarchar(20)))
+                    .build();
+
     private final String pattern;
     private Expr where;
 

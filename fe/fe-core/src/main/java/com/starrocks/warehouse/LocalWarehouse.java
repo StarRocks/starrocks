@@ -19,11 +19,15 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
 
 // on-premise
 public class LocalWarehouse extends Warehouse {
+    private static final Logger LOG = LogManager.getLogger(LocalWarehouse.class);
+
     Cluster cluster;
 
     public LocalWarehouse(long id, String name) {
@@ -34,10 +38,11 @@ public class LocalWarehouse extends Warehouse {
 
     @Override
     public void getProcNodeData(BaseProcResult result) {
+        // for debug
+        LOG.info("enter getProcNodeData");
         result.addRow(Lists.newArrayList(this.getFullName(),
                 this.getState().toString(),
-                String.valueOf(this.getTotalPendingSqls()),
-                String.valueOf(this.getTotalRunningSqls())));
+                String.valueOf(1L)));
     }
 
     @Override

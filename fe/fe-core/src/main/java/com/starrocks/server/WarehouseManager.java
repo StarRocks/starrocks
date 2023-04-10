@@ -62,7 +62,8 @@ public class WarehouseManager implements Writable {
 
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
     private final WarehouseProcNode procNode = new WarehouseProcNode();
-    public static final ImmutableList<String> WAREHOUSE_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
+    // for elastic warehouse
+    /* public static final ImmutableList<String> WAREHOUSE_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("Warehouse")
             .add("State")
             .add("Size")
@@ -71,6 +72,12 @@ public class WarehouseManager implements Writable {
             .add("ClusterCount")
             .add("TotalPending")
             .add("TotalRunning")
+            .build();
+     */
+    public static final ImmutableList<String> WAREHOUSE_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
+            .add("Warehouse")
+            .add("State")
+            .add("ClusterCount")
             .build();
 
     public WarehouseManager() {
@@ -320,6 +327,8 @@ public class WarehouseManager implements Writable {
             try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
                 for (Map.Entry<String, Warehouse> entry : fullNameToWh.entrySet()) {
                     Warehouse warehouse = entry.getValue();
+                    // for debug
+                    LOG.info("warehouse name is {}", warehouse.getFullName());
                     if (warehouse == null) {
                         continue;
                     }
@@ -329,5 +338,4 @@ public class WarehouseManager implements Writable {
             return result;
         }
     }
-
 }
