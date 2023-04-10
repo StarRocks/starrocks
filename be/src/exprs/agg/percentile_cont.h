@@ -22,7 +22,9 @@
 #include "column/object_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/function_context.h"
 #include "gutil/casts.h"
+#include "runtime/mem_pool.h"
 #include "util/orlp/pdqsort.h"
 
 namespace starrocks {
@@ -43,7 +45,7 @@ struct PercentileState {
     double rate = 0.0;
 };
 
-template <LogicalType LT>
+template <LogicalType LT, typename = guard::Guard>
 class PercentileContDiscAggregateFunction
         : public AggregateFunctionBatchHelper<PercentileState<LT>, PercentileContDiscAggregateFunction<LT>> {
 public:
@@ -122,6 +124,123 @@ public:
             memcpy(bytes.data() + old_size, &rate, sizeof(double));
             *reinterpret_cast<size_t*>(bytes.data() + old_size + sizeof(double)) = 1UL;
             memcpy(bytes.data() + old_size + sizeof(double) + sizeof(size_t), &src_data[i], sizeof(InputCppType));
+            dst_column->get_offset().push_back(bytes.size());
+        }
+    }
+};
+
+template <LogicalType LT>
+class PercentileContDiscAggregateFunction<LT, StringLTGuard<LT>>
+        : public AggregateFunctionBatchHelper<PercentileState<LT>, PercentileContDiscAggregateFunction<LT>> {
+public:
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
+        const auto& column = down_cast<const BinaryColumn&>(*columns[0]);
+
+        // use mem_pool to hold the slice's data, otherwise after chunk is processed, the memory of slice used is gone
+        size_t element_size = column.get_data()[row_num].get_size();
+        uint8_t* pos = ctx->mem_pool()->allocate(element_size);
+        ctx->add_mem_usage(element_size);
+        memcpy(pos, column.get_data()[row_num].get_data(), element_size);
+
+        this->data(state).update(Slice(pos, element_size));
+
+        if (ctx->get_num_args() == 2) {
+            const auto* rate = down_cast<const ConstColumn*>(columns[1]);
+            this->data(state).rate = rate->get(row_num).get_double();
+            DCHECK(this->data(state).rate >= 0 && this->data(state).rate <= 1);
+        }
+    }
+
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        DCHECK(column->is_binary());
+
+        //  slice == rate, vector_size, [[element0_size, element0_data],[element1_size, element1_data], ...]
+        const Slice slice = column->get(row_num).get_slice();
+        double rate = *reinterpret_cast<double*>(slice.data);
+        size_t second_size = *reinterpret_cast<size_t*>(slice.data + sizeof(double));
+        auto src_ptr = slice.data + sizeof(double) + sizeof(size_t);
+        size_t elements_total_size =
+                slice.get_size() - sizeof(double) - sizeof(size_t) - (second_size * sizeof(size_t));
+
+        // used to save slice'data
+        uint8_t* dest_ptr = ctx->mem_pool()->allocate(elements_total_size);
+        ctx->add_mem_usage(elements_total_size);
+
+        // TODO(murphy) reduce the copy overhead of merge algorithm
+        auto& output = this->data(state).items;
+        size_t first_size = output.size();
+        output.reserve(first_size + second_size);
+        for (size_t i = 0; i < second_size; i++) {
+            size_t cur_element_size = *reinterpret_cast<size_t*>(src_ptr);
+            src_ptr += sizeof(size_t);
+
+            memcpy(dest_ptr, src_ptr, cur_element_size);
+            src_ptr += cur_element_size;
+
+            output.emplace_back(Slice(dest_ptr, cur_element_size));
+            dest_ptr += cur_element_size;
+        }
+
+        // sort in merge instead of serialize_to_column, got the same result but more easy to implement
+        pdqsort(output.begin() + first_size, output.end());
+        // TODO: optimize it with SIMD bitonic merge
+        std::inplace_merge(output.begin(), output.begin() + first_size, output.end());
+
+        this->data(state).rate = rate;
+    }
+
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        auto* column = down_cast<BinaryColumn*>(to);
+        Bytes& bytes = column->get_bytes();
+        size_t old_size = bytes.size();
+        size_t items_size = this->data(state).items.size();
+
+        // should serialize: rate, vector_size, [[element0_size, element0_data],[element1_size, element1_data]...]
+        size_t elements_total_size = 0;
+        for (size_t i = 0; i < items_size; i++) {
+            elements_total_size += (sizeof(size_t) + this->data(state).items[i].get_size());
+        }
+        size_t new_size = old_size + sizeof(double) + sizeof(size_t) + elements_total_size;
+        bytes.resize(new_size);
+
+        memcpy(bytes.data() + old_size, &(this->data(state).rate), sizeof(double));
+        memcpy(bytes.data() + old_size + sizeof(double), &items_size, sizeof(size_t));
+
+        uint8_t* cur = bytes.data() + old_size + sizeof(double) + sizeof(size_t);
+        for (size_t i = 0; i < items_size; i++) {
+            size_t cur_element_size = this->data(state).items[i].get_size();
+            memcpy(cur, &cur_element_size, sizeof(size_t));
+            cur += sizeof(size_t);
+
+            memcpy(cur, this->data(state).items[i].get_data(), cur_element_size);
+            cur += cur_element_size;
+        }
+
+        column->get_offset().emplace_back(new_size);
+    }
+
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
+        if (chunk_size <= 0) {
+            return;
+        }
+        auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
+        Bytes& bytes = dst_column->get_bytes();
+        double rate = ColumnHelper::get_const_value<TYPE_DOUBLE>(src[1]);
+
+        BinaryColumn src_column = *down_cast<const BinaryColumn*>(src[0].get());
+        Slice* src_data = src_column.get_data().data();
+        for (auto i = 0; i < chunk_size; ++i) {
+            size_t old_size = bytes.size();
+            // [rate, 1, element ith size, element ith data]
+            bytes.resize(old_size + sizeof(double) + sizeof(size_t) + sizeof(size_t) + src_data[i].get_size());
+            memcpy(bytes.data() + old_size, &rate, sizeof(double));
+            *reinterpret_cast<size_t*>(bytes.data() + old_size + sizeof(double)) = 1UL;
+            *reinterpret_cast<size_t*>(bytes.data() + old_size + sizeof(double) + sizeof(size_t)) =
+                    src_data[i].get_size();
+            memcpy(bytes.data() + old_size + sizeof(double) + sizeof(size_t) + sizeof(size_t), src_data[i].get_data(),
+                   src_data[i].get_size());
             dst_column->get_offset().push_back(bytes.size());
         }
     }
