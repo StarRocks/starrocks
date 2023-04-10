@@ -45,9 +45,11 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -61,8 +63,9 @@ public class ConfigBase {
         String comment() default "";
 
         /**
-         * alias for a configuration defined in Config, use for compatibility reason.
-         * when changing a configuration name, you can put the old name in alias annotation.<p>
+         * alias for a configuration defined in Config, used for compatibility reason.
+         * when changing a configuration name, you can put the old name in alias annotation.
+         * <p>
          * usage: @ConfField(alias = {"old_name1", "old_name2"})
          *
          * @return an array of alias names
@@ -138,7 +141,7 @@ public class ConfigBase {
                         map.put(f.getName(), Arrays.toString((String[]) f.get(null)));
                         break;
                     default:
-                        throw new Exception("unknown type: " + f.getType().getSimpleName());
+                        throw new InvalidConfException("unknown type: " + f.getType().getSimpleName());
                 }
             } else {
                 map.put(f.getName(), f.get(null).toString());
@@ -147,7 +150,7 @@ public class ConfigBase {
         return map;
     }
 
-    private void replacedByEnv() throws Exception {
+    private void replacedByEnv() throws InvalidConfException {
         Pattern pattern = Pattern.compile("\\$\\{([^\\}]*)\\}");
         for (String key : props.stringPropertyNames()) {
             String value = props.getProperty(key);
@@ -158,7 +161,7 @@ public class ConfigBase {
                 if (envValue != null) {
                     value = value.replace("${" + m.group(1) + "}", envValue);
                 } else {
-                    throw new Exception("no such env variable: " + m.group(1));
+                    throw new InvalidConfException("no such env variable: " + m.group(1));
                 }
             }
             props.setProperty(key, value);
@@ -198,13 +201,32 @@ public class ConfigBase {
         }
     }
 
-    public static void setConfigField(Field f, String confVal) throws IllegalAccessException, Exception {
+    private static void validateConfValue(Field f, String[] arrayArgs, String confVal)
+            throws InvalidConfException {
+        switch (f.getName()) {
+            case "authentication_chain":
+                Set<String> argsSet = new HashSet<>(Arrays.asList(arrayArgs));
+                if (!f.getType().getSimpleName().equals("String[]")
+                        || argsSet.size() != arrayArgs.length
+                        || !argsSet.contains("native")) {
+                    throw new InvalidConfException("'authentication_chain' configuration invalid, current value: "
+                            + confVal);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    public static void setConfigField(Field f, String confVal) throws Exception {
         confVal = confVal.trim();
 
         String[] sa = confVal.split(",");
         for (int i = 0; i < sa.length; i++) {
             sa[i] = sa[i].trim();
         }
+
+        validateConfValue(f, sa, confVal);
 
         // set config field
         switch (f.getType().getSimpleName()) {
@@ -265,20 +287,20 @@ public class ConfigBase {
                 f.set(null, sa);
                 break;
             default:
-                throw new Exception("unknown type: " + f.getType().getSimpleName());
+                throw new InvalidConfException("unknown type: " + f.getType().getSimpleName());
         }
     }
 
-    public static synchronized void setMutableConfig(String key, String value) throws DdlException {
+    public static synchronized void setMutableConfig(String key, String value) throws InvalidConfException {
         Field field = allMutableConfigs.get(key);
         if (field == null) {
-            throw new DdlException("Config '" + key + "' does not exist or is not mutable");
+            throw new InvalidConfException("Config '" + key + "' does not exist or is not mutable");
         }
 
         try {
             ConfigBase.setConfigField(field, value);
         } catch (Exception e) {
-            throw new DdlException("Failed to set config '" + key + "'. err: " + e.getMessage());
+            throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
         }
 
         LOG.info("set config {} to {}", key, value);
@@ -298,7 +320,7 @@ public class ConfigBase {
         return false;
     }
 
-    public static synchronized List<List<String>> getConfigInfo(PatternMatcher matcher) throws DdlException {
+    public static synchronized List<List<String>> getConfigInfo(PatternMatcher matcher) throws InvalidConfException {
         List<List<String>> configs = Lists.newArrayList();
         Field[] fields = configFields;
         for (Field f : fields) {
@@ -336,13 +358,13 @@ public class ConfigBase {
                             confVal = Arrays.toString((String[]) f.get(null));
                             break;
                         default:
-                            throw new DdlException("Unknown type: " + f.getType().getSimpleName());
+                            throw new InvalidConfException("Unknown type: " + f.getType().getSimpleName());
                     }
                 } else {
                     confVal = String.valueOf(f.get(null));
                 }
             } catch (IllegalArgumentException | IllegalAccessException e) {
-                throw new DdlException("Failed to get config '" + confKey + "'. err: " + e.getMessage());
+                throw new InvalidConfException("Failed to get config '" + confKey + "'. err: " + e.getMessage());
             }
 
             config.add(confKey);

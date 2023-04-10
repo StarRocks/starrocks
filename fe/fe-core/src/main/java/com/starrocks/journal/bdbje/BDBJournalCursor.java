@@ -308,8 +308,8 @@ public class BDBJournalCursor implements JournalCursor {
                     // and try to replay it. We will first get LockTimeoutException (because the transaction
                     // is hanging and waiting to be aborted after timeout). and after this log abort,
                     // we will get NOTFOUND.
-                    // So we simply throw a exception and let the replayer get the max id again.
-                    LOG.warn("canot find journal {} in db {}, maybe because master switched, will try again.",
+                    // So we simply throw an exception and let the replayer get the max id again.
+                    LOG.warn("cannot find journal {} in db {}, maybe because master switched, will try again.",
                             key, database);
                     return null;
                 } else {

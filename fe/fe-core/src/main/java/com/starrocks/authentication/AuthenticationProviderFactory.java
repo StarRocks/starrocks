@@ -23,7 +23,7 @@ import java.util.Map;
 
 public class AuthenticationProviderFactory {
     private static final Logger LOG = LogManager.getLogger(AuthenticationProviderFactory.class);
-    private static Map<String, AuthenticationProvider> pluginNameToAuthenticationProvider = new HashMap<>();
+    private static final Map<String, AuthenticationProvider> pluginNameToAuthenticationProvider = new HashMap<>();
 
     private AuthenticationProviderFactory() {}
 
@@ -42,7 +42,7 @@ public class AuthenticationProviderFactory {
     }
 
     public static AuthenticationProvider create(String plugin) throws AuthenticationException {
-        if (! pluginNameToAuthenticationProvider.containsKey(plugin)) {
+        if (!pluginNameToAuthenticationProvider.containsKey(plugin)) {
             throw new AuthenticationException("Cannot find " + plugin + " from "
                 + pluginNameToAuthenticationProvider.keySet());
         }

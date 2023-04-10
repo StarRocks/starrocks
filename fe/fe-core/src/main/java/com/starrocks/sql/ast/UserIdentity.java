@@ -62,6 +62,8 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
     private String host;
     @SerializedName("isDomain")
     private boolean isDomain;
+    @SerializedName("eph")
+    private boolean ephemeral;
 
     private final NodePosition pos;
 
@@ -82,15 +84,20 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         this(user, host, false);
     }
 
-    public UserIdentity(String user, String host, boolean isDomain) {
-        this(user, host, isDomain, NodePosition.ZERO);
+    public UserIdentity(boolean ephemeral, String user, String host) {
+        this(user, host, false, NodePosition.ZERO, ephemeral);
     }
 
-    public UserIdentity(String user, String host, boolean isDomain, NodePosition pos) {
+    public UserIdentity(String user, String host, boolean isDomain) {
+        this(user, host, isDomain, NodePosition.ZERO, false);
+    }
+
+    public UserIdentity(String user, String host, boolean isDomain, NodePosition pos, boolean ephemeral) {
         this.pos = pos;
         this.user = user;
         this.host = Strings.emptyToNull(host);
         this.isDomain = isDomain;
+        this.ephemeral = ephemeral;
     }
 
     public static UserIdentity createAnalyzedUserIdentWithIp(String user, String host) {
@@ -105,6 +112,10 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         return new UserIdentity(tUserIdent.getUsername(), tUserIdent.getHost(), tUserIdent.is_domain);
     }
 
+    public static UserIdentity createEphemeralUserIdent(String user, String host) {
+        return new UserIdentity(true, user, host);
+    }
+
     public String getQualifiedUser() {
         return user;
     }
@@ -115,6 +126,10 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
 
     public boolean isDomain() {
         return isDomain;
+    }
+
+    public boolean isEphemeral() {
+        return ephemeral;
     }
 
     public void analyze() {
