@@ -59,18 +59,8 @@ void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_e
 // null_data[i - column_start_idx] == DATUM_NULL, null slots are skipped.
 // filter_data[i - column_start_idx] == DATUM_NULL, slot marked as 1 is filtered out
 typedef Status (*ConvertFunc)(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
-                              size_t column_start_idx, uint8_t* null_data, uint8_t* filter_data,
-                              ArrowConvertContext* ctx);
-
-// ListConvertFunc resembles to ConvertFunc, except that:
-// 1. depth_limit is used to prevent a ListArray has too many nested layers.
-// 2. type_desc is used to guide ArrayColumn to unfold its layers and we can utilize directly copying
-// or simd optimization to speed up construction of each layer.
-typedef Status (*ListConvertFunc)(const arrow::Array* array, size_t array_start_idx, size_t num_elements,
-                                  Column* column, size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
-                                  Filter* column_filter, ArrowConvertContext* ctx, const TypeDescriptor* type_desc);
-
-typedef Status (*ListCheckDepthFunc)(const arrow::Array* array, size_t expected_depth);
+                              size_t column_start_idx, uint8_t* null_data, Filter* chunk_filter,
+                              ArrowConvertContext* ctx, const TypeDescriptor* type_desc);
 
 // invoked when a arrow type fail to convert to StarRocks type.
 Status illegal_converting_error(const std::string& arrow_type_name, const std::string& type_name);
@@ -78,11 +68,6 @@ Status illegal_converting_error(const std::string& arrow_type_name, const std::s
 // A triple [at, lt, is_nullable] can determine a optimized converter from converting at -> lt,
 // is_nullable means original data has null slots.
 ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType lt, bool is_nullable, bool is_strict);
-
-// get list converter, it is used to convert a ListArray in arrow to ArrayColumn in StarRocks.
-ListConvertFunc get_arrow_list_converter();
-
-ListCheckDepthFunc get_arrow_list_check_depth();
 
 // if there is no converter for a triple [at, lt, is_nullable], then call get_strict_type to obtain
 // strict lt0, and converting is decomposed into two phases:
