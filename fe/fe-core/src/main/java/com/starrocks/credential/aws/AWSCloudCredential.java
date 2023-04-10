@@ -174,6 +174,7 @@ public class AWSCloudCredential implements CloudCredential {
         }
         if (!region.isEmpty()) {
             configuration.set("fs.s3a.endpoint.region", region);
+            configuration.set("fs.s3a.assumed.role.sts.endpoint.region", region);
         }
         if (!endpoint.isEmpty()) {
             configuration.set("fs.s3a.endpoint", endpoint);
