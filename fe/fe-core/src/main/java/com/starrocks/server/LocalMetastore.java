@@ -4276,8 +4276,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // if it is lake table, need to delete shard and drop tablet
         if (olapTable.isLakeTable() && !isReplay) {
-            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(oldTabletIds);
-            editLog.logAddUnusedShard(oldTabletIds);
+            stateMgr.getShardManager().getShardDeleter().addUnusedShardId(oldTabletIds.keySet());
+            editLog.logAddUnusedShard(oldTabletIds.keySet());
         }
     }
 
