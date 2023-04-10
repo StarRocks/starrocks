@@ -230,7 +230,8 @@ public class LoadingTaskPlanner {
         // 2. Olap table sink
         List<Long> partitionIds = getAllPartitionIds();
         OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
-                table.writeQuorum(), table.enableReplicatedStorage(), checkNullExprInAutoIncrement());
+                table.writeQuorum(), table.enableReplicatedStorage(),
+                checkNullExprInAutoIncrement(), table.supportedAutomaticPartition());
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         Load.checkMergeCondition(mergeConditionStr, table, false);
         olapTableSink.complete(mergeConditionStr);
@@ -304,7 +305,8 @@ public class LoadingTaskPlanner {
         // 4. Olap table sink
         List<Long> partitionIds = getAllPartitionIds();
         OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
-                table.writeQuorum(), table.enableReplicatedStorage(), checkNullExprInAutoIncrement());
+                table.writeQuorum(), table.enableReplicatedStorage(),
+                checkNullExprInAutoIncrement(), table.supportedAutomaticPartition());
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         Load.checkMergeCondition(mergeConditionStr, table, false);
         olapTableSink.complete(mergeConditionStr);

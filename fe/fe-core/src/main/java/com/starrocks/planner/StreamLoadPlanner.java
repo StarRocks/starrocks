@@ -175,7 +175,8 @@ public class StreamLoadPlanner {
 
         List<Long> partitionIds = getAllPartitionIds();
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
-                destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement());
+                destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement(),
+                destTable.supportedAutomaticPartition());
         if (missAutoIncrementColumn.size() == 1 && missAutoIncrementColumn.get(0) == Boolean.TRUE) {
             olapTableSink.setMissAutoIncrementColumn();
         }
