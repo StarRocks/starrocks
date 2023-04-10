@@ -274,7 +274,7 @@ LOAD LABEL test_db.label6
     COLUMNS TERMINATED BY ","
     (id, city)
 )
-WITH BROKER "mybroker"
+WITH BROKER
 (
     "fs.obs.access.key" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
     "fs.obs.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
