@@ -180,7 +180,7 @@ If you choose AWS S3 as storage for your Hudi cluster, take one of the following
 - To choose IAM user as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "aws.s3.use_instance_profile" = 'false',
+  "aws.s3.use_instance_profile" = "false",
   "aws.s3.access_key" = "<iam_user_access_key>",
   "aws.s3.secret_key" = "<iam_user_secret_key>",
   "aws.s3.region" = "<aws_s3_region>"
