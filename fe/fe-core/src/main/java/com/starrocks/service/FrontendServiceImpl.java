@@ -1623,6 +1623,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             result = createPartitionProcess(request);
         } catch (Throwable t) {
+            LOG.warn(t);
             result = new TCreatePartitionResult();
             TStatus errorStatus = new TStatus(RUNTIME_ERROR);
             errorStatus.setError_msgs(Lists.newArrayList(String.format("txn_id=%d failed. %s",
