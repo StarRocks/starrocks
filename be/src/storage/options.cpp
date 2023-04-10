@@ -75,8 +75,14 @@ Status parse_root_path(const string& root_path, StorePath* path) {
         return Status::InvalidArgument("Invalid store path");
     }
 
+    Status status = FileSystem::Default()->create_dir_if_missing(tmp_vec[0]);
+    if (!status.ok()) {
+        LOG(WARNING) << "path can not be created. path=" << tmp_vec[0];
+        return status;
+    }
+
     string canonicalized_path;
-    Status status = FileSystem::Default()->canonicalize(tmp_vec[0], &canonicalized_path);
+    status = FileSystem::Default()->canonicalize(tmp_vec[0], &canonicalized_path);
     if (!status.ok()) {
         LOG(WARNING) << "path can not be canonicalized. may be not exist. path=" << tmp_vec[0];
         return status;
