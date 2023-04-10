@@ -31,6 +31,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
@@ -197,7 +198,8 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             executor.execute();
 
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-                LOG.warn("Statistics collect fail | Error Message [{}]", context.getState().getErrorMessage());
+                LOG.warn("Statistics collect fail | {} | Error Message [{}]", DebugUtil.printId(context.getQueryId()),
+                        context.getState().getErrorMessage());
                 if (StringUtils.contains(context.getState().getErrorMessage(), "Too many versions")) {
                     Thread.sleep(Config.statistic_collect_too_many_version_sleep);
                     count++;

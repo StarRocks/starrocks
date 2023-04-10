@@ -24,6 +24,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -279,7 +280,8 @@ public class StatisticExecutor {
         context.setQueryId(UUIDUtil.genUUID());
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
-            throw new SemanticException(sqlResult.second.getErrorMsg());
+            throw new SemanticException("Statistics query fail | Error Message [{}] | {} | SQL [{}]",
+                    context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
         } else {
             return sqlResult.first;
         }
