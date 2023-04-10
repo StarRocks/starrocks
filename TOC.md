@@ -286,6 +286,7 @@
         + [BITMAP](/sql-reference/sql-statements/data-types/BITMAP.md)
         + [JSON](/sql-reference/sql-statements/data-types/JSON.md)
         + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
+        + [BINARY](/sql-reference/sql-statements/data-types/BINARY.md)
     + [关键字](/sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](/sql-reference/auto_increment.md)
   + 函数参考
