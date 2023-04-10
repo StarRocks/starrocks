@@ -882,8 +882,10 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
             state.load_upserts(rowset.get(), i);
             auto& upserts = state.upserts();
             if (upserts[i] != nullptr) {
+                // used for auto increment delete-partial update conflict
+                std::unique_ptr<Column> delete_pks = nullptr;
                 // apply partial rowset segment
-                st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index);
+                st = state.apply(&_tablet, rowset.get(), rowset_id, i, latest_applied_version, index, delete_pks);
                 if (!st.ok()) {
                     manager->update_state_cache().remove(state_entry);
                     std::string msg =
@@ -895,6 +897,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
                 }
                 _do_update(rowset_id, i, conditional_column, upserts, index, tablet_id, &new_deletes);
                 manager->index_cache().update_object_size(index_entry, index.memory_usage());
+                if (delete_pks != nullptr) {
+                    index.erase(*delete_pks, &new_deletes);
+                }
             }
             state.release_upserts(i);
         }
@@ -926,8 +931,11 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
                 state.load_upserts(rowset.get(), loaded_upsert);
                 auto& upserts = state.upserts();
                 if (upserts[loaded_upsert] != nullptr) {
+                    // used for auto increment delete-partial update conflict
+                    std::unique_ptr<Column> delete_pks = nullptr;
                     // apply partial rowset segment
-                    st = state.apply(&_tablet, rowset.get(), rowset_id, loaded_upsert, latest_applied_version, index);
+                    st = state.apply(&_tablet, rowset.get(), rowset_id, loaded_upsert, latest_applied_version, index,
+                                     delete_pks);
                     if (!st.ok()) {
                         manager->update_state_cache().remove(state_entry);
                         std::string msg = strings::Substitute(
@@ -939,6 +947,9 @@ void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
                     }
                     _do_update(rowset_id, loaded_upsert, conditional_column, upserts, index, tablet_id, &new_deletes);
                     manager->index_cache().update_object_size(index_entry, index.memory_usage());
+                    if (delete_pks != nullptr) {
+                        index.erase(*delete_pks, &new_deletes);
+                    }
                 }
                 i++;
                 loaded_upsert++;
