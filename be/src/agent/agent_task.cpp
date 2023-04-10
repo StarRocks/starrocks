@@ -173,9 +173,6 @@ void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& age
 }
 
 void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
-    // for debug
-    LOG(INFO) << "enter run_create_tablet_task";
-
     const auto& create_tablet_req = agent_task_req->task_req;
     TFinishTaskRequest finish_task_request;
     TStatusCode::type status_code = TStatusCode::OK;

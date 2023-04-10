@@ -417,8 +417,6 @@ public class StarOSAgent {
                         if (Config.only_use_compute_node) {
                             backendId = GlobalStateMgr.getCurrentSystemInfo().
                                     getComputeNodeWithStarletPort(pair[0], Integer.parseInt(pair[1]));
-                            // for debug
-                            LOG.info("backendId got from starMgr is {}", backendId);
                         } else {
                             backendId = GlobalStateMgr.getCurrentSystemInfo()
                                     .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
