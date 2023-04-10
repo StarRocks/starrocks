@@ -82,10 +82,9 @@ public:
 
 private:
     struct PickupMorselState {
-        bool adjusted_io_tasks = false;
-        int64_t last_check_full_time = 0;
-        int64_t last_check_empty_time = 0;
         int max_io_tasks = 0;
+        int update_log_size = 0;
+        bool adjusted_io_tasks = false;
     };
     mutable PickupMorselState _pickup_morsel_state;
     bool _enable_adaptive_io_tasks = true;

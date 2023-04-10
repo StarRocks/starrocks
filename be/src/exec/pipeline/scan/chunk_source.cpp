@@ -96,7 +96,6 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             break;
         }
     }
-    _scan_op->update_chunk_source_total_running_time(time_spent_ns);
     return _status;
 }
 

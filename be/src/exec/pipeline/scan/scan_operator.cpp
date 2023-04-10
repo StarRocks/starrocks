@@ -221,16 +221,14 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     _peak_buffer_size_counter->set(buffer_size());
 
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
-
     ChunkPtr res = get_chunk_from_buffer();
-    if (res == nullptr) {
-        return nullptr;
+    if (res != nullptr) {
+        // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
+        auto [tablet_id, is_eos] = _should_emit_eos(res);
+        eval_runtime_bloom_filters(res.get());
+        res->owner_info().set_owner_id(tablet_id, is_eos);
     }
 
-    // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
-    auto [tablet_id, is_eos] = _should_emit_eos(res);
-    eval_runtime_bloom_filters(res.get());
-    res->owner_info().set_owner_id(tablet_id, is_eos);
     return res;
 }
 
