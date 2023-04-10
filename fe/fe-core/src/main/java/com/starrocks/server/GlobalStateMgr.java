@@ -372,9 +372,6 @@ public class GlobalStateMgr {
     // false if default_cluster is not created.
     private boolean isDefaultClusterCreated = false;
 
-    // false if default_warehouse is not created
-    private boolean isDefaultWarehouseCreated = false;
-
     private FrontendNodeType feType;
     // replica and observer use this value to decide provide read service or not
     private long synchronizedTimeMs;
@@ -1140,7 +1137,7 @@ public class GlobalStateMgr {
                 initDefaultCluster();
             }
 
-            if (!isDefaultWarehouseCreated) {
+            if (!warehouseMgr.warehouseExists(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
                 initDefaultWarehouse();
             }
 
@@ -3360,10 +3357,6 @@ public class GlobalStateMgr {
 
     public void setIsDefaultClusterCreated(boolean isDefaultClusterCreated) {
         this.isDefaultClusterCreated = isDefaultClusterCreated;
-    }
-
-    public void setIsDefaultWarehouseCreated(boolean isDefaultWarehouseCreated) {
-        this.isDefaultWarehouseCreated = isDefaultWarehouseCreated;
     }
 
     public Cluster getCluster() {

@@ -85,7 +85,6 @@ public class WarehouseManager implements Writable {
 
     public void initDefaultWarehouse() {
         createWarehouse(DEFAULT_WAREHOUSE_NAME, null);
-        GlobalStateMgr.getCurrentState().setIsDefaultWarehouseCreated(true);
     }
 
     public Warehouse getWarehouse(String warehouseName) {
