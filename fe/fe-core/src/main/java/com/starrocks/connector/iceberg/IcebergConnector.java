@@ -16,6 +16,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
@@ -23,10 +24,14 @@ import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
+import org.apache.iceberg.CatalogUtil;
+import org.apache.iceberg.hive.IcebergGlueCatalog;
+import org.apache.iceberg.hive.IcebergHiveCatalog;
 import org.apache.iceberg.util.ThreadPools;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -61,8 +66,9 @@ public class IcebergConnector implements Connector {
         IcebergCatalogType nativeCatalogType = getNativeCatalogType();
         Configuration conf = hdfsEnvironment.getConfiguration();
         String icebergNativeCatalogName = "native-" + nativeCatalogType.name() + "-" + catalogName;
-        CatalogLoader catalogLoader;
 
+        String catalogImpl;
+        Map<String, String> copiedProperties = Maps.newHashMap(properties);
         switch (nativeCatalogType) {
             case HIVE_CATALOG:
                 String metastoreURI = properties.get(HIVE_METASTORE_URIS);
@@ -70,22 +76,23 @@ public class IcebergConnector implements Connector {
                     metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
                 }
                 Util.validateMetastoreUris(metastoreURI);
-                properties.put(CatalogProperties.URI, metastoreURI);
-                catalogLoader = CatalogLoader.hive(icebergNativeCatalogName, conf, properties);
+                copiedProperties.put(CatalogProperties.URI, metastoreURI);
+                catalogImpl = IcebergHiveCatalog.class.getName();
                 break;
             case GLUE_CATALOG:
-                catalogLoader = CatalogLoader.glue(icebergNativeCatalogName, conf, properties);
+                catalogImpl = IcebergGlueCatalog.class.getName();
                 break;
             case REST_CATALOG:
-                catalogLoader = CatalogLoader.rest(icebergNativeCatalogName, conf, properties);
+                catalogImpl = IcebergRESTCatalog.class.getName();
                 break;
             case CUSTOM_CATALOG:
-                String nativeCatalogImpl = properties.get(ICEBERG_IMPL);
-                catalogLoader = CatalogLoader.custom(icebergNativeCatalogName, conf, properties, nativeCatalogImpl);
+                catalogImpl = properties.get(ICEBERG_IMPL);
                 break;
             default:
                 throw new StarRocksConnectorException("Property %s is missing or not supported now.", ICEBERG_CATALOG_TYPE);
         }
+        copiedProperties.put(CatalogProperties.CATALOG_IMPL, catalogImpl);
+        copiedProperties.remove(CatalogUtil.ICEBERG_CATALOG_TYPE);
 
         if (Config.enable_iceberg_custom_worker_thread) {
             LOG.info("Default iceberg worker thread number changed " + Config.iceberg_worker_num_threads);
@@ -93,7 +100,7 @@ public class IcebergConnector implements Connector {
             props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP, String.valueOf(Config.iceberg_worker_num_threads));
         }
 
-        return  (IcebergCatalog) catalogLoader.loadCatalog();
+        return (IcebergCatalog) CatalogUtil.buildIcebergCatalog(icebergNativeCatalogName, copiedProperties, conf);
     }
 
     private IcebergCatalogType getNativeCatalogType() {

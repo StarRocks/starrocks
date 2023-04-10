@@ -15,7 +15,6 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.connector.HdfsEnvironment;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -40,9 +39,8 @@ public class IcebergGlueCatalogTest {
     @Test
     public void testCatalogType() {
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergGlueCatalog icebergGlueCatalog =
-                (IcebergGlueCatalog) CatalogLoader.glue("glue_native_catalog", new Configuration(), icebergProperties)
-                        .loadCatalog();
+        IcebergGlueCatalog icebergGlueCatalog = (IcebergGlueCatalog) CatalogUtil.loadCatalog(
+                IcebergGlueCatalog.class.getName(), "glue_native_catalog", icebergProperties, new Configuration());
         Assert.assertEquals(IcebergCatalogType.GLUE_CATALOG, icebergGlueCatalog.getIcebergCatalogType());
     }
 
@@ -67,9 +65,8 @@ public class IcebergGlueCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergGlueCatalog icebergGlueCatalog =
-                (IcebergGlueCatalog) CatalogLoader.glue("glue_native_catalog", new Configuration(), icebergProperties)
-                        .loadCatalog();
+        IcebergGlueCatalog icebergGlueCatalog = (IcebergGlueCatalog) CatalogUtil.loadCatalog(
+                IcebergGlueCatalog.class.getName(), "glue_native_catalog", icebergProperties, new Configuration());
         Table table = icebergGlueCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
     }
@@ -95,10 +92,8 @@ public class IcebergGlueCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
-        IcebergGlueCatalog icebergGlueCatalog =
-                (IcebergGlueCatalog) CatalogLoader.glue("glue_native_catalog", new Configuration(), icebergProperties)
-                        .loadCatalog();
+        IcebergGlueCatalog icebergGlueCatalog = (IcebergGlueCatalog) CatalogUtil.loadCatalog(
+                IcebergGlueCatalog.class.getName(), "glue_native_catalog", icebergProperties, new Configuration());
         List<String> dbs = icebergGlueCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }
