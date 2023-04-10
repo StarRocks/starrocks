@@ -317,8 +317,10 @@ PARTITION BY RANGE(`dt`) (
     PARTITION p20210929 VALUES [('2021-09-29'), ('2021-09-30')),
     PARTITION p20210930 VALUES [('2021-09-30'), ('2021-10-01'))
 ) DISTRIBUTED BY HASH(order_id) BUCKETS 4
-PROPERTIES("replication_num" = "3",
-"enable_persistent_index" = "true");
+PROPERTIES (
+    "replication_num" = "1",
+    "enable_persistent_index" = "true"
+);
 ```
 
 > 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](Data_distribution.md/#分桶)。
@@ -340,8 +342,10 @@ create table users (
     property3 tinyint NOT NULL
 ) PRIMARY KEY (user_id)
 DISTRIBUTED BY HASH(user_id) BUCKETS 4
-PROPERTIES("replication_num" = "3",
-"enable_persistent_index" = "true");
+PROPERTIES (
+    "replication_num" = "1",
+    "enable_persistent_index" = "true"
+);
 ```
 
 > 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](Data_distribution.md/#分桶)。
