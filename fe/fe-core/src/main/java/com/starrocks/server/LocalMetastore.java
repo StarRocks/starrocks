@@ -76,6 +76,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -1029,6 +1030,12 @@ public class LocalMetastore implements ConnectorMetadata {
                     throw new DdlException("Cannot assign hash distribution buckets less than 0");
                 }
             }
+            if (distributionInfo.getType() == DistributionInfo.DistributionInfoType.RANDOM) {
+                RandomDistributionInfo randomDistributionInfo = (RandomDistributionInfo) distributionInfo;
+                if (randomDistributionInfo.getBucketNum() < 0) {
+                    throw new DdlException("Cannot assign random distribution buckets less than 0");
+                }
+            }
         } else {
             if (defaultDistributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH
                     && Config.enable_auto_tablet_distribution
@@ -1624,6 +1631,11 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         DistributionInfo distributionInfo = table.getDefaultDistributionInfo();
 
+        if (distributionInfo.getBucketNum() == 0) {
+            int numBucket = calAvgBucketNumOfRecentPartitions(table, 5);
+            distributionInfo.setBucketNum(numBucket);
+        }
+
         // create shard group
         long shardGroupId = 0;
         if (table.isCloudNativeTableOrMaterializedView()) {
@@ -2099,7 +2111,8 @@ public class LocalMetastore implements ConnectorMetadata {
         Preconditions.checkArgument(replicationNum > 0);
 
         DistributionInfo.DistributionInfoType distributionInfoType = distributionInfo.getType();
-        if (distributionInfoType != DistributionInfo.DistributionInfoType.HASH) {
+        if (distributionInfoType != DistributionInfo.DistributionInfoType.HASH
+                && distributionInfoType != DistributionInfo.DistributionInfoType.RANDOM) {
             throw new DdlException("Unknown distribution type: " + distributionInfoType);
         }
 
@@ -4479,6 +4492,7 @@ public class LocalMetastore implements ConnectorMetadata {
         OlapTable olapTable = (OlapTable) table;
         Map<Long, String> origPartitions = Maps.newHashMap();
         OlapTable copiedTbl = getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions);
+        copiedTbl.setDefaultDistributionInfo(olapTable.getDefaultDistributionInfo());
 
         // 2. use the copied table to create partitions
         List<Partition> newPartitions = null;

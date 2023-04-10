@@ -765,16 +765,18 @@ public class PlanFragmentBuilder {
             scanNode.updateAppliedDictStringColumns(node.getGlobalDicts().stream().
                     map(entry -> entry.first).collect(Collectors.toSet()));
 
-            List<ColumnRefOperator> bucketColumns = getShuffleColumns(node.getDistributionSpec());
-            boolean useAllBucketColumns =
-                    bucketColumns.stream().allMatch(c -> node.getColRefToColumnMetaMap().containsKey(c));
-            if (useAllBucketColumns) {
-                List<Expr> bucketExprs = bucketColumns.stream()
-                        .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                        .collect(Collectors.toList());
-                scanNode.setBucketExprs(bucketExprs);
-                scanNode.setBucketColumns(bucketColumns);
+            if (node.getDistributionSpec() instanceof HashDistributionSpec) {
+                List<ColumnRefOperator> bucketColumns = getShuffleColumns((HashDistributionSpec) node.getDistributionSpec());
+                boolean useAllBucketColumns =
+                        bucketColumns.stream().allMatch(c -> node.getColRefToColumnMetaMap().containsKey(c));
+                if (useAllBucketColumns) {
+                    List<Expr> bucketExprs = bucketColumns.stream()
+                            .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                            .collect(Collectors.toList());
+                    scanNode.setBucketExprs(bucketExprs);
+                    scanNode.setBucketColumns(bucketColumns);
+                }
             }
 
             context.getScanNodes().add(scanNode);
