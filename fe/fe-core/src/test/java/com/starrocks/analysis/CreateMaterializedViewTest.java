@@ -2439,6 +2439,30 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testJdbcTable() throws Exception {
+        starRocksAssert.withResource("create external resource jdbc0\n" +
+                "properties (\n" +
+                "    \"type\"=\"jdbc\",\n" +
+                "    \"user\"=\"postgres\",\n" +
+                "    \"password\"=\"changeme\",\n" +
+                "    \"jdbc_uri\"=\"jdbc:postgresql://127.0.0.1:5432/jdbc_test\",\n" +
+                "    \"driver_url\"=\"https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar\",\n" +
+                "    \"driver_class\"=\"org.postgresql.Driver\"\n" +
+                "); ");
+        starRocksAssert.withTable("create external table jdbc_tbl (\n" +
+                "     `id` bigint NULL,\n" +
+                "     `data` varchar(200) NULL\n" +
+                " ) ENGINE=jdbc\n" +
+                " properties (\n" +
+                "     \"resource\"=\"jdbc0\",\n" +
+                "     \"table\"=\"dest_tbl\"\n" +
+                " );");
+        starRocksAssert.withMaterializedView("create materialized view mv_jdbc " +
+                "distributed by hash(id) refresh deferred manual " +
+                "as select * from jdbc_tbl;");
+    }
+
+    @Test
     public void testCreateRealtimeMV() throws Exception {
         String sql = "create materialized view rtmv \n" +
                 "refresh incremental " +
