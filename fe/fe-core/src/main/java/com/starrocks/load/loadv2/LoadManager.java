@@ -62,6 +62,7 @@ import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TLoadJobType;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -685,11 +686,10 @@ public class LoadManager implements Writable {
         }
     }
 
-    public void updateJobPrgress(Long jobId, Long beId, TUniqueId loadId, TUniqueId fragmentId,
-                                 long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
+    public void updateJobPrgress(Long jobId, TReportExecStatusParams params) {
         LoadJob job = idToLoadJob.get(jobId);
         if (job != null) {
-            job.updateProgess(beId, loadId, fragmentId, sinkRows, sinkBytes, sourceRows, sourceBytes, isDone);
+            job.updateProgess(params);
         }
     }
 
