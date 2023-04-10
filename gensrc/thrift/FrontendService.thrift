@@ -460,6 +460,10 @@ struct TLoadInfo {
     17: optional string db
     18: optional i64 txn_id
     19: optional string tracking_sql
+    20: optional i64 num_scan_rows
+    21: optional i64 num_filtered_rows
+    22: optional i64 num_unselected_rows
+    23: optional i64 num_sink_rows
 }
 
 // getTableNames returns a list of unqualified table names
@@ -541,6 +545,10 @@ struct TReportExecStatusParams {
   20: optional InternalService.TLoadJobType load_type
 
   21: optional list<Types.TTabletFailInfo> failInfos
+
+  22: optional i64 filtered_rows
+
+  23: optional i64 unselected_rows
 }
 
 struct TFeResult {

@@ -124,12 +124,8 @@ Status FileDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
         size_t before_rows = (*chunk)->num_rows();
 
-        const TQueryOptions& query_options = state->query_options();
-        if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::BROKER) {
-            size_t before_size = (*chunk)->bytes_usage();
-            state->update_num_rows_load_from_source(before_rows);
-            state->update_num_bytes_load_from_source(before_size);
-        }
+        state->update_num_rows_load_from_source(before_rows);
+        state->update_num_bytes_load_from_source((*chunk)->bytes_usage());
 
         _counter.filtered_rows_read += before_rows;
         // eval conjuncts

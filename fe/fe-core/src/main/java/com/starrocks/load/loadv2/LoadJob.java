@@ -80,6 +80,7 @@ import com.starrocks.task.PriorityLeaderTask;
 import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TEtlState;
 import com.starrocks.thrift.TLoadInfo;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.BeginTransactionException;
@@ -246,10 +247,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         loadStartTimestamp = System.currentTimeMillis();
     }
 
-    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId,
-                              long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
-        loadingStatus.getLoadStatistic().updateLoadProgress(beId, loadId, fragmentId, sinkRows,
-                sinkBytes, sourceRows, sourceBytes, isDone);
+    public void updateProgess(TReportExecStatusParams params) {
+        loadingStatus.getLoadStatistic().updateLoadProgress(params);
     }
 
     public void setLoadFileInfo(int fileNum, long fileSize) {
@@ -753,8 +752,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             // priority
             jobInfo.add(LoadPriority.priorityToName(priority));
 
+            jobInfo.add(loadingStatus.getLoadStatistic().totalSourceLoadRows());
+            jobInfo.add(loadingStatus.getLoadStatistic().totalFilteredRows());
+            jobInfo.add(loadingStatus.getLoadStatistic().totalUnselectedRows());
+            jobInfo.add(loadingStatus.getLoadStatistic().totalSinkLoadRows());
+
             // etl info
-            if (loadingStatus.getCounters().size() == 0) {
+            if (jobType != EtlJobType.SPARK || loadingStatus.getCounters().size() == 0) {
                 jobInfo.add(FeConstants.NULL_STRING);
             } else {
                 jobInfo.add(Joiner.on("; ").withKeyValueSeparator("=").join(loadingStatus.getCounters()));
@@ -836,7 +840,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             info.setPriority(LoadPriority.priorityToName(priority));
 
             // etl info
-            if (loadingStatus.getCounters().size() == 0) {
+            if (jobType != EtlJobType.SPARK || loadingStatus.getCounters().size() == 0) {
                 info.setEtl_info("");
             } else {
                 info.setEtl_info(Joiner.on("; ").withKeyValueSeparator("=").join(loadingStatus.getCounters()));
@@ -875,6 +879,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
             }
             info.setJob_details(loadingStatus.getLoadStatistic().toShowInfoStr());
+            info.setNum_filtered_rows(loadingStatus.getLoadStatistic().totalFilteredRows());
+            info.setNum_unselected_rows(loadingStatus.getLoadStatistic().totalUnselectedRows());
+            info.setNum_scan_rows(loadingStatus.getLoadStatistic().totalSourceLoadRows());
+            info.setNum_sink_rows(loadingStatus.getLoadStatistic().totalSinkLoadRows());
             return info;
         } finally {
             readUnlock();
