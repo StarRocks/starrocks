@@ -1465,16 +1465,14 @@ public class Coordinator {
                 if (params.isSetSink_load_bytes() && params.isSetSource_load_rows()
                         && params.isSetSource_load_bytes()) {
                     GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
-                            jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
-                            params.sink_load_bytes, params.source_load_rows, params.source_load_bytes, params.done);
+                            jobId, params);
                 }
             }
         } else {
             if (params.isSetSink_load_bytes() && params.isSetSource_load_rows()
                     && params.isSetSource_load_bytes()) {
                 GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
-                        jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
-                        params.sink_load_bytes, params.source_load_rows, params.source_load_bytes, params.done);
+                        jobId, params);
             }
         }
     }
