@@ -90,9 +90,10 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=8/8")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     partitions=1/5\n" +
+                        "     PREDICATES: 10: c3 > 1999\n" +
+                        "     partitions=2/5\n" +
                         "     rollup: test_base_part\n" +
-                        "     tabletRatio=2/2");
+                        "     tabletRatio=4/4");
 
         // test query delta
         testRewriteOK("select c1, c3, c2 from test_base_part where c3 < 1000")
@@ -278,11 +279,14 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         " where t1.c3 < 3000")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 3: c3 < 3000\n" +
                         "     partitions=5/5\n" +
                         "     rollup: test_base_part\n" +
                         "     tabletRatio=10/10")
-                .contains("TABLE: test_base_part2\n" +
+                .contains("OlapScanNode\n" +
+                        "     TABLE: test_base_part2\n" +
                         "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 7: c3 < 3000\n" +
                         "     partitions=5/5\n" +
                         "     rollup: test_base_part2\n" +
                         "     tabletRatio=10/10");
@@ -375,11 +379,13 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         " where t1.c3 < 3000")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 3: c3 < 3000\n" +
                         "     partitions=5/5\n" +
                         "     rollup: test_base_part\n" +
                         "     tabletRatio=10/10")
                 .contains("TABLE: test_base_part2\n" +
                         "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 7: c3 < 3000\n" +
                         "     partitions=5/5\n" +
                         "     rollup: test_base_part2\n" +
                         "     tabletRatio=10/10");
@@ -445,6 +451,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         testRewriteOK("select c1, c3, c2 from test_base_part where c3 < 1000")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
+                        "     PREDICATES: 3: c3 < 1000\n" +
                         "     partitions=3/5\n" +
                         "     rollup: test_base_part\n" +
                         "     tabletRatio=6/6");
