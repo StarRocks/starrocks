@@ -1415,15 +1415,19 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
                 }
             }
 
-            _number_filtered_rows += (num_rows - _validate_select_idx.size());
+            int64_t num_rows_load_filtered = num_rows - _validate_select_idx.size();
+            if (num_rows_load_filtered > 0) {
+                _number_filtered_rows += num_rows_load_filtered;
+                state->update_num_rows_load_filtered(num_rows_load_filtered);
+            }
             _number_output_rows += _validate_select_idx.size();
         }
     }
     // update incrementally so that FE can get the progress.
     // the real 'num_rows_load_total' will be set when sink being closed.
     _number_input_rows += num_rows;
-    state->update_num_rows_load_from_sink(num_rows);
-    state->update_num_bytes_load_from_sink(serialize_size);
+    state->update_num_rows_load_sink(num_rows);
+    state->update_num_bytes_load_sink(serialize_size);
     StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
     StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
 
@@ -1809,10 +1813,6 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
         COUNTER_SET(_validate_data_timer, _validate_data_ns);
         COUNTER_SET(_serialize_chunk_timer, serialize_batch_ns);
         COUNTER_SET(_send_rpc_timer, actual_consume_ns);
-
-        // _number_input_rows don't contain num_rows_load_filtered and num_rows_load_unselected in scan node
-        state->update_num_rows_load_from_sink(state->num_rows_load_filtered() + state->num_rows_load_unselected());
-        state->update_num_rows_load_filtered(_number_filtered_rows);
 
         int64_t total_server_rpc_time_us = 0;
         // print log of add batch time of all node, for tracing load performance easily
