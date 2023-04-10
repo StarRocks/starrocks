@@ -34,7 +34,7 @@ import org.junit.Test;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -87,7 +87,7 @@ public class IcebergExprVisitorTest {
 
         // equal datetime
         value = ConstantOperator.createDatetime(LocalDateTime.of(2022, 11, 11, 11, 11, 11));
-        long epochSec = value.getDatetime().toEpochSecond(OffsetDateTime.now().getOffset());
+        long epochSec = value.getDatetime().toEpochSecond(ZoneOffset.UTC);
         convertedExpr = converter.convert(Lists.newArrayList(
                 new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, K4, value)), context);
         expectedExpr = Expressions.equal("k4", TimeUnit.MICROSECONDS.convert(epochSec, TimeUnit.SECONDS));
