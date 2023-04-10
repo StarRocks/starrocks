@@ -76,10 +76,10 @@ public:
     Status submit_task(const TRoutineLoadTask& task);
 
     Status get_kafka_partition_meta(const PKafkaMetaProxyRequest& request, std::vector<int32_t>* partition_ids,
-                                    int timeout);
+                                    int timeout, std::string* group_id);
 
     Status get_kafka_partition_offset(const PKafkaOffsetProxyRequest& request, std::vector<int64_t>* beginning_offsets,
-                                      std::vector<int64_t>* latest_offsets, int timeout);
+                                      std::vector<int64_t>* latest_offsets, int timeout, std::string* group_id);
 
     Status get_pulsar_partition_meta(const PPulsarMetaProxyRequest& request, std::vector<std::string>* partitions);
 
