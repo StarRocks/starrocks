@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
 import org.apache.logging.log4j.LogManager;
@@ -183,6 +184,12 @@ public class OptOlapPartitionPruner {
         }
 
         scanPredicates.removeAll(prunedPartitionPredicates);
+
+        if (column.isAllowNull() && containsNullValue(column, minRange)
+                && !checkFilterNullValue(scanPredicates, logicalOlapScanOperator.getPredicate().clone())) {
+            return null;
+        }
+
         return Pair.create(Utils.compoundAnd(scanPredicates), prunedPartitionPredicates);
     }
 
@@ -290,5 +297,48 @@ public class OptOlapPartitionPruner {
         return probeResult;
     }
 
+    private static boolean containsNullValue(Column column, PartitionKey minRange) {
+        PartitionKey nullValue = new PartitionKey();
+        try {
+            nullValue.pushColumn(LiteralExpr.createInfinity(column.getType(), false), column.getPrimitiveType());
+            return minRange.compareTo(nullValue) <= 0;
+        } catch (AnalysisException e) {
+            return false;
+        }
+    }
+
+
+    private static boolean checkFilterNullValue(List<ScalarOperator> scanPredicates, ScalarOperator predicate) {
+        ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+        ScalarOperator newPredicate = Utils.compoundAnd(scanPredicates);
+        boolean newPredicateFilterNulls = false;
+        boolean predicateFilterNulls = false;
+
+        BaseScalarOperatorShuttle shuttle = new BaseScalarOperatorShuttle() {
+            @Override
+            public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+                return ConstantOperator.createNull(variable.getType());
+            }
+        };
+
+        if (newPredicate != null) {
+            newPredicate = newPredicate.accept(shuttle, null);
+
+            ScalarOperator value = scalarRewriter.rewrite(newPredicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            if ((value.isConstantRef() && ((ConstantOperator) value).isNull()) ||
+                    value.equals(ConstantOperator.createBoolean(false))) {
+                newPredicateFilterNulls = true;
+            }
+        }
+
+        predicate = predicate.accept(shuttle, null);
+        ScalarOperator value = scalarRewriter.rewrite(predicate, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+        if ((value.isConstantRef() && ((ConstantOperator) value).isNull())
+                || value.equals(ConstantOperator.createBoolean(false))) {
+            predicateFilterNulls = true;
+        }
+
+        return newPredicateFilterNulls == predicateFilterNulls;
+    }
 
 }
