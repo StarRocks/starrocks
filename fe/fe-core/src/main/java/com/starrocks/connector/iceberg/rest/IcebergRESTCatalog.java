@@ -32,7 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
+import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class IcebergRESTCatalog extends RESTCatalog implements IcebergCatalog {
 
