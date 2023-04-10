@@ -71,7 +71,7 @@ public:
     Status remove(ColumnFamilyIndex column_family_index, const std::string& key);
 
     Status iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,
-                   std::function<bool(std::string_view, std::string_view)> const& func);
+                   std::function<bool(std::string_view, std::string_view)> const& func, int64_t timeout_sec = -1);
 
     Status iterate_range(ColumnFamilyIndex column_family_index, const std::string& lower_bound,
                          const std::string& upper_bound,
