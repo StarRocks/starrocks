@@ -95,7 +95,9 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
             // Plain remote password, scramble it first.
             byte[] scrambledRemotePass =
                     MysqlPassword.makeScrambledPassword(new String(remotePassword, StandardCharsets.UTF_8));
-            MysqlPassword.checkScrambledPlainPass(authenticationInfo.getPassword(), scrambledRemotePass);
+            if (!MysqlPassword.checkScrambledPlainPass(authenticationInfo.getPassword(), scrambledRemotePass)) {
+                throw new AuthenticationException("password mismatch!");
+            }
         }
     }
 

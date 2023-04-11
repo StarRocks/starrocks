@@ -32,6 +32,7 @@ public class ShowBrokerStmt extends ShowStmt {
     public ShowBrokerStmt(NodePosition pos) {
         super(pos);
     }
+
     @Override
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();

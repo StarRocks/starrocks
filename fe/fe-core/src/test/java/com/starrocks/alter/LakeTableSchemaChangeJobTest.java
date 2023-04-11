@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.alter;
 
 import com.staros.proto.FileCacheInfo;
@@ -20,7 +19,6 @@ import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -53,11 +51,13 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.commons.lang3.concurrent.ConcurrentUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -68,6 +68,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
@@ -91,8 +92,8 @@ public class LakeTableSchemaChangeJobTest {
         new MockUp<StarOSAgent>() {
             @Mock
             public List<Long> createShards(int shardCount, FilePathInfo path, FileCacheInfo cache, long groupId,
-                    List<Long> matchShardIds)
-                throws DdlException {
+                                           List<Long> matchShardIds)
+                    throws DdlException {
                 for (int i = 0; i < shardCount; i++) {
                     shadowTabletIds.add(GlobalStateMgr.getCurrentState().getNextId());
                 }
@@ -150,7 +151,7 @@ public class LakeTableSchemaChangeJobTest {
         builder.setFullPath("s3://test-bucket/object-1");
         FilePathInfo pathInfo = builder.build();
 
-        table.setStorageInfo(pathInfo, false, 0, false);
+        table.setStorageInfo(pathInfo, new StorageCacheInfo(false, 0, false));
         StorageCacheInfo storageCacheInfo = new StorageCacheInfo(false, 0, false);
         partitionInfo.setStorageCacheInfo(partitionId, storageCacheInfo);
 
@@ -732,6 +733,11 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public void writeEditLog(LakeTableSchemaChangeJob job) {
                 // nothing to do.
+            }
+
+            @Mock
+            public Future<Boolean> writeEditLogAsync(LakeTableSchemaChangeJob job) {
+                return ConcurrentUtils.constantFuture(true);
             }
 
             @Mock

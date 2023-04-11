@@ -25,6 +25,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -47,7 +48,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public interface ConnectorMetadata {
@@ -140,9 +143,19 @@ public interface ConnectorMetadata {
     }
 
     default void createDb(String dbName) throws DdlException, AlreadyExistsException {
+        createDb(dbName, new HashMap<>());
+    }
+
+    default void createDb(String dbName, Map<String, String> properties) throws DdlException, AlreadyExistsException {
+        throw new StarRocksConnectorException("This connector doesn't support creating databases");
     }
 
     default void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
+        throw new StarRocksConnectorException("This connector doesn't support dropping databases");
+    }
+
+    default boolean dbExists(String dbName) {
+        return listDbNames().contains(dbName.toLowerCase(Locale.ROOT));
     }
 
     default List<Long> getDbIds() {
@@ -200,14 +213,16 @@ public interface ConnectorMetadata {
             throws DdlException, MetaNotFoundException, AnalysisException {
     }
 
-    default void refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
-                                         int priority, boolean mergeRedundant, boolean isManual)
+    default String refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
+                                           int priority, boolean mergeRedundant, boolean isManual)
             throws DdlException, MetaNotFoundException {
+        return null;
     }
 
-    default void refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
-                                         int priority)
+    default String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
+                                           int priority)
             throws DdlException, MetaNotFoundException {
+        return null;
     }
 
     default void cancelRefreshMaterializedView(String dbName, String mvName)

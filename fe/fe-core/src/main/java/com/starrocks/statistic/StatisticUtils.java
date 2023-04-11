@@ -17,7 +17,6 @@ package com.starrocks.statistic;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -37,6 +36,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -122,7 +122,7 @@ public class StatisticUtils {
             if (table == null) {
                 return false;
             }
-            if (table.isCloudNativeTable()) {
+            if (table.isCloudNativeTableOrMaterializedView()) {
                 continue;
             }
 
@@ -158,10 +158,10 @@ public class StatisticUtils {
         ScalarType tableNameType = ScalarType.createVarcharType(65530);
         ScalarType partitionNameType = ScalarType.createVarcharType(65530);
         ScalarType dbNameType = ScalarType.createVarcharType(65530);
-        ScalarType maxType = ScalarType.createVarcharType(65530);
-        ScalarType minType = ScalarType.createVarcharType(65530);
-        ScalarType bucketsType = ScalarType.createVarcharType(65530);
-        ScalarType mostCommonValueType = ScalarType.createVarcharType(65530);
+        ScalarType maxType = ScalarType.createMaxVarcharType();
+        ScalarType minType = ScalarType.createMaxVarcharType();
+        ScalarType bucketsType = ScalarType.createMaxVarcharType();
+        ScalarType mostCommonValueType = ScalarType.createMaxVarcharType();
 
         // varchar type column need call setAssignedStrLenInColDefinition here,
         // otherwise it will be set length to 1 at analyze

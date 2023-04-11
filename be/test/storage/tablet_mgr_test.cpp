@@ -72,36 +72,33 @@ public:
         config::tablet_map_shard_size = 1;
         config::txn_map_shard_size = 1;
         config::txn_shard_size = 1;
-        string test_engine_data_path = "./be/test/storage/test_data/tablet_mgr_test/data";
-        _engine_data_path = "./be/test/storage/test_data/tablet_mgr_test/tmp";
-        std::filesystem::remove_all(_engine_data_path);
-        fs::create_directories(_engine_data_path);
-        fs::create_directories(_engine_data_path + "/meta");
 
-        std::vector<StorePath> paths;
-        paths.emplace_back("_engine_data_path");
-        EngineOptions options;
-        options.store_paths = paths;
-        options.backend_uid = UniqueId::gen_uid();
+        _engine_data_paths.resize(2);
+        for (int i = 0; i < 2; i++) {
+            _engine_data_paths[i] = fmt::format("./be/test/storage/test_data/tablet_mgr_test/tmp_{}", i);
+            std::filesystem::remove_all(_engine_data_paths[i]);
+            fs::create_directories(_engine_data_paths[i]);
+            fs::create_directories(_engine_data_paths[i] + "/meta");
 
-        _data_dir = new DataDir(_engine_data_path);
-        _data_dir->init();
-        string tmp_data_path = _engine_data_path + "/data";
-        if (std::filesystem::exists(tmp_data_path)) {
-            std::filesystem::remove_all(tmp_data_path);
+            std::vector<StorePath> paths;
+            paths.emplace_back("_engine_data_path");
+
+            auto data_dir = new DataDir(_engine_data_paths[i]);
+            data_dir->init();
+            _data_dirs.push_back(data_dir);
         }
-        copy_dir(test_engine_data_path, tmp_data_path);
+
         _tablet_id = 15007;
         _schema_hash = 368169781;
-        _tablet_data_path = tmp_data_path + "/" + std::to_string(0) + "/" + std::to_string(_tablet_id) + "/" +
-                            std::to_string(_schema_hash);
         _tablet_mgr = std::make_unique<TabletManager>(1);
     }
 
     void TearDown() override {
-        delete _data_dir;
-        if (std::filesystem::exists(_engine_data_path)) {
-            ASSERT_TRUE(std::filesystem::remove_all(_engine_data_path));
+        for (int i = 0; i < 2; i++) {
+            delete _data_dirs[i];
+            if (std::filesystem::exists(_engine_data_paths[i])) {
+                ASSERT_TRUE(std::filesystem::remove_all(_engine_data_paths[i]));
+            }
         }
     }
 
@@ -129,8 +126,8 @@ public:
     }
 
 protected:
-    DataDir* _data_dir;
-    std::string _engine_data_path;
+    std::vector<DataDir*> _data_dirs;
+    std::vector<std::string> _engine_data_paths;
     int64_t _tablet_id;
     int32_t _schema_hash;
     string _tablet_data_path;
@@ -140,7 +137,7 @@ protected:
 TEST_F(TabletMgrTest, CreateTablet) {
     TCreateTabletReq create_tablet_req = get_create_tablet_request(111, 3333);
     std::vector<DataDir*> data_dirs;
-    data_dirs.push_back(_data_dir);
+    data_dirs.push_back(_data_dirs[0]);
     Status create_st = _tablet_mgr->create_tablet(create_tablet_req, data_dirs);
     ASSERT_TRUE(create_st.ok());
     TabletSharedPtr tablet = _tablet_mgr->get_tablet(111);
@@ -150,7 +147,7 @@ TEST_F(TabletMgrTest, CreateTablet) {
     ASSERT_TRUE(dir_exist);
     // check meta has this tablet
     TabletMetaSharedPtr new_tablet_meta(new TabletMeta());
-    Status check_meta_st = TabletMetaManager::get_tablet_meta(_data_dir, 111, 3333, new_tablet_meta.get());
+    Status check_meta_st = TabletMetaManager::get_tablet_meta(_data_dirs[0], 111, 3333, new_tablet_meta.get());
     ASSERT_TRUE(check_meta_st.ok());
 
     // retry create should be successfully
@@ -166,7 +163,7 @@ TEST_F(TabletMgrTest, CreateTablet) {
 TEST_F(TabletMgrTest, DropTablet) {
     TCreateTabletReq create_tablet_req = get_create_tablet_request(111, 3333);
     std::vector<DataDir*> data_dirs;
-    data_dirs.push_back(_data_dir);
+    data_dirs.push_back(_data_dirs[0]);
     Status create_st = _tablet_mgr->create_tablet(create_tablet_req, data_dirs);
     ASSERT_TRUE(create_st.ok());
     TabletSharedPtr tablet = _tablet_mgr->get_tablet(111);
@@ -204,10 +201,46 @@ TEST_F(TabletMgrTest, DropTablet) {
     ASSERT_TRUE(!dir_exist);
 }
 
+TEST_F(TabletMgrTest, LoadExistTabletFromMeta) {
+    {
+        TCreateTabletReq create_tablet_req = get_create_tablet_request(111, 3333);
+        std::vector<DataDir*> data_dirs;
+        data_dirs.push_back(_data_dirs[0]);
+        Status create_st = _tablet_mgr->create_tablet(create_tablet_req, data_dirs);
+        ASSERT_TRUE(create_st.ok());
+        TabletSharedPtr tablet = _tablet_mgr->get_tablet(111);
+        ASSERT_TRUE(tablet != nullptr);
+        std::string meta_str;
+        ASSERT_TRUE(tablet->tablet_meta()->serialize(&meta_str).ok());
+        Status st = _tablet_mgr->load_tablet_from_meta(_data_dirs[0], 111, tablet->schema_hash(), meta_str, false,
+                                                       false, false, false);
+        ASSERT_TRUE(st.code() == TStatusCode::INTERNAL_ERROR);
+    }
+    {
+        // expect skip this tablet
+        TCreateTabletReq create_tablet_req = get_create_tablet_request(111, 4444);
+        std::vector<DataDir*> data_dirs;
+        data_dirs.push_back(_data_dirs[1]);
+        Status create_st = _tablet_mgr->create_tablet(create_tablet_req, data_dirs);
+        ASSERT_TRUE(create_st.ok());
+        TabletSharedPtr tablet = _tablet_mgr->get_tablet(111);
+        ASSERT_TRUE(tablet != nullptr);
+        std::string meta_str;
+        ASSERT_TRUE(tablet->tablet_meta()->serialize(&meta_str).ok());
+        Status st = _tablet_mgr->load_tablet_from_meta(_data_dirs[1], 111, tablet->schema_hash(), meta_str, false,
+                                                       false, false, false);
+        ASSERT_TRUE(st.is_already_exist());
+    }
+    // check tablet
+    TabletSharedPtr tablet = _tablet_mgr->get_tablet(111);
+    ASSERT_TRUE(tablet != nullptr);
+    ASSERT_TRUE(tablet->schema_hash() == 3333);
+}
+
 TEST_F(TabletMgrTest, GetRowsetId) {
     // normal case
     {
-        std::string path = _engine_data_path + "/data/0/15007/368169781";
+        std::string path = _engine_data_paths[0] + "/data/0/15007/368169781";
         TTabletId tid;
         TSchemaHash schema_hash;
         ASSERT_TRUE(_tablet_mgr->get_tablet_id_and_schema_hash_from_path(path, &tid, &schema_hash));
@@ -215,7 +248,7 @@ TEST_F(TabletMgrTest, GetRowsetId) {
         ASSERT_EQ(368169781, schema_hash);
     }
     {
-        std::string path = _engine_data_path + "/data/0/15007/368169781/";
+        std::string path = _engine_data_paths[0] + "/data/0/15007/368169781/";
         TTabletId tid;
         TSchemaHash schema_hash;
         ASSERT_TRUE(_tablet_mgr->get_tablet_id_and_schema_hash_from_path(path, &tid, &schema_hash));
@@ -224,8 +257,8 @@ TEST_F(TabletMgrTest, GetRowsetId) {
     }
     // normal case
     {
-        std::string path =
-                _engine_data_path + "/data/0/15007/368169781/020000000000000100000000000000020000000000000003_0_0.dat";
+        std::string path = _engine_data_paths[0] +
+                           "/data/0/15007/368169781/020000000000000100000000000000020000000000000003_0_0.dat";
         TTabletId tid;
         TSchemaHash schema_hash;
         ASSERT_TRUE(_tablet_mgr->get_tablet_id_and_schema_hash_from_path(path, &tid, &schema_hash));
@@ -240,7 +273,7 @@ TEST_F(TabletMgrTest, GetRowsetId) {
     }
     // empty tablet directory
     {
-        std::string path = _engine_data_path + "/data/0/15007";
+        std::string path = _engine_data_paths[0] + "/data/0/15007";
         TTabletId tid;
         TSchemaHash schema_hash;
         ASSERT_TRUE(_tablet_mgr->get_tablet_id_and_schema_hash_from_path(path, &tid, &schema_hash));
@@ -252,7 +285,7 @@ TEST_F(TabletMgrTest, GetRowsetId) {
     }
     // empty tablet directory
     {
-        std::string path = _engine_data_path + "/data/0/15007/";
+        std::string path = _engine_data_paths[0] + "/data/0/15007/";
         TTabletId tid;
         TSchemaHash schema_hash;
         ASSERT_TRUE(_tablet_mgr->get_tablet_id_and_schema_hash_from_path(path, &tid, &schema_hash));
@@ -261,7 +294,7 @@ TEST_F(TabletMgrTest, GetRowsetId) {
     }
     // empty tablet directory
     {
-        std::string path = _engine_data_path + "/data/0/15007abc";
+        std::string path = _engine_data_paths[0] + "/data/0/15007abc";
         TTabletId tid;
         TSchemaHash schema_hash;
         ASSERT_FALSE(_tablet_mgr->get_tablet_id_and_schema_hash_from_path(path, &tid, &schema_hash));
@@ -269,7 +302,7 @@ TEST_F(TabletMgrTest, GetRowsetId) {
     // not match pattern
     {
         std::string path =
-                _engine_data_path + "/data/0/15007/123abc/020000000000000100000000000000020000000000000003_0_0.dat";
+                _engine_data_paths[0] + "/data/0/15007/123abc/020000000000000100000000000000020000000000000003_0_0.dat";
         TTabletId tid;
         TSchemaHash schema_hash;
         ASSERT_FALSE(_tablet_mgr->get_tablet_id_and_schema_hash_from_path(path, &tid, &schema_hash));
@@ -281,7 +314,7 @@ TEST_F(TabletMgrTest, GetRowsetId) {
 
 TEST_F(TabletMgrTest, GetNextBatchTabletsTest) {
     std::vector<DataDir*> data_dirs;
-    data_dirs.push_back(_data_dir);
+    data_dirs.push_back(_data_dirs[0]);
     for (int i = 0; i < 20; i++) {
         TCreateTabletReq create_tablet_req = get_create_tablet_request(i, 3333);
         Status create_st = StorageEngine::instance()->tablet_manager()->create_tablet(create_tablet_req, data_dirs);

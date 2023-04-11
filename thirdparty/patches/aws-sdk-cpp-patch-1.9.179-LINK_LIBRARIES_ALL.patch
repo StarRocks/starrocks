@@ -1,0 +1,22 @@
+diff --git a/cmake/dependencies.cmake b/cmake/dependencies.cmake
+index 30c665341f..ac8a15a2be 100644
+--- a/cmake/dependencies.cmake
++++ b/cmake/dependencies.cmake
+@@ -30,6 +30,17 @@ function(compute_links lib)
+     # For each direct link append it and its links
+     foreach(link ${links})
+         if(TARGET ${link}) # Collect only target links
++            get_target_property(link_type ${link} TYPE)
++            if(link_type STREQUAL "INTERFACE_LIBRARY")
++                # A custom property LINK_LIBRARIES_ALL can't be set to INTERFACE libraries.
++                # We have to allow Threads::Threads, which might be an interface library.
++                if(link STREQUAL "Threads::Threads")
++                    continue()
++                elseif()
++                    message(STATUS "Library '${lib}' uses link '${link}'.")
++                    message(FATAL_ERROR "Algorithm doesn't work with interface libraries.")
++                endif()
++            endif()
+             compute_links(${link})
+             get_target_property(link_links_all ${link} LINK_LIBRARIES_ALL)
+             set_property(TARGET ${lib} APPEND PROPERTY

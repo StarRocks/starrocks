@@ -20,10 +20,12 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -297,7 +299,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             BaseTableInfo baseTableInfo = tablePair.first;
             Table table = tablePair.second;
-            if (!table.isNativeTable()) {
+            if (!table.isNativeTableOrMaterializedView()) {
                 context.getCtx().getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
                         baseTableInfo.getDbName(), table, Lists.newArrayList(), true);
             }
@@ -346,7 +348,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
             // remove partition info of not-exist partition for snapshot table from version map
             Table snapshotTable = snapshotBaseTables.get(tableId).second;
-            if (snapshotTable.isOlapOrLakeTable()) {
+            if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapshotOlapTable = (OlapTable) snapshotTable;
                 currentTablePartitionInfo.keySet().removeIf(partitionName ->
                         !snapshotOlapTable.getPartitionNames().contains(partitionName));
@@ -519,7 +521,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private boolean supportRefreshByPartition(Table table) {
-        if (table.isLocalTable() || table.isHiveTable() || table.isLakeTable()) {
+        if (table.isOlapTableOrMaterializedView() || table.isHiveTable() || table.isCloudNativeTable()) {
             return true;
         }
         return false;
@@ -661,7 +663,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 }
                 tableNamePartitionNames.put(table.getName(), needRefreshTablePartitionNames);
             } else {
-                if (table.isNativeTable()) {
+                if (table.isNativeTableOrMaterializedView()) {
                     tableNamePartitionNames.put(table.getName(), ((OlapTable) table).getPartitionNames());
                 }
             }
@@ -695,9 +697,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         Analyzer.analyze(insertStmt, ctx);
         // after analyze, we could get the table meta info of the tableRelation.
         QueryStatement queryStatement = insertStmt.getQueryStatement();
-        Map<String, TableRelation> tableRelations =
+        Multimap<String, TableRelation> tableRelations =
                 AnalyzerUtils.collectAllTableRelation(queryStatement);
-        for (Map.Entry<String, TableRelation> nameTableRelationEntry : tableRelations.entrySet()) {
+        for (Map.Entry<String, TableRelation> nameTableRelationEntry : tableRelations.entries()) {
             Set<String> tablePartitionNames = sourceTablePartitions.get(nameTableRelationEntry.getKey());
             TableRelation tableRelation = nameTableRelationEntry.getValue();
             tableRelation.setPartitionNames(
@@ -706,7 +708,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             // generate partition predicate for external table because it can not use partition names
             // to scan partial partitions
             Table table = tableRelation.getTable();
-            if (tablePartitionNames != null && !table.isNativeTable()) {
+            if (tablePartitionNames != null && !table.isNativeTableOrMaterializedView()) {
                 generatePartitionPredicate(tablePartitionNames, queryStatement, tableRelation);
             }
         }
@@ -733,6 +735,13 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         if (outputPartitionSlot != null) {
             List<Expr> partitionPredicates =
                     MvUtils.convertRange(outputPartitionSlot, sourceTablePartitionRange);
+            // range contains the min value could be null value
+            Optional<Range<PartitionKey>> nullRange = sourceTablePartitionRange.stream().
+                    filter(range -> range.lowerEndpoint().isMinValue()).findAny();
+            if (nullRange.isPresent()) {
+                Expr isNullPredicate = new IsNullPredicate(outputPartitionSlot, false);
+                partitionPredicates.add(isNullPredicate);
+            }
             tableRelation.setPartitionPredicate(Expr.compoundOr(partitionPredicates));
         }
     }
@@ -754,7 +763,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     return true;
                 }
 
-                if (snapshotTable.isOlapOrLakeTable()) {
+                if (snapshotTable.isOlapOrCloudNativeTable()) {
                     OlapTable snapShotOlapTable = (OlapTable) snapshotTable;
                     if (snapShotOlapTable.getPartitionInfo() instanceof SinglePartitionInfo) {
                         Set<String> partitionNames = ((OlapTable) table).getPartitionNames();
@@ -930,7 +939,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                         throw new DmlException("Failed to copy olap table: %s", table.getName());
                     }
                     tables.put(table.getId(), Pair.create(baseTableInfo, copied));
-                } else if (table.isLakeTable()) {
+                } else if (table.isCloudNativeTable()) {
                     LakeTable copied = DeepCopy.copyWithGson(table, LakeTable.class);
                     if (copied == null) {
                         throw new DmlException("Failed to copy lake table: %s", table.getName());

@@ -41,11 +41,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -99,6 +101,7 @@ import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
@@ -112,9 +115,11 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddPartitionClause;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
@@ -161,6 +166,8 @@ import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
+import com.starrocks.thrift.TGetTabletScheduleRequest;
+import com.starrocks.thrift.TGetTabletScheduleResponse;
 import com.starrocks.thrift.TGetTaskInfoResult;
 import com.starrocks.thrift.TGetTaskRunInfoResult;
 import com.starrocks.thrift.TGetTasksParams;
@@ -225,6 +232,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
 import java.util.List;
@@ -296,7 +304,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setDbs(dbs);
         return result;
     }
-
 
     @Override
     public TGetTablesResult getTableNames(TGetTablesParams params) throws TException {
@@ -399,7 +406,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     if (listingViews) {
                         View view = (View) table;
                         String ddlSql = view.getInlineViewDef();
-                        Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(view.getQueryStatement());
+                        QueryStatement queryStatement = view.getQueryStatement();
+
+                        ConnectContext connectContext = new ConnectContext();
+                        connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
+                        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+                        connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+
+                        Analyzer.analyze(queryStatement, connectContext);
+                        Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(queryStatement);
                         for (TableName tableName : allTables.keySet()) {
                             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
                                 Table tbl = db.getTable(tableName.getTbl());
@@ -1571,8 +1586,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TAllocateAutoIncrementIdResult allocAutoIncrementId(TAllocateAutoIncrementIdParam request) throws TException {
         TAllocateAutoIncrementIdResult result = new TAllocateAutoIncrementIdResult();
         long rows = Math.max(request.rows, Config.auto_increment_cache_size);
-        Long nextId = GlobalStateMgr.getCurrentState().allocateAutoIncrementId(request.table_id, rows);
+        Long nextId = null;
         try {
+            nextId = GlobalStateMgr.getCurrentState().allocateAutoIncrementId(request.table_id, rows);
             // log the delta result.
             ConcurrentHashMap<Long, Long> deltaMap = new ConcurrentHashMap<>();
             deltaMap.put(request.table_id, nextId + rows);
@@ -1583,6 +1599,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             result.setAllocated_rows(0);
 
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            result.setStatus(status);
+            return result;
+        }
+
+        if (nextId == null) {
+            result.setAuto_increment_id(0);
+            result.setAllocated_rows(0);
+
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList("No ids have been allocated"));
             result.setStatus(status);
             return result;
         }
@@ -1601,6 +1628,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         LOG.info("Receive create partition: {}", request);
 
+        TCreatePartitionResult result;
+        try {
+            result = createPartitionProcess(request);
+        } catch (Throwable t) {
+            LOG.warn(t);
+            result = new TCreatePartitionResult();
+            TStatus errorStatus = new TStatus(RUNTIME_ERROR);
+            errorStatus.setError_msgs(Lists.newArrayList(String.format("txn_id=%d failed. %s",
+                    request.getTxn_id(), t.getMessage())));
+            result.setStatus(errorStatus);
+        }
+
+        return result;
+    }
+
+    @NotNull
+    private static TCreatePartitionResult createPartitionProcess(TCreatePartitionRequest request) {
         long dbId = request.getDb_id();
         long tableId = request.getTable_id();
         TCreatePartitionResult result = new TCreatePartitionResult();
@@ -1706,7 +1750,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-
         Map<String, AddPartitionClause> addPartitionClauseMap;
         try {
             Column firstPartitionColumn = expressionRangePartitionInfo.getPartitionColumns().get(0);
@@ -1778,13 +1821,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     if (bePathsMap.keySet().size() < quorum) {
                         errorStatus.setError_msgs(Lists.newArrayList(
                                 "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                + tablet.getId() + ", backends: " +
-                                Joiner.on(",").join(localTablet.getBackends())));
+                                        + tablet.getId() + ", backends: " +
+                                        Joiner.on(",").join(localTablet.getBackends())));
                         result.setStatus(errorStatus);
                         return result;
                     }
                     // replicas[0] will be the primary replica
-                    // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable 
+                    // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable
                     List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
                     tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
                             .collect(Collectors.toList())));
@@ -1875,5 +1918,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw e;
         }
         return result;
+    }
+
+    @Override
+    public TGetTabletScheduleResponse getTabletSchedule(TGetTabletScheduleRequest request) throws TException {
+        TGetTabletScheduleResponse response = GlobalStateMgr.getCurrentState().getTabletScheduler().getTabletSchedule(request);
+        LOG.info("getTabletSchedule: {} return {} TabletSchedule", request, response.getTablet_schedulesSize());
+        return response;
     }
 }

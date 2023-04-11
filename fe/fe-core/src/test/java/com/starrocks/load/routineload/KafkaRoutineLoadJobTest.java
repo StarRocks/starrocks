@@ -150,6 +150,41 @@ public class KafkaRoutineLoadJobTest {
         Assert.assertEquals(4, routineLoadJob.calculateCurrentConcurrentTaskNum());
     }
 
+    @Test 
+    public void testShowConfluentSchemaRegistryUrl() {
+        KafkaRoutineLoadJob routineLoadJob1 = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
+                1L, "127.0.0.1:9020", "topic1");
+        routineLoadJob1.setConfluentSchemaRegistryUrl("http://abc:def@addr.com");
+        String sourceString = routineLoadJob1.dataSourcePropertiesJsonToString();
+        String expected = "{\"topic\":\"topic1\",\"confluent.schema.registry.url\":\"http://addr.com\"," + 
+                                            "\"currentKafkaPartitions\":\"\",\"brokerList\":\"127.0.0.1:9020\"}";
+        Assert.assertEquals(expected, sourceString);
+
+        KafkaRoutineLoadJob routineLoadJob2 = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
+                1L, "127.0.0.1:9020", "topic1");
+        routineLoadJob2.setConfluentSchemaRegistryUrl("https://abc:def@addr.com");
+        sourceString = routineLoadJob2.dataSourcePropertiesJsonToString();
+        expected = "{\"topic\":\"topic1\",\"confluent.schema.registry.url\":\"https://addr.com\"," + 
+                                    "\"currentKafkaPartitions\":\"\",\"brokerList\":\"127.0.0.1:9020\"}";
+        Assert.assertEquals(expected, sourceString);
+
+        KafkaRoutineLoadJob routineLoadJob3 = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
+                1L, "127.0.0.1:9020", "topic1");
+        routineLoadJob3.setConfluentSchemaRegistryUrl("https://addr.com");
+        sourceString = routineLoadJob3.dataSourcePropertiesJsonToString();
+        expected = "{\"topic\":\"topic1\",\"confluent.schema.registry.url\":\"https://addr.com\"," + 
+                                    "\"currentKafkaPartitions\":\"\",\"brokerList\":\"127.0.0.1:9020\"}";
+        Assert.assertEquals(expected, sourceString);
+
+        KafkaRoutineLoadJob routineLoadJob4 = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
+                1L, "127.0.0.1:9020", "topic1");
+        routineLoadJob4.setConfluentSchemaRegistryUrl("http://addr.com");
+        sourceString = routineLoadJob4.dataSourcePropertiesJsonToString();
+        expected = "{\"topic\":\"topic1\",\"confluent.schema.registry.url\":\"http://addr.com\"," + 
+                                    "\"currentKafkaPartitions\":\"\",\"brokerList\":\"127.0.0.1:9020\"}";
+        Assert.assertEquals(expected, sourceString);
+    }
+
     @Test
     public void testDivideRoutineLoadJob(@Injectable RoutineLoadManager routineLoadManager,
                                          @Mocked RoutineLoadDesc routineLoadDesc)
@@ -283,7 +318,7 @@ public class KafkaRoutineLoadJobTest {
                 table.getId();
                 minTimes = 0;
                 result = tableId;
-                table.isOlapOrLakeTable();
+                table.isOlapOrCloudNativeTable();
                 minTimes = 0;
                 result = true;
             }

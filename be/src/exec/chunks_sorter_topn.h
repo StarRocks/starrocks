@@ -68,7 +68,7 @@ public:
     // Append a Chunk for sort.
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
-    Status done(RuntimeState* state) override;
+    Status do_done(RuntimeState* state) override;
     // get_next only works after done().
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 

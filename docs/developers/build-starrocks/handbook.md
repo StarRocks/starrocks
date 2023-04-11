@@ -60,7 +60,7 @@ You can build StarRocks by `clang` too
 CC=clang CXX=clang++ ./build.sh --be
 ```
 
-Then you can see the following message in the building message
+Then you can see the following similar message in the build message
 
 ```
 -- compiler Clang version 14.0.0
@@ -69,19 +69,19 @@ Then you can see the following message in the building message
 ## build with different linker
 
 The default linker is slow, developer can specify different linker to speed up linking.
-For example, you can use `mold`.
+For example, you can use `lld`, the LLVM-based linker.
 
-You need to install `mold` firstly.
+You need to install `lld` firstly.
 
 ```
-sudo apt install mold
+sudo apt install lld
 ```
 
 Then you set the environment variable STARROCKS_LINKER with the linker you want to use.
 For example:
 
 ```
-STARROCKS_LINKER=mold ./build.sh --be
+STARROCKS_LINKER=lld ./build.sh --be
 ```
 
 ## build different type

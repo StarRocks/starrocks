@@ -163,7 +163,7 @@ public class StructTypePlanTest extends PlanTestBase {
     @Test
     public void testLambda() throws Exception {
         String sql = "select array_map(x->x, [])";
-        assertVerbosePlanContains(sql, "ARRAY<boolean>[]");
+        assertVerbosePlanContains(sql, "[]");
         sql = "select array_map(x->x+1, c3.d) from test";
         assertVerbosePlanContains(sql, "[STRUCT<d ARRAY<int(11)>>]");
         sql = "select array_sortby(x->x+1, c3.d) from test";
@@ -171,6 +171,6 @@ public class StructTypePlanTest extends PlanTestBase {
         sql = "select array_filter((x,y) -> x<y, c3.d, c3.d) from test";
         assertVerbosePlanContains(sql, "[STRUCT<d ARRAY<int(11)>>]");
         sql = "select map_values(col_map), map_keys(col_map) from (select map_from_arrays([],[]) as col_map)A";
-        assertPlanContains(sql, "ARRAY<boolean>[], ARRAY<boolean>[]");
+        assertPlanContains(sql, "[], []");
     }
 }

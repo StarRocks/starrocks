@@ -167,7 +167,7 @@ public class ShowColumnStmt extends ShowStmt {
         where = where.substitute(aliasMap);
 
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
-                where, null, null));
+                where, null, null), this.origStmt);
     }
 
     @Override

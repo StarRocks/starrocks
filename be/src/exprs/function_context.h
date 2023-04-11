@@ -22,7 +22,6 @@
 #include <string>
 #include <vector>
 
-#include "exprs/function_context.h"
 #include "types/logical_type.h"
 
 namespace starrocks {
@@ -45,7 +44,13 @@ public:
 
         /// Only valid if type == TYPE_FIXED_BUFFER || type == TYPE_VARCHAR
         int len = 0;
+
+        // only valid if type is nested type
+        // array's element: children[0].
+        // map's key: children[0]; map's value: children[1].
+        // struct's types: keep order with field_names.
         std::vector<TypeDesc> children;
+        std::vector<std::string> field_names;
     };
 
     enum FunctionStateScope {
@@ -75,6 +80,11 @@ public:
                                            const FunctionContext::TypeDesc& return_type,
                                            const std::vector<FunctionContext::TypeDesc>& arg_types);
 
+    static FunctionContext* create_context(RuntimeState* state, MemPool* pool,
+                                           const FunctionContext::TypeDesc& return_type,
+                                           const std::vector<FunctionContext::TypeDesc>& arg_types,
+                                           const std::vector<bool>& isAscOrder, const std::vector<bool>& nullsFirst);
+
     ~FunctionContext();
     FunctionContext();
 
@@ -82,7 +92,7 @@ public:
     // query to fail.
     // Note: when you set error for the UDFs used in Data Load, you should
     // ensure the function return value is null.
-    void set_error(const char* error_msg);
+    void set_error(const char* error_msg, const bool is_udf = true);
 
     // Adds a warning that is returned to the user. This can include things like
     // overflow or other recoverable error conditions.
@@ -107,6 +117,13 @@ public:
     // argument).
     int get_num_args() const;
 
+    std::vector<bool> get_is_asc_order() { return _is_asc_order; }
+    std::vector<bool> get_nulls_first() { return _nulls_first; }
+    // for tests
+    void set_is_asc_order(const std::vector<bool>& order) { _is_asc_order = order; }
+    void set_nulls_first(const std::vector<bool>& nulls) { _nulls_first = nulls; }
+    void set_runtime_state(RuntimeState* const state) { _state = state; }
+
     // Returns _constant_columns size
     int get_num_constant_columns() const;
 
@@ -123,6 +140,8 @@ public:
 
     bool is_udf() { return _is_udf; }
     void set_is_udf(bool is_udf) { this->_is_udf = is_udf; }
+
+    ColumnPtr create_column(const TypeDesc& type_desc, bool nullable);
 
     // Create a test FunctionContext object. The caller is responsible for calling delete
     // on it. This context has additional debugging validation enabled.
@@ -170,6 +189,7 @@ private:
     FunctionContext::TypeDesc _return_type;
 
     // Type descriptors for each argument of the function.
+    // TODO: support complex type
     std::vector<FunctionContext::TypeDesc> _arg_types;
 
     std::vector<ColumnPtr> _constant_columns;
@@ -182,6 +202,9 @@ private:
 
     // UDAF Context
     std::unique_ptr<JavaUDAFContext> _jvm_udaf_ctxs;
+
+    std::vector<bool> _is_asc_order;
+    std::vector<bool> _nulls_first;
 };
 
 } // namespace starrocks

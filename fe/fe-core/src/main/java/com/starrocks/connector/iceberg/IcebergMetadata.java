@@ -22,11 +22,15 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -41,14 +45,17 @@ import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
+import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
@@ -91,9 +98,27 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void createDb(String dbName, Map<String, String> properties) throws AlreadyExistsException {
+        if (dbExists(dbName)) {
+            throw new AlreadyExistsException("Database Already Exists");
+        }
+
+        icebergCatalog.createDb(dbName, properties);
+    }
+
+    @Override
     public List<String> listTableNames(String dbName) {
         List<TableIdentifier> tableIdentifiers = icebergCatalog.listTables(Namespace.of(dbName));
         return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    @Override
+    public void dropDb(String dbName, boolean isForceDrop) throws MetaNotFoundException {
+        if (listTableNames(dbName).size() != 0) {
+            throw new StarRocksConnectorException("Database %s not empty", dbName);
+        }
+
+        icebergCatalog.dropDb(dbName);
     }
 
     @Override
@@ -104,11 +129,15 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         try {
-            org.apache.iceberg.Table icebergTable = icebergCatalog.loadTable(identifier);
+            IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
+            Optional<IcebergMetricsReporter> metricsReporter = catalogType == HIVE_CATALOG || catalogType == GLUE_CATALOG ?
+                    Optional.of(new IcebergMetricsReporter()) : Optional.empty();
+            org.apache.iceberg.Table icebergTable = icebergCatalog.loadTable(identifier, metricsReporter);
             Table table = IcebergApiConverter.toIcebergTable(
-                    icebergTable, catalogName, dbName, tblName, icebergCatalog.getIcebergCatalogType().name());
+                    icebergTable, catalogName, dbName, tblName, catalogType.name(), metricsReporter);
             tables.put(identifier, table);
             return table;
+
         } catch (StarRocksConnectorException e) {
             LOG.error("Failed to get iceberg table {}", identifier, e);
             return null;
@@ -133,8 +162,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         List<String> partitionNames = Lists.newArrayList();
-        TableScan tableScan = icebergTable.newScan();
-        List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
         if (icebergTable.spec().isUnpartitioned()) {
             return partitionNames;
         }
@@ -143,6 +170,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                 .anyMatch(partitionField -> !partitionField.transform().isIdentity())) {
             return partitionNames;
         }
+        TableScan tableScan = icebergTable.newScan();
+        List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
 
         for (FileScanTask fileScanTask : tasks) {
             StructLike partition = fileScanTask.file().partition();
@@ -175,11 +204,22 @@ public class IcebergMetadata implements ConnectorMetadata {
                 scan = scan.filter(icebergPredicate);
             }
 
-            for (CombinedScanTask combinedScanTask : scan.planTasks()) {
+            CloseableIterable<CombinedScanTask> combinedScanTasks = scan.planTasks();
+            for (CombinedScanTask combinedScanTask : combinedScanTasks) {
                 for (FileScanTask fileScanTask : combinedScanTask.files()) {
                     builder.add(fileScanTask);
                 }
             }
+            try {
+                combinedScanTasks.close();
+            } catch (IOException e) {
+                // Ignored
+            }
+            table.reportScanMetrics().ifPresent(scanReportWithCounter -> {
+                PlannerProfile.addCustomProperties("Iceberg.Metadata.ScanMetrics." +
+                                scanReportWithCounter.getScanReport().tableName() + " / No_" + scanReportWithCounter.getCount(),
+                        scanReportWithCounter.getScanReport().scanMetrics().toString());
+            });
             tasks.put(key, builder.build());
         }
 

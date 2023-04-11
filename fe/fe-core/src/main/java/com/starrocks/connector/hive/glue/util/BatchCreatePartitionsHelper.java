@@ -24,7 +24,8 @@ import com.starrocks.connector.hive.glue.converters.GlueInputConverter;
 import com.starrocks.connector.hive.glue.metastore.AWSGlueMetastore;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.util.Collection;
@@ -33,7 +34,7 @@ import java.util.Map;
 
 public final class BatchCreatePartitionsHelper {
 
-    private static final Logger LOGGER = Logger.getLogger(BatchCreatePartitionsHelper.class);
+    private static final Logger LOGGER = LogManager.getLogger(BatchCreatePartitionsHelper.class);
 
     private final AWSGlueMetastore glueClient;
     private final String databaseName;

@@ -52,6 +52,7 @@
 #include "gutil/strings/numbers.h"
 #include "gutil/strings/substitute.h"
 #include "storage/del_vector.h"
+#include "storage/delta_column_group.h"
 #include "storage/kv_store.h"
 #include "storage/olap_define.h"
 #include "storage/rocksdb_status_adapter.h"
@@ -70,6 +71,7 @@ static const std::string TABLET_META_ROWSET_PREFIX = "trs_";
 static const std::string TABLET_META_PENDING_ROWSET_PREFIX = "tpr_";
 static const std::string TABLET_DELVEC_PREFIX = "dlv_";
 static const std::string TABLET_PERSISTENT_INDEX_META_PREFIX = "tpi_";
+static const std::string TABLET_DELTA_COLUMN_GROUP_PREFIX = "dcg_";
 
 static string encode_meta_log_key(TTabletId id, uint64_t logid);
 static bool decode_meta_log_key(std::string_view key, TTabletId* id, uint64_t* logid);
@@ -81,6 +83,9 @@ std::string encode_del_vector_key(TTabletId tablet_id, uint32_t segment_id, int6
 void decode_del_vector_key(std::string_view enc_key, TTabletId* tablet_id, uint32_t* segment_id, int64_t* version);
 std::string encode_persistent_index_key(TTabletId tablet_id);
 void decode_persistent_index_key(std::string_view enc_key, TTabletId* tablet_id);
+std::string encode_delta_column_group_key(TTabletId tablet_id, uint32_t segment_id, int64_t version);
+void decode_delta_column_group_key(std::string_view enc_key, TTabletId* tablet_id, uint32_t* segment_id,
+                                   int64_t* version);
 
 static std::string encode_tablet_meta_key(TTabletId tablet_id, TSchemaHash schema_hash) {
     return strings::Substitute("$0$1_$2", HEADER_PREFIX, tablet_id, schema_hash);
@@ -428,6 +433,13 @@ Status TabletMetaManager::remove(DataDir* store, TTabletId tablet_id, TSchemaHas
 Status TabletMetaManager::walk(
         KVStore* meta,
         std::function<bool(long /*tablet_id*/, long /*schema_hash*/, std::string_view /*meta*/)> const& func) {
+    return walk_until_timeout(meta, func, -1);
+}
+
+Status TabletMetaManager::walk_until_timeout(
+        KVStore* meta,
+        std::function<bool(long /*tablet_id*/, long /*schema_hash*/, std::string_view /*meta*/)> const& func,
+        int64_t timeout_sec) {
     auto traverse_header_func = [&func](std::string_view key, std::string_view value) -> bool {
         TTabletId tablet_id;
         TSchemaHash schema_hash;
@@ -437,7 +449,7 @@ Status TabletMetaManager::walk(
         }
         return func(tablet_id, schema_hash, value);
     };
-    return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func);
+    return meta->iterate(META_COLUMN_FAMILY_INDEX, HEADER_PREFIX, traverse_header_func, timeout_sec);
 }
 
 std::string json_to_string(const rapidjson::Value& val_obj) {
@@ -473,6 +485,9 @@ Status TabletMetaManager::build_primary_meta(DataDir* store, rapidjson::Document
     }
     if (!clear_del_vector(store, &batch, tablet_id).ok()) {
         return Status::IOError("clear delvec add to batch failed");
+    }
+    if (!clear_delta_column_group(store, &batch, tablet_id).ok()) {
+        return Status::IOError("clear dcg add to batch failed");
     }
     if (!clear_rowset(store, &batch, tablet_id).ok()) {
         return Status::IOError("clear rowset add to batch failed");
@@ -694,6 +709,27 @@ int64_t decode_del_vector_key_version(std::string_view key) {
     return std::numeric_limits<int64_t>::max() - BigEndian::ToHost64(v);
 }
 
+std::string encode_delta_column_group_key(TTabletId tablet_id, uint32_t segment_id, int64_t version) {
+    std::string key;
+    key.reserve(24);
+    key.append(TABLET_DELTA_COLUMN_GROUP_PREFIX);
+    put_fixed64_le(&key, BigEndian::FromHost64(tablet_id));
+    put_fixed32_le(&key, BigEndian::FromHost32(segment_id));
+    // If a segment attached with multiple delta column group, make them
+    // sorted by version in reverse order in RocksDB.
+    int64_t v = std::numeric_limits<int64_t>::max() - version;
+    put_fixed64_le(&key, BigEndian::FromHost64(v));
+    return key;
+}
+
+void decode_delta_column_group_key(std::string_view enc_key, TTabletId* tablet_id, uint32_t* segment_id,
+                                   int64_t* version) {
+    DCHECK_EQ(4 + sizeof(TTabletId) + sizeof(uint32_t) + sizeof(int64_t), enc_key.size());
+    *tablet_id = BigEndian::ToHost64(UNALIGNED_LOAD64(enc_key.data() + 4));
+    *segment_id = BigEndian::ToHost32(UNALIGNED_LOAD32(enc_key.data() + 12));
+    *version = INT64_MAX - BigEndian::ToHost64(UNALIGNED_LOAD64(enc_key.data() + 16));
+}
+
 Status TabletMetaManager::rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid, EditVersionMetaPB* edit,
                                         const RowsetMetaPB& rowset, const string& rowset_meta_key) {
     WriteBatch batch;
@@ -843,6 +879,59 @@ Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_i
     return store->get_meta()->write_batch(&batch);
 }
 
+// used in column mode partial update
+Status TabletMetaManager::apply_rowset_commit(DataDir* store, TTabletId tablet_id, int64_t logid,
+                                              const EditVersion& version,
+                                              const std::map<uint32_t, DeltaColumnGroupPtr>& delta_column_groups,
+                                              const starrocks::RowsetMetaPB* rowset_meta) {
+    auto span = Tracer::Instance().start_trace_tablet("apply_save_meta", tablet_id);
+    span->SetAttribute("version", version.to_string());
+    WriteBatch batch;
+    auto handle = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    string logkey = encode_meta_log_key(tablet_id, logid);
+    TabletMetaLogPB log;
+    auto ops = log.add_ops();
+    ops->set_type(TabletMetaOpType::OP_APPLY);
+    auto version_pb = ops->mutable_apply();
+    version_pb->set_major(version.major());
+    version_pb->set_minor(version.minor());
+    auto logval = log.SerializeAsString();
+    rocksdb::Status st = batch.Put(handle, logkey, logval);
+    if (!st.ok()) {
+        LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
+        return to_status(st);
+    }
+    TabletSegmentId tsid;
+    tsid.tablet_id = tablet_id;
+    span->AddEvent("delta_column_group_start");
+    int64_t total_bytes = 0;
+    for (const auto& delta_column : delta_column_groups) {
+        tsid.segment_id = delta_column.first;
+        auto dcg_key = encode_delta_column_group_key(tsid.tablet_id, tsid.segment_id, version.major());
+        auto dcg_value = delta_column.second->save();
+        total_bytes += dcg_value.size();
+        st = batch.Put(handle, dcg_key, dcg_value);
+        if (!st.ok()) {
+            LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
+            return to_status(st);
+        }
+    }
+    span->SetAttribute("delta_column_group_bytes", total_bytes);
+    span->AddEvent("delta_column_group_end");
+
+    if (rowset_meta != nullptr) {
+        string rowset_key = encode_meta_rowset_key(tablet_id, rowset_meta->rowset_seg_id());
+        auto rowset_value = rowset_meta->SerializeAsString();
+        st = batch.Put(handle, rowset_key, rowset_value);
+        if (!st.ok()) {
+            LOG(WARNING) << "rowset_commit failed, rocksdb.batch.put failed";
+            return to_status(st);
+        }
+    }
+
+    return store->get_meta()->write_batch(&batch);
+}
+
 Status TabletMetaManager::traverse_meta_logs(DataDir* store, TTabletId tablet_id,
                                              const std::function<bool(uint64_t, const TabletMetaLogPB&)>& func) {
     Status ret;
@@ -914,6 +1003,35 @@ Status TabletMetaManager::get_del_vector(KVStore* meta, TTabletId tablet_id, uin
     VLOG(3) << strings::Substitute("get_del_vec in-meta tablet_id=$0 segment_id=$1 version=$2 actual_version=$3",
                                    tablet_id, segment_id, version, delvec ? delvec->version() : -1);
     return st;
+}
+
+Status TabletMetaManager::del_vector_iterate(KVStore* meta, TTabletId tablet_id, uint32_t lower, uint32_t upper,
+                                             const std::function<bool(uint32_t, int64_t, std::string_view)>& func) {
+    std::string lower_key = encode_del_vector_key(tablet_id, lower, INT64_MAX);
+    std::string upper_key = encode_del_vector_key(tablet_id, upper, 0);
+
+    Status st;
+    st = meta->iterate_range(
+            META_COLUMN_FAMILY_INDEX, lower_key, upper_key, [&](std::string_view key, std::string_view value) -> bool {
+                TTabletId dummy;
+                uint32_t segment_id;
+                int64_t version;
+                DelVectorPtr del_vec;
+                decode_del_vector_key(key, &dummy, &segment_id, &version);
+                DCHECK_EQ(tablet_id, dummy);
+                if (!func(segment_id, version, value)) {
+                    std::string msg = strings::Substitute("fail to get delvecs. tablet:$0 rowset:$1", tablet_id, lower);
+                    LOG(WARNING) << msg;
+                    st = Status::InternalError(msg);
+                    return false;
+                }
+                return true;
+            });
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to iterate rocksdb delvecs. tablet_id=" << tablet_id << " rowset=" << lower;
+        return st;
+    }
+    return Status::OK();
 }
 
 using DeleteVectorList = TabletMetaManager::DeleteVectorList;
@@ -1018,6 +1136,49 @@ Status TabletMetaManager::delete_del_vector_range(KVStore* meta, TTabletId table
     return meta->write_batch(&batch);
 }
 
+Status TabletMetaManager::get_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t segment_id,
+                                                 int64_t version, DeltaColumnGroupList* dcgs) {
+    return scan_delta_column_group(meta, tablet_id, segment_id, 0, version, dcgs);
+}
+
+Status TabletMetaManager::scan_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t segment_id,
+                                                  int64_t begin_version, int64_t end_version,
+                                                  DeltaColumnGroupList* dcgs) {
+    std::string lower = encode_delta_column_group_key(tablet_id, segment_id, end_version);
+    std::string upper = encode_delta_column_group_key(tablet_id, segment_id, begin_version);
+    auto st = meta->iterate_range(META_COLUMN_FAMILY_INDEX, lower, upper,
+                                  [&](std::string_view key, std::string_view value) -> bool {
+                                      TTabletId dummy;
+                                      uint32_t dummy_segment_id;
+                                      int64_t decode_version;
+                                      decode_delta_column_group_key(key, &dummy, &dummy_segment_id, &decode_version);
+                                      CHECK(segment_id == dummy_segment_id);
+                                      DeltaColumnGroupPtr dcg_ptr = std::make_shared<DeltaColumnGroup>();
+                                      CHECK(dcg_ptr->load(decode_version, value.data(), value.size()).ok());
+                                      CHECK(dcgs != nullptr);
+                                      dcgs->push_back(std::move(dcg_ptr));
+                                      return true;
+                                  });
+    if (!st.ok()) {
+        LOG(WARNING) << "fail to iterate rocksdb delvecs. tablet_id=" << tablet_id;
+        return st;
+    }
+    return Status::OK();
+}
+
+Status TabletMetaManager::delete_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t rowset_id,
+                                                    uint32_t segments) {
+    std::string lower = encode_delta_column_group_key(tablet_id, rowset_id, INT64_MAX);
+    std::string upper = encode_delta_column_group_key(tablet_id, rowset_id + segments, INT64_MAX);
+    auto h = meta->handle(META_COLUMN_FAMILY_INDEX);
+    WriteBatch batch;
+    rocksdb::Status st = batch.DeleteRange(h, lower, upper);
+    if (!st.ok()) {
+        return to_status(st);
+    }
+    return meta->write_batch(&batch);
+}
+
 Status TabletMetaManager::put_rowset_meta(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
                                           const RowsetMetaPB& rowset_meta) {
     auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
@@ -1032,6 +1193,17 @@ Status TabletMetaManager::put_del_vector(DataDir* store, WriteBatch* batch, TTab
     auto v = delvec.save();
     auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     return to_status(batch->Put(h, k, v));
+}
+
+Status TabletMetaManager::put_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id,
+                                                 uint32_t segment_id, const DeltaColumnGroupList& dcgs) {
+    for (const auto& dcg : dcgs) {
+        auto k = encode_delta_column_group_key(tablet_id, segment_id, dcg->version());
+        auto v = dcg->save();
+        auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+        RETURN_IF_ERROR(to_status(batch->Put(h, k, v)));
+    }
+    return Status::OK();
 }
 
 Status TabletMetaManager::put_tablet_meta(DataDir* store, WriteBatch* batch, const TabletMetaPB& meta) {
@@ -1058,6 +1230,13 @@ Status TabletMetaManager::clear_log(DataDir* store, WriteBatch* batch, TTabletId
 Status TabletMetaManager::clear_del_vector(DataDir* store, WriteBatch* batch, TTabletId tablet_id) {
     auto lower = encode_del_vector_key(tablet_id, 0, INT64_MAX);
     auto upper = encode_del_vector_key(tablet_id, UINT32_MAX, INT64_MAX);
+    auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
+    return to_status(batch->DeleteRange(h, lower, upper));
+}
+
+Status TabletMetaManager::clear_delta_column_group(DataDir* store, WriteBatch* batch, TTabletId tablet_id) {
+    auto lower = encode_delta_column_group_key(tablet_id, 0, INT64_MAX);
+    auto upper = encode_delta_column_group_key(tablet_id, UINT32_MAX, INT64_MAX);
     auto h = store->get_meta()->handle(META_COLUMN_FAMILY_INDEX);
     return to_status(batch->DeleteRange(h, lower, upper));
 }
@@ -1235,6 +1414,9 @@ Status TabletMetaManager::remove_primary_key_meta(DataDir* store, WriteBatch* ba
     }
     if (!clear_del_vector(store, batch, tablet_id).ok()) {
         LOG(WARNING) << "clear delvec add to batch failed";
+    }
+    if (!clear_delta_column_group(store, batch, tablet_id).ok()) {
+        LOG(WARNING) << "clear dcg add to batch failed";
     }
     if (!clear_rowset(store, batch, tablet_id).ok()) {
         LOG(WARNING) << "clear rowset add to batch failed";

@@ -98,6 +98,7 @@ private:
     // True if this is a merging exchange node. If true, GetNext() is delegated to the
     // underlying _stream_recvr, and _input_batch is not used/valid.
     bool _is_merging;
+    bool _is_parallel_merge;
 
     // Sort expressions and parameters passed to the merging receiver..
     SortExecExprs _sort_exec_exprs;

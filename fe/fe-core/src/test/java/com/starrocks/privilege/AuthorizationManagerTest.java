@@ -25,6 +25,7 @@ import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SetRoleExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
@@ -95,7 +96,7 @@ public class AuthorizationManagerTest {
         globalStateMgr.getAuthenticationManager().createUser(createUserStmt);
         publicRoleId = globalStateMgr.getAuthorizationManager().getRoleIdByNameNoLock("public");
 
-        ctx.getSessionVariable().setActivateAllRolesOnLogin(true);
+        GlobalVariable.setActivateAllRolesOnLogin(true);
     }
 
     private static void createMvForTest(StarRocksAssert starRocksAssert,
@@ -1173,7 +1174,7 @@ public class AuthorizationManagerTest {
 
     @Test
     public void testSetRole() throws Exception {
-        ctx.getSessionVariable().setActivateAllRolesOnLogin(false);
+        GlobalVariable.setActivateAllRolesOnLogin(false);
         AuthorizationManager manager = ctx.getGlobalStateMgr().getAuthorizationManager();
         // create user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1266,7 +1267,7 @@ public class AuthorizationManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant test_set_role_3 to role test_set_role_0;", ctx), ctx);
         assertTableSelectOnTestWithoutSetRole(user, true, false, false, true);
-        ctx.getSessionVariable().setActivateAllRolesOnLogin(true);
+        GlobalVariable.setActivateAllRolesOnLogin(true);
     }
 
     @Test

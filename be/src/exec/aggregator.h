@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <new>
 #include <queue>
 #include <utility>
 
@@ -41,6 +42,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -75,14 +77,26 @@ struct HashTableKeyAllocator {
     AggDataPtr allocate() {
         if (vecs.empty() || vecs.back().second == alloc_batch_size) {
             uint8_t* mem = pool->allocate_aligned(alloc_batch_size * aggregate_key_size, aligned);
+            if (mem == nullptr) {
+                throw std::bad_alloc();
+            }
             vecs.emplace_back(mem, 0);
         }
         return static_cast<AggDataPtr>(vecs.back().first) + aggregate_key_size * vecs.back().second++;
     }
 
-    uint8_t* allocate_null_key_data() { return pool->allocate_aligned(alloc_batch_size * aggregate_key_size, aligned); }
+    AggDataPtr allocate_null_key_data() { return pool->allocate_aligned(aggregate_key_size, aligned); }
 
     void reset() { vecs.clear(); }
+
+    void rollback() {
+        DCHECK(!vecs.empty());
+        DCHECK_GT(vecs.back().second, 0);
+        vecs.back().second--;
+        if (vecs.back().second == 0) {
+            vecs.pop_back();
+        }
+    }
 };
 
 inline void RawHashTableIterator::next() {
@@ -116,6 +130,9 @@ struct AggFunctionTypes {
     std::vector<FunctionContext::TypeDesc> arg_typedescs;
     bool has_nullable_child;
     bool is_nullable; // whether result of agg function is nullable
+    // hold order-by info
+    std::vector<bool> is_asc_order;
+    std::vector<bool> nulls_first;
 };
 
 struct ColumnType {
@@ -298,6 +315,9 @@ public:
     Status evaluate_agg_input_column(Chunk* chunk, std::vector<ExprContext*>& agg_expr_ctxs, int i);
 
     [[nodiscard]] Status output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk);
+
+    // convert input chunk to spill format
+    [[nodiscard]] Status convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk);
 
     // Elements queried in HashTable will be added to HashTable,
     // elements that cannot be queried are not processed,
@@ -518,21 +538,44 @@ template <class HashMapWithKey>
 inline AggDataPtr AllocateState<HashMapWithKey>::operator()(const typename HashMapWithKey::KeyType& key) {
     AggDataPtr agg_state = aggregator->_state_allocator.allocate();
     *reinterpret_cast<typename HashMapWithKey::KeyType*>(agg_state) = key;
-    for (int i = 0; i < aggregator->_agg_fn_ctxs.size(); i++) {
-        aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
-                                              agg_state + aggregator->_agg_states_offsets[i]);
+    size_t created = 0;
+    size_t aggregate_function_sz = aggregator->_agg_fn_ctxs.size();
+    try {
+        for (int i = 0; i < aggregate_function_sz; i++) {
+            aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
+                                                  agg_state + aggregator->_agg_states_offsets[i]);
+            created++;
+        }
+        return agg_state;
+    } catch (std::bad_alloc& e) {
+        for (size_t i = 0; i < created; ++i) {
+            aggregator->_agg_functions[i]->destroy(aggregator->_agg_fn_ctxs[i],
+                                                   agg_state + aggregator->_agg_states_offsets[i]);
+        }
+        aggregator->_state_allocator.rollback();
+        throw;
     }
-    return agg_state;
 }
 
 template <class HashMapWithKey>
 inline AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nullptr_t) {
     AggDataPtr agg_state = aggregator->_state_allocator.allocate_null_key_data();
-    for (int i = 0; i < aggregator->_agg_fn_ctxs.size(); i++) {
-        aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
-                                              agg_state + aggregator->_agg_states_offsets[i]);
+    size_t created = 0;
+    size_t aggregate_function_sz = aggregator->_agg_fn_ctxs.size();
+    try {
+        for (int i = 0; i < aggregate_function_sz; i++) {
+            aggregator->_agg_functions[i]->create(aggregator->_agg_fn_ctxs[i],
+                                                  agg_state + aggregator->_agg_states_offsets[i]);
+            created++;
+        }
+        return agg_state;
+    } catch (std::bad_alloc& e) {
+        for (int i = 0; i < created; i++) {
+            aggregator->_agg_functions[i]->destroy(aggregator->_agg_fn_ctxs[i],
+                                                   agg_state + aggregator->_agg_states_offsets[i]);
+        }
+        throw;
     }
-    return agg_state;
 }
 
 template <class T>

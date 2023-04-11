@@ -80,6 +80,13 @@ public class MaterializedViewTestBase extends PlanTestBase {
             }
         };
 
+        new MockUp<PlanTestBase>() {
+            @Mock
+            boolean isIgnoreExplicitColRefIds() {
+                return true;
+            }
+        };
+
         if (!starRocksAssert.databaseExist("_statistics_")) {
             starRocksAssert.withDatabaseWithoutAnalyze(StatsConstants.STATISTICS_DB_NAME)
                     .useDatabase(StatsConstants.STATISTICS_DB_NAME);
@@ -165,7 +172,12 @@ public class MaterializedViewTestBase extends PlanTestBase {
         }
 
         public MVRewriteChecker contains(String expect) {
-            Assert.assertTrue(this.rewritePlan.contains(expect));
+            boolean contained = this.rewritePlan.contains(expect);
+            if (!contained) {
+                LOG.warn("rewritePlan: \n{}", rewritePlan);
+                LOG.warn("expect: \n{}", expect);
+            }
+            Assert.assertTrue(contained);
             return this;
         }
 

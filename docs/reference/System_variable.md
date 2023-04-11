@@ -55,6 +55,7 @@ Variables that can be set both globally or partially effective include:
 * use_compute_nodes
 * vectorized_engine_enable
 * wait_timeout
+* sql_dialect
 
 Variables that can only be set globally effective include:
 
@@ -471,3 +472,17 @@ SELECT /*+ SET_VAR
   The maximum number of rows allowed for the Hash table based on which Bloom filter Local RF is generated. Local RF will not be generated if this value is exceeded. This variable prevents the generation of an excessively long Local RF.
 
   The value is an integer. Default value: 1024000.
+
+* sql_dialect  (v3.0 and later)
+
+  The SQL dialect that is used. For example, you can run the `set sql_dialect = 'trino';` command to set the SQL dialect to Trino, so you can use Trino-specific SQL syntax and functions in your queries.
+
+* io_tasks_per_scan_operator (v3.0 and later)
+
+  The number of concurrent I/O tasks that can be issued by a scan operator. Increase this value if you want to access remote storage systems such as HDFS or S3 but the latency is high. However, a larger value causes more memory consumption.
+
+  The value is an integer. Default value: 4.
+
+* range_pruner_max_predicate (v3.0 and later)
+
+  The maximum number of IN predicates that can be used for Range partition pruning. Default value: 100. A value larger than 100 may cause the system to scan all tablets, which compromises the query performance.

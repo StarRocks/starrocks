@@ -98,6 +98,8 @@ jobs:
     runs-on: self-hosted
     needs: be-checker
     name: Clang-Format
+    env:
+      PR_NUMBER: ${{ github.event.number }}
     if: ${{ needs.be-checker.outputs.output1 == 'true' }}
     steps:
       - name: Clean Workspace
@@ -107,11 +109,23 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
       - name: Checkout PR
-        uses: dawidd6/action-checkout-pr@v1
-        with:
-          pr: ${{ github.event.number }}
+        run: |
+          BRANCH=${{steps.branch.outputs.branch}}
+          git checkout $BRANCH;
+          git pull;
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout $BRANCH_NAME;
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
           
       - name: Run Clang-Format
         run: |
@@ -148,6 +162,20 @@ jobs:
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+
+      - name: Upload log
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: BE UT LOG
+          path: ${{ steps.run_ut.outputs.RES_LOG }}
+          retention-days: 1
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -f ${{ steps.run_ut.outputs.RES_FILE }}
+          rm -f ${{ steps.run_ut.outputs.RES_LOG }}
 
   fe-checker:
     runs-on: ubuntu-latest
@@ -248,11 +276,24 @@ jobs:
 
       - name: UT Report
         uses: mikepenz/action-junit-report@v3
+        if: always()
         with:
           check_name: 'FE UT Report'
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/*.xml
 
-      - name: Clean Report
-        run: rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
+      - name: Upload log
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: FE UT LOG
+          path: ${{ steps.run_ut.outputs.RES_LOG }}
+          retention-days: 1
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
+          rm -f ${{ steps.run_ut.outputs.RES_FILE }}
+          rm -f ${{ steps.run_ut.outputs.RES_LOG }}

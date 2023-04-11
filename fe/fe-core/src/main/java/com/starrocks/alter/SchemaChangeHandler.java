@@ -380,6 +380,11 @@ public class SchemaChangeHandler extends AlterHandler {
         }
 
         Column oriColumn = schemaForFinding.get(modColIndex);
+
+        if (oriColumn.isAutoIncrement()) {
+            throw new DdlException("Can't not modify a AUTO_INCREMENT column");
+        }
+    
         // retain old column name
         modColumn.setName(oriColumn.getName());
 
@@ -565,7 +570,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("Can not assign aggregation method on key column: " + newColName);
             } else if (null == newColumn.getAggregationType()) {
                 Type type = newColumn.getType();
-                if (!type.isKeyType()) {
+                if (!type.canDistributedBy()) {
                     throw new DdlException(
                             "column without agg function will be treated as key column for aggregate table, " + type +
                                     " type can not be key column");

@@ -24,6 +24,7 @@ public class AddComputeNodeClause extends ComputeNodeClause {
     public AddComputeNodeClause(List<String> hostPorts) {
         this(hostPorts, NodePosition.ZERO);
     }
+
     public AddComputeNodeClause(List<String> hostPorts, NodePosition pos) {
         super(hostPorts, pos);
     }

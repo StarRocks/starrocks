@@ -67,60 +67,69 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 }
 
 Status FileReader::_parse_footer() {
-    // try with buffer on stack
-    uint8_t local_buf[FOOTER_BUFFER_SIZE];
-    uint8_t* footer_buf = local_buf;
-    // we may allocate on heap if local_buf is not large enough.
-    DeferOp deferop([&] {
-        if (footer_buf != local_buf) {
-            delete[] footer_buf;
-        }
-    });
+    std::vector<char> footer_buffer;
+    ASSIGN_OR_RETURN(uint32_t footer_read_size, _get_footer_read_size());
+    footer_buffer.resize(footer_read_size);
 
-    uint64_t to_read = std::min(_file_size, FOOTER_BUFFER_SIZE);
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
-        RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buf, to_read));
+        RETURN_IF_ERROR(_file->read_at_fully(_file_size - footer_read_size, footer_buffer.data(), footer_read_size));
+        _scanner_ctx->stats->request_bytes_read += footer_read_size;
+        _scanner_ctx->stats->request_bytes_read_uncompressed += footer_read_size;
     }
-    // check magic
-    RETURN_IF_ERROR(_check_magic(footer_buf + to_read - 4));
-    // deserialize footer
-    uint32_t footer_size = decode_fixed32_le(footer_buf + to_read - 8);
 
-    // if local buf is not large enough, we have to allocate on heap and re-read.
-    // 4 bytes magic number, 4 bytes for footer_size, so total size is footer_size + 8.
-    if ((footer_size + 8) > to_read) {
-        // VLOG_FILE << "parquet file has large footer. name = " << _file->filename() << ", footer_size = " << footer_size;
-        to_read = footer_size + 8;
-        if (_file_size < to_read) {
-            return Status::Corruption(strings::Substitute("Invalid parquet file: name=$0, file_size=$1, footer_size=$2",
-                                                          _file->filename(), _file_size, to_read));
-        }
-        footer_buf = new uint8[to_read];
+    ASSIGN_OR_RETURN(uint32_t metadata_length, _parse_metadata_length(footer_buffer));
+
+    if (footer_read_size < (metadata_length + PARQUET_FOOTER_SIZE)) {
+        // footer_buffer's size is not enough to read the whole metadata, we need to re-read for larger size
+        size_t re_read_size = metadata_length + PARQUET_FOOTER_SIZE;
+        footer_buffer.resize(re_read_size);
         {
             SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_read_ns);
-            RETURN_IF_ERROR(_file->read_at_fully(_file_size - to_read, footer_buf, to_read));
+            RETURN_IF_ERROR(_file->read_at_fully(_file_size - re_read_size, footer_buffer.data(), re_read_size));
+            _scanner_ctx->stats->request_bytes_read += re_read_size;
+            _scanner_ctx->stats->request_bytes_read_uncompressed += re_read_size;
         }
     }
-
-    _scanner_ctx->stats->request_bytes_read += footer_size + 8;
-    _scanner_ctx->stats->request_bytes_read_uncompressed += footer_size + 8;
 
     tparquet::FileMetaData t_metadata;
     // deserialize footer
-    RETURN_IF_ERROR(deserialize_thrift_msg(footer_buf + to_read - 8 - footer_size, &footer_size, TProtocolType::COMPACT,
-                                           &t_metadata));
+    RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(footer_buffer.data()) + footer_buffer.size() -
+                                                   PARQUET_FOOTER_SIZE - metadata_length,
+                                           &metadata_length, TProtocolType::COMPACT, &t_metadata));
     _file_metadata.reset(new FileMetaData());
     RETURN_IF_ERROR(_file_metadata->init(t_metadata, _scanner_ctx->case_sensitive));
-
     return Status::OK();
 }
 
-Status FileReader::_check_magic(const uint8_t* file_magic) {
-    if (!memequal(reinterpret_cast<const char*>(file_magic), 4, PARQUET_MAGIC_NUMBER, 4)) {
-        return Status::Corruption("Parquet file magic not match");
+StatusOr<uint32_t> FileReader::_get_footer_read_size() const {
+    if (_file_size == 0) {
+        return Status::Corruption("Parquet file size is 0 bytes");
+    } else if (_file_size < PARQUET_FOOTER_SIZE) {
+        return Status::Corruption(strings::Substitute(
+                "Parquet file size is $0 bytes, smaller than the minimum parquet file footer ($1 bytes)", _file_size,
+                PARQUET_FOOTER_SIZE));
     }
-    return Status::OK();
+    return std::min(_file_size, DEFAULT_FOOTER_BUFFER_SIZE);
+}
+
+StatusOr<uint32_t> FileReader::_parse_metadata_length(const std::vector<char>& footer_buff) const {
+    size_t size = footer_buff.size();
+    if (memequal(footer_buff.data() + size - 4, 4, PARQUET_EMAIC_NUMBER, 4)) {
+        return Status::NotSupported("StarRocks parquet reader not support encrypted parquet file yet");
+    }
+
+    if (!memequal(footer_buff.data() + size - 4, 4, PARQUET_MAGIC_NUMBER, 4)) {
+        return Status::Corruption("Parquet file magic not matched");
+    }
+
+    uint32_t metadata_length = decode_fixed32_le(reinterpret_cast<const uint8_t*>(footer_buff.data()) + size - 8);
+    if (metadata_length > _file_size - PARQUET_FOOTER_SIZE) {
+        return Status::Corruption(strings::Substitute(
+                "Parquet file size is $0 bytes, smaller than the size reported by footer's ($1 bytes)", _file_size,
+                metadata_length));
+    }
+    return metadata_length;
 }
 
 int64_t FileReader::_get_row_group_start_offset(const tparquet::RowGroup& row_group) {
@@ -464,10 +473,6 @@ Status FileReader::_init_group_readers() {
     // 2. collect io ranges of every row group reader.
     // 3. set io ranges to the stream.
     if (config::parquet_coalesce_read_enable && _sb_stream != nullptr) {
-        io::SharedBufferedInputStream::CoalesceOptions options = {
-                .max_dist_size = config::io_coalesce_read_max_distance_size,
-                .max_buffer_size = config::io_coalesce_read_max_buffer_size};
-        _sb_stream->set_coalesce_options(options);
         std::vector<io::SharedBufferedInputStream::IORange> ranges;
         for (auto& r : _row_group_readers) {
             int64_t end_offset = 0;

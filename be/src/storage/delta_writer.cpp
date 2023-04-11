@@ -219,6 +219,7 @@ Status DeltaWriter::_init() {
             return Status::NotSupported("table with sort key do not support partial update");
         }
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
+        writer_context.partial_update_mode = _opt.partial_update_mode;
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();
         if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {
@@ -254,7 +255,6 @@ Status DeltaWriter::_init() {
     writer_context.segments_overlap = OVERLAPPING;
     writer_context.global_dicts = _opt.global_dicts;
     writer_context.miss_auto_increment_column = _opt.miss_auto_increment_column;
-    writer_context.abort_delete = _opt.abort_delete;
     Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
     if (!st.ok()) {
         auto msg = strings::Substitute("Fail to create rowset writer. tablet_id: $0, error: $1", _opt.tablet_id,
@@ -438,7 +438,6 @@ void DeltaWriter::_reset_mem_table() {
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
     _mem_table->set_write_buffer_row(_memtable_buffer_row);
-    _mem_table->set_abort_delete(_opt.abort_delete);
 }
 
 Status DeltaWriter::commit() {

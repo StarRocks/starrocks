@@ -740,29 +740,22 @@ CONF_Bool(object_storage_endpoint_use_https, "false");
 // https://hadoop.apache.org/docs/current2/hadoop-aws/tools/hadoop-aws/index.html
 CONF_Bool(object_storage_endpoint_path_style_access, "false");
 
+// orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
 CONF_Int32(orc_file_cache_max_size, "8388608");
 CONF_Int32(orc_natural_read_size, "8388608");
 CONF_mBool(orc_coalesce_read_enable, "true");
 
-// parquet reader, each column will reserve X bytes for read
-// but with coalesce read enabled, this value is not used.
-CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
+// parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_mInt32(parquet_header_max_size, "16384");
 CONF_Bool(parquet_late_materialization_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
-
-CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 CONF_Int32(io_tasks_per_scan_operator, "4");
-CONF_Bool(connector_chunk_source_accumulate_chunk_enable, "true");
-CONF_Bool(connector_dynamic_chunk_buffer_limiter_enable, "true");
-CONF_Bool(connector_min_max_predicate_from_runtime_filter_enable, "true");
-CONF_Bool(scan_node_always_shared_scan, "false");
-CONF_Bool(connector_scan_node_always_shared_scan, "true");
+CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
@@ -804,6 +797,19 @@ CONF_Int32(starlet_port, "9070");
 CONF_Int32(starlet_cache_thread_num, "64");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
+// Cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
+CONF_Int32(starlet_cache_check_interval, "900");
+// Cache backend cache evictor interval (in seconds)
+CONF_Int32(starlet_cache_evict_interval, "60");
+// Cache will start evict cache files if free space belows this value(percentage)
+CONF_Double(starlet_cache_evict_low_water, "0.1");
+// Cache will stop evict cache files if free space is above this value(percentage)
+CONF_Double(starlet_cache_evict_high_water, "0.2");
+// type:Integer. cache directory allocation policy. (0:default, 1:random, 2:round-robin)
+CONF_Int32(starlet_cache_dir_allocate_policy, "0");
+// Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
+// Only support in S3/HDFS currently.
+CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
 #endif
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -838,7 +844,10 @@ CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
 // spill dirs
 CONF_String(spill_local_storage_dir, "spill");
-CONF_mBool(experimental_spill_skip_sync, "false");
+// when spill occurs, whether enable skip synchronous flush
+CONF_mBool(experimental_spill_skip_sync, "true");
+// spill Initial number of partitions
+CONF_mInt32(spill_init_partition, "4");
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
@@ -883,6 +892,8 @@ CONF_Int64(block_cache_max_concurrent_inserts, "1000000");
 // Once this is reached, requests will be rejected until the parcel memory usage gets under the limit.
 CONF_Int64(block_cache_max_parcel_memory_mb, "256");
 CONF_Bool(block_cache_report_stats, "false");
+// cachelib, starcache
+CONF_String(block_cache_engine, "starcache");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
@@ -917,5 +928,12 @@ CONF_Int64(binlog_file_max_size, "536870912");
 CONF_Int32(binlog_page_max_size, "1048576");
 
 CONF_mInt64(txn_info_history_size, "20000");
+
+CONF_mInt32(update_cache_evict_internal_sec, "11");
+CONF_mBool(enable_auto_evict_update_cache, "true");
+
+CONF_Bool(enable_preload_column_mode_update_cache, "true");
+
+CONF_mInt64(load_tablet_timeout_seconds, "30");
 
 } // namespace starrocks::config

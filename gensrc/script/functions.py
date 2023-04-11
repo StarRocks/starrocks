@@ -394,12 +394,21 @@ vectorized_functions = [
     [50243, 'str2date', 'DATE', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::str2date', 'TimeFunctions::str_to_date_prepare', 'TimeFunctions::str_to_date_close'],
     [50250, 'time_to_sec', 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
 
-    [50300, 'unix_timestamp', 'INT', [], 'TimeFunctions::to_unix_for_now'],
-    [50301, 'unix_timestamp', 'INT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime'],
-    [50302, 'unix_timestamp', 'INT', ['DATE'], 'TimeFunctions::to_unix_from_date'],
-    [50303, 'unix_timestamp', 'INT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format'],
-    [50304, 'from_unixtime', 'VARCHAR', ['INT'], 'TimeFunctions::from_unix_to_datetime'],
-    [50305, 'from_unixtime', 'VARCHAR', ['INT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
+    # unix timestamp extended version to int64
+    # be sure to put before int32 version, so fe will find signature in order.
+    [50284, 'unix_timestamp', 'BIGINT', [], 'TimeFunctions::to_unix_for_now_64'],
+    [50285, 'unix_timestamp', 'BIGINT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime_64'],
+    [50286, 'unix_timestamp', 'BIGINT', ['DATE'], 'TimeFunctions::to_unix_from_date_64'],
+    [50287, 'unix_timestamp', 'BIGINT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format_64'],
+    [50288, 'from_unixtime', 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_64'],
+    [50289, 'from_unixtime', 'VARCHAR', ['BIGINT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format_64', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
+
+    [50300, 'unix_timestamp', 'INT', [], 'TimeFunctions::to_unix_for_now_32'],
+    [50301, 'unix_timestamp', 'INT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime_32'],
+    [50302, 'unix_timestamp', 'INT', ['DATE'], 'TimeFunctions::to_unix_from_date_32'],
+    [50303, 'unix_timestamp', 'INT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format_32'],
+    [50304, 'from_unixtime', 'VARCHAR', ['INT'], 'TimeFunctions::from_unix_to_datetime_32'],
+    [50305, 'from_unixtime', 'VARCHAR', ['INT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format_32', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
 
     [50310, 'dayname', 'VARCHAR', ['DATETIME'], 'TimeFunctions::day_name'],
     [50311, 'monthname', 'VARCHAR', ['DATETIME'], 'TimeFunctions::month_name'],
@@ -413,6 +422,8 @@ vectorized_functions = [
     [50371, 'date_slice', 'DATE', ['DATE', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
     [50372, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
     [50373, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+
+    [50400, 'next_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::next_day'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
@@ -718,6 +729,8 @@ vectorized_functions = [
     [150100, 'array_distinct', 'ARRAY_DATETIME',    ['ARRAY_DATETIME'],    'ArrayFunctions::array_distinct<TYPE_DATETIME>'],
     [150101, 'array_distinct', 'ARRAY_DATE',        ['ARRAY_DATE'],        'ArrayFunctions::array_distinct<TYPE_DATE>'],
 
+    [150107, 'array_distinct', 'ANY_ARRAY',        ['ANY_ARRAY'],        'ArrayFunctions::array_distinct_any_type'],
+
     [150110, 'array_sort', 'ARRAY_BOOLEAN',   ['ARRAY_BOOLEAN'],   'ArrayFunctions::array_sort<TYPE_BOOLEAN>'],
     [150111, 'array_sort', 'ARRAY_TINYINT',   ['ARRAY_TINYINT'],   'ArrayFunctions::array_sort<TYPE_TINYINT>'],
     [150112, 'array_sort', 'ARRAY_SMALLINT',  ['ARRAY_SMALLINT'],  'ArrayFunctions::array_sort<TYPE_SMALLINT>'],
@@ -751,6 +764,8 @@ vectorized_functions = [
     [150140, 'reverse', 'ARRAY_DATETIME',  ['ARRAY_DATETIME'],  'ArrayFunctions::array_reverse<TYPE_DATETIME>'],
     [150141, 'reverse', 'ARRAY_DATE',      ['ARRAY_DATE'],      'ArrayFunctions::array_reverse<TYPE_DATE>'],
     [150142, 'reverse', 'ARRAY_JSON',      ['ARRAY_JSON'],      'ArrayFunctions::array_reverse<TYPE_JSON>'],
+
+    [150146, 'reverse', 'ANY_ARRAY',      ['ANY_ARRAY'],      'ArrayFunctions::array_reverse_any_types'],
 
     [150150, 'array_join', 'VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR'],   'ArrayFunctions::array_join'],
     [150151, 'array_join', 'VARCHAR', ['ARRAY_VARCHAR', 'VARCHAR', 'VARCHAR'],   'ArrayFunctions::array_join'],
@@ -824,6 +839,8 @@ vectorized_functions = [
     [150220, 'arrays_overlap', 'BOOLEAN', ['ARRAY_DECIMALV2', 'ARRAY_DECIMALV2'],    'ArrayFunctions::array_overlap<TYPE_DECIMALV2>'],
     [150221, 'arrays_overlap', 'BOOLEAN',   ['ARRAY_VARCHAR', 'ARRAY_VARCHAR'],      'ArrayFunctions::array_overlap<TYPE_VARCHAR>'],
 
+    [150226, 'arrays_overlap', 'BOOLEAN',   ['ANY_ARRAY', 'ANY_ARRAY'],      'ArrayFunctions::array_contains_any'],
+
     [150230, 'array_intersect', 'ARRAY_DATE',       ['ARRAY_DATE', "..."],        'ArrayFunctions::array_intersect<TYPE_DATE>'],
     [150231, 'array_intersect', 'ARRAY_DATETIME',   ['ARRAY_DATETIME', "..."],    'ArrayFunctions::array_intersect<TYPE_DATETIME>'],
     [150232, 'array_intersect', 'ARRAY_BOOLEAN',    ['ARRAY_BOOLEAN', "..."],     'ArrayFunctions::array_intersect<TYPE_BOOLEAN>'],
@@ -839,6 +856,8 @@ vectorized_functions = [
     [150239, 'array_intersect', 'ARRAY_DOUBLE',     ['ARRAY_DOUBLE', "..."],      'ArrayFunctions::array_intersect<TYPE_DOUBLE>'],
     [150240, 'array_intersect', 'ARRAY_DECIMALV2',  ['ARRAY_DECIMALV2', "..."],   'ArrayFunctions::array_intersect<TYPE_DECIMALV2>'],
     [150241, 'array_intersect', 'ARRAY_VARCHAR',    ['ARRAY_VARCHAR', "..."],     'ArrayFunctions::array_intersect<TYPE_VARCHAR>'],
+
+    [150246, 'array_intersect', 'ANY_ARRAY',    ['ANY_ARRAY', "..."],     'ArrayFunctions::array_intersect_any_type'],
 
 
     # @Deprecated: these will be deleted in the future version, keep these just for compatible
@@ -886,6 +905,12 @@ vectorized_functions = [
     [150322, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_DATE'],      'ArrayFunctions::array_sortby<TYPE_DATE>'],
     [150323, 'array_sortby', 'ANY_ARRAY',  ['ANY_ARRAY', 'ARRAY_JSON'],      'ArrayFunctions::array_sortby<TYPE_JSON>'],
 
+    [150330, 'array_generate', 'ARRAY_TINYINT',  ['TINYINT', 'TINYINT', 'TINYINT'],          "ArrayFunctions::array_generate<TYPE_TINYINT>"],
+    [150331, 'array_generate', 'ARRAY_SMALLINT',  ['SMALLINT', 'SMALLINT', 'SMALLINT'],      "ArrayFunctions::array_generate<TYPE_SMALLINT>"],
+    [150332, 'array_generate', 'ARRAY_INT',  ['INT', 'INT', 'INT'],                          "ArrayFunctions::array_generate<TYPE_INT>"],
+    [150333, 'array_generate', 'ARRAY_BIGINT',  ['BIGINT', 'BIGINT', 'BIGINT'],              "ArrayFunctions::array_generate<TYPE_BIGINT>"],
+    [150334, 'array_generate', 'ARRAY_LARGEINT',  ['LARGEINT', 'LARGEINT', 'LARGEINT'],      "ArrayFunctions::array_generate<TYPE_LARGEINT>"],
+
     # high-order functions related to lambda functions.
     [160100, 'array_map','ANY_ARRAY',['FUNCTION','ANY_ARRAY', "..."],'ArrayFunctions::array_map'],
 
@@ -899,12 +924,4 @@ vectorized_functions = [
 
     # struct functions
     [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
-
-    # unix timestamp extended version to int64
-    # [170700, 'unix_timestamp', 'BIGINT', [], 'TimeFunctions::to_unix_for_now_64'],
-    # [170701, 'unix_timestamp', 'BIGINT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime_64'],
-    # [170702, 'unix_timestamp', 'BIGINT', ['DATE'], 'TimeFunctions::to_unix_from_date_64'],
-    # [170701, 'unix_timestamp', 'BIGINT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format_64'],
-    [170704, 'from_unixtime', 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_64'],
-    # [170705, 'from_unixtime', 'VARCHAR', ['BIGINT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format_64', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
 ]
