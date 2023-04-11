@@ -240,25 +240,25 @@ Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotD
 
 Status ParquetScanner::convert_array_to_column(ConvertFunc conv_func, size_t num_elements, const arrow::Array* array,
                                                const TypeDescriptor* type_desc, const ColumnPtr& column,
-                                               size_t batch_start_idx, size_t column_start_idx, Filter* chunk_filter,
+                                               size_t batch_start_idx, size_t chunk_start_idx, Filter* chunk_filter,
                                                ArrowConvertContext* conv_ctx) {
     uint8_t* null_data;
     Column* data_column;
     if (column->is_nullable()) {
         auto nullable_column = down_cast<NullableColumn*>(column.get());
         auto null_column = nullable_column->mutable_null_column();
-        size_t null_count = fill_null_column(array, batch_start_idx, num_elements, null_column, column_start_idx);
+        size_t null_count = fill_null_column(array, batch_start_idx, num_elements, null_column, chunk_start_idx);
         nullable_column->set_has_null(null_count != 0);
-        null_data = &null_column->get_data().front() + column_start_idx;
+        null_data = &null_column->get_data().front() + chunk_start_idx;
         data_column = nullable_column->data_column().get();
     } else {
         null_data = nullptr;
         // Fill nullable array into not-nullable column, positions of NULLs is marked as 1
-        fill_filter(array, batch_start_idx, num_elements, chunk_filter, column_start_idx, conv_ctx);
+        fill_filter(array, batch_start_idx, num_elements, chunk_filter, chunk_start_idx, conv_ctx);
         data_column = column.get();
     }
 
-    auto st = conv_func(array, batch_start_idx, num_elements, data_column, column_start_idx, null_data, chunk_filter,
+    auto st = conv_func(array, batch_start_idx, num_elements, data_column, chunk_start_idx, null_data, chunk_filter,
                         conv_ctx, type_desc);
     if (st.ok() && column->is_nullable()) {
         // in some scene such as string length exceeds limit, the column will be set NULL, so we need reset has_null
@@ -311,6 +311,7 @@ StatusOr<ChunkPtr> ParquetScanner::get_next() {
 
         // process end of file
         // if chunk is not empty, then just break the loop and finalize the chunk
+        // so always empty chunks read data from files
         _curr_file_reader.reset();
         if (chunk->num_rows() > 0) {
             break;

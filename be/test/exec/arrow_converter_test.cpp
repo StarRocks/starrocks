@@ -25,6 +25,7 @@
 #include "arrow/array/builder_base.h"
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
+#include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/arrow_to_starrocks_converter.h"
 #include "runtime/datetime_value.h"
@@ -1244,6 +1245,80 @@ PARALLEL_TEST(ArrowConverterTest, test_map_to_json) {
     for (int i = 1; i < 10; i++) {
         add_arrow_map_to_json_column(json_column.get(), i, map_value, counter);
     }
+}
+
+static std::shared_ptr<arrow::Array> create_list_array(int64_t num_elements, ssize_t& counter) {
+    auto value_builder = std::make_shared<arrow::UInt64Builder>();
+    int fix_size = 10;
+    arrow::TypeTraits<arrow::FixedSizeListType>::BuilderType builder(arrow::default_memory_pool(), value_builder,
+                                                                     fix_size);
+    for (auto num = 0; num < num_elements; num = num + fix_size) {
+        builder.Append();
+        for (int i = 0; i < fix_size; i++) {
+            value_builder->Append(counter);
+            counter += 1;
+        }
+    }
+    return builder.Finish().ValueOrDie();
+}
+
+PARALLEL_TEST(ArrowConverterTest, test_convert_list_array) {
+    TypeDescriptor array_type(TYPE_ARRAY);
+    array_type.children.push_back(TypeDescriptor(LogicalType::TYPE_BIGINT));
+    auto column = ColumnHelper::create_column(array_type, false);
+    column->reserve(4096);
+    ssize_t counter = 0;
+    int num = 100;
+    auto array = create_list_array(num, counter);
+    auto conv_func = get_arrow_converter(ArrowTypeId::LIST, TYPE_ARRAY, false, false);
+    ASSERT_TRUE(conv_func != nullptr);
+    ASSERT_EQ(num, counter);
+    Filter filter;
+    filter.resize(array->length() + column->size(), 1);
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column.get(), column->size(), nullptr, &filter, nullptr,
+                               &array_type));
+    ASSERT_EQ(column->size(), 10);
+}
+
+static std::shared_ptr<arrow::Array> create_nest_list_array(int64_t num_elements, ssize_t& counter) {
+    int fix_size = 5;
+    int fix_size1 = 10;
+    auto value_builder = std::make_shared<arrow::UInt64Builder>();
+    auto builder = std::make_shared<arrow::FixedSizeListBuilder>(arrow::default_memory_pool(), value_builder, fix_size);
+    arrow::TypeTraits<arrow::FixedSizeListType>::BuilderType builder1(arrow::default_memory_pool(), builder, fix_size1);
+
+    for (auto num1 = 0; num1 < num_elements; num1 += fix_size1) {
+        builder1.Append();
+        for (auto num = 0; num < fix_size1; num += fix_size) {
+            builder->Append();
+            for (int i = 0; i < fix_size; i++) {
+                value_builder->Append(counter);
+                counter += 1;
+            }
+        }
+    }
+    return builder1.Finish().ValueOrDie();
+}
+
+PARALLEL_TEST(ArrowConverterTest, test_convert_nest_list_array) {
+    TypeDescriptor array_type0(TYPE_ARRAY);
+    array_type0.children.push_back(TypeDescriptor(LogicalType::TYPE_BIGINT));
+    TypeDescriptor array_type(TYPE_ARRAY);
+    array_type.children.push_back(array_type0);
+
+    auto column = ColumnHelper::create_column(array_type, false);
+    column->reserve(4096);
+    ssize_t counter = 0;
+    int num = 100;
+    auto array = create_nest_list_array(num, counter);
+    auto conv_func = get_arrow_converter(ArrowTypeId::LIST, TYPE_ARRAY, false, false);
+    ASSERT_TRUE(conv_func != nullptr);
+    ASSERT_EQ(num, counter);
+    Filter filter;
+    filter.resize(array->length() + column->size(), 1);
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column.get(), column->size(), nullptr, &filter, nullptr,
+                               &array_type));
+    ASSERT_EQ(column->size(), 10);
 }
 
 } // namespace starrocks

@@ -773,7 +773,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
     }
 
     static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
-                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* chunk_filter,
+                        size_t chunk_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* chunk_filter,
                         ArrowConvertContext* ctx, const TypeDescriptor* type_desc) {
         auto* col_array = down_cast<ArrayColumn*>(column);
         UInt32Column* col_offsets = col_array->offsets_column().get();
@@ -801,11 +801,11 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
         if (!conv_func) {
             return illegal_converting_error(child_array->type()->name(), child_type.debug_string());
         }
-        return ParquetScanner::convert_array_to_column(
-                conv_func, child_array_num_elements, child_array, &child_type, col_array->elements_column(),
-                child_array_start_idx,
-                child_type.type == TYPE_ARRAY ? column_start_idx : col_array->elements_column()->size(), chunk_filter,
-                ctx);
+        Filter child_chunk_filter;
+        child_chunk_filter.resize(col_array->elements_column()->size() + child_array_num_elements, 1);
+        return ParquetScanner::convert_array_to_column(conv_func, child_array_num_elements, child_array, &child_type,
+                                                       col_array->elements_column(), child_array_start_idx,
+                                                       col_array->elements_column()->size(), &child_chunk_filter, ctx);
     }
 };
 
@@ -897,6 +897,7 @@ ConvertFunc get_arrow_converter(ArrowTypeId at, LogicalType lt, bool is_nullable
     if (at == ArrowTypeId::NA) {
         return null_converter;
     }
+    at = ArrowConverter<ArrowTypeId::LIST, TYPE_ARRAY, false, false>::is_any_list(at) ? ArrowTypeId::LIST : at;
     auto optimized_idx = convert_idx(at, lt, is_nullable, is_strict);
     auto it = global_optimized_arrow_conv_table.find(optimized_idx);
     if (it != global_optimized_arrow_conv_table.end()) {
