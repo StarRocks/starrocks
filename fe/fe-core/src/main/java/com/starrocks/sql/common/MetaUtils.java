@@ -42,6 +42,15 @@ public class MetaUtils {
 
     private static final Logger LOG = LogManager.getLogger(MVUtils.class);
 
+    public static void checkCatalogExistAndReport(String catalogName) throws AnalysisException {
+        if (catalogName == null) {
+            ErrorReport.reportAnalysisException("Catalog is null");
+        }
+        if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+        }
+    }
+
     public static void checkDbNullAndReport(Database db, String name) throws AnalysisException {
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, name);
@@ -138,5 +147,4 @@ public class MetaUtils {
                 originStmt.originStmt);
         return Maps.newConcurrentMap();
     }
-
 }

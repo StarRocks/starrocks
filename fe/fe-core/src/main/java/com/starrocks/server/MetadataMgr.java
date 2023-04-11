@@ -23,6 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorMetadata;
@@ -137,6 +138,14 @@ public class MetadataMgr {
             }
         }
         return ImmutableList.copyOf(partitionNames.build());
+    }
+
+    public void createDb(String catalogName, String dbName, Map<String, String> properties)
+            throws DdlException, AlreadyExistsException {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            connectorMetadata.get().createDb(dbName, properties);
+        }
     }
 
     public Database getDb(String catalogName, String dbName) {

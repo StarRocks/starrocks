@@ -71,5 +71,8 @@ public interface IcebergCatalog {
 
     Database getDB(String dbName) throws InterruptedException, TException;
 
+    default void createDb(String dbName, Map<String, String> properties) {
+    }
+
     List<TableIdentifier> listTables(Namespace of);
 }

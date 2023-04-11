@@ -501,8 +501,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
-        String dbName = ((Identifier) visit(context.identifier())).getValue();
-        return new CreateDbStmt(context.IF() != null, dbName, createPos(context));
+        String catalogName = "";
+        if (context.catalog != null) {
+            catalogName = getIdentifierName(context.catalog);
+        }
+
+        String dbName = getIdentifierName(context.database);
+
+        Map<String, String> properties = new HashMap<>();;
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateDbStmt(context.IF() != null, catalogName, dbName, properties, createPos(context));
     }
 
     @Override
