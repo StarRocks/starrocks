@@ -11,8 +11,7 @@ To ensure successful SQL workloads on your Hudi cluster, your StarRocks cluster 
 
 ## Usage notes
 
-- The file format of Hudi that StarRocks supports is Parquet. Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
-- The data types of Delta Lake that StarRocks does not support are MAP and STRUCT.
+The file format of Hudi that StarRocks supports is Parquet. Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
 
 ## Integration preparations
 
