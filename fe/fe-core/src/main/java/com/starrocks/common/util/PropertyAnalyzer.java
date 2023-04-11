@@ -389,14 +389,17 @@ public class PropertyAnalyzer {
             throw new AnalysisException("Replication num should larger than 0");
         }
 
-        if (Config.only_use_compute_node) {
-            List<Long> computeNodeIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds();
-            if (RunMode.defaultReplicationNum() > computeNodeIds.size()) {
-                throw new AnalysisException("Number of available CN nodes is " + computeNodeIds.size()
+        List<Long> backendIds = Config.only_use_compute_node ?
+                GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds() :
+                GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.defaultReplicationNum() > backendIds.size()) {
+                throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
                         + ", less than " + RunMode.defaultReplicationNum());
             }
         } else {
-            List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+            GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
             if (replicationNum > backendIds.size()) {
                 throw new AnalysisException("Replication num should be less than the number of available BE nodes. "
                         + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size());
