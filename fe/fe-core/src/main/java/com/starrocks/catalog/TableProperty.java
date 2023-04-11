@@ -290,6 +290,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildPartitionLiveNumber() {
+        if (partitionTTLNumber != INVALID) {
+            return this;
+        }
         partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER,
                 String.valueOf(INVALID)));
         return this;
