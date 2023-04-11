@@ -1494,6 +1494,7 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
         LOG(WARNING) << "Fail to init cloned tablet " << tablet_id << ", try to clear meta store";
         wb.Clear();
         RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(store, &wb, tablet_id));
+        RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(store, &wb, tablet_id));
         RETURN_IF_ERROR(TabletMetaManager::clear_rowset(store, &wb, tablet_id));
         RETURN_IF_ERROR(TabletMetaManager::clear_log(store, &wb, tablet_id));
         RETURN_IF_ERROR(TabletMetaManager::remove_tablet_meta(store, &wb, tablet_id, schema_hash));

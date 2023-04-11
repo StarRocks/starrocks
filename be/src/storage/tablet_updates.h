@@ -291,6 +291,9 @@ public:
 
     std::shared_ptr<std::unordered_map<uint32_t, RowsetSharedPtr>> get_rowset_map() const;
 
+    Status get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
+                                         std::vector<uint32_t>* rowset_ids);
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -309,10 +312,6 @@ private:
         std::string to_string() const;
     };
 
-    // used for PrimaryIndex load
-    Status _get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
-                                          std::vector<uint32_t>* rowset_ids);
-
     void _redo_edit_version_log(const EditVersionMetaPB& v);
 
     // check if needs submit an async apply task
@@ -328,6 +327,11 @@ private:
     void _ignore_rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
 
     void _apply_rowset_commit(const EditVersionInfo& version_info);
+
+    // used for normal update or row-mode partial update
+    void _apply_normal_rowset_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset);
+    // used for column-mode partial update
+    void _apply_column_partial_update_commit(const EditVersionInfo& version_info, RowsetSharedPtr rowset);
 
     void _apply_compaction_commit(const EditVersionInfo& version_info);
 
@@ -374,6 +378,8 @@ private:
 
     void _clear_rowset_del_vec_cache(const Rowset& rowset);
 
+    void _clear_rowset_delta_column_group_cache(const Rowset& rowset);
+
     void _update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before, size_t* row_count_after);
 
     Status _convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
@@ -381,6 +387,8 @@ private:
                                      const std::unique_ptr<RowsetWriter>& rowset_writer);
 
     void _check_creation_time_increasing();
+
+    Status _check_conflict_with_partial_update(CompactionInfo* info);
 
     // these functions is only used in ut
     void stop_apply(bool apply_stopped) { _apply_stopped = apply_stopped; }

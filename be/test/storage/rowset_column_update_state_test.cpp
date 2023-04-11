@@ -235,7 +235,6 @@ TEST_F(RowsetColumnUpdateStateTest, prepare_partial_update_states) {
     }
     ASSERT_EQ(N, read_tablet(_tablet, rowsets.size()));
 
-    /*
     std::vector<int32_t> column_indexes = {0, 1};
     {
         std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
@@ -267,7 +266,7 @@ TEST_F(RowsetColumnUpdateStateTest, prepare_partial_update_states) {
         ASSERT_EQ(parital_update_states.size(), 1);
         ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
         ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.size(), 0);
-    }*/
+    }
 }
 
 } // namespace starrocks

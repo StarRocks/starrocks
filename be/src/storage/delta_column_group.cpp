@@ -25,10 +25,16 @@ void DeltaColumnGroup::init(int64_t version, const std::vector<uint32_t>& column
     _version = version;
     _column_ids = column_ids;
     _column_file = column_file;
+    _calc_memory_usage();
 }
 
 void DeltaColumnGroup::rename_column_file(const std::string& dir, RowsetId new_rowset_id, int segment_id) {
     _column_file = Rowset::delta_column_group_path(dir, new_rowset_id, segment_id, _version);
+    _calc_memory_usage();
+}
+
+void DeltaColumnGroup::_calc_memory_usage() {
+    _memory_usage = sizeof(size_t) + sizeof(int64_t) + sizeof(uint32_t) * _column_ids.size() + _column_file.length();
 }
 
 Status DeltaColumnGroup::load(int64_t version, const char* data, size_t length) {
@@ -41,6 +47,7 @@ Status DeltaColumnGroup::load(int64_t version, const char* data, size_t length) 
     for (uint32_t cid : dcg_pb.column_ids()) {
         _column_ids.push_back(cid);
     }
+    _calc_memory_usage();
     return Status::OK();
 }
 

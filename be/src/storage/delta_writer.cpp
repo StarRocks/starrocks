@@ -219,6 +219,7 @@ Status DeltaWriter::_init() {
             return Status::NotSupported("table with sort key do not support partial update");
         }
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
+        writer_context.partial_update_mode = _opt.partial_update_mode;
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();
         if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {

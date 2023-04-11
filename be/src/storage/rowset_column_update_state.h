@@ -54,6 +54,7 @@ struct ColumnPartialUpdateState {
 
     // build `rss_rowid_to_update_rowid` from `src_rss_rowids`
     void build_rss_rowid_to_update_rowid() {
+        rss_rowid_to_update_rowid.clear();
         for (uint32_t upt_id = 0; upt_id < src_rss_rowids.size(); upt_id++) {
             uint64_t each_rss_rowid = src_rss_rowids[upt_id];
             // build rssid & rowid -> update file's rowid
@@ -87,20 +88,12 @@ public:
     // |rowset| : the rowset that we want to handle it to generate delta column group
     Status load(Tablet* tablet, Rowset* rowset);
 
-    // finalize decide the `ColumnPartialUpdateState` after conflict resolve
-    // |tablet| : current tablet
-    // |rowset| : the rowset that we want to handle it to generate delta column group
-    // |latest_applied_version| : latest apply version of this tablet
-    // |index| : tablet's primary key index
-    Status finalize_partial_update_state(Tablet* tablet, Rowset* rowset, EditVersion latest_applied_version,
-                                         const PrimaryIndex& index);
-
     // Generate delta columns by partial update states and rowset,
     // And distribute partial update column data to different `.col` files
     // |rowset| : the rowset that we want to handle it to generate delta column group
     // |tablet| : current tablet
-    // |latest_applied_version| : latest apply major version of this tablet
-    Status finalize(Tablet* tablet, Rowset* rowset, int64_t latest_applied_version);
+    // |index| : tablet's primary key index
+    Status finalize(Tablet* tablet, Rowset* rowset, const PrimaryIndex& index);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
 
@@ -116,6 +109,14 @@ private:
     Status _load_upserts(Rowset* rowset, uint32_t upsert_id);
 
     Status _do_load(Tablet* tablet, Rowset* rowset);
+
+    // finalize decide the `ColumnPartialUpdateState` after conflict resolve
+    // |tablet| : current tablet
+    // |rowset| : the rowset that we want to handle it to generate delta column group
+    // |latest_applied_version| : latest apply version of this tablet
+    // |index| : tablet's primary key index
+    Status _finalize_partial_update_state(Tablet* tablet, Rowset* rowset, EditVersion latest_applied_version,
+                                          const PrimaryIndex& index);
 
     Status _check_and_resolve_conflict(Tablet* tablet, uint32_t rowset_id, uint32_t segment_id,
                                        EditVersion latest_applied_version, const PrimaryIndex& index);
@@ -137,7 +138,7 @@ private:
     // find <RowsetId, segment id> by rssid
     StatusOr<RowsetSegmentId> _find_rowset_seg_id(uint32_t rssid);
     // build the map from rssid to <RowsetId, segment id>
-    Status _init_rowset_seg_id(Tablet* tablet, int64_t version);
+    Status _init_rowset_seg_id(Tablet* tablet);
 
     Status _read_chunk_from_update(const RowidsToUpdateRowids& rowid_to_update_rowid,
                                    std::vector<ChunkIteratorPtr>& update_iterators, std::vector<uint32_t>& rowids,

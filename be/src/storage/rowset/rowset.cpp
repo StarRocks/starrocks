@@ -294,7 +294,7 @@ Status Rowset::_remove_delta_column_group_files(std::shared_ptr<FileSystem> fs) 
             for (const auto& dcg : list) {
                 auto st = fs->delete_file(dcg->column_file());
                 if (st.ok() || st.is_not_found()) {
-                    LOG(INFO) << "Deleting delta column group's file: " << dcg->debug_string() << " st: " << st;
+                    VLOG(1) << "Deleting delta column group's file: " << dcg->debug_string() << " st: " << st;
                 } else {
                     return st;
                 }
@@ -333,7 +333,7 @@ Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id) {
             return Status::RuntimeError(
                     fmt::format("Fail to link segment update file, src: {}, dst {}", src_file_path, dst_link_path));
         } else {
-            LOG(INFO) << "success to link " << src_file_path << " to " << dst_link_path;
+            VLOG(1) << "success to link " << src_file_path << " to " << dst_link_path;
         }
     }
     RETURN_IF_ERROR(_link_delta_column_group_files(dir, new_rowset_id));
@@ -362,7 +362,7 @@ Status Rowset::_link_delta_column_group_files(const std::string& dir, RowsetId n
                     return Status::RuntimeError(fmt::format("Fail to link segment update file, src: {}, dst {}",
                                                             src_file_path, dst_link_path));
                 } else {
-                    LOG(INFO) << "success to link " << src_file_path << " to " << dst_link_path;
+                    VLOG(1) << "success to link " << src_file_path << " to " << dst_link_path;
                 }
             }
         }
