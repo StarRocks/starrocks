@@ -89,11 +89,14 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 ### 自动创建分区
 
+> 注意
+>
+> StarRocks 存算分离模式暂时不支持该功能。
 自 3.0 版本起，StarRocks 支持导入时自动创建分区。相比于其他创建分区的方式，这种创建分区的方式更加易用灵活，因此推荐您优先使用该方式。您只需要在建表时在包含时间函数的分区表达式中，指定一个 DATE 或者 DATETIME 类型的分区列，以及指定分区粒度。借助这种使用表达式的隐式分区方式，StarRocks 会写入新数据时自动创建对应分区，您不需要预先创建出大量分区。
 
 ### 动态分区
 
-您可以为新数据动态创建分区(./dynamic_partitioning.md)，同时 StarRocks 会⾃动删除过期分区，从而确保数据的实效性，实现对分区的⽣命周期管理（Time to Life，简称 “TTL”）。
+您可以按需为新数据[动态创建分区](./dynamic_partitioning.md)，同时 StarRocks 会⾃动删除过期分区，从而确保数据的实效性，实现对分区的⽣命周期管理（Time to Life，简称 “TTL”）。
 
 ### 手动创建分区
 
