@@ -62,8 +62,8 @@ public class IcebergRESTCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergRESTCatalog icebergRESTCatalog = (IcebergRESTCatalog) CatalogLoader.rest(
-                "rest_catalog", new Configuration(), icebergProperties).loadCatalog();
+        IcebergRESTCatalog icebergRESTCatalog = (IcebergRESTCatalog) CatalogUtil.loadCatalog(
+                IcebergRESTCatalog.class.getName(), "rest_catalog", icebergProperties, new Configuration());
         Table table = icebergRESTCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
     }
@@ -79,8 +79,8 @@ public class IcebergRESTCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergRESTCatalog icebergRESTCatalog = (IcebergRESTCatalog) CatalogLoader.rest(
-                "rest_catalog", new Configuration(), icebergProperties).loadCatalog();
+        IcebergRESTCatalog icebergRESTCatalog = (IcebergRESTCatalog) CatalogUtil.loadCatalog(
+                IcebergRESTCatalog.class.getName(), "rest_catalog", icebergProperties, new Configuration());
         List<String> dbs = icebergRESTCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }

@@ -172,7 +172,6 @@ public class AWSCloudCredential implements CloudCredential {
         } else {
             Preconditions.checkArgument(false, "Unreachable");
         }
-        configuration.set("fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
         if (!region.isEmpty()) {
             configuration.set("fs.s3a.endpoint.region", region);
         }
