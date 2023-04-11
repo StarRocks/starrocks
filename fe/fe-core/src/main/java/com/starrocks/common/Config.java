@@ -1527,10 +1527,13 @@ public class Config extends ConfigBase {
     public static double statistic_auto_collect_sample_threshold = 0.3;
 
     @ConfField(mutable = true)
-    public static long statistic_auto_collect_table_interval_size = 5L * 1024 * 1024 * 1024; // 5G
+    public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
 
     @ConfField(mutable = true)
-    public static long statistic_auto_collect_table_interval = 3600L * 12; // unit: second, default 12h
+    public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
+
+    @ConfField(mutable = true)
+    public static long statistic_auto_collect_large_table_interval = 3600L * 12; // unit: second, default 12h
 
     /**
      * Full statistics collection max data size

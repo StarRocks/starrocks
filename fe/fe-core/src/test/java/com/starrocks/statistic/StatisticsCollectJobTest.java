@@ -604,14 +604,14 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         new MockUp<Partition>() {
             @Mock
             public long getDataSize() {
-                return Config.statistic_auto_collect_table_interval_size + 10;
+                return Config.statistic_auto_collect_small_table_size + 10;
             }
         };
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         BasicStatsMeta execMeta1 = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL,
-                now.minusSeconds(Config.statistic_auto_collect_table_interval).minusHours(1),
+                now.minusSeconds(Config.statistic_auto_collect_large_table_interval).minusHours(1),
                 Maps.newHashMap());
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta1);
 
@@ -668,14 +668,14 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         new MockUp<Partition>() {
             @Mock
             public long getDataSize() {
-                return Config.statistic_auto_collect_table_interval_size + 10;
+                return Config.statistic_auto_collect_small_table_size + 10;
             }
         };
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         BasicStatsMeta execMeta = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL,
-                now.minusSeconds(Config.statistic_auto_collect_table_interval).minusHours(1),
+                now.minusSeconds(Config.statistic_auto_collect_large_table_interval).minusHours(1),
                 Maps.newHashMap());
         GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta);
 
@@ -737,7 +737,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             new MockUp<Partition>() {
                 @Mock
                 public long getDataSize() {
-                    return Config.statistic_auto_collect_table_interval_size - 10;
+                    return Config.statistic_auto_collect_small_table_size - 10;
                 }
             };
             // healthy = 0.1 && small table
