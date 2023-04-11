@@ -61,8 +61,10 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPartItem title="Query acceleration">
 
 - [Cost-based optimizer](../using_starrocks/Cost_based_optimizer.md)
-- [Materialized view](../using_starrocks/Materialized_view.md)
+- [Synchronous materialized view](../using_starrocks/Materialized_view-single_table.md)
+- [Asynchronous materialized views](../using_starrocks/Materialized_view.md)
 - [Colocate Join](../using_starrocks/Colocate_join.md)
+- [Query cache](../using_starrocks/query_cache.md)
 
 </NavBoxPartItem>
 <NavBoxPartItem title="Query semi-structured data">
@@ -93,6 +95,8 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Manage a cluster](../administration/Cluster_administration.md)
 - [Scale in and out a cluster](../administration/Scale_up_down.md)
+- [Resource group](../administration/resource_group.md)
+- [Data recovery](../administration/Data_recovery.md)
 - [Tune query performance](../administration/Query_planning.md)
 - [Manage workloads](../administration/resource_group.md)
 
