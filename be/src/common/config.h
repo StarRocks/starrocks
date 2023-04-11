@@ -838,7 +838,9 @@ CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
 // spill dirs
 CONF_String(spill_local_storage_dir, "spill");
+// when spill occurs, whether enable skip synchronous flush
 CONF_mBool(experimental_spill_skip_sync, "true");
+// spill Initial number of partitions
 CONF_mInt32(spill_init_partition, "4");
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
