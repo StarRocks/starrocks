@@ -521,7 +521,8 @@ public class MaterializedViewAnalyzer {
             } else if (table.isIcebergTable()) {
                 checkPartitionColumnWithBaseIcebergTable(slotRef, (IcebergTable) table);
             } else {
-                throw new SemanticException("Materialized view do not support base table type : %s", table.getType());
+                throw new SemanticException("Materialized view with partition does not support base table type : %s",
+                        table.getType());
             }
             replaceTableAlias(slotRef, statement, tableNameTableMap);
         }

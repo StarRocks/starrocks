@@ -1408,8 +1408,17 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testAsTableNoOlapTable() {
-        String sql = "create materialized view mv1 " +
+    public void testMySQLTable() throws Exception {
+        String sql1 = "create materialized view mv1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
+        UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
+
+        String sql2 = "create materialized view mv1 " +
                 "partition by ss " +
                 "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
@@ -1418,9 +1427,11 @@ public class CreateMaterializedViewTest {
                 ")" +
                 "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
+            Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Create materialized view do not support the table type: MYSQL"));
+            Assert.assertTrue(e.getMessage()
+                    .contains("Materialized view with partition does not support base table type : MYSQL"));
         }
     }
 
