@@ -153,7 +153,8 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
             requiredProperties.add(Lists.newArrayList(gather, gather));
         } else {
             PhysicalPropertySet rightBroadcastProperty =
-                    new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
+                    new PhysicalPropertySet(
+                            new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
             requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
         }
         return null;
@@ -161,9 +162,9 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     @Override
     public Void visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
-        // If scan tablet sum leas than 1, do one phase local aggregate is enough
+        // If scan tablet sum less than 1, do one phase local aggregate is enough
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0
-                && context.getRootProperty().isExecuteInOneTablet()
+                && context.getRootProperty().oneTabletProperty().supportOneTabletOpt
                 && node.isOnePhaseAgg()) {
             requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
             return null;
@@ -214,7 +215,12 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         if (partitionColumnRefSet.isEmpty()) {
             distributionProperty = new DistributionProperty(DistributionSpec.createGatherDistributionSpec());
         } else {
-            distributionProperty = createShuffleAggProperty(partitionColumnRefSet);
+            // If scan tablet sum less than 1, no distribution property is required
+            if (context.getRootProperty().oneTabletProperty().supportOneTabletOpt) {
+                distributionProperty = DistributionProperty.EMPTY;
+            } else {
+                distributionProperty = createShuffleAggProperty(partitionColumnRefSet);
+            }
         }
         requiredProperties.add(Lists.newArrayList(new PhysicalPropertySet(distributionProperty, sortProperty)));
 
@@ -253,7 +259,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     public Void visitPhysicalLimit(PhysicalLimitOperator node, ExpressionContext context) {
         // @todo: check the condition is right?
         //
-        // If scan tablet sum leas than 1, don't need required gather, because work machine always less than 1?
+        // If scan tablet sum less than 1, don't need required gather, because work machine always less than 1?
         // if (context.getRootProperty().isExecuteInOneTablet()) {
         //     requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
         //     return null;
