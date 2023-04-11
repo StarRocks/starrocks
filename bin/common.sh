@@ -170,3 +170,10 @@ export_cachelib_lib_path() {
     CACHELIB_DIR=$STARROCKS_HOME/lib/cachelib
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CACHELIB_DIR/lib64
 }
+
+update_submodules()
+{
+    pushd ${STARROCKS_HOME} &>/dev/null
+    git submodule update --init --recursive
+    popd
+}
