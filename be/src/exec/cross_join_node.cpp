@@ -679,7 +679,10 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
             _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
+    left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), left_ops,
+                                                                              context->degree_of_parallelism());
     left_ops.emplace_back(std::move(left_factory));
+
     if (limit() != -1) {
         left_ops.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
