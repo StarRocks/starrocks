@@ -28,6 +28,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.CatalogUtils;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
@@ -79,6 +80,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -263,10 +265,14 @@ public class MaterializedViewAnalyzer {
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, aliasTableMap);
             }
-            // check and analyze distribution
-            checkDistribution(statement, aliasTableMap, context);
 
-            planMVQuery(statement, queryStatement, context);
+            // Plan the query to inference the distribution key
+            boolean forcePlan = statement.getDistributionDesc() == null;
+            OptExpression optExpr = planMVQuery(statement, queryStatement, context, forcePlan);
+
+            // check and analyze distribution
+            checkDistribution(statement, aliasTableMap, context, optExpr);
+
             return null;
         }
 
@@ -276,18 +282,21 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        // TODO(murphy) implement
         // Plan the query statement and store in memory
-        private void planMVQuery(CreateMaterializedViewStatement createStmt, QueryStatement query, ConnectContext ctx) {
-            if (!ctx.getSessionVariable().isEnableIncrementalRefreshMV()) {
-                return;
+        private OptExpression planMVQuery(CreateMaterializedViewStatement createStmt,
+                                          QueryStatement query,
+                                          ConnectContext ctx,
+                                          boolean force) {
+            if (!force && !ctx.getSessionVariable().isEnableIncrementalRefreshMV()) {
+                return null;
             }
-            if (!createStmt.getRefreshSchemeDesc().getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
-                return;
+            if (!force &&
+                    !createStmt.getRefreshSchemeDesc().getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
+                return null;
             }
 
             try {
-                ctx.getSessionVariable().setMVPlanner(true);
+                ctx.getSessionVariable().setMVPlanner(!force);
 
                 QueryRelation queryRelation = query.getQueryRelation();
                 ColumnRefFactory columnRefFactory = new ColumnRefFactory();
@@ -316,13 +325,16 @@ public class MaterializedViewAnalyzer {
                 // TODO: refine rules for mv plan
                 // TODO: infer state
                 // TODO: store the plan in create-mv statement and persist it at executor
-                ExecPlan execPlan =
-                        PlanFragmentBuilder.createPhysicalPlanForMV(ctx, createStmt, optimizedPlan, logicalPlan,
-                                queryRelation, columnRefFactory);
+                if (!force) {
+                    ExecPlan execPlan =
+                            PlanFragmentBuilder.createPhysicalPlanForMV(ctx, createStmt, optimizedPlan, logicalPlan,
+                                    queryRelation, columnRefFactory);
+                }
+                return optimizedPlan;
             } catch (DdlException ex) {
                 throw new RuntimeException(ex);
             } finally {
-                ctx.getSessionVariable().setMVPlanner(false);
+                ctx.getSessionVariable().setMVPlanner(force);
             }
         }
 
@@ -470,7 +482,8 @@ public class MaterializedViewAnalyzer {
                     statement.setPartitionRefTableExpr(refExpr);
                 } else {
                     throw new SemanticException(
-                            "Materialized view partition function must related with column", expressionPartitionDesc.getPos());
+                            "Materialized view partition function must related with column",
+                            expressionPartitionDesc.getPos());
                 }
             }
         }
@@ -637,7 +650,8 @@ public class MaterializedViewAnalyzer {
 
         private void checkDistribution(CreateMaterializedViewStatement statement,
                                        Map<TableName, Table> tableNameTableMap,
-                                       ConnectContext context) {
+                                       ConnectContext context,
+                                       OptExpression optExpr) {
             DistributionDesc distributionDesc = statement.getDistributionDesc();
             List<Column> mvColumnItems = statement.getMvColumnItems();
             Map<String, String> properties = statement.getProperties();
@@ -650,13 +664,26 @@ public class MaterializedViewAnalyzer {
                         autoInferReplicationNum(tableNameTableMap).toString());
             }
             if (distributionDesc == null) {
-                if (context.getSessionVariable().isAllowDefaultPartition()) {
-                    distributionDesc = new HashDistributionDesc(0,
-                            Lists.newArrayList(mvColumnItems.get(0).getName()));
-                    statement.setDistributionDesc(distributionDesc);
-                } else {
-                    throw new SemanticException("Materialized view should contain distribution desc");
+                // Choose distributed column to make sure the cardinality is enough to get rid of data skew
+                List<String> mvDistributeColumns = new ArrayList<>();
+                double rowCount = optExpr.getStatistics().getOutputRowCount();
+                long expectedCardinality =
+                        Math.max((long) rowCount / 10, CatalogUtils.expectCardinalityBasedOnBackends());
+                long cardinality = 1;
+                for (ColumnRefOperator columnRef : optExpr.getStatistics().getColumnStatistics().keySet()) {
+                    if (!columnRef.getType().canDistributedBy()) {
+                        continue;
+                    }
+                    ColumnStatistic columnStatistic = optExpr.getStatistics().getColumnStatistic(columnRef);
+                    cardinality *= columnStatistic.getDistinctValuesCount();
+                    mvDistributeColumns.add(columnRef.getName());
+                    if (cardinality >= expectedCardinality) {
+                        break;
+                    }
                 }
+
+                distributionDesc = new HashDistributionDesc(0, mvDistributeColumns);
+                statement.setDistributionDesc(distributionDesc);
             }
             Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
             for (Column columnDef : mvColumnItems) {
@@ -696,7 +723,8 @@ public class MaterializedViewAnalyzer {
             final String newMvName = statement.getNewMvName();
             if (newMvName != null) {
                 if (statement.getMvName().getTbl().equals(newMvName)) {
-                    throw new SemanticException("Same materialized view name " + newMvName, statement.getMvName().getPos());
+                    throw new SemanticException("Same materialized view name " + newMvName,
+                            statement.getMvName().getPos());
                 }
             } else if (refreshSchemeDesc != null) {
                 if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
@@ -708,14 +736,16 @@ public class MaterializedViewAnalyzer {
                     if (intervalLiteral != null) {
                         long step = ((IntLiteral) intervalLiteral.getValue()).getLongValue();
                         if (step <= 0) {
-                            throw new SemanticException("Unsupported negative or zero step value: " + step, async.getPos());
+                            throw new SemanticException("Unsupported negative or zero step value: " + step,
+                                    async.getPos());
                         }
                         final String unit = intervalLiteral.getUnitIdentifier().getDescription().toUpperCase();
                         try {
                             RefreshTimeUnit.valueOf(unit);
                         } catch (IllegalArgumentException e) {
-                            String msg = String.format("Unsupported interval unit: %s, only timeunit %s are supported", unit,
-                                    Arrays.asList(RefreshTimeUnit.values()));
+                            String msg =
+                                    String.format("Unsupported interval unit: %s, only timeunit %s are supported", unit,
+                                            Arrays.asList(RefreshTimeUnit.values()));
                             throw new SemanticException(msg, intervalLiteral.getUnitIdentifier().getPos());
                         }
                     }
@@ -762,7 +792,8 @@ public class MaterializedViewAnalyzer {
                 return null;
             }
             if (!(table.getPartitionInfo() instanceof RangePartitionInfo)) {
-                throw new SemanticException("Not support refresh by partition for single partition mv", mvName.getPos());
+                throw new SemanticException("Not support refresh by partition for single partition mv",
+                        mvName.getPos());
             }
             Column partitionColumn =
                     ((RangePartitionInfo) table.getPartitionInfo()).getPartitionColumns().get(0);

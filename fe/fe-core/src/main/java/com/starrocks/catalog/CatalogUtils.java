@@ -221,6 +221,11 @@ public class CatalogUtils {
         }
     }
 
+    public static int expectCardinalityBasedOnBackends() {
+        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+        return backendNum * 100 * 10000;
+    }
+
     public static int calBucketNumAccordingToBackends() {
         int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
         // When POC, the backends is not greater than three most of the time.
