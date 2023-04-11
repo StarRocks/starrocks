@@ -60,6 +60,11 @@ public class CachedStatisticStorage implements StatisticStorage {
 
     @Override
     public TableStatistic getTableStatistic(Long tableId, Long partitionId) {
+        // get Statistics Table column info, just return default column statistics
+        if (StatisticUtils.statisticTableBlackListCheck(tableId)) {
+            return TableStatistic.unknown();
+        }
+
         try {
             CompletableFuture<Optional<TableStatistic>> result =
                     tableStatsCache.get(new TableStatsCacheKey(tableId, partitionId));
