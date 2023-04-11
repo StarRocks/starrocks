@@ -95,8 +95,8 @@ public class ExpressionContext {
         return childrenProperty.get(index).getOutputColumns();
     }
 
-    public LogicalProperty.OneTabletProperty oneTabletProperty(int index) {
-        return childrenProperty.get(index).oneTabletProperty();
+    public boolean isExecuteInOneTablet(int index) {
+        return childrenProperty.get(index).isExecuteInOneTablet();
     }
 
     public Operator getChildOperator(int index) {

@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.rule;
 
-import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.Memo;
@@ -21,13 +20,9 @@ public class BinderTest {
 
     @Test
     public void testBinder() {
-        OlapTable table1 = new OlapTable();
-        table1.setDefaultDistributionInfo(new HashDistributionInfo());
-        OlapTable table2 = new OlapTable();
-        table2.setDefaultDistributionInfo(new HashDistributionInfo());
         OptExpression expr = OptExpression.create(new LogicalJoinOperator(),
-                new OptExpression(new LogicalOlapScanOperator(table1)),
-                new OptExpression(new LogicalOlapScanOperator(table2)));
+                new OptExpression(new LogicalOlapScanOperator(new OlapTable())),
+                new OptExpression(new LogicalOlapScanOperator(new OlapTable())));
 
         Pattern pattern = Pattern.create(OperatorType.LOGICAL_JOIN)
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF))
