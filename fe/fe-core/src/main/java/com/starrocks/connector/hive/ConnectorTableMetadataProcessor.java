@@ -14,7 +14,9 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
@@ -25,11 +27,14 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.spark_project.guava.collect.Lists;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 public class ConnectorTableMetadataProcessor extends LeaderDaemon {
@@ -37,21 +42,78 @@ public class ConnectorTableMetadataProcessor extends LeaderDaemon {
 
     private final Set<BaseTableInfo> registeredTableInfos = Sets.newConcurrentHashSet();
 
+    private final Map<String, CacheUpdateProcessor> cacheUpdateProcessors = new ConcurrentHashMap<>();
+
+    private final ExecutorService refreshRemoteFileExecutor;
+
     public void registerTableInfo(BaseTableInfo tableInfo) {
         registeredTableInfos.add(tableInfo);
     }
 
+    public void registerCacheUpdateProcessor(String catalogName, CacheUpdateProcessor cache) {
+        LOG.info("register to update {} metadata cache in the ConnectorTableMetadataProcessor", catalogName);
+        cacheUpdateProcessors.put(catalogName, cache);
+    }
+
+    public void unRegisterCacheUpdateProcessor(String catalogName) {
+        LOG.info("unregister to update {} metadata cache in the ConnectorTableMetadataProcessor", catalogName);
+        cacheUpdateProcessors.remove(catalogName);
+    }
+
     public ConnectorTableMetadataProcessor() {
         super(ConnectorTableMetadataProcessor.class.getName(), Config.background_refresh_metadata_interval_millis);
+        refreshRemoteFileExecutor = Executors.newFixedThreadPool(Config.background_refresh_file_metadata_concurrency,
+                new ThreadFactoryBuilder().setNameFormat("background-refresh-remote-files-%d").build());
     }
 
     @Override
     protected void runAfterCatalogReady() {
-        if (!Config.enable_hms_events_incremental_sync && Config.enable_background_refresh_hive_metadata) {
+        if (!Config.enable_hms_events_incremental_sync && Config.enable_background_refresh_resource_table_metadata) {
             refreshResourceHiveTable();
         }
 
         refreshRegisteredTable();
+
+        if (Config.enable_background_refresh_connector_metadata) {
+            refreshCatalogTable();
+        }
+    }
+
+    private void refreshCatalogTable() {
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        List<String> catalogNames = Lists.newArrayList(cacheUpdateProcessors.keySet());
+        for (String catalogName : catalogNames) {
+            CacheUpdateProcessor updateProcessor = cacheUpdateProcessors.get(catalogName);
+            if (updateProcessor == null) {
+                LOG.error("Failed to get cacheUpdateProcessor by catalog {}.", catalogName);
+                continue;
+            }
+
+            for (HiveTableName cachedTableName : updateProcessor.getCachedTableNames()) {
+                String dbName = cachedTableName.getDatabaseName();
+                String tableName = cachedTableName.getTableName();
+                Table table;
+                try {
+                    table = metadataMgr.getTable(catalogName, dbName, tableName);
+                } catch (Exception e) {
+                    LOG.warn("can't get table of {}.{}.{}，msg: ", catalogName, dbName, tableName, e);
+                    continue;
+                }
+                if (table == null) {
+                    LOG.warn("{}.{}.{} not exist", catalogName, dbName, tableName);
+                    continue;
+                }
+                try {
+                    updateProcessor.refreshTableBackground(table, true, refreshRemoteFileExecutor);
+                } catch (Exception e) {
+                    LOG.warn("refresh {}.{}.{} meta store info failed, msg : ", catalogName, dbName,
+                            tableName, e);
+                    continue;
+                }
+                LOG.info("refresh table {}.{}.{} success", catalogName, dbName, tableName);
+            }
+            LOG.info("refresh connector metadata {} finished", catalogName);
+        }
     }
 
     private void refreshRegisteredTable() {

@@ -20,6 +20,7 @@
 #include "agent/master_info.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
@@ -138,13 +139,23 @@ Status QueryContext::init_query_once(workgroup::WorkGroup* wg) {
             auto maybe_token = wg->acquire_running_query_token();
             if (maybe_token.ok()) {
                 _wg_running_query_token_ptr = std::move(maybe_token.value());
+                _wg_running_query_token_atomic_ptr = _wg_running_query_token_ptr.get();
             } else {
                 st = maybe_token.status();
             }
+
+            _spill_manager = std::make_unique<spill::QuerySpillManager>(_query_id);
         });
     }
 
     return st;
+}
+
+void QueryContext::release_workgroup_token_once() {
+    auto* old = _wg_running_query_token_atomic_ptr.load();
+    if (old != nullptr && _wg_running_query_token_atomic_ptr.compare_exchange_strong(old, nullptr)) {
+        _wg_running_query_token_ptr.reset();
+    }
 }
 
 void QueryContext::set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace) {

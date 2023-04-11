@@ -325,12 +325,14 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
         String sql = "select count(distinct v2) from t0 group by v3";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:AGGREGATE (merge serialize)\n"
-                + "  |  group by: 2: v2, 3: v3");
-        assertContains(plan, "  STREAM DATA SINK\n"
-                + "    EXCHANGE ID: 06\n"
-                + "    UNPARTITIONED");
-
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 2: v2, 3: v3");
+        assertContains(plan, "  PARTITION: HASH_PARTITIONED: 3: v3\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    UNPARTITIONED");
     }
 
     @Test

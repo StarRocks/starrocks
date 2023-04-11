@@ -41,12 +41,17 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.system.Backend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -83,8 +88,57 @@ public class CreateTableTest {
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
     }
 
+    @Test(expected = DdlException.class)
+    public void testNotSpecifyReplicateNum() throws Exception {
+        createTable(
+                "CREATE TABLE test.`duplicate_table_with_null` ( `k1`  date, `k2`  datetime,`k3`  " +
+                        "char(20), `k4`  varchar(20), `k5`  boolean, `k6`  tinyint, `k7`  smallint, " +
+                        "`k8`  int, `k9`  bigint, `k10` largeint, `k11` float, `k12` double, " +
+                        "`k13` decimal(27,9)) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY " +
+                        "time_slice(k2, interval 1 hour) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) " +
+                        "PROPERTIES ( \"storage_format\" = \"v2\");"
+        );
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testCreateUnsupportedType() throws Exception {
+        createTable(
+                "CREATE TABLE test.ods_warehoused (\n" +
+                        " warehouse_id                                bigint(20)                 COMMENT        ''\n" +
+                        ",company_id                                        bigint(20)                 COMMENT        ''\n" +
+                        ",company_name                                string                        COMMENT        ''\n" +
+                        ",is_sort_express_by_cost        tinyint(1)                COMMENT        ''\n" +
+                        ",is_order_intercepted                tinyint(1)                COMMENT        ''\n" +
+                        ",intercept_time_type                tinyint(3)                 COMMENT        ''\n" +
+                        ",intercept_time                                time                        COMMENT        ''\n" +
+                        ",intercept_begin_time                time                        COMMENT        ''\n" +
+                        ",intercept_end_time                        time                        COMMENT        ''\n" +
+                        ")\n" +
+                        "PRIMARY KEY(warehouse_id)\n" +
+                        "COMMENT \"\"\n" +
+                        "DISTRIBUTED BY HASH(warehouse_id)\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
+        );
+    }
+
     @Test
     public void testNormal() throws DdlException {
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable(
+                        "CREATE TABLE test.case_insensitive (\n" +
+                                "    A1 TINYINT,\n" +
+                                "    A2 DATE\n" +
+                                ") ENGINE=OLAP\n" +
+                                "DUPLICATE KEY(A1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "PARTITION BY RANGE (a2) (\n" +
+                                "START (\"2021-01-01\") END (\"2022-01-01\") EVERY (INTERVAL 1 year)\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(A1) BUCKETS 20\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");"));
 
         ExceptionChecker.expectThrowsNoException(
                 () -> createTable(
@@ -413,6 +467,22 @@ public class CreateTableTest {
         System.out.println("columns = " + columns);
         Assert.assertTrue(columns.contains("`sum_decimal` decimal128(38, 4) SUM"));
         Assert.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
+    }
+
+    @Test
+    public void testDecimal() throws Exception {
+        String sql = "CREATE TABLE create_decimal_tbl\n" +
+                "(\n" +
+                "    c1 decimal(38, 1),\n" +
+                "    c2 numeric(38, 1),\n" +
+                "    c3 number(38, 1) \n" +
+                ")\n" +
+                "DUPLICATE KEY(c1)\n" +
+                "DISTRIBUTED BY HASH(c1) BUCKETS 1\n" +
+                "PROPERTIES(\"replication_num\" = \"1\");";
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
     }
 
     @Test(expected = AnalysisException.class)
@@ -748,6 +818,32 @@ public class CreateTableTest {
     }
 
     @Test
+    public void testTemporaryTable() throws Exception {
+        Config.enable_experimental_temporary_table = true;
+        createTable(
+                "CREATE TABLE test.base_tbl (\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")"
+        );
+
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(
+                "create temporary table test.temp_table select * from test.base_tbl",
+                connectContext);
+        // String sql = stmt.toSql();
+        // Assert.assertEquals("hehe", sql);
+
+        // drop table
+        UtFrameUtils.parseStmtWithNewParser("drop temporary table test.base_tbl", connectContext);
+    }
+
+    @Test
     public void testCreateTableWithConstraint() {
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.parent_table1(\n" +
@@ -929,6 +1025,134 @@ public class CreateTableTest {
                                 "PROPERTIES (\n" +
                                 "\"replication_num\" = \"1\",\n" +
                                 "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table2(k1)\"\n" +
+                                ");"
+                ));
+    }
+
+    @Test
+    public void testAutomaticPartitionTableLimit() {
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.site_access_part_partition(\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "    START (\"2023-05-01\") END (\"2023-05-03\") EVERY (INTERVAL 1 month)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.site_access_interval_not_1 (\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "    START (\"2023-05-01\") END (\"2023-10-01\") EVERY (INTERVAL 2 month)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.site_access_granularity_does_not_match (\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "    START (\"2023-05-01\") END (\"2023-10-01\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.site_access_granularity_does_not_match (\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "    START (\"2023-05-01\") END (\"2023-10-01\") EVERY (INTERVAL 1 month)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE site_access_use_time_slice (\n" +
+                        "    event_day datetime,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY time_slice(event_day, interval 1 day)(\n" +
+                        "\tSTART (\"2023-05-01\") END (\"2023-05-03\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+    }
+
+    @Test
+    public void testCannotCreateOlapTable() {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Cannot create table without persistent volume in current run mode \"shared_data\"",
+                () -> createTable(
+                        "CREATE TABLE test.base_table2(\n" +
+                                "k1 INT,\n" +
+                                "k2 VARCHAR(20),\n" +
+                                "k3 INT,\n" +
+                                "k4 VARCHAR(20),\n" +
+                                "k5 INT,\n" +
+                                "k6 VARCHAR(20),\n" +
+                                "k7 INT,\n" +
+                                "k8 VARCHAR(20)\n" +
+                                ") ENGINE=OLAP\n" +
+                                "DUPLICATE KEY(k1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                                "PROPERTIES (\n" +
+                                "\"storage_volume\" = \"local\"\n" +
                                 ");"
                 ));
     }

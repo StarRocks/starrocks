@@ -83,7 +83,7 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
 
     bool append_nulls(size_t count) override;
 
@@ -161,6 +161,7 @@ public:
 
     const Column& elements() const { return *_elements; }
     ColumnPtr& elements_column() { return _elements; }
+    ColumnPtr elements_column() const { return _elements; }
 
     const UInt32Column& offsets() const { return *_offsets; }
     UInt32Column::Ptr& offsets_column() { return _offsets; }
@@ -182,9 +183,6 @@ public:
     bool has_large_column() const override { return _elements->has_large_column(); }
 
     void check_or_die() const override;
-
-    // null map is null, but the corresponding array may not empty, so need empty the unexpected array.
-    bool empty_null_array(const NullColumnPtr& null_map);
 
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
 

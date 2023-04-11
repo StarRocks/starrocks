@@ -2,7 +2,7 @@
 
 A Hudi catalog is a kind of external catalog that enables you to query data from Apache Hudi without ingestion.
 
-Also, you can directly transform and load data from Hudi based on this Hudi catalog.
+Also, you can directly transform and load data from Hudi by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Hudi catalogs. StarRocks supports Hudi catalogs from v2.4 onwards.
 
 To ensure successful SQL workloads on your Hudi cluster, your StarRocks cluster needs to integrate with two important components:
 
@@ -11,9 +11,7 @@ To ensure successful SQL workloads on your Hudi cluster, your StarRocks cluster 
 
 ## Usage notes
 
-- The file formats of Hudi that StarRocks supports are Parquet, ORC, and CSV.
-- The data types of Hudi that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP data type for CSV-formatted Hudi tables.
-- You can only use Hudi catalogs to query data. You cannot use Hudi catalogs to drop, delete, or insert data into your Hudi cluster.
+The file format of Hudi that StarRocks supports is Parquet. Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
 
 ## Integration preparations
 
@@ -91,7 +89,7 @@ The type of your data source. Set the value to `hudi`.
 
 A set of parameters about how StarRocks integrates with the metastore of your data source.
 
-###### Hive metastore
+##### Hive metastore
 
 If you choose Hive metastore as the metastore of your data source, configure `MetastoreParams` as follows:
 
@@ -107,9 +105,9 @@ The following table describes the parameter you need to configure in `MetastoreP
 
 | Parameter           | Required | Description                                                  |
 | ------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (,), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>","thrift://<metastore_IP_address_2>:<metastore_port_2>","thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+| hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>","thrift://<metastore_IP_address_2>:<metastore_port_2>","thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
-###### AWS Glue
+##### AWS Glue
 
 If you choose AWS Glue as the metastore of your data source, take one of the following actions:
 
@@ -160,7 +158,7 @@ You need to configure `StorageCredentialParams` only when your Hudi cluster uses
 
 If your Hudi cluster uses any other storage system, you can ignore `StorageCredentialParams`.
 
-###### AWS S3
+##### AWS S3
 
 If you choose AWS S3 as storage for your Hudi cluster, take one of the following actions:
 
@@ -193,12 +191,34 @@ The following table describes the parameters you need to configure in `StorageCr
 | Parameter                   | Required | Description                                                  |
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | Yes      | Specifies whether to enable the credential methods instance profile and assumed role. Valid values: `true` and `false`. Default value: `false`. |
-| "aws.s3.iam_role_arn"       | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Hudi data by using a Hudi catalog. |
-| "aws.s3.region"             | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
-| "aws.s3.access_key"         | No       | The access key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Hudi data by using a Hudi catalog. |
-| "aws.s3.secret_key"         | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this user when it accesses your Hudi data by using a Hudi catalog. |
+| aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Hudi data by using a Hudi catalog. |
+| aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
+| aws.s3.access_key           | No       | The access key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Hudi data by using a Hudi catalog. |
+| aws.s3.secret_key           | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this user when it accesses your Hudi data by using a Hudi catalog. |
 
 For information about how to choose a credential method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+
+##### AWS S3-compatible storage
+
+If you choose an AWS S3-compatible storage system, such as MinIO, as storage for your Hive cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
+
+```SQL
+"aws.s3.enable_ssl" = "<true>",
+"aws.s3.enable_path_style_access" = "<true>",
+"aws.s3.endpoint" = "<s3_endpoint>",
+"aws.s3.access_key" = "<iam_user_access_key>",
+"aws.s3.secret_key" = "<iam_user_secret_key>"
+```
+
+The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+| Parameter                        | Required | Description                                                  |
+| -------------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection. Valid values: `true` and `false`. Default value: `true`. |
+| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style URL access. Valid values: `true` and `false`. Default value: `false`. |
+| aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your AWS S3 bucket. |
+| aws.s3.access_key                | Yes      | The access key of your AWS IAM user. |
+| aws.s3.secret_key                | Yes      | The secret key of your AWS IAM user. |
 
 #### `MetadataUpdateParams`
 
@@ -215,8 +235,8 @@ However, if the frequency of data updates in Hudi is high, you can tune these pa
 > In most cases, if your Hudi data is updated at a granularity of 1 hour or less, the data update frequency is considered high.
 
 | Parameter                              | Required | Description                                                  |
-| -------------------------------------- | -------- | ------------------------------------------------------------ |
-| enable_hive_metastore_cache            | No       | Specifies whether StarRocks caches the metadata of Hudi tables. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
+|----------------------------------------| -------- | ------------------------------------------------------------ |
+| enable_metastore_cache                 | No       | Specifies whether StarRocks caches the metadata of Hudi tables. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
 | enable_remote_file_cache               | No       | Specifies whether StarRocks caches the metadata of the underlying data files of Hudi tables or partitions. Valid values: `true` and `false`. Default value: `true`. The value `true` enables the cache, and the value `false` disables the cache. |
 | metastore_cache_refresh_interval_sec   | No       | The time interval at which StarRocks asynchronously updates the metadata of Hudi tables or partitions cached in itself. Unit: seconds. Default value: `7200`, which is 2 hours. |
 | remote_file_cache_refresh_interval_sec | No       | The time interval at which StarRocks asynchronously updates the metadata of the underlying data files of Hudi tables or partitions cached in itself. Unit: seconds. Default value: `60`. |
@@ -327,6 +347,30 @@ The following examples create a Hudi catalog named `hudi_catalog_hms` or `hudi_c
       "aws.glue.region" = "us-west-2"
   );
   ```
+
+## View Hudi catalogs
+
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+
+```SQL
+SHOW CATALOGS;
+```
+
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Hudi catalog named `hudi_catalog_glue`:
+
+```SQL
+SHOW CREATE CATALOG hudi_catalog_glue;
+```
+
+## Drop a Hudi catalog
+
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop an external catalog.
+
+The following example drops a Hudi catalog named `hudi_catalog_glue`:
+
+```SQL
+DROP Catalog hudi_catalog_glue;
+```
 
 ## View the schema of a Hudi table
 
@@ -458,7 +502,7 @@ You can also tune the following parameters in the `$FE_HOME/conf/fe.conf` file o
 
 Automatic asynchronous update is the default policy that StarRocks uses to update the metadata in Hudi catalogs.
 
-By default (namely, when the `enable_hive_metastore_cache` and `enable_remote_file_cache` parameters are both set to `true`), if a query hits a partition of a Hudi table, StarRocks automatically caches the metadata of the partition and the metadata of the underlying data files of the partition. The cached metadata is updated by using the lazy update policy.
+By default (namely, when the `enable_metastore_cache` and `enable_remote_file_cache` parameters are both set to `true`), if a query hits a partition of a Hudi table, StarRocks automatically caches the metadata of the partition and the metadata of the underlying data files of the partition. The cached metadata is updated by using the lazy update policy.
 
 For example, there is a Hudi table named `table2`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. A query hits `p1`, and StarRocks caches the metadata of `p1` and the metadata of the underlying data files of `p1`. Assume that the default time intervals to update and discard the cached metadata are as follows:
 

@@ -61,6 +61,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
@@ -155,6 +156,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
+
+    public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
 
     public static final String PROPERTIES_STORAGE_VOLUME = "storage_volume";
 
@@ -384,9 +387,16 @@ public class PropertyAnalyzer {
             throw new AnalysisException("Replication num should larger than 0");
         }
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
-        if (replicationNum > backendIds.size()) {
-            throw new AnalysisException("Replication num should be less than the number of available BE nodes. "
-                    + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size());
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.defaultReplicationNum() > backendIds.size()) {
+                throw new AnalysisException("Number of available BE nodes is " + backendIds.size()
+                        + ", less than " + RunMode.defaultReplicationNum());
+            }
+        } else {
+            if (replicationNum > backendIds.size()) {
+                throw new AnalysisException("Replication num should be less than the number of available BE nodes. "
+                        + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size());
+            }
         }
     }
 
@@ -715,14 +725,19 @@ public class PropertyAnalyzer {
                 String sourceColumns = foreignKeyMatcher.group(1);
                 String tablePath = foreignKeyMatcher.group(4);
                 String targetColumns = foreignKeyMatcher.group(6);
-                List<String> baseColumns = Arrays.asList(sourceColumns.split(","))
+                // case insensitive
+                List<String> originalBaseColumns = Arrays.asList(sourceColumns.split(","))
                         .stream().map(String::trim).collect(Collectors.toList());
-                List<String> parentColumns = Arrays.asList(targetColumns.split(","))
-                        .stream().map(String::trim).collect(Collectors.toList());
-                if (baseColumns.size() != parentColumns.size()) {
+                List<String> originalParentColumns = Arrays.asList(targetColumns.split(","))
+                        .stream().map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
+                if (originalBaseColumns.size() != originalParentColumns.size()) {
                     throw new AnalysisException(String.format("invalid foreign key constraint:%s," +
                             " columns' size does not match", foreignKeyConstraintDesc));
                 }
+                List<String> baseColumns =
+                        originalBaseColumns.stream().map(String::toLowerCase).collect(Collectors.toList());
+                List<String> parentColumns =
+                        originalParentColumns.stream().map(String::toLowerCase).collect(Collectors.toList());
 
                 String[] parts = tablePath.split("\\.");
                 String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
@@ -756,7 +771,7 @@ public class PropertyAnalyzer {
                             catalogName, dbName, parentTableName));
                 }
 
-                if (!baseTable.isLocalTable()) {
+                if (!baseTable.isOlapTableOrMaterializedView()) {
                     throw new AnalysisException("now do not support add foreign key on external table");
                 }
 
@@ -783,7 +798,7 @@ public class PropertyAnalyzer {
                         List<UniqueConstraint> uniqueConstraints = parentOlapTable.getUniqueConstraints();
                         boolean matched = false;
                         for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
-                            if (uniqueConstraint.getUniqueColumns().containsAll(parentColumns)) {
+                            if (uniqueConstraint.isMatch(Sets.newHashSet(parentColumns))) {
                                 matched = true;
                                 break;
                             }
@@ -796,15 +811,13 @@ public class PropertyAnalyzer {
                 } else {
                     // for PRIMARY_KEYS and UNIQUE_KEYS type table
                     // parent columns should be keys
-                    List<String> keyColumnNames =
-                            parentOlapTable.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
-                    if (!keyColumnNames.equals(parentColumns)) {
+                    if (!parentOlapTable.isKeySet(Sets.newHashSet(parentColumns))) {
                         throw new AnalysisException(String.format("columns:%s are not key columns of table:%s",
                                 parentColumns, parentTable.getName()));
                     }
                 }
-                List<Pair<String, String>> columnRefPairs =
-                        Streams.zip(baseColumns.stream(), parentColumns.stream(), Pair::create).collect(Collectors.toList());
+                List<Pair<String, String>> columnRefPairs = Streams.zip(originalBaseColumns.stream(),
+                        originalParentColumns.stream(), Pair::create).collect(Collectors.toList());
                 for (Pair<String, String> pair : columnRefPairs) {
                     Column childColumn = baseOlapTable.getColumn(pair.first);
                     Column parentColumn = parentTable.getColumn(pair.second);

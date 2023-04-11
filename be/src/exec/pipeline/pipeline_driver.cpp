@@ -142,10 +142,10 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
                     multilane_op != nullptr) {
                     multilane_op->set_lane_arbiter(lane_arbiter);
                     multilane_operators.push_back(multilane_op);
-                } else if (auto* olap_scan_op = dynamic_cast<OlapScanOperator*>(op.get()); olap_scan_op != nullptr) {
-                    olap_scan_op->set_lane_arbiter(lane_arbiter);
-                    olap_scan_op->set_cache_operator(cache_op);
-                    cache_op->set_scan_operator(olap_scan_op);
+                } else if (auto* scan_op = dynamic_cast<ScanOperator*>(op.get()); scan_op != nullptr) {
+                    scan_op->set_lane_arbiter(lane_arbiter);
+                    scan_op->set_cache_operator(cache_op);
+                    cache_op->set_scan_operator(scan_op);
                 }
             }
             cache_op->set_multilane_operators(std::move(multilane_operators));
@@ -240,6 +240,21 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
                 if (_check_fragment_is_canceled(runtime_state)) {
                     return _state;
+                }
+
+                // Run spill stragety
+                // TODO: FIXME
+                // a simple spill stragety
+                auto query_mem_tracker = _query_ctx->mem_tracker();
+                if (runtime_state->enable_spill() &&
+                    sink_operator()->revocable_mem_bytes() > runtime_state->spill_operator_min_bytes() &&
+                    !sink_operator()->need_mark_spill()) {
+                    auto spill_manager = _query_ctx->spill_manager();
+                    if (query_mem_tracker->consumption() - spill_manager->pending_spilled_bytes() >
+                        query_mem_tracker->limit() * runtime_state->spill_mem_limit_threshold()) {
+                        spill_manager->update_spilled_bytes(sink_operator()->revocable_mem_bytes());
+                        sink_operator()->mark_need_spill();
+                    }
                 }
 
                 // pull chunk from current operator and push the chunk onto next
@@ -470,7 +485,9 @@ void PipelineDriver::_update_overhead_timer() {
 
 std::string PipelineDriver::to_readable_string() const {
     std::stringstream ss;
-    ss << "driver=" << this << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
+    ss << "query_id=" << print_id(this->query_ctx()->query_id())
+       << " fragment_id=" << print_id(this->fragment_ctx()->fragment_instance_id()) << " driver=" << this
+       << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
             ss << _operators[i]->get_name();

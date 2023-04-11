@@ -407,6 +407,38 @@ public:
         return Status::OK();
     }
 
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override {
+        DIR* d = opendir(dir.c_str());
+        if (d == nullptr) {
+            return io_error(dir, errno);
+        }
+        errno = 0;
+        struct dirent* entry;
+        while ((entry = readdir(d)) != nullptr) {
+            std::string_view name(entry->d_name);
+            if (name == "." || name == "..") {
+                continue;
+            }
+            struct stat child_stat;
+            std::string child_path = fmt::format("{}/{}", dir, name);
+            if (stat(child_path.c_str(), &child_stat) != 0) {
+                break;
+            }
+            DirEntry de;
+            de.name = name;
+            de.is_dir = S_ISDIR(child_stat.st_mode);
+            de.mtime = static_cast<int64_t>(child_stat.st_mtime);
+            de.size = child_stat.st_size;
+            // callback returning false means to terminate iteration
+            if (!cb(de)) {
+                break;
+            }
+        }
+        closedir(d);
+        if (errno != 0) return io_error(dir, errno);
+        return Status::OK();
+    }
+
     Status delete_file(const std::string& fname) override {
         if (config::file_descriptor_cache_capacity > 0 && enable_fd_cache(fname)) {
             FdCache::Instance()->erase(fname);

@@ -138,8 +138,11 @@ if [ -e /proc/cpuinfo ] ; then
     fi
 fi
 
-if [[ -z ${WITH_BLOCK_CACHE} ]]; then
+if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+    # force turn off block cache on arm platform
     WITH_BLOCK_CACHE=OFF
+elif [[ -z ${WITH_BLOCK_CACHE} ]]; then
+    WITH_BLOCK_CACHE=ON
 fi
 
 if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
@@ -256,7 +259,6 @@ fi
 # DO NOT using parallel make(-j) for gensrc
 make
 cd ${STARROCKS_HOME}
-
 
 if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
     export LIBRARY_PATH=${JAVA_HOME}/jre/lib/aarch64/server/
@@ -419,6 +421,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/java-extensions/hudi-reader/target/starrocks-hudi-reader.jar ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
+    cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
+    cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
+    cp -p ${STARROCKS_THIRDPARTY}/installed/gcs_connector/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
 
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
@@ -435,7 +440,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
     else
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/open_jdk/jre/lib/amd64 ${STARROCKS_OUTPUT}/be/lib/jvm/
     fi
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/

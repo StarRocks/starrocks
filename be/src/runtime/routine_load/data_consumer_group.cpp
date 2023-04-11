@@ -221,6 +221,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
         if (res) {
             VLOG(3) << "get kafka message"
                     << ", partition: " << msg->partition() << ", offset: " << msg->offset() << ", len: " << msg->len();
+            DeferOp msgDeleter([&] { delete msg; });
 
             if (msg->err() == RdKafka::ERR__PARTITION_EOF) {
                 // For transaction producer, producer will append one control msg to the group of msgs,
@@ -239,22 +240,27 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             } else {
                 Status st = Status::OK();
                 if (ctx->format == TFileFormatType::FORMAT_AVRO) {
-                    avro_value_t avro;
-                    DeferOp op([&] { avro_value_decref(&avro); });
-                    serdes_schema_t* schema;
-                    serdes_err_t err = serdes_deserialize_avro(serdes, &avro, &schema, msg->payload(), msg->len(),
-                                                               errstr, sizeof(errstr));
-                    if (err) {
-                        LOG(ERROR) << "serdes deserialize avro failed: " << errstr;
-                        return Status::InternalError("serdes deserialize avro failed");
+                    // We must ensure the msg len > 0.
+                    if (msg->len() > 0) {
+                        avro_value_t avro;
+                        serdes_schema_t* schema;
+                        serdes_err_t err = serdes_deserialize_avro(serdes, &avro, &schema, msg->payload(), msg->len(),
+                                                                   errstr, sizeof(errstr));
+                        if (err) {
+                            auto err_msg = strings::Substitute("serdes deserialize avro failed: $0", errstr);
+                            LOG(ERROR) << err_msg;
+                            return Status::InternalError(err_msg);
+                        }
+                        DeferOp op([&] { avro_value_decref(&avro); });
+                        char* as_json;
+                        if (avro_value_to_json(&avro, 1, &as_json)) {
+                            auto err_msg = strings::Substitute("avro to json failed: $0", avro_strerror());
+                            LOG(ERROR) << err_msg;
+                            return Status::InternalError(err_msg);
+                        }
+                        st = (kafka_pipe.get()->*append_data)(as_json, strlen(as_json), row_delimiter);
+                        free(as_json);
                     }
-                    char* as_json;
-                    if (avro_value_to_json(&avro, 1, &as_json)) {
-                        LOG(ERROR) << "avro to json failed: %s" << avro_strerror();
-                        return Status::InternalError("avro to json failed");
-                    }
-                    st = (kafka_pipe.get()->*append_data)(as_json, strlen(as_json), row_delimiter);
-                    free(as_json);
                 } else {
                     st = (kafka_pipe.get()->*append_data)(static_cast<const char*>(msg->payload()),
                                                           static_cast<size_t>(msg->len()), row_delimiter);
@@ -277,7 +283,6 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     }
                 }
             }
-            delete msg;
         } else {
             // queue is empty and shutdown
             eos = true;

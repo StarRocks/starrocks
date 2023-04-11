@@ -16,6 +16,7 @@
 package com.starrocks.authentication;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.StarRocksFE;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
@@ -26,8 +27,8 @@ import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -38,7 +39,10 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.File;
 import java.io.IOException;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -133,6 +137,8 @@ public class AuthenticationManager {
                 PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
         AuthenticationProviderFactory.installPlugin(
                 LDAPAuthenticationProvider.PLUGIN_NAME, new LDAPAuthenticationProvider());
+        AuthenticationProviderFactory.installPlugin(
+                KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider());
 
         // default user
         userToAuthenticationInfo = new UserAuthInfoTreeMap();
@@ -248,12 +254,12 @@ public class AuthenticationManager {
                 userNameToProperty.put(userIdentity.getQualifiedUser(), userProperty);
             }
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            PrivilegeManager privilegeManager = globalStateMgr.getPrivilegeManager();
+            AuthorizationManager authorizationManager = globalStateMgr.getAuthorizationManager();
             // init user privilege
-            UserPrivilegeCollection collection = privilegeManager.onCreateUser(userIdentity, stmt.getDefaultRoles());
+            UserPrivilegeCollection collection = authorizationManager.onCreateUser(userIdentity, stmt.getDefaultRoles());
 
-            short pluginId = privilegeManager.getProviderPluginId();
-            short pluginVersion = privilegeManager.getProviderPluginVersion();
+            short pluginId = authorizationManager.getProviderPluginId();
+            short pluginVersion = authorizationManager.getProviderPluginVersion();
             globalStateMgr.getEditLog().logCreateUser(
                     userIdentity, info, userProperty, collection, pluginId, pluginVersion);
 
@@ -327,7 +333,7 @@ public class AuthenticationManager {
         try {
             dropUserNoLock(userIdentity);
             // drop user privilege as well
-            GlobalStateMgr.getCurrentState().getPrivilegeManager().onDropUser(userIdentity);
+            GlobalStateMgr.getCurrentState().getAuthorizationManager().onDropUser(userIdentity);
             GlobalStateMgr.getCurrentState().getEditLog().logDropUser(userIdentity);
         } finally {
             writeUnlock();
@@ -339,7 +345,7 @@ public class AuthenticationManager {
         try {
             dropUserNoLock(userIdentity);
             // drop user privilege as well
-            GlobalStateMgr.getCurrentState().getPrivilegeManager().onDropUser(userIdentity);
+            GlobalStateMgr.getCurrentState().getAuthorizationManager().onDropUser(userIdentity);
         } finally {
             writeUnlock();
         }
@@ -379,7 +385,7 @@ public class AuthenticationManager {
             }
 
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-            globalStateMgr.getPrivilegeManager().replayUpdateUserPrivilegeCollection(
+            globalStateMgr.getAuthorizationManager().replayUpdateUserPrivilegeCollection(
                     userIdentity, privilegeCollection, pluginId, pluginVersion);
         } finally {
             writeUnlock();
@@ -560,5 +566,53 @@ public class AuthenticationManager {
         UserProperty userProperty = new UserProperty();
         userProperty.setMaxConn(maxConn);
         userNameToProperty.put(userName, new UserProperty());
+    }
+
+    private Class<?> authClazz = null;
+    public static final String KRB5_AUTH_CLASS_NAME = "com.starrocks.plugins.auth.KerberosAuthentication";
+    public static final String KRB5_AUTH_JAR_PATH = StarRocksFE.STARROCKS_HOME_DIR + "/lib/starrocks-kerberos.jar";
+
+    public boolean isSupportKerberosAuth() {
+        if (!Config.enable_authentication_kerberos) {
+            LOG.error("enable_authentication_kerberos need to be set to true");
+            return false;
+        }
+
+        if (Config.authentication_kerberos_service_principal.isEmpty()) {
+            LOG.error("authentication_kerberos_service_principal must be set in config");
+            return false;
+        }
+
+        if (Config.authentication_kerberos_service_key_tab.isEmpty()) {
+            LOG.error("authentication_kerberos_service_key_tab must be set in config");
+            return false;
+        }
+
+        if (authClazz == null) {
+            try {
+                File jarFile = new File(KRB5_AUTH_JAR_PATH);
+                if (!jarFile.exists()) {
+                    LOG.error("Can not found jar file at {}", KRB5_AUTH_JAR_PATH);
+                    return false;
+                } else {
+                    ClassLoader loader = URLClassLoader.newInstance(
+                            new URL[] {
+                                    jarFile.toURL()
+                            },
+                            getClass().getClassLoader()
+                    );
+                    authClazz = Class.forName(AuthenticationManager.KRB5_AUTH_CLASS_NAME, true, loader);
+                }
+            } catch (Exception e) {
+                LOG.error("Failed to load {}", AuthenticationManager.KRB5_AUTH_CLASS_NAME, e);
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public Class<?> getAuthClazz() {
+        return authClazz;
     }
 }

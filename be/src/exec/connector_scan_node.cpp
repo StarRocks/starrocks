@@ -591,7 +591,7 @@ int ConnectorScanNode::io_tasks_per_scan_operator() const {
 }
 
 bool ConnectorScanNode::always_shared_scan() const {
-    return config::connector_scan_node_always_shared_scan;
+    return _data_source_provider->always_shared_scan();
 }
 
 } // namespace starrocks

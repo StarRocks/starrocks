@@ -38,6 +38,8 @@ public:
 
     size_t get_memory_limit_per_driver() const { return _max_memory_usage_per_driver; }
 
+    size_t get_memory_usage() const { return _memory_usage; }
+
     bool is_full() const { return _memory_usage >= _max_memory_usage; }
 
 private:

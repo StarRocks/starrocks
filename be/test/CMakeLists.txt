@@ -53,9 +53,10 @@ set(EXEC_FILES
         ./exec/arrow_converter_test.cpp
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
+        ./exec/connector_scan_node_test.cpp
         ./exec/csv_scanner_test.cpp
         ./exec/file_scan_node_test.cpp
-        ./exec/hdfs_scanner_test.cpp        
+        ./exec/hdfs_scanner_test.cpp
         ./exec/hdfs_scan_node_test.cpp
         ./exec/join_hash_map_test.cpp
         ./exec/json_parser_test.cpp
@@ -96,6 +97,7 @@ set(EXEC_FILES
         ./exprs/is_null_predicate_test.cpp
         ./exprs/json_functions_test.cpp
         ./exprs/lambda_function_expr_test.cpp
+        ./exprs/lambda_map_expr_test.cpp
         ./exprs/like_test.cpp
         ./exprs/map_element_expr_test.cpp
         ./exprs/map_functions_test.cpp
@@ -129,6 +131,7 @@ set(EXEC_FILES
         ./formats/csv/json_converter_test.cpp
         ./formats/csv/nullable_converter_test.cpp
         ./formats/csv/numeric_converter_test.cpp
+        ./formats/csv/default_value_converter_test.cpp
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
@@ -142,6 +145,7 @@ set(EXEC_FILES
         ./formats/parquet/metadata_test.cpp
         ./formats/parquet/group_reader_test.cpp
         ./formats/parquet/file_reader_test.cpp
+        ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_client_test.cpp
@@ -157,6 +161,7 @@ set(EXEC_FILES
         ./io/s3_input_stream_test.cpp
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
+        ./io/spill_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/disjunctive_predicates_test.cpp
         ./storage/utils_test.cpp
@@ -265,6 +270,7 @@ set(EXEC_FILES
         ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/lake_tablets_channel_test.cpp
         ./runtime/large_int_value_test.cpp
+        ./runtime/load_channel_test.cpp
         ./runtime/memory/mem_chunk_allocator_test.cpp
         ./runtime/memory/system_allocator_test.cpp
         ./runtime/memory/memory_resource_test.cpp
@@ -285,6 +291,7 @@ set(EXEC_FILES
         ./runtime/command_executor_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
+        ./types/bitmap_value_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
@@ -328,7 +335,6 @@ set(EXEC_FILES
         ./util/trace_test.cpp
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp
-        ./util/buffered_stream_test.cpp
         ./util/int96_test.cpp
         ./util/bit_packing_test.cpp
         ./util/gc_helper_test.cpp

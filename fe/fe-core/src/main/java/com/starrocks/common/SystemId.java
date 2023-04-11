@@ -75,4 +75,19 @@ public class SystemId {
     public static final long BE_TXNS_ID = 28L;
 
     public static final long BE_CONFIGS_ID = 29L;
+
+    public static final long PARTITIONS_ID = 30L;
+
+    public static final long COLUMN_PRIVILEGES_ID = 31L;
+
+    public static final long LOADS_ID = 32L;
+
+    public static final long LOAD_TRACKING_LOGS_ID = 33L;
+
+    public static final long FE_SCHEDULES_ID = 34L;
+
+    public static final long BE_COMPACTIONS_ID = 35L;
+
+    public static final long BE_THREADS_ID = 36L;
+    public static final long BE_LOGS_ID = 37L;
 }

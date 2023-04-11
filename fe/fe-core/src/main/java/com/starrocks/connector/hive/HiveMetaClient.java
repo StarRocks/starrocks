@@ -17,6 +17,7 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.connector.ClassUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
@@ -42,8 +43,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.connector.ClassUtils.getCompatibleParamClasses;
-import static com.starrocks.connector.hive.HiveConnector.DUMMY_THRIFT_URI;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
@@ -72,12 +71,9 @@ public class HiveMetaClient {
     public static HiveMetaClient createHiveMetaClient(Map<String, String> properties) {
         HiveConf conf = new HiveConf();
         properties.forEach(conf::set);
-        if (!properties.containsKey(HIVE_METASTORE_URIS)) {
-            // set value for compatible with the rollback
-            properties.put(HIVE_METASTORE_URIS, DUMMY_THRIFT_URI);
+        if (properties.containsKey(HIVE_METASTORE_URIS)) {
+            conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
         }
-
-        conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
         conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
                 String.valueOf(Config.hive_meta_store_timeout_s));
         return new HiveMetaClient(conf);
@@ -146,12 +142,17 @@ public class HiveMetaClient {
     }
 
     public <T> T callRPC(String methodName, String messageIfError, Object... args) {
+        return callRPC(methodName, messageIfError, null, args);
+    }
+
+    public <T> T callRPC(String methodName, String messageIfError, Class<?>[] argClasses, Object... args) {
         RecyclableClient client = null;
         StarRocksConnectorException connectionException = null;
 
         try {
             client = getClient();
-            Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, getCompatibleParamClasses(args));
+            argClasses = argClasses == null ? ClassUtils.getCompatibleParamClasses(args) : argClasses;
+            Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, argClasses);
             return (T) method.invoke(client.hiveClient, args);
         } catch (Exception e) {
             LOG.error(messageIfError, e);
@@ -219,7 +220,8 @@ public class HiveMetaClient {
     public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
         int size = partitionNames.size();
         List<Partition> partitions;
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames", String.format("%s partitions", size));
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames." + tblName,
+                String.format("%s partitions", size));
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionsByNames")) {
             RecyclableClient client = null;
@@ -266,7 +268,8 @@ public class HiveMetaClient {
                                                                           List<String> partitionNames,
                                                                           List<String> columnNames) {
         int size = partitionNames.size();
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics", String.format("%s partitions", size));
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics." + tableName,
+                String.format("%s partitions", size));
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionColumnStatistics")) {
             return callRPC("getPartitionColumnStatistics",

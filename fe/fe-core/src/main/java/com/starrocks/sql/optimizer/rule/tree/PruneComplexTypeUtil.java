@@ -30,7 +30,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Deque;
 import java.util.HashMap;
@@ -39,7 +40,7 @@ import java.util.List;
 import java.util.Map;
 
 public class PruneComplexTypeUtil {
-    private static final Logger LOGGER = Logger.getLogger(PruneComplexTypeUtil.class);
+    private static final Logger LOG = LogManager.getLogger(PruneComplexTypeUtil.class);
 
     // For example, we have a column col: MAP<INT, STRUCT<a INT, b STRUCT<c INT, d INT>>>
     // And we have a sql: SELECT map_values(col).b.d, map_keys(col) from TABLE;
@@ -117,8 +118,13 @@ public class PruneComplexTypeUtil {
                 return true;
             }
 
+            if (!columnRefOperator.getType().isComplexType() && !scalarOperator.getType().isComplexType()) {
+                // If columnRefOperator and scalarOperator both are not complex type, don't need to check
+                return true;
+            }
+
             if (!columnRefOperator.getType().equals(scalarOperator.getType())) {
-                LOGGER.warn("ColumnRefOperator and ScalarOperator should has the same type.");
+                LOG.warn("Complex type columnRefOperator and scalarOperator should has the same type.");
                 return false;
             }
             return true;

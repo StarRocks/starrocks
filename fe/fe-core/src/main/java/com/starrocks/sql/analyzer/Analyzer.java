@@ -96,6 +96,7 @@ import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
+import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
@@ -125,7 +126,6 @@ import com.starrocks.sql.ast.SuspendWarehouseStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
-import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
 
 public class Analyzer {
@@ -254,12 +254,16 @@ public class Analyzer {
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
             CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
-            QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
-            Analyzer.analyze(queryStatement, context);
-            OriginStatement origStmt = statement.getOrigStmt();
-            String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
-            statement.setSqlText(sqlText);
-            TaskAnalyzer.analyzeSubmitTaskStmt(statement, context);
+            if (createTableAsSelectStmt != null) {
+                QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
+                Analyzer.analyze(queryStatement, context);
+                OriginStatement origStmt = statement.getOrigStmt();
+                String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
+                statement.setSqlText(sqlText);
+                TaskAnalyzer.analyzeSubmitTaskStmt(statement, context);
+            } else {
+                InsertAnalyzer.analyze(statement.getInsertStmt(), context);
+            }
             return null;
         }
 
@@ -418,7 +422,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitUseCatalogStatement(UseCatalogStmt statement, ConnectContext context) {
+        public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
             CatalogAnalyzer.analyze(statement, context);
             return null;
         }
@@ -552,7 +556,6 @@ public class Analyzer {
             PauseRoutineLoadAnalyzer.analyze(statement, session);
             return null;
         }
-
 
         // ------------------------------------------- Cluster Management Statement ----------------------------------------
 

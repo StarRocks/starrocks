@@ -44,6 +44,7 @@ set(EXPR_FILES
   case_expr.cpp
   cast_expr.cpp
   cast_expr_array.cpp
+  cast_expr_json.cpp
   cast_nested.cpp
   column_ref.cpp
   placeholder_ref.cpp
@@ -86,6 +87,8 @@ set(EXPR_FILES
   lambda_function.cpp
   array_map_expr.cpp
   subfield_expr.cpp
+  map_apply_expr.cpp
+  map_expr.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})

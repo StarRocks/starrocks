@@ -43,6 +43,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 [NEGATIVE]INTO TABLE <table_name>
 [PARTITION (<partition_name>[, <partition_name> ...])]
 [FORMAT AS "CSV | Parquet | ORC"]
+[(fomat_type_options)]
 [COLUMNS TERMINATED BY "<column_separator>"]
 [(column_list)]
 [COLUMNS FROM PATH AS (<partition_field_name>[, <partition_field_name> ...])]
@@ -95,6 +96,31 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
   Specifies the format of the data file. Valid values: `CSV`, `Parquet`, and `ORC`. By default, if you do not specify this parameter, StarRocks determines the data file format based on the filename extension **.csv**, **.parquet**, or **.orc** specified in the `file_path` parameter.
 
+- `format_type_options`
+
+  Specifies CSV format options when `FORMAT AS` is set to `CSV`. Syntax:
+
+  ```JSON
+  (
+      key = value
+      key = value
+      ...
+  )
+  ```
+
+  > **NOTE**
+  >
+  > `format_type_options` is supported in v3.0 and later.
+
+  The following table describes the options.
+
+  | **Parameter** | **Description**                                              |
+  | ------------- | ------------------------------------------------------------ |
+  | skip_header   | Specifies whether to skip the first rows of the data file when the data file is in CSV format. Type: INTEGER. Default value: `0`.<br>In some CSV-formatted data files, the first rows at the beginning are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip the first rows of the data file during data loading. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.<br>The first rows at the beginning in the data file must be separated by using the row separator that you specify in the load statement or command. For example, for Stream Load, the `row_delimiter` parameter is used to specify the row separator. |
+  | trim_space    | Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br>For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br>Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (<code class="language-text">&#124;</code>) as the column separator and double quotation marks (`"`) as the `enclose`-specified character:<br><code class="language-text">&#124;"Love StarRocks"&#124;</code> <br><code class="language-text">&#124;" Love StarRocks "&#124;</code> <br><code class="language-text">&#124; "Love StarRocks" &#124;</code> <br>If you set `trim_space` to `true`, StarRocks processes the preceding field values as follows:<br><code class="language-text">&#124;"Love StarRocks"&#124;</code> <br><code class="language-text">&#124;" Love StarRocks "&#124;</code> <br><code class="language-text">&#124;"Love StarRocks"&#124;</code> |
+  | enclose       | Specifies the character that is used to wrap the field values in the data file according to [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).<br>All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.<br>If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file. |
+  | escape        | Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br>**NOTE**<br>The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br>Two examples are as follows:<ul><li>When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.</li><li>Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.</li></ul> |
+
 - `COLUMNS TERMINATED BY`
 
   Specifies the column separator used in the data file. By default, if you do not specify this parameter, this parameter defaults to `\t`, indicating tab. The column separator you specify must be the same as the column separator used in the data file. Otherwise, the load job fails due to inadequate data quality, and its `State` is displayed as `CANCELLED`.
@@ -103,7 +129,8 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
   > **NOTE**
   >
-  > For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+  > - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+  > - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
 
 - `column_list`
 
@@ -138,7 +165,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
 ### `WITH BROKER`
 
-In StarRocks v2.4 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker group you want to use. From StarRocks v2.5 onwards, you no longer need to specify a broker group, but you still need to retain the `WITH BROKER` keyword.
+In v2.4 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker you want to use. From v2.5 onwards, you no longer need to specify a broker, but you still need to retain the `WITH BROKER` keyword. For more information, see [Load data from HDFS or cloud storage > Background information](../../../loading/BrokerLoad.md#background-information).
 
 ### `broker_properties`
 
@@ -182,7 +209,7 @@ Open-source HDFS supports two authentication methods: simple authentication and 
     | kerberos_keytab         | The save path of the Kerberos keytab file. |
     | kerberos_keytab_content | The Base64-encoded content of the the Kerberos keytab file. You can choose to specify either `kerberos_keytab` or `kerberos_keytab_content`. |
 
-    If you use Kerberos authentication, you must open the broker startup script file **start_broker.sh** and modify line 42 of the file to enable the Broker process to read the **krb5.conf** file. Example:
+    If you have configured multiple Kerberos users, you must deploy an independent broker and in the load statement you must input `WITH BROKER "<broker_name>"` to specify the broker you want to use. Additionally, you must open the broker startup script file **start_broker.sh** and modify line 42 of the file to enable the broker to read the **krb5.conf** file. Example:
 
     ```Plain
     export JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx1024m -Dfile.encoding=UTF-8 -Djava.security.krb5.conf=/etc/krb5.conf"
@@ -190,32 +217,36 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
     > **NOTE**
     >
-    > In the preceding example, `/etc/krb5.conf` can be replaced with your actual save path of the **krb5.conf** file. Make sure that the Broker process has read permissions on that file. If multiple broker groups are deployed, you must modify the **start_broker.sh** file for each of the broker groups and then restart the nodes that host the broker groups to make the modifications take effect.
+    > In the preceding example, `/etc/krb5.conf` can be replaced with your actual save path of the **krb5.conf** file. Make sure that the broker has read permissions on that file. If multiple brokers are deployed, you must modify the **start_broker.sh** file for each of these brokers and then restart the nodes that host the brokers to make the modifications take effect.
 
 - HA configuration
 
-  You can configure an HA mechanism for the NameNode of the HDFS cluster. This way, if the NameNode is switched over to another node, StarRocks can automatically identify the new node that serves as the NameNode. To enable brokers to read information about the nodes of the HDFS cluster, perform either of the following operations:
+  You can configure an HA mechanism for the NameNode of the HDFS cluster. This way, if the NameNode is switched over to another node, StarRocks can automatically identify the new node that serves as the NameNode. This includes the following two scenarios:
 
-  Place the `hdfs-site.xml` file to the `{deploy}/conf` path on each node that hosts brokers. As such, StarRocks will add the `{deploy_dir}/conf/` path to the environment variable `CLASSPATH` upon broker startup, allowing brokers to read the HDFS node information.
+  - If you load data from a single HDFS cluster, you can perform broker-free loading. In this case, you need to place the `hdfs-site.xml` file to the `{deploy}/conf` paths of each FE and each BE.
 
-  Add the following HA configuration at job creation:
+  - If you load data from multiple HDFS clusters, you can perform broker-based loading. In this case, take one of the following actions to enable brokers to read information about the HDFS cluster nodes:
 
-  ```Plain
-  "dfs.nameservices" = "ha_cluster",
-  "dfs.ha.namenodes.ha_cluster" = "ha_n1,ha_n2",
-  "dfs.namenode.rpc-address.ha_cluster.ha_n1" = "<hdfs_host>:<hdfs_port>",
-  "dfs.namenode.rpc-address.ha_cluster.ha_n2" = "<hdfs_host>:<hdfs_port>",
-  "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
-  ```
+    - Place the `hdfs-site.xml` file to the `{deploy}/conf` path on the node that hosts the broker for each HDFS cluster. As such, StarRocks will add the `{deploy_dir}/conf/` path to the environment variable `CLASSPATH` upon broker startup, allowing the broker to read information about the nodes in that HDFS cluster.
 
-  The following table describes the parameters in the HA configuration.
+    - Add the following HA configuration at job creation:
 
-  | Parameter                          | Description                                                  |
-  | ---------------------------------- | ------------------------------------------------------------ |
-  | dfs.nameservices                   | The name of the HDFS cluster.                                |
-  | dfs.ha.namenodes.XXX               | The name of the NameNode in the HDFS cluster. If you specify multiple NameNode names, separate them with commas (,). `xxx` is the HDFS cluster name that you have specified in `dfs.nameservices`. |
-  | dfs.namenode.rpc-address.XXX.NN    | The RPC address of the NameNode in the HDFS cluster. `NN` is the NameNode name that you have specified in `dfs.ha.namenodes.XXX`. |
-  | dfs.client.failover.proxy.provider | The provider of the NameNode to which the client will connect. Default value: `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`. |
+      ```Plain
+      "dfs.nameservices" = "ha_cluster",
+      "dfs.ha.namenodes.ha_cluster" = "ha_n1,ha_n2",
+      "dfs.namenode.rpc-address.ha_cluster.ha_n1" = "<hdfs_host>:<hdfs_port>",
+      "dfs.namenode.rpc-address.ha_cluster.ha_n2" = "<hdfs_host>:<hdfs_port>",
+      "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
+      ```
+
+      The following table describes the parameters in the HA configuration.
+
+      | Parameter                          | Description                                                  |
+      | ---------------------------------- | ------------------------------------------------------------ |
+      | dfs.nameservices                   | The name of the HDFS cluster.                                |
+      | dfs.ha.namenodes.XXX               | The name of the NameNode in the HDFS cluster. If you specify multiple NameNode names, separate them with commas (`,`). `xxx` is the HDFS cluster name that you have specified in `dfs.nameservices`. |
+      | dfs.namenode.rpc-address.XXX.NN    | The RPC address of the NameNode in the HDFS cluster. `NN` is the NameNode name that you have specified in `dfs.ha.namenodes.XXX`. |
+      | dfs.client.failover.proxy.provider | The provider of the NameNode to which the client will connect. Default value: `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`. |
 
 #### Amazon S3
 
@@ -319,7 +350,7 @@ The following parameters are supported:
 
 - `strict_mode`
 
-  Specifies whether to enable the strict mode. Valid values: `true` and `false`. Default value: `false`. `true` specifies to enable the strict mode, and `false` specifies to disable the strict mode.
+  Specifies whether to enable the [strict mode](../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`. `true` specifies to enable the strict mode, and `false` specifies to disable the strict mode.
 
 - `timezone`
 
@@ -329,7 +360,9 @@ The following parameters are supported:
 
   Specifies the priority of the load job. Valid values: `LOWEST`, `LOW`, `NORMAL`, `HIGH`, and `HIGHEST`. Default value: `NORMAL`. Broker Load provides the [FE parameter](../../../administration/Configuration.md#fe-configuration-items) `async_load_task_pool_size`, which specifies the task pool size. The task pool size determines the maximum number of tasks that can be concurrently run for Broker Load within a specific time period. If the number of tasks to run for jobs that are submitted within the specified time period exceeds the maximum number, the jobs in the task pool will be waiting to be scheduled based on their priorities.
 
-    You can use the [ALTER LOAD](../../../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
+  You can use the [ALTER LOAD](../../../sql-reference/sql-statements/data-manipulation/ALTER%20LOAD.md) statement to change the priority of an existing load job that is in the `QUEUEING` or `LOADING` state.
+
+  StarRocks allows setting the `priority` parameter for a Broker Load job since v2.5.
 
 ## Column mapping
 
@@ -537,7 +570,7 @@ Your StarRocks database `test_db` contains a table named `table8`. The table con
 
 Your data file `example8.csv` also consists of three columns, which are mapped in sequence onto `col2`, `col1`, and `col3` of `table8`.
 
-If you want to load all data from `example3.csv` into `table3`, run the following command:
+If you want to load all data from `example8.csv` into `table8`, run the following command:
 
 ```SQL
 LOAD LABEL test_db.label8
@@ -698,6 +731,40 @@ WITH BROKER
 > **NOTE**
 >
 > In the preceding example, the values extracted from the partition field `data_time` are strings that contain `%3A`, such as `2020-02-17 00%3A00%3A00`. Therefore, you need to use the `str_to_date` function to convert the strings into DATETIME-type data before they are loaded into `data_time` of `table8`.
+
+#### Setting `format_type_options`
+
+Your StarRocks database `test_db` contains a table named `table13`. The table consists of three columns, which are `col1`, `col2`, and `col3` in sequence.
+
+Your data file `example13.csv` also consists of three columns, which are mapped in sequence onto `col2`, `col1`, and `col3` of `table13`.
+
+If you want to load all data from `example13.csv` into `table13`, with the intention of skipping the first two rows of `example13.csv`, removing the spaces preceding and following column separators, and setting `enclose` to `\` and `escape` to `\`, run the following command:
+
+```SQL
+LOAD LABEL test_db.label13
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/data/*/example13.csv")
+    INTO TABLE table13
+    COLUMNS TERMINATED BY ","
+    FORMAT AS "CSV"
+    (
+        skip_header = 2
+        trim_space = TRUE
+        enclose = "\""
+        escape = "\\"
+    )
+    (col2, col1, col3)
+)
+WITH BROKER
+(
+    "username" = "hdfs_username",
+    "password" = "hdfs_password"
+)
+PROPERTIES
+(
+    "timeout" = "3600"
+);
+```
 
 ### Load Parquet data
 

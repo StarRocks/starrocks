@@ -568,7 +568,7 @@ public class PseudoCluster {
                                 "\"write_quorum\" = \"%s\", " +
                                 "\"replication_num\" = \"%d\", " +
                                 "\"storage_medium\" = \"%s\", " +
-                                "\"group_with\" = \"%s\")",
+                                "\"colocate_with\" = \"%s\")",
                     tableName,
                     buckets, quorum, replication,
                     ssd ? "SSD" : "HDD",

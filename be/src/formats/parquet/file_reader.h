@@ -20,15 +20,16 @@
 #include "column/chunk.h"
 #include "common/status.h"
 #include "formats/parquet/group_reader.h"
+#include "formats/parquet/meta_helper.h"
 #include "gen_cpp/parquet_types.h"
+#include "io/shared_buffered_input_stream.h"
 #include "runtime/runtime_state.h"
-#include "util/buffered_stream.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
 class RandomAccessFile;
 
-class HdfsScannerContext;
+struct HdfsScannerContext;
 
 } // namespace starrocks
 
@@ -41,7 +42,8 @@ class FileMetaData;
 
 class FileReader {
 public:
-    FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size);
+    FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
+               io::SharedBufferedInputStream* sb_stream = nullptr);
     ~FileReader();
 
     Status init(HdfsScannerContext* scanner_ctx);
@@ -97,10 +99,6 @@ private:
     static bool _can_use_deprecated_stats(const tparquet::Type::type& type, const tparquet::ColumnOrder* column_order);
     static bool _is_integer_type(const tparquet::Type::type& type);
 
-    // find column meta according column name
-    static const tparquet::ColumnMetaData* _get_column_meta(const tparquet::RowGroup& row_group,
-                                                            const std::string& col_name, bool case_sensitive);
-
     // get the data page start offset in parquet file
     static int64_t _get_row_group_start_offset(const tparquet::RowGroup& row_group);
 
@@ -111,7 +109,6 @@ private:
     std::vector<std::shared_ptr<GroupReader>> _row_group_readers;
     size_t _cur_row_group_idx = 0;
     size_t _row_group_size = 0;
-    Schema _schema;
 
     size_t _total_row_count = 0;
     size_t _scan_row_count = 0;
@@ -120,8 +117,9 @@ private:
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;
     HdfsScannerContext* _scanner_ctx = nullptr;
-    std::shared_ptr<SharedBufferedInputStream> _sb_stream = nullptr;
+    io::SharedBufferedInputStream* _sb_stream = nullptr;
     GroupReaderParam _group_reader_param;
+    std::shared_ptr<MetaHelper> _meta_helper = nullptr;
 };
 
 } // namespace starrocks::parquet

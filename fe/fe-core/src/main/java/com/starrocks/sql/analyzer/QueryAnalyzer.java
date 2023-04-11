@@ -40,7 +40,6 @@ import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.io.DeepCopy;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -277,13 +276,7 @@ public class QueryAnalyzer {
                     }
 
                     if (table.isSupported()) {
-                        if (table.isOlapTable()) {
-                            // Copying the olap table meta to avoid the lock when plan query
-                            Table copied = DeepCopy.copyWithGson(table, OlapTable.class);
-                            tableRelation.setTable(copied);
-                        } else {
-                            tableRelation.setTable(table);
-                        }
+                        tableRelation.setTable(table);
                         return tableRelation;
                     } else {
                         throw unsupportedException("unsupported scan table type: " + table.getType());
@@ -810,7 +803,7 @@ public class QueryAnalyzer {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName + "." + tbName);
             }
 
-            if (table.isNativeTable() &&
+            if (table.isNativeTableOrMaterializedView() &&
                     (((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE
                             || ((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");

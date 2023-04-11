@@ -62,6 +62,9 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
     private List<LiteralExpr> keys;
     private List<PrimitiveType> types;
 
+    private static final DateLiteral SHADOW_DATE_LITERAL = new DateLiteral(0, 0, 0);
+    private static final DateLiteral SHADOW_DATETIME_LITERAL = new DateLiteral(0, 0, 0, 0, 0, 0, 0);
+
     // constructor for partition prune
     public PartitionKey() {
         keys = Lists.newArrayList();
@@ -85,10 +88,23 @@ public class PartitionKey implements Comparable<PartitionKey>, Writable {
         return partitionKey;
     }
 
-    public static PartitionKey createShadowPartitionKey(List<Column> columns) {
+    public static PartitionKey createShadowPartitionKey(List<Column> columns)
+            throws AnalysisException {
         PartitionKey partitionKey = new PartitionKey();
         for (Column column : columns) {
-            partitionKey.keys.add(new DateLiteral(0, 1, 1));
+            PrimitiveType primitiveType = column.getPrimitiveType();
+            DateLiteral shadowLiteral;
+            switch (primitiveType) {
+                case DATE:
+                    shadowLiteral = SHADOW_DATE_LITERAL;
+                    break;
+                case DATETIME:
+                    shadowLiteral = SHADOW_DATETIME_LITERAL;
+                    break;
+                default:
+                    throw new AnalysisException("Unsupported shadow partition type:" + primitiveType);
+            }
+            partitionKey.keys.add(shadowLiteral);
             partitionKey.types.add(column.getPrimitiveType());
         }
         return partitionKey;

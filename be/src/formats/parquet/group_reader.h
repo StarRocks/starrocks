@@ -19,10 +19,10 @@
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/metadata.h"
 #include "gen_cpp/parquet_types.h"
+#include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "storage/column_predicate.h"
-#include "util/buffered_stream.h"
 #include "util/runtime_profile.h"
 namespace starrocks {
 class RandomAccessFile;
@@ -46,6 +46,8 @@ struct GroupReaderParam {
         // column type in chunk
         TypeDescriptor col_type_in_chunk;
 
+        const TIcebergSchemaField* t_iceberg_schema_field = nullptr;
+
         SlotId slot_id;
     };
 
@@ -60,7 +62,7 @@ struct GroupReaderParam {
 
     HdfsScanStats* stats = nullptr;
 
-    SharedBufferedInputStream* shared_buffered_stream = nullptr;
+    io::SharedBufferedInputStream* sb_stream = nullptr;
 
     int chunk_size = 0;
 
@@ -79,7 +81,7 @@ public:
     Status init();
     Status get_next(ChunkPtr* chunk, size_t* row_count);
     void close();
-    void collect_io_ranges(std::vector<SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
+    void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
     void set_end_offset(int64_t value) { _end_offset = value; }
 
 private:
@@ -132,7 +134,7 @@ private:
     Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
     void _dict_filter(ChunkPtr* chunk, Filter* filter_ptr);
     Status _dict_decode(ChunkPtr* chunk);
-    void _collect_field_io_range(const ParquetField& field, std::vector<SharedBufferedInputStream::IORange>* ranges,
+    void _collect_field_io_range(const ParquetField& field, std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                  int64_t* end_offset);
 
     // row group meta

@@ -319,9 +319,9 @@ struct THdfsScanRange {
     9: optional list<string> hudi_logs
 
     // whether to use JNI scanner to read data of hudi MOR table for snapshot queries
-    10: optional bool use_hudi_jni_reader;
+    10: optional bool use_hudi_jni_reader
 
-    11: optional list<TIcebergDeleteFile> delete_files;
+    11: optional list<TIcebergDeleteFile> delete_files
 
     // number of lines at the start of the file to skip
     12: optional i64 skip_header
@@ -422,6 +422,16 @@ struct TSchemaScanNode {
   13: optional i64 partition_id
   14: optional i64 tablet_id
   15: optional i64 txn_id
+  16: optional i64 job_id
+  17: optional string label
+  18: optional string type
+  19: optional string state
+  20: optional i64 limit
+  21: optional i64 log_start_ts;
+  22: optional i64 log_end_ts;
+  23: optional string log_level;
+  24: optional string log_pattern;
+  25: optional i64 log_limit;
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
@@ -442,6 +452,7 @@ struct TOlapScanNode {
 
   26: optional list<Exprs.TExpr> bucket_exprs
   27: optional list<string> sort_key_column_names
+  28: optional i32 max_parallel_scan_instance_num
 }
 
 struct TJDBCScanNode {

@@ -19,6 +19,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 
 public class PrivilegeCollectionTest {
 
@@ -146,9 +147,9 @@ public class PrivilegeCollectionTest {
         PrivilegeType select = PrivilegeType.SELECT;
         PrivilegeType insert = PrivilegeType.INSERT;
         TablePEntryObject table1 = new TablePEntryObject("1", "2");
-        TablePEntryObject allTablesInDb = new TablePEntryObject("1", TablePEntryObject.ALL_TABLES_UUID);
+        TablePEntryObject allTablesInDb = new TablePEntryObject("1", PrivilegeBuiltinConstants.ALL_TABLES_UUID);
         TablePEntryObject allTablesInALLDb = new TablePEntryObject(
-                TablePEntryObject.ALL_DATABASES_UUID, TablePEntryObject.ALL_TABLES_UUID);
+                PrivilegeBuiltinConstants.ALL_DATABASES_UUID, PrivilegeBuiltinConstants.ALL_TABLES_UUID);
 
         // grant select,insert on db1.table1
         collection.grant(table, Arrays.asList(select, insert), Arrays.asList(table1), false);
@@ -238,6 +239,15 @@ public class PrivilegeCollectionTest {
         collection.merge(createTable);
         Assert.assertTrue(collection.allowGrant(db, Arrays.asList(drop), Arrays.asList(db1)));
         Assert.assertTrue(collection.check(db, drop, db1));
+
+        PrivilegeCollection systemCollection1 = new PrivilegeCollection();
+        systemCollection1.grant(ObjectType.SYSTEM, Arrays.asList(PrivilegeType.NODE),
+                Collections.singletonList(null), true);
+
+        PrivilegeCollection systemCollection2 = new PrivilegeCollection();
+        systemCollection2.grant(ObjectType.SYSTEM, Arrays.asList(PrivilegeType.OPERATE),
+                Collections.singletonList(null), false);
+        systemCollection1.merge(systemCollection2);
     }
 
     @Test

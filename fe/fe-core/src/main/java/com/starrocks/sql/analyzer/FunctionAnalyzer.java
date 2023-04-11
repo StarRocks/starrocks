@@ -88,6 +88,12 @@ public class FunctionAnalyzer {
             // which puts various arguments/inputs at the tail e.g.,
             // array_map(x+y <- (x,y), arr1, arr2)
             functionCallExpr.setType(new ArrayType(functionCallExpr.getChild(0).getChild(0).getType()));
+        } else if (fnName.getFunction().equals(FunctionSet.MAP_APPLY)) {
+            Preconditions.checkState(functionCallExpr.getChildren().size() > 1,
+                    "map_apply should have at least two inputs");
+            Preconditions.checkState(functionCallExpr.getChild(0).getChild(0) != null,
+                    "map_apply's lambda function can not be null");
+            functionCallExpr.setType(functionCallExpr.getChild(0).getChild(0).getType());
         }
     }
 
@@ -166,9 +172,6 @@ public class FunctionAnalyzer {
         if (fnName.getFunction().equals(FunctionSet.ARRAY_AGG)) {
             if (fnParams.isDistinct()) {
                 throw new SemanticException("array_agg does not support DISTINCT");
-            }
-            if (arg.getType().isDecimalV3()) {
-                throw new SemanticException("array_agg does not support DecimalV3");
             }
         }
 

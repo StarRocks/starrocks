@@ -774,15 +774,25 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         const auto& base_sort_key_idxes = base_tablet->tablet_schema().sort_key_idxes();
         const auto& new_sort_key_idxes = new_tablet->tablet_schema().sort_key_idxes();
-        if (std::mismatch(new_sort_key_idxes.begin(), new_sort_key_idxes.end(), base_sort_key_idxes.begin()).first !=
-            new_sort_key_idxes.end()) {
+        std::vector<int32_t> base_sort_key_unique_ids;
+        std::vector<int32_t> new_sort_key_unique_ids;
+        for (auto idx : base_sort_key_idxes) {
+            base_sort_key_unique_ids.emplace_back(base_tablet->tablet_schema().column(idx).unique_id());
+        }
+        for (auto idx : new_sort_key_idxes) {
+            new_sort_key_unique_ids.emplace_back(new_tablet->tablet_schema().column(idx).unique_id());
+        }
+        if (std::mismatch(new_sort_key_unique_ids.begin(), new_sort_key_unique_ids.end(),
+                          base_sort_key_unique_ids.begin())
+                    .first != new_sort_key_unique_ids.end()) {
             sc_params.sc_directly = !(sc_params.sc_sorting = true);
         }
         if (sc_params.sc_directly) {
             status = new_tablet->updates()->convert_from(base_tablet, request.alter_version,
                                                          sc_params.chunk_changer.get());
         } else if (sc_params.sc_sorting) {
-            status = new_tablet->updates()->reorder_from(base_tablet, request.alter_version);
+            status = new_tablet->updates()->reorder_from(base_tablet, request.alter_version,
+                                                         sc_params.chunk_changer.get());
         } else {
             status = new_tablet->updates()->link_from(base_tablet.get(), request.alter_version);
         }
@@ -874,7 +884,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         }
         VLOG(3) << "rowsets_to_delete size is:" << rowsets_to_delete.size()
                 << " version is:" << max_rowset->end_version();
-        new_tablet->modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete);
+        new_tablet->modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete, nullptr);
         new_tablet->set_cumulative_layer_point(-1);
         new_tablet->save_meta();
         for (auto& rowset : rowsets_to_delete) {
@@ -1038,6 +1048,11 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             break;
         }
         LOG(INFO) << "new rowset has " << (*new_rowset)->num_segments() << " segments";
+        if (sc_params.rowsets_to_change[i]->rowset_meta()->has_delete_predicate()) {
+            (*new_rowset)
+                    ->mutable_delete_predicate()
+                    ->CopyFrom(sc_params.rowsets_to_change[i]->rowset_meta()->delete_predicate());
+        }
         status = sc_params.new_tablet->add_rowset(*new_rowset, false);
         if (status.is_already_exist()) {
             LOG(WARNING) << "version already exist, version revert occurred. "

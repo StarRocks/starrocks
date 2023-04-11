@@ -64,7 +64,7 @@ protected:
         DCHECK(chunk_iter_or.ok());
         auto chunk_iter = chunk_iter_or.value();
 
-        auto chunk = ChunkHelper::new_chunk(chunk_iter->schema(), 1);
+        ChunkPtr chunk = ChunkHelper::new_chunk(chunk_iter->schema(), 1);
         auto status = chunk_iter->get_next(chunk.get());
         DCHECK(status.ok());
         chunk_iter->close();

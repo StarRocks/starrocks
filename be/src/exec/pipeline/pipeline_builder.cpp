@@ -19,6 +19,8 @@
 #include "exec/pipeline/adaptive/collect_stats_sink_operator.h"
 #include "exec/pipeline/adaptive/collect_stats_source_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
+#include "exec/pipeline/noop_sink_operator.h"
+#include "exec/pipeline/spill_process_operator.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/conjugate_operator.h"
@@ -145,6 +147,19 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
     return {std::move(local_shuffle_source)};
 }
 
+void PipelineBuilderContext::interpolate_spill_process(const SpillProcessChannelFactoryPtr& spill_channel_factory,
+                                                       size_t dop) {
+    OpFactories spill_process_operators;
+    auto pseudo_plan_node_id = next_pseudo_plan_node_id();
+    auto spill_process_factory = std::make_shared<SpillProcessOperatorFactory>(
+            next_operator_id(), "spill-process", pseudo_plan_node_id, spill_channel_factory);
+    spill_process_factory->set_degree_of_parallelism(dop);
+    spill_process_operators.emplace_back(std::move(spill_process_factory));
+    auto noop_sink_factory = std::make_shared<NoopSinkOperatorFactory>(next_operator_id(), next_pseudo_plan_node_id());
+    spill_process_operators.emplace_back(std::move(noop_sink_factory));
+    add_pipeline(std::move(spill_process_operators));
+}
+
 OpFactories PipelineBuilderContext::maybe_gather_pipelines_to_one(RuntimeState* state,
                                                                   std::vector<OpFactories>& pred_operators_list) {
     // If there is only one pred pipeline, we needn't local passthrough anymore.
@@ -246,7 +261,7 @@ bool PipelineBuilderContext::should_interpolate_cache_operator(OpFactoryPtr& sou
     if (cache_param.plan_node_id != plan_node_id) {
         return false;
     }
-    return dynamic_cast<pipeline::OlapScanOperatorFactory*>(source_op.get()) != nullptr;
+    return dynamic_cast<pipeline::OperatorFactory*>(source_op.get()) != nullptr;
 }
 
 OpFactories PipelineBuilderContext::interpolate_cache_operator(

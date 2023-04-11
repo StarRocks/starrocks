@@ -414,15 +414,13 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         }
 
         BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
-        if (backupMeta != null) {
-            backupMeta.makeDummyMap();
-        }
+
         // Create a restore job
         RestoreJob restoreJob = null;
         if (backupMeta != null) {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table remoteTbl = backupMeta.getTable(tblInfo.name);
-                if (remoteTbl.isLakeTable()) {
+                if (remoteTbl.isCloudNativeTable()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, remoteTbl.getName());
                 }
             }

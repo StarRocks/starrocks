@@ -367,7 +367,7 @@ public class Database extends MetaObject implements Writable {
         readLock();
         try {
             for (Table table : this.idToTable.values()) {
-                if (!table.isLocalTable()) {
+                if (!table.isOlapTableOrMaterializedView()) {
                     continue;
                 }
 
@@ -385,7 +385,7 @@ public class Database extends MetaObject implements Writable {
         readLock();
         try {
             for (Table table : this.idToTable.values()) {
-                if (!table.isLocalTable()) {
+                if (!table.isOlapTableOrMaterializedView()) {
                     continue;
                 }
 
@@ -514,8 +514,9 @@ public class Database extends MetaObject implements Writable {
         }
 
         if (table instanceof OlapTable && table.hasAutoIncrementColumn()) {
-            GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId);
-            ((OlapTable) table).sendDropAutoIncrementMapTask();
+            if (!isReplay) {
+                ((OlapTable) table).sendDropAutoIncrementMapTask();
+            }
         }
 
         table.onDrop(this, isForceDrop, isReplay);
@@ -526,6 +527,7 @@ public class Database extends MetaObject implements Writable {
             Table oldTable = GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table);
             runnable = (oldTable != null) ? oldTable.delete(isReplay) : null;
         } else {
+            GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, isReplay);
             runnable = table.delete(isReplay);
         }
 
@@ -579,6 +581,10 @@ public class Database extends MetaObject implements Writable {
 
     public List<Table> getTables() {
         return new ArrayList<Table>(idToTable.values());
+    }
+
+    public int getTableNumber() {
+        return idToTable.size();
     }
 
     public List<Table> getViews() {

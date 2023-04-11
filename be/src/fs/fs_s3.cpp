@@ -193,6 +193,7 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
             credential_provider, config, Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, !path_style_access);
 
     {
+        std::lock_guard l(_lock);
         if (UNLIKELY(_items >= kMaxItems)) {
             int idx = _rand.Uniform(kMaxItems);
             _client_cache_keys[idx] = client_cache_key;
@@ -258,11 +259,14 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
     return client;
 }
 
+// If you find yourself change this code, see also `bool operator==(const Aws::Client::ClientConfiguration&, const Aws::Client::ClientConfiguration&)`
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const FSOptions& opts) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
+    // TODO(SmithCruise) If CloudType is DEFAULT, we should use hadoop sdk to access file,
+    // otherwise user's core-site.xml will not take effect in s3 sdk
     if ((hdfs_properties != nullptr && hdfs_properties->__isset.cloud_configuration) ||
-        opts.cloud_configuration != nullptr) {
+        (opts.cloud_configuration != nullptr && opts.cloud_configuration->cloud_type != TCloudType::DEFAULT)) {
         // Use CloudConfiguration instead of original logic
         const TCloudConfiguration& tCloudConfiguration = (opts.cloud_configuration != nullptr)
                                                                  ? *opts.cloud_configuration
@@ -332,13 +336,13 @@ public:
 
     Status path_exists(const std::string& path) override { return Status::NotSupported("S3FileSystem::path_exists"); }
 
-    Status list_path(const std::string& dir, std::vector<FileStatus>* result) override;
-
     Status get_children(const std::string& dir, std::vector<std::string>* file) override {
         return Status::NotSupported("S3FileSystem::get_children");
     }
 
     Status iterate_dir(const std::string& dir, const std::function<bool(std::string_view)>& cb) override;
+
+    Status iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) override;
 
     Status delete_file(const std::string& path) override;
 
@@ -526,7 +530,7 @@ Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<boo
     return directory_exist ? Status::OK() : Status::NotFound(dir);
 }
 
-Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* file_status) {
+Status S3FileSystem::iterate_dir2(const std::string& dir, const std::function<bool(DirEntry)>& cb) {
     S3URI uri;
     if (!uri.parse(dir)) {
         return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
@@ -557,9 +561,10 @@ Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* 
             const auto& full_name = cp.GetPrefix();
 
             std::string_view name(full_name.data() + uri.key().size(), full_name.size() - uri.key().size() - 1);
-            bool is_dir = true;
-            int64_t file_size = 0;
-            file_status->emplace_back(name, is_dir, file_size);
+            DirEntry entry{.name = name, .is_dir = {true}};
+            if (!cb(entry)) {
+                return Status::OK();
+            }
         }
         for (auto&& obj : result.GetContents()) {
             if (obj.GetKey() == uri.key()) {
@@ -568,19 +573,27 @@ Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* 
             DCHECK(HasPrefixString(obj.GetKey(), uri.key()));
 
             std::string_view obj_key(obj.GetKey());
-            bool is_dir = true;
-            int64_t file_size = 0;
+            DirEntry entry;
+            if (obj.LastModifiedHasBeenSet()) {
+                entry.mtime = obj.GetLastModified().Seconds();
+            }
             if (obj_key.back() == '/') {
                 obj_key = std::string_view(obj_key.data(), obj_key.size() - 1);
+                entry.is_dir = true;
             } else {
                 DCHECK(obj.SizeHasBeenSet());
-                is_dir = false;
-                file_size = obj.GetSize();
+                entry.is_dir = false;
+                if (obj.SizeHasBeenSet()) {
+                    entry.size = obj.GetSize();
+                }
             }
 
             std::string_view name(obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size());
+            entry.name = name;
 
-            file_status->emplace_back(name, is_dir, file_size);
+            if (!cb(entry)) {
+                return Status::OK();
+            }
         }
     } while (result.GetIsTruncated());
     return directory_exist ? Status::OK() : Status::NotFound(dir);

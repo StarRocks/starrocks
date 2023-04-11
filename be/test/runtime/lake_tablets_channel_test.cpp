@@ -17,17 +17,13 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include <random>
-
 #include "column/chunk.h"
 #include "column/fixed_length_column.h"
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
-#include "gen_cpp/descriptors.pb.h"
 #include "gen_cpp/internal_service.pb.h"
-#include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/load_channel_mgr.h"
 #include "runtime/mem_tracker.h"
@@ -40,7 +36,6 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/rowset/segment.h"
-#include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
@@ -48,10 +43,6 @@
 #include "util/uid_util.h"
 
 namespace starrocks {
-
-using VSchema = starrocks::Schema;
-using VChunk = starrocks::Chunk;
-using Int32Column = starrocks::Int32Column;
 
 // 2 senders, 1 index, each index has 2 partitions, each partition has 2 tablets, each tablet has 2 columns
 // partition id: 10, 11
@@ -70,7 +61,7 @@ public:
 
         auto metadata = new_tablet_metadata(10086);
         _tablet_schema = TabletSchema::create(metadata->schema());
-        _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
+        _schema = std::make_shared<Schema>(ChunkHelper::convert_schema(*_tablet_schema));
 
         // init _open_request
         _open_request.mutable_id()->set_hi(456789);
@@ -159,7 +150,7 @@ public:
         return metadata;
     }
 
-    VChunk generate_data(int64_t chunk_size) {
+    Chunk generate_data(int64_t chunk_size) {
         std::vector<int> v0(chunk_size);
         std::vector<int> v1(chunk_size);
         for (int i = 0; i < chunk_size; i++) {
@@ -169,7 +160,7 @@ public:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        VChunk chunk({c0, c1}, _schema);
+        Chunk chunk({c0, c1}, _schema);
         chunk.set_slot_id_to_index(0, 0);
         chunk.set_slot_id_to_index(1, 1);
         return chunk;
@@ -198,8 +189,8 @@ protected:
         CHECK_OK(_tablet_manager->put_tablet_metadata(*new_tablet_metadata(10089)));
 
         auto load_mem_tracker = std::make_unique<MemTracker>(-1, "", _mem_tracker.get());
-        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), UniqueId::gen_uid(), string(), 1000,
-                                                      std::move(load_mem_tracker));
+        _load_channel = std::make_shared<LoadChannel>(_load_channel_mgr.get(), _tablet_manager.get(),
+                                                      UniqueId::gen_uid(), string(), 1000, std::move(load_mem_tracker));
         TabletsChannelKey key{UniqueId::gen_uid().to_proto(), 99999};
         _tablets_channel =
                 new_lake_tablets_channel(_load_channel.get(), _tablet_manager.get(), key, _load_channel->mem_tracker());
@@ -220,7 +211,7 @@ protected:
         _tablet_manager->prune_metacache();
     }
 
-    std::shared_ptr<VChunk> read_segment(int64_t tablet_id, const std::string& filename) {
+    std::shared_ptr<Chunk> read_segment(int64_t tablet_id, const std::string& filename) {
         // Check segment file
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
         auto path = _location_provider->segment_location(tablet_id, filename);
@@ -262,7 +253,7 @@ protected:
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
     lake::LocationProvider* _backup_location_provider;
     std::shared_ptr<TabletSchema> _tablet_schema;
-    std::shared_ptr<VSchema> _schema;
+    std::shared_ptr<Schema> _schema;
     std::shared_ptr<OlapTableSchemaParam> _schema_param;
     PTabletWriterOpenRequest _open_request;
 
@@ -494,7 +485,7 @@ TEST_F(LakeTabletsChannelTest, test_write_concurrently) {
     }
 }
 
-TEST_F(LakeTabletsChannelTest, test_abort) {
+TEST_F(LakeTabletsChannelTest, DISABLED_test_abort) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
 

@@ -427,7 +427,7 @@ public class QueryCacheTest {
     }
 
     public static List<String> getSsbCreateTableSqlList() {
-        List<String> ssbTableNames = Lists.newArrayList("lineorder", "customer", "dates", "supplier", "part");
+        List<String> ssbTableNames = Lists.newArrayList("customer", "dates", "supplier", "part", "lineorder");
         ClassLoader loader = QueryCacheTest.class.getClassLoader();
         List<String> createTableSqlList = ssbTableNames.stream().map(n -> {
             try {
@@ -531,8 +531,9 @@ public class QueryCacheTest {
     @Test
     public void testNoGroupBy() throws Exception {
         ctx.getSessionVariable().setNewPlanerAggStage(2);
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
         List<String> aggrFunctions =
-                Lists.newArrayList("count(v1)", "sum(v1)", "avg(v1)", "count(distinct v1)",
+                Lists.newArrayList("sum(v1)", "avg(v1)", "count(distinct v1)",
                         "variance(v1)", "stddev(v1)", "ndv(v1)", "hll_raw_agg(hll_hash(v1))",
                         "bitmap_union(bitmap_hash(v1))", "hll_union_agg(hll_hash(v1))",
                         "bitmap_union_count(bitmap_hash(v1))");
@@ -541,13 +542,14 @@ public class QueryCacheTest {
         for (String agg : aggrFunctions) {
             testNoGroupBy(agg, whereClauses);
         }
-        // min/max without filters will use meta scan, so we should test them separately
-        aggrFunctions = Lists.newArrayList("max(v1)", "min(v1)");
+        // count/min/max without filters will use meta scan, so we should test them separately
+        aggrFunctions = Lists.newArrayList("count(v1)", "max(v1)", "min(v1)");
         whereClauses = Lists.newArrayList("where dt between '2022-01-02' and '2022-01-03'",
                 "where dt between '2022-01-01' and '2022-01-31'", "where dt between '2022-01-04' and '2022-01-06'");
         for (String agg : aggrFunctions) {
             testNoGroupBy(agg, whereClauses);
         }
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test

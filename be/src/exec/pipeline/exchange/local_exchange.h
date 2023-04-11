@@ -36,6 +36,7 @@ public:
                             LocalExchangeSourceOperatorFactory* source)
             : _name(std::move(name)), _memory_manager(std::move(memory_manager)), _source(source) {}
 
+    virtual ~LocalExchanger() = default;
     virtual Status prepare(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
 
@@ -79,6 +80,8 @@ public:
     int32_t source_dop() const { return _source->get_sources().size(); }
 
     int32_t incr_epoch_finished_sinker() { return ++_epoch_finished_sinker; }
+
+    size_t get_memory_usage() const { return _memory_manager->get_memory_usage(); }
 
 protected:
     const std::string _name;

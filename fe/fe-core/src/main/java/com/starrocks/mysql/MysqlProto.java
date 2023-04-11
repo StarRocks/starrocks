@@ -197,20 +197,36 @@ public class MysqlProto {
             // 1. clear the serializer
             serializer.reset();
             // 2. build the auth switch request and send to the client
-            // TODO(yiming): support kerberos in new RBAC privilege framework later
             if (authPluginName.equals(AUTHENTICATION_KERBEROS_CLIENT)) {
-                if (GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
-                    try {
-                        handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
-                    } catch (Exception e) {
-                        ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    if (GlobalStateMgr.getCurrentState().getAuthenticationManager().isSupportKerberosAuth()) {
+                        try {
+                            handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
+                        } catch (Exception e) {
+                            ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
+                            sendResponsePacket(context);
+                            return false;
+                        }
+                    } else {
+                        ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
                         sendResponsePacket(context);
                         return false;
                     }
                 } else {
-                    ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
-                    sendResponsePacket(context);
-                    return false;
+                    if (GlobalStateMgr.getCurrentState().getAuth().isSupportKerberosAuth()) {
+                        try {
+                            handshakePacket.buildKrb5AuthRequestDeprecated(serializer, context.getRemoteIP(),
+                                    authPacket.getUser());
+                        } catch (Exception e) {
+                            ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
+                            sendResponsePacket(context);
+                            return false;
+                        }
+                    } else {
+                        ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
+                        sendResponsePacket(context);
+                        return false;
+                    }
                 }
             } else {
                 handshakePacket.buildAuthSwitchRequest(serializer);
@@ -220,6 +236,8 @@ public class MysqlProto {
             ByteBuffer authSwitchResponse = channel.fetchOnePacket();
             if (authSwitchResponse == null) {
                 // receive response failed.
+                LOG.error("Building handshake with kerberos error, msg: Failed to get a valid service ticket for" +
+                        " {} from the client", authPacket.getUser());
                 return false;
             }
             // 3. the client use default password plugin of StarRocks to dispose

@@ -327,6 +327,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     }
                     if (sortKeyIdxes != null) {
                         copiedSortKeyIdxes = sortKeyIdxes;
+                    } else if (copiedSortKeyIdxes != null && !copiedSortKeyIdxes.isEmpty()) {
+                        sortKeyIdxes = copiedSortKeyIdxes;
                     }
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
@@ -594,7 +596,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         // Mark schema changed tablet not to move to trash.
                         long baseTabletId = partitionIndexTabletMap.get(
                                                     partitionId, shadowIdxId).get(shadowTablet.getId());
-                        GlobalStateMgr.getCurrentInvertedIndex().markTabletForceDelete(baseTabletId);
+                        GlobalStateMgr.getCurrentInvertedIndex().
+                                    markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
                         List<Replica> replicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
                         int healthyReplicaNum = 0;
                         for (Replica replica : replicas) {
@@ -683,7 +686,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                 if (modifiedColumns.contains(mvColumn.getName())) {
                     LOG.warn("Setting the materialized view {}({}) to invalid because " +
                             "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                            table.getName(), mvColumn.getName());
+                            mvColumn.getName(), table.getName());
                     mv.setActive(false);
                     return;
                 }
@@ -786,6 +789,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         tbl.setState(OlapTableState.NORMAL);
+        tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
     }
 
     /*

@@ -46,11 +46,14 @@
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/spill/dir_manager.h"
+#include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
+#include "gutil/strings/join.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"
@@ -321,6 +324,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
         _lake_update_manager = new lake::UpdateManager(_lake_location_provider, update_mem_tracker());
         _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, _lake_update_manager,
                                                        config::lake_metadata_cache_limit);
+        if (config::starlet_cache_dir.empty()) {
+            std::vector<std::string> starlet_cache_paths;
+            std::for_each(store_paths.begin(), store_paths.end(), [&](StorePath root_path) {
+                std::string starlet_cache_path = root_path.path + "/starlet_cache";
+                starlet_cache_paths.emplace_back(starlet_cache_path);
+            });
+            config::starlet_cache_dir = JoinStrings(starlet_cache_paths, ":");
+        }
 #elif defined(BE_TEST)
         _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
         _lake_update_manager = new lake::UpdateManager(_lake_location_provider, update_mem_tracker());
@@ -340,9 +351,13 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _small_file_mgr->init();
 
     RETURN_IF_ERROR(_load_channel_mgr->init(load_mem_tracker()));
+
     _heartbeat_flags = new HeartbeatFlags();
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
     _cache_mgr = new query_cache::CacheManager(capacity);
+
+    _spill_dir_mgr = std::make_shared<spill::DirManager>();
+    RETURN_IF_ERROR(_spill_dir_mgr->init());
     return Status::OK();
 }
 

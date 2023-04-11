@@ -139,6 +139,14 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
         threads.emplace_back([data_dir] {
+            auto res = data_dir->load();
+            if (!res.ok()) {
+                LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
+            }
+        });
+        Thread::set_thread_name(threads.back(), "load_data_dir");
+
+        threads.emplace_back([data_dir] {
             if (config::manual_compact_before_data_dir_load) {
                 uint64_t live_sst_files_size_before = 0;
                 if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
@@ -158,12 +166,8 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
                               << data_dir->get_meta()->get_stats();
                 }
             }
-            auto res = data_dir->load();
-            if (!res.ok()) {
-                LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
-            }
         });
-        Thread::set_thread_name(threads.back(), "load_data_dir");
+        Thread::set_thread_name(threads.back(), "compact_data_dir");
     }
     for (auto& thread : threads) {
         thread.join();
@@ -424,6 +428,17 @@ Status StorageEngine::set_cluster_id(int32_t cluster_id) {
     _effective_cluster_id = cluster_id;
     _is_all_cluster_id_exist = true;
     return Status::OK();
+}
+
+std::vector<string> StorageEngine::get_store_paths() {
+    std::vector<string> paths;
+    {
+        std::lock_guard<std::mutex> l(_store_lock);
+        for (auto& it : _store_map) {
+            paths.push_back(it.first);
+        }
+    }
+    return paths;
 }
 
 std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium::type storage_medium) {
@@ -1161,7 +1176,11 @@ void StorageEngine::remove_increment_map_by_table_id(int64_t table_id) {
 }
 
 Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num_row, std::vector<int64_t>& ids) {
-    bool need_init = false;
+    if (num_row == 0) {
+        return Status::OK();
+    }
+    DCHECK_EQ(num_row, ids.size());
+
     std::shared_ptr<AutoIncrementMeta> meta;
 
     {
@@ -1169,7 +1188,6 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
 
         if (UNLIKELY(_auto_increment_meta_map.find(tableid) == _auto_increment_meta_map.end())) {
             _auto_increment_meta_map.insert({tableid, std::make_shared<AutoIncrementMeta>()});
-            need_init = true;
         }
         meta = _auto_increment_meta_map[tableid];
     }
@@ -1184,7 +1202,7 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
 
     size_t cur_avaliable_rows = cur_max_id - cur_avaliable_min_id;
     auto ids_iter = ids.begin();
-    if (UNLIKELY(need_init || num_row > cur_avaliable_rows)) {
+    if (UNLIKELY(num_row > cur_avaliable_rows)) {
         size_t alloc_rows = num_row - cur_avaliable_rows;
         // rpc request for the new available interval from fe
         TAllocateAutoIncrementIdParam alloc_params;
@@ -1196,7 +1214,12 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
         auto st = _get_remote_next_increment_id_interval(alloc_params, &alloc_result);
 
         if (!st.ok() || alloc_result.status.status_code != TStatusCode::OK) {
-            return Status::InternalError("auto increment allocate failed");
+            std::stringstream err_msg;
+            for (auto& msg : alloc_result.status.error_msgs) {
+                err_msg << msg;
+            }
+
+            return Status::InternalError("auto increment allocate failed, err msg: " + err_msg.str());
         }
 
         if (cur_avaliable_rows > 0) {

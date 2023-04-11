@@ -57,6 +57,11 @@ const i32 INVALID_PLAN_NODE_ID = -1
 // Constant default partition ID, must be < 0 to avoid collisions
 const i64 DEFAULT_PARTITION_ID = -1;
 
+// constants for function version
+enum TFunctionVersion {
+    RUNTIME_FILTER_SERIALIZE_VERSION_2 = 6,
+}
+
 enum TQueryType {
     SELECT,
     LOAD,
@@ -108,6 +113,11 @@ enum TPipelineProfileLevel {
   CORE_METRICS,
   ALL_METRICS,
   DETAIL
+}
+
+enum TSpillMode {
+  AUTO,
+  FORCE
 }
 
 enum TTabletInternalParallelMode {
@@ -173,8 +183,8 @@ struct TQueryOptions {
   // see BE config `max_pushdown_conditions_per_column` for details
   // if set, this will overwrite the BE config.
   30: optional i32 max_pushdown_conditions_per_column
-  // whether enable spilling to disk
-  31: optional bool enable_spilling = false;
+  // whether enable spill to disk
+  31: optional bool enable_spill = false;
 
   // Added by StarRocks:
   50: optional Types.TCompressionType transmission_compression_type;
@@ -216,6 +226,16 @@ struct TQueryOptions {
   70: optional bool allow_throw_exception = 0;
 
   71: optional bool hudi_mor_force_jni_reader;
+
+  72: optional i64 rpc_http_min_size;
+
+  // some experimental parameter for spill
+  73: optional i32 spill_mem_table_size;
+  74: optional i32 spill_mem_table_num;
+  75: optional double spill_mem_limit_threshold;
+  76: optional i64 spill_operator_min_bytes;
+  77: optional i64 spill_operator_max_bytes;
+  85: optional TSpillMode spill_mode;  
 }
 
 

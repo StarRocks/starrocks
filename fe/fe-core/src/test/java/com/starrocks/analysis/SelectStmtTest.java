@@ -270,4 +270,76 @@ public class SelectStmtTest {
             Assert.assertTrue(e.getMessage().contains("Subquery in left-side child of in-predicate is not supported"));
         }
     }
+
+    @Test
+    public void testGroupByCountDistinctWithSkewHint() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql =
+                "select cast(k1 as int), count(distinct [skew] cast(k2 as int)) from db1.tbl1 group by cast(k1 as int)";
+        String s = starRocksAssert.query(sql).explainQuery();
+        Assert.assertTrue(s, s.contains("  3:Project\n" +
+                "  |  <slot 5> : 5: cast\n" +
+                "  |  <slot 6> : 6: cast\n" +
+                "  |  <slot 8> : CAST(murmur_hash3_32(CAST(6: cast AS VARCHAR)) % 512 AS SMALLINT)"));
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testGroupByMultiColumnCountDistinctWithSkewHint() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql =
+                "select cast(k1 as int), k3, count(distinct [skew] cast(k2 as int)) from db1.tbl1 group by cast(k1 as int), k3";
+        String s = starRocksAssert.query(sql).explainQuery();
+        Assert.assertTrue(s, s.contains("  3:Project\n" +
+                "  |  <slot 3> : 3: k3\n" +
+                "  |  <slot 5> : 5: cast\n" +
+                "  |  <slot 6> : 6: cast\n" +
+                "  |  <slot 8> : CAST(murmur_hash3_32(CAST(6: cast AS VARCHAR)) % 512 AS SMALLINT)"));
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testGroupByMultiColumnMultiCountDistinctWithSkewHint() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql =
+                "select k1, k3, count(distinct [skew] k2), count(distinct k4) from db1.tbl1 group by k1, k3";
+        String s = starRocksAssert.query(sql).explainQuery();
+        Assert.assertTrue(s, s.contains("  4:Project\n" +
+                "  |  <slot 7> : 7: k1\n" +
+                "  |  <slot 8> : 8: k2\n" +
+                "  |  <slot 9> : 9: k3\n" +
+                "  |  <slot 13> : CAST(murmur_hash3_32(8: k2) % 512 AS SMALLINT)"));
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testGroupByCountDistinctUseTheSameColumn()
+            throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql =
+                "select k3, count(distinct [skew] k3) from db1.tbl1 group by k3";
+        String s = starRocksAssert.query(sql).explainQuery();
+        Assert.assertFalse(s, s.contains("murmur_hash3_32"));
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testScalarCorrelatedSubquery() {
+        try {
+            String sql = "select *, (select [a.k1,a.k2] from db1.tbl1 a where a.k4 = b.k1) as r from db1.baseall b;";
+            UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.fail("Must throw an exception");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(),
+                    e.getMessage().contains("NOT support scalar correlated sub-query of type ARRAY<varchar(32)>"));
+        }
+
+        try {
+            String sql = "select *, (select a.k1 from db1.tbl1 a where a.k4 = b.k1) as r from db1.baseall b;";
+            String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            Assert.assertTrue(plan, plan.contains("assert_true[((7: countRows IS NULL) OR (7: countRows <= 1)"));
+        } catch (Exception e) {
+            Assert.fail("Should not throw an exception");
+        }
+    }
 }

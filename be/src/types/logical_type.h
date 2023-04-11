@@ -104,6 +104,15 @@ inline LogicalType delegate_type(LogicalType type) {
     }
 }
 
+inline bool is_integer_type(LogicalType type) {
+    return type == TYPE_TINYINT || type == TYPE_SMALLINT || type == TYPE_INT || type == TYPE_BIGINT ||
+           type == TYPE_LARGEINT;
+}
+
+inline bool is_float_type(LogicalType type) {
+    return type == TYPE_FLOAT || type == TYPE_DOUBLE;
+}
+
 inline bool is_string_type(LogicalType type) {
     return type == LogicalType::TYPE_CHAR || type == LogicalType::TYPE_VARCHAR;
 }
@@ -124,6 +133,31 @@ inline bool is_binary_type(LogicalType type) {
     switch (type) {
     case TYPE_BINARY:
     case TYPE_VARBINARY:
+        return true;
+    default:
+        return false;
+    }
+}
+
+inline bool is_scalar_field_type(LogicalType type) {
+    switch (type) {
+    case TYPE_STRUCT:
+    case TYPE_ARRAY:
+    case TYPE_MAP:
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
+        return false;
+    default:
+        return true;
+    }
+}
+
+inline bool is_complex_metric_type(LogicalType type) {
+    switch (type) {
+    case TYPE_OBJECT:
+    case TYPE_PERCENTILE:
+    case TYPE_HLL:
         return true;
     default:
         return false;
@@ -214,6 +248,8 @@ VALUE_GUARD(LogicalType, BinaryLTGuard, lt_is_binary, TYPE_BINARY, TYPE_VARBINAR
 VALUE_GUARD(LogicalType, JsonGuard, lt_is_json, TYPE_JSON)
 VALUE_GUARD(LogicalType, FunctionGuard, lt_is_function, TYPE_FUNCTION)
 VALUE_GUARD(LogicalType, ObjectFamilyLTGuard, lt_is_object_family, TYPE_JSON, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE)
+VALUE_GUARD(LogicalType, MapGuard, lt_is_map, TYPE_MAP)
+VALUE_GUARD(LogicalType, StructGurad, lt_is_struct, TYPE_STRUCT)
 
 VALUE_GUARD(LogicalType, DateLTGuard, lt_is_date, TYPE_DATE)
 VALUE_GUARD(LogicalType, DateTimeLTGuard, lt_is_datetime, TYPE_DATETIME)
@@ -241,7 +277,7 @@ UNION_VALUE_GUARD(LogicalType, NumericLTGuard, lt_is_numeric, lt_is_number_struc
 UNION_VALUE_GUARD(LogicalType, FixedLengthLTGuard, lt_is_fixedlength, lt_is_arithmetic_struct, lt_is_decimalv2_struct,
                   lt_is_decimal_struct, lt_is_datetime_struct, lt_is_date_struct, lt_is_time_struct)
 UNION_VALUE_GUARD(LogicalType, AggregateLTGuard, lt_is_aggregate, lt_is_arithmetic_struct, lt_is_decimalv2_struct,
-                  lt_is_decimal_struct, lt_is_datetime_struct, lt_is_date_struct)
+                  lt_is_decimal_struct, lt_is_datetime_struct, lt_is_date_struct, lt_is_string_struct)
 // TODO support more complex type as aggregate function
 UNION_VALUE_GUARD(LogicalType, AggregateComplexLTGuard, lt_is_complex_aggregate, lt_is_arithmetic_struct,
                   lt_is_decimalv2_struct, lt_is_decimal_struct, lt_is_datetime_struct, lt_is_date_struct,

@@ -80,7 +80,7 @@ TEST_F(ParquetSchemaTest, OnlyLeafType) {
     ASSERT_TRUE(st.ok());
 
     {
-        auto idx = desc.get_column_index("col1");
+        auto idx = desc.get_field_pos_by_column_name("col1");
         ASSERT_EQ(0, idx);
         auto field = desc.get_stored_column_by_idx(0);
         ASSERT_STREQ("col1", field->name.c_str());
@@ -91,7 +91,7 @@ TEST_F(ParquetSchemaTest, OnlyLeafType) {
     }
 
     {
-        auto idx = desc.get_column_index("col2");
+        auto idx = desc.get_field_pos_by_column_name("col2");
         ASSERT_EQ(1, idx);
         auto field = desc.get_stored_column_by_idx(1);
         ASSERT_STREQ("col2", field->name.c_str());
@@ -189,7 +189,7 @@ TEST_F(ParquetSchemaTest, NestedType) {
 
     // Check col2
     {
-        auto field = desc.resolve_by_name("col2");
+        auto field = desc.get_stored_column_by_column_name("col2");
         ASSERT_EQ(TYPE_ARRAY, field->type.type);
         ASSERT_EQ(2, field->max_def_level());
         ASSERT_EQ(1, field->max_rep_level());
@@ -206,7 +206,7 @@ TEST_F(ParquetSchemaTest, NestedType) {
 
     // Check col3
     {
-        auto field = desc.resolve_by_name("col3");
+        auto field = desc.get_stored_column_by_column_name("col3");
         ASSERT_EQ(TYPE_STRUCT, field->type.type);
         ASSERT_EQ(1, field->max_def_level());
         ASSERT_EQ(0, field->max_rep_level());
@@ -444,7 +444,7 @@ TEST_F(ParquetSchemaTest, SimpleArray) {
     auto st = desc.from_thrift(t_schemas, true);
     ASSERT_TRUE(st.ok());
     {
-        auto field = desc.resolve_by_name("col2");
+        auto field = desc.get_stored_column_by_column_name("col2");
         ASSERT_EQ(TYPE_ARRAY, field->type.type);
         ASSERT_EQ(1, field->max_def_level());
         ASSERT_EQ(1, field->max_rep_level());
@@ -497,7 +497,7 @@ TEST_F(ParquetSchemaTest, TwoLevelArray) {
     auto st = desc.from_thrift(t_schemas, true);
     ASSERT_TRUE(st.ok());
     {
-        auto field = desc.resolve_by_name("col2");
+        auto field = desc.get_stored_column_by_column_name("col2");
         ASSERT_EQ(TYPE_ARRAY, field->type.type);
         ASSERT_EQ(2, field->max_def_level());
         ASSERT_EQ(1, field->max_rep_level());
@@ -566,7 +566,7 @@ TEST_F(ParquetSchemaTest, MapNormal) {
     auto st = desc.from_thrift(t_schemas, true);
     ASSERT_TRUE(st.ok());
     {
-        auto field = desc.resolve_by_name("col2");
+        auto field = desc.get_stored_column_by_column_name("col2");
         ASSERT_EQ(TYPE_MAP, field->type.type);
         ASSERT_EQ(2, field->max_def_level());
         ASSERT_EQ(1, field->max_rep_level());

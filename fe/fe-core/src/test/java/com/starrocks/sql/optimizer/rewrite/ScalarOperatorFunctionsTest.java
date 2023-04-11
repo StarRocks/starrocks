@@ -294,7 +294,7 @@ public class ScalarOperatorFunctionsTest {
                                 ConstantOperator.createVarchar("%Y-%m-%d"))
                         .getVarchar());
         assertEquals("000123", ScalarOperatorFunctions
-                .dateFormat(ConstantOperator.createDate(LocalDateTime.of(2022, 3, 13, 0, 0, 0, 123000)),
+                .dateFormat(ConstantOperator.createDate(LocalDateTime.of(2022, 3, 13, 0, 0, 0, 123000000)),
                         ConstantOperator.createVarchar("%f")).getVarchar());
 
         assertEquals("asdfafdfsçv",
@@ -353,11 +353,11 @@ public class ScalarOperatorFunctionsTest {
                         ConstantOperator.createVarchar("%Y%m%d")).getDatetime().toString());
 
         assertEquals("2013-05-17T12:35:10.000123", ScalarOperatorFunctions
-                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.123"),
+                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.000123"),
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s.%f")).getDatetime().toString());
 
         assertEquals("2013-05-17T12:35:10.000001", ScalarOperatorFunctions
-                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.00001"),
+                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.000001"),
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s.%f")).getDatetime().toString());
 
         assertEquals("2013-05-17T12:35:10", ScalarOperatorFunctions
@@ -1077,4 +1077,15 @@ public class ScalarOperatorFunctionsTest {
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.now().getDatetime());
     }
+
+    @Test
+    public void testNowWithParameter() throws AnalysisException {
+        ConnectContext ctx = new ConnectContext(null);
+        ctx.setThreadLocalInfo();
+        ctx.setStartTime();
+        LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime())
+                .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+        assertEquals(expected, ScalarOperatorFunctions.now(new ConstantOperator(6, Type.INT)).getDatetime());
+    }
+
 }

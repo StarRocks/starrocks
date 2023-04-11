@@ -140,7 +140,13 @@ enum TSchemaTableType {
     SCH_BE_TABLETS,
     SCH_BE_METRICS,
     SCH_BE_TXNS,
-    SCH_BE_CONFIGS
+    SCH_BE_CONFIGS,
+    SCH_LOADS,
+    SCH_LOAD_TRACKING_LOGS,
+    SCH_FE_TABLET_SCHEDULES,
+    SCH_BE_COMPACTIONS,
+    SCH_BE_THREADS,
+    SCH_BE_LOGS,
 }
 
 enum THdfsCompression {
@@ -209,6 +215,8 @@ struct TOlapTablePartition {
     7: optional list<Exprs.TExprNode> end_keys
 
     8: optional list<list<Exprs.TExprNode>> in_keys
+    // for automatic partition
+    9: optional bool is_shadow_partition = false
 }
 
 struct TOlapTablePartitionParam {
@@ -350,12 +358,33 @@ struct TFileTable {
     2: optional list<TColumn> columns
 }
 
+struct TIcebergSchema {
+    1: optional list<TIcebergSchemaField> fields
+}
+
+struct TIcebergSchemaField {
+    // Refer to field id in iceberg schema
+    1: optional i32 field_id
+
+    // Refer to field name
+    2: optional string name
+
+    // You can fill other field properties here if you needed
+    // .......
+
+    // Children fields for struct, map and list(array)
+    100: optional list<TIcebergSchemaField> children
+}
+
 struct TIcebergTable {
     // table location
     1: optional string location
 
     // Schema columns, except partition columns
     2: optional list<TColumn> columns
+
+    // Iceberg schema, used to support schema evolution
+    3: optional TIcebergSchema iceberg_schema
 }
 
 struct THudiTable {

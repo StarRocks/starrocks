@@ -95,6 +95,20 @@ public class ScanOperatorPredicates {
     }
 
     @Override
+    public ScanOperatorPredicates clone() {
+        ScanOperatorPredicates other = new ScanOperatorPredicates();
+        other.idToPartitionKey.putAll(this.idToPartitionKey);
+        other.selectedPartitionIds.addAll(this.selectedPartitionIds);
+        other.partitionConjuncts.addAll(this.partitionConjuncts);
+        other.noEvalPartitionConjuncts.addAll(this.noEvalPartitionConjuncts);
+        other.nonPartitionConjuncts.addAll(this.nonPartitionConjuncts);
+        other.minMaxConjuncts.addAll(this.minMaxConjuncts);
+        other.minMaxColumnRefMap.putAll(this.minMaxColumnRefMap);
+
+        return other;
+    }
+
+    @Override
     public boolean equals(Object o) {
         if (this == o) {
             return true;

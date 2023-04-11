@@ -188,7 +188,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
                                                  short replicationNum,
                                                  boolean isInMemory,
                                                  StorageCacheInfo storageCacheInfo,
-                                                 boolean isLakeTable) {
+                                                 boolean isCloudNativeTable) {
         if (idToPartition.containsKey(partition.getId())) {
             LOG.error("partition[{}-{}] already in recycle bin.", partition.getId(), partition.getName());
             return false;
@@ -199,7 +199,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
         // recycle partition
         RecyclePartitionInfo partitionInfo = null;
-        if (isLakeTable) {
+        if (isCloudNativeTable) {
             // lake table
             partitionInfo = new RecycleRangePartitionInfo(dbId, tableId, partition,
                     range, dataProperty, replicationNum, isInMemory, storageCacheInfo);
@@ -372,6 +372,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             for (RecycleTableInfo tableInfo : tableToRemove) {
                 Table table = tableInfo.getTable();
                 long tableId = table.getId();
+                GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, false);
                 removeRecycleMarkers(tableId);
                 nameToTableInfo.remove(tableInfo.dbId, table.getName());
                 idToTableInfo.remove(tableInfo.dbId, tableId);
@@ -407,6 +408,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             if (tableInfo != null) {
                 Runnable runnable = null;
                 Table table = tableInfo.getTable();
+                GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, true);
                 nameToTableInfo.remove(dbId, table.getName());
                 runnable = table.delete(true);
                 if (!isCheckpointThread() && runnable != null) {
@@ -537,6 +539,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             db.createTable(table);
             LOG.info("recover db[{}] with table[{}]: {}", dbId, table.getId(), table.getName());
             iterator.remove();
+            nameToTableInfo.remove(dbId, table.getName());
             removeRecycleMarkers(table.getId());
             tableNames.remove(table.getName());
         }
@@ -630,7 +633,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         partitionInfo.setDataProperty(partitionId, recoverPartitionInfo.getDataProperty());
         partitionInfo.setReplicationNum(partitionId, recoverPartitionInfo.getReplicationNum());
         partitionInfo.setIsInMemory(partitionId, recoverPartitionInfo.isInMemory());
-        if (table.isLakeTable()) {
+        if (table.isCloudNativeTable()) {
             partitionInfo.setStorageCacheInfo(partitionId,
                     ((RecyclePartitionInfoV2) recoverPartitionInfo).getStorageCacheInfo());
         }
@@ -668,7 +671,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             rangePartitionInfo.setReplicationNum(partitionId, partitionInfo.getReplicationNum());
             rangePartitionInfo.setIsInMemory(partitionId, partitionInfo.isInMemory());
 
-            if (table.isLakeTable()) {
+            if (table.isCloudNativeTable()) {
                 rangePartitionInfo.setStorageCacheInfo(partitionId,
                         ((RecyclePartitionInfoV2) partitionInfo).getStorageCacheInfo());
             }
@@ -690,7 +693,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         // idToTable
         for (RecycleTableInfo tableInfo : idToTableInfo.values()) {
             Table table = tableInfo.getTable();
-            if (!table.isNativeTable()) {
+            if (!table.isNativeTableOrMaterializedView()) {
                 continue;
             }
 
@@ -704,11 +707,11 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
                     long indexId = index.getId();
                     int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
                     TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, medium,
-                            table.isLakeTable());
+                            table.isCloudNativeTable());
                     for (Tablet tablet : index.getTablets()) {
                         long tabletId = tablet.getId();
                         invertedIndex.addTablet(tabletId, tabletMeta);
-                        if (table.isLocalTable()) {
+                        if (table.isOlapTableOrMaterializedView()) {
                             for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                                 invertedIndex.addReplica(tabletId, replica);
                             }
@@ -759,11 +762,11 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
                 long indexId = index.getId();
                 int schemaHash = olapTable.getSchemaHashByIndexId(indexId);
                 TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, schemaHash, medium,
-                        olapTable.isLakeTable());
+                        olapTable.isCloudNativeTable());
                 for (Tablet tablet : index.getTablets()) {
                     long tabletId = tablet.getId();
                     invertedIndex.addTablet(tabletId, tabletMeta);
-                    if (olapTable.isLocalTable()) {
+                    if (olapTable.isOlapTableOrMaterializedView()) {
                         for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                             invertedIndex.addReplica(tabletId, replica);
                         }
@@ -776,7 +779,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     public void removeInvalidateReference() {
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
             // privilege object can be invalidated after gc
-            GlobalStateMgr.getCurrentState().getPrivilegeManager().removeInvalidObject();
+            GlobalStateMgr.getCurrentState().getAuthorizationManager().removeInvalidObject();
         }
     }
 

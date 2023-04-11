@@ -378,6 +378,7 @@ vectorized_functions = [
     [50201, 'current_timestamp', 'DATETIME', [], 'TimeFunctions::now'],
     [50202, 'localtime', 'DATETIME', [], 'TimeFunctions::now'],
     [50203, 'localtimestamp', 'DATETIME', [], 'TimeFunctions::now'],
+    [50204, 'now', 'DATETIME', ['INT'], 'TimeFunctions::now'],
     [50210, 'curtime', 'TIME', [], 'TimeFunctions::curtime'],
     [50211, 'current_time', 'TIME', [], 'TimeFunctions::curtime'],
     [50220, 'curdate', 'DATE', [], 'TimeFunctions::curdate'],
@@ -586,6 +587,8 @@ vectorized_functions = [
     [110018, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
     [110019, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys",
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+    [110100, "to_json", "JSON", ["ANY_MAP"], "JsonFunctions::to_json", False],
+    [110101, "to_json", "JSON", ["ANY_STRUCT"], "JsonFunctions::to_json", False],
 
     # aes and base64 function
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt", False],
@@ -859,6 +862,7 @@ vectorized_functions = [
     [170001, 'map_keys', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_keys'],
     [170002, 'map_values', 'ANY_ARRAY', ['ANY_MAP'], 'MapFunctions::map_values'],
     [170003, 'map_from_arrays', 'ANY_MAP', ['ANY_ARRAY', 'ANY_ARRAY'], 'MapFunctions::map_from_arrays'],
+    [170004, 'map_apply', 'ANY_MAP', ['FUNCTION', 'ANY_MAP'], 'nullptr'],
     # struct functions
     [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
 ]

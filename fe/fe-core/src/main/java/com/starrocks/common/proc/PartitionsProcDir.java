@@ -99,7 +99,7 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     private void createTitleNames() {
-        if (table.isCloudNativeTable()) {
+        if (table.isCloudNativeTableOrMaterializedView()) {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
                     .add("PartitionId")
                     .add("PartitionName")
@@ -263,13 +263,13 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     private List<List<Comparable>> getPartitionInfos() {
-        return table.isCloudNativeTable() ? getLakePartitionInfos() : getOlapPartitionInfos();
+        return table.isCloudNativeTableOrMaterializedView() ? getLakePartitionInfos() : getOlapPartitionInfos();
     }
 
     private List<List<Comparable>> getOlapPartitionInfos() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
-        Preconditions.checkState(table.isLocalTable());
+        Preconditions.checkState(table.isOlapTableOrMaterializedView());
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
@@ -308,7 +308,7 @@ public class PartitionsProcDir implements ProcDirInterface {
     private List<List<Comparable>> getLakePartitionInfos() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
-        Preconditions.checkState(table.isCloudNativeTable());
+        Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
 
         // get info
         List<List<Comparable>> partitionInfos = new ArrayList<List<Comparable>>();
@@ -448,19 +448,24 @@ public class PartitionsProcDir implements ProcDirInterface {
     }
 
     @Override
-    public ProcNodeInterface lookup(String partitionIdStr) throws AnalysisException {
+    public ProcNodeInterface lookup(String partitionIdOrName) throws AnalysisException {
         long partitionId = -1L;
-        try {
-            partitionId = Long.parseLong(partitionIdStr);
-        } catch (NumberFormatException e) {
-            throw new AnalysisException("Invalid partition id format: " + partitionIdStr);
-        }
+
 
         db.readLock();
         try {
-            Partition partition = table.getPartition(partitionId);
+            Partition partition;
+            try {
+                partition = table.getPartition(Long.parseLong(partitionIdOrName));
+            } catch (NumberFormatException e) {
+                partition = table.getPartition(partitionIdOrName, false);
+                if (partition == null) {
+                    partition = table.getPartition(partitionIdOrName, true);
+                }
+            }
+
             if (partition == null) {
-                throw new AnalysisException("Partition[" + partitionId + "] does not exist");
+                throw new AnalysisException("Unknown partition id or name \"" + partitionIdOrName + "\"");
             }
 
             return new IndicesProcDir(db, table, partition);

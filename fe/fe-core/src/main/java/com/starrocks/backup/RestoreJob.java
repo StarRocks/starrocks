@@ -455,7 +455,7 @@ public class RestoreJob extends AbstractJob {
                     continue;
                 }
 
-                if (!tbl.isOlapOrLakeTable()) {
+                if (!tbl.isOlapOrCloudNativeTable()) {
                     status = new Status(ErrCode.COMMON_ERROR, "Only support retore OLAP table: " + tbl.getName());
                     return;
                 }
@@ -488,12 +488,13 @@ public class RestoreJob extends AbstractJob {
                 Table localTbl = db.getTable(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
                 if (localTbl != null) {
                     if (localTbl instanceof OlapTable && localTbl.hasAutoIncrementColumn()) {
+                        // it must be !isReplay == true
                         ((OlapTable) localTbl).sendDropAutoIncrementMapTask();
                     }
 
-                    backupMeta.checkAndRecoverAutoIncrementId(localTbl);
+                    tblInfo.checkAndRecoverAutoIncrementId(localTbl);
                     // table already exist, check schema
-                    if (!localTbl.isOlapOrLakeTable()) {
+                    if (!localTbl.isOlapOrCloudNativeTable()) {
                         status = new Status(ErrCode.COMMON_ERROR,
                                 "Only support retore olap table: " + localTbl.getName());
                         return;
@@ -603,7 +604,7 @@ public class RestoreJob extends AbstractJob {
                         return;
                     }
 
-                    backupMeta.checkAndRecoverAutoIncrementId((Table) remoteOlapTbl);
+                    tblInfo.checkAndRecoverAutoIncrementId((Table) remoteOlapTbl);
 
                     // DO NOT set remote table's new name here, cause we will still need the origin name later
                     // remoteOlapTbl.setName(jobInfo.getAliasByOriginNameIfSet(tblInfo.name));
@@ -1476,7 +1477,7 @@ public class RestoreJob extends AbstractJob {
                 continue;
             }
 
-            if (!tbl.isOlapOrLakeTable()) {
+            if (!tbl.isOlapOrCloudNativeTable()) {
                 continue;
             }
 

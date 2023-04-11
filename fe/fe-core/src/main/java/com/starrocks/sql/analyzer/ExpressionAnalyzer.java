@@ -68,19 +68,21 @@ import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
@@ -121,9 +123,8 @@ public class ExpressionAnalyzer {
         bottomUpAnalyze(visitor, expression, scope);
     }
 
-    private boolean isHighOrderFunction(Expr expr) {
+    private boolean isArrayHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
-            // expand this in the future.
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_SORTBY)) {
@@ -135,6 +136,19 @@ public class ExpressionAnalyzer {
             }
         }
         return false;
+    }
+
+    private boolean isMapHighOrderFunction(Expr expr) {
+        if (expr instanceof FunctionCallExpr) {
+            if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isHighOrderFunction(Expr expr) {
+        return isArrayHighOrderFunction(expr) || isMapHighOrderFunction(expr);
     }
 
     private Expr rewriteHighOrderFunction(Expr expr) {
@@ -187,22 +201,43 @@ public class ExpressionAnalyzer {
             }
             expression.setChild(0, last);
         }
-        // the first child is lambdaFunction, following input arrays
-        for (int i = 1; i < childSize; ++i) {
-            Expr expr = expression.getChild(i);
+        if (isArrayHighOrderFunction(expression)) {
+            // the first child is lambdaFunction, following input arrays
+            for (int i = 1; i < childSize; ++i) {
+                Expr expr = expression.getChild(i);
+                bottomUpAnalyze(visitor, expr, scope);
+                if (expr instanceof NullLiteral) {
+                    expr.setType(Type.ARRAY_INT); // Let it have item type.
+                }
+                if (!expr.getType().isArrayType()) {
+                    throw new SemanticException(i + "th lambda input should be arrays.");
+                }
+                Type itemType = ((ArrayType) expr.getType()).getItemType();
+                scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
+            }
+        } else {
+            // map_apply(func, map)
+            if (!(expression.getChild(0).getChild(0) instanceof MapExpr)) {
+                throw new SemanticException("The right part of map lambda function (" +
+                        expression.getChild(0).toSql() + ") should have key and value arguments");
+            }
+            if (expression.getChild(0).getChildren().size() != 3) {
+                throw new SemanticException("The left part of map lambda function (" +
+                        expression.getChild(0).toSql() + ") should have 2 arguments, but there are "
+                        + (expression.getChild(0).getChildren().size() - 1) + " arguments");
+            }
+            Expr expr = expression.getChild(1);
             bottomUpAnalyze(visitor, expr, scope);
             if (expr instanceof NullLiteral) {
-                expr.setType(Type.ARRAY_INT); // Let it have item type.
+                expr.setType(Type.ANY_MAP); // Let it have item type.
             }
-            if (!expr.getType().isArrayType()) {
-                throw new SemanticException(i + "th lambda input should be arrays.");
+            if (!expr.getType().isMapType()) {
+                throw new SemanticException("Lambda inputs should be maps.");
             }
-            Type itemType = ((ArrayType) expr.getType()).getItemType();
-            if (itemType == Type.NULL) { // Since slot_ref with Type.NULL is rewritten to Literal in toThrift(),
-                // rather than a common columnRef, so change its type here.
-                itemType = Type.BOOLEAN;
-            }
-            scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
+            Type keyType = ((MapType) expr.getType()).getKeyType();
+            Type valueType = ((MapType) expr.getType()).getValueType();
+            scope.putLambdaInput(new PlaceHolderExpr(-1, true, keyType));
+            scope.putLambdaInput(new PlaceHolderExpr(-2, true, valueType));
         }
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
@@ -330,6 +365,24 @@ public class ExpressionAnalyzer {
         }
 
         @Override
+        public Void visitMapExpr(MapExpr node, Scope scope) {
+            if (!node.getChildren().isEmpty()) {
+                Type keyType = Type.NULL;
+                Type valueType = Type.NULL;
+                if (node.getKeyExpr() != null) {
+                    keyType = node.getKeyExpr().getType();
+                }
+                if (node.getValueExpr() != null) {
+                    valueType = node.getValueExpr().getType();
+                }
+                node.setType(new MapType(keyType, valueType));
+            } else {
+                node.setType(new MapType(Type.NULL, Type.NULL));
+            }
+            return null;
+        }
+
+        @Override
         public Void visitCollectionElementExpr(CollectionElementExpr node, Scope scope) {
             Expr expr = node.getChild(0);
             Expr subscript = node.getChild(1);
@@ -390,13 +443,14 @@ public class ExpressionAnalyzer {
         }
 
         @Override
-        public Void visitLambdaFunctionExpr(LambdaFunctionExpr node, Scope scope) {
+        public Void visitLambdaFunctionExpr(LambdaFunctionExpr node, Scope scope) { // (x,y) -> x+y or (k,v) -> (k1,v1)
             if (scope.getLambdaInputs().size() == 0) {
-                throw new SemanticException("Lambda Functions can only be used in high-order functions with arrays.");
+                throw new SemanticException("Lambda Functions can only be used in high-order functions with arrays/maps.");
             }
             if (scope.getLambdaInputs().size() != node.getChildren().size() - 1) {
                 throw new SemanticException("Lambda arguments should equal to lambda input arrays.");
             }
+
             // process lambda arguments
             Set<String> set = new HashSet<>();
             List<LambdaArgument> args = Lists.newArrayList();
@@ -797,6 +851,35 @@ public class ExpressionAnalyzer {
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                 fn.setArgsType(argumentTypes); // as accepting various types
                 fn.setIsNullable(false);
+            } else if (fnName.equals(FunctionSet.ARRAY_AGG)) {
+                // move order by expr to node child, and extract is_asc and null_first information.
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                List<OrderByElement> orderByElements = node.getParams().getOrderByElements();
+                List<Boolean> isAscOrder = new ArrayList<>();
+                List<Boolean> nullsFirst = new ArrayList<>();
+                if (orderByElements != null) {
+                    for (OrderByElement elem : orderByElements) {
+                        isAscOrder.add(elem.getIsAsc());
+                        nullsFirst.add(elem.getNullsFirstParam());
+                    }
+                }
+                for (int i = 0; i < argumentTypes.length; ++i) {
+                    // TODO: support nested type
+                    if (argumentTypes[i].isComplexType()) {
+                        throw new SemanticException("array_agg can't support inputs of nested types, " +
+                                "but " + i + "-th input is " + argumentTypes[i].toSql());
+                    }
+                    argumentTypes[i] = argumentTypes[i] == Type.NULL ? Type.BOOLEAN : argumentTypes[i];
+                }
+                fn.setArgsType(argumentTypes); // as accepting various types
+                ArrayList<Type> structTypes = new ArrayList<>(argumentTypes.length);
+                for (Type t : argumentTypes) {
+                    structTypes.add(new ArrayType(t));
+                }
+                ((AggregateFunction) fn).setIntermediateType(new StructType(structTypes));
+                ((AggregateFunction) fn).setIsAscOrder(isAscOrder);
+                ((AggregateFunction) fn).setNullsFirst(nullsFirst);
+                fn.setRetType(new ArrayType(argumentTypes[0])); // return null if scalar agg with empty input
             } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
                 // This must before test for DecimalV3.
                 if (!(node.getChild(1) instanceof IntLiteral)) {
@@ -1182,8 +1265,7 @@ public class ExpressionAnalyzer {
                 node.setStrValue(session.getCurrentUserIdentity().toString());
             } else if (funcType.equalsIgnoreCase("CURRENT_ROLE")) {
                 node.setType(Type.VARCHAR);
-
-                PrivilegeManager manager = session.getGlobalStateMgr().getPrivilegeManager();
+                AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
                 List<String> roleName = new ArrayList<>();
 
                 try {
@@ -1209,7 +1291,7 @@ public class ExpressionAnalyzer {
                 node.setStrValue("");
             } else if (funcType.equalsIgnoreCase("CURRENT_CATALOG")) {
                 node.setType(Type.VARCHAR);
-                node.setStrValue(session.getCurrentCatalog().toString());
+                node.setStrValue(session.getCurrentCatalog());
             }
             return null;
         }

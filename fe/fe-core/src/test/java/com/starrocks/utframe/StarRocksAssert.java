@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DdlStmt;
+import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -128,7 +129,7 @@ public class StarRocksAssert {
     public StarRocksAssert withRole(String roleName) throws Exception {
         CreateRoleStmt createRoleStmt =
                 (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser("create role " + roleName + ";", ctx);
-        GlobalStateMgr.getCurrentState().getPrivilegeManager().createRole(createRoleStmt);
+        GlobalStateMgr.getCurrentState().getAuthorizationManager().createRole(createRoleStmt);
         return this;
     }
 
@@ -229,6 +230,13 @@ public class StarRocksAssert {
         DropTableStmt dropViewStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop view " + viewName + ";", ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+        return this;
+    }
+
+    public StarRocksAssert dropCatalog(String catalogName) throws Exception {
+        DropCatalogStmt dropCatalogStmt =
+                (DropCatalogStmt) UtFrameUtils.parseStmtWithNewParser("drop catalog " + catalogName + ";", ctx);
+        GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
         return this;
     }
 

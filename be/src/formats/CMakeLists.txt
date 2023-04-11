@@ -29,6 +29,7 @@ add_library(Formats STATIC
         csv/json_converter.cpp
         csv/numeric_converter.cpp
         csv/nullable_converter.cpp
+        csv/default_value_converter.cpp
         json/nullable_column.cpp
         json/numeric_column.cpp
         json/binary_column.cpp
@@ -48,6 +49,7 @@ add_library(Formats STATIC
         parquet/stored_column_reader.cpp
         parquet/utils.cpp
         parquet/metadata.cpp
+        parquet/meta_helper.cpp
         parquet/group_reader.cpp
         parquet/file_reader.cpp
         )

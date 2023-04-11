@@ -78,6 +78,7 @@ import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.MapExpr;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -96,6 +97,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
@@ -285,10 +287,16 @@ public class AstToStringBuilder {
                             + " as " + userVariable.getEvaluatedExpression().getType().toSql() + ")";
                     setVarList.add(setVarSql);
                 } else if (setVar instanceof SetPassVar) {
-                    String tmp = "PASSWORD FOR " +
-                            ((SetPassVar) setVar).getUserIdent().toString() +
-                            " = PASSWORD('***')";
-                    setVarList.add(tmp);
+                    SetPassVar setPassVar = (SetPassVar) setVar;
+                    UserIdentity userIdentity = setPassVar.getUserIdent();
+                    String setPassSql = "";
+                    if (userIdentity == null) {
+                        setPassSql += "PASSWORD";
+                    } else {
+                        setPassSql += "PASSWORD FOR " + userIdentity;
+                    }
+                    setPassSql += " = PASSWORD('***')";
+                    setVarList.add(setPassSql);
                 }
             }
 
@@ -757,6 +765,14 @@ public class AstToStringBuilder {
             return sb.toString();
         }
 
+        public String visitMapExpr(MapExpr node, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append('(');
+            sb.append(visitAstList(node.getChildren()));
+            sb.append(')');
+            return sb.toString();
+        }
+
         @Override
         public String visitCollectionElementExpr(CollectionElementExpr node, Void context) {
             return visit(node.getChild(0)) + "[" + visit(node.getChild(1)) + "]";
@@ -869,6 +885,13 @@ public class AstToStringBuilder {
                 sb.append(" ").append(ident.getValue());
                 StringLiteral boundary = (StringLiteral) node.getChild(3);
                 sb.append(", ").append(boundary.getValue());
+                sb.append(")");
+            } else if (functionName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
+                sb.append(visit(node.getChild(0)));
+                List<OrderByElement> sortClause = fnParams.getOrderByElements();
+                if (sortClause != null) {
+                    sb.append(" ORDER BY ").append(visitAstList(sortClause));
+                }
                 sb.append(")");
             } else {
                 List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());

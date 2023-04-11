@@ -90,6 +90,11 @@ public class Config extends ConfigBase {
     @Deprecated
     @ConfField
     public static String sys_log_roll_mode = "SIZE-MB-1024";
+    /**
+     * Log to file by default. set to `true` if want to log to console
+     */
+    @ConfField
+    public static boolean sys_log_to_console = false;
 
     /**
      * audit_log_dir:
@@ -214,7 +219,8 @@ public class Config extends ConfigBase {
      * Used to limit the maximum number of partitions that can be created when creating a dynamic partition table,
      * to avoid creating too many partitions at one time.
      */
-    @ConfField(mutable = true) public static int max_dynamic_partition_num = 500;
+    @ConfField(mutable = true)
+    public static int max_dynamic_partition_num = 500;
 
     /**
      * plugin_dir:
@@ -448,6 +454,13 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int bdbje_replay_cost_percent = 150;
+
+    /**
+     * For the version of 5.7, bdb-je will reserve unprotected files (which can be deleted safely) as much as possible,
+     * this param (default is 0 in bdb-je, which means unlimited) controls the limit of reserved unprotected files.
+     */
+    @ConfField
+    public static long bdbje_reserved_disk_size = 512L * 1024 * 1024;
 
     /**
      * the max txn number which bdbje can rollback when trying to rejoin the group
@@ -1108,7 +1121,7 @@ public class Config extends ConfigBase {
      * TODO(cmy): remove this config and dynamically adjust it by clone task statistic
      */
     @ConfField(mutable = true, aliases = {"schedule_slot_num_per_path"})
-    public static int tablet_sched_slot_num_per_path = 4;
+    public static int tablet_sched_slot_num_per_path = 8;
 
     // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets
     // skip checking.
@@ -1155,11 +1168,6 @@ public class Config extends ConfigBase {
     public static boolean enable_replicated_storage_as_default_engine = true;
 
     /**
-     * FOR BeLoadBalancer:
-     * the threshold of cluster balance score, if a backend's load score is 10% lower than average score,
-     * this backend will be marked as LOW load, if load score is 10% higher than average score, HIGH load
-     * will be marked.
-     * <p>
      * FOR DiskAndTabletLoadBalancer:
      * upper limit of the difference in disk usage of all backends, exceeding this threshold will cause
      * disk balance
@@ -1488,6 +1496,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_update_interval_sec = 24L * 60L * 60L;
 
+    @ConfField(mutable = true)
+    public static long statistic_collect_too_many_version_sleep = 600000; // 10min
     /**
      * Enable full statistics collection
      */
@@ -1571,6 +1581,12 @@ public class Config extends ConfigBase {
     public static long max_partitions_in_one_batch = 4096;
 
     /**
+     * Used to limit num of partition for automatic partition table automatically created
+     */
+    @ConfField(mutable = true)
+    public static long max_automatic_partition_number = 4096;
+
+    /**
      * Used to limit num of agent task for one be. currently only for drop task.
      */
     @ConfField(mutable = true)
@@ -1610,7 +1626,7 @@ public class Config extends ConfigBase {
      * The maximum number of partitions to fetch from the metastore in one RPC.
      */
     @ConfField
-    public static int max_hive_partitions_per_rpc = 1000;
+    public static int max_hive_partitions_per_rpc = 5000;
 
     /**
      * The interval of lazy refreshing remote file's metadata cache
@@ -1668,16 +1684,34 @@ public class Config extends ConfigBase {
     public static long hive_max_split_size = 64L * 1024L * 1024L;
 
     /**
-     * Enable background refresh all hive external tables all partitions metadata on internal catalog.
+     * Enable background refresh all external tables all partitions metadata on internal catalog.
      */
     @ConfField
-    public static boolean enable_background_refresh_hive_metadata = false;
+    public static boolean enable_background_refresh_connector_metadata = true;
 
     /**
-     * Background refresh hive external table metadata interval in milliseconds.
+     * Enable background refresh all external tables all partitions metadata based on resource in internal catalog.
+     */
+    @ConfField
+    public static boolean enable_background_refresh_resource_table_metadata = false;
+
+    /**
+     * Number of threads to refresh remote file's metadata concurrency.
+     */
+    @ConfField
+    public static int background_refresh_file_metadata_concurrency = 4;
+
+    /**
+     * Background refresh external table metadata interval in milliseconds.
      */
     @ConfField(mutable = true)
     public static int background_refresh_metadata_interval_millis = 600000;
+
+    /**
+     * The duration of background refresh external table metadata since the table last access.
+     */
+    @ConfField(mutable = true)
+    public static long background_refresh_metadata_time_secs_since_last_access_secs = 3600L * 24L;
 
     /**
      * Enable refresh hive partition statistics.
@@ -1739,6 +1773,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long iceberg_metadata_disk_cache_capacity = 2147483648L;
+
+    /**
+     * iceberg metadata disk cache expire after access
+     */
+    @ConfField
+    public static long iceberg_metadata_disk_cache_expiration_seconds = 7L * 24L * 60L * 60L;
 
     /**
      * iceberg metadata cache max entry size, default 8MB
@@ -1890,7 +1930,7 @@ public class Config extends ConfigBase {
     // Enables or disables SSL connections to AWS services. Not support for now
     // @ConfField
     // public static String aws_s3_enable_ssl = "true";
-    
+
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
     // ***********************************************************
@@ -2098,4 +2138,14 @@ public class Config extends ConfigBase {
      **/
     @ConfField(mutable = true)
     public static long auto_increment_cache_size = 100000;
+
+    /**
+     * Enable the experimental temporary table feature
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_experimental_temporary_table = false;
+
+    @ConfField(mutable = true)
+    public static long max_per_node_grep_log_limit = 500000;
+
 }

@@ -62,8 +62,7 @@ struct DeltaWriterOptions {
     WriteQuorumTypePB write_quorum;
     std::string merge_condition;
     ReplicaState replica_state;
-    bool miss_auto_increment_column;
-    bool abort_delete;
+    bool miss_auto_increment_column = false;
 };
 
 enum State {

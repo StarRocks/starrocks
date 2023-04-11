@@ -135,7 +135,7 @@ Status HiveDataSource::_init_partition_values() {
             const ColumnPtr& data_column = const_column->data_column();
             ColumnPtr& chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
             if (data_column->is_nullable()) {
-                chunk_part_column->append_nulls(1);
+                chunk_part_column->append_default();
             } else {
                 chunk_part_column->append(*data_column, 0, 1);
             }
@@ -229,18 +229,29 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
 
     _profile.runtime_profile = _runtime_profile;
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
-    _profile.bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
-
     _profile.scan_ranges_counter = ADD_COUNTER(_runtime_profile, "ScanRanges", TUnit::UNIT);
 
     _profile.reader_init_timer = ADD_TIMER(_runtime_profile, "ReaderInit");
     _profile.open_file_timer = ADD_TIMER(_runtime_profile, "OpenFile");
     _profile.expr_filter_timer = ADD_TIMER(_runtime_profile, "ExprFilterTime");
 
-    _profile.io_timer = ADD_TIMER(_runtime_profile, "IOTime");
-    _profile.io_counter = ADD_COUNTER(_runtime_profile, "IOCounter", TUnit::UNIT);
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
+
+    {
+        static const char* prefix = "SharedBuffered";
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        _profile.shared_buffered_shared_io_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "SharedIOBytes", TUnit::BYTES, prefix);
+        _profile.shared_buffered_shared_io_count =
+                ADD_CHILD_COUNTER(_runtime_profile, "SharedIOCount", TUnit::UNIT, prefix);
+        _profile.shared_buffered_shared_io_timer = ADD_CHILD_TIMER(_runtime_profile, "SharedIOTime", prefix);
+        _profile.shared_buffered_direct_io_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "DirectIOBytes", TUnit::BYTES, prefix);
+        _profile.shared_buffered_direct_io_count =
+                ADD_CHILD_COUNTER(_runtime_profile, "DirectIOCount", TUnit::UNIT, prefix);
+        _profile.shared_buffered_direct_io_timer = ADD_CHILD_TIMER(_runtime_profile, "DirectIOTime", prefix);
+    }
 
     if (_use_block_cache) {
         static const char* prefix = "BlockCache";
@@ -259,6 +270,18 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailCounter", TUnit::UNIT, prefix);
         _profile.block_cache_write_fail_bytes =
                 ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteFailBytes", TUnit::BYTES, prefix);
+    }
+
+    {
+        static const char* prefix = "InputStream";
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        _profile.app_io_bytes_read_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "AppIOBytesRead", TUnit::BYTES, prefix);
+        _profile.app_io_timer = ADD_CHILD_TIMER(_runtime_profile, "AppIOTime", prefix);
+        _profile.app_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "AppIOCounter", TUnit::UNIT, prefix);
+        _profile.fs_bytes_read_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSBytesRead", TUnit::BYTES, prefix);
+        _profile.fs_io_counter = ADD_CHILD_COUNTER(_runtime_profile, "FSIOCounter", TUnit::UNIT, prefix);
+        _profile.fs_io_timer = ADD_CHILD_TIMER(_runtime_profile, "FSIOTime", prefix);
     }
 
     if (hdfs_scan_node.__isset.table_name) {
@@ -401,6 +424,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.open_limit = nullptr;
     for (const auto& delete_file : scan_range.delete_files) {
         scanner_params.deletes.emplace_back(&delete_file);
+    }
+    if (dynamic_cast<const IcebergTableDescriptor*>(_hive_table)) {
+        auto tbl = dynamic_cast<const IcebergTableDescriptor*>(_hive_table);
+        scanner_params.iceberg_schema = tbl->get_iceberg_schema();
     }
     scanner_params.use_block_cache = _use_block_cache;
     scanner_params.enable_populate_block_cache = _enable_populate_block_cache;

@@ -136,8 +136,8 @@ import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
-import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
+import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.FrontendNodeType;
@@ -204,8 +204,8 @@ import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
+import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeActions;
-import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
@@ -357,7 +357,6 @@ public class GlobalStateMgr {
     private Daemon timePrinter;
     private EsRepository esRepository;  // it is a daemon, so add it here
     private StarRocksRepository starRocksRepository;
-    private IcebergRepository icebergRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
     private ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
 
@@ -415,7 +414,7 @@ public class GlobalStateMgr {
     private AtomicBoolean usingNewPrivilege;
 
     private AuthenticationManager authenticationManager;
-    private PrivilegeManager privilegeManager;
+    private AuthorizationManager authorizationManager;
 
     private DomainResolver domainResolver;
 
@@ -627,7 +626,6 @@ public class GlobalStateMgr {
 
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
-        this.icebergRepository = new IcebergRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
         this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
 
@@ -762,8 +760,8 @@ public class GlobalStateMgr {
         return authenticationManager;
     }
 
-    public PrivilegeManager getPrivilegeManager() {
-        return privilegeManager;
+    public AuthorizationManager getAuthorizationManager() {
+        return authorizationManager;
     }
 
     public ResourceGroupMgr getResourceGroupMgr() {
@@ -897,6 +895,10 @@ public class GlobalStateMgr {
         return connectorTblMetaInfoMgr;
     }
 
+    public ConnectorTableMetadataProcessor getConnectorTableMetadataProcessor() {
+        return connectorTableMetadataProcessor;
+    }
+
     // Use tryLock to avoid potential dead lock
     public boolean tryLock(boolean mustLock) {
         while (true) {
@@ -998,12 +1000,12 @@ public class GlobalStateMgr {
         if (usingNewPrivilege) {
             this.authenticationManager = new AuthenticationManager();
             this.domainResolver = new DomainResolver(authenticationManager);
-            this.privilegeManager = new PrivilegeManager(this, null);
+            this.authorizationManager = new AuthorizationManager(this, null);
             LOG.info("using new privilege framework..");
         } else {
             this.domainResolver = new DomainResolver(auth);
             this.authenticationManager = null;
-            this.privilegeManager = null;
+            this.authorizationManager = null;
         }
     }
 
@@ -1017,7 +1019,7 @@ public class GlobalStateMgr {
     }
 
     private boolean needUpgradedToNewPrivilege() {
-        return !privilegeManager.isLoaded() || !authenticationManager.isLoaded();
+        return !authorizationManager.isLoaded() || !authenticationManager.isLoaded();
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -1135,7 +1137,7 @@ public class GlobalStateMgr {
             if (USING_NEW_PRIVILEGE) {
                 if (needUpgradedToNewPrivilege()) {
                     reInitializeNewPrivilegeOnUpgrade();
-                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, authorizationManager, this);
                     // upgrade metadata in old privilege framework to the new one
                     upgrader.upgradeAsLeader();
                     this.domainResolver.setAuthenticationManager(authenticationManager);
@@ -1439,7 +1441,7 @@ public class GlobalStateMgr {
                     }
                     MvId mvId = new MvId(db.getId(), mv.getId());
                     table.addRelatedMaterializedView(mvId);
-                    if (!table.isNativeTable()) {
+                    if (!table.isNativeTableOrMaterializedView()) {
                         connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
                                 baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
                                 ConnectorTableInfo.builder().setRelatedMaterializedViews(
@@ -1523,7 +1525,7 @@ public class GlobalStateMgr {
     public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
         if (USING_NEW_PRIVILEGE) {
             this.authenticationManager = AuthenticationManager.load(dis);
-            this.privilegeManager = PrivilegeManager.load(dis, this, null);
+            this.authorizationManager = AuthorizationManager.load(dis, this, null);
             this.domainResolver = new DomainResolver(authenticationManager);
         }
     }
@@ -1752,7 +1754,7 @@ public class GlobalStateMgr {
     public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
         if (USING_NEW_PRIVILEGE) {
             this.authenticationManager.save(dos);
-            this.privilegeManager.save(dos);
+            this.authorizationManager.save(dos);
         }
     }
 
@@ -2120,8 +2122,8 @@ public class GlobalStateMgr {
         localMetastore.replayRenameDatabase(dbName, newDbName);
     }
 
-    public void createTable(CreateTableStmt stmt) throws DdlException {
-        localMetastore.createTable(stmt);
+    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+        return localMetastore.createTable(stmt);
     }
 
     public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
@@ -2219,7 +2221,7 @@ public class GlobalStateMgr {
             }
             // There MUST BE 2 space in front of each column description line
             // sqlalchemy requires this to parse SHOW CREATE TABLE stmt.
-            if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
+            if (table.isOlapOrCloudNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
                     sb.append("  ").append(column.toSqlWithoutAggregateTypeName());
@@ -2230,7 +2232,7 @@ public class GlobalStateMgr {
                 sb.append("  ").append(column.toSql());
             }
         }
-        if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
+        if (table.isOlapOrCloudNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
             if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
                 for (Index index : olapTable.getIndexes()) {
@@ -2241,9 +2243,9 @@ public class GlobalStateMgr {
         }
 
         sb.append("\n) ENGINE=");
-        sb.append(table.getType() == TableType.LAKE ? "OLAP" : table.getType().name()).append(" ");
+        sb.append(table.getType() == TableType.CLOUD_NATIVE ? "OLAP" : table.getType().name()).append(" ");
         
-        if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
+        if (table.isOlapOrCloudNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
 
             // keys
@@ -2328,7 +2330,7 @@ public class GlobalStateMgr {
             }
 
             // enable storage cache && cache ttl
-            if (table.isLakeTable()) {
+            if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
@@ -2577,11 +2579,13 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.FILE) {
             FileTable fileTable = (FileTable) table;
+            Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
+            CloudCredentialUtil.maskCloudCredential(clonedFileProperties);
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
             sb.append("\nPROPERTIES (\n");
-            sb.append(new PrintableMap<>(fileTable.getFileProperties(), " = ", true, true, false).toString());
+            sb.append(new PrintableMap<>(clonedFileProperties, " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
             HudiTable hudiTable = (HudiTable) table;
@@ -2626,7 +2630,7 @@ public class GlobalStateMgr {
         // 2. add partition
         if (separatePartition && (table instanceof OlapTable)
                 && ((OlapTable) table).getPartitionInfo().isRangePartition()
-                && ((OlapTable) table).getPartitions().size() > 1) {
+                && table.getPartitions().size() > 1) {
             OlapTable olapTable = (OlapTable) table;
             RangePartitionInfo partitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
             boolean first = true;
@@ -2939,10 +2943,6 @@ public class GlobalStateMgr {
         return this.starRocksRepository;
     }
 
-    public IcebergRepository getIcebergRepository() {
-        return this.icebergRepository;
-    }
-
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
         return this.metastoreEventsProcessor;
     }
@@ -3239,13 +3239,13 @@ public class GlobalStateMgr {
 
     // Change current catalog of this session.
     // We can support "use 'catalog <catalog_name>'" from mysql client or "use catalog <catalog_name>" from jdbc.
-    public void changeCatalog(ConnectContext ctx, String newCatalogName) throws AnalysisException {
+    public void changeCatalog(ConnectContext ctx, String newCatalogName) throws DdlException {
         if (!catalogMgr.catalogExists(newCatalogName)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_ERROR, newCatalogName);
         }
         if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
-                !PrivilegeActions.checkAnyActionOnCatalog(ctx, newCatalogName)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+                !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
         }
         ctx.setCurrentCatalog(newCatalogName);
     }
@@ -3268,31 +3268,28 @@ public class GlobalStateMgr {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_CATALOG_AND_DB_ERROR, identifier);
             }
             if (isUsingNewPrivilege() && !CatalogMgr.isInternalCatalog(newCatalogName) &&
-                    !PrivilegeActions.checkAnyActionOnCatalog(ctx, newCatalogName)) {
+                    !PrivilegeActions.checkAnyActionOnOrInCatalog(ctx, newCatalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
             }
             ctx.setCurrentCatalog(newCatalogName);
         }
 
-        if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
-            LOG.debug("Unknown catalog '%s' and db '%s'", ctx.getCurrentCatalog(), dbName);
+        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
+            LOG.debug("Unknown catalog {} and db {}", ctx.getCurrentCatalog(), dbName);
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        // Check auth for internal catalog.
         // Here we check the request permission that sent by the mysql client or jdbc.
-        // So we didn't check UseDbStmt permission in PrivilegeChecker.
-        if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
-            if (isUsingNewPrivilege()) {
-                if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, dbName)) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                            ctx.getQualifiedUser(), dbName);
-                }
-            } else {
-                if (!auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                            ctx.getQualifiedUser(), dbName);
-                }
+        // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
+        if (isUsingNewPrivilege()) {
+            if (!PrivilegeActions.checkAnyActionOnOrInDb(ctx, ctx.getCurrentCatalog(), dbName)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                        ctx.getQualifiedUser(), dbName);
+            }
+        } else {
+            if (!auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                        ctx.getQualifiedUser(), dbName);
             }
         }
 
@@ -3538,8 +3535,8 @@ public class GlobalStateMgr {
         return localMetastore.allocateAutoIncrementId(tableId, rows);
     }
 
-    public void removeAutoIncrementIdByTableId(Long tableId) {
-        localMetastore.removeAutoIncrementIdByTableId(tableId);
+    public void removeAutoIncrementIdByTableId(Long tableId, boolean isReplay) {
+        localMetastore.removeAutoIncrementIdByTableId(tableId, isReplay);
     }
 
     public Long getCurrentAutoIncrementIdByTableId(Long tableId) {
@@ -3592,9 +3589,9 @@ public class GlobalStateMgr {
             //    privilege operation, then generate old auth journal
             // in both cases, we need a definite upgrade, so we mark the managers of
             // new privilege framework as unloaded to trigger upgrade process.
-            LOG.info("set authenticationManager and privilegeManager as unloaded because of old auth journal");
+            LOG.info("set authenticationManager and authorizationManager as unloaded because of old auth journal");
             authenticationManager.setLoaded(false);
-            privilegeManager.setLoaded(false);
+            authorizationManager.setLoaded(false);
             domainResolver = new DomainResolver(auth);
         }
         switch (code) {
@@ -3656,16 +3653,16 @@ public class GlobalStateMgr {
         // In the case where we upgrade again, i.e. upgrade->rollback->upgrade,
         // we may already load the image from last upgrade, in this case we should
         // discard the privilege data from last upgrade and only use the data from
-        // current image to upgrade, so we initialize a new PrivilegeManager and AuthenticationManger
+        // current image to upgrade, so we initialize a new AuthorizationManager and AuthenticationManger
         // instance here
         LOG.info("reinitialize privilege info before upgrade");
         this.authenticationManager = new AuthenticationManager();
-        this.privilegeManager = new PrivilegeManager(this, null);
+        this.authorizationManager = new AuthorizationManager(this, null);
     }
 
     public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
         reInitializeNewPrivilegeOnUpgrade();
-        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, authorizationManager, this);
         upgrader.replayUpgrade(info.getRoleNameToId());
         LOG.info("set usingNewPrivilege to true after auth upgrade log replayed");
         usingNewPrivilege.set(true);

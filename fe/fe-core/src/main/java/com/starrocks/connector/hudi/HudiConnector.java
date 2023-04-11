@@ -25,6 +25,7 @@ import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Map;
 
@@ -38,8 +39,8 @@ public class HudiConnector implements Connector {
 
     public HudiConnector(ConnectorContext context) {
         this.properties = context.getProperties();
-        this.cloudConfiguration = CloudConfigurationFactory.tryBuildForStorage(properties);
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(null, cloudConfiguration);
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.catalogName = context.getCatalogName();
         this.internalMgr = new HudiConnectorInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
@@ -82,5 +83,6 @@ public class HudiConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
+        GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor().unRegisterCacheUpdateProcessor(catalogName);
     }
 }

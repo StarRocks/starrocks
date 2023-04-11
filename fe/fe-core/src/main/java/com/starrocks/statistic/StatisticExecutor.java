@@ -142,7 +142,7 @@ public class StatisticExecutor {
 
         Database db = MetaUtils.getDatabase(dbId);
         Table table = MetaUtils.getTable(dbId, tableId);
-        if (!(table.isOlapOrLakeTable() || table.isMaterializedView())) {
+        if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
             throw new SemanticException("Table '%s' is not a OLAP table or LAKE table or Materialize View", table.getName());
         }
 
@@ -221,12 +221,12 @@ public class StatisticExecutor {
         Database db = statsJob.getDb();
         Table table = statsJob.getTable();
 
-        //Only update running status without edit log, make restart job status is failed
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
-        GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
-
         try {
             GlobalStateMgr.getCurrentAnalyzeMgr().registerConnection(analyzeStatus.getId(), statsConnectCtx);
+            //Only update running status without edit log, make restart job status is failed
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
+            GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+
             statsJob.collect(statsConnectCtx, analyzeStatus);
         } catch (Exception e) {
             LOG.warn("Collect statistics error ", e);

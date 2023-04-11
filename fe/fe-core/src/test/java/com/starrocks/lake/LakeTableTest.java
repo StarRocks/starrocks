@@ -131,7 +131,7 @@ public class LakeTableTest {
         byteArrayOutputStream.close();
 
         // Check lake table and lake tablet
-        Assert.assertTrue(newTable.isLakeTable());
+        Assert.assertTrue(newTable.isCloudNativeTable());
         LakeTable newLakeTable = (LakeTable) newTable;
 
         Assert.assertEquals("s3://test-bucket/1/", newLakeTable.getStoragePath());
@@ -146,6 +146,10 @@ public class LakeTableTest {
             Assert.assertEquals(expectedTabletId, lakeTablet.getShardId());
             ++expectedTabletId;
         }
+
+        Assert.assertEquals(-1, newLakeTable.lastSchemaUpdateTime.longValue());
+        Assert.assertEquals(-1, newLakeTable.lastVersionUpdateStartTime.longValue());
+        Assert.assertEquals(0, newLakeTable.lastVersionUpdateEndTime.longValue());
 
         Assert.assertNull(table.delete(true));
         Assert.assertNotNull(table.delete(false));

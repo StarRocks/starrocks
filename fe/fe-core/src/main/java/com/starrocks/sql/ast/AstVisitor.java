@@ -113,6 +113,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     public R visitShowDatabasesStatement(ShowDbStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
@@ -305,7 +309,7 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitUseCatalogStatement(UseCatalogStmt statement, C context) {
+    public R visitSetCatalogStatement(SetCatalogStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -360,7 +364,6 @@ public abstract class AstVisitor<R, C> {
     public R visitShowStreamLoadStatement(ShowStreamLoadStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
-
 
     // ------------------------------------------- Admin Statement -----------------------------------------------------
 
@@ -692,6 +695,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitExecuteScriptStatement(ExecuteScriptStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // --------------------------------------- Export Statement --------------------------------------------------------
 
     public R visitExportStatement(ExportStmt statement, C context) {
@@ -939,6 +946,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitArrayExpr(ArrayExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitMapExpr(MapExpr node, C context) {
         return visitExpression(node, context);
     }
 

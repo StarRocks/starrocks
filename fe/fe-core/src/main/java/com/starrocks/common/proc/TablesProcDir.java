@@ -82,28 +82,26 @@ public class TablesProcDir implements ProcDirInterface {
     }
 
     @Override
-    public ProcNodeInterface lookup(String tableIdStr) throws AnalysisException {
+    public ProcNodeInterface lookup(String tableIdOrName) throws AnalysisException {
         Preconditions.checkNotNull(db);
-        if (Strings.isNullOrEmpty(tableIdStr)) {
-            throw new AnalysisException("TableIdStr is null");
+        if (Strings.isNullOrEmpty(tableIdOrName)) {
+            throw new AnalysisException("table id or name is null or empty");
         }
 
-        long tableId = -1L;
-        try {
-            tableId = Long.parseLong(tableIdStr);
-        } catch (NumberFormatException e) {
-            throw new AnalysisException("Invalid table id format: " + tableIdStr);
-        }
-
-        Table table = null;
+        Table table;
         db.readLock();
         try {
-            table = db.getTable(tableId);
+            try {
+                table = db.getTable(Long.parseLong(tableIdOrName));
+            } catch (NumberFormatException e) {
+                table = db.getTable(tableIdOrName);
+            }
         } finally {
             db.readUnlock();
         }
+
         if (table == null) {
-            throw new AnalysisException("Table[" + tableId + "] does not exist");
+            throw new AnalysisException("unknown table id or name \"" + tableIdOrName + "\"");
         }
 
         return new TableProcDir(db, table);
@@ -157,7 +155,7 @@ public class TablesProcDir implements ProcDirInterface {
     }
 
     private long findReplicaCount(Table table) {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             return olapTable.getReplicaCount();
         }
@@ -165,7 +163,7 @@ public class TablesProcDir implements ProcDirInterface {
     }
 
     private String findState(Table table) {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             return olapTable.getState().toString();
         }
@@ -173,7 +171,7 @@ public class TablesProcDir implements ProcDirInterface {
     }
 
     private int findPartitionNum(Table table) {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             PartitionType partitionType = olapTable.getPartitionInfo().getType();
             if (partitionType == PartitionType.RANGE || partitionType == PartitionType.EXPR_RANGE
@@ -185,7 +183,7 @@ public class TablesProcDir implements ProcDirInterface {
     }
 
     private String findPartitionKey(Table table) {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             if (partitionInfo.getType() == PartitionType.RANGE) {
@@ -205,7 +203,7 @@ public class TablesProcDir implements ProcDirInterface {
     }
 
     private String findPartitionType(Table table) {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             return olapTable.getPartitionInfo().getType().typeString;
         } else if (table.getType() == TableType.ELASTICSEARCH) {
@@ -216,7 +214,7 @@ public class TablesProcDir implements ProcDirInterface {
     }
 
     private String findIndexNum(Table table) {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             return String.valueOf(olapTable.getIndexNameToId().size());
         }
@@ -225,7 +223,7 @@ public class TablesProcDir implements ProcDirInterface {
 
     private String findStoragePath(Table table) {
         String storageGroup = null;
-        if (table.isCloudNativeTable()) {
+        if (table.isCloudNativeTableOrMaterializedView()) {
             storageGroup = ((OlapTable) table).getStoragePath();
         }
         return storageGroup != null ? storageGroup : NULL_STRING_DEFAULT;

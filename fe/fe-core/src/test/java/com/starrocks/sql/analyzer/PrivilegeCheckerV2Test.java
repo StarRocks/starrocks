@@ -34,7 +34,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.mysql.MysqlChannel;
-import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -83,7 +84,7 @@ public class PrivilegeCheckerV2Test {
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
 
-    private static PrivilegeManager privilegeManager;
+    private static AuthorizationManager authorizationManager;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -120,9 +121,9 @@ public class PrivilegeCheckerV2Test {
         starRocksAssert.withTable(createTblStmtStr3);
         createMvForTest(starRocksAssert.getCtx());
 
-        privilegeManager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
+        authorizationManager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager();
         starRocksAssert.getCtx().setRemoteIP("localhost");
-        privilegeManager.initBuiltinRolesAndUsers();
+        authorizationManager.initBuiltinRolesAndUsers();
         ctxToRoot();
         createUsers();
     }
@@ -224,13 +225,20 @@ public class PrivilegeCheckerV2Test {
         };
     }
 
-    private static void ctxToTestUser() {
+    private static void ctxToTestUser() throws PrivilegeException {
         starRocksAssert.getCtx().setCurrentUserIdentity(testUser);
+        starRocksAssert.getCtx().setCurrentRoleIds(
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager().getRoleIdsByUser(testUser)
+        );
         starRocksAssert.getCtx().setQualifiedUser(testUser.getQualifiedUser());
     }
 
-    private static void ctxToRoot() {
+    private static void ctxToRoot() throws PrivilegeException {
         starRocksAssert.getCtx().setCurrentUserIdentity(UserIdentity.ROOT);
+        starRocksAssert.getCtx().setCurrentRoleIds(
+                starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager().getRoleIdsByUser(UserIdentity.ROOT)
+        );
+
         starRocksAssert.getCtx().setQualifiedUser(UserIdentity.ROOT.getQualifiedUser());
     }
 
@@ -396,21 +404,21 @@ public class PrivilegeCheckerV2Test {
         // Anyone can use default_catalog, but can't use other external catalog without any action on it
         ctxToTestUser();
         PrivilegeCheckerV2.check(
-                UtFrameUtils.parseStmtWithNewParser("use 'catalog default_catalog'", ctx), ctx);
+                UtFrameUtils.parseStmtWithNewParser("use catalog default_catalog", ctx), ctx);
         try {
             PrivilegeCheckerV2.check(
-                    UtFrameUtils.parseStmtWithNewParser("use 'catalog test_ex_catalog'", ctx), ctx);
+                    UtFrameUtils.parseStmtWithNewParser("use catalog test_ex_catalog", ctx), ctx);
         } catch (SemanticException e) {
             Assert.assertTrue(e.getMessage().contains(
                     "Access denied for user 'test' to catalog"));
         }
         verifyGrantRevoke(
-                "use 'catalog test_ex_catalog'",
+                "use catalog test_ex_catalog",
                 "grant USAGE on catalog test_ex_catalog to test",
                 "revoke USAGE on catalog test_ex_catalog from test",
                 "Access denied for user 'test' to catalog");
         verifyGrantRevoke(
-                "use 'catalog test_ex_catalog'",
+                "use catalog test_ex_catalog",
                 "grant DROP on catalog test_ex_catalog to test",
                 "revoke DROP on catalog test_ex_catalog from test",
                 "Access denied for user 'test' to catalog");
@@ -437,9 +445,9 @@ public class PrivilegeCheckerV2Test {
         ctxToTestUser();
         ShowResultSet res = new ShowExecutor(ctx,
                 (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW catalogs", ctx)).execute();
-        // TODO(yiming): check priv for show catalogs after external table priv check code is merged
-        Assert.assertEquals(3, res.getResultRows().size());
-        // Assert.assertEquals("test_ex_catalog3", res.getResultRows().get(0).get(0));
+        System.out.println(res.getResultRows());
+        Assert.assertEquals(2, res.getResultRows().size());
+        Assert.assertEquals("test_ex_catalog3", res.getResultRows().get(1).get(0));
     }
 
     @Test
@@ -908,7 +916,7 @@ public class PrivilegeCheckerV2Test {
                         "revoke INSERT on table db1.tbl1 from test",
                         "revoke ALTER on table db1.tbl1 from test"
                 ),
-                "INSERT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "INSERT command denied to user 'test'@'localhost' for table 'db1.tbl1'");
 
         // check CTAS: create table on db and SELECT on source table
         List<String> submitTaskSqls = Arrays.asList(
@@ -2261,7 +2269,7 @@ public class PrivilegeCheckerV2Test {
 
         grantRevokeSqlAsRoot("grant drop on materialized view db1.mv4 to test");
         GlobalStateMgr.getCurrentState().dropMaterializedView(statement);
-        GlobalStateMgr.getCurrentState().getPrivilegeManager().removeInvalidObject();
+        GlobalStateMgr.getCurrentState().getAuthorizationManager().removeInvalidObject();
         ctxToTestUser();
     }
 
@@ -2364,7 +2372,7 @@ public class PrivilegeCheckerV2Test {
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains(
-                    "SELECT command denied to user 'test'@'localhost' for table 'tbl1'"));
+                    "SELECT command denied to user 'test'@'localhost' for table 'db1.tbl1'"));
         }
         grantRevokeSqlAsRoot("revoke USAGE on FUNCTION db1.MY_UDF_JSON_GET(string, string) from test");
         Config.enable_udf = false;
@@ -2459,7 +2467,7 @@ public class PrivilegeCheckerV2Test {
     public void testUseGlobalFunc() throws Exception {
         FunctionName fn = FunctionName.createFnName("my_udf_json_get");
         fn.setAsGlobalFunction();
-        Function function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        Function function = new Function(1, fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
             GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
         } catch (Throwable e) {
@@ -2507,7 +2515,7 @@ public class PrivilegeCheckerV2Test {
 
         fn = FunctionName.createFnName("my_udf_json_get2");
         fn.setAsGlobalFunction();
-        function = new Function(fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
+        function = new Function(2, fn, Arrays.asList(Type.STRING, Type.STRING), Type.STRING, false);
         try {
             GlobalStateMgr.getCurrentState().getGlobalFunctionMgr().replayAddFunction(function);
         } catch (Throwable e) {
@@ -2549,7 +2557,7 @@ public class PrivilegeCheckerV2Test {
     }
 
     @Test
-    public void testShowAuthentication() throws com.starrocks.common.AnalysisException, DdlException {
+    public void testShowAuthentication() throws com.starrocks.common.AnalysisException, DdlException, PrivilegeException {
         ctxToTestUser();
         ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(testUser, false);
         ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), stmt);
@@ -2581,7 +2589,7 @@ public class PrivilegeCheckerV2Test {
     @Test
     public void testGrantRevokeBuiltinRole() throws Exception {
         String sql = "create role r1";
-        PrivilegeManager manager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
+        AuthorizationManager manager = starRocksAssert.getCtx().getGlobalStateMgr().getAuthorizationManager();
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         DDLStmtExecutor.execute(stmt, starRocksAssert.getCtx());
 
@@ -2695,19 +2703,19 @@ public class PrivilegeCheckerV2Test {
                 "select * from db1.tbl1, db1.tbl2, db2.tbl1",
                 "grant SELECT on TABLE db2.tbl1 to test",
                 "revoke SELECT on TABLE db2.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "SELECT command denied to user 'test'@'localhost' for table 'db2.tbl1'");
 
         verifyGrantRevoke(
                 "select * from db1.tbl1, db1.tbl2 where exists (select * from db2.tbl1)",
                 "grant SELECT on TABLE db2.tbl1 to test",
                 "revoke SELECT on TABLE db2.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "SELECT command denied to user 'test'@'localhost' for table 'db2.tbl1'");
 
         verifyGrantRevoke(
                 "with cte as (select * from db2.tbl1) select * from db1.tbl1, db1.tbl2",
                 "grant SELECT on TABLE db2.tbl1 to test",
                 "revoke SELECT on TABLE db2.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "SELECT command denied to user 'test'@'localhost' for table 'db2.tbl1'");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant SELECT on TABLE db2.tbl1 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2716,7 +2724,7 @@ public class PrivilegeCheckerV2Test {
                 "insert into db1.tbl2 select * from db2.tbl1",
                 "grant SELECT, INSERT on TABLE db1.tbl2 to test",
                 "revoke INSERT on TABLE db1.tbl2 from test",
-                "INSERT command denied to user 'test'@'localhost' for table 'tbl2'");
+                "INSERT command denied to user 'test'@'localhost' for table 'db1.tbl2'");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant INSERT on TABLE db1.tbl2 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2727,13 +2735,13 @@ public class PrivilegeCheckerV2Test {
                 "insert into db1.tbl2 select * from db2.tbl1",
                 "grant SELECT on TABLE db2.tbl1 to test",
                 "revoke SELECT on TABLE db2.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "SELECT command denied to user 'test'@'localhost' for table 'db2.tbl1'");
 
         verifyGrantRevoke(
                 "update db1.tprimary set v1 = db1.tbl1.k1 from db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
                 "grant select, update on table db1.tprimary to test",
                 "revoke update on TABLE db1.tprimary from test",
-                "UPDATE command denied to user 'test'@'localhost' for table 'tprimary'");
+                "UPDATE command denied to user 'test'@'localhost' for table 'db1.tprimary'");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant UPDATE on TABLE db1.tprimary to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2744,7 +2752,7 @@ public class PrivilegeCheckerV2Test {
                 "update db1.tprimary set v1 = db1.tbl1.k1 from db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
                 "grant select on table db1.tbl1 to test",
                 "revoke select on TABLE db1.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "SELECT command denied to user 'test'@'localhost' for table 'db1.tbl1'");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant select on TABLE db1.tbl1 to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2753,7 +2761,7 @@ public class PrivilegeCheckerV2Test {
                 "delete from db1.tprimary using db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
                 "grant select, delete on table db1.tprimary to test",
                 "revoke delete on TABLE db1.tprimary from test",
-                "DELETE command denied to user 'test'@'localhost' for table 'tprimary'");
+                "DELETE command denied to user 'test'@'localhost' for table 'db1.tprimary'");
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant DELETE on TABLE db1.tprimary to test", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -2764,9 +2772,60 @@ public class PrivilegeCheckerV2Test {
                 "delete from db1.tprimary using db1.tbl1 where db1.tbl1.k2 = db1.tprimary.pk",
                 "grant select on TABLE db1.tbl1 to test",
                 "revoke select on TABLE db1.tbl1 from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'tbl1'");
+                "SELECT command denied to user 'test'@'localhost' for table 'db1.tbl1'");
 
         starRocksAssert.dropTable("db1.tprimary");
     }
 
+    @Test
+    public void testShowTable() throws Exception {
+        ctxToRoot();
+        Config.enable_experimental_mv = true;
+        String createSql = "create materialized view db1.mv5 " +
+                "distributed by hash(k2)" +
+                "refresh async START('9999-12-31') EVERY(INTERVAL 1000 SECOND) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, db1.tbl1.k2 from db1.tbl1;";
+        starRocksAssert.withMaterializedView(createSql);
+
+        String createViewSql = "create view db1.view5 as select * from db1.tbl1";
+        starRocksAssert.withView(createViewSql);
+
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+        grantRevokeSqlAsRoot("grant select on db1.tbl1 to test");
+        ctxToTestUser();
+        ShowResultSet res = new ShowExecutor(ctx,
+                (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx)).execute();
+        System.out.println(res.getResultRows());
+        Assert.assertEquals(1, res.getResultRows().size());
+        Assert.assertEquals("tbl1", res.getResultRows().get(0).get(0));
+
+        // can show mv if we have any privilege on it
+        grantRevokeSqlAsRoot("grant alter on materialized view db1.mv5 to test");
+        res = new ShowExecutor(ctx,
+                (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx)).execute();
+        System.out.println(res.getResultRows());
+        Assert.assertEquals(2, res.getResultRows().size());
+        Assert.assertEquals("mv5", res.getResultRows().get(0).get(0));
+
+
+        // can show view if we have any privilege on it
+        grantRevokeSqlAsRoot("grant drop on view db1.view5 to test");
+        res = new ShowExecutor(ctx,
+                (ShowStmt) UtFrameUtils.parseStmtWithNewParser("SHOW tables from db1", ctx)).execute();
+        System.out.println(res.getResultRows());
+        Assert.assertEquals(3, res.getResultRows().size());
+        Assert.assertEquals("view5", res.getResultRows().get(2).get(0));
+        grantRevokeSqlAsRoot("revoke drop on view db1.view5 from test");
+        grantRevokeSqlAsRoot("revoke alter on materialized view db1.mv5 from test");
+        grantRevokeSqlAsRoot("revoke select on db1.tbl1 from test");
+
+        ctxToRoot();
+        starRocksAssert.dropMaterializedView("db1.mv5");
+        starRocksAssert.dropView("db1.view5");
+        ctxToTestUser();
+    }
 }

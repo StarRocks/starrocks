@@ -359,14 +359,14 @@ public class ReplayFromDumpTest {
                 "  |  equal join conjunct: [257: ss_ticket_number, INT, false] = [280: sr_ticket_number, INT, true]\n" +
                 "  |  equal join conjunct: [256: ss_item_sk, INT, false] = [279: sr_item_sk, INT, true]\n" +
                 "  |  other predicates: 280: sr_ticket_number IS NULL\n" +
-                "  |  output columns: 256, 258, 260, 266, 267, 269\n" +
+                "  |  output columns: 256, 258, 260, 266, 267, 269, 280\n" +
                 "  |  cardinality: 37372757"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("15:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [331: ws_order_number, INT, false] = [365: wr_order_number, INT, true]\n" +
                 "  |  equal join conjunct: [330: ws_item_sk, INT, false] = [364: wr_item_sk, INT, true]\n" +
                 "  |  other predicates: 365: wr_order_number IS NULL\n" +
-                "  |  output columns: 330, 332, 335, 348, 349, 351\n" +
+                "  |  output columns: 330, 332, 335, 348, 349, 351, 365\n" +
                 "  |  cardinality: 7914602"));
     }
 
@@ -665,14 +665,14 @@ public class ReplayFromDumpTest {
     public void testMultiSubqueries() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/subquery_statistics"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("96:AGGREGATE (update serialize)\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  95:AGGREGATE (update serialize)\n" +
                 "  |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false]\n" +
                 "  |  hasNullableGenerateChild: true\n" +
                 "  |  cardinality: 1\n" +
                 "  |  column statistics: \n" +
                 "  |  * count-->[0.0, 1.0420273298435367, 0.0, 8.0, 1.0] ESTIMATE\n" +
                 "  |  \n" +
-                "  95:Project\n" +
+                "  94:Project\n" +
                 "  |  output columns:\n" +
                 "  |  548 <-> 1\n" +
                 "  |  hasNullableGenerateChild: true\n" +
@@ -702,5 +702,38 @@ public class ReplayFromDumpTest {
                 "     partitions=17727/17727\n" +
                 "     rollup: segment_profile\n" +
                 "     tabletRatio=88635/88635"));
+    }
+
+    @Test
+    public void testGroupByDistinctColumnSkewHint() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_skew_hint"), null,
+                        TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  9:Project\n" +
+                "  |  <slot 39> : 39: year\n" +
+                "  |  <slot 42> : 42: case\n" +
+                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)" +
+                ""));
+    }
+
+    @Test
+    public void testGroupByDistinctColumnOptimization() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_optimize"), null,
+                        TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  9:Project\n" +
+                "  |  <slot 39> : 39: year\n" +
+                "  |  <slot 42> : 42: case\n" +
+                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)" +
+                ""));
+    }
+
+    @Test
+    public void testSSBRightOuterJoinCase() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/right_outer_join_case"), null,
+                        TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second.contains("4:NESTLOOP JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN"));
     }
 }

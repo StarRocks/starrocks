@@ -78,7 +78,6 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -114,6 +113,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
@@ -213,6 +213,12 @@ public class OlapTable extends Table {
     // then binlog is available
     protected long binlogTxnId = -1;
 
+    // Record the alter, schema change, MV update time
+    public AtomicLong lastSchemaUpdateTime = new AtomicLong(-1);
+    // Record the start and end time for data load version update phase
+    public AtomicLong lastVersionUpdateStartTime = new AtomicLong(-1);
+    public AtomicLong lastVersionUpdateEndTime = new AtomicLong(0);
+
     public OlapTable() {
         this(TableType.OLAP);
     }
@@ -272,6 +278,35 @@ public class OlapTable extends Table {
         this.indexes = indexes;
 
         this.tableProperty = null;
+    }
+
+    // Only Copy necessary metadata for query.
+    // We don't do deep copy, because which is very expensive;
+    public OlapTable copyOnlyForQuery() {
+        OlapTable olapTable = new OlapTable();
+        olapTable.id = this.id;
+        olapTable.name = this.name;
+        olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
+        olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
+        olapTable.relatedMaterializedViews = Sets.newHashSet(this.relatedMaterializedViews);
+        olapTable.state = this.state;
+        olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
+        olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
+        olapTable.keysType = this.keysType;
+        olapTable.partitionInfo = new PartitionInfo();
+        if (this.partitionInfo instanceof RangePartitionInfo) {
+            olapTable.partitionInfo = new RangePartitionInfo((RangePartitionInfo) this.partitionInfo);
+        } else if (this.partitionInfo instanceof SinglePartitionInfo) {
+            olapTable.partitionInfo = this.partitionInfo;
+        }
+        olapTable.defaultDistributionInfo = this.defaultDistributionInfo;
+        olapTable.idToPartition = Maps.newHashMap(this.idToPartition);
+        olapTable.nameToPartition = Maps.newHashMap(this.nameToPartition);
+        olapTable.baseIndexId = this.baseIndexId;
+        if (this.tableProperty != null) {
+            olapTable.tableProperty = this.tableProperty.copy();
+        }
+        return olapTable;
     }
 
     public BinlogConfig getCurBinlogConfig() {
@@ -542,20 +577,6 @@ public class OlapTable extends Table {
         }
     }
 
-    public boolean isAbortDelete() {
-        boolean abortDelete = false;
-        if (keysType == keysType.PRIMARY_KEYS) {
-            for (Column col : getBaseSchema()) {
-                if (col.isAutoIncrement() && !col.isKey()) {
-                    abortDelete = true;
-                    break;
-                }
-            }
-        }
-
-        return abortDelete;
-    }
-
     public Status resetIdsForRestore(GlobalStateMgr globalStateMgr, Database db, int restoreReplicationNum) {
         // table id
         id = globalStateMgr.getNextId();
@@ -781,7 +802,6 @@ public class OlapTable extends Table {
         }
 
         AgentBatchTask batchTask = new AgentBatchTask();
-        ;
 
         for (long backendId : fullBackendId) {
             DropAutoIncrementMapTask dropAutoIncrementMapTask = new DropAutoIncrementMapTask(backendId, this.id,
@@ -790,7 +810,7 @@ public class OlapTable extends Table {
         }
 
         if (batchTask.getTaskNum() > 0) {
-            MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<Long, Long>(batchTask.getTaskNum());
+            MarkedCountDownLatch<Long, Long> latch = new MarkedCountDownLatch<>(batchTask.getTaskNum());
             for (AgentTask task : batchTask.getAllTasks()) {
                 latch.addMark(task.getBackendId(), -1L);
                 ((DropAutoIncrementMapTask) task).setLatch(latch);
@@ -799,7 +819,7 @@ public class OlapTable extends Table {
             AgentTaskExecutor.submit(batchTask);
 
             // estimate timeout, at most 10 min
-            long timeout = 1L * 60L * 1000L;
+            long timeout = 60L * 1000L;
             boolean ok = false;
             try {
                 LOG.info("begin to send drop auto increment map tasks to BE, total {} tasks. timeout: {}",
@@ -813,7 +833,6 @@ public class OlapTable extends Table {
                 LOG.warn("drop auto increment map tasks failed");
             }
 
-            return;
         }
     }
 
@@ -823,7 +842,12 @@ public class OlapTable extends Table {
         Map<String, Range<PartitionKey>> rangePartitionMap = Maps.newHashMap();
         for (Map.Entry<Long, Partition> partitionEntry : idToPartition.entrySet()) {
             Long partitionId = partitionEntry.getKey();
-            rangePartitionMap.put(partitionEntry.getValue().getName(), rangePartitionInfo.getRange(partitionId));
+            String partitionName = partitionEntry.getValue().getName();
+            // FE and BE at the same time ignore the hidden partition at the same time
+            if (partitionName.startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+                continue;
+            }
+            rangePartitionMap.put(partitionName, rangePartitionInfo.getRange(partitionId));
         }
         return rangePartitionMap;
     }
@@ -918,7 +942,7 @@ public class OlapTable extends Table {
                             rangePartitionInfo.getReplicationNum(partition.getId()),
                             rangePartitionInfo.getIsInMemory(partition.getId()),
                             rangePartitionInfo.getStorageCacheInfo(partition.getId()),
-                            isLakeTable());
+                            isCloudNativeTable());
                 } else if (!reserveTablets) {
                     GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 }
@@ -1193,11 +1217,6 @@ public class OlapTable extends Table {
             rowCount += entry.getValue().getBaseIndex().getRowCount();
         }
         return rowCount;
-    }
-
-    @Override
-    public CreateTableStmt toCreateTableStmt(String dbName) {
-        throw new RuntimeException("Don't support anymore");
     }
 
     public int getSignature(int signatureVersion, List<String> partNames) {
@@ -1531,6 +1550,11 @@ public class OlapTable extends Table {
 
         // The table may be restored from another cluster, it should be set to current cluster id.
         clusterId = GlobalStateMgr.getCurrentState().getClusterId();
+
+        lastSchemaUpdateTime = new AtomicLong(-1);
+        // Record the start and end time for data load version update phase
+        lastVersionUpdateStartTime = new AtomicLong(-1);
+        lastVersionUpdateEndTime = new AtomicLong(0);
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
@@ -1563,7 +1587,7 @@ public class OlapTable extends Table {
                 partition.setState(PartitionState.NORMAL);
                 for (MaterializedIndex idx : partition.getMaterializedIndices(extState)) {
                     idx.setState(IndexState.NORMAL);
-                    if (copied.isCloudNativeTable()) {
+                    if (copied.isCloudNativeTableOrMaterializedView()) {
                         continue;
                     }
                     for (Tablet tablet : idx.getTablets()) {
@@ -1756,6 +1780,12 @@ public class OlapTable extends Table {
             }
         }
         return keysNum;
+    }
+
+    public boolean isKeySet(Set<String> keyColumns) {
+        Set<String> tableKeyColumns = getKeyColumns().stream()
+                .map(column -> column.getName().toLowerCase()).collect(Collectors.toSet());
+        return tableKeyColumns.equals(keyColumns);
     }
 
     public void setReplicationNum(Short replicationNum) {

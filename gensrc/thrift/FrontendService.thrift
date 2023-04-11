@@ -366,14 +366,24 @@ struct TMaterializedViewStatus {
     7: optional string last_refresh_finished_time
     8: optional string last_refresh_duration
     9: optional string last_refresh_state
-    10: optional string inactive_code
-    11: optional string inactive_reason 
+    10: optional string last_refresh_error_code
+    11: optional string last_refresh_error_message
     12: optional string text
     13: optional string rows
+
+    14: optional string partition_type 
+    15: optional string last_refresh_force_refresh
+    16: optional string last_refresh_start_partition
+    17: optional string last_refresh_end_partition
+    18: optional string last_refresh_base_refresh_partitions
+    19: optional string last_refresh_mv_refresh_partitions
 
     20: optional i64 last_check_time
     21: optional i64 create_time
     22: optional string ddl_sql
+
+    23: optional string task_id
+    24: optional string task_name
 }
 
 struct TListMaterializedViewStatusResult {
@@ -411,10 +421,45 @@ struct TTaskRunInfo {
     9: optional i32 error_code
     10: optional string error_message
     11: optional string progress
+
+    12: optional string extra_message
 }
 
 struct TGetTaskRunInfoResult {
     1: optional list<TTaskRunInfo> task_runs
+}
+
+struct TGetLoadsParams {
+    1: optional string db
+    2: optional i64 job_id
+    3: optional i64 txn_id
+    4: optional string label
+}
+
+struct TGetLoadsResult {
+    1: optional list<TLoadInfo> loads
+}
+
+struct TLoadInfo {
+    1: optional i64 job_id
+    2: optional string label
+    3: optional string state
+    4: optional string progress
+    5: optional string type
+    6: optional string priority
+    7: optional string etl_info
+    8: optional string task_info
+    9: optional string create_time
+    10: optional string etl_start_time
+    11: optional string etl_finish_time
+    12: optional string load_start_time
+    13: optional string load_finish_time
+    14: optional string url
+    15: optional string job_details
+    16: optional string error_msg
+    17: optional string db
+    18: optional i64 txn_id
+    19: optional string tracking_sql
 }
 
 // getTableNames returns a list of unqualified table names
@@ -1097,6 +1142,37 @@ struct TGetTablesInfoResponse {
     1: optional list<TTableInfo> tables_infos
 }
 
+struct TTabletSchedule {
+    1: optional i64 table_id
+    2: optional i64 partition_id
+    3: optional i64 tablet_id
+    4: optional string type
+    5: optional string priority
+    6: optional string state
+    7: optional string tablet_status
+    8: optional double create_time
+    9: optional double schedule_time
+    10: optional double finish_time
+    11: optional i64 clone_src
+    12: optional i64 clone_dest
+    13: optional i64 clone_bytes
+    14: optional double clone_duration
+    15: optional string error_msg
+}
+
+struct TGetTabletScheduleRequest {
+    1: optional i64 table_id
+    2: optional i64 partition_id
+    3: optional i64 tablet_id
+    4: optional string type
+    5: optional string state
+    6: optional i64 limit
+}
+
+struct TGetTabletScheduleResponse {
+    1: optional list<TTabletSchedule> tablet_schedules
+}
+
 struct TUpdateResourceUsageRequest {
     1: optional i64 backend_id 
     2: optional ResourceUsage.TResourceUsage resource_usage
@@ -1153,6 +1229,8 @@ service FrontendService {
     TGetDBPrivsResult getDBPrivs(1:TGetDBPrivsParams params)
     TGetTablePrivsResult getTablePrivs(1:TGetTablePrivsParams params)
 
+    TGetLoadsResult getLoads(1:TGetLoadsParams params)
+
     TDescribeTableResult describeTable(1:TDescribeTableParams params)
     TShowVariableResult showVariables(1:TShowVariableRequest params)
     TReportExecStatusResult reportExecStatus(1:TReportExecStatusParams params)
@@ -1204,5 +1282,7 @@ service FrontendService {
     MVMaintenance.TMVReportEpochResponse mvReport(1: MVMaintenance.TMVMaintenanceTasks request)
 
     TAllocateAutoIncrementIdResult allocAutoIncrementId (1:TAllocateAutoIncrementIdParam params)
+
+    TGetTabletScheduleResponse getTabletSchedule(1: TGetTabletScheduleRequest request)
 }
 

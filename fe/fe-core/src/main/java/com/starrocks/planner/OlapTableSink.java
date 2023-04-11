@@ -119,7 +119,6 @@ public class OlapTableSink extends DataSink {
 
     private boolean nullExprInAutoIncrement;
     private boolean missAutoIncrementColumn;
-    private boolean abortDelete;
     private int autoIncrementSlotId;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
@@ -140,7 +139,6 @@ public class OlapTableSink extends DataSink {
         this.enableReplicatedStorage = enableReplicatedStorage;
         this.nullExprInAutoIncrement = nullExprInAutoIncrement;
         this.missAutoIncrementColumn = false;
-        this.abortDelete = dstTable.isAbortDelete();
 
         this.autoIncrementSlotId = -1;
         if (tupleDescriptor != null) {
@@ -161,7 +159,6 @@ public class OlapTableSink extends DataSink {
         tSink.setTxn_id(txnId);
         tSink.setNull_expr_in_auto_increment(nullExprInAutoIncrement);
         tSink.setMiss_auto_increment_column(missAutoIncrementColumn);
-        tSink.setAbort_delete(abortDelete);
         tSink.setAuto_increment_slot_id(autoIncrementSlotId);
         TransactionState txnState =
                 GlobalStateMgr.getCurrentGlobalTransactionMgr()
@@ -171,7 +168,7 @@ public class OlapTableSink extends DataSink {
         }
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
-        tSink.setIs_lake_table(dstTable.isCloudNativeTable());
+        tSink.setIs_lake_table(dstTable.isCloudNativeTableOrMaterializedView());
         tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tSink.setWrite_quorum_type(writeQuorum);
         tSink.setEnable_replicated_storage(enableReplicatedStorage);
@@ -415,6 +412,10 @@ public class OlapTableSink extends DataSink {
                         range.upperEndpoint().getKeys().get(i).treeToThrift().getNodes().get(0));
             }
         }
+
+        if (partition.getName().startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
+            tPartition.setIs_shadow_partition(true);
+        }
     }
 
     private void setIndexAndBucketNums(Partition partition, TOlapTablePartition tPartition) {
@@ -453,7 +454,7 @@ public class OlapTableSink extends DataSink {
             int quorum = table.getPartitionInfo().getQuorumNum(partition.getId(), table.writeQuorum());
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
-                    if (table.isCloudNativeTable()) {
+                    if (table.isCloudNativeTableOrMaterializedView()) {
                         locationParam.addToTablets(new TTabletLocation(
                                 tablet.getId(), Lists.newArrayList(((LakeTablet) tablet).getPrimaryBackendId())));
                     } else {

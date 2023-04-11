@@ -2,7 +2,7 @@
 
 An Iceberg catalog is a kind of external catalog that enables you to query data from Apache Iceberg without ingestion.
 
-Also, you can directly transform and load data from Iceberg based on this Iceberg catalog.
+Also, you can directly transform and load data from Iceberg by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Iceberg catalogs. StarRocks supports Iceberg catalogs from v2.4 onwards.
 
 To ensure successful SQL workloads on your Iceberg cluster, your StarRocks cluster needs to integrate with two important components:
 
@@ -11,9 +11,12 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
 
 ## Usage notes
 
-- The file formats of Iceberg that StarRocks supports are Parquet, ORC, and CSV.
-- The data types of Iceberg that StarRocks does not support are INTERVAL, BINARY, and UNION. Additionally, StarRocks does not support the MAP data type for CSV-formatted Iceberg tables.
-- You can only use Iceberg catalogs to query data. You cannot use Iceberg catalogs to drop, delete, or insert data into your Iceberg cluster.
+- The file formats of Iceberg that StarRocks supports are Parquet and ORC:
+
+  - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
+  - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
+
+- Iceberg catalogs do not support Iceberg v2 tables.
 
 ## Integration preparations
 
@@ -91,7 +94,7 @@ The type of your data source. Set the value to `iceberg`.
 
 A set of parameters about how StarRocks integrates with the metastore of your data source.
 
-###### Hive metastore
+##### Hive metastore
 
 If you choose Hive metastore as the metastore of your data source, configure `MetastoreParams` as follows:
 
@@ -105,11 +108,11 @@ If you choose Hive metastore as the metastore of your data source, configure `Me
 
 The following table describes the parameter you need to configure in `MetastoreParams`.
 
-| Parameter           | Required | Description                                                  |
-| ------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (,), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>","thrift://<metastore_IP_address_2>:<metastore_port_2>","thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+| Parameter                           | Required | Description                                                  |
+| ----------------------------------- | -------- | ------------------------------------------------------------ |
+| hive.metastore.uris                 | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>","thrift://<metastore_IP_address_2>:<metastore_port_2>","thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
-###### AWS Glue
+##### AWS Glue
 
 If you choose AWS Glue as the metastore of your data source, take one of the following actions:
 
@@ -152,6 +155,18 @@ The following table describes the parameters you need to configure in `Metastore
 
 For information about how to choose a credential method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
+##### Custom metadata service
+
+If you use a custom metadata service for your Iceberg cluster, you need to create a custom catalog class (the class name of the custom catalog cannot be the same as the name of any class that already exists in StarRocks) and implement the related interface in StarRocks so that StarRocks can access the custom metadata service. The custom catalog class needs to inherit the abstract class `BaseMetastoreCatalog`. After the custom catalog is created, package the catalog and its related files, place them under the **fe/lib** path of each FE, and then restart each FE.
+
+After you complete the preceding operations, you can create an Iceberg catalog and configure its properties.
+
+| **Property**           | **Required** | **Description**                                              |
+| ---------------------- | ------------ | ------------------------------------------------------------ |
+| type                   | Yes          | The type of the data source. Set the value to `iceberg`.      |
+| iceberg.catalog.type   | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `CUSTOM`. |
+| iceberg.catalog-impl   | Yes          | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the custom catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg catalog. |
+
 #### `StorageCredentialParams`
 
 A set of parameters about how StarRocks integrates with your storage system. This parameter set is optional.
@@ -160,7 +175,7 @@ You need to configure `StorageCredentialParams` only when your Iceberg cluster u
 
 If your Iceberg cluster uses any other storage system, you can ignore `StorageCredentialParams`.
 
-###### AWS S3
+##### AWS S3
 
 If you choose AWS S3 as storage for your Iceberg cluster, take one of the following actions:
 
@@ -193,12 +208,34 @@ The following table describes the parameters you need to configure in `StorageCr
 | Parameter                   | Required | Description                                                  |
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | Yes      | Specifies whether to enable the credential methods instance profile and assumed role. Valid values: `true` and `false`. Default value: `false`. |
-| "aws.s3.iam_role_arn"       | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Iceberg data by using an Iceberg catalog. |
-| "aws.s3.region"             | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
-| "aws.s3.access_key"         | No       | The access key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Iceberg data by using an Iceberg catalog. |
-| "aws.s3.secret_key"         | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this user when it accesses your Iceberg data by using an Iceberg catalog. |
+| aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Iceberg data by using an Iceberg catalog. |
+| aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
+| aws.s3.access_key           | No       | The access key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Iceberg data by using an Iceberg catalog. |
+| aws.s3.secret_key           | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this user when it accesses your Iceberg data by using an Iceberg catalog. |
 
 For information about how to choose a credential method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+
+##### AWS S3-compatible storage
+
+If you choose an AWS S3-compatible storage system, such as MinIO, as storage for your Hive cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
+
+```SQL
+"aws.s3.enable_ssl" = "<true>",
+"aws.s3.enable_path_style_access" = "<true>",
+"aws.s3.endpoint" = "<s3_endpoint>",
+"aws.s3.access_key" = "<iam_user_access_key>",
+"aws.s3.secret_key" = "<iam_user_secret_key>"
+```
+
+The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+| Parameter                        | Required | Description                                                  |
+| -------------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection. Valid values: `true` and `false`. Default value: `true`. |
+| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style URL access. Valid values: `true` and `false`. Default value: `false`. |
+| aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your AWS S3 bucket. |
+| aws.s3.access_key                | Yes      | The access key of your AWS IAM user. |
+| aws.s3.secret_key                | Yes      | The secret key of your AWS IAM user. |
 
 #### `MetadataUpdateParams`
 
@@ -327,6 +364,30 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
       "aws.glue.region" = "us-west-2"
   );
   ```
+
+## View Iceberg catalogs
+
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+
+```SQL
+SHOW CATALOGS;
+```
+
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of an Iceberg catalog named `iceberg_catalog_glue`:
+
+```SQL
+SHOW CREATE CATALOG iceberg_catalog_glue;
+```
+
+## Drop an Iceberg catalog
+
+You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP%20CATALOG.md) to drop an external catalog.
+
+The following example drops an Iceberg catalog named `iceberg_catalog_glue`:
+
+```SQL
+DROP Catalog iceberg_catalog_glue;
+```
 
 ## View the schema of an Iceberg table
 
