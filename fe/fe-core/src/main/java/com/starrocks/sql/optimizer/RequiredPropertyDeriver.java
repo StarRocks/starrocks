@@ -1,20 +1,4 @@
-<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-=======
-// Copyright 2021-present StarRocks, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
->>>>>>> 45f45d98e1 ([BugFix] Fix wrong state of 'isExecuteInOneTablet' when it comes to agg or analytic (#19690))
 
 package com.starrocks.sql.optimizer;
 
@@ -150,30 +134,10 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     }
 
     @Override
-<<<<<<< HEAD
-=======
-    public Void visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, ExpressionContext context) {
-        if (node.getJoinType().isRightJoin() || node.getJoinType().isFullOuterJoin()) {
-            // Right join needs to maintain build_match_flag for right table, which could not be maintained on multiple nodes,
-            // instead it should be gathered to one node
-            PhysicalPropertySet gather =
-                    new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createGatherDistributionSpec()));
-            requiredProperties.add(Lists.newArrayList(gather, gather));
-        } else {
-            PhysicalPropertySet rightBroadcastProperty =
-                    new PhysicalPropertySet(
-                            new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
-            requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
-        }
-        return null;
-    }
-
-    @Override
->>>>>>> 45f45d98e1 ([BugFix] Fix wrong state of 'isExecuteInOneTablet' when it comes to agg or analytic (#19690))
     public Void visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
-        // If scan tablet sum less than 1, do one phase local aggregate is enough
+        // If scan tablet sum leas than 1, do one phase local aggregate is enough
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0
-                && context.getRootProperty().oneTabletProperty().supportOneTabletOpt
+                && context.getRootProperty().isExecuteInOneTablet()
                 && node.isOnePhaseAgg()) {
             requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
             return null;
@@ -224,12 +188,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         if (partitionColumnRefSet.isEmpty()) {
             distributionProperty = new DistributionProperty(DistributionSpec.createGatherDistributionSpec());
         } else {
-            // If scan tablet sum less than 1, no distribution property is required
-            if (context.getRootProperty().oneTabletProperty().supportOneTabletOpt) {
-                distributionProperty = DistributionProperty.EMPTY;
-            } else {
-                distributionProperty = createShuffleAggProperty(partitionColumnRefSet);
-            }
+            distributionProperty = createShuffleAggProperty(partitionColumnRefSet);
         }
         requiredProperties.add(Lists.newArrayList(new PhysicalPropertySet(distributionProperty, sortProperty)));
 
@@ -268,7 +227,7 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     public Void visitPhysicalLimit(PhysicalLimitOperator node, ExpressionContext context) {
         // @todo: check the condition is right?
         //
-        // If scan tablet sum less than 1, don't need required gather, because work machine always less than 1?
+        // If scan tablet sum leas than 1, don't need required gather, because work machine always less than 1?
         // if (context.getRootProperty().isExecuteInOneTablet()) {
         //     requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
         //     return null;
