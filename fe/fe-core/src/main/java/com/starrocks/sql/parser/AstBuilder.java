@@ -379,6 +379,7 @@ import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -395,6 +396,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -1463,7 +1465,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 refreshSchemeDesc = new SyncRefreshSchemeDesc();
             } else {
                 // use new manual refresh
-                refreshSchemeDesc = new ManualRefreshSchemeDesc(MaterializedView.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
+                refreshSchemeDesc =
+                        new ManualRefreshSchemeDesc(MaterializedView.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
             }
         }
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
@@ -5099,7 +5102,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(context.name.getText().toLowerCase(),
                 new FunctionParams(false, visit(context.expression(), Expr.class)), createPos(context));
-        functionCallExpr.setIgnoreNulls(context.ignoreNulls() != null);
+        boolean ignoreNull = CollectionUtils.isNotEmpty(context.ignoreNulls())
+                && context.ignoreNulls().stream().anyMatch(Objects::nonNull);
+        functionCallExpr.setIgnoreNulls(ignoreNull);
         return functionCallExpr;
     }
 
