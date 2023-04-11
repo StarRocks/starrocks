@@ -363,6 +363,25 @@ public class AnalyzerUtils {
         return tableRelations;
     }
 
+<<<<<<< HEAD
+=======
+    public static List<TableRelation> collectTableRelations(StatementBase statementBase) {
+        List<TableRelation> tableRelations = Lists.newArrayList();
+        new AnalyzerUtils.TableRelationsCollector(tableRelations).visit(statementBase);
+        return tableRelations;
+    }
+
+    public static boolean isOnlyHasOlapTables(StatementBase statementBase) {
+        Map<TableName, Table> nonOlapTables = Maps.newHashMap();
+        new AnalyzerUtils.NonOlapTableCollector(nonOlapTables).visit(statementBase);
+        return nonOlapTables.isEmpty();
+    }
+
+    public static void copyOlapTable(StatementBase statementBase, Set<OlapTable> olapTables) {
+        new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
+    }
+
+>>>>>>> c4cb3ac2a ([Enhancement] Support replay catalog hive table plan from query dump (#21220))
     public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
         new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
@@ -484,6 +503,22 @@ public class AnalyzerUtils {
         public Void visitTable(TableRelation node, Void context) {
             String tblName = node.getTable() != null ? node.getTable().getName() : node.getName().getTbl();
             tableRelations.put(tblName, node);
+            return null;
+        }
+    }
+
+    private static class TableRelationsCollector extends TableCollector {
+
+        private final List<TableRelation> tableRelations;
+
+        public TableRelationsCollector(List<TableRelation> tableRelations) {
+            super(null);
+            this.tableRelations = tableRelations;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            tableRelations.add(node);
             return null;
         }
     }
