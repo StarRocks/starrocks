@@ -494,69 +494,77 @@ class StarrocksSQLApiLib(object):
                     "sql result not match regex:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---"
                     % (sql, exp[len(REGEX_FLAG) :], act),
                 )
-            elif exp.startswith("["):
-                log.info("[check type]: List")
-                # list result
-                if "\n" in exp:
-                    # many lines
-                    expect_res = exp.replace("null", "None").split("\n")
-                else:
-                    # only one line
-                    try:
-                        expect_res = ast.literal_eval(exp.replace("null", "None"))
-                    except Exception as e:
-                        log.warn("converse array error: %s, %s" % (exp, e))
-                        expect_res = str(exp)
+                return
 
-                tools.assert_equal(type(expect_res), type(act), "exp and act results' type not match")
+            try:
+                if exp.startswith("["):
+                    log.info("[check type]: List")
+                    # list result
+                    if "\n" in exp:
+                        # many lines
+                        expect_res = exp.replace("null", "None").split("\n")
+                    else:
+                        # only one line
+                        try:
+                            expect_res = ast.literal_eval(exp.replace("null", "None"))
+                        except Exception as e:
+                            log.warn("converse array error: %s, %s" % (exp, e))
+                            expect_res = str(exp)
 
-                if order:
-                    tools.assert_list_equal(
-                        expect_res,
-                        act,
-                        "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, expect_res, act),
+                    tools.assert_equal(type(expect_res), type(act), "exp and act results' type not match")
+
+                    if order:
+                        tools.assert_list_equal(
+                            expect_res,
+                            act,
+                            "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, expect_res, act),
+                        )
+                    else:
+                        tools.assert_count_equal(
+                            expect_res,
+                            act,
+                            "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, expect_res, act),
+                        )
+                    return
+                elif exp.startswith("{") and exp.endswith("}"):
+                    log.info("[check type]: DICT")
+                    tools.assert_equal(type(exp), type(act), "exp and act results' type not match")
+                    # list result
+                    tools.assert_dict_equal(
+                        json.loads(exp),
+                        json.loads(act),
+                        "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, exp, act),
                     )
+                    return
+            except Exception as e:
+                log.warn("analyse result before check error, %s" % e)
+
+            # check str
+            log.info("[check type]: Str")
+            tools.assert_equal(type(exp), type(act), "exp and act results' type not match")
+
+            if exp.startswith("E:") and act.startswith("E:"):
+                if "url:" in exp and "url:" in act:
+                    # TODO. support url msg check in the future
+                    log.info("Both Error msg with url, skip detail check")
+                    return
                 else:
-                    tools.assert_count_equal(
-                        expect_res,
-                        act,
-                        "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, expect_res, act),
-                    )
-            elif exp.startswith("{"):
-                log.info("[check type]: DICT")
-                tools.assert_equal(type(exp), type(act), "exp and act results' type not match")
-                # list result
-                tools.assert_dict_equal(
-                    json.loads(exp),
-                    json.loads(act),
+                    # ERROR msg, regex check
+                    tools.assert_equal(act, exp)
+
+            exp = exp.split("\n") if isinstance(exp, str) else exp
+            act = act.split("\n") if isinstance(act, str) else act
+
+            if order:
+                tools.assert_list_equal(
+                    exp,
+                    act,
                     "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, exp, act),
                 )
             else:
-                log.info("[check type]: Str")
-                tools.assert_equal(type(exp), type(act), "exp and act results' type not match")
-
-                if exp.startswith("E:") and act.startswith("E:"):
-                    if "url:" in exp and "url:" in act:
-                        # TODO. support url msg check in the future
-                        log.info("Both Error msg with url, skip detail check")
-                        return
-                    else:
-                        # ERROR msg, regex check
-                        tools.assert_equal(act, exp)
-
-                exp = exp.split("\n") if isinstance(exp, str) else exp
-                act = act.split("\n") if isinstance(act, str) else act
-
-                if order:
-                    tools.assert_list_equal(
-                        exp,
-                        act,
-                        "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, exp, act),
-                    )
-                else:
-                    tools.assert_count_equal(
-                        exp, act, "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, exp, act)
-                    )
+                tools.assert_count_equal(
+                    exp, act, "sql result not match:\n- [SQL]: %s\n- [exp]: %s\n- [act]: %s\n---" % (sql, exp, act)
+                )
 
     @staticmethod
     def compress(ori_str, c_round=10):
