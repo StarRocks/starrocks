@@ -168,7 +168,12 @@ public class ReorderJoinRule extends Rule {
                 enumerate(new JoinReorderLeftDeep(context), context, innerJoinRoot, multiJoinNode);
                 // If there is no statistical information, the DP and greedy reorder algorithm are disabled,
                 // and the query plan degenerates to the left deep tree
+<<<<<<< HEAD
                 if (Utils.hasUnknownColumnsStats(innerJoinRoot) && !FeConstants.runningUnitTest) {
+=======
+                if (Utils.hasUnknownColumnsStats(input) &&
+                        (!FeConstants.runningUnitTest || FeConstants.isReplayFromQueryDump)) {
+>>>>>>> c4cb3ac2a ([Enhancement] Support replay catalog hive table plan from query dump (#21220))
                     continue;
                 }
 
