@@ -16,7 +16,6 @@ package com.starrocks.connector.elasticsearch;
 
 import com.starrocks.connector.config.Config;
 import com.starrocks.connector.config.ConnectorConfig;
-import lombok.Data;
 
 import static com.starrocks.catalog.EsTable.DOC_VALUE_SCAN;
 import static com.starrocks.catalog.EsTable.ES_NET_SSL;
@@ -26,7 +25,6 @@ import static com.starrocks.catalog.EsTable.PASSWORD;
 import static com.starrocks.catalog.EsTable.USER;
 import static com.starrocks.catalog.EsTable.WAN_ONLY;
 
-@Data
 public class EsConfig extends ConnectorConfig {
 
     @Config(key = HOSTS, desc = "user when connecting es cluster", defaultValue = "", nullable = false)
@@ -58,4 +56,60 @@ public class EsConfig extends ConnectorConfig {
             desc = " Whether to enable sniffing keyword for filtering more reasonable",
             defaultValue = "true")
     private boolean enableKeywordSniff;
+
+    public String[] getNodes() {
+        return nodes;
+    }
+
+    public void setNodes(String[] nodes) {
+        this.nodes = nodes;
+    }
+
+    public String getUserName() {
+        return userName;
+    }
+
+    public void setUserName(String userName) {
+        this.userName = userName;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public boolean isEnableSsl() {
+        return enableSsl;
+    }
+
+    public void setEnableSsl(boolean enableSsl) {
+        this.enableSsl = enableSsl;
+    }
+
+    public boolean isEnableWanOnly() {
+        return enableWanOnly;
+    }
+
+    public void setEnableWanOnly(boolean enableWanOnly) {
+        this.enableWanOnly = enableWanOnly;
+    }
+
+    public boolean isEnableDocValueScan() {
+        return enableDocValueScan;
+    }
+
+    public void setEnableDocValueScan(boolean enableDocValueScan) {
+        this.enableDocValueScan = enableDocValueScan;
+    }
+
+    public boolean isEnableKeywordSniff() {
+        return enableKeywordSniff;
+    }
+
+    public void setEnableKeywordSniff(boolean enableKeywordSniff) {
+        this.enableKeywordSniff = enableKeywordSniff;
+    }
 }

@@ -37,7 +37,6 @@ package com.starrocks.connector.elasticsearch;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import lombok.Data;
 import okhttp3.Credentials;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -299,9 +298,12 @@ public class EsRestClient {
         return ssfFactory;
     }
 
-    @Data
     public static class EsIndex {
         private String index;
+
+        public String getIndex() {
+            return index;
+        }
     }
 
     /**
