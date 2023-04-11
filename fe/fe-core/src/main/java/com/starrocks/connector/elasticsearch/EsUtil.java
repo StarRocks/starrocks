@@ -39,16 +39,16 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.starrocks.catalog.Column;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
-import org.json.simple.JSONObject;
-import org.json.simple.JSONValue;
+import org.json.JSONObject;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -102,14 +102,14 @@ public class EsUtil {
         int firstOccr = key.indexOf('.', fromIndex);
         if (firstOccr == -1) {
             String token = key.substring(key.lastIndexOf('.') + 1);
-            if (jsonObject.containsKey(token)) {
+            if (jsonObject.has(token)) {
                 return (JSONObject) jsonObject.get(token);
             } else {
                 return null;
             }
         }
         String fieldName = key.substring(fromIndex, firstOccr);
-        if (jsonObject.containsKey(fieldName)) {
+        if (jsonObject.has(fieldName)) {
             return getJsonObject((JSONObject) jsonObject.get(fieldName), key, firstOccr + 1);
         } else {
             return null;
@@ -135,19 +135,20 @@ public class EsUtil {
     /**
      * Generate columns from ElasticSearch.
      **/
-    public static List<Column> convertColumnSchema(EsRestClient client, String index) {
+    public static List<ColumnDef> convertColumnSchema(com.starrocks.connector.elasticsearch.external.EsRestClient client, String index) {
         String mappings = client.getMapping(index);
         JSONObject properties = parseProperties(index, mappings);
-        List<Column> columns = new ArrayList<>();
+        List<ColumnDef> columns = new ArrayList<>();
         for (String columnName : (Set<String>) properties.keySet()) {
             JSONObject columnAttr = (JSONObject) properties.get(columnName);
             //default set string.
             Type type = Type.STRING;
-            if (columnAttr.containsKey("type")) {
+            if (columnAttr.has("type")) {
                 type = convertType(columnAttr.get("type").toString());
             }
-            Column column = new Column(columnName, type, true, null, true,
-                    null, "comment");
+            ColumnDef column = new ColumnDef(columnName, new TypeDef(type), true,
+                    null, true,
+                    null, "es");
             columns.add(column);
         }
         return columns;
@@ -187,7 +188,7 @@ public class EsUtil {
             case "nested":
             case "object":
             default:
-                return ScalarType.createType("STRING");
+                return ScalarType.createDefaultExternalTableString();
         }
     }
 
@@ -228,7 +229,7 @@ public class EsUtil {
      * @return
      */
     private static JSONObject parseMappingsElement(String indexMapping) {
-        JSONObject jsonObject = (JSONObject) JSONValue.parse(indexMapping);
+        JSONObject jsonObject = new JSONObject(indexMapping);
         // If the indexName use alias takes the first mapping
         Iterator<String> keys = jsonObject.keySet().iterator();
         String docKey = keys.next();
@@ -242,7 +243,7 @@ public class EsUtil {
      * @return
      */
     private static JSONObject parsePropertiesRoot(JSONObject mappings) {
-        String element = (String) mappings.keySet().iterator().next();
+        String element = mappings.keySet().iterator().next();
         if (!"properties".equals(element)) {
             // If type is not passed in takes the first type.
             return (JSONObject) mappings.get(element);
@@ -266,13 +267,13 @@ public class EsUtil {
         }
     }
 
-    public static <T> List<T> fromJSONArray(String text, Class<T> elementClass) {
+    public static <T> List<T> getFromJSONArray(String text, Class<T> elementClass) {
         try {
             JavaType javaType = OBJECT_MAPPER.getTypeFactory().constructParametricType(ArrayList.class,
                     new Class[] {elementClass});
             return OBJECT_MAPPER.readValue(text, javaType);
         } catch (JsonProcessingException e) {
-            throw new RuntimeException("fromJSONArray exception.", e);
+            throw new RuntimeException("getFromJSONArray exception.", e);
         }
     }
 

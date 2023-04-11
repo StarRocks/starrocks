@@ -32,7 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.connector.elasticsearch;
+package com.starrocks.connector.elasticsearch.external;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.collect.ImmutableList;
@@ -70,8 +70,8 @@ import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
-import static com.starrocks.connector.elasticsearch.EsUtil.getFromJSONArray;
-import static com.starrocks.connector.elasticsearch.EsUtil.readTree;
+import static com.starrocks.connector.elasticsearch.external.EsUtil.getFromJSONArray;
+import static com.starrocks.connector.elasticsearch.external.EsUtil.readTree;
 
 public class EsRestClient {
 

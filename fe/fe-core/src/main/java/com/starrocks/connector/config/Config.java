@@ -13,21 +13,21 @@
 // limitations under the License.
 
 
-package com.starrocks.connector.delta;
+package com.starrocks.connector.config;
 
-import com.starrocks.connector.Connector;
-import com.starrocks.connector.ConnectorContext;
-import com.starrocks.connector.ConnectorFactory;
+import java.lang.annotation.Documented;
+import java.lang.annotation.Retention;
+import java.lang.annotation.Target;
 
-public class DeltaLakeConnectorFactory implements ConnectorFactory  {
+import static java.lang.annotation.ElementType.FIELD;
+import static java.lang.annotation.RetentionPolicy.RUNTIME;
 
-    @Override
-    public Connector createConnector(ConnectorContext context) {
-        return new DeltaLakeConnector(context);
-    }
-
-    @Override
-    public String name() {
-        return "deltalake";
-    }
+@Documented
+@Target(FIELD)
+@Retention(RUNTIME)
+public @interface Config {
+    String key();
+    String desc() default "please add desc";
+    String defaultValue();
+    boolean nullable() default true;
 }
