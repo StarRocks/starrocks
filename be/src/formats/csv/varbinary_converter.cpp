@@ -87,7 +87,7 @@ bool VarBinaryConverter::read_string(Column* column, Slice s, const Options& opt
     // from string to binary
     std::unique_ptr<char[]> p;
     p.reset(new char[hex_len]);
-    strings::a2b_hex(data_ptr, p.get(), hex_len);
+    strings::a2b_hex(data_ptr + start, p.get(), hex_len);
     down_cast<BinaryColumn*>(column)->append(Slice(p.get(), hex_len));
 
     return true;
