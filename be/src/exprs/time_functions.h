@@ -614,6 +614,15 @@ public:
      */
     DEFINE_VECTORIZED_FN(previous_day);
 
+    static Status previous_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status previous_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    // Process the case where dow is not constant in previous_day
+    static StatusOr<ColumnPtr> previous_day_common(FunctionContext* context, const Columns& columns);
+
+    // Process the case where dow is constant in previous_day
+    static StatusOr<ColumnPtr> previous_day_wdc(FunctionContext* context, const Columns& columns);
+
     // Following const variables used to obtains number days of year
     constexpr static int NUMBER_OF_LEAP_YEAR = 366;
     constexpr static int NUMBER_OF_NON_LEAP_YEAR = 365;
