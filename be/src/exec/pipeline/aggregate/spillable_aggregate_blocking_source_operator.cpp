@@ -50,7 +50,7 @@ bool SpillableAggregateBlockingSourceOperator::is_finished() const {
     if (!_aggregator->spiller()->spilled()) {
         return AggregateBlockingSourceOperator::is_finished();
     }
-    return AggregateBlockingSourceOperator::is_finished() && _aggregator->is_spilled_eos() && !_has_last_chunk;
+    return _aggregator->is_spilled_eos() && !_has_last_chunk;
 }
 
 Status SpillableAggregateBlockingSourceOperator::set_finished(RuntimeState* state) {

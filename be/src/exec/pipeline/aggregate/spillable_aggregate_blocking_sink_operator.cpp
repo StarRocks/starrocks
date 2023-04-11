@@ -32,11 +32,17 @@ bool SpillableAggregateBlockingSinkOperator::need_input() const {
 }
 
 bool SpillableAggregateBlockingSinkOperator::is_finished() const {
-    return AggregateBlockingSinkOperator::is_finished() && _is_finished;
+    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
+        return AggregateBlockingSinkOperator::is_finished();
+    }
+    return _is_finished;
 }
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
-    RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
+    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
+        RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
+        return Status::OK();
+    }
     // ugly code
     // TODO: fixme
     auto io_executor = _aggregator->spill_channel()->io_executor();
@@ -56,9 +62,13 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
 
     if (_aggregator->spill_channel()->is_working()) {
         DCHECK(_spill_strategy == spill::SpillStrategy::SPILL_ALL);
-        std::function<StatusOr<ChunkPtr>()> task = [state, io_executor, flush_function,
-                                                    set_call_back_function]() -> StatusOr<ChunkPtr> {
+        std::function<StatusOr<ChunkPtr>()> flush_task = [this, state, io_executor, flush_function]() ->StatusOr<ChunkPtr> {
             RETURN_IF_ERROR(flush_function(state, io_executor));
+            return Status::EndOfFile("eos");
+        };
+        _aggregator->spill_channel()->add_spill_task({flush_task});
+        std::function<StatusOr<ChunkPtr>()> task = [state, io_executor,
+                                                    set_call_back_function, this]() -> StatusOr<ChunkPtr> {
             RETURN_IF_ERROR(set_call_back_function(state, io_executor));
             return Status::EndOfFile("eos");
         };
