@@ -19,6 +19,7 @@
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
 #include "util/json.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -205,8 +206,8 @@ static Status add_column_with_array_object_value(BinaryColumn* column, const Typ
         LOG(ERROR) << "avro to json failed: %s" << avro_strerror();
         return Status::InternalError("avro to json failed");
     }
-    std::unique_ptr<char> up(as_json);
-    column->append(Slice(up.get()));
+    column->append(Slice(as_json));
+    free(as_json);
     return Status::OK();
 }
 
@@ -256,9 +257,9 @@ Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, c
         LOG(ERROR) << "avro to json failed: %s" << avro_strerror();
         return Status::InternalError("avro to json failed");
     }
-    std::unique_ptr<char> up(as_json);
+    DeferOp json_deleter([&] { free(as_json);});
     JsonValue json_value;
-    Status s = JsonValue::parse(up.get(), &json_value);
+    Status s = JsonValue::parse(as_json, &json_value);
     if (!s.ok()) {
         return Status::InternalError("parse json failed");
     }
