@@ -24,7 +24,7 @@ The deployment of a shared-data StarRocks cluster is similar to that of a classi
 
 ### Configure FE nodes for shared-data StarRocks
 
-Before starting FE, add the following configuration items in the FE configuration file **fe.conf**:
+Before starting FEs, add the following configuration items in the FE configuration file **fe.conf**:
 
 | **Configuration item**              | **Description**                                              |
 | ----------------------------------- | ------------------------------------------------------------ |
@@ -112,7 +112,7 @@ Before starting FE, add the following configuration items in the FE configuratio
 
 ### Configure BE nodes for shared-data StarRocks
 
-Add the following configuration items in the BE configuration file **be.conf**:
+Before starting BEs, add the following configuration items in the BE configuration file **be.conf**:
 
 ```YAML
 starlet_port = <starlet_port>
@@ -121,6 +121,16 @@ starlet_port = <starlet_port>
 | **Configuration item** | **Description**                |
 | ---------------------- | ------------------------------ |
 | starlet_port           | The BE heartbeat service port. Default value: `9070`.|
+
+If you want to enable local disk cache, add the following configuration item in the BE configuration file **be.conf**:
+
+```YAML
+starlet_cache_dir = <starlet_cache_dir>
+```
+
+| **Configuration item**   | **Description**        |
+| ------------ | ------------------------ |
+| starlet_cache_dir | The directory of the local disk cache. You can configure multiple directories and separate the directories with a colon (`:`).|
 
 > **NOTE**
 >

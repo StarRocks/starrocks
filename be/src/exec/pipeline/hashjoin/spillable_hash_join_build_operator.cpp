@@ -57,8 +57,6 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
         return HashJoinBuildOperator::set_finishing(state);
     }
 
-    RETURN_IF_ERROR(publish_runtime_filters(state));
-
     auto io_executor = _join_builder->spill_channel()->io_executor();
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         _join_builder->spill_channel()->set_finishing();
@@ -70,9 +68,27 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
                 },
                 state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker));
     };
-    RETURN_IF_ERROR(set_call_back_function(state, io_executor));
 
-    return Status::OK();
+    Status ret_status;
+    auto defer = DeferOp([&]() {
+        Status st = [&]() {
+            if (_join_builder->spill_channel()->is_working()) {
+                std::function<StatusOr<ChunkPtr>()> task = [state, io_executor,
+                                                            set_call_back_function]() -> StatusOr<ChunkPtr> {
+                    RETURN_IF_ERROR(set_call_back_function(state, io_executor));
+                    return Status::EndOfFile("eos");
+                };
+                _join_builder->spill_channel()->add_spill_task({task});
+            } else {
+                RETURN_IF_ERROR(set_call_back_function(state, io_executor));
+            }
+            return Status::OK();
+        }();
+        ret_status = ret_status.ok() ? st : ret_status;
+    });
+    ret_status = publish_runtime_filters(state);
+
+    return ret_status;
 }
 
 Status SpillableHashJoinBuildOperator::publish_runtime_filters(RuntimeState* state) {
@@ -147,6 +163,7 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
     RETURN_IF_ERROR(_join_builder->append_chunk_to_spill_buffer(state, chunk));
 
     if (_is_first_time_spill) {
+        _is_first_time_spill = false;
         _hash_table_slice_iterator = _convert_hash_map_to_chunk();
         RETURN_IF_ERROR(_join_builder->append_spill_task(state, _hash_table_slice_iterator));
     }

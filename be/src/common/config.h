@@ -791,6 +791,16 @@ CONF_Int32(starlet_port, "9070");
 CONF_Int32(starlet_cache_thread_num, "64");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
+// Cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
+CONF_Int32(starlet_cache_check_interval, "900");
+// Cache backend cache evictor interval (in seconds)
+CONF_Int32(starlet_cache_evict_interval, "60");
+// Cache will start evict cache files if free space belows this value(percentage)
+CONF_Double(starlet_cache_evict_low_water, "0.1");
+// Cache will stop evict cache files if free space is above this value(percentage)
+CONF_Double(starlet_cache_evict_high_water, "0.2");
+// type:Integer. cache directory allocation policy. (0:default, 1:random, 2:round-robin)
+CONF_Int32(starlet_cache_dir_allocate_policy, "0");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
 CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
@@ -828,7 +838,9 @@ CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
 // spill dirs
 CONF_String(spill_local_storage_dir, "spill");
+// when spill occurs, whether enable skip synchronous flush
 CONF_mBool(experimental_spill_skip_sync, "true");
+// spill Initial number of partitions
 CONF_mInt32(spill_init_partition, "4");
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
@@ -912,5 +924,9 @@ CONF_mInt64(txn_info_history_size, "20000");
 
 CONF_mInt32(update_cache_evict_internal_sec, "11");
 CONF_mBool(enable_auto_evict_update_cache, "true");
+
+CONF_Bool(enable_preload_column_mode_update_cache, "true");
+
+CONF_mInt64(load_tablet_timeout_seconds, "30");
 
 } // namespace starrocks::config

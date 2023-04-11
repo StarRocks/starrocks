@@ -289,16 +289,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
 
     // spill process operator
     if (runtime_state()->enable_spill() && _limit < 0 && !is_partition) {
-        OpFactories spill_process_operators;
-
-        auto spill_process_factory = std::make_shared<SpillProcessOperatorFactory>(
-                context->next_operator_id(), "spill-process", id(), spill_channel_factory);
-        spill_process_factory->set_degree_of_parallelism(degree_of_parallelism);
-        spill_process_operators.emplace_back(std::move(spill_process_factory));
-
-        auto noop_sink_factory = std::make_shared<NoopSinkOperatorFactory>(context->next_operator_id(), id());
-        spill_process_operators.emplace_back(std::move(noop_sink_factory));
-        context->add_pipeline(std::move(spill_process_operators));
+        context->interpolate_spill_process(spill_channel_factory, degree_of_parallelism);
     }
 
     // create context factory

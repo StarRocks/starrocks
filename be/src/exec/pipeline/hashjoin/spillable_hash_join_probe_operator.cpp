@@ -57,6 +57,10 @@ bool SpillableHashJoinProbeOperator::has_output() const {
         return false;
     }
 
+    if (!_status().ok()) {
+        return true;
+    }
+
     // if any hash_join_prober has data.
     for (auto prober : _probers) {
         if (!prober->probe_chunk_empty()) {
@@ -164,6 +168,7 @@ bool SpillableHashJoinProbeOperator::pending_finish() const {
 }
 
 Status SpillableHashJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    RETURN_IF_ERROR(_status());
     if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
         return HashJoinProbeOperator::push_chunk(state, chunk);
     }
@@ -202,7 +207,7 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         res->fnv_hash(hash_values.data(), 0, num_rows);
     }
 
-    auto& exexutor = _join_builder->io_executor();
+    auto& executor = _join_builder->io_executor();
     auto partition_processer = [&chunk, this, state, &hash_values](spill::SpilledPartition* probe_partition,
                                                                    const std::vector<uint32_t>& selection, int32_t from,
                                                                    int32_t size) {
@@ -231,7 +236,7 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         }
         probe_partition->num_rows += size;
     };
-    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(state, chunk, hash_column.get(), partition_processer, exexutor,
+    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(state, chunk, hash_column.get(), partition_processer, executor,
                                                       spill::MemTrackerGuard(tls_mem_tracker)));
 
     return Status::OK();
@@ -279,7 +284,6 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
             }
             _latch.count_down();
         };
-        // TODO:
         RETURN_IF_ERROR(_executor->submit(std::move(task)));
     }
     return Status::OK();
@@ -292,7 +296,13 @@ void SpillableHashJoinProbeOperator::_update_status(Status&& status) {
     }
 }
 
+Status SpillableHashJoinProbeOperator::_status() const {
+    std::lock_guard guard(_mutex);
+    return _operator_status;
+}
+
 StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* state) {
+    RETURN_IF_ERROR(_status());
     if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
         return HashJoinProbeOperator::pull_chunk(state);
     }

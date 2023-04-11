@@ -20,10 +20,10 @@ import com.starrocks.catalog.Table;
 
 public class TransactionStateListenerFactory {
     public TransactionStateListener create(DatabaseTransactionMgr dbTxnMgr, Table table) {
-        if (table.isCloudNativeTable()) {
+        if (table.isCloudNativeTableOrMaterializedView()) {
             return new LakeTableTxnStateListener(dbTxnMgr, (OlapTable) table);
         }
-        if (table.isLocalTable()) {
+        if (table.isOlapTableOrMaterializedView()) {
             return new OlapTableTxnStateListener(dbTxnMgr, (OlapTable) table);
         }
         return null;

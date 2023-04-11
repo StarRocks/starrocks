@@ -453,15 +453,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
 
     if (runtime_state()->enable_spill() &&
         std::is_same_v<HashJoinBuilderFactory, SpillableHashJoinBuildOperatorFactory>) {
-        OpFactories spill_process_operators;
-        auto spill_process_factory = std::make_shared<SpillProcessOperatorFactory>(
-                context->next_operator_id(), "spill-process", id(), build_side_spill_channel_factory);
-        spill_process_factory->set_degree_of_parallelism(num_right_partitions);
-        spill_process_operators.emplace_back(std::move(spill_process_factory));
-
-        auto noop_sink_factory = std::make_shared<NoopSinkOperatorFactory>(context->next_operator_id(), id());
-        spill_process_operators.emplace_back(std::move(noop_sink_factory));
-        context->add_pipeline(std::move(spill_process_operators));
+        context->interpolate_spill_process(build_side_spill_channel_factory, num_right_partitions);
     }
 
     auto* pool = context->fragment_context()->runtime_state()->obj_pool();
@@ -530,6 +522,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
 
 pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
+    // now spill only support INNER_JOIN and LEFT-SEMI JOIN. we could implement LEFT_OUTER_JOIN later
     if (runtime_state()->enable_spill() &&
         (_join_type == TJoinOp::INNER_JOIN || _join_type == TJoinOp::LEFT_SEMI_JOIN)) {
         return _decompose_to_pipeline<HashJoinerFactory, SpillableHashJoinBuildOperatorFactory,
