@@ -123,11 +123,18 @@ public class Database extends MetaObject implements Writable {
     // but that'ok to meet our needs.
     private volatile boolean exist = true;
 
+    // For external database location like hdfs://name_node:9000/user/hive/warehouse/test.db/
+    private String location;
+
     public Database() {
         this(0, null);
     }
 
     public Database(long id, String name) {
+        this(id, name, "");
+    }
+
+    public Database(long id, String name, String location) {
         this.id = id;
         this.fullQualifiedName = name;
         if (this.fullQualifiedName == null) {
@@ -138,6 +145,7 @@ public class Database extends MetaObject implements Writable {
         this.nameToTable = new ConcurrentHashMap<>();
         this.dataQuotaBytes = FeConstants.DEFAULT_DB_DATA_QUOTA_BYTES;
         this.replicaQuotaSize = FeConstants.DEFAULT_DB_REPLICA_QUOTA_SIZE;
+        this.location = location;
     }
 
     private String getOwnerInfo(Thread owner) {
@@ -321,6 +329,15 @@ public class Database extends MetaObject implements Writable {
 
     public String getFullName() {
         return fullQualifiedName;
+    }
+
+    public String getLocation() {
+        return location;
+    }
+
+    public Database setLocation(String location) {
+        this.location = location;
+        return this;
     }
 
     public void setNameWithLock(String newName) {

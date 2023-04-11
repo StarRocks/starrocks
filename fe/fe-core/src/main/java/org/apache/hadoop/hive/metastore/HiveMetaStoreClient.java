@@ -1285,8 +1285,10 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public void createDatabase(Database db)
             throws InvalidObjectException, AlreadyExistsException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        if (!db.isSetCatalogName()) {
+            db.setCatalogName(getDefaultCatalog(conf));
+        }
+        client.create_database(db);
     }
 
     @Override

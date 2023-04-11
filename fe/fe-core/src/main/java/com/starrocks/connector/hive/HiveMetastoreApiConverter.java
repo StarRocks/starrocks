@@ -94,6 +94,16 @@ public class HiveMetastoreApiConverter {
         return new Database(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), database.getName());
     }
 
+    public static org.apache.hadoop.hive.metastore.api.Database toMetastoreApiDatabase(Database database) {
+        org.apache.hadoop.hive.metastore.api.Database result = new org.apache.hadoop.hive.metastore.api.Database();
+        result.setName(database.getFullName());
+        if (!Strings.isNullOrEmpty(database.getLocation())) {
+            result.setLocationUri(database.getLocation());
+        }
+
+        return result;
+    }
+
     public static HiveTable toHiveTable(Table table, String catalogName) {
         validateHiveTableType(table.getTableType());
 

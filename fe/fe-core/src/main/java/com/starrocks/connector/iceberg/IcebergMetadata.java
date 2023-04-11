@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
@@ -93,6 +94,15 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             return null;
         }
+    }
+
+    @Override
+    public void createDb(String dbName, Map<String, String> properties) throws AlreadyExistsException {
+        if (dbExists(dbName)) {
+            throw new AlreadyExistsException("Database Already Exists");
+        }
+
+        icebergCatalog.createDb(dbName, properties);
     }
 
     @Override
