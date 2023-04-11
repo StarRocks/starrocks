@@ -29,6 +29,10 @@ TOP-N (order by [[49: sum DESC NULLS LAST]])
         AGGREGATE ([GLOBAL] aggregate [{49: sum=sum(49: sum)}] group by [[42: n_name]] having [null]
             EXCHANGE SHUFFLE[42]
                 AGGREGATE ([LOCAL] aggregate [{49: sum=sum(48: expr)}] group by [[42: n_name]] having [null]
+<<<<<<< HEAD
                     SCAN (mv[lineitem_mv] columns[74: c_nationkey, 89: o_orderdate, 100: s_nationkey, 102: l_saleprice, 106: n_name1, 110: r_name1] predicate[100: s_nationkey = 74: c_nationkey AND 110: r_name1 = AFRICA AND 89: o_orderdate >= 1995-01-01 AND 89: o_orderdate < 1996-01-01])
+=======
+                    SCAN (mv[lineitem_mv] columns[103: c_nationkey, 118: o_orderdate, 129: s_nationkey, 131: l_saleprice, 137: n_name2, 140: r_name2] predicate[129: s_nationkey = 103: c_nationkey AND 140: r_name2 = AFRICA AND 118: o_orderdate >= 1995-01-01 AND 118: o_orderdate < 1996-01-01])
+>>>>>>> dd76ccddab ([Enhancement] Enhance mv rewrite when mv/query have multi same tables (#20263))
 [end]
 
