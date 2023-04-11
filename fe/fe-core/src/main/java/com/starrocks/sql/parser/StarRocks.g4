@@ -285,7 +285,7 @@ createDbStatement
     ;
 
 dropDbStatement
-    : DROP (DATABASE | SCHEMA) (IF EXISTS)? identifier FORCE?
+    : DROP (DATABASE | SCHEMA) (IF EXISTS)? (catalog=identifier '.')? database=identifier FORCE?
     ;
 
 showCreateDbStatement

@@ -106,6 +106,12 @@ public class DropStmtAnalyzer {
                 statement.setCatalogName(context.getCurrentCatalog());
             }
 
+            try {
+                MetaUtils.checkCatalogExistAndReport(statement.getCatalogName());
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, statement.getCatalogName());
+            }
+
             String dbName = statement.getDbName();
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, context.getQualifiedUser(), dbName);

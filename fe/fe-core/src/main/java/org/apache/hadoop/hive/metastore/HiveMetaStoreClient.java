@@ -177,6 +177,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.getDefaultCatalog;
+import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.prependCatalogToDbName;
 
 /**
  * Modified from apache hive  org.apache.hadoop.hive.metastore.HiveMetaStoreClient.java
@@ -957,7 +958,7 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
     @Override
     public Database getDatabase(String catalogName, String databaseName)
             throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_database(databaseName);
     }
 
     @Override
@@ -1291,47 +1292,66 @@ public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
         client.create_database(db);
     }
 
+    /**
+     * @param name
+     * @throws NoSuchObjectException
+     * @throws InvalidOperationException
+     * @throws MetaException
+     * @throws TException
+     * @see org.apache.hadoop.hive.metastore.api.ThriftHiveMetastore.Iface#drop_database(java.lang.String, boolean, boolean)
+     */
     @Override
     public void dropDatabase(String name)
             throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        dropDatabase(getDefaultCatalog(conf), name, true, false, false);
     }
 
     @Override
     public void dropDatabase(String name, boolean deleteData, boolean ignoreUnknownDb)
             throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        dropDatabase(getDefaultCatalog(conf), name, deleteData, ignoreUnknownDb, false);
     }
 
     @Override
     public void dropDatabase(String name, boolean deleteData, boolean ignoreUnknownDb, boolean cascade)
             throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        dropDatabase(getDefaultCatalog(conf), name, deleteData, ignoreUnknownDb, cascade);
     }
 
     @Override
-    public void dropDatabase(String catName, String dbName, boolean deleteData, boolean ignoreUnknownDb,
-                             boolean cascade)
+    public void dropDatabase(String catalogName, String dbName, boolean deleteData,
+                             boolean ignoreUnknownDb, boolean cascade)
             throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
+        try {
+            getDatabase(catalogName, dbName);
+        } catch (NoSuchObjectException e) {
+            if (!ignoreUnknownDb) {
+                throw e;
+            }
+            return;
+        }
 
-    }
-
-    @Override
-    public void dropDatabase(String catName, String dbName, boolean deleteData, boolean ignoreUnknownDb)
-            throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
-    }
-
-    @Override
-    public void dropDatabase(String catName, String dbName)
-            throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        if (cascade) {
+            // Note that this logic may drop some of the tables of the database
+            // even if the drop database fail for any reason
+            // TODO: Fix this
+            List<String> materializedViews = getTables(dbName, ".*", TableType.MATERIALIZED_VIEW);
+            for (String table : materializedViews) {
+                // First we delete the materialized views
+                dropTable(dbName, table, deleteData, true);
+            }
+            List<String> tableList = getAllTables(dbName);
+            for (String table : tableList) {
+                // Now we delete the rest of tables
+                try {
+                    // Subclasses can override this step (for example, for temporary tables)
+                    dropTable(dbName, table, deleteData, true);
+                } catch (UnsupportedOperationException e) {
+                    // Ignore Index tables, those will be dropped with parent tables
+                }
+            }
+        }
+        client.drop_database(prependCatalogToDbName(catalogName, dbName, conf), deleteData, cascade);
     }
 
     @Override

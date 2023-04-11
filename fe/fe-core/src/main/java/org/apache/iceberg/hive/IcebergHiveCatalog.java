@@ -16,8 +16,10 @@ package org.apache.iceberg.hive;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalog;
@@ -172,12 +174,51 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
     }
 
     @Override
+    public void dropDb(String dbName) throws MetaNotFoundException {
+        Database database;
+        try {
+            database = getDB(dbName);
+        } catch (Exception e) {
+            LOG.error("Failed to access database {}", dbName, e);
+            throw new MetaNotFoundException("Failed to access database " + dbName);
+        }
+
+        if (database == null) {
+            throw new MetaNotFoundException("Not found database " + dbName);
+        }
+
+        String dbLocation = database.getLocation();
+        if (Strings.isNullOrEmpty(dbLocation)) {
+            throw new MetaNotFoundException("Database location is empty");
+        }
+
+        dropDatabaseInHiveMetastore(dbName);
+    }
+
+    public void dropDatabaseInHiveMetastore(String dbName) {
+        try {
+            clients.run(
+                    client -> {
+                        client.dropDatabase(dbName, true, false);
+                        return null;
+                    });
+        } catch (TException e) {
+            LOG.error("Failed to drop database {}", dbName, e);
+            throw new StarRocksConnectorException("Failed to drop database " + dbName);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new StarRocksConnectorException("Interrupted in call to dropDatabase(name) " +
+                    dbName + " in Hive Metastore. msg: %s", e.getMessage());
+        }
+    }
+
+    @Override
     public Database getDB(String dbName) throws InterruptedException, TException {
         org.apache.hadoop.hive.metastore.api.Database db = clients.run(client -> client.getDatabase(dbName));
         if (db == null || db.getName() == null) {
             throw new TException("Hive db " + dbName + " doesn't exist");
         }
-        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName);
+        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName, db.getLocationUri());
     }
 
     @Override
@@ -249,11 +290,6 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
     @Override
     public void setConf(Configuration conf) {
         this.conf = conf;
-    }
-
-    // for unit test
-    public ClientPool<IMetaStoreClient, TException> getClients() {
-        return clients;
     }
 
     public String toString() {

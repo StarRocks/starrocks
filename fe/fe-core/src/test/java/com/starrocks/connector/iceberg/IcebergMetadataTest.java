@@ -20,13 +20,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import mockit.Expectations;
 import mockit.Mocked;
-import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.iceberg.BaseTable;
-import org.apache.iceberg.ClientPool;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hive.HiveTableOperations;
@@ -189,11 +188,10 @@ public class IcebergMetadataTest {
     }
 
     @Test
-    public void testNormalCreateDb() throws AlreadyExistsException, DdlException, TException, InterruptedException {
+    public void testNormalCreateDb() throws AlreadyExistsException, DdlException {
         IcebergHiveCatalog hiveCatalog = new IcebergHiveCatalog();
         hiveCatalog.initialize("iceberg_catalog", new HashMap<>());
         IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, hiveCatalog);
-        ClientPool<IMetaStoreClient, TException> clients = hiveCatalog.getClients();
 
         new Expectations(hiveCatalog) {
             {
@@ -207,5 +205,110 @@ public class IcebergMetadataTest {
             }
         };
         metadata.createDb("iceberg_db");
+    }
+
+    @Test
+    public void testDropNotEmptyTable() {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog();
+        icebergHiveCatalog.initialize("iceberg_catalog", new HashMap<>());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        List<TableIdentifier> mockTables = new ArrayList<>();
+        mockTables.add(TableIdentifier.of("table1"));
+        mockTables.add(TableIdentifier.of("table2"));
+
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.listTables(Namespace.of("iceberg_db"));
+                result = mockTables;
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadata.dropDb("iceberg_db", true);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof StarRocksConnectorException);
+            Assert.assertTrue(e.getMessage().contains("Database iceberg_db not empty"));
+        }
+    }
+
+    @Test
+    public void testDropDbFailed() throws TException, InterruptedException {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog();
+        icebergHiveCatalog.initialize("iceberg_catalog", new HashMap<>());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.listTables(Namespace.of("iceberg_db"));
+                result = Lists.newArrayList();
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadata.dropDb("iceberg_db", true);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof MetaNotFoundException);
+            Assert.assertTrue(e.getMessage().contains("Failed to access database"));
+        }
+
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getDB("iceberg_db");
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadata.dropDb("iceberg_db", true);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof MetaNotFoundException);
+            Assert.assertTrue(e.getMessage().contains("Not found database"));
+        }
+
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.getDB("iceberg_db");
+                result = new Database();
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadata.dropDb("iceberg_db", true);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof MetaNotFoundException);
+            Assert.assertTrue(e.getMessage().contains("Database location is empty"));
+        }
+    }
+
+    @Test
+    public void testNormalDropDb() throws MetaNotFoundException, TException, InterruptedException {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog();
+        icebergHiveCatalog.initialize("iceberg_catalog", new HashMap<>());
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+
+        new Expectations(icebergHiveCatalog) {
+            {
+                icebergHiveCatalog.listTables(Namespace.of("iceberg_db"));
+                result = Lists.newArrayList();
+                minTimes = 0;
+
+                icebergHiveCatalog.getDB("iceberg_db");
+                result = new Database(1, "db", "hdfs:namenode:9000/user/hive/iceberg_location");
+                minTimes = 0;
+
+                icebergHiveCatalog.dropDatabaseInHiveMetastore("iceberg_db");
+                result = null;
+                minTimes = 0;
+            }
+        };
+        metadata.dropDb("iceberg_db", true);
     }
 }
