@@ -16,7 +16,6 @@ Iceberg Catalog 是一种 External Catalog。通过 Iceberg Catalog，您不需�
   - Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
   - ORC 文件支持 ZLIB、SNAPPY、LZO、LZ4、ZSTD 和 NO_COMPRESSION 压缩格式。
 
-- StarRocks 查询 Iceberg 数据时，不支持 MAP 和 STRUCT 数据类型。
 - Iceberg Catalog 不支持查询 Iceberg v2 表数据。
 
 ## 准备工作
