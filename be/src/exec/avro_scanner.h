@@ -71,13 +71,13 @@ private:
     Status _construct_cast_exprs();
     StatusOr<ChunkPtr> _cast_chunk(const starrocks::ChunkPtr& src_chunk);
     Status _create_src_chunk(ChunkPtr* chunk);
-    Status _parse_avro(Chunk* chunk, std::shared_ptr<SequentialFile> file);
+    Status _parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFile>& file);
     void _report_error(const std::string& line, const std::string& err_msg);
     Status _construct_row(const avro_value_t& avro_value, Chunk* chunk);
     void _materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);
     Status _construct_column(const avro_value_t& input_value, Column* column, const TypeDescriptor& type_desc,
                              const std::string& col_name);
-    Status _extract_field(const avro_value_t& input_value, std::vector<AvroPath> paths, avro_value_t& output_value);
+    Status _extract_field(const avro_value_t& input_value, const std::vector<AvroPath>& paths, avro_value_t& output_value);
     Status _handle_union(avro_value_t input_value, avro_value_t& branch);
     Status _get_array_element(avro_value_t* cur_value, size_t idx, avro_value_t* element);
     std::string _preprocess_jsonpaths(std::string jsonpath);

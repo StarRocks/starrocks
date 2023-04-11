@@ -54,25 +54,7 @@ extern "C" {
 }
 #endif
 
-bool replace(std::string& str, const std::string& from, const std::string& to) {
-    size_t start_pos = str.find(from);
-    if (start_pos == std::string::npos) return false;
-    str.replace(start_pos, from.length(), to);
-    return true;
-}
-
-void replaceAll(std::string& str, const std::string& from, const std::string& to) {
-    if (from.empty()) return;
-    size_t start_pos = 0;
-    while ((start_pos = str.find(from, start_pos)) != std::string::npos) {
-        str.replace(start_pos, from.length(), to);
-        start_pos += to.length(); // In case 'to' contains 'from', like replacing 'x' with 'yx'
-    }
-}
-
 namespace starrocks {
-
-const int64_t MAX_ERROR_LINES_IN_FILE = 50;
 
 AvroScanner::AvroScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
@@ -238,7 +220,7 @@ Status AvroScanner::_construct_row(const avro_value_t& avro_value, Chunk* chunk)
     return Status::OK();
 }
 
-Status AvroScanner::_parse_avro(Chunk* chunk, std::shared_ptr<SequentialFile> file) {
+Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFile>& file) {
     const int capacity = _state->chunk_size();
     DCHECK_EQ(0, chunk->num_rows());
     for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
@@ -392,10 +374,8 @@ StatusOr<ChunkPtr> AvroScanner::get_next() {
     src_chunk->reserve(chunk_capacity);
     src_chunk->set_num_rows(0);
     Status st = _parse_avro(src_chunk.get(), _file);
-    if (!st.ok()) {
-        if (!st.is_time_out() && !st.is_end_of_file()) {
-            return st;
-        }
+    if (!st.ok() && !st.is_time_out() && !st.is_end_of_file()) {
+        return st;
     }
     if (src_chunk->num_rows() == 0) {
         if (st.is_end_of_file()) {
@@ -614,7 +594,7 @@ Status AvroScanner::_handle_union(avro_value_t input_value, avro_value_t& branch
 // input_value: input param
 // paths: input param
 // output_value: output param
-Status AvroScanner::_extract_field(const avro_value_t& input_value, std::vector<AvroPath> paths,
+Status AvroScanner::_extract_field(const avro_value_t& input_value, const std::vector<AvroPath>& paths,
                                    avro_value_t& output_value) {
     avro_value_t cur_value = input_value;
 

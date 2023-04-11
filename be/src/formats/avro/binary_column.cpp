@@ -32,7 +32,7 @@ static Status add_column_with_numeric_value(BinaryColumn* column, const TypeDesc
             return Status::InvalidArgument(err_msg);
         }
         std::string sv = std::to_string(in);
-        if (type_desc.len < sv.size()) {
+        if (UNLIKELY(type_desc.len < sv.size())) {
             auto err_msg = strings::Substitute("Value length is beyond the capacity. column=$0, capacity=$1", name,
                                                type_desc.len);
             return Status::InvalidArgument(err_msg);
@@ -49,7 +49,7 @@ static Status add_column_with_numeric_value(BinaryColumn* column, const TypeDesc
             return Status::InvalidArgument(err_msg);
         }
         std::string sv = std::to_string(in);
-        if (type_desc.len < sv.size()) {
+        if (UNLIKELY(type_desc.len < sv.size())) {
             auto err_msg = strings::Substitute("Value length is beyond the capacity. column=$0, capacity=$1", name,
                                                type_desc.len);
             return Status::InvalidArgument(err_msg);
@@ -66,7 +66,7 @@ static Status add_column_with_numeric_value(BinaryColumn* column, const TypeDesc
             return Status::InvalidArgument(err_msg);
         }
         std::string sv = std::to_string(in);
-        if (type_desc.len < sv.size()) {
+        if (UNLIKELY(type_desc.len < sv.size())) {
             auto err_msg = strings::Substitute("Value length is beyond the capacity. column=$0, capacity=$1", name,
                                                type_desc.len);
             return Status::InvalidArgument(err_msg);
@@ -84,7 +84,7 @@ static Status add_column_with_numeric_value(BinaryColumn* column, const TypeDesc
             return Status::InvalidArgument(err_msg);
         }
         std::string sv = std::to_string(in);
-        if (type_desc.len < sv.size()) {
+        if (UNLIKELY(type_desc.len < sv.size())) {
             auto err_msg = strings::Substitute("Value length is beyond the capacity. column=$0, capacity=$1", name,
                                                type_desc.len);
             return Status::InvalidArgument(err_msg);
@@ -205,8 +205,8 @@ static Status add_column_with_array_object_value(BinaryColumn* column, const Typ
         LOG(ERROR) << "avro to json failed: %s" << avro_strerror();
         return Status::InternalError("avro to json failed");
     }
-    column->append(Slice(as_json));
-    free(as_json);
+    std::unique_ptr<char> up(as_json);
+    column->append(Slice(up.get()));
     return Status::OK();
 }
 
@@ -256,12 +256,12 @@ Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, c
         LOG(ERROR) << "avro to json failed: %s" << avro_strerror();
         return Status::InternalError("avro to json failed");
     }
+    std::unique_ptr<char> up(as_json);
     JsonValue json_value;
-    Status s = JsonValue::parse(as_json, &json_value);
+    Status s = JsonValue::parse(up.get(), &json_value);
     if (!s.ok()) {
         return Status::InternalError("parse json failed");
     }
-    free(as_json);
     json_column->append(std::move(json_value));
     return Status::OK();
 }
