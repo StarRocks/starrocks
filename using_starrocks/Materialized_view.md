@@ -68,13 +68,9 @@ StarRocks 支持在内、外部数据目录中的一个或多个基表上创建�
 
 ### 准备工作
 
-#### 开启异步物化视图
-
-使用异步物化视图前，您需要使用以下命令设置 FE 配置项 `enable_experimental_mv` 为 `true`：
-
-```SQL
-ADMIN SET FRONTEND CONFIG ("enable_experimental_mv"="true");
-```
+> **NOTE**
+>
+> 从 2.5.2 版本开始，异步物化视图功能（`enable_experimental_mv`）默认开启，无需您手动配置。
 
 #### 创建基表
 

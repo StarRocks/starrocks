@@ -156,7 +156,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |max_small_file_size_bytes|1024 \* 1024|存储文件的大小上限，单位为 Byte。|
 |agent_task_resend_wait_time_ms|5000|Agent task 重新发送前的等待时间。当代理任务的创建时间已设置，并且距离现在超过该值，才能重新发送代理任务，单位为 ms。<br>该参数防止过于频繁的代理任务发送。|
 |backup_job_default_timeout_ms|86400*1000|Backup 作业的超时时间，单位为 ms。|
-|enable_experimental_mv|FALSE|是否开启异步物化视图功能。如果为 `TRUE`，则开启异步物化视图功能。|
+|enable_experimental_mv|TRUE|是否开启异步物化视图功能。`TRUE` 表示开启。从 2.5.2 版本开始，该功能默认开启。2.5.2 版本之前默认值为 `FALSE`。|
 |authentication_ldap_simple_bind_base_dn    | 空字符串 | 检索用户时，使用的 Base DN，用于指定 LDAP 服务器检索用户鉴权信息的起始点。 |
 |authentication_ldap_simple_bind_root_dn    | 空字符串 | 检索用户时，使用的管理员账号的 DN。                          |
 |authentication_ldap_simple_bind_root_pwd   | 空字符串 | 检索用户时，使用的管理员账号的密码。                         |
