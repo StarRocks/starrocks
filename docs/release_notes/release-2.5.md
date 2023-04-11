@@ -77,6 +77,7 @@ The following bugs are fixed:
 
 ### Behavior Change
 
+- Changed the default value of `enable_experimental_mv` from `false` to `true`, which means asynchronous materialized view is enabled by default.
 - Added CHARACTER to the reserved keyword list. [#17488](https://github.com/StarRocks/starrocks/pull/17488)
 
 ## 2.5.1
