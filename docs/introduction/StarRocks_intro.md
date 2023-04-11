@@ -81,6 +81,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Apache Hive™](../data_source/catalog/hive_catalog.md)
 - [Apache Hudi](../data_source/catalog/hudi_catalog.md)
 - [Apache Iceberg](../data_source/catalog/iceberg_catalog.md)
+- [Delta Lake](../data_source/catalog/deltalake_catalog.md)
 - [MySQL](../using_starrocks/External_table#mysql-external-table.md)
 - [Elasticsearch](../using_starrocks/External_table#elasticsearch-external-table.md)
 - [JDBC-compatible database](../using_starrocks/External_table#external-table-for-a-jdbc-compatible-database.md)
@@ -98,7 +99,6 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Resource group](../administration/resource_group.md)
 - [Data recovery](../administration/Data_recovery.md)
 - [Tune query performance](../administration/Query_planning.md)
-- [Manage workloads](../administration/resource_group.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
