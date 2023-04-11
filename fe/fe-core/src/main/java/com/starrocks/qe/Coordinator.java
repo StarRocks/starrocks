@@ -274,7 +274,13 @@ public class Coordinator {
         this.queryOptions = context.getSessionVariable().toThrift();
         this.queryOptions.setQuery_type(TQueryType.LOAD);
         this.queryOptions.setQuery_timeout((int) loadPlanner.getTimeout());
-        this.queryOptions.setMem_limit(loadPlanner.getExecMemLimit());
+
+        // Don't set it explicit when zero. otherwise backend will take limit as zero.
+        long execMemLimit = loadPlanner.getExecMemLimit();
+        if (execMemLimit > 0) {
+            this.queryOptions.setMem_limit(execMemLimit);
+            this.queryOptions.setQuery_mem_limit(execMemLimit);
+        }
         this.queryOptions.setLoad_mem_limit(loadPlanner.getLoadMemLimit());
         Map<String, String> sessionVariables = loadPlanner.getSessionVariables();
         if (sessionVariables != null) {
@@ -538,7 +544,8 @@ public class Coordinator {
         }
     }
 
-    private void handleErrorBackendExecState(BackendExecState errorBackendExecState, TStatusCode errorCode, String errMessage)
+    private void handleErrorBackendExecState(BackendExecState errorBackendExecState, TStatusCode errorCode,
+                                             String errMessage)
             throws UserException, RpcException {
         if (errorBackendExecState != null) {
             cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
