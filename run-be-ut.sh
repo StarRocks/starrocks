@@ -83,7 +83,7 @@ TEST_MODULE=".*"
 HELP=0
 WITH_AWS=OFF
 USE_STAROS=OFF
-WITH_BLOCK_CACHE=OFF
+WITH_CACHELIB=OFF
 WITH_GCOV=OFF
 while true; do
     case "$1" in
@@ -132,8 +132,10 @@ if [ ! -d ${CMAKE_BUILD_DIR} ]; then
     mkdir -p ${CMAKE_BUILD_DIR}
 fi
 
-cd ${CMAKE_BUILD_DIR}
+source ${STARROCKS_HOME}/bin/common.sh
+update_submodules
 
+cd ${CMAKE_BUILD_DIR}
 if [ "${USE_STAROS}" == "ON"  ]; then
   if [ -z "$STARLET_INSTALL_DIR" ] ; then
     # assume starlet_thirdparty is installed to ${STARROCKS_THIRDPARTY}/installed/starlet/
@@ -147,7 +149,8 @@ if [ "${USE_STAROS}" == "ON"  ]; then
               -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
               -DUSE_STAROS=${USE_STAROS} -DWITH_GCOV=${WITH_GCOV} \
-              -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
+              -DWITH_CACHELIB=${WITH_CACHELIB} \
+              -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
               -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
               -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
               -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
@@ -160,7 +163,8 @@ else
               -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
               -DUSE_AVX2=$USE_AVX2 -DUSE_AVX512=$USE_AVX512 -DUSE_SSE4_2=$USE_SSE4_2 \
               -DWITH_GCOV=${WITH_GCOV} \
-              -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
+              -DWITH_CACHELIB=${WITH_CACHELIB} \
+              -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 fi
 ${BUILD_SYSTEM} -j${PARALLEL}
@@ -182,8 +186,6 @@ done
 mkdir -p $LOG_DIR
 mkdir -p ${UDF_RUNTIME_DIR}
 rm -f ${UDF_RUNTIME_DIR}/*
-
-. ${STARROCKS_HOME}/bin/common.sh
 
 # ====================== configure JAVA/JVM ====================
 # NOTE: JAVA_HOME must be configed if using hdfs scan, like hive external table
@@ -209,7 +211,7 @@ else
 fi
 
 export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
-if [ "${WITH_BLOCK_CACHE}" == "ON"  ]; then
+if [ "${WITH_CACHELIB}" == "ON"  ]; then
     CACHELIB_DIR=${STARROCKS_THIRDPARTY}/installed/cachelib
     export LD_LIBRARY_PATH=$CACHELIB_DIR/lib:$CACHELIB_DIR/lib64:$CACHELIB_DIR/deps/lib:$CACHELIB_DIR/deps/lib64:$LD_LIBRARY_PATH
 fi
