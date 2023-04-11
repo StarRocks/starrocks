@@ -394,19 +394,21 @@ public class SparkLoadPendingTask extends LoadTask {
             List<List<Object>> inKeys = Lists.newArrayList();
             if (multiValueList != null && !multiValueList.isEmpty()) {
                 for (List<LiteralExpr> list : multiValueList) {
-                    inKeys.add(initInKeysItem(list));
+                    inKeys.add(initItemOfInKeys(list));
                 }
             }
             List<LiteralExpr> valueList = literalExprValues.get(partitionId);
             if (valueList != null && !valueList.isEmpty()) {
-                inKeys.add(initInKeysItem(valueList));
+                for (LiteralExpr literalExpr : valueList) {
+                    inKeys.add(initItemOfInKeys(Lists.newArrayList(literalExpr)));
+                }
             }
             etlPartitions.add(new EtlPartition(partitionId, inKeys, bucketNum));
         }
         return etlPartitions;
     }
 
-    private List<Object> initInKeysItem(List<LiteralExpr> list) {
+    private List<Object> initItemOfInKeys(List<LiteralExpr> list) {
         List<Object> curList = new ArrayList<>();
         for (LiteralExpr literalExpr : list) {
             Object keyValue;
