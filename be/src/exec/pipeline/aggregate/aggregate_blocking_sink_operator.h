@@ -44,13 +44,15 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
-private:
+protected:
     // It is used to perform aggregation algorithms shared by
     // AggregateBlockingSourceOperator. It is
     // - prepared at SinkOperator::prepare(),
     // - reffed at constructor() of both sink and source operator,
     // - unreffed at close() of both sink and source operator.
     AggregatorPtr _aggregator = nullptr;
+
+private:
     // Whether prev operator has no output
     bool _is_finished = false;
     // whether enable aggregate group by limit optimize

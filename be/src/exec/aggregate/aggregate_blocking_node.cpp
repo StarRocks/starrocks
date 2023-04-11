@@ -29,8 +29,10 @@
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/spill_process_operator.h"
 #include "exec/sorted_streaming_aggregator.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
@@ -177,6 +179,18 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
     auto degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
     auto spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));
+    if (std::is_same_v<SinkFactory, SpillableAggregateBlockingSinkOperatorFactory>) {
+        OpFactories spill_process_operators;
+
+        auto spill_process_factory = std::make_shared<SpillProcessOperatorFactory>(
+                context->next_operator_id(), "spill-process", id(), spill_channel_factory);
+        spill_process_factory->set_degree_of_parallelism(degree_of_parallelism);
+        spill_process_operators.emplace_back(std::move(spill_process_factory));
+
+        auto noop_sink_factory = std::make_shared<NoopSinkOperatorFactory>(context->next_operator_id(), id());
+        spill_process_operators.emplace_back(std::move(noop_sink_factory));
+        context->add_pipeline(std::move(spill_process_operators));
+    }
 
     // create aggregator factory
     // shared by sink operator and source operator
@@ -267,7 +281,7 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
     } else {
         if (runtime_state()->enable_spill() && has_group_by_keys) {
             ops_with_source =
-                    _decompose_to_pipeline<StreamingAggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
+                    _decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
                                            SpillableAggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
         } else {
             ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
