@@ -1945,8 +1945,8 @@ public class MvRewriteOptimizationTest {
 
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv", "UNION",
-                "PARTITION PREDICATES: (22: l_shipdate < '1998-01-01') OR (22: l_shipdate >= '1998-01-06')");
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv", "UNION", "PARTITION PREDICATES: ((22: l_shipdate < '1998-01-01')" +
+                " OR (22: l_shipdate >= '1998-01-06')) OR (22: l_shipdate IS NULL)");
         dropMv("test", "hive_parttbl_mv");
 
         createAndRefreshMv("test", "hive_parttbl_mv_2",
@@ -1971,8 +1971,8 @@ public class MvRewriteOptimizationTest {
                 ImmutableList.of("l_shipdate=1998-01-02"));
         plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_2", "l_orderkey > 100", "lineitem_par",
-                "PARTITION PREDICATES: 23: l_shipdate >= '1998-01-02', (23: l_shipdate < '1998-01-03') OR " +
-                        "(23: l_shipdate >= '1998-01-06')",
+                "PARTITION PREDICATES: ((23: l_shipdate >= '1998-01-02') AND ((23: l_shipdate < '1998-01-03')" +
+                        " OR (23: l_shipdate >= '1998-01-06'))) OR (23: l_shipdate IS NULL)",
                 "NON-PARTITION PREDICATES: 21: l_orderkey > 100");
 
         dropMv("test", "hive_parttbl_mv_2");
@@ -1993,8 +1993,8 @@ public class MvRewriteOptimizationTest {
                         "where l_shipdate > '1998-01-02';");
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv_3", "partitions=3/6", "lineitem_par",
-                "partitions=2/6");
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_3", "partitions=3/6", "lineitem_par");
+        PlanTestBase.assertNotContains(plan, "partitions=2/6");
         dropMv("test", "hive_parttbl_mv_3");
 
         createAndRefreshMv("test", "hive_parttbl_mv_4",
@@ -2013,8 +2013,8 @@ public class MvRewriteOptimizationTest {
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_4", "partitions=1/6", "lineitem_par",
-                "NON-PARTITION PREDICATES: ((22: l_shipdate >= '1998-01-02') OR (20: l_orderkey != 100)) OR " +
-                        "(22: l_shipdate < '1998-01-01')");
+                "NON-PARTITION PREDICATES: (((22: l_shipdate >= '1998-01-02') OR (20: l_orderkey != 100))" +
+                        " OR (22: l_shipdate < '1998-01-01')) OR (22: l_shipdate IS NULL)");
         dropMv("test", "hive_parttbl_mv_4");
 
         createAndRefreshMv("test", "hive_parttbl_mv_5",
@@ -2044,8 +2044,9 @@ public class MvRewriteOptimizationTest {
         query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` ";
         plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_5", "orders",
-                "PARTITION PREDICATES: (15: o_orderdate < '1991-01-01') OR (15: o_orderdate >= '1991-02-01'), " +
-                        "(15: o_orderdate < '1991-03-01') OR (15: o_orderdate >= '1993-12-31')");
+                "PARTITION PREDICATES: (((15: o_orderdate < '1991-01-01') OR (15: o_orderdate >= '1991-02-01')) AND" +
+                        " ((15: o_orderdate < '1991-03-01') OR (15: o_orderdate >= '1993-12-31')))" +
+                        " OR (15: o_orderdate IS NULL)");
 
         // TODO(Ken Huang): This should support query rewrite
         query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` " +

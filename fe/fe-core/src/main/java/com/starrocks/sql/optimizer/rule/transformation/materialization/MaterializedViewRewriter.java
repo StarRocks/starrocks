@@ -28,11 +28,13 @@ import com.google.common.graph.MutableGraph;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Pair;
@@ -55,6 +57,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -923,6 +926,43 @@ public class MaterializedViewRewriter {
                         new ReplaceColumnRefRewriter(queryExpression.getOp().getProjection().getColumnRefMap());
                 queryCompensationPredicate = rewriter.rewrite(queryCompensationPredicate);
             }
+            MaterializedView mv = mvRewriteContext.getMaterializationContext().getMv();
+            PartitionInfo partitionInfo = mv.getPartitionInfo();
+            if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+                ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+                List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
+                Preconditions.checkState(partitionColumns.size() == 1);
+                ScalarOperator queryPredicate = rewriteContext.getQueryPredicateSplit().toScalarOperator();
+                List<ScalarOperator> queryPredicates = Utils.extractConjuncts(queryPredicate);
+                List<ScalarOperator> queryPartitionRelatedScalars = queryPredicates.stream()
+                        .filter(predicate -> isRelatedPredicate(predicate, partitionColumns.get(0).getName()))
+                        .collect(Collectors.toList());
+
+                ScalarOperator mvPredicate = rewriteContext.getMvPredicateSplit().toScalarOperator();
+                List<ScalarOperator> mvPredicates = Utils.extractConjuncts(mvPredicate);
+                List<ScalarOperator> mvPartitionRelatedScalars = mvPredicates.stream()
+                        .filter(predicate -> isRelatedPredicate(predicate, partitionColumns.get(0).getName()))
+                        .collect(Collectors.toList());
+                // when query has no partition related predicates and mv has,
+                // we should consider to add null value predicate into compensation predicates
+                ColumnRefOperator partitionColumnRef =
+                        getRelatedPredicate(mvPredicate, partitionColumns.get(0).getName());
+                if (queryPartitionRelatedScalars.isEmpty()
+                        && !mvPartitionRelatedScalars.isEmpty() && partitionColumnRef.isNullable()) {
+                    ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
+                    partitionColumnRef = columnRewriter.rewriteViewToQuery(partitionColumnRef).cast();
+                    IsNullPredicateOperator isNullPredicateOperator = new IsNullPredicateOperator(partitionColumnRef);
+                    List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
+                    List<ScalarOperator> partitionRelatedPredicates = predicates.stream()
+                            .filter(predicate -> isRelatedPredicate(predicate, partitionColumns.get(0).getName()))
+                            .collect(Collectors.toList());
+                    predicates.removeAll(partitionRelatedPredicates);
+                    ScalarOperator partitionPredicate =
+                            Utils.compoundOr(Utils.compoundAnd(partitionRelatedPredicates), isNullPredicateOperator);
+                    predicates.add(partitionPredicate);
+                    queryCompensationPredicate = Utils.compoundAnd(predicates);
+                }
+            }
             // add filter to op
             Operator.Builder builder = OperatorBuilderFactory.build(queryExpression.getOp());
             builder.withOperator(queryExpression.getOp());
@@ -933,6 +973,51 @@ public class MaterializedViewRewriter {
             return newQueryExpr;
         }
         return null;
+    }
+
+    boolean isRelatedPredicate(ScalarOperator scalarOperator, String name) {
+        ScalarOperatorVisitor<Boolean, Void> visitor = new ScalarOperatorVisitor<Boolean, Void>() {
+            @Override
+            public Boolean visit(ScalarOperator scalarOperator, Void context) {
+                for (ScalarOperator child : scalarOperator.getChildren()) {
+                    boolean ret = child.accept(this, null);
+                    if (ret) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            @Override
+            public Boolean visitVariableReference(ColumnRefOperator scalarOperator, Void context) {
+                return scalarOperator.getName().equalsIgnoreCase(name);
+            }
+        };
+        return scalarOperator.accept(visitor, null);
+    }
+
+    ColumnRefOperator getRelatedPredicate(ScalarOperator scalarOperator, String name) {
+        ScalarOperatorVisitor<ColumnRefOperator, Void> visitor = new ScalarOperatorVisitor<ColumnRefOperator, Void>() {
+            @Override
+            public ColumnRefOperator visit(ScalarOperator scalarOperator, Void context) {
+                for (ScalarOperator child : scalarOperator.getChildren()) {
+                    ColumnRefOperator ret = child.accept(this, null);
+                    if (ret != null) {
+                        return ret;
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public ColumnRefOperator visitVariableReference(ColumnRefOperator scalarOperator, Void context) {
+                if (scalarOperator.getName().equalsIgnoreCase(name)) {
+                    return scalarOperator;
+                }
+                return null;
+            }
+        };
+        return scalarOperator.accept(visitor, null);
     }
 
     protected OptExpression createUnion(OptExpression queryInput, OptExpression viewInput,
