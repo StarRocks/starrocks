@@ -52,6 +52,8 @@ public class FeConstants {
     // Set this flag to false to suppress showing local shuffle columns in verbose explain, when running FE unit tests.
     public static boolean showLocalShuffleColumnsInExplain = true;
 
+    // set to true when replay from query dump
+    public static boolean isReplayFromQueryDump = false;
     // default scheduler interval is 10 seconds
     public static int default_scheduler_interval_millisecond = 10000;
 
