@@ -52,6 +52,7 @@ import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
@@ -64,6 +65,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -432,6 +434,7 @@ public class UtFrameUtils {
             ReplayMetadataMgr replayMetadataMgr = new ReplayMetadataMgr(
                     connectContext.getGlobalStateMgr().getLocalMetastore(),
                     connectContext.getGlobalStateMgr().getConnectorMgr(),
+                    connectContext.getGlobalStateMgr().getResourceMgr(),
                     replayDumpInfo.getHmsTableMap(),
                     replayDumpInfo.getTableStatisticsMap());
             connectContext.getGlobalStateMgr().setMetadataMgr(replayMetadataMgr);
@@ -553,6 +556,11 @@ public class UtFrameUtils {
         try {
             StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(replaySql,
                     connectContext.getSessionVariable()).get(0);
+
+            if (statementBase instanceof QueryStatement) {
+                replaceTableCatalogName(statementBase);
+            }
+
             com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
 
             dbs = AnalyzerUtils.collectAllDatabase(connectContext, statementBase);
@@ -569,6 +577,17 @@ public class UtFrameUtils {
         } finally {
             unLock(dbs);
             tearMockEnv();
+        }
+    }
+
+    private static void replaceTableCatalogName(StatementBase statementBase) {
+        List<TableRelation> tableRelations = AnalyzerUtils.collectTableRelations(statementBase);
+        for (TableRelation tableRelation : tableRelations) {
+            if (tableRelation.getName().getCatalog() != null) {
+                String catalogName = tableRelation.getName().getCatalog();
+                tableRelation.getName().setCatalog(
+                        CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName(catalogName, "hive"));
+            }
         }
     }
 
