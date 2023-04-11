@@ -51,6 +51,7 @@
 
 ### 行为变更
 
+- 异步物化视图功能默认开启 （`enable_experimental_mv` 默认值变为 `true`)。
 - 新增保留关键字 CHARACTER。[#17488](https://github.com/StarRocks/starrocks/pull/17488)
 
 ## 2.5.1
