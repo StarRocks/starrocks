@@ -283,9 +283,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringL
     }
 
     static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
-                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
-                        [[maye_unused]] Filter* chunk_filter, ArrowConvertContext* ctx,
-                        [[maybe_unused]] const TypeDescriptor* type_desc) {
+                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* chunk_filter,
+                        ArrowConvertContext* ctx, [[maybe_unused]] const TypeDescriptor* type_desc) {
         auto concrete_array = down_cast<const ArrowArrayType*>(array);
         auto concrete_column = down_cast<ColumnType*>(column);
         auto* filter_data = (&chunk_filter->front()) + column_start_idx;
@@ -774,7 +773,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
     }
 
     static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
-                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* column_filter,
+                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* chunk_filter,
                         ArrowConvertContext* ctx, const TypeDescriptor* type_desc) {
         auto* col_array = down_cast<ArrayColumn*>(column);
         UInt32Column* col_offsets = col_array->offsets_column().get();
@@ -802,9 +801,11 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
         if (!conv_func) {
             return illegal_converting_error(child_array->type()->name(), child_type.debug_string());
         }
-        return ParquetScanner::convert_array_to_column(conv_func, child_array_num_elements, child_array, &child_type,
-                                                       col_array->elements_column(), child_array_start_idx,
-                                                       column_start_idx, column_filter, ctx);
+        return ParquetScanner::convert_array_to_column(
+                conv_func, child_array_num_elements, child_array, &child_type, col_array->elements_column(),
+                child_array_start_idx,
+                child_type.type == TYPE_ARRAY ? column_start_idx : col_array->elements_column()->size(), chunk_filter,
+                ctx);
     }
 };
 

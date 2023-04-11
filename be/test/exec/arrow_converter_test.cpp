@@ -73,9 +73,10 @@ void add_arrow_to_column(Column* column, size_t num_elements, ArrowCppType value
     auto array = create_constant_array<ArrowType>(num_elements, value, counter);
     auto conv_func = get_arrow_converter(AT, LT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
-    Filter filter;
-    filter.resize(array->length(), 1);
-    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr));
+    Filter filter; // its size should be equal with counter
+    filter.resize(array->length() + column->size(), 1);
+    ASSERT_STATUS_OK(
+            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr));
     ASSERT_EQ(column->size(), counter);
     auto* data = &(down_cast<ColumnType*>(column)->get_data().front());
     for (auto i = 0; i < num_elements; ++i) {
@@ -100,8 +101,8 @@ void add_arrow_to_nullable_column(Column* column, size_t num_elements, ArrowCppT
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
     Filter filter;
     filter.resize(array->length(), 1);
-    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), data_column, data_column->size(), null_data,
-                               &filter, nullptr, nullptr));
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), data_column, data_column->size(), null_data, &filter,
+                               nullptr, nullptr));
     ASSERT_EQ(data_column->size(), counter);
     auto* data = &(down_cast<ColumnType*>(data_column)->get_data().front());
     for (auto i = 0; i < num_elements; ++i) {
@@ -240,18 +241,19 @@ void add_arrow_to_binary_column(Column* column, size_t num_elements, ArrowCppTyp
     auto conv_func = get_arrow_converter(AT, LT, false, strict_mode);
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr);
+    filter.resize(array->length() + column->size(), 1);
+    auto status =
+            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr);
     ASSERT_TRUE(status.ok());
     auto* binary_column = down_cast<ColumnType*>(column);
     for (auto i = 0; i < num_elements; ++i) {
         auto idx = counter - num_elements + i;
         auto s = binary_column->get_slice(idx);
         if (fail) {
-            ASSERT_EQ(filter[i], 0);
+            ASSERT_EQ(filter[idx], 0);
             ASSERT_EQ(s.size, 0);
         } else {
-            ASSERT_EQ(filter[i], 1);
+            ASSERT_EQ(filter[idx], 1);
             ASSERT_EQ(s.to_string(), value);
         }
     }
@@ -291,23 +293,22 @@ void add_arrow_to_nullable_binary_column(Column* column, size_t num_elements, Ar
     fill_null_column(array.get(), 0, array->length(), null_column, null_column->size());
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
-    auto status = conv_func(array.get(), 0, array->length(), binary_column, binary_column->size(), null_data,
-                            &filter, nullptr, nullptr);
+    filter.resize(array->length() + binary_column->size(), 1);
+    auto status = conv_func(array.get(), 0, array->length(), binary_column, binary_column->size(), null_data, &filter,
+                            nullptr, nullptr);
     ASSERT_TRUE(status.ok());
     for (auto i = 0; i < num_elements; ++i) {
         auto idx = counter - num_elements + i;
         auto s = binary_column->get_slice(idx);
         if (i % 2 == 0) {
-            ASSERT_EQ(filter_data[i], 1);
+            ASSERT_EQ(filter[idx], 1);
             ASSERT_EQ(null_data[i], DATUM_NULL);
             ASSERT_EQ(s.size, 0);
         } else if (fail) {
-            ASSERT_EQ(filter_data[i], strict_mode ? 0 : 1);
+            ASSERT_EQ(filter[idx], strict_mode ? 0 : 1);
             ASSERT_EQ(s.size, 0);
         } else {
-            ASSERT_EQ(filter_data[i], 1);
+            ASSERT_EQ(filter[idx], 1);
             ASSERT_EQ(null_data[i], DATUM_NOT_NULL);
             ASSERT_EQ(s.to_string(), value);
         }
@@ -479,8 +480,9 @@ void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_ele
     auto conv_func = get_arrow_converter(ArrowTypeId::FIXED_SIZE_BINARY, LT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr);
+    filter.resize(array->length() + column->size(), 1);
+    auto status =
+            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(column->size(), counter);
     auto* binary_column = down_cast<ColumnType*>(column);
@@ -489,10 +491,10 @@ void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_ele
         auto idx = counter - num_elements + i;
         auto s = binary_column->get_slice(idx);
         if (fail) {
-            ASSERT_EQ(filter[i], 0);
+            ASSERT_EQ(filter[idx], 0);
             ASSERT_EQ(s.size, 0);
         } else {
-            ASSERT_EQ(filter[i], 1);
+            ASSERT_EQ(filter[idx], 1);
             ASSERT_TRUE(memequal(s.data, slice_size, value.data(), slice_size));
         }
     }
@@ -514,16 +516,16 @@ void add_fixed_size_binary_array_to_nullable_binary_column(Column* column, size_
     fill_null_column(array.get(), 0, array->length(), null_column, null_column->size());
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto status = conv_func(array.get(), 0, array->length(), binary_column, binary_column->size(), null_data,
-                            &filter, nullptr, nullptr);
+    filter.resize(array->length() + binary_column->size(), 1);
+    auto status = conv_func(array.get(), 0, array->length(), binary_column, binary_column->size(), null_data, &filter,
+                            nullptr, nullptr);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(binary_column->size(), counter);
     auto slice_size = std::min((std::string::size_type)bytes_width, value.size());
     for (auto i = 0; i < num_elements; ++i) {
         auto idx = counter - num_elements + i;
         auto s = binary_column->get_slice(idx);
-        ASSERT_EQ(filter[i], 1);
+        ASSERT_EQ(filter[idx], 1);
         if (i % 2 == 0) {
             ASSERT_EQ(null_data[i], DATUM_NULL);
             ASSERT_EQ(s.size, 0);
@@ -694,8 +696,9 @@ void add_arrow_to_datetime_column(std::shared_ptr<ArrowType> type, Column* colum
     auto conv_func = get_arrow_converter(AT, LT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr);
+    filter.resize(array->length() + column->size(), 1);
+    auto status =
+            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr);
     if (fail) {
         ASSERT_FALSE(status.ok());
         return;
@@ -726,7 +729,7 @@ void add_arrow_to_nullable_datetime_column(std::shared_ptr<ArrowType> type, Colu
     fill_null_column(array.get(), 0, num_elements, null_column, null_column->size());
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
     Filter filter;
-    filter.resize(array->length(), 1);
+    filter.resize(array->length() + datetime_column->size(), 1);
     auto status = conv_func(array.get(), 0, array->length(), datetime_column, datetime_column->size(), null_data,
                             &filter, nullptr, nullptr);
     if (fail) {
@@ -913,9 +916,9 @@ void add_arrow_to_decimal_column(const std::shared_ptr<arrow::Decimal128Type>& t
     auto conv_func = get_arrow_converter(ArrowTypeId::DECIMAL, LT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
-    auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr);
+    filter.resize(array->length() + column->size(), 1);
+    auto status =
+            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(column->size(), counter);
     auto* decimal_column = down_cast<ColumnType*>(column);
@@ -925,7 +928,7 @@ void add_arrow_to_decimal_column(const std::shared_ptr<arrow::Decimal128Type>& t
         if (!fail) {
             ASSERT_EQ(decimal_data[idx], expect_value);
         } else {
-            ASSERT_EQ(filter_data[i], 0);
+            ASSERT_EQ(filter[idx], 0);
         }
     }
 }
@@ -945,9 +948,9 @@ void add_arrow_to_nullable_decimal_column(const std::shared_ptr<arrow::Decimal12
     fill_null_column(array.get(), 0, array->length(), null_column, null_column->size());
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto status = conv_func(array.get(), 0, array->length(), decimal_column, decimal_column->size(), null_data,
-                            &filter, nullptr, nullptr);
+    filter.resize(array->length() + decimal_column->size(), 1);
+    auto status = conv_func(array.get(), 0, array->length(), decimal_column, decimal_column->size(), null_data, &filter,
+                            nullptr, nullptr);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(decimal_column->size(), counter);
     auto* decimal_data = &decimal_column->get_data().front();
@@ -1218,8 +1221,9 @@ void add_arrow_map_to_json_column(Column* column, size_t num_elements, const std
     ASSERT_TRUE(conv_func != nullptr);
 
     Filter filter;
-    filter.resize(array->length(), 1);
-    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr));
+    filter.resize(array->length() + column->size(), 1);
+    ASSERT_STATUS_OK(
+            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr));
     ASSERT_EQ(column->size(), counter);
     for (auto i = 0; i < num_elements; ++i) {
         const JsonValue* json = column->get(i).get_json();

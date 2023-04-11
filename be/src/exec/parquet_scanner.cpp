@@ -242,7 +242,6 @@ Status ParquetScanner::convert_array_to_column(ConvertFunc conv_func, size_t num
                                                const TypeDescriptor* type_desc, const ColumnPtr& column,
                                                size_t batch_start_idx, size_t column_start_idx, Filter* chunk_filter,
                                                ArrowConvertContext* conv_ctx) {
-
     uint8_t* null_data;
     Column* data_column;
     if (column->is_nullable()) {
