@@ -399,7 +399,7 @@ public class PropertyAnalyzer {
                         + ", less than " + RunMode.defaultReplicationNum());
             }
         } else {
-            List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+            GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
             if (replicationNum > backendIds.size()) {
                 throw new AnalysisException("Replication num should be less than the number of available BE nodes. "
                         + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size());
