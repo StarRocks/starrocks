@@ -786,4 +786,17 @@ public class WindowTest extends PlanTestBase {
                     "  6:EXCHANGE");
         }
     }
+
+
+    @Test
+    public void testWindowWithHaving() throws Exception {
+        String sql =
+                "    select *, " +
+                        "        row_number() over (PARTITION BY v1 order by v2) as rk " +
+                        "    from t0 where v1 > 1 and v2 > 1 having rk = 1;\n";
+
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("HAVING clause cannot contain window function");
+        String plan = getFragmentPlan(sql);
+    }
 }
