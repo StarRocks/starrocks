@@ -189,7 +189,7 @@ public class InsertPlanner {
                 OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
 
                 boolean enableAutomaticPartition;
-                if (insertStmt.getTargetPartitionNames() != null) {
+                if (insertStmt.isSpecifyPartition()) {
                     enableAutomaticPartition = false;
                 } else {
                     enableAutomaticPartition = olapTable.supportedAutomaticPartition();

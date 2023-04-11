@@ -412,9 +412,15 @@ public class LoadPlanner {
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink
             OlapTable olapTable = (OlapTable) destTable;
+            boolean enableAutomaticPartition;
+            if (fileGroups.stream().anyMatch(BrokerFileGroup::isSpecifyPartition)) {
+                enableAutomaticPartition = false;
+            } else {
+                enableAutomaticPartition = olapTable.supportedAutomaticPartition();
+            }
             dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds, canUsePipeLine,
                     olapTable.writeQuorum(), olapTable.enableReplicatedStorage(),
-                    checkNullExprInAutoIncrement(), olapTable.supportedAutomaticPartition());
+                    checkNullExprInAutoIncrement(), enableAutomaticPartition);
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
             }
