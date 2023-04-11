@@ -146,7 +146,8 @@ public class CatalogUtils {
         Set<List<LiteralExpr>> tempMultiSet = new HashSet<>();
         Set<Object> tempSimpleValueSet = new HashSet<>();
         Set<List<Object>> tempMultiValueSet = new HashSet<>();
-        getLiteralByPartitionMap(listPartitionInfo, tempPartitionList, tempSimpleSet, tempSimpleValueSet, tempMultiSet, tempMultiValueSet);
+        getLiteralByPartitionMap(listPartitionInfo, tempPartitionList, tempSimpleSet,
+                tempSimpleValueSet, tempMultiSet, tempMultiValueSet);
 
         if (!simpleSet.isEmpty() && !tempSimpleSet.isEmpty()) {
             if (strictRange) {

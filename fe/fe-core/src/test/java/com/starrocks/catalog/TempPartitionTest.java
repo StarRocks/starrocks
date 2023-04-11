@@ -306,7 +306,8 @@ public class TempPartitionTest {
                 "VALUES IN ((\"2023-04-01\", \"beijing\"));";
         alterTableWithNewAnalyzer(addTempStmtStr1, false);
         String failReplaceStrict = "alter table test.test replace partition(p_20230401_bj, p_20230401_sh) " +
-                "with temporary partition(tp_20230401_bj) properties('strict_range' = 'true', 'use_temp_partition_name' = 'true');";
+                "with temporary partition(tp_20230401_bj) " +
+                "properties('strict_range' = 'true', 'use_temp_partition_name' = 'true');";
         alterTableWithNewAnalyzer(failReplaceStrict, true);
         String dropTempStr = "alter table test.test drop temporary partition tp_20230401_bj;";
         alterTableWithNewAnalyzer(dropTempStr, false);
@@ -315,7 +316,8 @@ public class TempPartitionTest {
                 "VALUES IN ((\"2023-04-01\", \"beijing\"), (\"2023-04-01\", \"shanghai\"));";
         alterTableWithNewAnalyzer(addTempStmtStr2, false);
         String passReplaceStrict = "alter table test.test replace partition(p_20230401_bj, p_20230401_sh) " +
-                "with temporary partition(tp_20230401_bj_sh) properties('strict_range' = 'true', 'use_temp_partition_name' = 'true');";
+                "with temporary partition(tp_20230401_bj_sh) " +
+                "properties('strict_range' = 'true', 'use_temp_partition_name' = 'true');";
         alterTableWithNewAnalyzer(passReplaceStrict, false);
 
         String addStmtStr1 = "alter table test.test add partition p_20230404_bj " +
@@ -328,17 +330,20 @@ public class TempPartitionTest {
                 "VALUES IN ((\"2023-04-01\", \"beijing\"));";
         alterTableWithNewAnalyzer(addTempStmtStr3, false);
         String failReplaceNotStrict1 = "alter table test.test replace partition(p_20230404_bj, p_20230404_sh) " +
-                "with temporary partition(tp_20230401_bj) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+                "with temporary partition(tp_20230401_bj) " +
+                "properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
         alterTableWithNewAnalyzer(failReplaceNotStrict1, true);
         String failReplaceNotStrict2 = "alter table test.test replace partition(p_20230404_bj) " +
-                "with temporary partition(tp_20230401_bj) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+                "with temporary partition(tp_20230401_bj) " +
+                "properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
         alterTableWithNewAnalyzer(failReplaceNotStrict2, true);
 
         String addTempStmtStr4 = "alter table test.test add temporary partition tp_20230404_bj " +
                 "VALUES IN ((\"2023-04-04\", \"beijing\"));";
         alterTableWithNewAnalyzer(addTempStmtStr4, false);
         String passReplaceNotStrict1 = "alter table test.test replace partition(p_20230404_bj, p_20230404_sh) " +
-                "with temporary partition(tp_20230404_bj) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+                "with temporary partition(tp_20230404_bj) " +
+                "properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
         alterTableWithNewAnalyzer(passReplaceNotStrict1, false);
 
         String addStmtStr3 = "alter table test.test add partition p_20230405_bj " +
@@ -351,7 +356,8 @@ public class TempPartitionTest {
                 "VALUES IN ((\"2023-04-05\", \"shanghai\"));";
         alterTableWithNewAnalyzer(addTempStmtStr5, false);
         String passReplaceNotStrict2 = "alter table test.test replace partition(p_20230405_bj, p_20230405_sh) " +
-                "with temporary partition(tp_20230405_sh) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+                "with temporary partition(tp_20230405_sh) " +
+                "properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
         alterTableWithNewAnalyzer(passReplaceNotStrict2, false);
     }
 
