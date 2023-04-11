@@ -100,7 +100,7 @@ public class FileTable extends Table {
     }
 
     public List<RemoteFileDesc> getFileDescs() throws DdlException {
-        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(fileProperties, null);
+        HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(fileProperties);
         Configuration configuration = hdfsEnvironment.getConfiguration();
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
         boolean recursive = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_RECURSIVE_DIRECTORIES, "false"));

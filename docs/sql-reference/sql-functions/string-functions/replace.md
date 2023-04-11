@@ -4,6 +4,8 @@
 
 Replaces all occurrences of characters in a string with another string. This function performs a case-sensitive match when searching for `pattern`.
 
+This function is supported from v3.0.
+
 Note: Prior to 3.0, this function was implemented as [regexp_replace](../like_predicate-functions/regexp_replace.md).
 
 ## Syntax

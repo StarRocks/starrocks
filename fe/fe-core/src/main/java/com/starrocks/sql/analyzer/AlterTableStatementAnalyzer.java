@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.TableName;
@@ -41,6 +40,7 @@ import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
@@ -67,7 +67,7 @@ public class AlterTableStatementAnalyzer {
         Table table = MetaUtils.getTable(context, tbl);
         if (table instanceof MaterializedView) {
             String msg = String.format("The '%s' cannot be alter by 'ALTER TABLE', because it is a materialized view," +
-                            "you can use 'ALTER MATERIALIZED VIEW' to alter it.", tbl.getTbl());
+                    "you can use 'ALTER MATERIALIZED VIEW' to alter it.", tbl.getTbl());
             throw new SemanticException(msg, tbl.getPos());
         }
         List<AlterClause> alterClauseList = statement.getOps();

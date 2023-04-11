@@ -147,6 +147,7 @@ set(EXEC_FILES
         ./formats/parquet/group_reader_test.cpp
         ./formats/parquet/file_reader_test.cpp
         ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
+        ./formats/parquet/parquet_footer_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_client_test.cpp
@@ -349,14 +350,12 @@ set(EXEC_FILES
         ./util/cpu_usage_info_test.cpp
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
+        ./block_cache/block_cache_test.cpp
+        ./io/cache_input_stream_test.cpp
         )
 
 if ("${USE_STAROS}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
-endif ()
-if ("${WITH_BLOCK_CACHE}" STREQUAL "ON")
-    list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
-    list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 
 if (USE_AVX2)

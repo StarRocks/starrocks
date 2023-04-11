@@ -160,7 +160,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | agent_task_resend_wait_time_ms           | ms   | 5000        | The duration the FE must wait before it can resend an agent task. An agent task can be resent only when the gap between the task creation time and the current time exceeds the value of this parameter. This parameter is used to prevent repetitive sending of agent tasks. Unit: ms. |
 | backup_job_default_timeout_ms            | ms   | 86400*1000  | The timeout duration of a backup job, in ms. If this value is exceeded, the backup job fails. |
 | report_queue_size                        | -    | 100         | The maximum number of jobs that can wait in a report queue. <br>The report is about disk, task, and tablet information of BEs. If too many report jobs are piling up in a queue, OOM will occur. |
-| enable_experimental_mv                   | -    | FALSE       | Whether to enable the asynchronous materialized view feature. `TRUE` indicates this feature is enabled.|
+| enable_experimental_mv                   | -    | TRUE       | Whether to enable the asynchronous materialized view feature. `TRUE` indicates this feature is enabled. From v2.5.2 onwards, this feature is enabled by default. For versions earlier than v2.5.2, this feature is disabled by default. |
 | authentication_ldap_simple_bind_base_dn  | -  | Empty string | The base DN, which is the point from which the LDAP server starts to search for users' authentication information.|
 | authentication_ldap_simple_bind_root_dn  |  -  | Empty string | The administrator DN used to search for users' authentication information.|
 | authentication_ldap_simple_bind_root_pwd |  -  | Empty string | The password of the administrator used to search for users' authentication information.|
@@ -313,9 +313,6 @@ BE dynamic parameters are as follows.
 
 | Configuration item | Default | Unit | Description |
 | ------------------ | ------- | ---- | ----------- |
-| tc_use_memory_min | 0 | Byte | The minimum size of the TCMalloc-reserved memory. StarRocks does not return the released memory resource to the operating system if the size of the memory resource is less than this value. |
-| tc_free_memory_rate | 0 | % | The maximum ratio of the TCMalloc-reserved memory size to the total memory size occupied by TCMalloc. StarRocks does not return the released memory resource to the operating system if the size ratio of the released memory to the total memory used by TCMalloc is less than this value. Range: [0,100]. |
-| tc_gc_period | 60 | Second | The duration of a TCMalloc garbage collection (GC) cycle. |
 | report_task_interval_seconds | 10 | Second | The time interval at which to report the state of a task. A task can be creating a table, dropping a table, loading data, or changing a table schema. |
 | report_disk_state_interval_seconds | 60 | Second | The time interval at which to report the storage volume state, which includes the size of data within the volume. |
 | report_tablet_interval_seconds | 60 | Second | The time interval at which to report the most updated version of all tablets. |

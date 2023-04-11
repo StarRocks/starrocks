@@ -315,6 +315,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
+    public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
 
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
@@ -322,6 +323,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
+    public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
 
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
@@ -368,10 +370,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
 
+    // These parameters are experimental. They may be removed in the future
     public static final String SPILL_MEM_TABLE_SIZE = "spill_mem_table_size";
     public static final String SPILL_MEM_TABLE_NUM = "spill_mem_table_num";
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
     public static final String SPILL_OPERATOR_MIN_BYTES = "spill_operator_min_bytes";
+    public static final String SPILL_OPERATOR_MAX_BYTES = "spill_operator_max_bytes";
 
     // full_sort_max_buffered_{rows,bytes} are thresholds that limits input size of partial_sort
     // in full sort.
@@ -668,14 +672,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = SPILL_MODE)
     private String spillMode = "auto";
 
-    @VarAttr(name = SPILL_MEM_TABLE_SIZE)
+    // These parameters are experimental. They may be removed in the future
+    @VarAttr(name = SPILL_MEM_TABLE_SIZE, flag = VariableMgr.INVISIBLE)
     private int spillMemTableSize = 1024 * 1024 * 100;
-    @VarAttr(name = SPILL_MEM_TABLE_NUM)
+    @VarAttr(name = SPILL_MEM_TABLE_NUM, flag = VariableMgr.INVISIBLE)
     private int spillMemTableNum = 2;
-    @VarAttr(name = SPILL_MEM_LIMIT_THRESHOLD)
+    @VarAttr(name = SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
     private double spillMemLimitThreshold = 0.5;
-    @VarAttr(name = SPILL_OPERATOR_MIN_BYTES)
-    private long spillOperatorMinBytes = 1024 * 1024 * 10;
+    @VarAttr(name = SPILL_OPERATOR_MIN_BYTES, flag = VariableMgr.INVISIBLE)
+    private long spillOperatorMinBytes = 1024L * 1024 * 10;
+    @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)
+    private long spillOperatorMaxBytes = 1024L * 1024 * 1000;
+
 
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
@@ -855,6 +863,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_SORT_AGGREGATE)
     private boolean enableSortAggregate = false;
 
+    @VarAttr(name = ENABLE_PARALLEL_MERGE)
+    private boolean enableParallelMerge = false;
+
     // 1: sort based, 2: hash based
     @VarAttr(name = WINDOW_PARTITION_MODE, flag = VariableMgr.INVISIBLE)
     private int windowPartitionMode = 1;
@@ -877,11 +888,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableSortAggregate = enableSortAggregate;
     }
 
+    public boolean isEnableParallelMerge() {
+        return enableParallelMerge;
+    }
+
+    public void setEnableParallelMerge(boolean enableParallelMerge) {
+        this.enableParallelMerge = enableParallelMerge;
+    }
+
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
     private boolean useScanBlockCache = false;
 
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR)
+    private int connectorIoTasksPerScanOperator = 16;
 
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateBlockCache = true;
@@ -895,6 +917,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getIoTasksPerScanOperator() {
         return ioTasksPerScanOperator;
+    }
+
+    public int getConnectorIoTasksPerScanOperator() {
+        return connectorIoTasksPerScanOperator;
     }
 
     @VarAttr(name = ENABLE_QUERY_CACHE)
@@ -1287,6 +1313,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getSpillOperatorMinBytes() {
         return this.spillOperatorMinBytes;
+    }
+
+    public long getSpillOperatorMaxBytes() {
+        return this.spillOperatorMaxBytes;
     }
 
     public boolean getForwardToLeader() {
@@ -1970,6 +2000,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpill_mem_table_num(spillMemTableNum);
             tResult.setSpill_mem_limit_threshold(spillMemLimitThreshold);
             tResult.setSpill_operator_min_bytes(spillOperatorMinBytes);
+            tResult.setSpill_operator_max_bytes(spillOperatorMaxBytes);
         }
 
         // Compression Type

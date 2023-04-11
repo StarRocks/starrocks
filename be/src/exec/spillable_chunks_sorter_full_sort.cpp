@@ -42,10 +42,14 @@ Status SpillableChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr
         while (!_spiller->is_full()) {
             auto chunk_st = process_task();
             if (chunk_st.ok()) {
-                RETURN_IF_ERROR(_spiller->spill(state, chunk_st.value(), io_executor(),
-                                                spill::MemTrackerGuard(tls_mem_tracker)));
+                if (!chunk_st.value()->is_empty()) {
+                    RETURN_IF_ERROR(_spiller->spill(state, chunk_st.value(), io_executor(),
+                                                    spill::MemTrackerGuard(tls_mem_tracker)));
+                }
+            } else if (chunk_st.status().is_end_of_file()) {
+                return Status::OK();
             } else {
-                break;
+                return chunk_st.status();
             }
         }
         _spill_channel->add_spill_task({std::move(process_task)});

@@ -74,6 +74,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -911,11 +912,13 @@ public class ExpressionAnalyzer {
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                fn = fn.copy();
                 fn.setArgsType(argumentTypes); // as accepting various types
                 fn.setIsNullable(false);
             } else if (fnName.equals(FunctionSet.ARRAY_AGG)) {
                 // move order by expr to node child, and extract is_asc and null_first information.
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                fn = fn.copy();
                 List<OrderByElement> orderByElements = node.getParams().getOrderByElements();
                 List<Boolean> isAscOrder = new ArrayList<>();
                 List<Boolean> nullsFirst = new ArrayList<>();
@@ -1327,8 +1330,7 @@ public class ExpressionAnalyzer {
                 node.setStrValue(session.getCurrentUserIdentity().toString());
             } else if (funcType.equalsIgnoreCase("CURRENT_ROLE")) {
                 node.setType(Type.VARCHAR);
-
-                AuthorizationManager manager = session.getGlobalStateMgr().getAuthorizationManager();
+                AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
                 List<String> roleName = new ArrayList<>();
 
                 try {
@@ -1354,7 +1356,7 @@ public class ExpressionAnalyzer {
                 node.setStrValue("");
             } else if (funcType.equalsIgnoreCase("CURRENT_CATALOG")) {
                 node.setType(Type.VARCHAR);
-                node.setStrValue(session.getCurrentCatalog().toString());
+                node.setStrValue(session.getCurrentCatalog());
             }
             return null;
         }

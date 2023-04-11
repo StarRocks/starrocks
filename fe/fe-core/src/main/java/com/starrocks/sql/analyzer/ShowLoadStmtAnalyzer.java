@@ -69,7 +69,7 @@ public class ShowLoadStmtAnalyzer {
             String dbName = statement.getDbName();
             if (Strings.isNullOrEmpty(dbName)) {
                 dbName = context.getDatabase();
-                if (Strings.isNullOrEmpty(dbName)) {
+                if (Strings.isNullOrEmpty(dbName) && !statement.isAll()) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                 }
             }

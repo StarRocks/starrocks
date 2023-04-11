@@ -43,7 +43,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.staros.proto.FilePathInfo;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -165,6 +164,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -369,7 +369,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public void createDb(String dbName) throws DdlException, AlreadyExistsException {
+    public void createDb(String dbName, Map<String, String> properties) throws DdlException, AlreadyExistsException {
         long id = 0L;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
@@ -982,7 +982,8 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         // A tablet will be regarded using the 1GB size
         // And also the number will not be larger than the calBucketNumAccordingToBackends()
-        bucketNum = (int) Math.min(bucketNum, maxDataSize / FeConstants.AUTO_DISTRIBUTION_UNIT);
+        long speculateTabletNum = (maxDataSize + FeConstants.AUTO_DISTRIBUTION_UNIT - 1) / FeConstants.AUTO_DISTRIBUTION_UNIT;
+        bucketNum = (int) Math.min(bucketNum, speculateTabletNum);
         if (bucketNum == 0) {
             bucketNum = 1;
         }
@@ -3150,7 +3151,7 @@ public class LocalMetastore implements ConnectorMetadata {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             if (mv != null) {
                 LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
+                        "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
                 mv.setActive(false);
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
@@ -4062,12 +4063,16 @@ public class LocalMetastore implements ConnectorMetadata {
     private void truncateTableInternal(OlapTable olapTable, List<Partition> newPartitions,
                                        boolean isEntireTable, boolean isReplay) {
         // use new partitions to replace the old ones.
-        Set<Long> oldTabletIds = Sets.newHashSet();
+        Map<Long, Set<Long>> oldTabletIds = Maps.newHashMap();
         for (Partition newPartition : newPartitions) {
             Partition oldPartition = olapTable.replacePartition(newPartition);
             // save old tablets to be removed
             for (MaterializedIndex index : oldPartition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                index.getTablets().forEach(t -> oldTabletIds.add(t.getId()));
+                for (Tablet tablet : index.getTablets()) {
+                    if (!oldTabletIds.containsKey(tablet.getId())) {
+                        oldTabletIds.put(tablet.getId(), tablet.getBackendIds());
+                    }
+                }
             }
         }
 
@@ -4077,14 +4082,14 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         // remove the tablets in old partitions
-        for (Long tabletId : oldTabletIds) {
+        for (Long tabletId : oldTabletIds.keySet()) {
             GlobalStateMgr.getCurrentInvertedIndex().deleteTablet(tabletId);
             // Ensure that only the leader records truncate information.
             // TODO(yangzaorang): the information will be lost when failover occurs. The probability of this case
             // happening is small, and the trash data will be deleted by BE anyway, but we need to find a better
             // solution.
             if (!isReplay) {
-                GlobalStateMgr.getCurrentInvertedIndex().markTabletForceDelete(tabletId);
+                GlobalStateMgr.getCurrentInvertedIndex().markTabletForceDelete(tabletId, oldTabletIds.get(tabletId));
             }
         }
     }
@@ -4466,40 +4471,31 @@ public class LocalMetastore implements ConnectorMetadata {
     public long loadAutoIncrementId(DataInputStream dis, long checksum) throws IOException {
         AutoIncrementInfo info = new AutoIncrementInfo(null);
         info.read(dis);
-        // do the actually update when fe start.
-        if (!isCheckpointThread()) {
-            for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
-                Long tableId = entry.getKey();
-                Long id = entry.getValue();
+        for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
+            Long tableId = entry.getKey();
+            Long id = entry.getValue();
 
-                tableIdToIncrementId.put(tableId, id);
-            }
+            tableIdToIncrementId.put(tableId, id);
         }
         return checksum;
     }
 
     public void replayDeleteAutoIncrementId(AutoIncrementInfo info) throws IOException {
-        // replay when fe start.
-        if (!isCheckpointThread()) {
-            for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
-                Long tableId = entry.getKey();
-                tableIdToIncrementId.remove(tableId);
-            }
+        for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
+            Long tableId = entry.getKey();
+            tableIdToIncrementId.remove(tableId);
         }
     }
 
     public void replayAutoIncrementId(AutoIncrementInfo info) throws IOException {
-        // replay when fe start.
-        if (!isCheckpointThread()) {
-            for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
-                Long tableId = entry.getKey();
-                Long id = entry.getValue();
+        for (Map.Entry<Long, Long> entry : info.tableIdToIncrementId().entrySet()) {
+            Long tableId = entry.getKey();
+            Long id = entry.getValue();
 
-                Long oldId = tableIdToIncrementId.putIfAbsent(tableId, id);
+            Long oldId = tableIdToIncrementId.putIfAbsent(tableId, id);
 
-                if (oldId != null && id > tableIdToIncrementId.get(tableId)) {
-                    tableIdToIncrementId.replace(tableId, id);
-                }
+            if (oldId != null && id > tableIdToIncrementId.get(tableId)) {
+                tableIdToIncrementId.replace(tableId, id);
             }
         }
     }
@@ -4511,14 +4507,19 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         Long newId = oldId + rows;
-        while (!tableIdToIncrementId.replace(tableId, oldId, newId)) {
-            oldId = tableIdToIncrementId.get(tableId);
-            newId = oldId + rows;
-        }
-
         // AUTO_INCREMENT counter overflow
         if (newId < oldId) {
             throw new RuntimeException("AUTO_INCREMENT counter overflow");
+        }
+
+        while (!tableIdToIncrementId.replace(tableId, oldId, newId)) {
+            oldId = tableIdToIncrementId.get(tableId);
+            newId = oldId + rows;
+
+            // AUTO_INCREMENT counter overflow
+            if (newId < oldId) {
+                throw new RuntimeException("AUTO_INCREMENT counter overflow");
+            }
         }
 
         return oldId;

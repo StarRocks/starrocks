@@ -32,16 +32,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.connector.hive;
+package org.apache.hadoop.hive.metastore;
 
 import com.google.common.collect.Lists;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.common.ValidWriteIdList;
-import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
-import org.apache.hadoop.hive.metastore.IMetaStoreClient;
-import org.apache.hadoop.hive.metastore.PartitionDropOptions;
-import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.api.AggrStats;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.Catalog;
@@ -181,6 +177,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.getDefaultCatalog;
+import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.prependCatalogToDbName;
 
 /**
  * Modified from apache hive  org.apache.hadoop.hive.metastore.HiveMetaStoreClient.java
@@ -188,8 +185,8 @@ import static org.apache.hadoop.hive.metastore.utils.MetaStoreUtils.getDefaultCa
  * ,getTableColumnStatistics, getPartitionColumnStatistics.
  * Newly added method should cover hive0/1/2/3 metastore server.
  */
-public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseable {
-    private static final Logger LOG = LogManager.getLogger(HiveMetaStoreThriftClient.class);
+public class HiveMetaStoreClient implements IMetaStoreClient, AutoCloseable {
+    private static final Logger LOG = LogManager.getLogger(HiveMetaStoreClient.class);
 
     ThriftHiveMetastore.Iface client = null;
     private TTransport transport = null;
@@ -224,15 +221,15 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
 
     private final ClientCapabilities version;
 
-    public HiveMetaStoreThriftClient(Configuration conf) throws MetaException {
+    public HiveMetaStoreClient(Configuration conf) throws MetaException {
         this(conf, null, true);
     }
 
-    public HiveMetaStoreThriftClient(Configuration conf, HiveMetaHookLoader hookLoader) throws MetaException {
+    public HiveMetaStoreClient(Configuration conf, HiveMetaHookLoader hookLoader) throws MetaException {
         this(conf, hookLoader, true);
     }
 
-    public HiveMetaStoreThriftClient(Configuration conf, HiveMetaHookLoader hookLoader, Boolean allowEmbedded)
+    public HiveMetaStoreClient(Configuration conf, HiveMetaHookLoader hookLoader, Boolean allowEmbedded)
             throws MetaException {
 
         if (conf == null) {
@@ -961,7 +958,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     @Override
     public Database getDatabase(String catalogName, String databaseName)
             throws NoSuchObjectException, MetaException, TException {
-        throw new TException("method not implemented");
+        return client.get_database(databaseName);
     }
 
     @Override
@@ -1289,51 +1286,72 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
     @Override
     public void createDatabase(Database db)
             throws InvalidObjectException, AlreadyExistsException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        if (!db.isSetCatalogName()) {
+            db.setCatalogName(getDefaultCatalog(conf));
+        }
+        client.create_database(db);
     }
 
+    /**
+     * @param name
+     * @throws NoSuchObjectException
+     * @throws InvalidOperationException
+     * @throws MetaException
+     * @throws TException
+     * @see org.apache.hadoop.hive.metastore.api.ThriftHiveMetastore.Iface#drop_database(java.lang.String, boolean, boolean)
+     */
     @Override
     public void dropDatabase(String name)
             throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        dropDatabase(getDefaultCatalog(conf), name, true, false, false);
     }
 
     @Override
     public void dropDatabase(String name, boolean deleteData, boolean ignoreUnknownDb)
             throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        dropDatabase(getDefaultCatalog(conf), name, deleteData, ignoreUnknownDb, false);
     }
 
     @Override
     public void dropDatabase(String name, boolean deleteData, boolean ignoreUnknownDb, boolean cascade)
             throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        dropDatabase(getDefaultCatalog(conf), name, deleteData, ignoreUnknownDb, cascade);
     }
 
     @Override
-    public void dropDatabase(String catName, String dbName, boolean deleteData, boolean ignoreUnknownDb,
-                             boolean cascade)
+    public void dropDatabase(String catalogName, String dbName, boolean deleteData,
+                             boolean ignoreUnknownDb, boolean cascade)
             throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
+        try {
+            getDatabase(catalogName, dbName);
+        } catch (NoSuchObjectException e) {
+            if (!ignoreUnknownDb) {
+                throw e;
+            }
+            return;
+        }
 
-    }
-
-    @Override
-    public void dropDatabase(String catName, String dbName, boolean deleteData, boolean ignoreUnknownDb)
-            throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
-    }
-
-    @Override
-    public void dropDatabase(String catName, String dbName)
-            throws NoSuchObjectException, InvalidOperationException, MetaException, TException {
-        throw new TException("method not implemented");
-
+        if (cascade) {
+            // Note that this logic may drop some of the tables of the database
+            // even if the drop database fail for any reason
+            // TODO: Fix this
+            List<String> materializedViews = getTables(dbName, ".*", TableType.MATERIALIZED_VIEW);
+            for (String table : materializedViews) {
+                // First we delete the materialized views
+                dropTable(dbName, table, deleteData, true);
+            }
+            List<String> tableList = getAllTables(dbName);
+            for (String table : tableList) {
+                // Now we delete the rest of tables
+                try {
+                    // Subclasses can override this step (for example, for temporary tables)
+                    dropTable(dbName, table, deleteData, true);
+                } catch (UnsupportedOperationException e) {
+                    // Ignore Index tables, those will be dropped with parent tables
+                }
+            }
+        }
+        client.drop_database(prependCatalogToDbName(catalogName, dbName, conf), deleteData, cascade);
     }
 
     @Override

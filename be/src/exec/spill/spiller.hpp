@@ -117,6 +117,12 @@ Status RawSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chunk, TaskE
 template <class TaskExecutor, class MemGuard>
 Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard) {
     auto captured_mem_table = std::move(_mem_table);
+    auto defer = DeferOp([&]() {
+        if (captured_mem_table) {
+            std::lock_guard _(_mutex);
+            _mem_table_pool.emplace(std::move(captured_mem_table));
+        }
+    });
     if (captured_mem_table == nullptr) {
         return Status::OK();
     }
@@ -165,21 +171,22 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
     DCHECK(_stream->enable_prefetch());
     // if all is well and input stream enable prefetch and not eof
     if (!_stream->eof()) {
+        _running_restore_tasks++;
         auto restore_task = [this, state, guard]() {
             RETURN_IF(!guard.scoped_begin(), Status::OK());
-            _running_restore_tasks++;
-            SerdeContext ctx;
-            auto res = _stream->prefetch(ctx);
+            auto defer = DeferOp([&]() { _running_restore_tasks--; });
+            {
+                SerdeContext ctx;
+                auto res = _stream->prefetch(ctx);
 
-            if (!res.is_end_of_file() && !res.ok()) {
-                _spiller->update_spilled_task_status(std::move(res));
-            }
-
+                if (!res.is_end_of_file() && !res.ok()) {
+                    _spiller->update_spilled_task_status(std::move(res));
+                }
+                if (!res.ok()) {
+                    _finished_restore_tasks++;
+                }
+            };
             guard.scoped_end();
-            _running_restore_tasks--;
-            if (!res.ok()) {
-                _finished_restore_tasks++;
-            }
             return Status::OK();
         };
         RETURN_IF_ERROR(executor.submit(std::move(restore_task)));

@@ -31,7 +31,6 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CollectionElementExpr;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
@@ -143,6 +142,7 @@ import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnAssignment;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
@@ -501,14 +501,32 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
-        String dbName = ((Identifier) visit(context.identifier())).getValue();
-        return new CreateDbStmt(context.IF() != null, dbName, createPos(context));
+        String catalogName = "";
+        if (context.catalog != null) {
+            catalogName = getIdentifierName(context.catalog);
+        }
+
+        String dbName = getIdentifierName(context.database);
+
+        Map<String, String> properties = new HashMap<>();;
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateDbStmt(context.IF() != null, catalogName, dbName, properties, createPos(context));
     }
 
     @Override
     public ParseNode visitDropDbStatement(StarRocksParser.DropDbStatementContext context) {
-        String dbName = ((Identifier) visit(context.identifier())).getValue();
-        return new DropDbStmt(context.IF() != null, dbName, context.FORCE() != null,
+        String catalogName = "";
+        if (context.catalog != null) {
+            catalogName = getIdentifierName(context.catalog);
+        }
+
+        String dbName = getIdentifierName(context.database);
+        return new DropDbStmt(context.IF() != null, catalogName, dbName, context.FORCE() != null,
                 createPos(context));
     }
 
@@ -2483,7 +2501,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.limitElement() != null) {
             limitElement = (LimitElement) visit(context.limitElement());
         }
-        return new ShowLoadStmt(db, labelExpr, orderByElements, limitElement, createPos(context));
+        boolean all = context.ALL() != null;
+        ShowLoadStmt res = new ShowLoadStmt(db, labelExpr, orderByElements, limitElement, createPos(context));
+        res.setAll(all);
+        return res;
     }
 
     @Override
@@ -4999,7 +5020,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 Expr e2 = (Expr) visit(context.expression(1));
                 Expr e3 = (Expr) visit(context.expression(2));
                 Expr e4 = (Expr) visit(context.expression(3));
-                return new FunctionCallExpr(fnName, ImmutableList.of(e1, e2, e3, e4));
+
+                if (!(e3 instanceof StringLiteral)) {
+                    throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), e3.getPos());
+                }
+                String ident = ((StringLiteral) e3).getValue();
+                if (!(e4 instanceof StringLiteral)) {
+                    throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), e4.getPos());
+                }
+                String boundary = ((StringLiteral) e4).getValue();
+                return new FunctionCallExpr(fnName, getArgumentsForTimeSlice(e1, e2, ident, boundary));
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
             }

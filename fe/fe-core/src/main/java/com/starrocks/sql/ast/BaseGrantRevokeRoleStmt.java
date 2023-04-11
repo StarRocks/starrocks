@@ -49,6 +49,7 @@ public abstract class BaseGrantRevokeRoleStmt extends DdlStmt {
         this.userIdentity = null;
         this.role = role;
     }
+
     public UserIdentity getUserIdentity() {
         return userIdentity;
     }

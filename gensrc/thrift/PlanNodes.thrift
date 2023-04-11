@@ -428,6 +428,11 @@ struct TSchemaScanNode {
   18: optional string type
   19: optional string state
   20: optional i64 limit
+  21: optional i64 log_start_ts;
+  22: optional i64 log_end_ts;
+  23: optional string log_level;
+  24: optional string log_pattern;
+  25: optional i64 log_limit;
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
@@ -731,6 +736,7 @@ struct TSortNode {
   27: optional i64 max_buffered_rows;
   28: optional i64 max_buffered_bytes;
   29: optional bool late_materialization;
+  30: optional bool enable_parallel_merge;
 }
 
 enum TAnalyticWindowType {
@@ -887,6 +893,7 @@ struct TExchangeNode {
   3: optional i64 offset
   // Sender's partition type
   4: optional Partitions.TPartitionType partition_type;
+  5: optional bool enable_parallel_merge;
 }
 
 // This contains all of the information computed by the plan as part of the resource

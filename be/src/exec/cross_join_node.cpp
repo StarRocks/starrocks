@@ -397,7 +397,7 @@ Status CrossJoinNode::get_next_internal(RuntimeState* state, ChunkPtr* chunk, bo
         // Until _probe_chunk be done.
         if (_probe_chunk_index == _probe_chunk->num_rows()) {
             // step 2:
-            // if left chunk is bigger than right, we shuld scan left based on right.
+            // if left chunk is bigger than right, we should scan left based on right.
             if (_probe_chunk_index > _number_of_build_rows - _build_chunks_size) {
                 if (row_count > _probe_chunk_index - _probe_rows_index) {
                     row_count = _probe_chunk_index - _probe_rows_index;
@@ -679,7 +679,10 @@ pipeline::OpFactories CrossJoinNode::decompose_to_pipeline(pipeline::PipelineBui
             _join_op);
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(left_factory.get(), context, rc_rf_probe_collector);
+    left_ops = context->maybe_interpolate_local_adpative_passthrough_exchange(runtime_state(), left_ops,
+                                                                              context->degree_of_parallelism());
     left_ops.emplace_back(std::move(left_factory));
+
     if (limit() != -1) {
         left_ops.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }

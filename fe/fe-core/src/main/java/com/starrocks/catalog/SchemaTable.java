@@ -575,6 +575,10 @@ public class SchemaTable extends Table {
                                     .column("PROGRESS", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("PRIORITY", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("SCAN_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("FILTERED_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("UNSELECTED_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("SINK_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
                                     .column("ETL_INFO", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("TASK_INFO", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
@@ -725,6 +729,17 @@ public class SchemaTable extends Table {
                                     .column("IDLE", ScalarType.createType(PrimitiveType.BOOLEAN))
                                     .column("FINISHED_TASKS", ScalarType.createType(PrimitiveType.BIGINT))
                                     .build()))
+                    .put("be_logs", new SchemaTable(
+                            SystemId.BE_THREADS_ID,
+                            "be_logs",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("LEVEL", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TIMESTAMP", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("LOG", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
                     .build();
 
     public static class Builder {
@@ -826,7 +841,8 @@ public class SchemaTable extends Table {
         SCH_BE_CONFIGS("BE_CONFIGS", "BE_CONFIGS", TSchemaTableType.SCH_BE_CONFIGS),
         SCH_FE_TABLET_SCHEDULES("FE_TABLET_SCHEDULES", "FE_TABLET_SCHEDULES", TSchemaTableType.SCH_FE_TABLET_SCHEDULES),
         SCH_BE_COMPACTIONS("BE_COMPACTIONS", "BE_COMPACTIONS", TSchemaTableType.SCH_BE_COMPACTIONS),
-        SCH_BE_THREADS("BE_THREADS", "BE_THREADS", TSchemaTableType.SCH_BE_THREADS);
+        SCH_BE_THREADS("BE_THREADS", "BE_THREADS", TSchemaTableType.SCH_BE_THREADS),
+        SCH_BE_LOGS("BE_LOGS", "BE_LOGS", TSchemaTableType.SCH_BE_LOGS);
 
         private final String description;
         private final String tableName;

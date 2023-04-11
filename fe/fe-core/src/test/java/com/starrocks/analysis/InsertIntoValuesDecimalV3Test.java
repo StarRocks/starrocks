@@ -104,7 +104,7 @@ public class InsertIntoValuesDecimalV3Test {
         String plan = execPlan.getExplainString(TExplainLevel.NORMAL);
 
         Assert.assertTrue(plan.contains("constant exprs: \n" +
-                "         1 | 2 | ARRAY<bigint(20)>[]"));
+                "         1 | 2 | []"));
     }
 }
 
