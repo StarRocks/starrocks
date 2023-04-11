@@ -185,7 +185,6 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
     } else {
         create_status = StorageEngine::instance()->create_tablet(create_tablet_req);
     }
-
     if (!create_status.ok()) {
         LOG(WARNING) << "create table failed. status: " << create_status.to_string()
                      << ", signature: " << agent_task_req->signature;
@@ -209,9 +208,6 @@ void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>&
         tablet_info.data_size = 0;
         tablet_info.__set_path_hash(tablet->data_dir()->path_hash());
     }
-
-    // for debug
-    LOG(INFO) << "ready to finish task to fe";
 
     unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature, true);
 }
