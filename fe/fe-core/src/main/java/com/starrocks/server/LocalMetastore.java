@@ -1671,7 +1671,8 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitions.isEmpty()) {
             return;
         }
-        int numAliveCNs = systemInfoService.getAliveComputeNodeNumber();
+        int numAliveCNs = Config.only_use_compute_node ? systemInfoService.getAliveComputeNodeNumber() :
+                systemInfoService.getAliveBackendNumber();
         int numReplicas = 0;
         for (Partition partition : partitions) {
             numReplicas += partition.getReplicaCount();

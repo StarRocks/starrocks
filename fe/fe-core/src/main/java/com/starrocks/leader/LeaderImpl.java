@@ -184,21 +184,19 @@ public class LeaderImpl {
         String host = tBackend.getHost();
         int bePort = tBackend.getBe_port();
         long backendId = -1L;
-        if (Config.only_use_compute_node) {
-            ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort);
-            backendId = cn.getId();
+        ComputeNode cn = Config.only_use_compute_node ?
+                GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort) :
+                GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
+
+        if (cn == null) {
+            tStatus.setStatus_code(TStatusCode.CANCELLED);
+            List<String> errorMsgs = new ArrayList<>();
+            errorMsgs.add("backend not exist.");
+            tStatus.setError_msgs(errorMsgs);
+            LOG.warn("backend does not found. host: {}, be port: {}. task: {}", host, bePort, request.toString());
+            return result;
         } else {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
-            if (backend == null) {
-                tStatus.setStatus_code(TStatusCode.CANCELLED);
-                List<String> errorMsgs = new ArrayList<>();
-                errorMsgs.add("backend not exist.");
-                tStatus.setError_msgs(errorMsgs);
-                LOG.warn("backend does not found. host: {}, be port: {}. task: {}", host, bePort, request.toString());
-                return result;
-            } else {
-                backendId = backend.getId();
-            }
+            backendId = cn.getId();
         }
 
         TTaskType taskType = request.getTask_type();
