@@ -70,23 +70,39 @@ public class AggregateFunctionRewriter {
         }
 
         CallOperator aggFunc = (CallOperator) op;
-        if (aggFunc.getFnName().equals(FunctionSet.AVG)) {
+        String aggFuncName = aggFunc.getFnName();
+        if (aggFuncName.equals(FunctionSet.AVG)) {
             return true;
         }
-        if (aggFunc.getFnName().equals(FunctionSet.COUNT) && aggFunc.isDistinct()) {
+        if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct()) {
+            return true;
+        }
+        if (aggFuncName.equals(FunctionSet.BITMAP_UNION_COUNT)) {
+            return true;
+        }
+        if (aggFuncName.equals(FunctionSet.APPROX_COUNT_DISTINCT) || aggFuncName.equals(FunctionSet.NDV)) {
+            return true;
+        }
+        if (aggFuncName.equals(FunctionSet.PERCENTILE_APPROX)) {
             return true;
         }
         return false;
     }
 
     public CallOperator rewriteAggFunction(CallOperator aggFunc) {
-        if (aggFunc.getFnName().equals(FunctionSet.COUNT) && aggFunc.isDistinct()) {
+        String aggFuncName = aggFunc.getFnName();
+        if ((aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct()) ||
+                aggFuncName.equals(FunctionSet.BITMAP_UNION_COUNT)) {
             return rewriteCountDistinct(aggFunc);
-        } else if (aggFunc.getFnName().equals(FunctionSet.AVG)) {
+        } else if (aggFuncName.equals(FunctionSet.AVG)) {
             return rewriteAvg(aggFunc);
+        } else if (aggFuncName.equals(FunctionSet.APPROX_COUNT_DISTINCT) || aggFuncName.equals(FunctionSet.NDV)) {
+            return rewriteApproxCount(aggFunc);
+        } else if (aggFuncName.equals(FunctionSet.PERCENTILE_APPROX)) {
+            return rewritePercentile(aggFunc);
+        } else {
+            return null;
         }
-
-        return null;
     }
 
     private Function findArithmeticFunction(Type[] argsType, String fnName) {
@@ -191,5 +207,78 @@ public class AggregateFunctionRewriter {
                 Expr.getBuiltinFunction(FunctionSet.BITMAP_COUNT, new Type[] {Type.BITMAP},
                         IS_IDENTICAL));
         return bitmapCountOp;
+    }
+
+    private CallOperator rewriteApproxCount(CallOperator aggFunc) {
+        Type childType = aggFunc.getChild(0).getType();
+        List<ScalarOperator> aggChild = aggFunc.getChildren();
+        if (!childType.isHllType()) {
+            CallOperator hllHashOp = new CallOperator(FunctionSet.HLL_HASH,
+                    Type.HLL,
+                    aggFunc.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.HLL_HASH, new Type[] { Type.VARCHAR },
+                            IS_IDENTICAL));
+            hllHashOp = (CallOperator) scalarRewriter.rewrite(hllHashOp,
+                    Lists.newArrayList(new ImplicitCastRule()));
+            aggChild = Lists.newArrayList(hllHashOp);
+        }
+
+        // rewrite approx_count_distinct to hll_union_agg(hll_union(hll_hash(x)))
+        CallOperator hllUnionOp = new CallOperator(FunctionSet.HLL_UNION,
+                Type.HLL,
+                aggChild,
+                Expr.getBuiltinFunction(FunctionSet.HLL_UNION, new Type[] { Type.HLL },
+                        IS_IDENTICAL));
+        ScalarOperator newAggFunc = hllUnionOp;
+        if (newColumnRefToAggFuncMap != null) {
+            ColumnRefOperator newColRef =
+                    queryColumnRefFactory.create(hllUnionOp, hllUnionOp.getType(), hllUnionOp.isNullable());
+            newColumnRefToAggFuncMap.put(newColRef, hllUnionOp);
+            newAggFunc = newColRef;
+        }
+
+        CallOperator hllUnionAggOp = new CallOperator(FunctionSet.HLL_UNION_AGG,
+                aggFunc.getType(),
+                Lists.newArrayList(newAggFunc),
+                Expr.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[] {Type.HLL},
+                        IS_IDENTICAL));
+        return hllUnionAggOp;
+    }
+
+    private CallOperator rewritePercentile(CallOperator aggFunc) {
+        Type childType = aggFunc.getChild(0).getType();
+        ScalarOperator aggChild = aggFunc.getChild(0);
+        if (!childType.isPercentile()) {
+            CallOperator percentileHashOp = new CallOperator(FunctionSet.PERCENTILE_HASH,
+                    Type.PERCENTILE,
+                    Lists.newArrayList(aggChild),
+                    Expr.getBuiltinFunction(FunctionSet.PERCENTILE_HASH, new Type[] { childType },
+                            IS_IDENTICAL));
+            percentileHashOp = (CallOperator) scalarRewriter.rewrite(percentileHashOp,
+                    Lists.newArrayList(new ImplicitCastRule()));
+            aggChild = percentileHashOp;
+        }
+
+        // rewrite percentile_approx to percentile_approx_raw(percentile_union(percentile_hash(x)))
+        CallOperator percentileUnionOp = new CallOperator(FunctionSet.PERCENTILE_UNION,
+                Type.PERCENTILE,
+                Lists.newArrayList(aggChild),
+                Expr.getBuiltinFunction(FunctionSet.PERCENTILE_UNION, new Type[] { Type.PERCENTILE },
+                        IS_IDENTICAL));
+        ScalarOperator newAggFunc = percentileUnionOp;
+        if (newColumnRefToAggFuncMap != null) {
+            ColumnRefOperator newColRef =
+                    queryColumnRefFactory.create(percentileUnionOp, percentileUnionOp.getType(), percentileUnionOp.isNullable());
+            newColumnRefToAggFuncMap.put(newColRef, percentileUnionOp);
+            newAggFunc = newColRef;
+        }
+
+        CallOperator percentileApproxRaw = new CallOperator(FunctionSet.PERCENTILE_APPROX_RAW,
+                Type.DOUBLE, Lists.newArrayList(newAggFunc, aggFunc.getChild(1)),
+                Expr.getBuiltinFunction(
+                        FunctionSet.PERCENTILE_APPROX_RAW,
+                        new Type[] {Type.PERCENTILE, Type.DOUBLE},
+                        Function.CompareMode.IS_IDENTICAL));
+        return percentileApproxRaw;
     }
 }

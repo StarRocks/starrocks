@@ -2110,16 +2110,15 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testBitmapRewriteWithOutRollup() {
+    public void testCountDistinctToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
-        // testRewriteOK(mv, "select user_id, bitmap_union_count(to_bitmap(tag_id)) x from user_tags group by user_id;");
     }
 
     @Test
-    public void testBitmapRewriteWithRollup1() {
+    public void testCountDistinctToBitmapCount2() {
         String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time;";
         testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
         // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
@@ -2127,11 +2126,54 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testBitmapRewriteWithRollup2() {
+    public void testCountDistinctToBitmapCount3() {
         String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id % 10)) from user_tags group by user_id, time;";
         testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id % 10)) x from user_tags group by user_id;");
         testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id % 10))) x from user_tags group by user_id;");
         // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
         testRewriteOK(mv, "select user_id, count(distinct tag_id % 10) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testBitmapUnionCountToBitmapCount1() {
+        String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
+        testRewriteOK(mv, "select user_id, bitmap_union_count(to_bitmap(tag_id)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testBitmapUnionCountToBitmapCount2() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, bitmap_union_count(to_bitmap(tag_id)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testApproxCountToHLL1() {
+        String mv = "select user_id, time, hll_union(hll_hash(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, ndv(tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, hll_union(hll_hash(tag_id)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testApproxCountToHLL2() {
+        String mv = "select user_id, hll_union(hll_hash(tag_id)) from user_tags group by user_id;";
+        testRewriteOK(mv, "select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, ndv(tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, hll_union(hll_hash(tag_id)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testPercentile1() {
+        String mv = "select user_id, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id;";
+        testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 0) x from user_tags group by user_id;");
+        // testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testPercentile2() {
+        String mv = "select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id;");
+        // testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
     }
 }
