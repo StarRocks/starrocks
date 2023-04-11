@@ -202,6 +202,18 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+<<<<<<< HEAD
+=======
+    public TableProperty buildPartitionLiveNumber() {
+        if (partitionTTLNumber != INVALID) {
+            return this;
+        }
+        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER,
+                String.valueOf(INVALID)));
+        return this;
+    }
+
+>>>>>>> 3c9f1891e ([BugFix] Fix mv ttl task invalid when restart Fe (#21330))
     public TableProperty buildAutoRefreshPartitionsLimit() {
         autoRefreshPartitionsLimit =
                 Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT,
