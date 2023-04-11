@@ -152,7 +152,7 @@ public class AnalyzerUtils {
             dbName = context.getDatabase();
         }
 
-        Database db = context.getGlobalStateMgr().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             return null;
         }
