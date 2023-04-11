@@ -4956,7 +4956,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 Expr e2 = (Expr) visit(context.expression(1));
                 Expr e3 = (Expr) visit(context.expression(2));
                 Expr e4 = (Expr) visit(context.expression(3));
-                return new FunctionCallExpr(fnName, ImmutableList.of(e1, e2, e3, e4));
+
+                if (!(e3 instanceof StringLiteral)) {
+                    throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), e3.getPos());
+                }
+                String ident = ((StringLiteral) e3).getValue();
+                if (!(e4 instanceof StringLiteral)) {
+                    throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), e4.getPos());
+                }
+                String boundary = ((StringLiteral) e4).getValue();
+                return new FunctionCallExpr(fnName, getArgumentsForTimeSlice(e1, e2, ident, boundary));
             } else {
                 throw new ParsingException(
                         functionName + " must as format " + functionName + "(date,INTERVAL expr unit[, FLOOR"
