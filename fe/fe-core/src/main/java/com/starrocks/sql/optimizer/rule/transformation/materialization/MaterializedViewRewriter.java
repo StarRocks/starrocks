@@ -181,7 +181,8 @@ public class MaterializedViewRewriter {
 
         ScalarOperator mvPredicate = MvUtils.rewriteOptExprCompoundPredicate(mvExpression, mvColumnRefRewriter);
 
-        if (materializationContext.getMvPartialPartitionPredicate() != null) {
+        if (materializationContext.getMvPartialPartitionPredicate() != null
+                && !(mvPredicate instanceof IsNullPredicateOperator)) {
             // add latest partition predicate to mv predicate
             ScalarOperator rewritten =
                     mvColumnRefRewriter.rewrite(materializationContext.getMvPartialPartitionPredicate());
