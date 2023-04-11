@@ -77,7 +77,8 @@ private:
     void _materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);
     Status _construct_column(const avro_value_t& input_value, Column* column, const TypeDescriptor& type_desc,
                              const std::string& col_name);
-    Status _extract_field(const avro_value_t& input_value, const std::vector<AvroPath>& paths, avro_value_t& output_value);
+    Status _extract_field(const avro_value_t& input_value, const std::vector<AvroPath>& paths,
+                          avro_value_t& output_value);
     Status _handle_union(avro_value_t input_value, avro_value_t& branch);
     Status _get_array_element(avro_value_t* cur_value, size_t idx, avro_value_t* element);
     std::string _preprocess_jsonpaths(std::string jsonpath);

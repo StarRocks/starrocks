@@ -31,8 +31,8 @@ extern "C" {
 
 namespace starrocks {
 
-Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name, const avro_value_t& value,
-                           bool invalid_as_null);
+Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                           const avro_value_t& value, bool invalid_as_null);
 
 Status add_adaptive_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                     const avro_value_t& value, bool invalid_as_null);
