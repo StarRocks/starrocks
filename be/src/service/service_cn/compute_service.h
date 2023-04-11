@@ -18,8 +18,6 @@
 
 namespace starrocks {
 
-class AgentServer;
-
 // This class just forward rpc requests to actual handlers, used
 // to bind multiple services on single port.
 class ComputeService : public BackendServiceBase {
@@ -27,11 +25,6 @@ public:
     explicit ComputeService(ExecEnv* exec_env);
 
     ~ComputeService() override;
-
-    void submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) override;
-
-private:
-    AgentServer* _agent_server;
 };
 
 } // namespace starrocks

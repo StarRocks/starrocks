@@ -30,6 +30,7 @@ DECLARE_int64(socket_max_unwritten_bytes);
 
 void start_be() {
     using starrocks::BackendService;
+
     auto* exec_env = starrocks::ExecEnv::GetInstance();
 
     // Begin to start services

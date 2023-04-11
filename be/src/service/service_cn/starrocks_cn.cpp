@@ -24,9 +24,6 @@
 #include "runtime/exec_env.h"
 #include "service/brpc.h"
 #include "service/service.h"
-#include "service/service_be/backend_service.h"
-#include "service/service_be/internal_service.h"
-#include "service/service_be/lake_service.h"
 #include "service/service_cn/internal_service.h"
 #include "storage/storage_engine.h"
 #include "util/logging.h"
@@ -40,14 +37,14 @@ DECLARE_int64(socket_max_unwritten_bytes);
 } // namespace brpc
 
 void start_cn() {
-    using starrocks::BackendService;
+    using starrocks::ComputeService;
     auto* exec_env = starrocks::ExecEnv::GetInstance();
 
     // Begin to start services
-    // 1. Start thrift server with 'be_port'.
-    auto thrift_server = BackendService::create<BackendService>(exec_env, starrocks::config::be_port);
+    // 1. Start thrift server with 'thrift_port'.
+    auto thrift_server = ComputeService::create<ComputeService>(exec_env, starrocks::config::thrift_port);
     if (auto status = thrift_server->start(); !status.ok()) {
-        LOG(ERROR) << "Fail to start BackendService thrift server on port " << starrocks::config::be_port << ": "
+        LOG(ERROR) << "Fail to start ComputeService thrift server on port " << starrocks::config::be_port << ": "
                    << status;
         starrocks::shutdown_logging();
         exit(1);
@@ -58,13 +55,11 @@ void start_cn() {
     brpc::FLAGS_socket_max_unwritten_bytes = starrocks::config::brpc_socket_max_unwritten_bytes;
     brpc::Server brpc_server;
 
-    starrocks::BackendInternalServiceImpl<starrocks::PInternalService> internal_service(exec_env);
-    starrocks::BackendInternalServiceImpl<doris::PBackendService> compute_service(exec_env);
-    starrocks::LakeServiceImpl lake_service(exec_env);
+    starrocks::ComputeNodeInternalServiceImpl<starrocks::PInternalService> internal_service(exec_env);
+    starrocks::ComputeNodeInternalServiceImpl<doris::PBackendService> compute_service(exec_env);
 
     brpc_server.AddService(&internal_service, brpc::SERVER_DOESNT_OWN_SERVICE);
     brpc_server.AddService(&compute_service, brpc::SERVER_DOESNT_OWN_SERVICE);
-    brpc_server.AddService(&lake_service, brpc::SERVER_DOESNT_OWN_SERVICE);
 
     brpc::ServerOptions options;
     if (starrocks::config::brpc_num_threads != -1) {
@@ -76,7 +71,7 @@ void start_cn() {
         exit(1);
     }
 
-    // 3. Start HTTP service.
+    // 3. Start http service.
     std::unique_ptr<starrocks::HttpServiceCN> http_service = std::make_unique<starrocks::HttpServiceCN>(
             exec_env, starrocks::config::be_http_port, starrocks::config::be_http_num_workers);
     if (auto status = http_service->start(); !status.ok()) {
