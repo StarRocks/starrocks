@@ -889,7 +889,7 @@ static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_con
 
         // JSON converters
         ARROW_CONV_ENTRY(ArrowTypeId::MAP, TYPE_JSON),
-        ARROW_CONV_ENTRY(ArrowTypeId::LIST, TYPE_ARRAY, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::LIST, TYPE_ARRAY, TYPE_JSON), // NOTE: FixedSizeListType, LargeListType, ListType
         ARROW_CONV_ENTRY(ArrowTypeId::STRUCT, TYPE_JSON),
 };
 
