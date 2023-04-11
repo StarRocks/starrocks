@@ -59,6 +59,7 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* chunk) {
         SCOPED_TIMER(_scan_timer);
         RETURN_IF_ERROR(_data_source->get_next(state, chunk));
+        return Status::OK();
     }
 
     int64_t raw_rows_read() const { return _data_source->raw_rows_read(); }
