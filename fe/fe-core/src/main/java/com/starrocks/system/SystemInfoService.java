@@ -1117,13 +1117,15 @@ public class SystemInfoService {
      */
     public Status checkExceedDiskCapacityLimit(Multimap<Long, Long> bePathsMap, boolean floodStage) {
         LOG.debug("pathBeMap: {}", bePathsMap);
-        ImmutableMap<Long, DiskInfo> pathHashToDiskInfo = pathHashToDishInfoRef;
-        for (Long beId : bePathsMap.keySet()) {
-            for (Long pathHash : bePathsMap.get(beId)) {
-                DiskInfo diskInfo = pathHashToDiskInfo.get(pathHash);
-                if (diskInfo != null && diskInfo.exceedLimit(floodStage)) {
-                    return new Status(TStatusCode.CANCELLED,
-                            "disk " + pathHash + " on backend " + beId + " exceed limit usage");
+        if (RunMode.getCurrentRunMode() != RunMode.SHARED_DATA) {
+            ImmutableMap<Long, DiskInfo> pathHashToDiskInfo = pathHashToDishInfoRef;
+            for (Long beId : bePathsMap.keySet()) {
+                for (Long pathHash : bePathsMap.get(beId)) {
+                    DiskInfo diskInfo = pathHashToDiskInfo.get(pathHash);
+                    if (diskInfo != null && diskInfo.exceedLimit(floodStage)) {
+                        return new Status(TStatusCode.CANCELLED,
+                                "disk " + pathHash + " on backend " + beId + " exceed limit usage");
+                    }
                 }
             }
         }
