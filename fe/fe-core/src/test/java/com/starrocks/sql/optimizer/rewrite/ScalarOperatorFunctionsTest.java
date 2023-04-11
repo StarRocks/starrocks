@@ -551,6 +551,16 @@ public class ScalarOperatorFunctionsTest {
         assertEquals(now, ScalarOperatorFunctions.curDate().getDate());
     }
 
+
+    @Test
+    public void nextDay() {
+        assertEquals("2015-03-29T09:23:55", ScalarOperatorFunctions.nextDay(O_DT_20150323_092355,
+                ConstantOperator.createVarchar("Sunday")).getDate().toString());
+        Assert.assertThrows("undefine_dow not supported in next_day dow_string", IllegalArgumentException.class,
+                () -> ScalarOperatorFunctions.nextDay(O_DT_20150323_092355, ConstantOperator.createVarchar("undefine_dow"))
+                        .getVarchar());
+    }
+
     @Test
     public void floor() {
         assertEquals(100, ScalarOperatorFunctions.floor(O_FLOAT_100).getBigint());
