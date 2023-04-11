@@ -95,7 +95,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Scale in and out a cluster](../administration/Scale_up_down.md)
 - [Resource group](../administration/resource_group.md)
 - [Tune query performance](../administration/Query_planning.md)
-- [Data recover](../administration/Data_recovery.md)
+- [Data recovery](../administration/Data_recovery.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
