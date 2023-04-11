@@ -68,8 +68,8 @@ RuntimeState::RuntimeState(const TUniqueId& fragment_instance_id, const TQueryOp
           _per_fragment_instance_idx(0),
           _num_rows_load_total_from_source(0),
           _num_bytes_load_from_source(0),
-          _num_rows_load_from_sink(0),
-          _num_bytes_load_from_sink(0),
+          _num_rows_load_sink(0),
+          _num_bytes_load_sink(0),
           _num_rows_load_filtered(0),
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {
@@ -85,8 +85,8 @@ RuntimeState::RuntimeState(const TUniqueId& query_id, const TUniqueId& fragment_
           _per_fragment_instance_idx(0),
           _num_rows_load_total_from_source(0),
           _num_bytes_load_from_source(0),
-          _num_rows_load_from_sink(0),
-          _num_bytes_load_from_sink(0),
+          _num_rows_load_sink(0),
+          _num_bytes_load_sink(0),
           _num_rows_load_filtered(0),
           _num_rows_load_unselected(0),
           _num_print_error_rows(0) {

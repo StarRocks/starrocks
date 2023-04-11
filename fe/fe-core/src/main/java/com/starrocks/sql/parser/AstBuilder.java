@@ -2481,7 +2481,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.limitElement() != null) {
             limitElement = (LimitElement) visit(context.limitElement());
         }
-        return new ShowLoadStmt(db, labelExpr, orderByElements, limitElement, createPos(context));
+        boolean all = context.ALL() != null;
+        ShowLoadStmt res = new ShowLoadStmt(db, labelExpr, orderByElements, limitElement, createPos(context));
+        res.setAll(all);
+        return res;
     }
 
     @Override
