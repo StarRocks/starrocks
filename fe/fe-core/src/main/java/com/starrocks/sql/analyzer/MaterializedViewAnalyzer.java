@@ -129,7 +129,7 @@ public class MaterializedViewAnalyzer {
         }
 
         private boolean isSupportBasedOnTable(Table table) {
-            return SUPPORTED_TABLE_TYPE.contains(table.getType());
+            return SUPPORTED_TABLE_TYPE.contains(table.getType()) || table instanceof OlapTable;
         }
 
         private boolean isExternalTableFromResource(Table table) {
