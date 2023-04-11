@@ -796,6 +796,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (!(table instanceof OlapTable)) { // Special case: OlapTable has been added into the metastore before return.
             registerTable(db, table, stmt);
         }
+        table.onCreate();
         return true;
     }
 
