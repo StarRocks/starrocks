@@ -47,9 +47,18 @@ public:
         if (!_is_downgrade) {
             for (size_t i = 0; i < _partition_exprs.size(); i++) {
                 ASSIGN_OR_RETURN(_partition_columns[i], _partition_exprs[i]->evaluate(chunk.get()));
-                if (_hash_map_variant.is_nullable()) {
-                    _partition_columns[i] = NullableColumn::wrap_if_necessary(_partition_columns[i]);
+
+                if (false) {
                 }
+#define HASH_MAP_METHOD(NAME)                                                                                     \
+    else if (_hash_map_variant.type == PartitionHashMapVariant::Type::NAME) {                                     \
+        if (!_partition_columns[i]->is_nullable()) {                                                              \
+            _partition_columns[i] = NullableColumn::create(_partition_columns[i],                                 \
+                                                           NullColumn::create(_partition_columns[i]->size(), 0)); \
+        }                                                                                                         \
+    }
+                APPLY_FOR_PARTITION_VARIANT_NULL(HASH_MAP_METHOD)
+#undef HASH_MAP_METHOD
             }
         }
 
@@ -236,5 +245,5 @@ private:
     std::any _chunk_it;
     bool _hash_map_eos = false;
     bool _null_key_eos = false;
-};
+}; // namespace starrocks::vectorized
 } // namespace starrocks::vectorized
