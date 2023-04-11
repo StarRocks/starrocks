@@ -49,7 +49,7 @@ static std::unique_ptr<Converter> get_converter(const TypeDescriptor& t) {
         if (c == nullptr) {
             return nullptr;
         } else {
-            return std::make_unique<ArrayConverter>(c);
+            return std::make_unique<ArrayConverter>(std::move(c));
         }
     }
     case TYPE_DECIMAL32:
