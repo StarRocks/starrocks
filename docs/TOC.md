@@ -467,7 +467,6 @@
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
     + Map Functions
-      + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)
       + [map_keys](./sql-reference/sql-functions/map-functions/map_keys.md)
       + [map_size](./sql-reference/sql-functions/map-functions/map_size.md)
       + [map_values](./sql-reference/sql-functions/map-functions/map_values.md)
