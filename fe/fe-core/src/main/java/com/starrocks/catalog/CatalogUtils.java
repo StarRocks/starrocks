@@ -28,6 +28,7 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -100,21 +101,33 @@ public class CatalogUtils {
         }
     }
 
-    private static void getValueByPartitionMap(ListPartitionInfo listPartitionInfo,
-                                               List<Partition> partitionList,
-                                               Set<String> simpleSet,
-                                               Set<List<String>> multiSet) {
-        Map<Long, List<String>> listMap = listPartitionInfo.getIdToValues();
-        Map<Long, List<List<String>>> multiListMap = listPartitionInfo.getIdToMultiValues();
+    private static void getLiteralByPartitionMap(ListPartitionInfo listPartitionInfo,
+                                                 List<Partition> partitionList,
+                                                 Set<LiteralExpr> simpleSet,
+                                                 Set<Object> simpleValueSet,
+                                                 Set<List<LiteralExpr>> multiSet,
+                                                 Set<List<Object>> multiValueSet) {
+        Map<Long, List<LiteralExpr>> listMap = listPartitionInfo.getLiteralExprValues();
+        Map<Long, List<List<LiteralExpr>>> multiListMap = listPartitionInfo.getMultiLiteralExprValues();
         for (Partition partition : partitionList) {
             if (!listMap.isEmpty()) {
-                List<String> currentPartitionValueList = listMap.get(partition.getId());
+                List<LiteralExpr> currentPartitionValueList = listMap.get(partition.getId());
                 simpleSet.addAll(currentPartitionValueList);
+                for (LiteralExpr literalExpr : currentPartitionValueList) {
+                    simpleValueSet.add(literalExpr.getRealObjectValue());
+                }
                 continue;
             }
             if (!multiListMap.isEmpty()) {
-                List<List<String>> currentMultiplePartitionValueList = multiListMap.get(partition.getId());
+                List<List<LiteralExpr>> currentMultiplePartitionValueList = multiListMap.get(partition.getId());
                 multiSet.addAll(currentMultiplePartitionValueList);
+                for (List<LiteralExpr> list : currentMultiplePartitionValueList) {
+                    List<Object> valueList = new ArrayList<>();
+                    for (LiteralExpr literalExpr : list) {
+                        valueList.add(literalExpr.getRealObjectValue());
+                    }
+                    multiValueSet.add(valueList);
+                }
             }
         }
     }
@@ -123,24 +136,28 @@ public class CatalogUtils {
                                                List<Partition> tempPartitionList,
                                                ListPartitionInfo listPartitionInfo,
                                                boolean strictRange) throws DdlException {
-        Set<String> simpleSet = new HashSet<>();
-        Set<List<String>> multiSet = new HashSet<>();
-        getValueByPartitionMap(listPartitionInfo, partitionList, simpleSet, multiSet);
+        Set<LiteralExpr> simpleSet = new HashSet<>();
+        Set<List<LiteralExpr>> multiSet = new HashSet<>();
+        Set<Object> simpleValueSet = new HashSet<>();
+        Set<List<Object>> multiValueSet = new HashSet<>();
+        getLiteralByPartitionMap(listPartitionInfo, partitionList, simpleSet, simpleValueSet, multiSet, multiValueSet);
 
-        Set<String> tempSimpleSet = new HashSet<>();
-        Set<List<String>> tempMultiSet = new HashSet<>();
-        getValueByPartitionMap(listPartitionInfo, tempPartitionList, tempSimpleSet, tempMultiSet);
+        Set<LiteralExpr> tempSimpleSet = new HashSet<>();
+        Set<List<LiteralExpr>> tempMultiSet = new HashSet<>();
+        Set<Object> tempSimpleValueSet = new HashSet<>();
+        Set<List<Object>> tempMultiValueSet = new HashSet<>();
+        getLiteralByPartitionMap(listPartitionInfo, tempPartitionList, tempSimpleSet, tempSimpleValueSet, tempMultiSet, tempMultiValueSet);
 
         if (!simpleSet.isEmpty() && !tempSimpleSet.isEmpty()) {
             if (strictRange) {
                 if (!simpleSet.equals(tempSimpleSet)) {
-                    throw new DdlException("2 list partitions are not strictly matched. "
-                            + simpleSet + " vs. " + tempSimpleSet);
+                    throw new DdlException("2 list partitions are not strictly matched, "
+                            + simpleValueSet + " vs " + tempSimpleValueSet);
                 }
             } else {
                 if (!simpleSet.containsAll(tempSimpleSet)) {
-                    throw new DdlException("2 list partitions are not matched. "
-                            + simpleSet + " vs. " + tempSimpleSet);
+                    throw new DdlException("2 list partitions are not matched, "
+                            + simpleValueSet + " vs " + tempSimpleValueSet);
                 }
             }
         }
@@ -148,13 +165,13 @@ public class CatalogUtils {
         if (!multiSet.isEmpty() && !tempMultiSet.isEmpty()) {
             if (strictRange) {
                 if (!multiSet.equals(tempMultiSet)) {
-                    throw new DdlException("2 list partitions are not strictly matched. "
-                            + multiSet + " vs. " + tempMultiSet);
+                    throw new DdlException("2 list partitions are not strictly matched, "
+                            + multiValueSet + " vs " + tempMultiValueSet);
                 }
             } else {
                 if (!multiSet.containsAll(tempMultiSet)) {
-                    throw new DdlException("2 list partitions are not matched. "
-                            + multiSet + " vs. " + tempMultiSet);
+                    throw new DdlException("2 list partitions are not matched, "
+                            + multiValueSet + " vs " + tempMultiValueSet);
                 }
             }
         }
