@@ -62,7 +62,7 @@ public class AuthenticationManager {
     private static final Logger LOG = LogManager.getLogger(AuthenticationManager.class);
     private static final String DEFAULT_PLUGIN = PlainPasswordAuthenticationProvider.PLUGIN_NAME;
     public static final String ROOT_USER = "root";
-    private static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 100;
+    public static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 100;
 
     // core data structure
     // user identity -> all the authentication information

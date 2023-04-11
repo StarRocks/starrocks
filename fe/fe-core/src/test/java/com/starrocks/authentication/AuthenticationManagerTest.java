@@ -48,6 +48,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.authentication.AuthenticationManager.DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
+
 public class AuthenticationManagerTest {
     static ConnectContext ctx;
 
@@ -292,9 +294,10 @@ public class AuthenticationManagerTest {
         sql = "drop user 'test'@'10.1.1.1' ";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
         DDLStmtExecutor.execute(dropStmt, ctx);
+        Assert.assertFalse(manager.doesUserExist(testUserWithIp));
 
         // can't get max connection after all test user are dropped
-        Assert.assertThrows(NullPointerException.class, () -> manager.getMaxConn("test"));
+        Assert.assertEquals(DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER, manager.getMaxConn("test"));
     }
 
     @Test
