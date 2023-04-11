@@ -952,15 +952,27 @@ public class MaterializedViewRewriter {
                     ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
                     partitionColumnRef = columnRewriter.rewriteViewToQuery(partitionColumnRef).cast();
                     IsNullPredicateOperator isNullPredicateOperator = new IsNullPredicateOperator(partitionColumnRef);
+                    IsNullPredicateOperator isNotNullPredicateOperator = new IsNullPredicateOperator(true, partitionColumnRef);
                     List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
                     List<ScalarOperator> partitionRelatedPredicates = predicates.stream()
                             .filter(predicate -> isRelatedPredicate(predicate, partitionColumns.get(0).getName()))
                             .collect(Collectors.toList());
                     predicates.removeAll(partitionRelatedPredicates);
-                    ScalarOperator partitionPredicate =
-                            Utils.compoundOr(Utils.compoundAnd(partitionRelatedPredicates), isNullPredicateOperator);
-                    predicates.add(partitionPredicate);
-                    queryCompensationPredicate = Utils.compoundAnd(predicates);
+                    if (partitionRelatedPredicates.contains(isNullPredicateOperator)
+                            || partitionRelatedPredicates.contains(isNotNullPredicateOperator)) {
+                        if (partitionRelatedPredicates.size() != 1) {
+                            // has other partition predicates except partition column is null
+                            // do not support now
+                            // can it happend?
+                            return null;
+                        }
+                        predicates.addAll(partitionRelatedPredicates);
+                    } else {
+                        ScalarOperator partitionPredicate =
+                                Utils.compoundOr(Utils.compoundAnd(partitionRelatedPredicates), isNullPredicateOperator);
+                        predicates.add(partitionPredicate);
+                    }
+                    queryCompensationPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(predicates));
                 }
             }
             // add filter to op
@@ -989,14 +1001,14 @@ public class MaterializedViewRewriter {
             }
 
             @Override
-            public Boolean visitVariableReference(ColumnRefOperator scalarOperator, Void context) {
-                return scalarOperator.getName().equalsIgnoreCase(name);
+            public Boolean visitVariableReference(ColumnRefOperator columnRefOperator, Void context) {
+                return columnRefOperator.getName().equalsIgnoreCase(name);
             }
         };
         return scalarOperator.accept(visitor, null);
     }
 
-    ColumnRefOperator getRelatedPredicate(ScalarOperator scalarOperator, String name) {
+    ColumnRefOperator getRelatedPredicate(ScalarOperator predicate, String name) {
         ScalarOperatorVisitor<ColumnRefOperator, Void> visitor = new ScalarOperatorVisitor<ColumnRefOperator, Void>() {
             @Override
             public ColumnRefOperator visit(ScalarOperator scalarOperator, Void context) {
@@ -1010,14 +1022,14 @@ public class MaterializedViewRewriter {
             }
 
             @Override
-            public ColumnRefOperator visitVariableReference(ColumnRefOperator scalarOperator, Void context) {
-                if (scalarOperator.getName().equalsIgnoreCase(name)) {
-                    return scalarOperator;
+            public ColumnRefOperator visitVariableReference(ColumnRefOperator columnRefOperator, Void context) {
+                if (columnRefOperator.getName().equalsIgnoreCase(name)) {
+                    return columnRefOperator;
                 }
                 return null;
             }
         };
-        return scalarOperator.accept(visitor, null);
+        return predicate.accept(visitor, null);
     }
 
     protected OptExpression createUnion(OptExpression queryInput, OptExpression viewInput,

@@ -76,9 +76,8 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=8/8")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
-                        "     partitions=1/5\n" +
-                        "     rollup: test_base_part\n" +
-                        "     tabletRatio=2/2");
+                        "     PREDICATES: (10: c3 >= 2000) OR (10: c3 IS NULL)\n" +
+                        "     partitions=2/5");
 
         // test union all
         sql("select c1, c3, c2 from test_base_part where c3 < 3000")
@@ -603,6 +602,50 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     .contains("partial_mv_10")
                     .contains("partitions=2/5");
             starRocksAssert.dropMaterializedView("partial_mv_10");
+        }
+
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `partial_mv_12`\n" +
+                    "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                    "PARTITION BY (`c3`)\n" +
+                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
+                    "REFRESH MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"storage_medium\" = \"HDD\"\n" +
+                    ")\n" +
+                    "AS SELECT `test_base_part`.`c1`, `test_base_part`.`c3`, sum(`test_base_part`.`c4`) AS `total`\n" +
+                    "FROM `test_mv`.`test_base_part`\n" +
+                    "WHERE `test_base_part`.`c3` is null\n" +
+                    "GROUP BY `test_base_part`.`c3`, `test_base_part`.`c1`;");
+
+            String query = "select c1, c3, sum(c4) from test_base_part group by c1, c3;";
+            testRewriteOK(query)
+                    .contains("partial_mv_12")
+                    .contains("PREDICATES: 10: c3 IS NOT NULL");
+            starRocksAssert.dropMaterializedView("partial_mv_12");
+        }
+
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `partial_mv_13`\n" +
+                    "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                    "PARTITION BY (`c3`)\n" +
+                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
+                    "REFRESH MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"storage_medium\" = \"HDD\"\n" +
+                    ")\n" +
+                    "AS SELECT `test_base_part`.`c1`, `test_base_part`.`c3`, sum(`test_base_part`.`c4`) AS `total`\n" +
+                    "FROM `test_mv`.`test_base_part`\n" +
+                    "WHERE `test_base_part`.`c3` is not null\n" +
+                    "GROUP BY `test_base_part`.`c3`, `test_base_part`.`c1`;");
+
+            String query = "select c1, c3, sum(c4) from test_base_part group by c1, c3;";
+            testRewriteOK(query)
+                    .contains("partial_mv_13")
+                    .contains("PREDICATES: 10: c3 IS NULL");
+            starRocksAssert.dropMaterializedView("partial_mv_13");
         }
     }
 }
