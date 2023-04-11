@@ -77,6 +77,7 @@
 
 ### 行为变更
 
+- 修改 FE 参数 `enable_experimental_mv` 默认值为 `true`，即异步物化视图功能默认开启。
 - 新增保留关键字 CHARACTER。[#17488](https://github.com/StarRocks/starrocks/pull/17488)
 
 ## 2.5.1
