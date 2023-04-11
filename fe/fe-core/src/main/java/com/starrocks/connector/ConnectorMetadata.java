@@ -151,6 +151,7 @@ public interface ConnectorMetadata {
     }
 
     default void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
+        throw new StarRocksConnectorException("This connector doesn't support dropping databases");
     }
 
     default boolean dbExists(String dbName) {

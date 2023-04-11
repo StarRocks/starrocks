@@ -25,6 +25,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
@@ -145,6 +146,13 @@ public class MetadataMgr {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         if (connectorMetadata.isPresent()) {
             connectorMetadata.get().createDb(dbName, properties);
+        }
+    }
+
+    public void dropDb(String catalogName, String dbName, boolean isForce) throws DdlException, MetaNotFoundException {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            connectorMetadata.get().dropDb(dbName, isForce);
         }
     }
 
