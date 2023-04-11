@@ -123,7 +123,6 @@ set(EXEC_FILES
         ./exprs/runtime_filter_test.cpp
         ./exprs/subfield_expr_test.cpp
         ./formats/csv/array_converter_test.cpp
-        ./formats/csv/binary_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/date_converter_test.cpp
         ./formats/csv/datetime_converter_test.cpp
@@ -133,6 +132,8 @@ set(EXEC_FILES
         ./formats/csv/nullable_converter_test.cpp
         ./formats/csv/numeric_converter_test.cpp
         ./formats/csv/default_value_converter_test.cpp
+        ./formats/csv/string_converter_test.cpp
+        ./formats/csv/varbinary_converter_test.cpp
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp

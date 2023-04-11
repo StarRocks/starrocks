@@ -64,6 +64,47 @@ INSERT INTO test_binary select 6, to_binary('abab', 'base64');
 INSERT INTO test_binary select 7, to_binary('abab', 'utf8');
 ```
 
+- Method 3: Use Broker Load to load a Parquet/ORC file and store the file as BINARY data. For more information, see [Broker Load](../../../loading/BrokerLoad.md).
+
+    - For Parquet file, convert `parquet::Type::type::BYTE_ARRAY` to `TYPE_VARBINARY` directly;
+    - For Orc file, convert `orc::BINARY` to `TYPE_VARBINARY` directly.
+
+- Method 4:  Use Stream Load to load a CSV file and store the file as `BINARY` data. For more information, see [Load CSV data](../../../loading/StreamLoad.md#load-csv-data).
+    - CSV file use hex format for `BINARY` type as the input.  Please ensure the input binary type input with a valid hex.
+    - `BINARY` type is only supported for CSV file for now, json file doesn't suport `BINARY` type yet.
+
+
+eg, `t1` is a table with `BINARY` column.
+```
+CREATE TABLE `t1` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` int(11) NOT NULL COMMENT "",
+  `b` varbinary
+)engine=olap
+DUPLICATE KEY(`k`)
+PARTITION BY RANGE(`v`) (
+PARTITION p1 VALUES [("-2147483648"), ("0")),
+PARTITION p2 VALUES [("0"), ("10")),
+PARTITION p3 VALUES [("10"), ("20")))
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+
+-- csv file
+-- cat temp_data
+0,0,ab
+
+-- Load csv by stream
+curl --location-trusted -u root: -T temp_data -XPUT -H column_separator:, -H label:xx http://172.17.0.1:8131/api/test_mv/t1/_stream_load
+
+-- query the load result
+mysql> select * from t1;
++------+------+------------+
+| k    | v    | xx         |
++------+------+------------+
+|    0 |    0 | 0xAB       |
++------+------+------------+
+1 rows in set (0.11 sec)
+```
 ### Query and process BINARY type data
 
 StarRocks supports querying and processing `BINARY` type data, and supports the use of `BINARY` functions and operators. This example is illustrated with the table test_binary.
