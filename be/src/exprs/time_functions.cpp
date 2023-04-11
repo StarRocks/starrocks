@@ -2192,8 +2192,8 @@ Status TimeFunctions::next_day_prepare(FunctionContext* context, FunctionContext
     }
 
     ColumnPtr column = context->get_constant_column(1);
-    auto* wdc = new WeekDayCtx();
     if (column->only_null()) {
+        auto* wdc = new WeekDayCtx();
         wdc->dow_weekday = -2;
         context->set_function_state(scope, wdc);
         return Status::OK();
@@ -2205,6 +2205,7 @@ Status TimeFunctions::next_day_prepare(FunctionContext* context, FunctionContext
     if (dow_weekday == -1) {
         throw std::runtime_error(dow + " not supported in next_day dow_string");
     }
+    auto* wdc = new WeekDayCtx();
     wdc->dow_weekday = dow_weekday;
     context->set_function_state(scope, wdc);
     return Status::OK();
