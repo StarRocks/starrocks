@@ -20,7 +20,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPart title="Get started​">
 <NavBoxPartItem>
 
-- [Deploy StarRocks](../quick_start/Deploy.md)
+- [Deploy with docker](../quick_start/deploy_in_docker.md)
 - [Create a table](../quick_start/create_table.md)
 - [Ingest and query data](../quick_start/Import_and_query.md)
 
@@ -61,8 +61,10 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPartItem title="Query acceleration">
 
 - [Cost-based optimizer](../using_starrocks/Cost_based_optimizer.md)
-- [Materialized view](../using_starrocks/Materialized_view.md)
+- [Synchronous materialized view](../using_starrocks/Materialized_view-single_table.md)
+- [Asynchronous materialized views](../using_starrocks/Materialized_view.md)
 - [Colocate Join](../using_starrocks/Colocate_join.md)
+- [Query cache](../using_starrocks/query_cache.md)
 
 </NavBoxPartItem>
 <NavBoxPartItem title="Query semi-structured data">
@@ -79,6 +81,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Apache Hive™](../data_source/catalog/hive_catalog.md)
 - [Apache Hudi](../data_source/catalog/hudi_catalog.md)
 - [Apache Iceberg](../data_source/catalog/iceberg_catalog.md)
+- [Delta Lake](../data_source/catalog/deltalake_catalog.md)
 - [MySQL](../using_starrocks/External_table#mysql-external-table.md)
 - [Elasticsearch](../using_starrocks/External_table#elasticsearch-external-table.md)
 - [JDBC-compatible database](../using_starrocks/External_table#external-table-for-a-jdbc-compatible-database.md)
@@ -93,8 +96,9 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Manage a cluster](../administration/Cluster_administration.md)
 - [Scale in and out a cluster](../administration/Scale_up_down.md)
+- [Resource group](../administration/resource_group.md)
+- [Data recovery](../administration/Data_recovery.md)
 - [Tune query performance](../administration/Query_planning.md)
-- [Manage workloads](../administration/resource_group.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
