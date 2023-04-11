@@ -80,8 +80,8 @@ public class PrivilegeStmtAnalyzerV2 {
         private AuthorizationManager authorizationManager = null;
 
         public void analyze(StatementBase statement, ConnectContext session) {
-            authenticationManager = session.getGlobalStateMgr().getAuthenticationManager();
-            authorizationManager = session.getGlobalStateMgr().getAuthorizationManager();
+            authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationManager();
+            authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
             visit(statement, session);
         }
 
