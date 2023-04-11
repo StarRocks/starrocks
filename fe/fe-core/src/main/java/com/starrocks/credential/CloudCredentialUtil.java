@@ -14,6 +14,7 @@
 
 package com.starrocks.credential;
 
+import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -46,6 +47,8 @@ public class CloudCredentialUtil {
     }
 
     private static void doMask(Map<String, String> properties, String configKey) {
+        // This key is only auxiliary authentication for Azure and does not need to be exposed.
+        properties.remove(AzureCloudConfigurationFactory.AZURE_PATH_KEY);
         properties.computeIfPresent(configKey, (key, value) -> {
             if (value.length() <= 4) {
                 return MASK_CLOUD_CREDENTIAL_WORDS;
@@ -95,7 +98,7 @@ public class CloudCredentialUtil {
             }
             return new AzureStoragePath(storageAccount, container);
         } catch (URISyntaxException exception) {
-            LOG.warn(exception.getMessage());
+            LOG.debug(exception.getMessage());
         }
         // Return empty AzureStoragePath
         return new AzureStoragePath("", "");

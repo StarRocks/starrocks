@@ -50,6 +50,15 @@ public class AWSCloudConfiguration implements CloudConfiguration {
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
+        configuration.set("fs.s3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
+        configuration.set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
+        // Below storage using s3 compatible storage api
+        configuration.set("fs.oss.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
+        configuration.set("fs.ks3.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
+        configuration.set("fs.obs.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
+        configuration.set("fs.tos.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
+        configuration.set("fs.cosn.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem");
+
         configuration.set("fs.s3a.path.style.access", String.valueOf(enablePathStyleAccess));
         configuration.set("fs.s3a.connection.ssl.enabled", String.valueOf(enableSSL));
         awsCloudCredential.applyToConfiguration(configuration);
