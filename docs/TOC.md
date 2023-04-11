@@ -39,8 +39,6 @@
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Materialized view](./using_starrocks/Materialized_view.md)
-  + [External tables](./data_source/External_table.md)
-  + [Use catalogs to manage internal and external data](./data_source/Manage_data.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Bitmap indexing](./using_starrocks/Bitmap_index.md)
