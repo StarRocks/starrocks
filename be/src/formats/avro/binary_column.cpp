@@ -18,8 +18,8 @@
 #include "column/json_column.h"
 #include "common/status.h"
 #include "gutil/strings/substitute.h"
-#include "util/json.h"
 #include "util/defer_op.h"
+#include "util/json.h"
 
 namespace starrocks {
 
@@ -257,7 +257,7 @@ Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, c
         LOG(ERROR) << "avro to json failed: %s" << avro_strerror();
         return Status::InternalError("avro to json failed");
     }
-    DeferOp json_deleter([&] { free(as_json);});
+    DeferOp json_deleter([&] { free(as_json); });
     JsonValue json_value;
     Status s = JsonValue::parse(as_json, &json_value);
     if (!s.ok()) {
