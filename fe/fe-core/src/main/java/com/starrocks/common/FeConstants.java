@@ -71,6 +71,8 @@ public class FeConstants {
     public static int checkpoint_interval_second = 60; // 1 minutes
     // set to true to skip some step when running FE unit test
     public static boolean runningUnitTest = false;
+    // set to true when replay from query dump
+    public static boolean isReplayFromQueryDump = false;
     // default scheduler interval is 10 seconds
     public static int default_scheduler_interval_millisecond = 10000;
 

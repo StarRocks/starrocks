@@ -21,8 +21,10 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorMgr;
@@ -53,22 +55,37 @@ public class ReplayMetadataMgr extends MetadataMgr {
 
     public ReplayMetadataMgr(LocalMetastore localMetastore,
                              ConnectorMgr connectorMgr,
+                             ResourceMgr resourceMgr,
                              Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> externalTableInfoMap,
                              Map<String, Map<String, ColumnStatistic>> identifyToColumnStats) {
         super(localMetastore, connectorMgr, new ConnectorTblMetaInfoMgr());
-        init(externalTableInfoMap, identifyToColumnStats);
+        init(resourceMgr, externalTableInfoMap, identifyToColumnStats);
     }
 
-    private void init(Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> externalTableInfoMap,
+    private void init(ResourceMgr resourceMgr,
+                      Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> externalTableInfoMap,
                       Map<String, Map<String, ColumnStatistic>> identifyToColumnStats) {
         replayTableMap = new HashMap<>();
         for (Map.Entry<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> resourceEntry :
                 externalTableInfoMap.entrySet()) {
             String resourceName = resourceEntry.getKey();
-            String resourceMappingCatalogName = CatalogMgr.ResourceMappingCatalog
-                    .getResourceMappingCatalogName(resourceName, "hive");
-            replayTableMap.putIfAbsent(resourceMappingCatalogName, Maps.newHashMap());
-            Map<String, Map<String, HiveTableInfo>> replayDbMap = replayTableMap.get(resourceMappingCatalogName);
+            String catalogName;
+            if (!resourceMgr.containsResource(resourceName)) {
+                // we only support hive query dump now.
+                Map<String, String> properties = Maps.newHashMap();
+                properties.put("hive.metastore.uris", "thrift://localhost:9083");
+                HiveResource resource = new HiveResource(resourceName);
+                try {
+                    resource.alterProperties(properties);
+                    resourceMgr.replayCreateResource(resource);
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            catalogName = CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName(resourceName, "hive");
+            replayTableMap.putIfAbsent(catalogName, Maps.newHashMap());
+            Map<String, Map<String, HiveTableInfo>> replayDbMap = replayTableMap.get(catalogName);
             Map<String, Map<String, HiveMetaStoreTableDumpInfo>> externalDbMap = resourceEntry.getValue();
 
             for (Map.Entry<String, Map<String, HiveMetaStoreTableDumpInfo>> dbEntry : externalDbMap.entrySet()) {
@@ -85,7 +102,7 @@ public class ReplayMetadataMgr extends MetadataMgr {
                     HiveTable.Builder tableBuilder = HiveTable.builder()
                             .setId(idGen++)
                             .setTableName(tableName)
-                            .setCatalogName(resourceMappingCatalogName)
+                            .setCatalogName(catalogName)
                             .setResourceName(resourceName)
                             .setHiveDbName(dbName)
                             .setHiveTableName(tableName)
