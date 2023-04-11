@@ -170,6 +170,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -1856,11 +1857,11 @@ public class ShowExecutor {
             createCatalogSql.append("comment \"").append(catalog.getComment()).append("\"\n");
         }
 
-        Map<String, String> config = catalog.getConfig();
-        CloudCredentialUtil.maskCloudCredential(config);
+        Map<String, String> clonedConfig = new HashMap<>(catalog.getConfig());
+        CloudCredentialUtil.maskCloudCredential(clonedConfig);
         // Properties
         createCatalogSql.append("PROPERTIES (")
-                .append(new PrintableMap<>(config, " = ", true, true))
+                .append(new PrintableMap<>(clonedConfig, " = ", true, true))
                 .append("\n)");
         rows.add(Lists.newArrayList(catalogName, createCatalogSql.toString()));
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);
