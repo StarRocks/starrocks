@@ -352,16 +352,25 @@ public class CachingHiveMetastore implements IHiveMetastore {
             partitionCache.put(hivePartitionName, updatedPartition);
             tableStatsCache.put(hiveTableName, loadTableStatistics(hiveTableName));
         } else {
-            List<HivePartitionName> presentPartitionNames;
-            List<HivePartitionName> presentPartitionStatistics;
+            List<HivePartitionName> allPartitionsInHms = updatedPartitionKeys.stream()
+                    .map(key -> HivePartitionName.of(hiveDbName, hiveTblName, key))
+                    .collect(Collectors.toList());
+
+            List<HivePartitionName> presentPartitionNames = Lists.newArrayList();
+            List<HivePartitionName> presentPartitionStatistics = Lists.newArrayList();
 
             if (onlyCachedPartitions) {
-                presentPartitionNames = getPresentPartitionNames(partitionCache, hiveDbName, hiveTblName);
-                presentPartitionStatistics = getPresentPartitionNames(partitionStatsCache, hiveDbName, hiveTblName);
+                for (HivePartitionName name : allPartitionsInHms) {
+                    if (partitionCache.asMap().containsKey(name)) {
+                        presentPartitionNames.add(name);
+                    }
+
+                    if (partitionStatsCache.asMap().containsKey(name)) {
+                        presentPartitionStatistics.add(name);
+                    }
+                }
             } else {
-                presentPartitionNames = presentPartitionStatistics = updatedPartitionKeys.stream()
-                        .map(partitionKey -> HivePartitionName.of(hiveDbName, hiveTblName, partitionKey))
-                        .collect(Collectors.toList());
+                presentPartitionNames = presentPartitionStatistics = allPartitionsInHms;
             }
 
             refreshPartitionNames = refreshPartitions(presentPartitionNames, updatedPartitionKeys,
