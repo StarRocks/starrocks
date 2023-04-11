@@ -274,14 +274,7 @@ public class GroupingSetTest extends PlanTestBase {
                 "  |  <slot 10> : 10: unnest\n" +
                 "  |  <slot 11> : datediff(CAST(split(9: array_join, ',')[2] AS DATETIME), CAST(10: unnest AS DATETIME))\n" +
                 "  |  \n" +
-<<<<<<< HEAD
-                "  5:TableValueFunction\n" +
-=======
                 "  7:TableValueFunction\n" +
-                "  |  tableFunctionName: unnest\n" +
-                "  |  columns: [unnest]\n" +
-                "  |  returnTypes: [BIGINT]\n" +
->>>>>>> 45f45d98e ([BugFix] Fix wrong state of 'isExecuteInOneTablet' when it comes to agg or analytic (#19690))
                 "  |  \n" +
                 "  6:Project\n" +
                 "  |  <slot 6> : 6: array_agg\n" +
