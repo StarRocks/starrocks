@@ -65,7 +65,7 @@
 <NavBoxPartItem title="查询半结构化数据">
 
 - [JSON](/sql-reference/sql-statements/data-types/JSON.md)
-- [数组](/sql-reference/sql-statements/data-types/Array.md)
+- [ARRAY](/sql-reference/sql-statements/data-types/Array.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -90,6 +90,7 @@
 
 - [部署使用](/administration/Build_in_docker)
 - [运维操作](/administration/Scale_up_down)
+- [资源隔离](/administration/resource_group)
 - [数据恢复](/administration/Data_recovery)
 - [性能调优](/administration/Query_planning)
 
