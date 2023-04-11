@@ -11,8 +11,7 @@ Hudi Catalog 是一种 External Catalog。通过 Hudi Catalog，您不需要执�
 
 ## 使用说明
 
-- StarRocks 查询 Hudi 数据时，支持 Parquet 文件格式。Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
-- StarRocks 查询 Hudi 数据时，不支持 MAP 和 STRUCT 数据类型。
+StarRocks 查询 Hudi 数据时，支持 Parquet 文件格式。Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
 
 ## 准备工作
 
