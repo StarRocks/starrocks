@@ -584,7 +584,7 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select SUM(v2) from (select v2, sum(v1) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -592,7 +592,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: 2: v2\n");
         sql = "select SUM(v2) from (select v2, sum(distinct v2) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -627,7 +627,7 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select SUM(x1) from (select v2 as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
