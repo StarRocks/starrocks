@@ -68,6 +68,18 @@ StarRocks supports creating asynchronous materialized views on one or more base 
 
 ### Before you begin
 
+#### Enable asynchronous materialized view
+
+To use the asynchronous materialized view feature, you need to set the FE configuration item `enable_experimental_mv` to `true` using the following statement:
+
+```SQL
+ADMIN SET FRONTEND CONFIG ("enable_experimental_mv"="true");
+```
+
+> **NOTE**
+>
+> From v2.5.2 onwards, this feature is enabled by default. You do not need to manually enable it.
+
 #### Prepare base tables
 
 The following examples involve two base tables:
