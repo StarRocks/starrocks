@@ -528,6 +528,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                 stripOuterArray = Boolean.valueOf(jobProperties.getOrDefault(STRIP_OUTER_ARRAY, "false"));
             } else if (format.equalsIgnoreCase("avro")) {
                 format = "avro";
+                jsonPaths = jobProperties.get(JSONPATHS);
             } else {
                 throw new UserException("Format type is invalid. format=`" + format + "`");
             }
