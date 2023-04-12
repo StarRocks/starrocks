@@ -112,7 +112,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
 ### Configure BE nodes for shared-data StarRocks
 
-Before starting BEs, add the following configuration items in the BE configuration file **be.conf**:
+**Before starting BEs**, add the following configuration items in the BE configuration file **be.conf**:
 
 ```YAML
 starlet_port = <starlet_port>
