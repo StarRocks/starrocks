@@ -64,7 +64,7 @@ private:
 
 class StreamChunkSource : public ConnectorChunkSource {
 public:
-    StreamChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel, ScanOperator* op,
+    StreamChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                       ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
 };
 

@@ -73,7 +73,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
 
     RETURN_IF_ERROR(do_prepare(state));
-
     return Status::OK();
 }
 
@@ -148,9 +147,11 @@ bool ScanOperator::has_output() const {
     if (buffer_full) {
         return chunk_number > 0;
     }
+
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return false;
     }
+
     // Can pick up more morsels or submit more tasks
     if (!_morsel_queue->empty()) {
         return true;
@@ -218,16 +219,14 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     _peak_buffer_size_counter->set(buffer_size());
 
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
-
     ChunkPtr res = get_chunk_from_buffer();
-    if (res == nullptr) {
-        return nullptr;
+    if (res != nullptr) {
+        // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
+        auto [tablet_id, is_eos] = _should_emit_eos(res);
+        eval_runtime_bloom_filters(res.get());
+        res->owner_info().set_owner_id(tablet_id, is_eos);
     }
 
-    // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
-    auto [tablet_id, is_eos] = _should_emit_eos(res);
-    eval_runtime_bloom_filters(res.get());
-    res->owner_info().set_owner_id(tablet_id, is_eos);
     return res;
 }
 
@@ -248,7 +247,6 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
 
     return 1000'000L * global_rf_collector->scan_wait_timeout_ms();
 }
-
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
@@ -256,7 +254,6 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     if (_unpluging && num_buffered_chunks() >= _buffer_unplug_threshold()) {
         return Status::OK();
     }
-
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
     int cnt = _io_tasks_per_scan_operator;
@@ -454,7 +451,6 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
     if (morsel != nullptr) {
         COUNTER_UPDATE(_morsels_counter, 1);
-
         _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {
