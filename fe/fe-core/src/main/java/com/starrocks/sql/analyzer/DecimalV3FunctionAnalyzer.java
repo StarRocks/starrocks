@@ -65,6 +65,7 @@ public class DecimalV3FunctionAnalyzer {
             return Type.INVALID;
         }
 
+<<<<<<< HEAD
         if (DECIMAL_UNARY_FUNCTION_SET.contains(fnName)) {
             return FunctionSet.MONEY_FORMAT.equals(fnName) ? Type.VARCHAR : argTypes[0];
         }
@@ -112,6 +113,19 @@ public class DecimalV3FunctionAnalyzer {
                 Arrays.fill(argTypes, commonTypeStartIdx, argTypes.length, commonType);
             }
             return commonType;
+=======
+        if (DECIMAL_IDENTICAL_TYPE_FUNCTION_SET.contains(fnName) || fnName.equalsIgnoreCase(FunctionSet.IF)) {
+            boolean isIfFunc = fnName.equals(FunctionSet.IF);
+            int commonTypeStartIdx = isIfFunc ? 1 : 0;
+            if (Arrays.stream(argTypes, commonTypeStartIdx, argTypes.length).noneMatch(Type::isDecimalV3)) {
+                return argTypes;
+            }
+            Type commonType = Type.getCommonType(argTypes, commonTypeStartIdx, argTypes.length);
+            Type[] newArgType = new Type[argTypes.length];
+            newArgType[0] = isIfFunc ? Type.BOOLEAN : argTypes[0];
+            Arrays.fill(newArgType, commonTypeStartIdx, argTypes.length, commonType);
+            return newArgType;
+>>>>>>> 0665ac58f ([BugFix] Fix analyze error of if expr whose first argument is decimal (#21391))
         }
         return Type.INVALID;
     }
