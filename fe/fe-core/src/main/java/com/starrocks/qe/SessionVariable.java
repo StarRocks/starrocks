@@ -925,6 +925,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableDistinctColumnBucketization;
     }
 
+    public boolean getEnablePopulateBlockCache() {
+        return enablePopulateBlockCache;
+    }
+
     public boolean getHudiMORForceJNIReader() {
         return hudiMORForceJNIReader;
     }
