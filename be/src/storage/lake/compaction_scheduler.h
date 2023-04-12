@@ -106,7 +106,7 @@ struct CompactionTaskInfo {
 class CompactionScheduler {
     // Limiter is used to control the maximum compaction concurrency based on the memory usage limitation:
     //  - The initial maximum compaction concurrency is config::compact_threads
-    //  - One Status::MemoryLimitExceeded is encountered, reduce the maximum concurrency by one until the
+    //  - Once Status::MemoryLimitExceeded is encountered, reduce the maximum concurrency by one until the
     //    concurrency is reduced to 1
     //  - If no Status::MemoryLimitExceeded is encountered for "kConcurrencyRestoreTimes" consecutive time,
     //    increase the maximum concurrency by one until config::compact_threads is reached or
