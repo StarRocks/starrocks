@@ -97,6 +97,11 @@ enum TPipelineProfileLevel {
   DETAIL
 }
 
+enum TSpillMode {
+  AUTO,
+  FORCE
+}
+
 enum TTabletInternalParallelMode {
   AUTO,
   FORCE_SPLIT
