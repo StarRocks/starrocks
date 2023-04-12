@@ -241,7 +241,7 @@ public class PseudoCluster {
         }
 
         @Override
-        public long getPrimaryBackendIdByShard(long shardId) throws UserException {
+        public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
             return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
         }
 

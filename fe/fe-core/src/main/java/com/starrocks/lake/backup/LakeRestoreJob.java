@@ -125,7 +125,7 @@ public class LakeRestoreJob extends RestoreJob {
                 Partition part = tbl.getPartition(idChain.getPartId());
                 MaterializedIndex index = part.getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tablet.getPrimaryBackendId());
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tablet.getPrimaryComputeNodeId());
                 LakeTableSnapshotInfo info = new LakeTableSnapshotInfo(db.getId(), idChain.getTblId(),
                         idChain.getPartId(), idChain.getIdxId(), idChain.getTabletId(),
                         backend.getId(), tbl.getSchemaHashByIndexId(index.getId()), -1);

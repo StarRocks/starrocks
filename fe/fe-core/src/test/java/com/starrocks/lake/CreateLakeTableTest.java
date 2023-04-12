@@ -116,9 +116,9 @@ public class CreateLakeTableTest {
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
-                agent.getPrimaryBackendIdByShard(anyLong);
+                agent.getPrimaryComputeNodeIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-                agent.getPrimaryBackendIdByShard(anyLong);
+                agent.getPrimaryComputeNodeIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
         };
@@ -181,9 +181,9 @@ public class CreateLakeTableTest {
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
-                agent.getPrimaryBackendIdByShard(anyLong);
+                agent.getPrimaryComputeNodeIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-                agent.getPrimaryBackendIdByShard(anyLong);
+                agent.getPrimaryComputeNodeIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
         };

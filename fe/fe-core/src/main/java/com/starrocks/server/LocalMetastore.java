@@ -1671,19 +1671,24 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitions.isEmpty()) {
             return;
         }
-        int numAliveBackends = systemInfoService.getAliveBackendNumber();
+        int numAliveCNs = Config.only_use_compute_node ? systemInfoService.getAliveComputeNodeNumber() :
+                systemInfoService.getAliveBackendNumber();
         int numReplicas = 0;
         for (Partition partition : partitions) {
             numReplicas += partition.getReplicaCount();
         }
 
-        if (partitions.size() >= 3 && numAliveBackends >= 3 && numReplicas >= numAliveBackends * 500) {
+        if (partitions.size() >= 3 && numAliveCNs >= 3 && numReplicas >= numAliveCNs * 500) {
             LOG.info("creating {} partitions of table {} concurrently", partitions.size(), table.getName());
-            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
-        } else if (numAliveBackends > 0) {
-            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
+            buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveCNs);
+        } else if (numAliveCNs > 0) {
+            buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveCNs);
         } else {
-            throw new DdlException("no alive backend");
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                throw new DdlException("no alive compute nodes");
+            } else {
+                throw new DdlException("no alive backends");
+            }
         }
     }
 
@@ -1805,15 +1810,15 @@ public class LocalMetastore implements ConnectorMetadata {
         MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(index.getId());
         for (Tablet tablet : index.getTablets()) {
             if (table.isCloudNativeTableOrMaterializedView()) {
-                long primaryBackendId = -1;
+                long primaryComputeNodeId = -1;
                 try {
-                    primaryBackendId = ((LakeTablet) tablet).getPrimaryBackendId();
+                    primaryComputeNodeId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }
 
                 CreateReplicaTask task = new CreateReplicaTask(
-                        primaryBackendId,
+                        primaryComputeNodeId,
                         dbId,
                         table.getId(),
                         partition.getId(),

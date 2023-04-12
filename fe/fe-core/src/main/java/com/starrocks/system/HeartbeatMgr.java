@@ -241,6 +241,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                         if (RunMode.allowCreateLakeTable() && !isReplay && isBackend) {
                             // addWorker
                             int starletPort = computeNode.getStarletPort();
+
                             if (starletPort != 0) {
                                 String workerAddr = computeNode.getHost() + ":" + starletPort;
                                 GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(computeNode.getId(), workerAddr);

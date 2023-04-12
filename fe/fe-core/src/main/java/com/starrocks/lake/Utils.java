@@ -52,7 +52,7 @@ public class Utils {
     // Returns null if no backend available.
     public static Long chooseBackend(LakeTablet tablet) {
         try {
-            return tablet.getPrimaryBackendId();
+            return tablet.getPrimaryComputeNodeId();
         } catch (UserException ex) {
             LOG.info("Ignored error {}", ex.getMessage());
         }
