@@ -112,8 +112,6 @@ SELECT select_expr[, select_expr ...]
 
 物化视图的属性。
 
-- `short_key`：排序列的个数。
-- `timeout`：构建物化视图的超时时间。单位为秒。
 - `replication_num`：创建物化视图副本数量。
 - `storage_medium`：存储介质类型。
 - `partition_ttl_number`：需要保留的最近的物化视图分区数量。分区数量超过该值后，过期分区将被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_check_interval_seconds` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。默认值：`-1`。当值为 `-1` 时，将保留物化视图所有分区。
