@@ -604,8 +604,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
                 for (Partition partition : selectedPartitions) {
                     long partitionRowCount;
-                    TableStatistic tableStatistic =
-                            GlobalStateMgr.getCurrentStatisticStorage().getTableStatistic(table.getId(), partition.getId());
+                    TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
+                            .getTableStatistic(table.getId(), partition.getId());
                     if (tableStatistic.equals(TableStatistic.unknown())) {
                         partitionRowCount = partition.getRowCount();
                     } else {
@@ -1065,26 +1065,19 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalTableFunction(LogicalTableFunctionOperator node, ExpressionContext context) {
-        ColumnRefSet columnRefSet = new ColumnRefSet();
-        columnRefSet.union(node.getFnResultColumnRefSet());
-        columnRefSet.union(node.getOuterColumnRefSet());
-        return computeTableFunctionNode(context, columnRefSet);
+        return computeTableFunctionNode(context, node.getOutputColRefs());
     }
 
     @Override
     public Void visitPhysicalTableFunction(PhysicalTableFunctionOperator node, ExpressionContext context) {
-        ColumnRefSet columnRefSet = new ColumnRefSet();
-        columnRefSet.union(node.getFnResultColumnRefSet());
-        columnRefSet.union(node.getOuterColumnRefSet());
-        return computeTableFunctionNode(context, columnRefSet);
+        return computeTableFunctionNode(context, node.getOutputColRefs());
     }
 
-    private Void computeTableFunctionNode(ExpressionContext context, ColumnRefSet outputColumns) {
+    private Void computeTableFunctionNode(ExpressionContext context, List<ColumnRefOperator> outputColumns) {
         Statistics.Builder builder = Statistics.builder();
 
-        for (int columnId : outputColumns.getColumnIds()) {
-            ColumnRefOperator columnRefOperator = columnRefFactory.getColumnRef(columnId);
-            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+        for (ColumnRefOperator col : outputColumns) {
+            builder.addColumnStatistic(col, ColumnStatistic.unknown());
         }
 
         Statistics inputStatistics = context.getChildStatistics(0);

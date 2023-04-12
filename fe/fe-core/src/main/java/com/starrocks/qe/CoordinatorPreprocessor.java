@@ -1031,14 +1031,6 @@ public class CoordinatorPreprocessor {
             } else if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                     scanNode instanceof FileTableScanNode) {
-                if (connectContext != null) {
-                    queryOptions.setUse_scan_block_cache(connectContext.getSessionVariable().getUseScanBlockCache());
-                    queryOptions.
-                            setEnable_populate_block_cache(
-                                    connectContext.getSessionVariable().getEnablePopulateBlockCache());
-                    queryOptions.setHudi_mor_force_jni_reader(
-                            connectContext.getSessionVariable().getHudiMORForceJNIReader());
-                }
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                 getSelectorComputeNodes(hasComputeNode),
@@ -1558,6 +1550,7 @@ public class CoordinatorPreprocessor {
                                 sessionVariable.getAdaptiveDopMaxOutputAmplificationFactor());
                     }
                 }
+
             }
         }
 

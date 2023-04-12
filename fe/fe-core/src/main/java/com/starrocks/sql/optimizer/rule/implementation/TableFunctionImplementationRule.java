@@ -36,10 +36,10 @@ public class TableFunctionImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalTableFunctionOperator logicalTableFunctionOperator = (LogicalTableFunctionOperator) input.getOp();
         PhysicalTableFunctionOperator physicalLateral = new PhysicalTableFunctionOperator(
-                logicalTableFunctionOperator.getFnResultColumnRefSet(),
+                logicalTableFunctionOperator.getFnResultColRefs(),
                 logicalTableFunctionOperator.getFn(),
                 logicalTableFunctionOperator.getFnParamColumnProject().stream().map(p -> p.first).collect(Collectors.toList()),
-                logicalTableFunctionOperator.getOuterColumnRefSet(),
+                logicalTableFunctionOperator.getOuterColRefs(),
                 logicalTableFunctionOperator.getLimit(),
                 logicalTableFunctionOperator.getPredicate(),
                 logicalTableFunctionOperator.getProjection());

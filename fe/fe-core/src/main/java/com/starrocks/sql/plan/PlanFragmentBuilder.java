@@ -238,7 +238,7 @@ public class PlanFragmentBuilder {
         List<Long> fakePartitionIds = Arrays.asList(1L, 2L, 3L);
 
         DataSink tableSink = new OlapTableSink(view, tupleDesc, fakePartitionIds, true,
-                view.writeQuorum(), view.enableReplicatedStorage(), false);
+                view.writeQuorum(), view.enableReplicatedStorage(), false, false);
         execPlan.getTopFragment().setSink(tableSink);
 
         return execPlan;
@@ -1638,7 +1638,7 @@ public class PlanFragmentBuilder {
             ArrayList<Expr> intermediateAggrExprs = aggExpr.intermediateExpr;
 
             AggregationNode aggregationNode;
-            if (node.getType().isLocal()) {
+            if (node.getType().isLocal() && node.isSplit()) {
                 AggregateInfo aggInfo = AggregateInfo.create(
                         groupingExpressions,
                         aggregateExprList,
@@ -1658,7 +1658,9 @@ public class PlanFragmentBuilder {
                         hasColocateOlapScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
-            } else if (node.getType().isGlobal()) {
+            } else if (node.getType().isGlobal() || (node.getType().isLocal() && !node.isSplit())) {
+                // Local && un-split aggregate meanings only execute local pre-aggregation, we need promise
+                // output type match other node, so must use `update finalized` phase
                 if (node.hasSingleDistinct()) {
                     // For SQL: select count(id_int) as a, sum(DISTINCT id_bigint) as b from test_basic group by id_int;
                     // sum function is update function, but count is merge function
@@ -2587,9 +2589,7 @@ public class PlanFragmentBuilder {
             PhysicalTableFunctionOperator physicalTableFunction = (PhysicalTableFunctionOperator) optExpression.getOp();
 
             TupleDescriptor udtfOutputTuple = context.getDescTbl().createTupleDescriptor();
-            for (int columnId : physicalTableFunction.getOutputColumns().getColumnIds()) {
-                ColumnRefOperator columnRefOperator = columnRefFactory.getColumnRef(columnId);
-
+            for (ColumnRefOperator columnRefOperator : physicalTableFunction.getOutputColRefs()) {
                 SlotDescriptor slotDesc =
                         context.getDescTbl().addSlotDescriptor(udtfOutputTuple, new SlotId(columnRefOperator.getId()));
                 slotDesc.setType(columnRefOperator.getType());
@@ -2604,12 +2604,13 @@ public class PlanFragmentBuilder {
                     inputFragment.getPlanRoot(),
                     udtfOutputTuple,
                     physicalTableFunction.getFn(),
-                    physicalTableFunction.getFnParamColumnRef().stream().map(ColumnRefOperator::getId)
+                    physicalTableFunction.getFnParamColumnRefs().stream().map(ColumnRefOperator::getId)
                             .collect(Collectors.toList()),
-                    Arrays.stream(physicalTableFunction.getOuterColumnRefSet().getColumnIds()).boxed()
+                    physicalTableFunction.getOuterColRefs().stream().map(ColumnRefOperator::getId)
                             .collect(Collectors.toList()),
-                    Arrays.stream(physicalTableFunction.getFnResultColumnRefSet().getColumnIds()).boxed()
-                            .collect(Collectors.toList()));
+                    physicalTableFunction.getFnResultColRefs().stream().map(ColumnRefOperator::getId)
+                            .collect(Collectors.toList())
+                    );
             tableFunctionNode.computeStatistics(optExpression.getStatistics());
             tableFunctionNode.setLimit(physicalTableFunction.getLimit());
             inputFragment.setPlanRoot(tableFunctionNode);

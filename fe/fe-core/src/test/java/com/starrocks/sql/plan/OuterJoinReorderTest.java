@@ -76,6 +76,36 @@ public class OuterJoinReorderTest extends PlanTestBase {
                 "  |  equal join conjunct: 10: v9 = 15: v14\n" +
                 "  |  other join predicates: (CAST(space(CAST(16: v15 AS INT)) AS DOUBLE) <= CAST(15: v14 AS DOUBLE)) " +
                 "OR (CAST(6: v5 AS DOUBLE) = tan(CAST(7: v6 AS DOUBLE)))");
+
+        sqlList.add("select tmp.a, t0.v3 from t0 left join (select * from test_all_type, unnest(split(t1a, ',')) " +
+                "as unnest_tbl(a)) tmp on t0.v1 = tmp.a join t1 on t0.v2 = t1.v4");
+        planList.add("10:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 19: cast = 14: a\n" +
+                "  |  \n" +
+                "  |----9:EXCHANGE\n" +
+                "  |    \n" +
+                "  5:Project\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 19> : 19: cast\n" +
+                "  |  \n" +
+                "  4:HASH JOIN");
+
+        sqlList.add("select tmp.a, t0.v3 from t0 left join (select * from tarray, unnest(v3) as unnest_tbl(a)) " +
+                "tmp on t0.v1 = tmp.a join t1 on t0.v2 = t1.v4");
+        planList.add("8:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 7: a\n" +
+                "  |  \n" +
+                "  |----7:EXCHANGE\n" +
+                "  |    \n" +
+                "  4:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  \n" +
+                "  3:HASH JOIN");
         List<Pair<String, String>> zips = zipSqlAndPlan(sqlList, planList);
         return zips.stream().map(e -> Arguments.of(e));
     }
