@@ -2008,11 +2008,34 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new StarRocksPlannerException("Aggregate functions are not being parsed correctly",
                     ErrorType.INTERNAL_ERROR);
         }
+<<<<<<< HEAD
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 context.aggregationFunction().ASTERISK_SYMBOL() == null ?
                         new FunctionParams(context.aggregationFunction().DISTINCT() != null,
                                 visit(context.aggregationFunction().expression(), Expr.class)) :
                         FunctionParams.createStarParam());
+=======
+        List<OrderByElement> orderByElements = new ArrayList<>();
+        if (context.aggregationFunction().ORDER() != null) {
+            orderByElements = visit(context.aggregationFunction().sortItem(), OrderByElement.class);
+        }
+
+        List<String> hints = Lists.newArrayList();
+        if (context.aggregationFunction().bracketHint() != null) {
+            hints = context.aggregationFunction().bracketHint().identifier().stream().map(
+                    RuleContext::getText).collect(Collectors.toList());
+        }
+        boolean isDistinct = false;
+        if (context.aggregationFunction().setQuantifier() != null) {
+            isDistinct = context.aggregationFunction().setQuantifier().DISTINCT() != null;
+        }
+
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
+                context.aggregationFunction().ASTERISK_SYMBOL() == null ?
+                        new FunctionParams(isDistinct,
+                                visit(context.aggregationFunction().expression(), Expr.class), orderByElements) :
+                        FunctionParams.createStarParam(), pos);
+>>>>>>> 7c1efe58e ([BugFix] support all setQuantifier in special agg functions in new parser (#21413))
 
         if (context.over() != null) {
             return buildOverClause(functionCallExpr, context.over());
