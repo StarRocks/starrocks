@@ -123,7 +123,7 @@ public:
 
     bool restore_finished() const { return _reader->restore_finished(); }
 
-    bool is_cancel() { return _is_cancel; }
+    bool is_cancel() const { return _is_cancel; }
 
     void cancel() {
         _is_cancel = true;
