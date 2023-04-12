@@ -1183,7 +1183,7 @@ PARALLEL_TEST(ArrowConverterTest, test_decimal128) {
 }
 
 static std::shared_ptr<arrow::Array> create_map_array(int64_t num_elements, const std::map<std::string, int>& value,
-                                                      size_t& counter, bool add_null = false) {
+                                                      size_t& counter, bool null_dup = false) {
     auto key_builder = std::make_shared<arrow::StringBuilder>();
     auto item_builder = std::make_shared<arrow::Int32Builder>();
     arrow::TypeTraits<arrow::MapType>::BuilderType builder(arrow::default_memory_pool(), key_builder, item_builder);
@@ -1193,9 +1193,13 @@ static std::shared_ptr<arrow::Array> create_map_array(int64_t num_elements, cons
         for (auto& [key, value] : value) {
             key_builder->Append(key);
             item_builder->Append(value);
+            if (null_dup) {
+                key_builder->Append(key);
+                item_builder->Append(value);
+            }
         }
         counter += 1;
-        if (add_null) {
+        if (null_dup) {
             builder.AppendNull();
             counter++;
         }
@@ -1400,9 +1404,9 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_nullable_map) {
     filter.resize(array->length() + map_column->size(), 1);
     ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(conv_func, array->length(), array.get(), &map_type,
                                                              map_column, 0, map_column->size(), &filter, nullptr));
-
     ASSERT_EQ(map_column->size(), counter);
     ASSERT_EQ(down_cast<NullableColumn*>(map_column.get())->null_count(), num_elements);
+    ASSERT_EQ(map_column->debug_item(0), "{'haha':2,'hehe':1}");
 }
 
 } // namespace starrocks

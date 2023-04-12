@@ -275,6 +275,7 @@ public:
         if (_value_reader == nullptr) {
             value_column->append_default(offsets.back());
         }
+        map_column->remove_duplicated_keys();
 
         if (dst->is_nullable()) {
             DCHECK(nullable_column != nullptr);
