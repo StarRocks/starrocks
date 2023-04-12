@@ -156,6 +156,11 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
     return scan_node->connector_type();
 }
 
+bool ConnectorScanOperator::is_running_all_io_tasks() const {
+    PickupMorselState& state = _pickup_morsel_state;
+    return (state.max_io_tasks != 0) && (_num_running_io_tasks >= state.max_io_tasks);
+}
+
 void ConnectorScanOperator::finish_driver_process() {
     PickupMorselState& state = _pickup_morsel_state;
     state.adjusted_io_tasks = false;

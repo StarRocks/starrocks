@@ -76,6 +76,7 @@ public:
 
     void set_query_ctx(const QueryContextPtr& query_ctx);
 
+    virtual bool is_running_all_io_tasks() const;
     virtual int update_pickup_morsel_state() { return _io_tasks_per_scan_operator; }
     virtual void finish_driver_process() {}
 
