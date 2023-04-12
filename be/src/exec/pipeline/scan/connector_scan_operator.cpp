@@ -158,6 +158,8 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
 
 bool ConnectorScanOperator::is_running_all_io_tasks() const {
     PickupMorselState& state = _pickup_morsel_state;
+    VLOG_FILE << "[XXX] running all. seq = " << _driver_sequence << ", io = " << _num_running_io_tasks
+              << ", exp = " << state.max_io_tasks;
     return (state.max_io_tasks != 0) && (_num_running_io_tasks >= state.max_io_tasks);
 }
 
@@ -167,12 +169,15 @@ void ConnectorScanOperator::finish_driver_process() {
 }
 
 int ConnectorScanOperator::update_pickup_morsel_state() {
-    if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
-    size_t chunks = num_buffered_chunks();
-    size_t thres = _buffer_unplug_threshold();
-
     PickupMorselState& state = _pickup_morsel_state;
     int& io_tasks = state.max_io_tasks;
+    if (!_enable_adaptive_io_tasks) {
+        io_tasks = _io_tasks_per_scan_operator;
+        return _io_tasks_per_scan_operator;
+    }
+
+    size_t chunks = num_buffered_chunks();
+    size_t thres = _buffer_unplug_threshold();
     const int MIN_IO_TASKS = config::connector_io_tasks_min_size;
     if (state.adjusted_io_tasks) {
         return io_tasks;

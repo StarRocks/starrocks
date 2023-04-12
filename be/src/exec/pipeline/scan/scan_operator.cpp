@@ -138,6 +138,7 @@ bool ScanOperator::has_output() const {
     //   2.4 No more tasks: pull_chunk, so return true
 
     size_t chunk_number = num_buffered_chunks();
+    VLOG_FILE << "[ZZZ] chunk = " << chunk_number << ", unplug = " << _unpluging;
     if (_unpluging) {
         if (chunk_number > 0) {
             return true;
