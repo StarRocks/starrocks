@@ -22,6 +22,7 @@
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
 #include "column/array_column.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
@@ -693,6 +694,48 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, JsonGuard<LT>> {
     }
 };
 
+// TODO: rename
+template <typename T>
+static void list_offsets_copy(const arrow::Array* layer, const size_t array_start_idx, const size_t num_elements,
+                              UInt32Column* col_offsets) {
+    using ArrowArrayType = typename arrow::TypeTraits<T>::ArrayType;
+    using OffsetsType = typename T::offset_type;
+    auto* concrete_array = down_cast<const ArrowArrayType*>(layer);
+    auto* arrow_offsets_data = concrete_array->raw_value_offsets() + array_start_idx;
+    auto arrow_base_offset = arrow_offsets_data[0];
+    arrow_offsets_data += 1;
+    auto start_idx = col_offsets->size() - 1;
+    col_offsets->resize(col_offsets->size() + num_elements);
+    auto* offsets_data = &col_offsets->get_data().front() + start_idx;
+    auto base_offset = offsets_data[0];
+    offsets_data += 1;
+    offsets_copy<OffsetsType>(arrow_offsets_data, arrow_base_offset, num_elements, offsets_data, base_offset);
+}
+
+// TODO: rename
+template <typename T>
+static arrow::Array* get_list_array_child(const arrow::Array* array, size_t array_start_idx = 0,
+                                          size_t num_elements = 0, size_t* child_array_start_idx = nullptr,
+                                          size_t* child_array_num_elements = nullptr, int8_t child_id = 0) {
+    using ArrowArrayType = typename arrow::TypeTraits<T>::ArrayType;
+    using OffsetsType = typename T::offset_type;
+    if (child_array_start_idx && child_array_num_elements) {
+        auto child_array = down_cast<const ArrowArrayType*>(array);
+        *child_array_start_idx = child_array->value_offset(array_start_idx),
+        *child_array_num_elements = child_array->value_offset(array_start_idx + num_elements) - *child_array_start_idx;
+    }
+    if constexpr (std::is_same<T, arrow::MapType>::value) {
+        if (child_id == 0) {
+            return down_cast<const ArrowArrayType*>(array)->keys().get();
+
+        } else {
+            return down_cast<const ArrowArrayType*>(array)->items().get();
+        }
+    } else {
+        return down_cast<const ArrowArrayType*>(array)->values().get();
+    }
+}
+
 template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
 struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
     using UInt32ColumnPtr = UInt32Column::Ptr;
@@ -700,23 +743,6 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
     static bool is_large_list(ArrowTypeId t) { return t == ArrowTypeId::LARGE_LIST; }
     static bool is_fixed_size_list(ArrowTypeId t) { return t == ArrowTypeId::FIXED_SIZE_LIST; }
     static bool is_any_list(ArrowTypeId t) { return is_list(t) || is_large_list(t) || is_fixed_size_list(t); }
-
-    template <typename T>
-    static void list_offsets_copy(const arrow::Array* layer, const size_t array_start_idx, const size_t num_elements,
-                                  UInt32Column* col_offsets) {
-        using ArrowArrayType = typename arrow::TypeTraits<T>::ArrayType;
-        using OffsetsType = typename T::offset_type;
-        auto* concrete_array = down_cast<const ArrowArrayType*>(layer);
-        auto* arrow_offsets_data = concrete_array->raw_value_offsets() + array_start_idx;
-        auto arrow_base_offset = arrow_offsets_data[0];
-        arrow_offsets_data += 1;
-        auto start_idx = col_offsets->size() - 1;
-        col_offsets->resize(col_offsets->size() + num_elements);
-        auto* offsets_data = &col_offsets->get_data().front() + start_idx;
-        auto base_offset = offsets_data[0];
-        offsets_data += 1;
-        offsets_copy<OffsetsType>(arrow_offsets_data, arrow_base_offset, num_elements, offsets_data, base_offset);
-    }
 
     static void fixed_size_list_offsets_copy(const arrow::Array* layer, const size_t array_start_idx,
                                              const size_t num_elements, UInt32Column* col_offsets) {
@@ -736,22 +762,6 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
             // that would cause underflow for unsigned int;
             offsets_data[i] = base_offset + (concrete_array->value_offset(array_start_idx + i + 1) - arrow_base_offset);
         }
-    }
-
-    template <typename T>
-    static arrow::Array* get_list_array_child(const arrow::Array* array, size_t array_start_idx = 0,
-                                              size_t num_elements = 0, size_t* child_array_start_idx = nullptr,
-                                              size_t* child_array_num_elements = nullptr) {
-        using ArrowArrayType = typename arrow::TypeTraits<T>::ArrayType;
-        using OffsetsType = typename T::offset_type;
-        if (child_array_start_idx && child_array_num_elements) {
-            auto child_array = down_cast<const ArrowArrayType*>(array);
-            *child_array_start_idx = child_array->value_offset(array_start_idx),
-            *child_array_num_elements =
-                    child_array->value_offset(array_start_idx + num_elements) - *child_array_start_idx;
-            return child_array->values().get();
-        }
-        return down_cast<const ArrowArrayType*>(array)->values().get();
     }
 
     static arrow::Array* get_child_array_position(const arrow::Array* array, size_t array_start_idx,
@@ -806,6 +816,45 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
         return ParquetScanner::convert_array_to_column(conv_func, child_array_num_elements, child_array, &child_type,
                                                        col_array->elements_column(), child_array_start_idx,
                                                        col_array->elements_column()->size(), &child_chunk_filter, ctx);
+    }
+};
+
+template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
+struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
+    static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                        size_t chunk_start_idx, [[maybe_unused]] uint8_t* null_data, Filter* chunk_filter,
+                        ArrowConvertContext* ctx, const TypeDescriptor* type_desc) {
+        // offset
+        auto* col_map = down_cast<MapColumn*>(column);
+        UInt32Column* col_offsets = col_map->offsets_column().get();
+        list_offsets_copy<arrow::MapType>(array, array_start_idx, num_elements, col_offsets);
+        // keys, values
+        size_t kv_size[2];
+        kv_size[0] = col_map->keys().size();
+        kv_size[1] = col_map->values().size();
+        ColumnPtr kv_columns[2];
+        kv_columns[0] = col_map->keys_column();
+        kv_columns[1] = col_map->values_column();
+        for (auto i = 0; i < 2; ++i) {
+            const TypeDescriptor& child_type = type_desc->children[i];
+            size_t child_array_start_idx;
+            size_t child_array_num_elements;
+            const auto* child_array = get_list_array_child<arrow::MapType>(
+                    array, array_start_idx, num_elements, &child_array_start_idx, &child_array_num_elements, i);
+            if (!child_array) {
+                return Status::InternalError(fmt::format("Unnest arrow map type({}) fail", array->type()->name()));
+            }
+            auto conv_func = get_arrow_converter(child_array->type()->id(), child_type.type, true, false);
+            if (!conv_func) {
+                return illegal_converting_error(child_array->type()->name(), child_type.debug_string());
+            }
+            Filter child_chunk_filter;
+            child_chunk_filter.resize(kv_size[i] + child_array_num_elements, 1);
+            RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(conv_func, child_array_num_elements, child_array,
+                                                                    &child_type, kv_columns[i], child_array_start_idx,
+                                                                    kv_size[i], &child_chunk_filter, ctx));
+        }
+        return Status::OK();
     }
 };
 
@@ -888,7 +937,7 @@ static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_con
         ARROW_CONV_ENTRY(ArrowTypeId::DECIMAL, TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128),
 
         // JSON converters
-        ARROW_CONV_ENTRY(ArrowTypeId::MAP, TYPE_JSON),
+        ARROW_CONV_ENTRY(ArrowTypeId::MAP, TYPE_MAP, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::LIST, TYPE_ARRAY, TYPE_JSON), // NOTE: FixedSizeListType, LargeListType, ListType
         ARROW_CONV_ENTRY(ArrowTypeId::STRUCT, TYPE_JSON),
 };
