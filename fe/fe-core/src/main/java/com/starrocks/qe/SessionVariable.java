@@ -615,6 +615,34 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = ENABLE_SPILL)
+    private boolean enableSpill = false;
+
+    @VariableMgr.VarAttr(name = SPILL_MODE)
+    private String spillMode = "auto";
+
+    // These parameters are experimental. They may be removed in the future
+    @VarAttr(name = SPILL_MEM_TABLE_SIZE, flag = VariableMgr.INVISIBLE)
+    private int spillMemTableSize = 1024 * 1024 * 100;
+    @VarAttr(name = SPILL_MEM_TABLE_NUM, flag = VariableMgr.INVISIBLE)
+    private int spillMemTableNum = 2;
+    @VarAttr(name = SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
+    private double spillMemLimitThreshold = 0.5;
+    @VarAttr(name = SPILL_OPERATOR_MIN_BYTES, flag = VariableMgr.INVISIBLE)
+    private long spillOperatorMinBytes = 1024L * 1024 * 10;
+    @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)
+    private long spillOperatorMaxBytes = 1024L * 1024 * 1000;
+<<<<<<< HEAD
+    // the encoding level of spilled data, the meaning of values is similar to transmission_encode_level,
+    // see more details in the comment above transmissionEncodeLevel
+    @VarAttr(name = SPILL_ENCODE_LEVEL)
+    private int spillEncodeLevel = 7;
+=======
+>>>>>>> 1b9b4e6... [Enhancement] add sv `runtime_filter_early_return_selectivity` (#21395)
+
+>>>>>>> b42f9ab9e ([Enhancement] add sv `runtime_filter_early_return_selectivity` (#21395))
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
 
@@ -820,6 +848,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
     private boolean hudiMORForceJNIReader = false;
 
+<<<<<<< HEAD
     public boolean getUseScanBlockCache() {
         return useScanBlockCache;
     }
@@ -828,6 +857,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return ioTasksPerScanOperator;
     }
 
+=======
+>>>>>>> 1b9b4e6... [Enhancement] add sv `runtime_filter_early_return_selectivity` (#21395)
     @VarAttr(name = ENABLE_QUERY_CACHE)
     private boolean enableQueryCache = false;
 
@@ -1769,6 +1800,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setUse_scan_block_cache(useScanBlockCache);
         tResult.setEnable_populate_block_cache(enablePopulateBlockCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
+<<<<<<< HEAD
+=======
+        tResult.setUse_page_cache(usePageCache);
+        tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
+        tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
+>>>>>>> b42f9ab9e ([Enhancement] add sv `runtime_filter_early_return_selectivity` (#21395))
         return tResult;
     }
 
