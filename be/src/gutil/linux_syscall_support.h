@@ -2369,78 +2369,70 @@ LSS_INLINE int LSS_NAME(clone)(int (*fn)(void*), void* child_stack, int flags, v
 #define __NR__exit __NR_exit
 #define __NR__gettid __NR_gettid
 #define __NR__mremap __NR_mremap
-LSS_INLINE _syscall1(int, close, int, f)
-LSS_INLINE _syscall1(int, _exit, int, e)
+LSS_INLINE _syscall1(int, close, int, f) LSS_INLINE _syscall1(int, _exit, int, e)
 #if defined(__aarch64__) && defined(__ILP32__)
-/* aarch64_ilp32 uses fcntl64 for sys_fcntl() */
-LSS_INLINE _syscall3_long(int, fcntl, fcntl64, int, f, int, c, long, a)
+        /* aarch64_ilp32 uses fcntl64 for sys_fcntl() */
+        LSS_INLINE _syscall3_long(int, fcntl, fcntl64, int, f, int, c, long, a)
 #else
-LSS_INLINE _syscall3(int, fcntl, int, f, int, c, long, a)
+        LSS_INLINE _syscall3(int, fcntl, int, f, int, c, long, a)
 #endif
 #if defined(__aarch64__) && defined(__ILP32__)
-/* aarch64_ilp32 uses fstat64 for sys_fstat() */
-LSS_INLINE _syscall2_long(int, fstat, fstat64, int, f, struct kernel_stat*, b)
+        /* aarch64_ilp32 uses fstat64 for sys_fstat() */
+        LSS_INLINE _syscall2_long(int, fstat, fstat64, int, f, struct kernel_stat*, b)
 #else
-LSS_INLINE
-_syscall2(int, fstat, int, f, struct kernel_stat*, b)
+                LSS_INLINE
+        _syscall2(int, fstat, int, f, struct kernel_stat*, b)
 #endif
-LSS_INLINE _syscall6(int, futex, int*, a, int, o, int, v, struct kernel_timespec*, t, int*, a2, int, v3)
+                LSS_INLINE _syscall6(int, futex, int*, a, int, o, int, v, struct kernel_timespec*, t, int*, a2, int, v3)
 #ifdef __NR_getdents64
-LSS_INLINE _syscall3(int, getdents64, int, f, struct kernel_dirent64*, d, int, c)
+                        LSS_INLINE _syscall3(int, getdents64, int, f, struct kernel_dirent64*, d, int, c)
 #define KERNEL_DIRENT kernel_dirent64
 #define GETDENTS sys_getdents64
 #else
-LSS_INLINE _syscall3(int, getdents, int, f, struct kernel_dirent*, d, int, c)
+                        LSS_INLINE _syscall3(int, getdents, int, f, struct kernel_dirent*, d, int, c)
 #define KERNEL_DIRENT kernel_dirent
 #define GETDENTS sys_getdents
 #endif
-LSS_INLINE _syscall0(pid_t, getpid)
-LSS_INLINE _syscall0(pid_t, getppid)
-LSS_INLINE
-_syscall0(pid_t, _gettid) LSS_INLINE _syscall2(int, kill, pid_t, p, int, s)
+                                LSS_INLINE _syscall0(pid_t, getpid) LSS_INLINE _syscall0(pid_t, getppid) LSS_INLINE
+        _syscall0(pid_t, _gettid) LSS_INLINE _syscall2(int, kill, pid_t, p, int, s)
 #if defined(__x86_64__)
-/* Need to make sure off_t isn't truncated to 32-bits under x32.  */
-LSS_INLINE off_t LSS_NAME(lseek)(int f, off_t o, int w) {
+        /* Need to make sure off_t isn't truncated to 32-bits under x32.  */
+        LSS_INLINE off_t LSS_NAME(lseek)(int f, off_t o, int w) {
     _LSS_BODY(3, off_t, lseek, off_t, LSS_SYSCALL_ARG(f), (uint64_t)(o), LSS_SYSCALL_ARG(w));
 }
 #elif defined(__aarch64__) && defined(__ILP32__)
-/* aarch64_ilp32 uses llseek for sys_lseek() */
-LSS_INLINE _syscall3_long(off_t, lseek, llseek, int, f, off_t, o, int, w)
+        /* aarch64_ilp32 uses llseek for sys_lseek() */
+        LSS_INLINE _syscall3_long(off_t, lseek, llseek, int, f, off_t, o, int, w)
 #else
-LSS_INLINE _syscall3(off_t, lseek, int, f, off_t, o, int, w)
+                LSS_INLINE _syscall3(off_t, lseek, int, f, off_t, o, int, w)
 #endif
-LSS_INLINE _syscall2(int, munmap, void*, s, size_t, l)
-LSS_INLINE
-_syscall5(void*, _mremap, void*, o, size_t, os, size_t, ns, unsigned long, f, void*, a) LSS_INLINE
-        _syscall2(int, prctl, int, o, long, a)
-LSS_INLINE
-_syscall4(long, ptrace, int, r, pid_t, p, void*, a, void*, d) LSS_INLINE
-        _syscall3(ssize_t, read, int, f, void*, b, size_t, c)
-LSS_INLINE
-_syscall4(int, rt_sigaction, int, s, const struct kernel_sigaction*, a, struct kernel_sigaction*, o, size_t,
-          c) LSS_INLINE
+LSS_INLINE _syscall2(int, munmap, void*, s, size_t, l) LSS_INLINE
+        _syscall5(void*, _mremap, void*, o, size_t, os, size_t, ns, unsigned long, f, void*, a) LSS_INLINE
+        _syscall2(int, prctl, int, o, long, a) LSS_INLINE
+        _syscall4(long, ptrace, int, r, pid_t, p, void*, a, void*, d) LSS_INLINE
+        _syscall3(ssize_t, read, int, f, void*, b, size_t, c) LSS_INLINE
+        _syscall4(int, rt_sigaction, int, s, const struct kernel_sigaction*, a, struct kernel_sigaction*, o, size_t,
+                  c) LSS_INLINE
         _syscall4(int, rt_sigprocmask, int, h, const struct kernel_sigset_t*, s, struct kernel_sigset_t*, o, size_t, c);
-LSS_INLINE _syscall0(int, sched_yield)
-LSS_INLINE _syscall2(int, sigaltstack, const stack_t*, s, const stack_t*, o)
+LSS_INLINE _syscall0(int, sched_yield) LSS_INLINE _syscall2(int, sigaltstack, const stack_t*, s, const stack_t*, o)
 #if defined(__NR_fstatat)
-LSS_INLINE _syscall4(int, fstatat, int, d, const char*, p, struct kernel_stat*, b, int, flags)
-LSS_INLINE
-int LSS_NAME(stat)(const char* p, struct kernel_stat* b) {
+        LSS_INLINE _syscall4(int, fstatat, int, d, const char*, p, struct kernel_stat*, b, int, flags) LSS_INLINE
+        int LSS_NAME(stat)(const char* p, struct kernel_stat* b) {
     return LSS_NAME(fstatat)(AT_FDCWD, p, b, 0);
 }
 #else
-LSS_INLINE _syscall2(int, stat, const char*, f, struct kernel_stat*, b)
+        LSS_INLINE _syscall2(int, stat, const char*, f, struct kernel_stat*, b)
 #endif
 LSS_INLINE _syscall3(ssize_t, write, int, f, const void*, b, size_t, c)
 #if defined(__NR_getcpu)
-LSS_INLINE _syscall3(long, getcpu, unsigned*, cpu, unsigned*, node, void*, unused);
+        LSS_INLINE _syscall3(long, getcpu, unsigned*, cpu, unsigned*, node, void*, unused);
 #endif
 #if defined(__x86_64__) || defined(__aarch64__) || (defined(__mips__) && _MIPS_SIM != _MIPS_SIM_ABI32)
 LSS_INLINE _syscall3(int, socket, int, d, int, t, int, p)
 #endif
 #if defined(__x86_64__) || defined(__s390x__)
-LSS_INLINE
-int LSS_NAME(sigaction)(int signum, const struct kernel_sigaction* act, struct kernel_sigaction* oldact) {
+        LSS_INLINE
+        int LSS_NAME(sigaction)(int signum, const struct kernel_sigaction* act, struct kernel_sigaction* oldact) {
 #if defined(__x86_64__)
     /* On x86_64, the kernel requires us to always set our own
        * SA_RESTORER in order to be able to return from a signal handler.
@@ -2470,21 +2462,20 @@ LSS_INLINE int LSS_NAME(sigprocmask)(int how, const struct kernel_sigset_t* set,
 }
 #endif
 #ifdef __NR_wait4
-LSS_INLINE _syscall4(pid_t, wait4, pid_t, p, int*, s, int, o, struct kernel_rusage*, r)
-LSS_INLINE pid_t LSS_NAME(waitpid)(pid_t pid, int* status, int options) {
+LSS_INLINE _syscall4(pid_t, wait4, pid_t, p, int*, s, int, o, struct kernel_rusage*, r) LSS_INLINE pid_t
+        LSS_NAME(waitpid)(pid_t pid, int* status, int options) {
     return LSS_NAME(wait4)(pid, status, options, nullptr);
 }
 #else
-LSS_INLINE _syscall3(pid_t, waitpid, pid_t, p, int*, s, int, o)
+                        LSS_INLINE _syscall3(pid_t, waitpid, pid_t, p, int*, s, int, o)
 #endif
 #ifdef __NR_openat
-LSS_INLINE _syscall4(int, openat, int, d, const char*, p, int, f, int, m)
-LSS_INLINE
-int LSS_NAME(open)(const char* p, int f, int m) {
+LSS_INLINE _syscall4(int, openat, int, d, const char*, p, int, f, int, m) LSS_INLINE
+        int LSS_NAME(open)(const char* p, int f, int m) {
     return LSS_NAME(openat)(AT_FDCWD, p, f, m);
 }
 #else
-LSS_INLINE _syscall3(int, open, const char*, p, int, f, int, m)
+                                LSS_INLINE _syscall3(int, open, const char*, p, int, f, int, m)
 #endif
 LSS_INLINE int LSS_NAME(sigemptyset)(struct kernel_sigset_t* set) {
     memset(&set->sig, 0, sizeof(set->sig));
@@ -2520,9 +2511,8 @@ LSS_INLINE int LSS_NAME(sigdelset)(struct kernel_sigset_t* set, int signum) {
         defined(__PPC__) || (defined(__s390__) && !defined(__s390x__))
 #define __NR__sigaction __NR_sigaction
 #define __NR__sigprocmask __NR_sigprocmask
-LSS_INLINE _syscall2(int, fstat64, int, f, struct kernel_stat64*, b)
-LSS_INLINE
-_syscall5(int, _llseek, uint, fd, ulong, hi, ulong, lo, loff_t*, res, uint, wh)
+LSS_INLINE _syscall2(int, fstat64, int, f, struct kernel_stat64*, b) LSS_INLINE
+        _syscall5(int, _llseek, uint, fd, ulong, hi, ulong, lo, loff_t*, res, uint, wh)
 #if defined(__s390__) && !defined(__s390x__)
         /* On s390, mmap2() arguments are passed in memory. */
         LSS_INLINE void* LSS_NAME(_mmap2)(void* s, size_t l, int p, int f, int d, off_t o) {
@@ -2533,15 +2523,16 @@ _syscall5(int, _llseek, uint, fd, ulong, hi, ulong, lo, loff_t*, res, uint, wh)
 }
 #elif !defined(__PPC64__)
 #define __NR__mmap2 __NR_mmap2
-        LSS_INLINE _syscall6(void*, _mmap2, void*, s, size_t, l, int, p, int, f, int, d, off_t, o)
+                LSS_INLINE
+        _syscall6(void*, _mmap2, void*, s, size_t, l, int, p, int, f, int, d, off_t, o)
 #endif
-LSS_INLINE _syscall3(int, _sigaction, int, s, const struct kernel_old_sigaction*, a, struct kernel_old_sigaction*, o)
-LSS_INLINE
-_syscall3(int, _sigprocmask, int, h, const unsigned long*, s, unsigned long*, o) LSS_INLINE
+LSS_INLINE _syscall3(int, _sigaction, int, s, const struct kernel_old_sigaction*, a, struct kernel_old_sigaction*,
+                     o) LSS_INLINE
+        _syscall3(int, _sigprocmask, int, h, const unsigned long*, s, unsigned long*, o) LSS_INLINE
         _syscall2(int, stat64, const char*, p, struct kernel_stat64*, b)
 
-LSS_INLINE
-int LSS_NAME(sigaction)(int signum, const struct kernel_sigaction* act, struct kernel_sigaction* oldact) {
+                LSS_INLINE
+        int LSS_NAME(sigaction)(int signum, const struct kernel_sigaction* act, struct kernel_sigaction* oldact) {
     int old_errno = LSS_ERRNO;
     int rc;
     struct kernel_sigaction a;
@@ -2654,7 +2645,7 @@ LSS_INLINE _syscall6(void*, mmap, void*, addr, size_t, length, int, prot, int, f
      */
 LSS_INLINE _syscall2(int, socketcall, int, c, unsigned long*, a)
 
-LSS_INLINE int LSS_NAME(socket)(int domain, int type, int protocol) {
+        LSS_INLINE int LSS_NAME(socket)(int domain, int type, int protocol) {
     unsigned long args[3] = {(unsigned long)domain, (unsigned long)type, (unsigned long)protocol};
     return LSS_NAME(socketcall)(1, args);
 }
@@ -2683,8 +2674,7 @@ LSS_INLINE int LSS_NAME(pipe)(int* p) {
     }
 }
 #elif defined(__NR_pipe2)
-LSS_INLINE _syscall2(int, pipe2, int*, p, int, f)
-LSS_INLINE int LSS_NAME(pipe)(int* p) {
+        LSS_INLINE _syscall2(int, pipe2, int*, p, int, f) LSS_INLINE int LSS_NAME(pipe)(int* p) {
     return LSS_NAME(pipe2)(p, 0);
 }
 #else
