@@ -38,15 +38,15 @@ public interface ParserErrorMsg {
     String tokenExceedLimit();
 
     @BaseMessage("The inserted rows are {0} exceeded the maximum limit {1}, please consider modify " +
-            "''expr_children_limit'' in BE conf")
+            "''expr_children_limit'' in FE conf")
     String insertRowsExceedLimit(long a0, int a1);
 
     @BaseMessage("The number of exprs are {0} exceeded the maximum limit {1}, please consider modify " +
-            "''expr_children_limit'' in BE conf")
+            "''expr_children_limit'' in FE conf")
     String exprsExceedLimit(long a0, int a1);
 
     @BaseMessage("The number of children in expr are {0} exceeded the maximum limit {1}, please consider modify " +
-            "''expr_children_limit'' in BE conf")
+            "''expr_children_limit'' in FE conf")
     String argsOfExprExceedLimit(long a0, int a1);
 
     @BaseMessage("Invalid db name format ''{0}''")
