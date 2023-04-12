@@ -229,19 +229,17 @@ public class MaterializedViewTestBase extends PlanTestBase {
         }
 
         public MVRewriteChecker ok() {
-            return ok("TABLE: mv0");
+            return match("TABLE: mv0");
         }
 
-        public MVRewriteChecker ok(String targetMV) {
+        public MVRewriteChecker match(String targetMV) {
             Assert.assertTrue(this.exception == null);
             Assert.assertTrue(this.rewritePlan.contains(targetMV));
             return this;
         }
 
         public MVRewriteChecker nonMatch() {
-            Assert.assertTrue(this.rewritePlan != null);
-            Assert.assertTrue(!this.rewritePlan.contains("TABLE: mv0"));
-            return this;
+            return nonMatch("TABLE: mv0");
         }
 
         public MVRewriteChecker nonMatch(String targetMV) {

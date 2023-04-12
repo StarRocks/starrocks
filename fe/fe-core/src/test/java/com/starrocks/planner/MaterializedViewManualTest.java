@@ -91,4 +91,27 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 .nonMatch("test_partition_expr_mv1");
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
     }
+
+    @Test
+    public void testLimit1() throws Exception {
+        String sql = "CREATE TABLE `test_limit_1` (\n" +
+                "  `id` bigint(20) NULL COMMENT \"\",\n" +
+                "  `dt` date NULL COMMENT \"\",\n" +
+                "  `hour` varchar(65533) NULL COMMENT \"\"," +
+                "  `v1` float NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`, `dt`, `hour`)\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(PARTITION p202207 VALUES [(\"2022-07-01\"), (\"2022-08-01\")),\n" +
+                "PARTITION p202210 VALUES [(\"2022-10-01\"), (\"2022-11-01\")))\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 144\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ");";
+        starRocksAssert.withTable(sql);
+        String mv = "SELECT dt, count(DISTINCT id) from " +
+                "test_limit_1 where dt >= '2022-07-01' and dt <= '2022-10-01' group by dt";
+        testRewriteOK(mv, "SELECT dt, count(DISTINCT id) from test_limit_1 where " +
+                "dt >= '2022-07-01' and dt <= '2022-10-01' group by dt limit 10");
+    }
 }
