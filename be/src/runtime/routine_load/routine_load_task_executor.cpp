@@ -277,7 +277,13 @@ Status RoutineLoadTaskExecutor::submit_task(const TRoutineLoadTask& task) {
     // the routine load task'txn has alreay began in FE.
     // so it need to rollback if encounter error.
     ctx->need_rollback = true;
-    ctx->max_filter_ratio = 1.0;
+    if (task.__isset.max_filter_ratio) {
+        ctx->max_filter_ratio = task.max_filter_ratio;
+        LOG(INFO) << "yzrmm get max filter ratio from fe: " << ctx->max_filter_ratio;
+    } else {
+        ctx->max_filter_ratio = 1.0;
+        LOG(INFO) << "yzrmm use default max filter ratio from fe: " << ctx->max_filter_ratio;
+    }
 
     // set source related params
     switch (task.type) {
