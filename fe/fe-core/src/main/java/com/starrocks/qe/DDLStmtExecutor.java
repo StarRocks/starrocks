@@ -232,8 +232,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateTableStatement(CreateTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                String catalogName = stmt.getCatalogName();
-                context.getGlobalStateMgr().getMetadataMgr().createTable(catalogName, stmt);
+                context.getGlobalStateMgr().getMetadataMgr().createTable(stmt);
             });
             return null;
         }
@@ -249,7 +248,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropTableStatement(DropTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().dropTable(stmt);
+                context.getGlobalStateMgr().getMetadataMgr().dropTable(stmt);
             });
             return null;
         }
