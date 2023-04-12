@@ -601,24 +601,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
 
-    @VariableMgr.VarAttr(name = ENABLE_SPILL)
-    private boolean enableSpill = false;
-
-    @VariableMgr.VarAttr(name = SPILL_MODE)
-    private String spillMode = "auto";
-
-    // These parameters are experimental. They may be removed in the future
-    @VarAttr(name = SPILL_MEM_TABLE_SIZE, flag = VariableMgr.INVISIBLE)
-    private int spillMemTableSize = 1024 * 1024 * 100;
-    @VarAttr(name = SPILL_MEM_TABLE_NUM, flag = VariableMgr.INVISIBLE)
-    private int spillMemTableNum = 2;
-    @VarAttr(name = SPILL_MEM_LIMIT_THRESHOLD, flag = VariableMgr.INVISIBLE)
-    private double spillMemLimitThreshold = 0.5;
-    @VarAttr(name = SPILL_OPERATOR_MIN_BYTES, flag = VariableMgr.INVISIBLE)
-    private long spillOperatorMinBytes = 1024L * 1024 * 10;
-    @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)
-    private long spillOperatorMaxBytes = 1024L * 1024 * 1000;
-
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
 
@@ -1730,12 +1712,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_pipeline_query_statistic(enablePipelineQueryStatistic);
         tResult.setRuntime_filter_early_return_selectivity(runtimeFilterEarlyReturnSelectivity);
 
-        tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
         tResult.setUse_scan_block_cache(useScanBlockCache);
         tResult.setEnable_populate_block_cache(enablePopulateBlockCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
-        tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
-        tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
         return tResult;
     }
 
