@@ -191,7 +191,7 @@ public class MetadataMgr {
             }
             return connectorMetadata.get().createTable(stmt);
         } else {
-            throw new  DdlException("Invalidate catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+            throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }
     }
 
