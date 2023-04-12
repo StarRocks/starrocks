@@ -74,7 +74,7 @@ public class TabletStatMgr extends LeaderDaemon {
     // for lake table
     private final Map<Long, Long> partitionToUpdatedVersion;
 
-    private LocalDateTime lastWorkTimestamp;
+    private LocalDateTime lastWorkTimestamp = LocalDateTime.MIN;
 
     public TabletStatMgr() {
         super("tablet stat mgr", Config.tablet_stat_update_interval_second * 1000L);
