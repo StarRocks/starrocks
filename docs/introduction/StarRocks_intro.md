@@ -70,7 +70,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPartItem title="Query semi-structured data">
 
 - [JSON](../sql-reference/sql-statements/data-types/JSON.md)
-- [ARRAY](../using_starrocks/Array.md)
+- [ARRAY](../sql-reference/sql-statements/data-types/Array.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -82,9 +82,9 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Apache Hudi](../data_source/catalog/hudi_catalog.md)
 - [Apache Iceberg](../data_source/catalog/iceberg_catalog.md)
 - [Delta Lake](../data_source/catalog/deltalake_catalog.md)
-- [MySQL](../using_starrocks/External_table#mysql-external-table.md)
-- [Elasticsearch](../using_starrocks/External_table#elasticsearch-external-table.md)
-- [JDBC-compatible database](../using_starrocks/External_table#external-table-for-a-jdbc-compatible-database.md)
+- [MySQL](../data_source/External_table.md#mysql-external-table)
+- [Elasticsearch](../data_source/External_table.md#elasticsearch-external-table)
+- [JDBC-compatible database](../data_source/External_table.md#external-table-for-a-jdbc-compatible-database)
 
 </NavBoxPartItem>
 </NavBoxPart>
