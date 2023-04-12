@@ -132,6 +132,91 @@ class ParserTest {
                 exprs[1] instanceof FunctionCallExpr);
     }
 
+<<<<<<< HEAD
+=======
+    @ParameterizedTest
+    @MethodSource("keyWordSqls")
+    void testNodeReservedWords_3(String sql) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+        } catch (Exception e) {
+            fail("sql should success. errMsg: " +  e.getMessage());
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("reservedWordSqls")
+    void testReservedWords(String sql) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            fail("Not quoting reserved words. sql should fail.");
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof ParsingException);
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("multipleStatements")
+    void testMultipleStatements(String sql, boolean isValid) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            if (!isValid) {
+                fail("sql should fail.");
+            }
+        } catch (Exception e) {
+            if (isValid) {
+                fail("sql should success. errMsg: " +  e.getMessage());
+            }
+        }
+    }
+
+    @ParameterizedTest
+    @MethodSource("setQuantifierInAggFunc")
+    void testSetQuantifierInAggFunc(String sql, boolean isValid) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            if (!isValid) {
+                fail("sql should fail.");
+            }
+        } catch (Exception e) {
+            if (isValid) {
+                fail("sql should success. errMsg: " +  e.getMessage());
+            }
+        }
+    }
+
+    
+    private static Stream<Arguments> keyWordSqls() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select current_role()");
+        sqls.add("select current_role");
+        sqls.add("SHOW ALL AUTHENTICATION ");
+        sqls.add("CANCEL BACKUP from tbl");
+        sqls.add("select current_role() from tbl");
+        sqls.add("grant all privileges on DATABASE db1 to test");
+        sqls.add("revoke export on DATABASE db1 from test");
+        sqls.add("ALTER SYSTEM MODIFY BACKEND HOST '1' to '1'");
+        sqls.add("SHOW COMPUTE NODES");
+        sqls.add("trace optimizer select 1");
+        sqls.add("select anti from t1 left anti join t2 on true");
+        sqls.add("select anti, semi from t1 left semi join t2 on true");
+        sqls.add("select * from tbl1 MINUS select * from tbl2");
+        return sqls.stream().map(e -> Arguments.of(e));
+    }
+
+
+    private static Stream<Arguments> reservedWordSqls() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select * from current_role ");
+        sqls.add("select * from full full join anti anti on anti.col join t1 on true");
+        return sqls.stream().map(e -> Arguments.of(e));
+    }
+
+>>>>>>> 7c1efe58e ([BugFix] support all setQuantifier in special agg functions in new parser (#21413))
     private static Stream<Arguments> multipleStatements() {
         List<Pair<String, Boolean>> sqls = Lists.newArrayList();
         sqls.add(Pair.create("select 1;;;;;;select 2", true));
@@ -143,6 +228,22 @@ class ParserTest {
 
         sqls.add(Pair.create("select 1 select 2", false));
         sqls.add(Pair.create("select 1 xxx select 2 xxx", false));
+        return sqls.stream().map(e -> Arguments.of(e.first, e.second));
+    }
+
+    private static Stream<Arguments> setQuantifierInAggFunc() {
+        List<Pair<String, Boolean>> sqls = Lists.newArrayList();
+        sqls.add(Pair.create("select count(v1) from t1", true));
+        sqls.add(Pair.create("select count(all v1) from t1", true));
+        sqls.add(Pair.create("select count(distinct v1) from t1", true));
+        sqls.add(Pair.create("select sum(abs(v1)) from t1", true));
+        sqls.add(Pair.create("select sum(all abs(v1)) from t1", true));
+        sqls.add(Pair.create("select sum(distinct abs(v1)) from t1", true));
+
+        sqls.add(Pair.create("select count(all *) from t1", false));
+        sqls.add(Pair.create("select count(distinct *) from t1", false));
+        sqls.add(Pair.create("select abs(all v1) from t1", false));
+        sqls.add(Pair.create("select abs(distinct v1) from t1", false));
         return sqls.stream().map(e -> Arguments.of(e.first, e.second));
     }
 }
