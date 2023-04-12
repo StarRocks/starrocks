@@ -102,6 +102,7 @@ public class FragmentNormalizer {
 
     private Set<Integer> cachedPlanNodeIds = Sets.newHashSet();
     private boolean assignScanRangesAcrossDrivers = false;
+
     public FragmentNormalizer(ExecPlan execPlan, PlanFragment fragment) {
         this.execPlan = execPlan;
         this.fragment = fragment;
@@ -749,6 +750,14 @@ public class FragmentNormalizer {
             return false;
         }
 
+        // constant arguments in window_funnel is not aligned in two-stage agg operators, so
+        // forbid query cache when encountering window_funnel
+        boolean hasWindowFunnel = firstAggNode.getAggInfo().getAggregateExprs().stream()
+                .anyMatch(func -> func.getFnName().getFunction().equals(FunctionSet.WINDOW_FUNNEL));
+        if (hasWindowFunnel) {
+            return false;
+        }
+
         // If there exists no JoinNode has runtime filters above cache point(i.e.firstAggNode),
         // then we just compute digest from the subtree rooted at firstAggNode.
         if (topMostDigestNode == null) {
@@ -793,7 +802,7 @@ public class FragmentNormalizer {
         normalizeSubTree(leftNodeIds, topMostDigestNode, Sets.newHashSet());
         List<PlanNode> cachedPlanNodes = leftNodesTopDown.stream().skip(firstAggNodeIdx).collect(Collectors.toList());
         fragment.setAssignScanRangesPerDriverSeq(canAssignScanRangesAcrossDrivers(cachedPlanNodes));
-        cachedPlanNodeIds = cachedPlanNodes.stream().map(node->node.getId().asInt()).collect(Collectors.toSet());
+        cachedPlanNodeIds = cachedPlanNodes.stream().map(node -> node.getId().asInt()).collect(Collectors.toSet());
         return computeDigest(firstAggNode);
     }
 

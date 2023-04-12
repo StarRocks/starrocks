@@ -1541,4 +1541,22 @@ public class QueryCacheTest {
         Assert.assertTrue(frag0.isPresent() && frag1.isPresent());
         Assert.assertNotEquals(frag0.get().getCacheParam().digest, frag1.get().getCacheParam().digest);
     }
+
+    @Test
+    public void testForbidWindowFunnel() {
+        String sql = "select\n" +
+                "   date_trunc('ts', 'month') as month,\n" +
+                "   window_funnel(\n" +
+                "      86400,\n" +
+                "      ts,\n" +
+                "      0,\n" +
+                "      [c3 = 1, c3 = 2, c3 = 3]\n" +
+                "   ) as level\n" +
+                "from\n" +
+                "   t1\n" +
+                "group by\n" +
+                "   month;";
+        Optional<PlanFragment> optCachedFragment = getCachedFragment(sql);
+        Assert.assertFalse(optCachedFragment.isPresent());
+    }
 }
