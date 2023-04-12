@@ -32,8 +32,8 @@
 
 <!--- [Preview] 支持大查询的算子落盘，可以在内存不足时利用磁盘空间来保证查询稳定执行成功。-->
 - [Query Cache](../using_starrocks/query_cache.md) 支持更多使用场景，包括各种 Broadcast Join、Bucket Shuffle Join 等 Join 场景。
-- 动态自适应并行度，可以根据查询并发自适应调节 `pipeline_dop`。
 - 支持 [Global UDF](../sql-reference/sql-functions/JAVA_UDF.md)。
+- 动态自适应并行度，可以根据查询并发自适应调节 `pipeline_dop`。
 
 **函数**
 
