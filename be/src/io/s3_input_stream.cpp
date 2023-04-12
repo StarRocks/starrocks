@@ -25,8 +25,6 @@
 #include "metrics/metrics.h"
 #endif
 
-#include "common/config.h"
-
 namespace starrocks::io {
 
 inline Status make_error_status(const Aws::S3::S3Error& error) {
@@ -47,10 +45,6 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
     request.SetBucket(_bucket);
     request.SetKey(_object);
     request.SetRange(std::move(range));
-
-    if (config::io_sleep_ms > 0) {
-        usleep(config::io_sleep_ms * 1000);
-    }
 
     Aws::S3::Model::GetObjectOutcome outcome = _s3client->GetObject(request);
     if (outcome.IsSuccess()) {

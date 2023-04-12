@@ -61,12 +61,8 @@ ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t i
         : ScanOperator(factory, id, driver_sequence, dop, scan_node) {}
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
-    const TQueryOptions& options = state->query_options();
     bool shared_scan = _scan_node->is_shared_scan_enabled();
     _unique_metrics->add_info_string("SharedScan", shared_scan ? "True" : "False");
-    if (options.__isset.enable_connector_adaptive_io_tasks) {
-        _enable_adaptive_io_tasks = options.enable_connector_adaptive_io_tasks;
-    }
     return Status::OK();
 }
 
@@ -154,49 +150,6 @@ void ConnectorScanOperator::set_buffer_finished() {
 connector::ConnectorType ConnectorScanOperator::connector_type() {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     return scan_node->connector_type();
-}
-
-bool ConnectorScanOperator::is_running_all_io_tasks() const {
-    PickupMorselState& state = _pickup_morsel_state;
-    return (state.max_io_tasks != 0) && (_num_running_io_tasks >= state.max_io_tasks);
-}
-
-void ConnectorScanOperator::finish_driver_process() {
-    PickupMorselState& state = _pickup_morsel_state;
-    state.adjusted_io_tasks = false;
-}
-
-int ConnectorScanOperator::update_pickup_morsel_state() {
-    if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
-    size_t chunks = num_buffered_chunks();
-    size_t thres = _buffer_unplug_threshold();
-
-    PickupMorselState& state = _pickup_morsel_state;
-    int& io_tasks = state.max_io_tasks;
-    const int MIN_IO_TASKS = config::connector_io_tasks_min_size;
-    if (state.adjusted_io_tasks) {
-        return io_tasks;
-    }
-
-    auto f = [&]() {
-        if (chunks >= (2 * thres)) {
-            io_tasks = std::max(MIN_IO_TASKS, io_tasks - 1);
-            VLOG_FILE << "[XXX] queue FULL. id = " << _driver_sequence << ", update to " << io_tasks;
-        } else if (chunks <= thres) {
-            int delta = MIN_IO_TASKS;
-            io_tasks = std::min(io_tasks + delta, _io_tasks_per_scan_operator);
-            VLOG_FILE << "[XXX] queue not full. id = " << _driver_sequence << ", update to " << io_tasks;
-        } else {
-            // if buffer is enough. then don't do anything.
-        }
-        return io_tasks;
-    };
-
-    int value = f();
-    state.adjusted_io_tasks = true;
-    VLOG_FILE << "[XXX] pickup morsel. id = " << _driver_sequence << ", P = " << value << ", chunk/thres = " << chunks
-              << "/" << thres;
-    return value;
 }
 
 // ==================== ConnectorChunkSource ====================
