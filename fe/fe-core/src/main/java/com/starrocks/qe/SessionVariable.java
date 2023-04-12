@@ -895,13 +895,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
     private boolean hudiMORForceJNIReader = false;
 
-<<<<<<< HEAD
     public boolean getUseScanBlockCache() {
         return useScanBlockCache;
     }
 
-=======
->>>>>>> 1b9b4e6be ([Enhancement] add sv `runtime_filter_early_return_selectivity` (#21395))
     @VarAttr(name = ENABLE_QUERY_CACHE)
     private boolean enableQueryCache = false;
 
