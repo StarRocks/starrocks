@@ -122,19 +122,10 @@ starlet_port = <starlet_port>
 | ---------------------- | ------------------------------ |
 | starlet_port           | The BE heartbeat service port. Default value: `9070`.|
 
-If you want to enable local disk cache, add the following configuration item in the BE configuration file **be.conf**:
-
-```YAML
-starlet_cache_dir = <starlet_cache_dir>
-```
-
-| **Configuration item**   | **Description**        |
-| ------------ | ------------------------ |
-| starlet_cache_dir | The directory of the local disk cache. You can configure multiple directories and separate the directories with a colon (`:`).|
-
 > **NOTE**
 >
-> Whereas data has been stored in object storage, you do not need to specify `storage_root_path` in the BE configuration file when you deploy a shared-data StarRocks cluster.
+> - Whereas data has been stored in object storage, you do not need to specify `storage_root_path` in the BE configuration file when you deploy a shared-data StarRocks cluster.
+> - If you have enabled the local disk cache, the data is cached under the directory **be/storage/starlet_cache**.
 
 ## Use your shared-data StarRocks cluster
 
