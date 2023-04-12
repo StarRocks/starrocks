@@ -262,6 +262,23 @@ class ParserTest {
             }
         }
     }
+
+    @ParameterizedTest
+    @MethodSource("setQuantifierInAggFunc")
+    void testSetQuantifierInAggFunc(String sql, boolean isValid) {
+        SessionVariable sessionVariable = new SessionVariable();
+        try {
+            SqlParser.parse(sql, sessionVariable).get(0);
+            if (!isValid) {
+                fail("sql should fail.");
+            }
+        } catch (Exception e) {
+            if (isValid) {
+                fail("sql should success. errMsg: " +  e.getMessage());
+            }
+        }
+    }
+
     
     private static Stream<Arguments> keyWordSqls() {
         List<String> sqls = Lists.newArrayList();
@@ -300,6 +317,22 @@ class ParserTest {
 
         sqls.add(Pair.create("select 1 select 2", false));
         sqls.add(Pair.create("select 1 xxx select 2 xxx", false));
+        return sqls.stream().map(e -> Arguments.of(e.first, e.second));
+    }
+
+    private static Stream<Arguments> setQuantifierInAggFunc() {
+        List<Pair<String, Boolean>> sqls = Lists.newArrayList();
+        sqls.add(Pair.create("select count(v1) from t1", true));
+        sqls.add(Pair.create("select count(all v1) from t1", true));
+        sqls.add(Pair.create("select count(distinct v1) from t1", true));
+        sqls.add(Pair.create("select sum(abs(v1)) from t1", true));
+        sqls.add(Pair.create("select sum(all abs(v1)) from t1", true));
+        sqls.add(Pair.create("select sum(distinct abs(v1)) from t1", true));
+
+        sqls.add(Pair.create("select count(all *) from t1", false));
+        sqls.add(Pair.create("select count(distinct *) from t1", false));
+        sqls.add(Pair.create("select abs(all v1) from t1", false));
+        sqls.add(Pair.create("select abs(distinct v1) from t1", false));
         return sqls.stream().map(e -> Arguments.of(e.first, e.second));
     }
 }
