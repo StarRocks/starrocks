@@ -288,7 +288,7 @@ public class CreateLakeTableTest {
                 result = GlobalStateMgr.getCurrentState().getNextId();
                 agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 result = Lists.newArrayList(20001L, 20002L, 20003L);
-                agent.getPrimaryBackendIdByShard(anyLong);
+                agent.getPrimaryComputeNodeIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
                 agent.getBackendIdsByShard(anyLong);
                 result = Sets.newHashSet(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0));
