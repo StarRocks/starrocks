@@ -1872,6 +1872,43 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    public void testHivePartialPartitionWithTTL() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        createAndRefreshMv("test", "hive_parttbl_mv",
+                "CREATE MATERIALIZED VIEW `hive_parttbl_mv`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"force_external_table_query_rewrite\" = \"true\",\n" +
+                        "\"partition_ttl_number\" = \"3\"\n" +
+                        ")\n" +
+                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
+
+        MaterializedView ttlMv = getMv("test", "hive_parttbl_mv");
+        GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().runOnceForTest();
+        Assert.assertEquals(3, ttlMv.getPartitions().size());
+
+        String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par`";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "0:UNION");
+
+        query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                "where l_shipdate = '1998-01-01'";
+        plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "HdfsScanNode");
+
+        query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+                "where l_shipdate >= '1998-01-04'";
+        plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv");
+
+        dropMv("test", "hive_parttbl_mv");
+    }
+
+    @Test
     public void testHivePartialPartition() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         createAndRefreshMv("test", "hive_parttbl_mv",
