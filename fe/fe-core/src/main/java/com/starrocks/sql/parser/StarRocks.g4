@@ -1707,6 +1707,11 @@ columnAliases
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
     | TEMPORARY? (PARTITION | PARTITIONS) identifier
+    | listPartition
+    ;
+
+listPartition
+    : PARTITION '(' partitionPair (',' partitionPair)* ')'                              #listPartitions
     ;
 
 tabletList
@@ -2032,6 +2037,10 @@ partitionKeyDesc
 
 partitionValueList
     : '(' partitionValue (',' partitionValue)* ')'
+    ;
+
+partitionPair
+    : key=identifier '=' value=literalExpression
     ;
 
 partitionValue
