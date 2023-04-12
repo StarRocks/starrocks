@@ -29,6 +29,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -132,10 +133,9 @@ public class CatalogUtils {
         }
     }
 
-    public static void checkTempPartitionMatch(List<Partition> partitionList,
-                                               List<Partition> tempPartitionList,
-                                               ListPartitionInfo listPartitionInfo,
-                                               boolean strictRange) throws DdlException {
+    public static void checkTempPartitionStrictMatch(List<Partition> partitionList,
+                                                     List<Partition> tempPartitionList,
+                                                     ListPartitionInfo listPartitionInfo) throws DdlException {
         Set<LiteralExpr> simpleSet = new HashSet<>();
         Set<List<LiteralExpr>> multiSet = new HashSet<>();
         Set<Object> simpleValueSet = new HashSet<>();
@@ -150,29 +150,71 @@ public class CatalogUtils {
                 tempSimpleValueSet, tempMultiSet, tempMultiValueSet);
 
         if (!simpleSet.isEmpty() && !tempSimpleSet.isEmpty()) {
-            if (strictRange) {
-                if (!simpleSet.equals(tempSimpleSet)) {
-                    throw new DdlException("2 list partitions are not strictly matched, "
-                            + simpleValueSet + " vs " + tempSimpleValueSet);
-                }
-            } else {
-                if (!simpleSet.containsAll(tempSimpleSet)) {
-                    throw new DdlException("2 list partitions are not matched, "
-                            + simpleValueSet + " vs " + tempSimpleValueSet);
-                }
+            if (!simpleSet.equals(tempSimpleSet)) {
+                throw new DdlException("2 list partitions are not strictly matched, "
+                        + simpleValueSet + " vs " + tempSimpleValueSet);
             }
         }
 
         if (!multiSet.isEmpty() && !tempMultiSet.isEmpty()) {
-            if (strictRange) {
-                if (!multiSet.equals(tempMultiSet)) {
-                    throw new DdlException("2 list partitions are not strictly matched, "
-                            + multiValueSet + " vs " + tempMultiValueSet);
+            if (!multiSet.equals(tempMultiSet)) {
+                throw new DdlException("2 list partitions are not strictly matched, "
+                        + multiValueSet + " vs " + tempMultiValueSet);
+            }
+        }
+    }
+
+    public static void checkTempPartitionConflict(List<Partition> partitionList,
+                                               List<Partition> tempPartitionList,
+                                               ListPartitionInfo listPartitionInfo) throws DdlException {
+        Map<Long, List<LiteralExpr>> listMap = listPartitionInfo.getLiteralExprValues();
+        Map<Long, List<List<LiteralExpr>>> multiListMap = listPartitionInfo.getMultiLiteralExprValues();
+        Map<Long, List<LiteralExpr>> newListMap = new HashMap<>(listMap);
+        Map<Long, List<List<LiteralExpr>>> newMultiListMap = new HashMap<>(multiListMap);
+
+        // Filter the partition that needs to be replaced
+        partitionList.forEach(partition -> {
+            newListMap.remove(partition.getId());
+            newMultiListMap.remove(partition.getId());
+        });
+
+        // Filter out temporary partitions
+        Set<List<LiteralExpr>> tempSet = new HashSet<>();
+        Set<List<List<LiteralExpr>>> tempMultiSet = new HashSet<>();
+        for(Partition partition : tempPartitionList) {
+            if (!listMap.isEmpty()) {
+                tempSet.add(listMap.get(partition.getId()));
+                newListMap.remove(partition.getId());
+            }
+            if (!multiListMap.isEmpty()) {
+                tempMultiSet.add(multiListMap.get(partition.getId()));
+                newMultiListMap.remove(partition.getId());
+            }
+        };
+
+        // Check whether the remaining partition overlaps with the temporary partition
+        if (!tempSet.isEmpty() && !newListMap.isEmpty()) {
+            for (List<LiteralExpr> list : tempSet) {
+                for (Map.Entry<Long, List<LiteralExpr>> entry : newListMap.entrySet()) {
+                    List<LiteralExpr> cur = entry.getValue();
+                    List<LiteralExpr> diff = list.stream().distinct().filter(cur::contains).collect(Collectors.toList());
+                    if (!diff.isEmpty()) {
+                        List<String> message = diff.stream().map(LiteralExpr::getStringValue).collect(Collectors.toList());
+                        throw new DdlException("Range: " + message + " conflicts with existing range");
+                    }
                 }
-            } else {
-                if (!multiSet.containsAll(tempMultiSet)) {
-                    throw new DdlException("2 list partitions are not matched, "
-                            + multiValueSet + " vs " + tempMultiValueSet);
+            }
+        }
+        if (!tempMultiSet.isEmpty() && !newMultiListMap.isEmpty()) {
+            for (List<List<LiteralExpr>> multiList : tempMultiSet) {
+                for (List<LiteralExpr> list : multiList) {
+                    for (Map.Entry<Long, List<List<LiteralExpr>>> entry : newMultiListMap.entrySet()) {
+                        List<List<LiteralExpr>> cur = entry.getValue();
+                        if (cur.contains(list)) {
+                            List<String> message = list.stream().map(LiteralExpr::getStringValue).collect(Collectors.toList());
+                            throw new DdlException("Range: " + message + " conflicts with existing range");
+                        }
+                    }
                 }
             }
         }
@@ -198,7 +240,7 @@ public class CatalogUtils {
                 for (LiteralExpr item : singleItemListPartitionDesc.getLiteralExprValues()) {
                     for (LiteralExpr value : allLiteralExprValues) {
                         if (item.getStringValue().equals(value.getStringValue())) {
-                            throw new DdlException("Duplicate partition value %s");
+                            throw new DdlException("Duplicate partition value " + item.getStringValue());
                         }
                     }
                 }

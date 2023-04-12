@@ -2033,6 +2033,7 @@ public class OlapTable extends Table {
             List<Partition> partitionList = new ArrayList<>();
             for (String partName : partitionNames) {
                 Partition partition = nameToPartition.get(partName);
+                Preconditions.checkNotNull(partition);
                 partitionList.add(partition);
             }
             List<Partition> tempPartitionList = new ArrayList<>();
@@ -2041,7 +2042,11 @@ public class OlapTable extends Table {
                 Preconditions.checkNotNull(tempPartition);
                 tempPartitionList.add(tempPartition);
             }
-            CatalogUtils.checkTempPartitionMatch(partitionList, tempPartitionList, listInfo, strictRange);
+            if (strictRange) {
+                CatalogUtils.checkTempPartitionStrictMatch(partitionList, tempPartitionList, listInfo);
+            } else {
+                CatalogUtils.checkTempPartitionConflict(partitionList, tempPartitionList, listInfo);
+            }
         }
 
         // begin to replace

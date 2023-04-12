@@ -251,19 +251,28 @@ public class TempPartitionTest {
         String addStmtStr2 = "alter table test.test add partition p_js " +
                 "VALUES IN (\"nanjing\", \"suzhou\");";
         alterTableWithNewAnalyzer(addStmtStr2, false);
-        String addTempStmtStr3 = "alter table test.test add temporary partition tp_bj " +
-                "VALUES IN (\"beijing\");";
-        alterTableWithNewAnalyzer(addTempStmtStr3, false);
-        String failReplaceNotStrict1 = "alter table test.test replace partition(p_zj, p_js) " +
-                "with temporary partition(tp_bj) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
-        alterTableWithNewAnalyzer(failReplaceNotStrict1, true);
-        String failReplaceNotStrict2 = "alter table test.test replace partition(p_zj) " +
-                "with temporary partition(tp_bj) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
-        alterTableWithNewAnalyzer(failReplaceNotStrict2, true);
 
-        String addTempStmtStr4 = "alter table test.test add temporary partition tp_zj " +
-                "VALUES IN (\"hangzhou\", \"ningbo\");";
+        String addTempStmtStr3 = "alter table test.test add temporary partition tp_bj_zj " +
+                "VALUES IN (\"beijing\", \"hangzhou\");";
+        alterTableWithNewAnalyzer(addTempStmtStr3, false);
+        String failReplaceNotStrict1 = "alter table test.test replace partition(p_js) " +
+                "with temporary partition(tp_bj_zj) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+        alterTableWithNewAnalyzer(failReplaceNotStrict1, true);
+        dropTempStr = "alter table test.test drop temporary partition tp_bj_zj;";
+        alterTableWithNewAnalyzer(dropTempStr, false);
+
+        String addTempStmtStr4 = "alter table test.test add temporary partition tp_bj_js " +
+                "VALUES IN (\"beijing\", \"nanjing\");";
         alterTableWithNewAnalyzer(addTempStmtStr4, false);
+        String failReplaceNotStrict2 = "alter table test.test replace partition(p_zj) " +
+                "with temporary partition(tp_bj_js) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
+        alterTableWithNewAnalyzer(failReplaceNotStrict2, true);
+        dropTempStr = "alter table test.test drop temporary partition tp_bj_js;";
+        alterTableWithNewAnalyzer(dropTempStr, false);
+
+        String addTempStmtStr5 = "alter table test.test add temporary partition tp_zj " +
+                "VALUES IN (\"hangzhou\", \"ningbo\");";
+        alterTableWithNewAnalyzer(addTempStmtStr5, false);
         String passReplaceNotStrict1 = "alter table test.test replace partition(p_zj, p_js) " +
                 "with temporary partition(tp_zj) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
         alterTableWithNewAnalyzer(passReplaceNotStrict1, false);
@@ -274,9 +283,9 @@ public class TempPartitionTest {
         String addStmtStr4 = "alter table test.test add partition p_hb " +
                 "VALUES IN (\"wuhang\", \"sanxia\");";
         alterTableWithNewAnalyzer(addStmtStr4, false);
-        String addTempStmtStr5 = "alter table test.test add temporary partition tp_sc " +
+        String addTempStmtStr6 = "alter table test.test add temporary partition tp_sc " +
                 "VALUES IN (\"chengdu\", \"chongqing\");";
-        alterTableWithNewAnalyzer(addTempStmtStr5, false);
+        alterTableWithNewAnalyzer(addTempStmtStr6, false);
         String passReplaceNotStrict2 = "alter table test.test replace partition(p_sc, p_hb) " +
                 "with temporary partition(tp_sc) properties('strict_range' = 'false', 'use_temp_partition_name' = 'true');";
         alterTableWithNewAnalyzer(passReplaceNotStrict2, false);
