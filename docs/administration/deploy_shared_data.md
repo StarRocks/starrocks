@@ -122,11 +122,11 @@ storage_root_path = <storage_root_path>
 | **Configuration item** | **Description**                |
 | ---------------------- | ------------------------------ |
 | starlet_port           | The BE heartbeat service port. Default value: `9070`.|
-| storage_root_path      | The directory and medium of the storage volume(s) for local cached data. Multiple volumes are separated by semicolon (;). You can specify the storage medium. If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. Default value: `${STARROCKS_HOME}/storage`. |
+| storage_root_path      | The directory of the storage volume(s) that the local cached data depends on and the medium type of the storage. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. Default value: `${STARROCKS_HOME}/storage`. |
 
 > **NOTE**
 >
-> The data is cached under the directory **${STARROCKS_HOME}/\<storage_root_path\>/starlet_cache**.
+> The data is cached under the directory **\<storage_root_path\>/starlet_cache**.
 
 ## Use your shared-data StarRocks cluster
 
