@@ -102,8 +102,6 @@ SELECT select_expr[, select_expr ...]
 
 物化视图的属性。
 
-- `short_key`：排序列的个数。
-- `timeout`：构建物化视图的超时时间。单位为秒。
 - `replication_num`：创建物化视图副本数量。
 - `storage_medium`：存储介质类型。
 
