@@ -59,7 +59,7 @@ Status MetaScanOperator::do_prepare(RuntimeState* state) {
 void MetaScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr MetaScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
-    return std::make_shared<MetaChunkSource>(_driver_sequence, _runtime_profile.get(), std::move(morsel), _ctx);
+    return std::make_shared<MetaChunkSource>(this, _runtime_profile.get(), std::move(morsel), _ctx);
 }
 
 ChunkPtr MetaScanOperator::get_chunk_from_buffer() {

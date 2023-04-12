@@ -63,9 +63,9 @@ public:
     Status do_prepare(RuntimeState* state) override;
     void do_close(RuntimeState* state) override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
+
     connector::ConnectorType connector_type();
 
-    // TODO: refactor it into the base class
     void attach_chunk_source(int32_t source_index) override;
     void detach_chunk_source(int32_t source_index) override;
     bool has_shared_chunk_source() const override;
@@ -81,8 +81,8 @@ public:
 
 class ConnectorChunkSource : public ChunkSource {
 public:
-    ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                         ScanOperator* op, ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
+    ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                         ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
 
     ~ConnectorChunkSource() override;
 
@@ -91,7 +91,7 @@ public:
     const std::string get_custom_coredump_msg() const override;
 
 protected:
-    virtual bool _reach_eof() { return _limit != -1 && _rows_read >= _limit; }
+    virtual bool _reach_eof() const { return _limit != -1 && _rows_read >= _limit; }
     Status _open_data_source(RuntimeState* state);
 
     connector::DataSourcePtr _data_source;

@@ -107,7 +107,8 @@ public class AlterRoutineLoadStmtTest {
                 + "(\n"
                 + "\"kafka_partitions\" = \"0, 1, 2\",\n"
                 + "\"kafka_offsets\" = \"100, 200, 100\",\n"
-                + "\"property.group.id\" = \"group1\"\n"
+                + "\"property.group.id\" = \"group1\",\n"
+                + "\"confluent.schema.registry.url\" = \"https://key:passwrod@addr\"\n"
                 + ");";
         List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
         AlterRoutineLoadStmt stmt = (AlterRoutineLoadStmt)stmts.get(0);
@@ -122,6 +123,7 @@ public class AlterRoutineLoadStmtTest {
         Assert.assertEquals(1, stmt.getDataSourceProperties().getCustomKafkaProperties().size());
         Assert.assertTrue(stmt.getDataSourceProperties().getCustomKafkaProperties().containsKey("group.id"));
         Assert.assertEquals(3, stmt.getDataSourceProperties().getKafkaPartitionOffsets().size());
+        Assert.assertEquals("https://key:passwrod@addr", stmt.getDataSourceProperties().getConfluentSchemaRegistryUrl());
     }
 
     @Test

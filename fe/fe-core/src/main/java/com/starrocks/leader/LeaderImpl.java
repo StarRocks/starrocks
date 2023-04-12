@@ -78,6 +78,7 @@ import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
@@ -182,17 +183,22 @@ public class LeaderImpl {
         TBackend tBackend = request.getBackend();
         String host = tBackend.getHost();
         int bePort = tBackend.getBe_port();
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
-        if (backend == null) {
+        long backendId = -1L;
+        ComputeNode cn = Config.only_use_compute_node ?
+                GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort) :
+                GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
+
+        if (cn == null) {
             tStatus.setStatus_code(TStatusCode.CANCELLED);
             List<String> errorMsgs = new ArrayList<>();
             errorMsgs.add("backend not exist.");
             tStatus.setError_msgs(errorMsgs);
             LOG.warn("backend does not found. host: {}, be port: {}. task: {}", host, bePort, request.toString());
             return result;
+        } else {
+            backendId = cn.getId();
         }
 
-        long backendId = backend.getId();
         TTaskType taskType = request.getTask_type();
         long signature = request.getSignature();
         AgentTask task = AgentTaskQueue.getTask(backendId, taskType, signature);
@@ -214,7 +220,7 @@ public class LeaderImpl {
             if (taskStatus.getStatus_code() != TStatusCode.OK) {
                 task.failed();
                 String errMsg = "task type: " + taskType + ", status_code: " + taskStatus.getStatus_code().toString() +
-                        ", backendId: " + backend + ", signature: " + signature;
+                        ", backendId: " + backendId + ", signature: " + signature;
                 task.setErrorMsg(errMsg);
                 // We start to let FE perceive the task's error msg
                 if (taskType != TTaskType.MAKE_SNAPSHOT && taskType != TTaskType.UPLOAD

@@ -432,12 +432,12 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                             return Status::InternalError("automatic partition only support single column partition.");
                         }
                         for (auto& column : *row.columns) {
-                            VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partion row "
+                            VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partition row "
                                     << row.debug_string();
                             (*partition_not_exist_row_values)[0].emplace_back(column->debug_item(i));
                         }
                     } else {
-                        VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partion row "
+                        VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partition row "
                                 << row.debug_string();
                         (*partitions)[i] = nullptr;
                         (*selection)[i] = 0;
@@ -454,12 +454,12 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                             return Status::InternalError("automatic partition only support single column partition.");
                         }
                         for (auto& column : *row.columns) {
-                            VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partion row "
+                            VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partition row "
                                     << row.debug_string();
                             (*partition_not_exist_row_values)[0].emplace_back(column->debug_item(i));
                         }
                     } else {
-                        VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partion row "
+                        VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partition row "
                                 << row.debug_string() << " partition start " << it->second->start_key.debug_string()
                                 << " end " << it->second->end_key.debug_string();
                         (*partitions)[i] = nullptr;

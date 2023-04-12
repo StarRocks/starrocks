@@ -28,6 +28,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -146,6 +147,10 @@ public interface ConnectorMetadata {
         createDb(dbName, new HashMap<>());
     }
 
+    default boolean dbExists(String dbName) {
+        return listDbNames().contains(dbName.toLowerCase(Locale.ROOT));
+    }
+
     default void createDb(String dbName, Map<String, String> properties) throws DdlException, AlreadyExistsException {
         throw new StarRocksConnectorException("This connector doesn't support creating databases");
     }
@@ -154,20 +159,20 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support dropping databases");
     }
 
-    default boolean dbExists(String dbName) {
-        return listDbNames().contains(dbName.toLowerCase(Locale.ROOT));
-    }
-
-    default List<Long> getDbIds() {
-        return Lists.newArrayList();
+    default Database getDb(long dbId) {
+        return null;
     }
 
     default Database getDb(String name) {
         return null;
     }
 
-    default Database getDb(long dbId) {
-        return null;
+    default List<Long> getDbIds() {
+        return Lists.newArrayList();
+    }
+
+    default boolean createTable(CreateTableStmt stmt) throws DdlException {
+        throw new StarRocksConnectorException("This connector doesn't support creating tables");
     }
 
     default void dropTable(DropTableStmt stmt) throws DdlException {
@@ -176,11 +181,10 @@ public interface ConnectorMetadata {
     default void alterTable(AlterTableStmt stmt) throws UserException {
     }
 
-    default boolean createTable(CreateTableStmt stmt) throws DdlException {
-        return true;
+    default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {
     }
 
-    default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {
+    default void alterTableComment(Database db, Table table, AlterTableCommentClause clause) {
     }
 
     default void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
