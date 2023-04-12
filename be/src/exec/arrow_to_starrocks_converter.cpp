@@ -787,9 +787,9 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
 
         auto type_id = array->type_id();
         if (is_list(type_id)) {
-            list_offsets_copy<arrow::ListType>(array, array_start_idx, num_elements, col_offsets);
+            list_map_offsets_copy<arrow::ListType>(array, array_start_idx, num_elements, col_offsets);
         } else if (is_large_list(type_id)) {
-            list_offsets_copy<arrow::LargeListType>(array, array_start_idx, num_elements, col_offsets);
+            list_map_offsets_copy<arrow::LargeListType>(array, array_start_idx, num_elements, col_offsets);
         } else if (is_fixed_size_list(type_id)) {
             fixed_size_list_map_offsets_copy(array, array_start_idx, num_elements, col_offsets);
         } else {
@@ -824,7 +824,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
         // offset
         auto* col_map = down_cast<MapColumn*>(column);
         UInt32Column* col_offsets = col_map->offsets_column().get();
-        list_offsets_copy<arrow::MapType>(array, array_start_idx, num_elements, col_offsets);
+        list_map_offsets_copy<arrow::MapType>(array, array_start_idx, num_elements, col_offsets);
         // keys, values
         size_t kv_size[2];
         kv_size[0] = col_map->keys().size();
