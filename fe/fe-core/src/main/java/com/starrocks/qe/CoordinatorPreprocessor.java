@@ -1013,7 +1013,14 @@ public class CoordinatorPreprocessor {
     // <fragment, <server, nodeId>>
     @VisibleForTesting
     void computeScanRangeAssignment() throws Exception {
+<<<<<<< HEAD
         boolean forceScheduleLocal = connectContext.getSessionVariable().isForceScheduleLocal();
+=======
+        SessionVariable sv = connectContext.getSessionVariable();
+
+
+
+>>>>>>> 1b9b4e6be ([Enhancement] add sv `runtime_filter_early_return_selectivity` (#21395))
         // set scan ranges/locations for scan nodes
         for (ScanNode scanNode : scanNodes) {
             // the parameters of getScanRangeLocations may ignore, It dosn't take effect
@@ -1558,6 +1565,7 @@ public class CoordinatorPreprocessor {
                                 sessionVariable.getAdaptiveDopMaxOutputAmplificationFactor());
                     }
                 }
+
             }
         }
 

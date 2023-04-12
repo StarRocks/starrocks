@@ -235,7 +235,15 @@ struct TQueryOptions {
   75: optional double spill_mem_limit_threshold;
   76: optional i64 spill_operator_min_bytes;
   77: optional i64 spill_operator_max_bytes;
+<<<<<<< HEAD
   85: optional TSpillMode spill_mode;  
+=======
+  85: optional TSpillMode spill_mode;
+  
+  86: optional i32 io_tasks_per_scan_operator = 4;
+  87: optional i32 connector_io_tasks_per_scan_operator = 16;
+  88: optional double runtime_filter_early_return_selectivity = 0.05;
+>>>>>>> 1b9b4e6be ([Enhancement] add sv `runtime_filter_early_return_selectivity` (#21395))
 }
 
 
