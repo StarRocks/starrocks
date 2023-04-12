@@ -22,6 +22,7 @@
 
 > **说明**
 >
+> * 如果您想在 Ubuntu 22.04 或 ARM 架构处理器上运行 StarRocks，则需要从 [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/allin1-ubuntu/tags) 下载并运行特定标签的 Docker 镜像，并从 Docker 容器目录 **/data/starrocks** 下复制二进制文件到您的主机。
 > * 依据不同的工作负载复杂性，StarRocks 每个 CPU 线程每秒可以处理 10M 至 100M 行数据。您可以据此估计集群中需要多少 CPU 线程能够满足您的要求。而 StarRocks 在存储数据时利用列存储和压缩，可以达到 4-10 倍的压缩比，您可以使用该数据来估计集群所需的存储量。
 > * StarRocks 仅支持 JDK 作为依赖，不支持使用 JRE。
 
