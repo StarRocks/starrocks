@@ -839,7 +839,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
             const auto* child_array = get_list_map_array_child<arrow::MapType>(
                     array, array_start_idx, num_elements, &child_array_start_idx, &child_array_num_elements, i);
             if (!child_array) {
-                return Status::InternalError(fmt::format("Unnest arrow map type({}) fail", array->type()->name()));
+                return Status::InternalError(fmt::format("Unnest arrow array type({}) fail", array->type()->name()));
             }
             auto conv_func = get_arrow_converter(child_array->type()->id(), child_type.type, true, false);
             if (!conv_func) {
