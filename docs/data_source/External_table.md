@@ -129,18 +129,43 @@ PROPERTIES (
 );
 ~~~
 
-Parameters
+The followint table describes the parameters.
 
-* **host**: The connection address of the Elasticsearch cluster. You can specify one or more addresses. StarRocks can parse the Elasticsearch version and index shard allocation from this address.
-* **user**: The username of the Elasticsearch cluster with **basic authentication** enabled. Make sure you have the access to `/*cluster/state/*nodes/http` and the index.
-* **password**: The password of the Elasticsearch cluster.
-* **index**: The name of the Elasticsearch index that corresponds to the table in StarRocks. It can be an alias.
-* **type**: the type of the index. Default value: doc.
-* **transport**: This parameter is reserved. Default value: http.
-* **es.nodes.wan.only**: indicates whether StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data.
+| **Parameter**        | **Description**                                              |
+| -------------------- | ------------------------------------------------------------ |
+| hosts                | The connection address of the Elasticsearch cluster. You can specify one or more addresses. StarRocks can parse the Elasticsearch version and index shard allocation from this address. StarRocks communicates with your Elasticsearch cluster based on the address returned by the `GET /_nodes/http` API operation. Therefore, the value of the `host` parameter must be the same as the address returned by the `GET /_nodes/http` API operation. Otherwise, BEs may not be able to communicate with your Elasticsearch cluster. |
+| user                 | The username that is used to log in to the Elasticsearch cluster with basic authentication enabled. Make sure you have access to `/*cluster/state/*nodes/http` and the index. |
+| password             | The password that is used to log in to the Elasticsearch cluster. |
+| index                | The name of the Elasticsearch index that is created on the table in StarRocks. The name can be an alias. |
+| type                 | The type of the index. Default value: `_doc`. If you want to query data in Elasticsearch 8 and later versions, you do not need to configure this parameter because the mapping types have been removed in Elasticsearch 8 and later versions. |
+| transport            | This parameter is reserved. Default value: `http`.           |
+| es.nodes.wan.only    | Specifies whether StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data.<ul><li>`true`: StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data and does not sniff data nodes on which the shards of the Elasticsearch index reside. If StarRocks cannot access the addresses of the data nodes inside the Elasticsearch cluster, you need to set this parameter to `true`.</li><li>`false`: default value. StarRocks uses the addresses specified by `host` to sniff data nodes on which the shards of the Elasticsearch cluster indexes reside. After StarRocks generates a query execution plan, the relevant BEs directly access the data nodes inside the Elasticsearch cluster to fetch data from the shards of indexes. If StarRocks can access the addresses of the data nodes inside the Elasticsearch cluster, we recommend that you retain the default value `false`.</li></ul> |
+| es.net.ssl           | Specifies whether the HTTPS protocol can be used to access your Elasticsearch cluster. Only StarRocks 2.4 and later versions support configuring this parameter.<ul><li>`true`: Both the HTTPS and HTTP protocols can be used to access your Elasticsearch cluster.</li><li>`false`: Only the HTTP protocol can be used to access your Elasticsearch cluster.</li></ul> |
+| enable_docvalue_scan | Specifies whether to obtain the values of the target fields from Elasticsearch columnar storage. Default value: `true`. If this parameter is set to `true`, StarRocks follows these rules when it obtains data from Elasticsearch:<ul><li>**Try and see**: StarRocks automatically checks if columnar storage is enabled for the target fields. If so, StarRocks obtains all values in the target fields from columnar storage.</li><li>**Auto-downgrading**: If any one of the target fields is unavailable in columnar storage, StarRocks parses and obtains all values in the target fields from row storage (`_source`).</li></ul> |
+| enable_keyword_sniff | Specifies whether to sniff TEXT-type fields in Elasticsearch based on KEYWORD-type fields. If this parameter is set to `false`, StarRocks performs matching after tokenization. Default value: `true`. |
 
-  * true: StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data and does not sniff data nodes which shards of the Elasticsearch index reside in. If StarRocks cannot access the addresses of the data nodes inside the Elasticsearch cluster, you need to set this parameter to `true`.
-  * false: default value. StarRocks uses the addresses specified by `host` to sniff data nodes on which the shards of the Elasticsearch cluster indexes are located. After StarRocks generates a query execution plan, the relevant BEs directly access the data nodes inside the Elasticsearch cluster to fetch data from the shards of indexes. If StarRocks can access the addresses of the data nodes inside the Elasticsearch cluster, we recommend that you retain the default value `false`.
+When you create an external table, you need to specify the data types of columns in the external table based on the data types of columns in the Elasticsearch table. The following table shows the mapping of column data types.
+
+| **Elasticsearch** | **StarRocks**               |
+| ----------------- | --------------------------- |
+| BOOLEAN           | BOOLEAN                     |
+| BYTE              | TINYINT/SMALLINT/INT/BIGINT |
+| SHORT             | SMALLINT/INT/BIGINT         |
+| INTEGER           | INT/BIGINT                  |
+| LONG              | BIGINT                      |
+| FLOAT             | FLOAT                       |
+| DOUBLE            | DOUBLE                      |
+| KEYWORD           | CHAR/VARCHAR                |
+| TEXT              | CHAR/VARCHAR                |
+| DATE              | DATE/DATETIME               |
+| NESTED            | CHAR/VARCHAR                |
+| OBJECT            | CHAR/VARCHAR                |
+| ARRAY             | ARRAY                       |
+
+> **Note**
+>
+> * StarRocks reads the data of the NESTED type by using JSON-related functions.
+> * Elasticsearch automatically flattens multi-dimensional arrays into one-dimensional arrays. StarRocks does the same. The support for querying ARRAY data from Elasticsearch is added from v2.5.
 
 ### Predicate pushdown
 
