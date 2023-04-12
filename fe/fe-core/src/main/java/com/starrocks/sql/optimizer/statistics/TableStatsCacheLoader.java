@@ -74,7 +74,7 @@ public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKe
                 }
                 for (TableStatsCacheKey key : cacheKey) {
                     if (!result.containsKey(key)) {
-                        result.put(key, Optional.of(new TableStatistic(key.getTableId(), key.getPartitionId(), 0L)));
+                        result.put(key, Optional.empty());
                     }
                 }
 

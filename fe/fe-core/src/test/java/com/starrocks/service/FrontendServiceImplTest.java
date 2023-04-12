@@ -228,7 +228,13 @@ public class FrontendServiceImplTest {
                         "PARTITION BY time_slice(event_day, interval 5 day)\n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
                         "PROPERTIES(\"replication_num\" = \"1\");")
-                .withView("create view v as select * from site_access_empty");
+                .withView("create view v as select * from site_access_empty")
+                .withView("create view v1 as select current_role()")
+                .withView("create view v2 as select current_user()")
+                .withView("create view v3 as select database()")
+                .withView("create view v4 as select user()")
+                .withView("create view v5 as select CONNECTION_ID()")
+                .withView("create view v6 as select CURRENT_CATALOG()");
     }
 
     @AfterClass
@@ -410,7 +416,7 @@ public class FrontendServiceImplTest {
         request.setCurrent_user_ident(tUserIdentity);
         request.setType(TTableType.VIEW);
         TListTableStatusResult result = impl.listTableStatus(request);
-        Assert.assertEquals(1, result.tables.size());
+        Assert.assertEquals(7, result.tables.size());
     }
 
     @Test

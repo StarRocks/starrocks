@@ -22,6 +22,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
@@ -96,9 +98,27 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void createDb(String dbName, Map<String, String> properties) throws AlreadyExistsException {
+        if (dbExists(dbName)) {
+            throw new AlreadyExistsException("Database Already Exists");
+        }
+
+        icebergCatalog.createDb(dbName, properties);
+    }
+
+    @Override
     public List<String> listTableNames(String dbName) {
         List<TableIdentifier> tableIdentifiers = icebergCatalog.listTables(Namespace.of(dbName));
         return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
+    }
+
+    @Override
+    public void dropDb(String dbName, boolean isForceDrop) throws MetaNotFoundException {
+        if (listTableNames(dbName).size() != 0) {
+            throw new StarRocksConnectorException("Database %s not empty", dbName);
+        }
+
+        icebergCatalog.dropDb(dbName);
     }
 
     @Override

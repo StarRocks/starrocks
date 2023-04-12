@@ -379,6 +379,7 @@ import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -395,6 +396,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -501,14 +503,32 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitCreateDbStatement(StarRocksParser.CreateDbStatementContext context) {
-        String dbName = ((Identifier) visit(context.identifier())).getValue();
-        return new CreateDbStmt(context.IF() != null, dbName, createPos(context));
+        String catalogName = "";
+        if (context.catalog != null) {
+            catalogName = getIdentifierName(context.catalog);
+        }
+
+        String dbName = getIdentifierName(context.database);
+
+        Map<String, String> properties = new HashMap<>();;
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateDbStmt(context.IF() != null, catalogName, dbName, properties, createPos(context));
     }
 
     @Override
     public ParseNode visitDropDbStatement(StarRocksParser.DropDbStatementContext context) {
-        String dbName = ((Identifier) visit(context.identifier())).getValue();
-        return new DropDbStmt(context.IF() != null, dbName, context.FORCE() != null,
+        String catalogName = "";
+        if (context.catalog != null) {
+            catalogName = getIdentifierName(context.catalog);
+        }
+
+        String dbName = getIdentifierName(context.database);
+        return new DropDbStmt(context.IF() != null, catalogName, dbName, context.FORCE() != null,
                 createPos(context));
     }
 
@@ -1463,7 +1483,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 refreshSchemeDesc = new SyncRefreshSchemeDesc();
             } else {
                 // use new manual refresh
-                refreshSchemeDesc = new ManualRefreshSchemeDesc(MaterializedView.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
+                refreshSchemeDesc =
+                        new ManualRefreshSchemeDesc(MaterializedView.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
             }
         }
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
@@ -5000,7 +5021,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 Expr e2 = (Expr) visit(context.expression(1));
                 Expr e3 = (Expr) visit(context.expression(2));
                 Expr e4 = (Expr) visit(context.expression(3));
-                return new FunctionCallExpr(fnName, ImmutableList.of(e1, e2, e3, e4));
+
+                if (!(e3 instanceof StringLiteral)) {
+                    throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), e3.getPos());
+                }
+                String ident = ((StringLiteral) e3).getValue();
+                if (!(e4 instanceof StringLiteral)) {
+                    throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(functionName), e4.getPos());
+                }
+                String boundary = ((StringLiteral) e4).getValue();
+                return new FunctionCallExpr(fnName, getArgumentsForTimeSlice(e1, e2, ident, boundary));
             } else {
                 throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(functionName), pos);
             }
@@ -5099,7 +5129,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(context.name.getText().toLowerCase(),
                 new FunctionParams(false, visit(context.expression(), Expr.class)), createPos(context));
-        functionCallExpr.setIgnoreNulls(context.ignoreNulls() != null);
+        boolean ignoreNull = CollectionUtils.isNotEmpty(context.ignoreNulls())
+                && context.ignoreNulls().stream().anyMatch(Objects::nonNull);
+        functionCallExpr.setIgnoreNulls(ignoreNull);
         return functionCallExpr;
     }
 

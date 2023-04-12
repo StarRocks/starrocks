@@ -17,6 +17,7 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import org.apache.iceberg.Table;
@@ -69,7 +70,13 @@ public interface IcebergCatalog {
 
     List<String> listAllDatabases();
 
+    default void dropDb(String dbName) throws MetaNotFoundException {
+    }
+
     Database getDB(String dbName) throws InterruptedException, TException;
+
+    default void createDb(String dbName, Map<String, String> properties) {
+    }
 
     List<TableIdentifier> listTables(Namespace of);
 }

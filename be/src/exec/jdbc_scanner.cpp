@@ -423,6 +423,8 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
         SlotDescriptor* slot_desc = _slot_descs[col_idx];
         ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
         ASSIGN_OR_RETURN(auto result, _cast_exprs[col_idx]->evaluate(_result_chunk.get()));
+        // unpack const_nullable_column to avoid error down_cast
+        result = ColumnHelper::unpack_and_duplicate_const_column(num_rows, result);
         if (column->is_nullable() == result->is_nullable()) {
             column = result;
         } else if (column->is_nullable() && !result->is_nullable()) {
