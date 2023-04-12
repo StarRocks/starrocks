@@ -1019,7 +1019,6 @@ public class CoordinatorPreprocessor {
         queryOptions.setHudi_mor_force_jni_reader(sv.getHudiMORForceJNIReader());
         queryOptions.setIo_tasks_per_scan_operator(sv.getIoTasksPerScanOperator());
         queryOptions.setConnector_io_tasks_per_scan_operator(sv.getConnectorIoTasksPerScanOperator());
-        queryOptions.setEnable_connector_adaptive_io_tasks(sv.getEnableConnectorAdaptiveIoTasks());
 
         // set scan ranges/locations for scan nodes
         for (ScanNode scanNode : scanNodes) {
