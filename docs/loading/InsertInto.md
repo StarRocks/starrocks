@@ -338,7 +338,7 @@ You can check the status of an asynchronous INSERT task by querying the metadata
 
 The following example checks the status of the INSERT task `async`.
 
-```
+```SQL
 SELECT * FROM information_schema.task_runs WHERE task_name = 'async';
 ```
 
