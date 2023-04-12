@@ -21,7 +21,6 @@ Release date: March 31, 2023
 
 - [Preview] Supports Presto/Trino compatible dialect. Presto/Trino's SQL can be automatically rewritten into StarRocks' SQL pattern. For more information, see [the system variable](../reference/System_variable.md) `sql_dialect`.
 - [Preview] Supports [JDBC catalogs](../data_source/catalog/jdbc_catalog.md).
-- Supports [Global UDFs](../sql-reference/sql-functions/JAVA_UDF.md).
 - Supports using [SET CATALOG](../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to manually switch between catalogs in the current session.
 
 **Privileges and Security**
@@ -33,6 +32,7 @@ Release date: March 31, 2023
 
 <!-- - [Preview] Supports operator **spilling** for large queries, which can use disk space to ensure stable running of queries in case of insufficient memory. -->
 - Allows more queries on joined tables to benefit from the [query cache](../using_starrocks/query_cache.md). For example, the query cache now supports aggregate queries on multiple tables that are joined by using  bucket shuffle joins and broadcast joins.
+- Supports [Global UDFs](../sql-reference/sql-functions/JAVA_UDF.md).
 - Dynamic adaptive parallelism: StarRocks can automatically adjust the `pipeline_dop` parameter for query concurrency.
 
 **Functions**
