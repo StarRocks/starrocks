@@ -1015,10 +1015,6 @@ public class CoordinatorPreprocessor {
     void computeScanRangeAssignment() throws Exception {
         SessionVariable sv = connectContext.getSessionVariable();
 
-        queryOptions.setUse_scan_block_cache(sv.getUseScanBlockCache());
-        queryOptions.setEnable_populate_block_cache(sv.getEnablePopulateBlockCache());
-        queryOptions.setHudi_mor_force_jni_reader(sv.getHudiMORForceJNIReader());
-        queryOptions.setIo_tasks_per_scan_operator(sv.getIoTasksPerScanOperator());
 
         // set scan ranges/locations for scan nodes
         for (ScanNode scanNode : scanNodes) {
