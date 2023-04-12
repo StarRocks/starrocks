@@ -36,7 +36,7 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.hive.HiveMetastoreApiConverter;
+import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -102,7 +102,7 @@ public class CatalogMgr {
             Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
             connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
             long id = isResourceMappingCatalog(catalogName) ?
-                    HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
+                    ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
                     GlobalStateMgr.getCurrentState().getNextId();
             Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
             catalogs.put(catalogName, catalog);
