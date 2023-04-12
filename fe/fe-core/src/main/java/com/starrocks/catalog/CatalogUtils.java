@@ -181,7 +181,7 @@ public class CatalogUtils {
         // Filter out temporary partitions
         Set<List<LiteralExpr>> tempSet = new HashSet<>();
         Set<List<List<LiteralExpr>>> tempMultiSet = new HashSet<>();
-        for(Partition partition : tempPartitionList) {
+        for (Partition partition : tempPartitionList) {
             if (!listMap.isEmpty()) {
                 tempSet.add(listMap.get(partition.getId()));
                 newListMap.remove(partition.getId());
@@ -190,7 +190,7 @@ public class CatalogUtils {
                 tempMultiSet.add(multiListMap.get(partition.getId()));
                 newMultiListMap.remove(partition.getId());
             }
-        };
+        }
 
         // Check whether the remaining partition overlaps with the temporary partition
         if (!tempSet.isEmpty() && !newListMap.isEmpty()) {
