@@ -188,9 +188,15 @@ public class InsertPlanner {
             if (insertStmt.getTargetTable() instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
 
-                dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
-                        insertStmt.getTargetPartitionIds(), canUsePipeline, olapTable.writeQuorum(),
-                        olapTable.enableReplicatedStorage(), nullExprInAutoIncrement);
+                boolean enableAutomaticPartition;
+                if (insertStmt.isSpecifyPartition()) {
+                    enableAutomaticPartition = false;
+                } else {
+                    enableAutomaticPartition = olapTable.supportedAutomaticPartition();
+                }
+                dataSink = new OlapTableSink(olapTable, olapTuple, insertStmt.getTargetPartitionIds(),
+                        canUsePipeline, olapTable.writeQuorum(), olapTable.enableReplicatedStorage(),
+                        nullExprInAutoIncrement, enableAutomaticPartition);
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
             } else {
@@ -262,9 +268,9 @@ public class InsertPlanner {
                         }
                         if (row.get(idx) instanceof DefaultValueExpr) {
                             if (isAutoIncrement) {
-                                row.set(columnIdx, new NullLiteral());
+                                row.set(idx, new NullLiteral());
                             } else {
-                                row.set(columnIdx, new StringLiteral(targetColumn.calculatedDefaultValue()));
+                                row.set(idx, new StringLiteral(targetColumn.calculatedDefaultValue()));
                             }
                         }
                         row.set(idx, TypeManager.addCastExpr(row.get(idx), targetColumn.getType()));

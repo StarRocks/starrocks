@@ -193,7 +193,7 @@ OutPut Exchange Id: 14
 |  build runtime filters:
 |  - filter_id = 1, build_expr = (14: PS_PARTKEY), remote = true
 |  - filter_id = 2, build_expr = (15: PS_SUPPKEY), remote = false
-|  output columns: 15
+|  output columns: 15, 16, 48
 |  cardinality: 39029703
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 5000000.0] ESTIMATE

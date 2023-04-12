@@ -222,7 +222,9 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
 
-    int func_version = request.common().__isset.func_version ? request.common().func_version : 2;
+    int func_version = request.common().__isset.func_version
+                               ? request.common().func_version
+                               : TFunctionVersion::type::RUNTIME_FILTER_SERIALIZE_VERSION_2;
     runtime_state->set_func_version(func_version);
     runtime_state->init_mem_trackers(query_mem_tracker);
     runtime_state->set_be_number(request.backend_num());
@@ -330,7 +332,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
 
-    if (fragment.__isset.cache_param) {
+    // If spill is turned on, then query cache will be turned off automatically
+    // TODO: Fix
+    if (fragment.__isset.cache_param && !runtime_state->enable_spill()) {
         auto const& tcache_param = fragment.cache_param;
         auto& cache_param = _fragment_ctx->cache_param();
         cache_param.plan_node_id = tcache_param.id;

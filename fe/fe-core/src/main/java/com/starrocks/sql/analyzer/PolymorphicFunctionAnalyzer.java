@@ -106,11 +106,11 @@ public class PolymorphicFunctionAnalyzer {
 
             // Need to make input be a valid complex type if the input is Type NULL
             if (declType instanceof AnyArrayType) {
-                resolvedTypes[i] = inputType.isNull() ? new ArrayType(Type.NULL) : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new ArrayType(Type.BOOLEAN) : inputType;
             } else if (declType instanceof AnyMapType) {
-                resolvedTypes[i] = inputType.isNull() ? new MapType(Type.NULL, Type.NULL) : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new MapType(Type.BOOLEAN, Type.BOOLEAN) : inputType;
             } else if (declType instanceof AnyStructType) {
-                resolvedTypes[i] = inputType.isNull() ? new StructType(Lists.newArrayList(Type.NULL)) : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new StructType(Lists.newArrayList(Type.BOOLEAN)) : inputType;
             } else {
                 resolvedTypes[i] = inputType;
             }
@@ -300,11 +300,12 @@ public class PolymorphicFunctionAnalyzer {
                 }
             }
 
+            commonType = AnalyzerUtils.replaceNullType2Boolean(commonType);
             typeArray = new ArrayType(commonType);
             typeElement = commonType;
         } else {
-            typeElement = Type.NULL;
-            typeArray = new ArrayType(Type.NULL);
+            typeElement = Type.BOOLEAN;
+            typeArray = new ArrayType(Type.BOOLEAN);
         }
 
         if (retType instanceof AnyArrayType) {
@@ -370,3 +371,4 @@ public class PolymorphicFunctionAnalyzer {
         return null;
     }
 }
+

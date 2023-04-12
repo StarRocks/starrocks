@@ -20,11 +20,52 @@
 
 namespace starrocks::pipeline {
 
-Status PartitionExchanger::Partitioner::partition_chunk(const ChunkPtr& chunk,
-                                                        std::vector<uint32_t>& partition_row_indexes) {
-    int32_t num_rows = chunk->num_rows();
-    int32_t num_partitions = _source->get_sources().size();
+Status Partitioner::partition_chunk(const ChunkPtr& chunk, int32_t num_partitions,
+                                    std::vector<uint32_t>& partition_row_indexes) {
+    size_t num_rows = chunk->num_rows();
 
+    // step1: compute shuffle channel ids.
+    RETURN_IF_ERROR(shuffle_channel_ids(chunk, num_partitions));
+
+    // step2: shuffle chunk into dest partitions.
+    {
+        _partition_row_indexes_start_points.assign(num_partitions + 1, 0);
+        _partition_memory_usage.assign(num_partitions, 0);
+        for (size_t i = 0; i < num_rows; ++i) {
+            _partition_row_indexes_start_points[_shuffle_channel_id[i]]++;
+            _partition_memory_usage[_shuffle_channel_id[i]] += chunk->bytes_usage(i, 1);
+        }
+        // We make the last item equal with number of rows of this chunk.
+        for (int32_t i = 1; i <= num_partitions; ++i) {
+            _partition_row_indexes_start_points[i] += _partition_row_indexes_start_points[i - 1];
+        }
+
+        for (int32_t i = num_rows - 1; i >= 0; --i) {
+            partition_row_indexes[_partition_row_indexes_start_points[_shuffle_channel_id[i]] - 1] = i;
+            _partition_row_indexes_start_points[_shuffle_channel_id[i]]--;
+        }
+    }
+    return Status::OK();
+}
+
+Status Partitioner::send_chunk(const ChunkPtr& chunk, std::shared_ptr<std::vector<uint32_t>> partition_row_indexes) {
+    size_t num_partitions = _source->get_sources().size();
+    for (size_t i = 0; i < num_partitions; ++i) {
+        size_t from = partition_begin_offset(i);
+        size_t size = partition_end_offset(i) - from;
+        if (size == 0) {
+            // No data for this partition.
+            continue;
+        }
+
+        RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, partition_row_indexes, from, size,
+                                                             partition_memory_usage(i)));
+    }
+    return Status::OK();
+}
+
+Status ShufflePartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t num_partitions) {
+    size_t num_rows = chunk->num_rows();
     if (_shuffler == nullptr) {
         _shuffler = std::make_unique<Shuffler>(_source->runtime_state()->func_version() <= 3, false, _part_type,
                                                _source->get_sources().size(), 1);
@@ -53,23 +94,25 @@ Status PartitionExchanger::Partitioner::partition_chunk(const ChunkPtr& chunk,
     _shuffle_channel_id.resize(num_rows);
 
     _shuffler->local_exchange_shuffle(_shuffle_channel_id, _hash_values, num_rows);
+    return Status::OK();
+}
 
-    _partition_row_indexes_start_points.assign(num_partitions + 1, 0);
-    _partition_memory_usage.assign(num_partitions, 0);
-    for (size_t i = 0; i < num_rows; ++i) {
-        _partition_row_indexes_start_points[_shuffle_channel_id[i]]++;
-        _partition_memory_usage[_shuffle_channel_id[i]] += chunk->bytes_usage(i, 1);
+Status RandomPartitioner::shuffle_channel_ids(const ChunkPtr& chunk, int32_t num_partitions) {
+    size_t num_rows = chunk->num_rows();
+    _shuffle_channel_id.resize(num_rows, 0);
+    {
+        if (num_rows <= num_partitions) {
+            std::iota(_shuffle_channel_id.begin(), _shuffle_channel_id.end(), 0);
+        } else {
+            size_t i = 0;
+            for (; i < num_rows - num_partitions; i += num_partitions) {
+                std::iota(_shuffle_channel_id.begin() + i, _shuffle_channel_id.begin() + i + num_partitions, 0);
+            }
+            if (i < num_rows - 1) {
+                std::iota(_shuffle_channel_id.begin() + i, _shuffle_channel_id.end(), 0);
+            }
+        }
     }
-    // We make the last item equal with number of rows of this chunk.
-    for (int32_t i = 1; i <= num_partitions; ++i) {
-        _partition_row_indexes_start_points[i] += _partition_row_indexes_start_points[i - 1];
-    }
-
-    for (int32_t i = num_rows - 1; i >= 0; --i) {
-        partition_row_indexes[_partition_row_indexes_start_points[_shuffle_channel_id[i]] - 1] = i;
-        _partition_row_indexes_start_points[_shuffle_channel_id[i]]--;
-    }
-
     return Status::OK();
 }
 
@@ -82,7 +125,7 @@ PartitionExchanger::PartitionExchanger(const std::shared_ptr<LocalExchangeMemory
 
 void PartitionExchanger::incr_sinker() {
     LocalExchanger::incr_sinker();
-    _partitioners.emplace_back(_source, _part_type, _partition_exprs);
+    _partitioners.emplace_back(std::make_unique<ShufflePartitioner>(_source, _part_type, _partition_exprs));
 }
 
 Status PartitionExchanger::prepare(RuntimeState* state) {
@@ -103,6 +146,7 @@ Status PartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driv
         return Status::OK();
     }
 
+    size_t num_partitions = _source->get_sources().size();
     auto& partitioner = _partitioners[sink_driver_sequence];
 
     // Create a new partition_row_indexes here instead of reusing it in the partitioner.
@@ -110,19 +154,8 @@ Status PartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driv
     // and used later in pull_chunk() of source operator. If we reuse partition_row_indexes in partitioner,
     // it will be overwritten by the next time calling partitioner.partition_chunk().
     std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
-    RETURN_IF_ERROR(partitioner.partition_chunk(chunk, *partition_row_indexes));
-
-    for (size_t i = 0; i < _source->get_sources().size(); ++i) {
-        size_t from = partitioner.partition_begin_offset(i);
-        size_t size = partitioner.partition_end_offset(i) - from;
-        if (size == 0) {
-            // No data for this partition.
-            continue;
-        }
-
-        RETURN_IF_ERROR(_source->get_sources()[i]->add_chunk(chunk, partition_row_indexes, from, size,
-                                                             partitioner.partition_memory_usage(i)));
-    }
+    RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
+    RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
     return Status::OK();
 }
 
@@ -147,4 +180,62 @@ Status PassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_dr
 bool LocalExchanger::need_input() const {
     return !_memory_manager->is_full() && !is_all_sources_finished();
 }
+
+void RandomPassthroughExchanger::incr_sinker() {
+    LocalExchanger::incr_sinker();
+    _random_partitioners.emplace_back(std::make_unique<RandomPartitioner>(_source));
+}
+
+Status RandomPassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+    size_t num_rows = chunk->num_rows();
+    if (num_rows == 0) {
+        return Status::OK();
+    }
+
+    size_t num_partitions = _source->get_sources().size();
+
+    auto& partitioner = _random_partitioners[sink_driver_sequence];
+    std::shared_ptr<std::vector<uint32_t>> partition_row_indexes = std::make_shared<std::vector<uint32_t>>(num_rows);
+    RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
+    RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+    return Status::OK();
+}
+
+void AdaptivePassthroughExchanger::incr_sinker() {
+    LocalExchanger::incr_sinker();
+    _random_partitioners.emplace_back(std::make_unique<RandomPartitioner>(_source));
+}
+
+Status AdaptivePassthroughExchanger::accept(const ChunkPtr& chunk, const int32_t sink_driver_sequence) {
+    size_t num_rows = chunk->num_rows();
+    if (num_rows == 0) {
+        return Status::OK();
+    }
+
+    size_t num_partitions = _source->get_sources().size();
+
+    // NOTE: When total chunk num is greater than num_partitions, passthrough chunk directyly, otherwise
+    // random shuffle each rows for the input chunk to seperate it evenly.
+    if (_is_pass_through_by_chunk) {
+        if (num_partitions == 1) {
+            _source->get_sources()[0]->add_chunk(chunk);
+        } else {
+            _source->get_sources()[(_next_accept_source++) % num_partitions]->add_chunk(chunk);
+        }
+    } else {
+        // The first `num_partitions / 2` will pass through by rows to split more meanly, and if there are more
+        // chunks, then pass through by chunks directly.
+        if (_source_total_chunk_num++ > num_partitions / 2) {
+            _is_pass_through_by_chunk = true;
+        }
+
+        auto& partitioner = _random_partitioners[sink_driver_sequence];
+        std::shared_ptr<std::vector<uint32_t>> partition_row_indexes =
+                std::make_shared<std::vector<uint32_t>>(num_rows);
+        RETURN_IF_ERROR(partitioner->partition_chunk(chunk, num_partitions, *partition_row_indexes));
+        RETURN_IF_ERROR(partitioner->send_chunk(chunk, std::move(partition_row_indexes)));
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks::pipeline

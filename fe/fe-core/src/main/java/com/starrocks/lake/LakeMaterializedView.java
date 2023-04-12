@@ -44,6 +44,7 @@ import java.util.Map;
 
 /**
  * Metadata for StarRocks lake materialized view
+ * todo: Rename to CloudNativeMaterializedView
  */
 public class LakeMaterializedView extends MaterializedView {
 
@@ -53,7 +54,7 @@ public class LakeMaterializedView extends MaterializedView {
                                 PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
                                 MvRefreshScheme refreshScheme) {
         super(id, dbId, mvName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, refreshScheme);
-        this.type = TableType.LAKE_MATERIALIZED_VIEW;
+        this.type = TableType.CLOUD_NATIVE_MATERIALIZED_VIEW;
     }
 
     private FilePathInfo getDefaultFilePathInfo() {
@@ -83,13 +84,11 @@ public class LakeMaterializedView extends MaterializedView {
     }
 
     @Override
-    public void setStorageInfo(FilePathInfo pathInfo, boolean enableCache, long cacheTtlS, boolean asyncWriteBack) {
-        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
-                .setAsyncWriteBack(asyncWriteBack).build();
+    public void setStorageInfo(FilePathInfo pathInfo, StorageCacheInfo storageCacheInfo) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty.setStorageInfo(new StorageInfo(pathInfo, cacheInfo));
+        tableProperty.setStorageInfo(new StorageInfo(pathInfo, storageCacheInfo.getCacheInfo()));
     }
 
     @Override
@@ -145,29 +144,24 @@ public class LakeMaterializedView extends MaterializedView {
     }
 
     @Override
-    public Short getDefaultReplicationNum() {
-        return 1;
-    }
-
-    @Override
-    protected void appendBaseProperties(StringBuilder sb) {
+    protected void appendUniqueProperties(StringBuilder sb) {
         Preconditions.checkNotNull(sb);
 
         Map<String, String> storageProperties = getProperties();
 
         // enable_storage_cache
-        sb.append("\"").append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE).append("\" = \"");
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                .append(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE).append("\" = \"");
         sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE)).append("\"");
 
         // storage_cache_ttl
-        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)
-                .append("\" = \"");
+        sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                .append(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL).append("\" = \"");
         sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL)).append("\"");
 
         // allow_sync_write_back
         sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
-                .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)
-                .append("\" = \"");
+                .append(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK).append("\" = \"");
         sb.append(storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK)).append("\"");
     }
 

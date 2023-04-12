@@ -29,7 +29,7 @@ public:
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) override;
 
-    StatusOr<ChunkPtr> streaming_compute_agg_state(size_t chunk_size, bool is_update_phase = false);
+    StatusOr<ChunkPtr> streaming_compute_agg_state(size_t chunk_size, bool is_update_phase = true);
 
     StatusOr<ChunkPtr> pull_eos_chunk();
 

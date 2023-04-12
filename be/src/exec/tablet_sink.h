@@ -393,6 +393,7 @@ private:
     friend class IndexChannel;
 
     ObjectPool* _pool;
+    int64_t _rpc_http_min_size = 0;
 
     // unique load id
     PUniqueId _load_id;
@@ -498,8 +499,6 @@ private:
     bool _null_expr_in_auto_increment = false;
 
     bool _miss_auto_increment_column = false;
-
-    bool _abort_delete = false;
 
     std::unique_ptr<ThreadPoolToken> _automatic_partition_token;
 

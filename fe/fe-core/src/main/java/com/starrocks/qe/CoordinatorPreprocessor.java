@@ -1012,7 +1012,10 @@ public class CoordinatorPreprocessor {
     // <fragment, <server, nodeId>>
     @VisibleForTesting
     void computeScanRangeAssignment() throws Exception {
-        boolean forceScheduleLocal = connectContext.getSessionVariable().isForceScheduleLocal();
+        SessionVariable sv = connectContext.getSessionVariable();
+
+
+
         // set scan ranges/locations for scan nodes
         for (ScanNode scanNode : scanNodes) {
             // the parameters of getScanRangeLocations may ignore, It dosn't take effect
@@ -1021,7 +1024,6 @@ public class CoordinatorPreprocessor {
                 // only analysis olap scan node
                 continue;
             }
-
             FragmentScanRangeAssignment assignment =
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
             if (scanNode instanceof SchemaScanNode) {
@@ -1030,20 +1032,13 @@ public class CoordinatorPreprocessor {
             } else if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                     scanNode instanceof FileTableScanNode) {
-                if (connectContext != null) {
-                    queryOptions.setUse_scan_block_cache(connectContext.getSessionVariable().getUseScanBlockCache());
-                    queryOptions.
-                            setEnable_populate_block_cache(
-                                    connectContext.getSessionVariable().getEnablePopulateBlockCache());
-                    queryOptions.setHudi_mor_force_jni_reader(
-                            connectContext.getSessionVariable().getHudiMORForceJNIReader());
-                }
+
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                 getSelectorComputeNodes(hasComputeNode),
                                 hasComputeNode,
-                                forceScheduleLocal,
-                                connectContext.getSessionVariable().getHDFSBackendSelectorScanRangeShuffle());
+                                sv.getForceScheduleLocal(),
+                                sv.getHDFSBackendSelectorScanRangeShuffle());
                 selector.computeScanRangeAssignment();
             } else {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
@@ -1506,7 +1501,7 @@ public class CoordinatorPreprocessor {
             commonParams.setProtocol_version(InternalServiceVersion.V1);
             commonParams.setFragment(fragment.toThrift());
             commonParams.setDesc_tbl(descTable);
-            commonParams.setFunc_version(TFunctionVersion.FUNC_VERSION_UNIX_TIMESTAMP_INT64.getValue());
+            commonParams.setFunc_version(TFunctionVersion.RUNTIME_FILTER_SERIALIZE_VERSION_2.getValue());
             commonParams.setCoord(coordAddress);
 
             commonParams.setParams(new TPlanFragmentExecParams());
@@ -1557,6 +1552,7 @@ public class CoordinatorPreprocessor {
                                 sessionVariable.getAdaptiveDopMaxOutputAmplificationFactor());
                     }
                 }
+
             }
         }
 

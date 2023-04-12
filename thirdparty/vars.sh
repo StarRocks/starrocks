@@ -24,10 +24,13 @@
 # --job param for *make*
 # support macos
 if [[ $(uname) == "Darwin" ]]; then
-    PARALLEL=$[$(sysctl -n hw.physicalcpu)/4+1]
+    default_parallel=$[$(sysctl -n hw.physicalcpu)/4+1]
 else
-    PARALLEL=$[$(nproc)/4+1]
+    default_parallel=$[$(nproc)/4+1]
 fi
+
+# use the value if $PARALEL is already set, otherwise use $default_parallel
+PARALLEL=${PARALLEL:-$default_parallel}
 
 ###################################################
 # DO NOT change variables bellow unless you known
@@ -369,8 +372,14 @@ SERDES_NAME="libserdes-7.3.1.tar.gz"
 SERDES_SOURCE="libserdes-7.3.1"
 SERDES_MD5SUM="61012487a8845f37540710ac4ac2f7ab"
 
+# lzo
+LZO2_DOWNLOAD="http://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz"
+LZO2_NAME=lzo-2.10.tar.gz
+LZO2_SOURCE=lzo-2.10
+LZO2_MD5SUM="39d3f3f9c55c87b1e5d6888e1420f4b5"
+
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
-            BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS JANSSON AVRO SERDES GCS_CONNECTOR"
+            BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS JANSSON AVRO SERDES GCS_CONNECTOR LZO2"

@@ -1,5 +1,31 @@
 # StarRocks version 2.5
 
+## 2.5.4
+
+Release date: April 4, 2023
+
+### Improvements
+
+- Optimized the performance of rewriting queries on materialized views during query planning. The amount of time taken for query planning is reduced by about 70%. [#19579](https://github.com/StarRocks/starrocks/pull/19579)
+- Optimized the type inference logic. If a query like `SELECT sum(CASE WHEN XXX);` contains a constant `0`, such as `SELECT sum(CASE WHEN k1 = 1 THEN v1 ELSE 0 END) FROM test;`, pre-aggregation is automatically enabled to accelerate the query. [#19474](https://github.com/StarRocks/starrocks/pull/19474)
+- Supported using `SHOW CREATE VIEW` to view the creation statement of a materialized view. [#19999](https://github.com/StarRocks/starrocks/pull/19999)
+- Supported transmitting packets that are 2 GB or larger in size for a single bRPC request between BE nodes. [#20283](https://github.com/StarRocks/starrocks/pull/20283) [#20230](https://github.com/StarRocks/starrocks/pull/20230)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- After queries on materialized views are rewritten, the global dictionary for low-cardinality optimization does not take effect. [#19615](https://github.com/StarRocks/starrocks/pull/19615)
+- If a query on materialized views fails to be rewritten, the query fails. [#19774](https://github.com/StarRocks/starrocks/pull/19774)
+- If a materialized view is created based on a Primary Key or Unique Key table, queries on that materialized view cannot be rewritten. [#19600](https://github.com/StarRocks/starrocks/pull/19600)
+- The column names of materialized views are case-sensitive. However, when you create a table, the table is successfully created without an error message even if column names are incorrect in the `PROPERTIES` of the table creation statement, and moreover the rewriting of queries on materialized views created on that table fails. [#19780](https://github.com/StarRocks/starrocks/pull/19780)
+- After a query on materialized views is rewritten, the query plan ma contain partition column-based, invalid predicates, which affect query performance. [#19784](https://github.com/StarRocks/starrocks/pull/19784)
+- When data is loaded into a newly created partition, queries on materialized views may fail to be rewritten. [#20323](https://github.com/StarRocks/starrocks/pull/20323)
+- Configuring `"storage_medium" = "SSD"` at the creation of materialized views causes the refresh of the materialized views to fail. [#19539](https://github.com/StarRocks/starrocks/pull/19539) [#19626](https://github.com/StarRocks/starrocks/pull/19626)
+- Concurrent compaction may happen on Primary Key tables. [#19692](https://github.com/StarRocks/starrocks/pull/19692)
+- Compaction does not occur promptly after a large number of DELETE operations. [#19623](https://github.com/StarRocks/starrocks/pull/19623)
+- If the expression of a statement contains multiple low-cardinality columns, the expression may fail to be properly rewritten. As a result, the global dictionary for low-cardinality optimization does not take effect. [#20161](https://github.com/StarRocks/starrocks/pull/20161)
+
 ## 2.5.3
 
 Release date: March 10, 2023
@@ -51,6 +77,7 @@ The following bugs are fixed:
 
 ### Behavior Change
 
+- Changed the default value of `enable_experimental_mv` from `false` to `true`, which means asynchronous materialized view is enabled by default.
 - Added CHARACTER to the reserved keyword list. [#17488](https://github.com/StarRocks/starrocks/pull/17488)
 
 ## 2.5.1
@@ -59,7 +86,7 @@ Release date: February 5, 2023
 
 ### Improvements
 
-- Multi-table materialized views created based on external catalogs support query rewrite.  [#11116](https://github.com/StarRocks/starrocks/issues/11116) [#15791](https://github.com/StarRocks/starrocks/issues/15791)
+- Asynchronous materialized views created based on external catalogs support query rewrite.  [#11116](https://github.com/StarRocks/starrocks/issues/11116) [#15791](https://github.com/StarRocks/starrocks/issues/15791)
 - Allows users to specify a collection period for automatic CBO statistics collection, which prevents cluster performance jitter caused by automatic full collection. [#14996](https://github.com/StarRocks/starrocks/pull/14996)
 - Added Thrift server queue. Requests that cannot be processed immediately during INSERT INTO SELECT can be pending in the Thrift server queue, preventing requests from being rejected. [#14571](https://github.com/StarRocks/starrocks/pull/14571)
 - Deprecated the FE parameter `default_storage_medium`. If `storage_medium` is not explicitly specified when users create a table, the system automatically infers the storage medium of the table based on BE disk type. For more information, see description of `storage_medium` in [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20VIEW.md). [#14394](https://github.com/StarRocks/starrocks/pull/14394)
@@ -108,8 +135,8 @@ Release date: January 22, 2023
 - Optimized the metadata access performance when you query external data using [Hive catalogs](../data_source/catalog/hive_catalog.md), [Hudi catalogs](../data_source/catalog/hudi_catalog.md), and [Iceberg catalogs](../data_source/catalog/iceberg_catalog.md). [#11349](https://github.com/StarRocks/starrocks/issues/11349)
 - Supports querying ARRAY data using [Elasticsearch external tables](../data_source/External_table.md#elasticsearch-external-table). [#9693](https://github.com/StarRocks/starrocks/pull/9693)
 - Optimized the following aspects of materialized views:
-  - Multi-table async refresh materialized views support automatic and transparent query rewrite based on the SPJG-type materialized views. For more information, see [Materialized view](../using_starrocks/Materialized_view.md#about-async-refresh-mechanisms-for-materialized-views). [#13193](https://github.com/StarRocks/starrocks/issues/13193)
-  - Multi-table async refresh materialized views support multiple async refresh mechanisms. For more information, see [Materialized view](../using_starrocks/Materialized_view.md#enable-query-rewrite-based-on-async-materialized-views). [#12712](https://github.com/StarRocks/starrocks/pull/12712) [#13171](https://github.com/StarRocks/starrocks/pull/13171) [#13229](https://github.com/StarRocks/starrocks/pull/13229) [#12926](https://github.com/StarRocks/starrocks/pull/12926)
+  - Asynchronous materialized views support automatic and transparent query rewrite based on the SPJG-type materialized views. For more information, see [Materialized view](../using_starrocks/Materialized_view.md#about-async-refresh-mechanisms-for-materialized-views). [#13193](https://github.com/StarRocks/starrocks/issues/13193)
+  - Asynchronous materialized views support multiple async refresh mechanisms. For more information, see [Materialized view](../using_starrocks/Materialized_view.md#enable-query-rewrite-based-on-async-materialized-views). [#12712](https://github.com/StarRocks/starrocks/pull/12712) [#13171](https://github.com/StarRocks/starrocks/pull/13171) [#13229](https://github.com/StarRocks/starrocks/pull/13229) [#12926](https://github.com/StarRocks/starrocks/pull/12926)
   - The efficiency of refreshing materialized views is improved. [#13167](https://github.com/StarRocks/starrocks/issues/13167)
 - StarRocks automatically sets an appropriate number of tablets when you create a table, eliminating the need for manual operations. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md). [#10614](https://github.com/StarRocks/starrocks/pull/10614)
 - Optimized the following aspects of data loading:

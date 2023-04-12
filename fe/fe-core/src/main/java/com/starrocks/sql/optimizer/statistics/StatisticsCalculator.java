@@ -567,7 +567,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     }
 
     private long getTableRowCount(Table table, Operator node) {
-        if (table.isNativeTable()) {
+        if (table.isNativeTableOrMaterializedView()) {
             OlapTable olapTable = (OlapTable) table;
             List<Partition> selectedPartitions;
             if (node.getOpType() == OperatorType.LOGICAL_BINLOG_SCAN ||
@@ -604,8 +604,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
                 for (Partition partition : selectedPartitions) {
                     long partitionRowCount;
-                    TableStatistic tableStatistic =
-                            GlobalStateMgr.getCurrentStatisticStorage().getTableStatistic(table.getId(), partition.getId());
+                    TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
+                            .getTableStatistic(table.getId(), partition.getId());
                     if (tableStatistic.equals(TableStatistic.unknown())) {
                         partitionRowCount = partition.getRowCount();
                     } else {

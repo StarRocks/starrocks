@@ -125,6 +125,8 @@ private:
 
     bool _contains_deleted_row(uint32_t page_index) const;
 
+    bool _skip_fill_local_cache() const { return _opts.reader_type != READER_QUERY; }
+
     ColumnReader* _reader;
 
     // 1. The _page represents current page.

@@ -133,12 +133,12 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.elasticsearch.EsRepository;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.credential.CloudCredentialUtil;
-import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
@@ -225,6 +225,7 @@ import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.BackupStmt;
@@ -838,6 +839,10 @@ public class GlobalStateMgr {
         return getCurrentState().statisticStorage;
     }
 
+    public static TabletStatMgr getCurrentTabletStatMgr() {
+        return getCurrentState().tabletStatMgr;
+    }
+
     // Only used in UT
     public void setStatisticStorage(StatisticStorage statisticStorage) {
         this.statisticStorage = statisticStorage;
@@ -1443,7 +1448,7 @@ public class GlobalStateMgr {
                     }
                     MvId mvId = new MvId(db.getId(), mv.getId());
                     table.addRelatedMaterializedView(mvId);
-                    if (!table.isNativeTable()) {
+                    if (!table.isNativeTableOrMaterializedView()) {
                         connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
                                 baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
                                 ConnectorTableInfo.builder().setRelatedMaterializedViews(
@@ -2223,7 +2228,7 @@ public class GlobalStateMgr {
             }
             // There MUST BE 2 space in front of each column description line
             // sqlalchemy requires this to parse SHOW CREATE TABLE stmt.
-            if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
+            if (table.isOlapOrCloudNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
                 OlapTable olapTable = (OlapTable) table;
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
                     sb.append("  ").append(column.toSqlWithoutAggregateTypeName());
@@ -2234,7 +2239,7 @@ public class GlobalStateMgr {
                 sb.append("  ").append(column.toSql());
             }
         }
-        if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
+        if (table.isOlapOrCloudNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
             if (CollectionUtils.isNotEmpty(olapTable.getIndexes())) {
                 for (Index index : olapTable.getIndexes()) {
@@ -2245,9 +2250,9 @@ public class GlobalStateMgr {
         }
 
         sb.append("\n) ENGINE=");
-        sb.append(table.getType() == TableType.LAKE ? "OLAP" : table.getType().name()).append(" ");
+        sb.append(table.getType() == TableType.CLOUD_NATIVE ? "OLAP" : table.getType().name()).append(" ");
         
-        if (table.isOlapOrLakeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
+        if (table.isOlapOrCloudNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
             OlapTable olapTable = (OlapTable) table;
 
             // keys
@@ -2332,7 +2337,7 @@ public class GlobalStateMgr {
             }
 
             // enable storage cache && cache ttl
-            if (table.isLakeTable()) {
+            if (table.isCloudNativeTable()) {
                 Map<String, String> storageProperties = olapTable.getProperties();
 
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
@@ -2581,13 +2586,13 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.FILE) {
             FileTable fileTable = (FileTable) table;
-            Map<String, String> fileProperties = fileTable.getFileProperties();
-            CloudCredentialUtil.maskCloudCredential(fileProperties);
+            Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
+            CloudCredentialUtil.maskCloudCredential(clonedFileProperties);
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
             sb.append("\nPROPERTIES (\n");
-            sb.append(new PrintableMap<>(fileProperties, " = ", true, true, false).toString());
+            sb.append(new PrintableMap<>(clonedFileProperties, " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
             HudiTable hudiTable = (HudiTable) table;
@@ -3136,6 +3141,10 @@ public class GlobalStateMgr {
     // entry of rename table operation
     public void renameTable(Database db, OlapTable table, TableRenameClause tableRenameClause) throws DdlException {
         localMetastore.renameTable(db, table, tableRenameClause);
+    }
+
+    public void alterTableComment(Database db, Table table, AlterTableCommentClause clause) {
+        localMetastore.alterTableComment(db, table, clause);
     }
 
     public void replayRenameTable(TableInfo tableInfo) {

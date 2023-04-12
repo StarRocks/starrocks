@@ -143,6 +143,7 @@ public class MaterializationContext {
     public boolean isMatchedGroup(int groupId) {
         return matchedGroups.contains(groupId);
     }
+
     public ScalarOperator getMvPartialPartitionPredicate() {
         return mvPartialPartitionPredicate;
     }

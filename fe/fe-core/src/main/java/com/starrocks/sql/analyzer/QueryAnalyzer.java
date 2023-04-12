@@ -49,6 +49,7 @@ import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
@@ -779,6 +780,14 @@ public class QueryAnalyzer {
             node.setScope(outputScope);
             return outputScope;
         }
+
+        @Override
+        public Scope visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Scope scope) {
+            Scope ignored = visitJoin(node, scope);
+            // Only the scope of the table function is visible outside.
+            node.setScope(node.getRight().getScope());
+            return node.getScope();
+        }
     }
 
     private Table resolveTable(TableName tableName) {
@@ -803,7 +812,7 @@ public class QueryAnalyzer {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName + "." + tbName);
             }
 
-            if (table.isNativeTable() &&
+            if (table.isNativeTableOrMaterializedView() &&
                     (((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE
                             || ((OlapTable) table).getState() == OlapTable.OlapTableState.RESTORE_WITH_LOAD)) {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_STATE, "RESTORING");

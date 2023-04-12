@@ -55,6 +55,7 @@ statement
     // Table Statement
     | createTableStatement
     | createTableAsSelectStatement
+    | createTemporaryTableStatement
     | createTableLikeStatement
     | showCreateTableStatement
     | dropTableStatement
@@ -128,6 +129,7 @@ statement
     | adminCheckTabletsStatement
     | killStatement
     | syncStatement
+    | executeScriptStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -279,11 +281,11 @@ alterDbQuotaStatement
     ;
 
 createDbStatement
-    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier
+    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? (catalog=identifier '.')? database=identifier charsetDesc? collateDesc? properties?
     ;
 
 dropDbStatement
-    : DROP (DATABASE | SCHEMA) (IF EXISTS)? identifier FORCE?
+    : DROP (DATABASE | SCHEMA) (IF EXISTS)? (catalog=identifier '.')? database=identifier FORCE?
     ;
 
 showCreateDbStatement
@@ -343,9 +345,12 @@ engineDesc
     ;
 
 charsetDesc
-    : DEFAULT? CHARSET EQ? identifierOrString
+    : DEFAULT? (CHAR SET | CHARSET | CHARACTER SET) EQ? identifierOrString
     ;
 
+collateDesc
+    : DEFAULT? COLLATE EQ? identifierOrString
+    ;
 
 keyDesc
     : (AGGREGATE | UNIQUE | PRIMARY | DUPLICATE) KEY identifierList
@@ -382,6 +387,11 @@ fromRollup
     : FROM identifier
     ;
 
+createTemporaryTableStatement
+    : CREATE TEMPORARY TABLE qualifiedName
+        queryStatement
+    ;
+
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName
         ('(' identifier (',' identifier)* ')')?
@@ -394,7 +404,7 @@ createTableAsSelectStatement
         ;
 
 dropTableStatement
-    : DROP TABLE (IF EXISTS)? qualifiedName FORCE?
+    : DROP TEMPORARY? TABLE (IF EXISTS)? qualifiedName FORCE?
     ;
 
 alterTableStatement
@@ -502,7 +512,7 @@ dropViewStatement
 
 submitTaskStatement
     : SUBMIT setVarHint* TASK qualifiedName?
-    AS createTableAsSelectStatement
+    AS (createTableAsSelectStatement | insertStatement )
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
@@ -517,6 +527,7 @@ createMaterializedViewStatement
 materializedViewDesc
     : (PARTITION BY primaryExpression)
     | distributionDesc
+    | orderByDesc
     | refreshSchemeDesc
     | properties
     ;
@@ -678,6 +689,7 @@ alterClause
     | reorderColumnsClause
     | rollupRenameClause
     | compactionClause
+    | modifyCommentClause
 
     //Alter partition clause
     | addPartitionClause
@@ -761,6 +773,10 @@ swapTableClause
 
 modifyTablePropertiesClause
     : SET propertyList
+    ;
+
+modifyCommentClause
+    : COMMENT '=' string
     ;
 
 addColumnClause
@@ -1094,7 +1110,7 @@ resourceDesc
     ;
 
 showLoadStatement
-    : SHOW LOAD (FROM identifier)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
+    : SHOW LOAD (ALL)? (FROM identifier)? (WHERE expression)? (ORDER BY sortItem (',' sortItem)*)? limitElement?
     ;
 
 showLoadWarningsStatement
@@ -1166,7 +1182,7 @@ showOpenTableStatement
     ;
 
 showProcedureStatement
-    : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
+    : SHOW (PROCEDURE | FUNCTION) STATUS ((LIKE pattern=string) | (WHERE where=expression))?
     ;
 
 showProcStatement
@@ -1510,6 +1526,10 @@ setWarehouseStatement
     : SET WAREHOUSE identifierOrString
     ;
 
+executeScriptStatement
+    : ADMIN EXECUTE ON INTEGER_VALUE string
+    ;
+
 unsupportedStatement
     : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
     | BEGIN WORK?
@@ -1581,8 +1601,8 @@ limitElement
 querySpecification
     : SELECT setVarHint* setQuantifier? selectItem (',' selectItem)*
       fromClause
-      ((QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?
-      | (WHERE where=expression)? (GROUP BY groupingElement)? (HAVING having=expression)?)
+      ((WHERE where=expression)? (GROUP BY groupingElement)? (HAVING having=expression)?
+       (QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?)
     ;
 
 fromClause
@@ -1633,6 +1653,8 @@ relationPrimary
     | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
     | qualifiedName '(' expressionList ')'
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
+    | TABLE '(' qualifiedName '(' expressionList ')' ')'
+        (AS? alias=identifier columnAliases?)?                                          #normalizedTableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
     ;
 
@@ -1823,12 +1845,13 @@ functionCall
     ;
 
 aggregationFunction
-    : AVG '(' DISTINCT? expression ')'
+    : AVG '(' setQuantifier? expression ')'
     | COUNT '(' ASTERISK_SYMBOL? ')'
-    | COUNT '(' (DISTINCT bracketHint?)? (expression (',' expression)*)? ')'
-    | MAX '(' DISTINCT? expression ')'
-    | MIN '(' DISTINCT? expression ')'
-    | SUM '(' DISTINCT? expression ')'
+    | COUNT '(' (setQuantifier bracketHint?)? (expression (',' expression)*)? ')'
+    | MAX '(' setQuantifier? expression ')'
+    | MIN '(' setQuantifier? expression ')'
+    | SUM '(' setQuantifier? expression ')'
+    | ARRAY_AGG '(' expression (ORDER BY sortItem (',' sortItem)*)? ')'
     ;
 
 userVariable
@@ -1891,10 +1914,10 @@ windowFunction
     | name = RANK '(' ')'
     | name = DENSE_RANK '(' ')'
     | name = NTILE  '(' expression? ')'
-    | name = LEAD  '(' (expression ignoreNulls? (',' expression)*)? ')'
-    | name = LAG '(' (expression ignoreNulls? (',' expression)*)? ')'
-    | name = FIRST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
-    | name = LAST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
+    | name = LEAD  '(' (expression ignoreNulls? (',' expression)*)? ')' ignoreNulls?
+    | name = LAG '(' (expression ignoreNulls? (',' expression)*)? ')' ignoreNulls?
+    | name = FIRST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')' ignoreNulls?
+    | name = LAST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')' ignoreNulls?
     ;
 
 whenClause
@@ -1948,6 +1971,7 @@ optimizerTrace
 partitionDesc
     : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY LIST identifierList '(' (listPartitionDesc (',' listPartitionDesc)*)? ')'
+    | PARTITION BY identifierList
     | PARTITION BY functionCall '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY functionCall
     ;
@@ -2011,7 +2035,7 @@ distributionDesc
     ;
 
 refreshSchemeDesc
-    : REFRESH (ASYNC
+    : REFRESH (IMMEDIATE | DEFERRED)? (ASYNC
     | ASYNC (START '(' string ')')? EVERY '(' interval ')'
     | INCREMENTAL
     | MANUAL)
@@ -2150,7 +2174,8 @@ baseType
     ;
 
 decimalType
-    : (DECIMAL | DECIMALV2 | DECIMAL32 | DECIMAL64 | DECIMAL128) ('(' precision=INTEGER_VALUE (',' scale=INTEGER_VALUE)? ')')?
+    : (DECIMAL | DECIMALV2 | DECIMAL32 | DECIMAL64 | DECIMAL128 | NUMERIC | NUMBER )
+        ('(' precision=INTEGER_VALUE (',' scale=INTEGER_VALUE)? ')')?
     ;
 
 qualifiedName
@@ -2217,7 +2242,7 @@ nonReserved
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL | LOW_PRIORITY | LOCK
     | MANUAL | MAP | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE | MINUS
-    | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS
+    | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST | PRIVILEGES
     | PROPERTIES | PROPERTY

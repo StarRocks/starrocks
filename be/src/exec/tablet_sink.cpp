@@ -45,6 +45,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "common/statusor.h"
 #include "config.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/stream_epoch_manager.h"
@@ -205,7 +206,6 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_node_id(_node_id);
     request.set_write_quorum(_write_quorum_type);
     request.set_miss_auto_increment_column(_parent->_miss_auto_increment_column);
-    request.set_abort_delete(_parent->_abort_delete);
     request.set_is_incremental(incremental_open);
     request.set_sender_id(_parent->_sender_id);
     for (auto& tablet : tablets) {
@@ -240,7 +240,21 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     // This ref is for RPC's reference
     open_closure->ref();
     open_closure->cntl.set_timeout_ms(config::tablet_writer_open_rpc_timeout_sec * 1000);
-    _stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
+    if (request.ByteSizeLong() > _parent->_rpc_http_min_size) {
+        TNetworkAddress brpc_addr;
+        brpc_addr.hostname = _node_info->host;
+        brpc_addr.port = _node_info->brpc_port;
+        open_closure->cntl.http_request().set_content_type("application/proto");
+        auto res = BrpcStubCache::create_http_stub(brpc_addr);
+        if (!res.ok()) {
+            LOG(ERROR) << res.status().get_error_msg();
+            return;
+        }
+        res.value()->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
+        VLOG(2) << "NodeChannel::_open() issue a http rpc, request size = " << request.ByteSizeLong();
+    } else {
+        _stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
+    }
     request.release_id();
     request.release_schema();
 
@@ -553,16 +567,47 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
     _add_batch_closures[_current_request_index]->ref();
     _add_batch_closures[_current_request_index]->reset();
     _add_batch_closures[_current_request_index]->cntl.set_timeout_ms(_rpc_timeout_ms);
+
     if (_enable_colocate_mv_index) {
         request.set_is_repeated_chunk(true);
-        _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
-                                        &_add_batch_closures[_current_request_index]->result,
-                                        _add_batch_closures[_current_request_index]);
+        if (UNLIKELY(request.ByteSizeLong() > _parent->_rpc_http_min_size)) {
+            TNetworkAddress brpc_addr;
+            brpc_addr.hostname = _node_info->host;
+            brpc_addr.port = _node_info->brpc_port;
+            _add_batch_closures[_current_request_index]->cntl.http_request().set_content_type("application/proto");
+            auto res = BrpcStubCache::create_http_stub(brpc_addr);
+            if (!res.ok()) {
+                return res.status();
+            }
+            res.value()->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
+                                                  &_add_batch_closures[_current_request_index]->result,
+                                                  _add_batch_closures[_current_request_index]);
+            VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
+        } else {
+            _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
+                                            &_add_batch_closures[_current_request_index]->result,
+                                            _add_batch_closures[_current_request_index]);
+        }
     } else {
         DCHECK(request.requests_size() == 1);
-        _stub->tablet_writer_add_chunk(&_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
-                                       &_add_batch_closures[_current_request_index]->result,
-                                       _add_batch_closures[_current_request_index]);
+        if (UNLIKELY(request.ByteSizeLong() > _parent->_rpc_http_min_size)) {
+            TNetworkAddress brpc_addr;
+            brpc_addr.hostname = _node_info->host;
+            brpc_addr.port = _node_info->brpc_port;
+            _add_batch_closures[_current_request_index]->cntl.http_request().set_content_type("application/proto");
+            auto res = BrpcStubCache::create_http_stub(brpc_addr);
+            if (!res.ok()) {
+                return res.status();
+            }
+            res.value()->tablet_writer_add_chunk(
+                    &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
+                    &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
+            VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
+        } else {
+            _stub->tablet_writer_add_chunk(
+                    &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
+                    &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
+        }
     }
     _next_packet_seq++;
 
@@ -852,7 +897,7 @@ bool IndexChannel::has_intolerable_failure() {
 }
 
 OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status, RuntimeState* state)
-        : _pool(pool) {
+        : _pool(pool), _rpc_http_min_size(state->get_rpc_http_min_size()) {
     if (!texprs.empty()) {
         *status = Expr::create_expr_trees(_pool, texprs, &_output_expr_ctxs, state);
     }
@@ -875,7 +920,6 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     if (table_sink.__isset.null_expr_in_auto_increment) {
         _null_expr_in_auto_increment = table_sink.null_expr_in_auto_increment;
         _miss_auto_increment_column = table_sink.miss_auto_increment_column;
-        _abort_delete = table_sink.abort_delete;
         _auto_increment_slot_id = table_sink.auto_increment_slot_id;
     }
     if (table_sink.__isset.write_quorum_type) {
@@ -1302,9 +1346,9 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
             uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
             int invalid_row_index = 0;
 
-            // _enable_automatic_partition is true means destination table using automatic partition
+            // _enable_automatic_partition is true means' destination table using automatic partition
             // _has_automatic_partition is true means last send_chunk already create partition in nonblocking mode
-            // we don't need create again since it will resend last chunk
+            // we don't need to create again since it will resend last chunk
             if (_enable_automatic_partition && !_has_automatic_partition) {
                 _partition_not_exist_row_values.clear();
                 // only support single column partition now
@@ -1371,15 +1415,19 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
                 }
             }
 
-            _number_filtered_rows += (num_rows - _validate_select_idx.size());
+            int64_t num_rows_load_filtered = num_rows - _validate_select_idx.size();
+            if (num_rows_load_filtered > 0) {
+                _number_filtered_rows += num_rows_load_filtered;
+                state->update_num_rows_load_filtered(num_rows_load_filtered);
+            }
             _number_output_rows += _validate_select_idx.size();
         }
     }
     // update incrementally so that FE can get the progress.
     // the real 'num_rows_load_total' will be set when sink being closed.
     _number_input_rows += num_rows;
-    state->update_num_rows_load_from_sink(num_rows);
-    state->update_num_bytes_load_from_sink(serialize_size);
+    state->update_num_rows_load_sink(num_rows);
+    state->update_num_bytes_load_sink(serialize_size);
     StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
     StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
 
@@ -1634,7 +1682,24 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     ColumnPtr& data_col = std::dynamic_pointer_cast<NullableColumn>(col)->data_column();
     std::vector<uint8_t> filter(std::dynamic_pointer_cast<NullableColumn>(col)->immutable_null_column_data());
 
+    if (_keys_type == TKeysType::PRIMARY_KEYS && _output_tuple_desc->slots().back()->col_name() == "__op") {
+        size_t op_column_id = chunk->num_columns() - 1;
+        ColumnPtr& op_col = chunk->get_column_by_index(op_column_id);
+        auto* ops = reinterpret_cast<const uint8_t*>(op_col->raw_data());
+        size_t row = chunk->num_rows();
+
+        for (size_t i = 0; i < row; ++i) {
+            if (ops[i] == TOpType::DELETE) {
+                filter[i] = 0;
+            }
+        }
+    }
+
     uint32_t null_rows = SIMD::count_nonzero(filter);
+
+    if (null_rows == 0) {
+        return Status::OK();
+    }
 
     switch (slot->type().type) {
     case TYPE_BIGINT: {
@@ -1748,10 +1813,6 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
         COUNTER_SET(_validate_data_timer, _validate_data_ns);
         COUNTER_SET(_serialize_chunk_timer, serialize_batch_ns);
         COUNTER_SET(_send_rpc_timer, actual_consume_ns);
-
-        // _number_input_rows don't contain num_rows_load_filtered and num_rows_load_unselected in scan node
-        state->update_num_rows_load_from_sink(state->num_rows_load_filtered() + state->num_rows_load_unselected());
-        state->update_num_rows_load_filtered(_number_filtered_rows);
 
         int64_t total_server_rpc_time_us = 0;
         // print log of add batch time of all node, for tracing load performance easily

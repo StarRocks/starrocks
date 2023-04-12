@@ -79,6 +79,8 @@ import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.task.PriorityLeaderTask;
 import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TEtlState;
+import com.starrocks.thrift.TLoadInfo;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.BeginTransactionException;
@@ -245,10 +247,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         loadStartTimestamp = System.currentTimeMillis();
     }
 
-    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId,
-                              long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
-        loadingStatus.getLoadStatistic().updateLoadProgress(beId, loadId, fragmentId, sinkRows,
-                sinkBytes, sourceRows, sourceBytes, isDone);
+    public void updateProgess(TReportExecStatusParams params) {
+        loadingStatus.getLoadStatistic().updateLoadProgress(params);
     }
 
     public void setLoadFileInfo(int fileNum, long fileSize) {
@@ -752,8 +752,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             // priority
             jobInfo.add(LoadPriority.priorityToName(priority));
 
+            jobInfo.add(loadingStatus.getLoadStatistic().totalSourceLoadRows());
+            jobInfo.add(loadingStatus.getLoadStatistic().totalFilteredRows());
+            jobInfo.add(loadingStatus.getLoadStatistic().totalUnselectedRows());
+            jobInfo.add(loadingStatus.getLoadStatistic().totalSinkLoadRows());
+
             // etl info
-            if (loadingStatus.getCounters().size() == 0) {
+            if (jobType != EtlJobType.SPARK || loadingStatus.getCounters().size() == 0) {
                 jobInfo.add(FeConstants.NULL_STRING);
             } else {
                 jobInfo.add(Joiner.on("; ").withKeyValueSeparator("=").join(loadingStatus.getCounters()));
@@ -780,10 +785,105 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             jobInfo.add(TimeUtils.longToTimeString(loadStartTimestamp));
             // load end time
             jobInfo.add(TimeUtils.longToTimeString(finishTimestamp));
-            // tracking url
-            jobInfo.add(loadingStatus.getTrackingUrl());
+            // tracking sql
+            if (!loadingStatus.getTrackingUrl().equals(EtlStatus.DEFAULT_TRACKING_URL)) {
+                jobInfo.add("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            } else {
+                jobInfo.add("");
+            }
             jobInfo.add(loadingStatus.getLoadStatistic().toShowInfoStr());
             return jobInfo;
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public TLoadInfo toThrift() {
+        readLock();
+        try {
+            TLoadInfo info = new TLoadInfo();
+            info.setJob_id(id);
+            info.setLabel(label);
+            try {
+                info.setDb(getDb().getFullName());
+            } catch (MetaNotFoundException e) {
+                info.setDb("");
+            }
+            info.setTxn_id(transactionId);
+
+            if (state == JobState.COMMITTED) {
+                info.setState("PREPARED");
+            } else if (state == JobState.LOADING && !startLoad) {
+                info.setState("QUEUEING");
+            } else {
+                info.setState(state.name());
+            }
+            // progress
+            switch (state) {
+                case PENDING:
+                    info.setProgress("ETL:0%; LOAD:0%");
+                    break;
+                case CANCELLED:
+                    info.setProgress("ETL:N/A; LOAD:N/A");
+                    break;
+                case ETL:
+                    info.setProgress("ETL:" + progress + "%; LOAD:0%");
+                    break;
+                default:
+                    info.setProgress("ETL:100%; LOAD:" + progress + "%");
+                    break;
+            }
+
+            // type
+            info.setType(jobType.name());
+            // priority
+            info.setPriority(LoadPriority.priorityToName(priority));
+
+            // etl info
+            if (jobType != EtlJobType.SPARK || loadingStatus.getCounters().size() == 0) {
+                info.setEtl_info("");
+            } else {
+                info.setEtl_info(Joiner.on("; ").withKeyValueSeparator("=").join(loadingStatus.getCounters()));
+            }
+
+            // task info
+            info.setTask_info("resource:" + getResourceName() + "; timeout(s):" + timeoutSecond
+                    + "; max_filter_ratio:" + maxFilterRatio);
+
+            // error msg
+            if (failMsg != null) {
+                info.setError_msg("type:" + failMsg.getCancelType() + "; msg:" + failMsg.getMsg());
+            }
+
+            // create time
+            if (createTimestamp != -1) {
+                info.setCreate_time(TimeUtils.longToTimeString(createTimestamp));
+            }
+            // etl start time
+            if (getEtlStartTimestamp() != -1) {
+                info.setEtl_start_time(TimeUtils.longToTimeString(getEtlStartTimestamp()));
+            }
+            if (loadStartTimestamp != -1) {
+                // etl end time
+                info.setEtl_finish_time(TimeUtils.longToTimeString(loadStartTimestamp));
+                // load start time
+                info.setLoad_start_time(TimeUtils.longToTimeString(loadStartTimestamp));
+            }
+            // load end time
+            if (finishTimestamp != -1) {
+                info.setLoad_finish_time(TimeUtils.longToTimeString(finishTimestamp));
+            }
+            // tracking url
+            if (!loadingStatus.getTrackingUrl().equals(EtlStatus.DEFAULT_TRACKING_URL)) {
+                info.setUrl(loadingStatus.getTrackingUrl());
+                info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            }
+            info.setJob_details(loadingStatus.getLoadStatistic().toShowInfoStr());
+            info.setNum_filtered_rows(loadingStatus.getLoadStatistic().totalFilteredRows());
+            info.setNum_unselected_rows(loadingStatus.getLoadStatistic().totalUnselectedRows());
+            info.setNum_scan_rows(loadingStatus.getLoadStatistic().totalSourceLoadRows());
+            info.setNum_sink_rows(loadingStatus.getLoadStatistic().totalSinkLoadRows());
+            return info;
         } finally {
             readUnlock();
         }

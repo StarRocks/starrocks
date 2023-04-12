@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -110,40 +110,45 @@ public class BasicStatsMeta implements Writable {
     public double getHealthy() {
         Database database = GlobalStateMgr.getCurrentState().getDb(dbId);
         OlapTable table = (OlapTable) database.getTable(tableId);
-        long minRowCount = Long.MAX_VALUE;
+        long totalPartitionCount = table.getPartitions().size();
+        long updatePartitionRowCount = 0;
+        long updatePartitionCount = 0;
         for (Partition partition : table.getPartitions()) {
             if (!partition.hasData()) {
-                //skip init empty partition
+                // skip init empty partition
                 continue;
             }
-            if (partition.getRowCount() < minRowCount) {
-                minRowCount = partition.getRowCount();
+
+            LocalDateTime loadTimes = StatisticUtils.getPartitionLastUpdateTime(partition);
+            if (updateTime.isAfter(loadTimes)) {
+                continue;
             }
+
+            updatePartitionCount++;
+            updatePartitionRowCount += partition.getRowCount();
         }
 
-        /*
-         * The ratio of the number of modified lines to the total number of lines.
-         * Because we cannot obtain complete table-level information, we use the row count of
-         * the partition with the smallest row count as totalRowCount.
-         * It can be understood that we assume an extreme case where all imported and modified lines
-         * are concentrated in only one partition
-         */
-        double healthy;
-        if (minRowCount == Long.MAX_VALUE) {
-            //All partition is empty
-            healthy = 1;
-        } else if (updateRows > minRowCount) {
-            healthy = 0;
-        } else if (minRowCount == 0) {
-            // updateRows == 0 && minRowCount == 0
-            // If minRowCount == 0 and partition.hasData is true.
-            // Indicates that a truncate or delete operation has occurred on this table.
-            healthy = 1;
+        // promise new partitions row count
+        LocalDateTime updateRowCountTimes = GlobalStateMgr.getCurrentTabletStatMgr().getLastWorkTimestamp();
+        if (StatisticUtils.getTableLastUpdateTime(table).plusSeconds(Config.tablet_stat_update_interval_second)
+                .isAfter(updateRowCountTimes)) {
+            updatePartitionRowCount += updateRows;
+        }
+
+        double updateRatio;
+        // 1. If none updated partitions, health is 1
+        // 2. If there are few updated partitions, the health only to calculated on rows
+        // 3. If there are many updated partitions, the health needs to be calculated based on partitions
+        if (updatePartitionRowCount == 0 || updatePartitionCount == 0) {
+            return 1;
+        } else if (updatePartitionCount < StatsConstants.STATISTICS_PARTITION_UPDATED_THRESHOLD) {
+            updateRatio = (updateRows * 1.0) / updatePartitionRowCount;
         } else {
-            healthy = 1 - (double) updateRows / (double) minRowCount;
+            double rowUpdateRatio = (updateRows * 1.0) / updatePartitionRowCount;
+            double partitionUpdateRatio = (updatePartitionCount * 1.0) / totalPartitionCount;
+            updateRatio = Math.min(rowUpdateRatio, partitionUpdateRatio);
         }
-
-        return healthy;
+        return 1 - Math.min(updateRatio, 1.0);
     }
 
     public long getUpdateRows() {

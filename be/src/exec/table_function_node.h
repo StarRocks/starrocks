@@ -62,8 +62,6 @@ private:
     int _outer_column_remain_repeat_times = 0;
     //table function result
     std::pair<Columns, ColumnPtr> _table_function_result;
-    //table function return result end ?
-    bool _table_function_result_eos = false;
     //table function param and return offset
     TableFunctionState* _table_function_state = nullptr;
 

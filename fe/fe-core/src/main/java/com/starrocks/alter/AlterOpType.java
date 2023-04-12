@@ -56,6 +56,9 @@ public enum AlterOpType {
     SWAP,
     COMPACT,
 
+    // comment
+    ALTER_COMMENT,
+
     INVALID_OP; // INVALID_OP must be the last one
 
     // true means 2 operations have no conflict.

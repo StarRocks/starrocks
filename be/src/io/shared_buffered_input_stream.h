@@ -36,7 +36,8 @@ public:
         int64_t max_buffer_size = 8 * MB;
     };
 
-    SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename, size_t size);
+    SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, const std::string& filename,
+                              size_t file_size);
     ~SharedBufferedInputStream() override = default;
 
     Status seek(int64_t position) override {
@@ -54,7 +55,6 @@ public:
 
     Status set_io_ranges(const std::vector<IORange>& ranges);
     void release_to_offset(int64_t offset);
-    Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes);
     void release();
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
     void set_align_size(int64_t size) { _align_size = size; }
@@ -71,17 +71,25 @@ public:
 private:
     struct SharedBuffer {
     public:
+        // request range
+        int64_t raw_offset;
+        int64_t raw_size;
+        // request range after alignment
         int64_t offset;
         int64_t size;
         int64_t ref_count;
         std::vector<uint8_t> buffer;
+        void align(int64_t align_size, int64_t file_size);
     };
+    Status _get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes);
     StatusOr<SharedBuffer*> _find_shared_buffer(size_t offset, size_t count);
+    Status _read_stream_buffer(SharedBuffer& sb, size_t offset, size_t count);
     std::shared_ptr<SeekableInputStream> _stream;
+    std::string _filename;
     std::map<int64_t, SharedBuffer> _map;
     CoalesceOptions _options;
     int64_t _offset = 0;
-    int64_t _size = 0;
+    int64_t _file_size = 0;
     int64_t _shared_io_count = 0;
     int64_t _shared_io_bytes = 0;
     int64_t _shared_io_timer = 0;

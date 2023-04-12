@@ -16,6 +16,7 @@ CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [partition_desc]
 distribution_desc
 [rollup_index]
+[ORDER BY (column_definition1,...)]
 [PROPERTIES ("key"="value", ...)]
 [BROKER PROPERTIES ("key"="value", ...)]
 ```
@@ -27,7 +28,7 @@ distribution_desc
 Syntax:
 
 ```SQL
-col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
+col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_INCREMENT]
 ```
 
 **col_name**：Column name.
@@ -79,6 +80,8 @@ This aggregation type applies ONLY to the aggregation model whose key_desc type 
 - **DEFAULT current_timestamp**: Use the current time as the default value. For more information, see [current_timestamp()](../../sql-functions/date-time-functions/current_timestamp.md).
 - **DEFAULT <default_value>**: Use a given value of the column data type as the default value. For example, if the data type of the column is VARCHAR, you can specify a VARCHAR string, such as beijing, as the default value, as presented in `DEFAULT "beijing"`. Note that default values cannot be any of the following types: ARRAY, BITMAP, JSON, HLL, and BOOLEAN.
 - **DEFAULT (\<expr\>)**: Use the result returned by a given function as the default value. Only the [uuid()](../../sql-functions/utility-functions/uuid.md) and [uuid_numeric()](../../sql-functions/utility-functions/uuid_numeric.md) expressions are supported.
+
+- **AUTO_INCREMENT**：specifies an `AUTO_INCREMENT` column. The data types of `AUTO_INCREMENT` columns must be BIGINT. Auto-incremented IDs start from 1 and increase at a step of 1. For more information about `AUTO_INCREMENT` columns, see [AUTO_INCREMENT](../../sql-statements/auto_increment.md).
 
 ### index_definition
 
@@ -292,6 +295,14 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 - Bucketing columns cannot be modified after they are specified.
 - Since StarRocks 2.5, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
 
+### ORDER BY
+
+Since version 3.0, the primary key and sort key are decoupled in the Primary Key model. The sort key is specified by the `ORDER BY` keyword and can be the permutation and combination of any columns.
+
+> **NOTICE**
+>
+> If the sort key is specified, the prefix index is built according to the sort key; if the sort key is not specified, the prefix index is built according to the primary key.
+
 ### PROPERTIES
 
 #### Specify storage medium, storage cooldown time, replica number
@@ -314,7 +325,7 @@ PROPERTIES (
 
 > **NOTE**
 >
-> - From 2.5.1, the system automatically infers storage medium based on BE disk type if `storage_medium` is not explicitly specified. Inference mechanism: If `storage_root_path` reported by BEs contain only SSD, the system automatically sets this parameter to SSD. If `storage_root_path` reported by BEs contain only HDD, the system automatically sets this parameter to HDD. If `storage_root_path` reported by BEs contain both SSD and HDD, the system automatically sets this parameter to SSD.
+> - From 2.5.1, the system automatically infers storage medium based on BE disk type if `storage_medium` is not explicitly specified. Inference mechanism: If `storage_root_path` reported by BEs contain only SSD, the system automatically sets this parameter to SSD. If `storage_root_path` reported by BEs contain only HDD, the system automatically sets this parameter to HDD. If `storage_root_path` reported by BEs contain both SSD and HDD, the system automatically sets this parameter to SSD. From 2.3.10, 2.4.5, 2.5.4 onwards, if `storage_root_path` reported by BEs contain both SSD and HDD and the property `storage_cooldown_time` is specified, `storage_medium` is set to SSD; if the property `storage_cooldown_time` is not specified, `storage_medium` is set to HDD.
 > - If the FE configuration item `enable_strict_storage_medium_check` is set to `true`, the system strictly checks BE disk type when you create a table. If the storage medium you specified in CREATE TABLE is inconsistent with BE disk type, an error "Failed to find enough host in all backends with storage medium is SSD|HDD." is returned and table creation fails. If `enable_strict_storage_medium_check` is set to `false`, the system ignores this error and forcibly creates the table. However, cluster disk space may be unevenly distributed after data is loaded.
 
 **storage_cooldown_time**: the storage cooldown time for a partition. If the storage medium is SSD, SSD is switched to HDD after the time specified by this parameter. Format: "yyyy-MM-dd HH:mm:ss". The specified time must be later than the current time. If this parameter is not explicitly specified, storage cooldown is not performed by default.
@@ -431,9 +442,35 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 [PROPERTIES ("key"="value", ...)],...)
 ```
 
+#### Define Foreign Key constraints for View Delta Join query rewrite
+
+To enable query rewrite in the View Delta Join scenario, you must define the Foreign Key constraints `foreign_key_constraints` for the table to be joined in the Delta Join. See [Asynchronous materialized view - Rewrite queries in View Delta Join scenario](../../../using_starrocks/Materialized_view.md#rewrite-queries-in-view-delta-join-scenario) for further information.
+
+```SQL
+PROPERTIES (
+    "foreign_key_constraints" = "
+    (<child_column>[, ...]) 
+    REFERENCES 
+    [catalog_name].[database_name].<parent_table_name>(<parent_column>[, ...])
+    [;...]
+    "
+)
+```
+
+- `child_column`: the Foreign Key of the table. You can define multiple `child_column`.
+- `catalog_name`: the name of the catalog where the table to join resides. The default catalog is used if this parameter is not specified.
+- `database_name`: the name of the database where the table to join resides. The current database is used if this parameter is not specified.
+- `parent_table_name`: the name of the table to join.
+- `parent_column`: the column to be joined. They must be the Primary Keys or Unique Keys of the corresponding tables.
+
+> **CAUTION**
+>
+> - The number of `child_column` and `parent_column` must agree.
+> - The data types of the `child_column` and the corresponding `parent_column` must match.
+
 ## Examples
 
-### Create an Aggregate Key table that uses Hash bucketing and column-based storage
+### Create an Aggregate Key table that uses Hash bucketing and columnar storage
 
 ```SQL
 CREATE TABLE example_db.table_hash
@@ -718,5 +755,32 @@ PROPERTIES
     "resource" = "hive0",
     "database" = "hive_db_name",
     "table" = "hive_table_name"
+);
+```
+
+### Create a Primary Key table and specify the sort key
+
+Suppose that you need to analyze user behavior in real time from dimensions such as users' address and last active time. When you create a table, you can define the `user_id` column as the primary key and define the combination of the `address` and `last_active` columns as the sort key.
+
+```SQL
+create table users (
+    user_id bigint NOT NULL,
+    name string NOT NULL,
+    email string NULL,
+    address string NULL,
+    age tinyint NULL,
+    sex tinyint NULL,
+    last_active datetime,
+    property0 tinyint NOT NULL,
+    property1 tinyint NOT NULL,
+    property2 tinyint NOT NULL,
+    property3 tinyint NOT NULL
+) 
+PRIMARY KEY (`user_id`)
+DISTRIBUTED BY HASH(`user_id`) BUCKETS 4
+ORDER BY(`address`,`last_active`)
+PROPERTIES(
+    "replication_num" = "3",
+    "enable_persistent_index" = "true"
 );
 ```

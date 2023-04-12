@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Database;
@@ -115,6 +116,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
 
 public class DDLStmtExecutor {
 
@@ -155,10 +159,12 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateDbStatement(CreateDbStmt stmt, ConnectContext context) {
             String fullDbName = stmt.getFullDbName();
+            String catalogName = stmt.getCatalogName();
+            Map<String, String> properties = stmt.getProperties();
             boolean isSetIfNotExists = stmt.isSetIfNotExists();
             ErrorReport.wrapWithRuntimeException(() -> {
                 try {
-                    context.getGlobalStateMgr().getMetadata().createDb(fullDbName);
+                    context.getGlobalStateMgr().getMetadataMgr().createDb(catalogName, fullDbName, properties);
                 } catch (AlreadyExistsException e) {
                     if (isSetIfNotExists) {
                         LOG.info("create database[{}] which already exists", fullDbName);
@@ -173,10 +179,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropDbStatement(DropDbStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+                String catalogName = stmt.getCatalogName();
                 String dbName = stmt.getDbName();
                 boolean isForceDrop = stmt.isForceDrop();
                 try {
-                    context.getGlobalStateMgr().getMetadata().dropDb(dbName, isForceDrop);
+                    context.getGlobalStateMgr().getMetadataMgr().dropDb(catalogName, dbName, isForceDrop);
                 } catch (MetaNotFoundException e) {
                     if (stmt.isSetIfExists()) {
                         LOG.info("drop database[{}] which does not exist", dbName);
@@ -225,7 +232,8 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateTableStatement(CreateTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().createTable(stmt);
+                String catalogName = stmt.getCatalogName();
+                context.getGlobalStateMgr().getMetadataMgr().createTable(catalogName, stmt);
             });
             return null;
         }
@@ -283,12 +291,15 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement stmt,
                                                                    ConnectContext context) {
+            List<String> info = Lists.newArrayList();
             ErrorReport.wrapWithRuntimeException(() -> {
                 // The priority of manual refresh is higher than that of general refresh
-                context.getGlobalStateMgr().getLocalMetastore()
+                String taskId = context.getGlobalStateMgr().getLocalMetastore()
                         .refreshMaterializedView(stmt, Constants.TaskRunPriority.HIGH.value());
+                info.add(taskId);
             });
-            return null;
+
+            return new ShowResultSet(RefreshMaterializedViewStatement.META_DATA, Arrays.asList(info));
         }
 
         @Override
@@ -768,6 +779,7 @@ public class DDLStmtExecutor {
                         context.getSessionVariable().getStatisticCollectParallelism());
 
                 Thread thread = new Thread(() -> {
+                    statsConnectCtx.setThreadLocalInfo();
                     StatisticExecutor statisticExecutor = new StatisticExecutor();
                     analyzeJob.run(statsConnectCtx, statisticExecutor);
                 });

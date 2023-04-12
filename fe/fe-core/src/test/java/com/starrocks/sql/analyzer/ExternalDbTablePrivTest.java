@@ -205,14 +205,6 @@ public class ExternalDbTablePrivTest {
                 "revoke drop on database tpch from test",
                 "Access denied for user 'test' to database 'tpch'");
 
-        // Test create_table on database
-        verifyGrantRevoke(
-                "create table hive0.tpch.test1111 (id int) duplicate key (id) distributed by hash(id)" +
-                        " buckets 10 properties(\"replication_num\"=\"1\");",
-                "grant CREATE TABLE on database tpch to test",
-                "revoke CREATE TABLE on database tpch from test",
-                "Access denied for user 'test' to database 'tpch'");
-
         // Test show databases, check any action on table
         grantRevokeSqlAsRoot("grant drop on tpch.region to test");
         StatementBase showTableStmt =  UtFrameUtils.parseStmtWithNewParser("show databases",

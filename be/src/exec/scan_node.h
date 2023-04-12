@@ -72,6 +72,8 @@ public:
     ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs) : ExecNode(pool, tnode, descs) {}
     ~ScanNode() override = default;
 
+    Status init(const TPlanNode& tnode, RuntimeState* state) override;
+
     // Set up counters
     Status prepare(RuntimeState* state) override;
 
@@ -115,7 +117,7 @@ public:
     const std::string& name() const { return _name; }
 
     virtual int io_tasks_per_scan_operator() const { return _io_tasks_per_scan_operator; }
-    virtual bool always_shared_scan() const { return config::scan_node_always_shared_scan; }
+    virtual bool always_shared_scan() const { return false; }
 
     // TODO: support more share_scan strategy
     void enable_shared_scan(bool enable);

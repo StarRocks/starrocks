@@ -149,6 +149,10 @@ if __name__ == "__main__":
         sys.exit(4)
     argv += ["--process-timeout=%s" % timeout]
 
+    # test xml
+    if not record:
+        argv += ["--with-xunitmp"]
+
     if collect:
         argv += ["--collect-only"]
 
@@ -157,5 +161,5 @@ if __name__ == "__main__":
     nose.run(argv=argv)
 
     # record mode
-    if record:
+    if record and not collect:
         sr_sql_lib.StarrocksSQLApiLib().save_r_into_file(part)

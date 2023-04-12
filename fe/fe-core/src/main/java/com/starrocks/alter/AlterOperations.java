@@ -105,6 +105,10 @@ public class AlterOperations {
         return currentOps.contains(AlterOpType.COMPACT);
     }
 
+    public boolean hasAlterCommentOp() {
+        return currentOps.contains(AlterOpType.ALTER_COMMENT);
+    }
+
     public boolean contains(AlterOpType op) {
         return currentOps.contains(op);
     }

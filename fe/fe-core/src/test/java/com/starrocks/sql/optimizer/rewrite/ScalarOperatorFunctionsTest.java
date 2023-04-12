@@ -296,7 +296,7 @@ public class ScalarOperatorFunctionsTest {
                                 ConstantOperator.createVarchar("%Y-%m-%d"))
                         .getVarchar());
         assertEquals("000123", ScalarOperatorFunctions
-                .dateFormat(ConstantOperator.createDate(LocalDateTime.of(2022, 3, 13, 0, 0, 0, 123000)),
+                .dateFormat(ConstantOperator.createDate(LocalDateTime.of(2022, 3, 13, 0, 0, 0, 123000000)),
                         ConstantOperator.createVarchar("%f")).getVarchar());
 
         assertEquals("asdfafdfsçv",
@@ -355,11 +355,11 @@ public class ScalarOperatorFunctionsTest {
                         ConstantOperator.createVarchar("%Y%m%d")).getDatetime().toString());
 
         assertEquals("2013-05-17T12:35:10.000123", ScalarOperatorFunctions
-                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.123"),
+                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.000123"),
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s.%f")).getDatetime().toString());
 
         assertEquals("2013-05-17T12:35:10.000001", ScalarOperatorFunctions
-                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.00001"),
+                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.000001"),
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s.%f")).getDatetime().toString());
 
         assertEquals("2013-05-17T12:35:10", ScalarOperatorFunctions
@@ -549,6 +549,16 @@ public class ScalarOperatorFunctionsTest {
         ctx.setStartTime();
         LocalDateTime now = LocalDateTime.of(LocalDate.now(), LocalTime.of(0, 0, 0));
         assertEquals(now, ScalarOperatorFunctions.curDate().getDate());
+    }
+
+
+    @Test
+    public void nextDay() {
+        assertEquals("2015-03-29T09:23:55", ScalarOperatorFunctions.nextDay(O_DT_20150323_092355,
+                ConstantOperator.createVarchar("Sunday")).getDate().toString());
+        Assert.assertThrows("undefine_dow not supported in next_day dow_string", IllegalArgumentException.class,
+                () -> ScalarOperatorFunctions.nextDay(O_DT_20150323_092355, ConstantOperator.createVarchar("undefine_dow"))
+                        .getVarchar());
     }
 
     @Test

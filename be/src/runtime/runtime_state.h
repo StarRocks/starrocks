@@ -77,6 +77,8 @@ namespace pipeline {
 class QueryContext;
 }
 
+constexpr int64_t kRpcHttpMinSize = ((1L << 31) - (1L << 10));
+
 // A collection of items that are part of the global state of a
 // query and shared across all execution nodes of that query.
 class RuntimeState {
@@ -236,43 +238,33 @@ public:
 
     int64_t num_rows_load_from_source() const noexcept { return _num_rows_load_total_from_source.load(); }
 
-    int64_t num_bytes_load_from_sink() const noexcept { return _num_bytes_load_from_sink.load(); }
+    int64_t num_bytes_load_sink() const noexcept { return _num_bytes_load_sink.load(); }
 
-    int64_t num_rows_load_from_sink() const noexcept { return _num_rows_load_from_sink.load(); }
+    int64_t num_rows_load_sink() const noexcept { return _num_rows_load_sink.load(); }
 
     int64_t num_rows_load_filtered() const noexcept { return _num_rows_load_filtered.load(); }
 
     int64_t num_rows_load_unselected() const noexcept { return _num_rows_load_unselected.load(); }
 
-    int64_t num_rows_load_sink_success() const noexcept {
-        return num_rows_load_from_sink() - num_rows_load_filtered() - num_rows_load_unselected();
-    }
-
     void update_num_bytes_load_from_source(int64_t bytes_load) { _num_bytes_load_from_source.fetch_add(bytes_load); }
-
-    void set_update_num_bytes_load_from_source(int64_t bytes_load) { _num_bytes_load_from_source.store(bytes_load); }
 
     void update_num_rows_load_from_source(int64_t num_rows) { _num_rows_load_total_from_source.fetch_add(num_rows); }
 
-    void set_num_rows_load_from_source(int64_t num_rows) { _num_rows_load_total_from_source.store(num_rows); }
+    void update_num_bytes_load_sink(int64_t bytes_load) { _num_bytes_load_sink.fetch_add(bytes_load); }
 
-    void update_num_bytes_load_from_sink(int64_t bytes_load) { _num_bytes_load_from_sink.fetch_add(bytes_load); }
-
-    void set_update_num_bytes_load_from_sink(int64_t bytes_load) { _num_bytes_load_from_sink.store(bytes_load); }
-
-    void update_num_rows_load_from_sink(int64_t num_rows) { _num_rows_load_from_sink.fetch_add(num_rows); }
-
-    void set_num_rows_load_from_sink(int64_t num_rows) { _num_rows_load_from_sink.store(num_rows); }
+    void update_num_rows_load_sink(int64_t num_rows) { _num_rows_load_sink.fetch_add(num_rows); }
 
     void update_num_rows_load_filtered(int64_t num_rows) { _num_rows_load_filtered.fetch_add(num_rows); }
 
     void update_num_rows_load_unselected(int64_t num_rows) { _num_rows_load_unselected.fetch_add(num_rows); }
 
     void update_report_load_status(TReportExecStatusParams* load_params) {
-        load_params->__set_loaded_rows(num_rows_load_from_sink());
-        load_params->__set_sink_load_bytes(num_bytes_load_from_sink());
+        load_params->__set_loaded_rows(num_rows_load_sink());
+        load_params->__set_sink_load_bytes(num_bytes_load_sink());
         load_params->__set_source_load_rows(num_rows_load_from_source());
         load_params->__set_source_load_bytes(num_bytes_load_from_source());
+        load_params->__set_filtered_rows(num_rows_load_filtered());
+        load_params->__set_unselected_rows(num_rows_load_unselected());
     }
 
     void set_per_fragment_instance_idx(int idx) { _per_fragment_instance_idx = idx; }
@@ -297,6 +289,8 @@ public:
     double spill_mem_limit_threshold() const { return _query_options.spill_mem_limit_threshold; }
 
     int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
+
+    int64_t spill_operator_max_bytes() const { return _query_options.spill_operator_max_bytes; }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
@@ -352,6 +346,10 @@ public:
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
     Status reset_epoch();
+
+    int64_t get_rpc_http_min_size() {
+        return _query_options.__isset.rpc_http_min_size ? _query_options.rpc_http_min_size : kRpcHttpMinSize;
+    }
 
 private:
     // Set per-query state.
@@ -440,8 +438,8 @@ private:
     std::atomic<int64_t> _num_bytes_load_from_source{0}; // total bytes load from source node (file scan node, olap scan
                                                          // node)
 
-    std::atomic<int64_t> _num_rows_load_from_sink{0};  // total rows load from sink node (tablet sink node)
-    std::atomic<int64_t> _num_bytes_load_from_sink{0}; // total bytes load from sink node (tablet sink node)
+    std::atomic<int64_t> _num_rows_load_sink{0};  // total rows sink to storage
+    std::atomic<int64_t> _num_bytes_load_sink{0}; // total bytes sink to storage
 
     std::atomic<int64_t> _num_rows_load_filtered{0};   // unqualified rows
     std::atomic<int64_t> _num_rows_load_unselected{0}; // rows filtered by predicates

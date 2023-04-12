@@ -52,7 +52,6 @@ public class ShowProcStmt extends ShowStmt {
     }
 
 
-
     public ProcNodeInterface getNode() {
         return node;
     }

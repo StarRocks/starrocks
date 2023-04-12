@@ -332,7 +332,7 @@ public class ExportJob implements Writable {
         ScanNode scanNode = null;
         switch (exportTable.getType()) {
             case OLAP:
-            case LAKE:
+            case CLOUD_NATIVE:
                 scanNode = new OlapScanNode(new PlanNodeId(0), exportTupleDesc, "OlapScanNodeForExport");
                 scanNode.setColumnFilters(Maps.newHashMap());
                 ((OlapScanNode) scanNode).setIsPreAggregation(false, "This an export operation");
@@ -363,7 +363,7 @@ public class ExportJob implements Writable {
         PlanFragment fragment = null;
         switch (exportTable.getType()) {
             case OLAP:
-            case LAKE:
+            case CLOUD_NATIVE:
                 fragment = new PlanFragment(
                         new PlanFragmentId(nextId.getAndIncrement()), scanNode, DataPartition.RANDOM);
                 break;
@@ -685,7 +685,7 @@ public class ExportJob implements Writable {
             case OLAP:
             case MYSQL:
                 return releaseSnapshotPaths();
-            case LAKE:
+            case CLOUD_NATIVE:
                 return releaseMetadataLocks();
             default:
                 return Status.OK;
@@ -991,7 +991,7 @@ public class ExportJob implements Writable {
     }
 
     public boolean exportLakeTable() {
-        return exportTable.isCloudNativeTable();
+        return exportTable.isCloudNativeTableOrMaterializedView();
     }
 
     public boolean exportOlapTable() {

@@ -76,7 +76,7 @@ public class PartitionUtils {
                             rangePartitionInfo.getRange(sourcePartitionId));
                     range = rangePartitionInfo.getRange(partition.getId());
                 }
-                if (targetTable.isCloudNativeTable()) {
+                if (targetTable.isCloudNativeTableOrMaterializedView()) {
                     PartitionPersistInfoV2 info = null;
                     if (range != null) {
                         info = new RangePartitionPersistInfo(db.getId(), targetTable.getId(),
@@ -104,7 +104,7 @@ public class PartitionUtils {
                 }
             }
 
-            if (targetTable.isCloudNativeTable()) {
+            if (targetTable.isCloudNativeTableOrMaterializedView()) {
                 AddPartitionsInfoV2 infos = new AddPartitionsInfoV2(partitionInfoV2List);
                 GlobalStateMgr.getCurrentState().getEditLog().logAddPartitions(infos);
             } else {

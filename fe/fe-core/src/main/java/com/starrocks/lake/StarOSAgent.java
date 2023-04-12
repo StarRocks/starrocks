@@ -400,7 +400,7 @@ public class StarOSAgent {
         }
     }
 
-    public long getPrimaryBackendIdByShard(long shardId) throws UserException {
+    public long getPrimaryComputeNodeIdByShard(long shardId) throws UserException {
         List<ReplicaInfo> replicas = getShardReplicas(shardId);
 
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
@@ -412,8 +412,15 @@ public class StarOSAgent {
                         // get backendId from system info by host & starletPort
                         String workerAddr = workerInfo.getIpPort();
                         String[] pair = workerAddr.split(":");
-                        long backendId = GlobalStateMgr.getCurrentSystemInfo()
-                                .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
+
+                        long backendId = -1L;
+                        if (Config.only_use_compute_node) {
+                            backendId = GlobalStateMgr.getCurrentSystemInfo().
+                                    getComputeNodeWithStarletPort(pair[0], Integer.parseInt(pair[1]));
+                        } else {
+                            backendId = GlobalStateMgr.getCurrentSystemInfo()
+                                    .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
+                        }
 
                         if (backendId == -1L) {
                             throw new UserException("Failed to get backend by worker. worker id: " + workerId);

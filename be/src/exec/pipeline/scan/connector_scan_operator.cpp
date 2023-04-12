@@ -71,8 +71,8 @@ void ConnectorScanOperator::do_close(RuntimeState* state) {}
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    return std::make_shared<ConnectorChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
-                                                  std::move(morsel), this, scan_node, factory->get_chunk_buffer());
+    return std::make_shared<ConnectorChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(),
+                                                  std::move(morsel), scan_node, factory->get_chunk_buffer());
 }
 
 void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
@@ -153,10 +153,9 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
 }
 
 // ==================== ConnectorChunkSource ====================
-ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile,
-                                           MorselPtr&& morsel, ScanOperator* op, ConnectorScanNode* scan_node,
-                                           BalancedChunkBuffer& chunk_buffer)
-        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), chunk_buffer),
+ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                                           ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
+        : ChunkSource(op, runtime_profile, std::move(morsel), chunk_buffer),
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),
@@ -186,10 +185,12 @@ ConnectorChunkSource::~ConnectorChunkSource() {
 Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
-    if (config::connector_min_max_predicate_from_runtime_filter_enable) {
-        _data_source->parse_runtime_filters(state);
-    }
+    _data_source->parse_runtime_filters(state);
     return Status::OK();
+}
+
+const std::string ConnectorChunkSource::get_custom_coredump_msg() const {
+    return _data_source->get_custom_coredump_msg();
 }
 
 void ConnectorChunkSource::close(RuntimeState* state) {
@@ -232,12 +233,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         if (_status.ok()) {
             if (tmp->num_rows() == 0) continue;
             _ck_acc.push(tmp);
-            if (config::connector_chunk_source_accumulate_chunk_enable) {
-                if (_ck_acc.has_output()) break;
-            } else {
-                _ck_acc.finalize();
-                break;
-            }
+            if (_ck_acc.has_output()) break;
         } else if (!_status.is_end_of_file()) {
             if (_status.is_time_out()) {
                 Status t = _status;

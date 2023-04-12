@@ -112,6 +112,7 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
@@ -428,10 +429,13 @@ public class StmtExecutor {
 
                 // sql's blacklist is enabled through enable_sql_blacklist.
                 if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
-                    String originSql = parsedStmt.getOrigStmt().originStmt.trim().toLowerCase().replaceAll(" +", " ");
-
-                    // If this sql is in blacklist, show message.
-                    SqlBlackList.verifying(originSql);
+                    OriginStatement origStmt = parsedStmt.getOrigStmt();
+                    if (origStmt != null) {
+                        String originSql = origStmt.originStmt.trim()
+                                .toLowerCase().replaceAll(" +", " ");
+                        // If this sql is in blacklist, show message.
+                        SqlBlackList.verifying(originSql);
+                    }
                 }
 
                 // Record planner costs in audit log
@@ -538,6 +542,8 @@ public class StmtExecutor {
                 handleDelSqlBlackListStmt();
             } else if (parsedStmt instanceof ExecuteAsStmt) {
                 handleExecAsStmt();
+            } else if (parsedStmt instanceof ExecuteScriptStmt) {
+                handleExecScriptStmt();
             } else if (parsedStmt instanceof SetRoleStmt) {
                 handleSetRole();
             } else if (parsedStmt instanceof SetDefaultRoleStmt) {
@@ -571,13 +577,16 @@ public class StmtExecutor {
                 coord.cancel();
             }
 
-            if (parsedStmt instanceof InsertStmt) {
+            if (parsedStmt instanceof InsertStmt && !parsedStmt.isExplain()) {
                 // sql's blacklist is enabled through enable_sql_blacklist.
                 if (Config.enable_sql_blacklist) {
-                    String originSql = parsedStmt.getOrigStmt().originStmt.trim().toLowerCase().replaceAll(" +", " ");
-
-                    // If this sql is in blacklist, show message.
-                    SqlBlackList.verifying(originSql);
+                    OriginStatement origStmt = parsedStmt.getOrigStmt();
+                    if (origStmt != null) {
+                        String originSql = origStmt.originStmt.trim()
+                                .toLowerCase().replaceAll(" +", " ");
+                        // If this sql is in blacklist, show message.
+                        SqlBlackList.verifying(originSql);
+                    }
                 }
             }
 
@@ -982,6 +991,10 @@ public class StmtExecutor {
         ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
     }
 
+    private void handleExecScriptStmt() throws PrivilegeException, UserException {
+        ExecuteScriptExecutor.execute((ExecuteScriptStmt) parsedStmt, context);
+    }
+
     private void handleSetRole() throws PrivilegeException, UserException {
         SetRoleExecutor.execute((SetRoleStmt) parsedStmt, context);
     }
@@ -1362,6 +1375,7 @@ public class StmtExecutor {
         long estimateScanRows = -1;
         TransactionStatus txnStatus = TransactionStatus.ABORTED;
         boolean insertError = false;
+        String trackingSql = "";
         try {
             if (execPlan.getFragments().get(0).getSink() instanceof OlapTableSink) {
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
@@ -1407,6 +1421,7 @@ public class StmtExecutor {
                     type,
                     ConnectContext.get().getSessionVariable().getQueryTimeoutS());
             coord.setJobId(jobId);
+            trackingSql = "select tracking_log from information_schema.load_tracking_logs where job_id=" + jobId;
 
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
             coord.exec();
@@ -1464,8 +1479,7 @@ public class StmtExecutor {
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = "
-                                        + coord.getTrackingUrl()
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql
                         );
                     } else if (targetTable instanceof SchemaTable) {
                         // schema table does not need txn
@@ -1473,13 +1487,12 @@ public class StmtExecutor {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                                 database.getId(),
                                 transactionId,
-                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking_url = "
-                                        + coord.getTrackingUrl(),
+                                TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql,
                                 TabletFailInfo.fromThrift(coord.getFailInfos())
                         );
                     }
-                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " +
-                            transactionId + " tracking_url = " + coord.getTrackingUrl());
+                    context.getState().setError("Insert has filtered data in strict mode, txn_id = " + transactionId +
+                            " tracking sql = " + trackingSql);
                     insertError = true;
                     return;
                 }
@@ -1571,7 +1584,7 @@ public class StmtExecutor {
             // if not using old load usage pattern, error will be returned directly to user
             StringBuilder sb = new StringBuilder(t.getMessage() == null ? "Unknown reason" : t.getMessage());
             if (coord != null && !Strings.isNullOrEmpty(coord.getTrackingUrl())) {
-                sb.append(". url: ").append(coord.getTrackingUrl());
+                sb.append(". tracking sql: ").append(trackingSql);
             }
             context.getState().setError(sb.toString());
 
@@ -1643,6 +1656,8 @@ public class StmtExecutor {
     public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan) {
         List<TResultBatch> sqlResult = Lists.newArrayList();
         try {
+            UUID uuid = context.getQueryId();
+            context.setExecutionId(UUIDUtil.toTUniqueId(uuid));
             coord = new Coordinator(context, plan.getFragments(), plan.getScanNodes(), plan.getDescTbl().toThrift());
             QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(), coord);
 

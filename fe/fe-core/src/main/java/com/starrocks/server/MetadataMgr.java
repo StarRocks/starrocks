@@ -23,7 +23,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
@@ -32,6 +36,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -139,6 +144,21 @@ public class MetadataMgr {
         return ImmutableList.copyOf(partitionNames.build());
     }
 
+    public void createDb(String catalogName, String dbName, Map<String, String> properties)
+            throws DdlException, AlreadyExistsException {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            connectorMetadata.get().createDb(dbName, properties);
+        }
+    }
+
+    public void dropDb(String catalogName, String dbName, boolean isForce) throws DdlException, MetaNotFoundException {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isPresent()) {
+            connectorMetadata.get().dropDb(dbName, isForce);
+        }
+    }
+
     public Database getDb(String catalogName, String dbName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         Database db = connectorMetadata.map(metadata -> metadata.getDb(dbName)).orElse(null);
@@ -147,6 +167,32 @@ public class MetadataMgr {
             db.setCatalogName(catalogName);
         }
         return db;
+    }
+
+    public boolean createTable(String catalogName, CreateTableStmt stmt) throws DdlException {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+
+        if (connectorMetadata.isPresent()) {
+            if (!CatalogMgr.isInternalCatalog(catalogName)) {
+                String dbName = stmt.getDbName();
+                String tableName = stmt.getTableName();
+                if (getDb(catalogName, dbName) == null) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+                }
+
+                if (listTableNames(catalogName, dbName).contains(tableName)) {
+                    if (stmt.isSetIfNotExists()) {
+                        LOG.info("create table[{}] which already exists", tableName);
+                        return false;
+                    } else {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
+                    }
+                }
+            }
+            return connectorMetadata.get().createTable(stmt);
+        } else {
+            throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+        }
     }
 
     public Table getTable(String catalogName, String dbName, String tblName) {

@@ -74,6 +74,9 @@ Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
 }
 
 Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    if (chunk == nullptr || chunk->is_empty()) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
     if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
         return AggregateBlockingSinkOperator::push_chunk(state, chunk);
@@ -87,7 +90,7 @@ Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, c
 Status SpillableAggregateBlockingSinkOperator::_spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk) {
     // spill all data
     auto spillable = std::make_shared<Chunk>();
-    RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(chunk.get(), &spillable));
+    RETURN_IF_ERROR(_aggregator->convert_to_spill_format(chunk.get(), &spillable));
 
     auto executor = _aggregator->spill_channel()->io_executor();
     RETURN_IF_ERROR(
@@ -113,12 +116,7 @@ Status SpillableAggregateBlockingSinkOperatorFactory::prepare(RuntimeState* stat
     _spill_options->spill_file_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
-    // init chunk builder
-    _spill_options->chunk_builder = [&, state]() {
-        auto intermediate_tuple_id = _aggregator_factory->aggregator_param()->intermediate_tuple_id;
-        auto desc = state->desc_tbl().get_tuple_descriptor(intermediate_tuple_id);
-        return _aggregator_factory->aggregator_param()->create_result_chunk(true, *desc);
-    };
+    _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "agg-blocking-spill";
     _spill_options->plan_node_id = _plan_node_id;
 
