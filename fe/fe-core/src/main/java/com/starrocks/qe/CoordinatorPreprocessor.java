@@ -1013,14 +1013,6 @@ public class CoordinatorPreprocessor {
     @VisibleForTesting
     void computeScanRangeAssignment() throws Exception {
         SessionVariable sv = connectContext.getSessionVariable();
-
-        queryOptions.setUse_scan_block_cache(sv.getUseScanBlockCache());
-        queryOptions.setEnable_populate_block_cache(sv.getEnablePopulateBlockCache());
-        queryOptions.setHudi_mor_force_jni_reader(sv.getHudiMORForceJNIReader());
-        queryOptions.setIo_tasks_per_scan_operator(sv.getIoTasksPerScanOperator());
-        queryOptions.setConnector_io_tasks_per_scan_operator(sv.getConnectorIoTasksPerScanOperator());
-        queryOptions.setEnable_connector_adaptive_io_tasks(sv.getEnableConnectorAdaptiveIoTasks());
-
         // set scan ranges/locations for scan nodes
         for (ScanNode scanNode : scanNodes) {
             // the parameters of getScanRangeLocations may ignore, It dosn't take effect
@@ -1557,6 +1549,7 @@ public class CoordinatorPreprocessor {
                                 sessionVariable.getAdaptiveDopMaxOutputAmplificationFactor());
                     }
                 }
+
             }
         }
 

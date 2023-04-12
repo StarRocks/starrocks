@@ -339,6 +339,19 @@ public class CreateRoutineLoadStmtTest {
     }
 
     @Test
+    public void testAnalyzeAvroConfig() throws Exception {
+        String createSQL = "CREATE ROUTINE LOAD db0.routine_load_0 ON t1 " +
+                "PROPERTIES(\"format\" = \"avro\",\"jsonpaths\"=\"[\\\"$.k1\\\",\\\"$.k2.\\\\\\\"k2.1\\\\\\\"\\\"]\") " +
+                "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:xxx\",\"kafka_topic\" = \"topic_0\"," + 
+                "\"confluent.schema.registry.url\" = \"https://user:password@confluent.west.us\");";
+        ConnectContext ctx = starRocksAssert.getCtx();
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);
+        CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+        Assert.assertEquals(createRoutineLoadStmt.getJsonPaths(), "[\"$.k1\",\"$.k2.\\\"k2.1\\\"\"]");
+        Assert.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
+    }
+
+    @Test
     public void testAnalyzeCSVConfig() throws Exception {
         String createSQL = "CREATE ROUTINE LOAD db0.routine_load_1 ON t1 " +
                 "PROPERTIES(\"format\" = \"csv\", \"trim_space\"=\"true\", \"enclose\"=\"'\", \"escape\"=\"|\") " +

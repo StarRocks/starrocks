@@ -134,8 +134,10 @@ Status DeltaWriter::_init() {
         if (config::enable_event_based_compaction_framework) {
             StorageEngine::instance()->compaction_manager()->update_tablet_async(_tablet);
         }
-        auto msg = fmt::format("Too many versions. tablet_id: {}, version_count: {}, limit: {}, replica_state: {}",
-                               _opt.tablet_id, _tablet->version_count(), config::tablet_max_versions, _replica_state);
+        auto msg = fmt::format(
+                "Too many versions, please reduce your insert/load request rate. tablet_id: {}, version_count: {}, "
+                "limit: {}, replica_state: {}",
+                _opt.tablet_id, _tablet->version_count(), config::tablet_max_versions, _replica_state);
         LOG(ERROR) << msg;
         Status st = Status::ServiceUnavailable(msg);
         _set_state(kUninitialized, st);
@@ -219,6 +221,7 @@ Status DeltaWriter::_init() {
             return Status::NotSupported("table with sort key do not support partial update");
         }
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
+        writer_context.partial_update_mode = _opt.partial_update_mode;
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();
         if (_tablet->tablet_schema().keys_type() == KeysType::PRIMARY_KEYS && !_opt.merge_condition.empty()) {

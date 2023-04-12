@@ -133,12 +133,12 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.elasticsearch.EsRepository;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.credential.CloudCredentialUtil;
-import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
@@ -225,6 +225,7 @@ import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.BackupStmt;
@@ -2585,13 +2586,13 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.FILE) {
             FileTable fileTable = (FileTable) table;
-            Map<String, String> fileProperties = fileTable.getFileProperties();
-            CloudCredentialUtil.maskCloudCredential(fileProperties);
+            Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
+            CloudCredentialUtil.maskCloudCredential(clonedFileProperties);
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
             sb.append("\nPROPERTIES (\n");
-            sb.append(new PrintableMap<>(fileProperties, " = ", true, true, false).toString());
+            sb.append(new PrintableMap<>(clonedFileProperties, " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
             HudiTable hudiTable = (HudiTable) table;
@@ -3140,6 +3141,10 @@ public class GlobalStateMgr {
     // entry of rename table operation
     public void renameTable(Database db, OlapTable table, TableRenameClause tableRenameClause) throws DdlException {
         localMetastore.renameTable(db, table, tableRenameClause);
+    }
+
+    public void alterTableComment(Database db, Table table, AlterTableCommentClause clause) {
+        localMetastore.alterTableComment(db, table, clause);
     }
 
     public void replayRenameTable(TableInfo tableInfo) {

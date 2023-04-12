@@ -36,8 +36,9 @@ package com.starrocks.task;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.ClientPool;
+import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TAgentServiceVersion;
 import com.starrocks.thrift.TAgentTaskRequest;
@@ -170,13 +171,20 @@ public class AgentBatchTask implements Runnable {
             TNetworkAddress address = null;
             boolean ok = false;
             try {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-                if (backend == null || !backend.isAlive()) {
+                ComputeNode computeNode = Config.only_use_compute_node ?
+                        GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendId) :
+                        GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+
+                if (computeNode == null || !computeNode.isAlive()) {
                     continue;
                 }
+
+                String host = computeNode.getHost();
+                int port = computeNode.getBePort();
+
                 List<AgentTask> tasks = this.backendIdToTasks.get(backendId);
                 // create AgentClient
-                address = new TNetworkAddress(backend.getHost(), backend.getBePort());
+                address = new TNetworkAddress(host, port);
                 client = ClientPool.backendPool.borrowObject(address);
                 List<TAgentTaskRequest> agentTaskRequests = new LinkedList<TAgentTaskRequest>();
                 for (AgentTask task : tasks) {
@@ -201,7 +209,7 @@ public class AgentBatchTask implements Runnable {
                     ClientPool.backendPool.invalidateObject(address, client);
                 }
             }
-        } // end for backend
+        } // end for compute node
     }
 
     private TAgentTaskRequest toAgentTaskRequest(AgentTask task) {

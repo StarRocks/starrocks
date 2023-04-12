@@ -71,10 +71,12 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
@@ -338,6 +340,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         for (Map.Entry<Long, Map<String, MaterializedView.BasePartitionInfo>> tableEntry
                 : changedTablePartitionInfos.entrySet()) {
             Long tableId = tableEntry.getKey();
+            if (mvContext.hasNextBatchPartition() && tableId != materializedView.getId()) {
+                continue;
+            }
             if (!currentVersionMap.containsKey(tableId)) {
                 currentVersionMap.put(tableId, Maps.newHashMap());
             }
@@ -371,6 +376,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         for (Map.Entry<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> tableEntry
                 : changedTablePartitionInfos.entrySet()) {
             BaseTableInfo baseTableInfo = tableEntry.getKey();
+            if (mvContext.hasNextBatchPartition() && baseTableInfo.getTableId() != materializedView.getId()) {
+                continue;
+            }
             if (!currentVersionMap.containsKey(baseTableInfo)) {
                 currentVersionMap.put(baseTableInfo, Maps.newHashMap());
             }
@@ -481,12 +489,13 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         Map<String, String> partitionProperties = getPartitionProperties(materializedView);
         DistributionDesc distributionDesc = getDistributionDesc(materializedView);
         Map<String, Range<PartitionKey>> adds = partitionDiff.getAdds();
+
+        addPartitions(database, materializedView, adds, partitionProperties, distributionDesc);
         for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
             String mvPartitionName = addEntry.getKey();
-            addPartition(database, materializedView, mvPartitionName,
-                    addEntry.getValue(), partitionProperties, distributionDesc);
             mvPartitionMap.put(mvPartitionName, addEntry.getValue());
         }
+
         LOG.info("The process of synchronizing materialized view [{}] add partitions range [{}]",
                 materializedView.getName(), adds);
 
@@ -982,27 +991,41 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         return new HashDistributionDesc(hashDistributionInfo.getBucketNum(), distColumnNames);
     }
 
-    private void addPartition(Database database, MaterializedView materializedView, String partitionName,
-                              Range<PartitionKey> partitionKeyRange, Map<String, String> partitionProperties,
-                              DistributionDesc distributionDesc) {
-        String lowerBound = partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue();
-        String upperBound = partitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue();
-        boolean isMaxValue = partitionKeyRange.upperEndpoint().isMaxValue();
-        PartitionValue upperPartitionValue;
-        if (isMaxValue) {
-            upperPartitionValue = PartitionValue.MAX_VALUE;
-        } else {
-            upperPartitionValue = new PartitionValue(upperBound);
+    private void addPartitions(Database database, MaterializedView materializedView,
+                               Map<String, Range<PartitionKey>> adds, Map<String, String> partitionProperties,
+                               DistributionDesc distributionDesc) {
+        if (adds.isEmpty()) {
+            return;
         }
-        PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
-                Collections.singletonList(new PartitionValue(lowerBound)),
-                Collections.singletonList(upperPartitionValue));
-        SingleRangePartitionDesc singleRangePartitionDesc =
-                new SingleRangePartitionDesc(false, partitionName, partitionKeyDesc, partitionProperties);
+        List<PartitionDesc> partitionDescs = Lists.newArrayList();
+
+        for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
+            String mvPartitionName = addEntry.getKey();
+            Range<PartitionKey> partitionKeyRange = addEntry.getValue();
+
+            String lowerBound = partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue();
+            String upperBound = partitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue();
+            boolean isMaxValue = partitionKeyRange.upperEndpoint().isMaxValue();
+            PartitionValue upperPartitionValue;
+            if (isMaxValue) {
+                upperPartitionValue = PartitionValue.MAX_VALUE;
+            } else {
+                upperPartitionValue = new PartitionValue(upperBound);
+            }
+            PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
+                    Collections.singletonList(new PartitionValue(lowerBound)),
+                    Collections.singletonList(upperPartitionValue));
+            SingleRangePartitionDesc singleRangePartitionDesc =
+                    new SingleRangePartitionDesc(false, mvPartitionName, partitionKeyDesc, partitionProperties);
+            partitionDescs.add(singleRangePartitionDesc);
+        }
+        RangePartitionDesc rangePartitionDesc =
+                new RangePartitionDesc(materializedView.getPartitionColumnNames(), partitionDescs);
+
         try {
             GlobalStateMgr.getCurrentState().addPartitions(
                     database, materializedView.getName(),
-                    new AddPartitionClause(singleRangePartitionDesc, distributionDesc,
+                    new AddPartitionClause(rangePartitionDesc, distributionDesc,
                             partitionProperties, false));
         } catch (Exception e) {
             throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),

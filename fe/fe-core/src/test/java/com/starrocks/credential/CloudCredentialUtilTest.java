@@ -14,6 +14,7 @@
 
 package com.starrocks.credential;
 
+import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
 import com.starrocks.credential.azure.AzureStoragePath;
 import org.junit.Assert;
 import org.junit.Test;
@@ -42,6 +43,10 @@ public class CloudCredentialUtilTest {
         properties.put(key, "heheh");
         CloudCredentialUtil.maskCloudCredential(properties);
         Assert.assertEquals("he******eh", properties.get(key));
+
+        properties.put(AzureCloudConfigurationFactory.AZURE_PATH_KEY, "path");
+        CloudCredentialUtil.maskCloudCredential(properties);
+        Assert.assertFalse(properties.containsKey(AzureCloudConfigurationFactory.AZURE_PATH_KEY));
     }
 
     @Test

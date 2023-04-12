@@ -103,6 +103,7 @@ import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPriority;
 import com.starrocks.thrift.TPushType;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
@@ -344,8 +345,11 @@ public class SparkLoadJob extends BulkLoadJob {
             long dummyBackendId = -1L;
             loadingStatus.getLoadStatistic()
                     .initLoad(dummyId, Sets.newHashSet(dummyId), Lists.newArrayList(dummyBackendId));
+            TReportExecStatusParams params = new TReportExecStatusParams();
+            params.setDone(true);
+            params.setSource_load_rows(dppResult.scannedRows);
             loadingStatus.getLoadStatistic()
-                    .updateLoadProgress(dummyBackendId, dummyId, dummyId, dppResult.scannedRows, true);
+                    .updateLoadProgress(params);
 
             Map<String, String> counters = loadingStatus.getCounters();
             counters.put(DPP_NORMAL_ALL, String.valueOf(dppResult.normalRows));
@@ -521,7 +525,7 @@ public class SparkLoadJob extends BulkLoadJob {
 
                                 } else {
                                     // lake tablet
-                                    long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
+                                    long backendId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
                                     Backend backend = GlobalStateMgr.getCurrentSystemInfo().
                                             getBackend(backendId);
                                     if (backend == null) {

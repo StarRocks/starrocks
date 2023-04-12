@@ -12,9 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake;
-
 
 import com.google.common.collect.Lists;
 import com.staros.proto.FileCacheInfo;
@@ -24,6 +22,7 @@ import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
@@ -117,9 +116,9 @@ public class CreateLakeTableTest {
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
-                agent.getPrimaryBackendIdByShard(anyLong);
+                agent.getPrimaryComputeNodeIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-                agent.getPrimaryBackendIdByShard(anyLong);
+                agent.getPrimaryComputeNodeIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
         };
@@ -182,9 +181,9 @@ public class CreateLakeTableTest {
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
-                agent.getPrimaryBackendIdByShard(anyLong);
+                agent.getPrimaryComputeNodeIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
-                agent.getPrimaryBackendIdByShard(anyLong);
+                agent.getPrimaryComputeNodeIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
         };
@@ -227,11 +226,13 @@ public class CreateLakeTableTest {
             Assert.assertEquals(7200, storageInfo.getStorageCacheTtlS());
             // check partition property
             long partition1Id = lakeTable.getPartition("p1").getId();
-            StorageCacheInfo partition1StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition1Id);
+            StorageCacheInfo partition1StorageCacheInfo =
+                    lakeTable.getPartitionInfo().getStorageCacheInfo(partition1Id);
             Assert.assertTrue(partition1StorageCacheInfo.isEnableStorageCache());
             Assert.assertEquals(7200, partition1StorageCacheInfo.getStorageCacheTtlS());
             long partition2Id = lakeTable.getPartition("p2").getId();
-            StorageCacheInfo partition2StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition2Id);
+            StorageCacheInfo partition2StorageCacheInfo =
+                    lakeTable.getPartitionInfo().getStorageCacheInfo(partition2Id);
             Assert.assertTrue(partition2StorageCacheInfo.isEnableStorageCache());
             Assert.assertEquals(7200, partition2StorageCacheInfo.getStorageCacheTtlS());
             Assert.assertEquals(true, partition2StorageCacheInfo.isEnableAsyncWriteBack());
@@ -254,11 +255,14 @@ public class CreateLakeTableTest {
             Assert.assertEquals(Config.lake_default_storage_cache_ttl_seconds, storageInfo.getStorageCacheTtlS());
             // check partition property
             long partition1Id = lakeTable.getPartition("p1").getId();
-            StorageCacheInfo partition1StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition1Id);
+            StorageCacheInfo partition1StorageCacheInfo =
+                    lakeTable.getPartitionInfo().getStorageCacheInfo(partition1Id);
             Assert.assertTrue(partition1StorageCacheInfo.isEnableStorageCache());
-            Assert.assertEquals(Config.lake_default_storage_cache_ttl_seconds, partition1StorageCacheInfo.getStorageCacheTtlS());
+            Assert.assertEquals(Config.lake_default_storage_cache_ttl_seconds,
+                    partition1StorageCacheInfo.getStorageCacheTtlS());
             long partition2Id = lakeTable.getPartition("p2").getId();
-            StorageCacheInfo partition2StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition2Id);
+            StorageCacheInfo partition2StorageCacheInfo =
+                    lakeTable.getPartitionInfo().getStorageCacheInfo(partition2Id);
             Assert.assertFalse(partition2StorageCacheInfo.isEnableStorageCache());
             Assert.assertEquals(0L, partition2StorageCacheInfo.getStorageCacheTtlS());
         }
@@ -271,9 +275,9 @@ public class CreateLakeTableTest {
                 "enable_async_write_back can't be turned on when cache is disabled",
                 () -> createTable(
                         "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
-                        "distributed by hash(key1) buckets 3\n" +
-                        " properties('enable_storage_cache' = 'false', 'storage_cache_ttl' = '0'," +
-                        "'enable_async_write_back' = 'true');"));
+                                "distributed by hash(key1) buckets 3\n" +
+                                " properties('enable_storage_cache' = 'false', 'storage_cache_ttl' = '0'," +
+                                "'enable_async_write_back' = 'true');"));
 
         // storage_cache disabled but storage_cache_ttl is not 0
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
@@ -282,5 +286,12 @@ public class CreateLakeTableTest {
                         "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
                                 "distributed by hash(key1) buckets 3\n" +
                                 " properties('enable_storage_cache' = 'false', 'storage_cache_ttl' = '2592000');"));
+
+        // disable auto partition
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Cloud native table does not support automatic partition",
+                () -> createTable(
+                        "create table lake_test.auto_partition (key1 date, key2 varchar(10), key3 int)\n" +
+                                "partition by date_trunc(\"day\", key1) distributed by hash(key2) buckets 3;"));
     }
 }

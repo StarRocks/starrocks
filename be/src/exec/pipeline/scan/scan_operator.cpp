@@ -255,7 +255,6 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
 
     return 1000'000L * global_rf_collector->scan_wait_timeout_ms();
 }
-
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // to sure to put it here for updating state.
     // because we want to update state based on raw data.
@@ -267,7 +266,6 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     if (_unpluging && num_buffered_chunks() >= _buffer_unplug_threshold()) {
         return Status::OK();
     }
-
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
     int cnt = _io_tasks_per_scan_operator;
