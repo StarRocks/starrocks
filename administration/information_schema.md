@@ -40,9 +40,10 @@ TABLE_COLLATION: utf8_general_ci
 StarRocks 优化了 `information_schema` 中以下表提供的元数据信息：
 
 | **Information Schema 表名** | **描述**                                  |
-| --------------------------- | ----------------------------------------- |
-| tables                      | 提供常规的表元数据信息。                  |
-| tables_config               | 提供额外的 StarRocks 独有的表元数据信息。 |
+| --------------------------- | ---------------------------------------- |
+| tables                      | 提供常规的表元数据信息。                     |
+| tables_config               | 提供额外的 StarRocks 独有的表元数据信息。     |
+| load_tracking_logs          | 提供导入作业相关的错误信息。                  |
 
 ### tables
 
@@ -89,3 +90,16 @@ StarRocks 优化了 `information_schema` 中以下表提供的元数据信息：
 | DISTRIBUTE_BUCKET | 表的分桶数。                                                 |
 | SORT_KEY         | 表的排序键。                                                 |
 | PROPERTIES       | 表的属性。                                                   |
+
+### load_tracking_logs
+
+此功能自 StarRocks v3.0 起支持。
+
+表 `load_tracking_logs` 提供以下字段：
+
+| **字段**         | **描述**                                                     |
+| ---------------- | ----------------------------------------------------------- |
+| JOB_ID           | 导入作业的 ID。                                               |
+| LABEL            | 导入作业的 Label。                                            |
+| DATABASE_NAME    | 导入作业所属的数据库名称。                                      |
+| TRACKING_LOG     | 导入作业的错误日志信息（如有）。                                 |
