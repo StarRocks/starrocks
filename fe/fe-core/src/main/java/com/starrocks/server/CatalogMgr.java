@@ -287,6 +287,14 @@ public class CatalogMgr {
         return procNode.fetchResult().getRows();
     }
 
+    public String getCatalogType(String catalogName) {
+        if (isInternalCatalog(catalogName)) {
+            return "internal";
+        } else {
+            return catalogs.get(catalogName).getType();
+        }
+    }
+
     public Catalog getCatalogByName(String name) {
         return catalogs.get(name);
     }

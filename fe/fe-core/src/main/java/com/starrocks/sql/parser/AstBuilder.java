@@ -597,7 +597,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 tableName,
                 columnDefs,
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
-                context.engineDesc() == null ? EngineType.defaultEngine().name() :
+                context.engineDesc() == null ? "" :
                         ((Identifier) visit(context.engineDesc().identifier())).getValue(),
                 context.charsetDesc() == null ? null :
                         ((Identifier) visit(context.charsetDesc().identifierOrString())).getValue(),
@@ -655,6 +655,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 final PartitionDesc listPartitionDesc = (PartitionDesc) visit(listPartitionDescContext);
                 partitionDescList.add(listPartitionDesc);
             }
+            partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
+        } else {
+            // For hive/iceberg/hudi partition
             partitionDesc = new ListPartitionDesc(columnList, partitionDescList);
         }
         return partitionDesc;
