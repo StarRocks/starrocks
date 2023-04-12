@@ -118,8 +118,8 @@ Status StreamScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_
 ChunkSourcePtr StreamScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<StreamScanOperatorFactory*>(_factory);
-    return std::make_shared<StreamChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
-                                               std::move(morsel), this, scan_node, factory->get_chunk_buffer());
+    return std::make_shared<StreamChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(),
+                                               std::move(morsel), scan_node, factory->get_chunk_buffer());
 }
 
 bool StreamScanOperator::is_finished() const {
@@ -333,9 +333,9 @@ void StreamScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int c
     }
 }
 
-StreamChunkSource::StreamChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                                     ScanOperator* op, ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
-        : ConnectorChunkSource(scan_operator_id, runtime_profile, std::move(morsel), op, scan_node, chunk_buffer) {}
+StreamChunkSource::StreamChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                                     ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
+        : ConnectorChunkSource(op, runtime_profile, std::move(morsel), scan_node, chunk_buffer) {}
 
 Status StreamChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ConnectorChunkSource::prepare(state));
@@ -359,7 +359,7 @@ void StreamChunkSource::reset_status() {
     _get_stream_data_source()->reset_status();
 }
 
-bool StreamChunkSource::_reach_eof() {
+bool StreamChunkSource::_reach_eof() const {
     connector::StreamDataSource* data_source = _get_stream_data_source();
     return (_epoch_rows_limit != -1 && data_source->num_rows_read_in_epoch() >= _epoch_rows_limit) ||
            (_epoch_time_limit != -1 && data_source->cpu_time_spent_in_epoch() >= _epoch_time_limit);
