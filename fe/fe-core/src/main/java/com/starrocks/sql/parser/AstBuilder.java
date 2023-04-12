@@ -4517,12 +4517,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             hints = context.aggregationFunction().bracketHint().identifier().stream().map(
                     RuleContext::getText).collect(Collectors.toList());
         }
+        boolean isDistinct = false;
+        if (context.aggregationFunction().setQuantifier() != null) {
+            isDistinct = context.aggregationFunction().setQuantifier().DISTINCT() != null;
+        }
 
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 context.aggregationFunction().ASTERISK_SYMBOL() == null ?
+<<<<<<< HEAD
                         new FunctionParams(context.aggregationFunction().DISTINCT() != null,
                                 visit(context.aggregationFunction().expression(), Expr.class)) :
                         FunctionParams.createStarParam());
+=======
+                        new FunctionParams(isDistinct,
+                                visit(context.aggregationFunction().expression(), Expr.class), orderByElements) :
+                        FunctionParams.createStarParam(), pos);
+>>>>>>> 7c1efe58e ([BugFix] support all setQuantifier in special agg functions in new parser (#21413))
 
         functionCallExpr.setHints(hints);
         if (context.over() != null) {
