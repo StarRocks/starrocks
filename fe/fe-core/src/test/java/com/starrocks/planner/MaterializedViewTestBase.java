@@ -276,19 +276,9 @@ public class MaterializedViewTestBase extends PlanTestBase {
         }
     }
 
-    protected MVRewriteChecker testRewriteOK(String query) {
+    protected MVRewriteChecker sql(String query) {
         MVRewriteChecker fixture = new MVRewriteChecker(query);
-        return fixture.rewrite().ok();
-    }
-
-    protected MVRewriteChecker testRewriteFail(String query) {
-        MVRewriteChecker fixture = new MVRewriteChecker(query);
-        return fixture.rewrite().nonMatch();
-    }
-
-    protected MVRewriteChecker nonMatch(String query, String targetMV) {
-        MVRewriteChecker fixture = new MVRewriteChecker(query);
-        return fixture.rewrite().nonMatch(targetMV);
+        return fixture.rewrite();
     }
 
     protected MVRewriteChecker testRewriteOK(String mv, String query) {

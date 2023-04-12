@@ -40,8 +40,8 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "FROM `emps`\n" +
                 "GROUP BY `locationid`, `deptno`;";
         starRocksAssert.withMaterializedView(mv);
-        nonMatch("select deptno, count(distinct empid) from emps " +
-                "group by deptno", "test_distinct_mv1");
+        sql("select deptno, count(distinct empid) from emps group by deptno")
+                .nonMatch("test_distinct_mv1");
         starRocksAssert.dropMaterializedView("test_distinct_mv1");
     }
 
@@ -86,9 +86,9 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "FROM `test_partition_expr_tbl1`\n" +
                 "group by dt, k1;";
         starRocksAssert.withMaterializedView(mv);
-        nonMatch("select dt, count(distinct order_id) " +
-                "from test_partition_expr_tbl1 " +
-                "group by dt", "test_partition_expr_mv1");
+        sql("select dt, count(distinct order_id) " +
+                "from test_partition_expr_tbl1 group by dt")
+                .nonMatch("test_partition_expr_mv1");
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
     }
 }
