@@ -127,14 +127,14 @@ void CrossJoinLeftOperator::_copy_build_rows_with_index_base_probe(vectorized::C
             _buf_selective.assign(row_count, 0);
             dest_col->append_selective(*const_col->data_column(), &_buf_selective[0], 0, row_count);
         } else {
-            dest_col->append(*src_col.get(), start_row, row_count);
+            dest_col->append_shallow_copy(*src_col.get(), start_row, row_count);
         }
     } else {
         if (src_col->is_constant()) {
             // current can't reach here
             dest_col->append_nulls(row_count);
         } else {
-            dest_col->append(*src_col.get(), start_row, row_count);
+            dest_col->append_shallow_copy(*src_col.get(), start_row, row_count);
         }
     }
 }
