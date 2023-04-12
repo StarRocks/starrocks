@@ -65,7 +65,7 @@
 <NavBoxPartItem title="查询半结构化数据">
 
 - [JSON](/sql-reference/sql-statements/data-types/JSON)
-- [数组](/using_starrocks/Array)
+- [数组](/sql-reference/sql-statements/data-types/Array)
 
 </NavBoxPartItem>
 </NavBoxPart>
