@@ -1111,7 +1111,7 @@ public class SystemInfoService {
     }
 
     public void checkClusterCapacity() throws DdlException {
-        if (RunMode.getCurrentRunMode() != RunMode.SHARED_DATA) {
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             return;
         }
 
