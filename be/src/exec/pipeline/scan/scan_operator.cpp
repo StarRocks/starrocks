@@ -154,6 +154,7 @@ bool ScanOperator::has_output() const {
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return false;
     }
+
     // Can pick up more morsels or submit more tasks
     if (!_morsel_queue->empty()) {
         return true;
@@ -265,7 +266,7 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
     int cnt = _io_tasks_per_scan_operator;
-    int to_sched[32];
+    int to_sched[_io_tasks_per_scan_operator];
     int size = 0;
 
     // pick up already started chunk source.
@@ -273,15 +274,14 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
         _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
         int i = _chunk_source_idx;
         if (_is_io_task_running[i]) {
+            total_cnt -= 1;
             continue;
         }
-        if (total_cnt >= 0) {
-            if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
-                RETURN_IF_ERROR(_trigger_next_scan(state, i));
-                total_cnt -= 1;
-            } else {
-                to_sched[size++] = i;
-            }
+        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
+            RETURN_IF_ERROR(_trigger_next_scan(state, i));
+            total_cnt -= 1;
+        } else {
+            to_sched[size++] = i;
         }
     }
 

@@ -72,16 +72,6 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
 
 void ConnectorScanOperator::do_close(RuntimeState* state) {}
 
-bool ConnectorScanOperator::has_output() const {
-    bool ret = ScanOperator::has_output();
-    // when has no output, we need to adjust io tasks next time.
-    if (!ret) {
-        PickupMorselState& state = _pickup_morsel_state;
-        state.adjusted_io_tasks = false;
-    }
-    return ret;
-}
-
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
@@ -166,34 +156,31 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
     return scan_node->connector_type();
 }
 
+void ConnectorScanOperator::finish_driver_process() {
+    PickupMorselState& state = _pickup_morsel_state;
+    state.adjusted_io_tasks = false;
+}
+
 int ConnectorScanOperator::update_pickup_morsel_state() {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
-    int current_io_tasks = _num_running_io_tasks.load();
+    size_t chunks = num_buffered_chunks();
+    size_t thres = _buffer_unplug_threshold();
+
+    PickupMorselState& state = _pickup_morsel_state;
+    int& io_tasks = state.max_io_tasks;
+    const int MIN_IO_TASKS = config::connector_io_tasks_min_size;
+    if (state.adjusted_io_tasks) {
+        return io_tasks;
+    }
 
     auto f = [&]() {
-        const int MIN_IO_TASKS = config::connector_io_tasks_min_size;
-        PickupMorselState& state = _pickup_morsel_state;
-        int& io_tasks = state.max_io_tasks;
-
-        // update max io tasks.
-        io_tasks = std::max(io_tasks, current_io_tasks);
-        io_tasks = std::max(io_tasks, MIN_IO_TASKS);
-
-        if (state.adjusted_io_tasks) return io_tasks;
-        state.adjusted_io_tasks = true;
-
-        size_t chunks = num_buffered_chunks();
-        size_t thres = _buffer_unplug_threshold();
-        if (is_buffer_full()) {
-            // if buffer full, dec io tasks.
+        if (chunks >= (2 * thres)) {
             io_tasks = std::max(MIN_IO_TASKS, io_tasks - 1);
-            state.update_log_size = 0;
-        } else if (chunks < thres) {
-            int delta = std::max(MIN_IO_TASKS, 2 << state.update_log_size);
-            io_tasks = std::min(current_io_tasks + delta, _io_tasks_per_scan_operator);
-            if ((2 << (state.update_log_size + 1)) <= _io_tasks_per_scan_operator) {
-                state.update_log_size += 1;
-            }
+            VLOG_FILE << "[XXX] queue FULL. id = " << _driver_sequence << ", update to " << io_tasks;
+        } else if (chunks <= thres) {
+            int delta = MIN_IO_TASKS;
+            io_tasks = std::min(io_tasks + delta, _io_tasks_per_scan_operator);
+            VLOG_FILE << "[XXX] queue not full. id = " << _driver_sequence << ", update to " << io_tasks;
         } else {
             // if buffer is enough. then don't do anything.
         }
@@ -201,8 +188,10 @@ int ConnectorScanOperator::update_pickup_morsel_state() {
     };
 
     int value = f();
-    VLOG_FILE << "[XXX] pickup morsel. P = " << value << ", X = " << current_io_tasks;
-    return value - current_io_tasks;
+    state.adjusted_io_tasks = true;
+    VLOG_FILE << "[XXX] pickup morsel. id = " << _driver_sequence << ", P = " << value << ", chunk/thres = " << chunks
+              << "/" << thres;
+    return value;
 }
 
 // ==================== ConnectorChunkSource ====================
