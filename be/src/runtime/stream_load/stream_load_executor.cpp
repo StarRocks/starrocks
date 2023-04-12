@@ -268,6 +268,7 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     TLoadTxnRollbackRequest request;
     set_request_auth(&request, ctx->auth);
     request.db = ctx->db;
+    request.tbl = ctx->table;
     request.txnId = ctx->txn_id;
     request.failInfos = std::move(ctx->fail_infos);
     request.__set_reason(ctx->status.get_error_msg());
