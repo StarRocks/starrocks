@@ -81,6 +81,7 @@ public:
     bool is_running_all_io_tasks() const override;
     int update_pickup_morsel_state() override;
     void finish_driver_process() override;
+    bool has_output() const override;
 
 private:
     struct PickupMorselState {

@@ -158,7 +158,7 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
 
 bool ConnectorScanOperator::is_running_all_io_tasks() const {
     PickupMorselState& state = _pickup_morsel_state;
-    VLOG_FILE << "[XXX] running all. seq = " << _driver_sequence << ", io = " << _num_running_io_tasks
+    VLOG_FILE << "[ZZZ] running all. seq = " << _driver_sequence << ", io = " << _num_running_io_tasks
               << ", exp = " << state.max_io_tasks;
     return (state.max_io_tasks != 0) && (_num_running_io_tasks >= state.max_io_tasks);
 }
@@ -166,6 +166,18 @@ bool ConnectorScanOperator::is_running_all_io_tasks() const {
 void ConnectorScanOperator::finish_driver_process() {
     PickupMorselState& state = _pickup_morsel_state;
     state.adjusted_io_tasks = false;
+}
+
+bool ConnectorScanOperator::has_output() const {
+    bool ret = ScanOperator::has_output();
+    // if (!ret) {
+    //     PickupMorselState& state = _pickup_morsel_state;
+    //     state.adjusted_io_tasks = false;
+    // }
+    if (ret) {
+        _unpluging = true;
+    }
+    return ret;
 }
 
 int ConnectorScanOperator::update_pickup_morsel_state() {
@@ -188,8 +200,7 @@ int ConnectorScanOperator::update_pickup_morsel_state() {
             io_tasks = std::max(MIN_IO_TASKS, io_tasks - 1);
             VLOG_FILE << "[XXX] queue FULL. id = " << _driver_sequence << ", update to " << io_tasks;
         } else if (chunks <= thres) {
-            int delta = MIN_IO_TASKS;
-            io_tasks = std::min(io_tasks + delta, _io_tasks_per_scan_operator);
+            io_tasks = std::min(io_tasks + MIN_IO_TASKS, _io_tasks_per_scan_operator);
             VLOG_FILE << "[XXX] queue not full. id = " << _driver_sequence << ", update to " << io_tasks;
         } else {
             // if buffer is enough. then don't do anything.
