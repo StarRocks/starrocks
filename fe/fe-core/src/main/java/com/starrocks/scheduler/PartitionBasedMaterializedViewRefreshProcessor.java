@@ -340,6 +340,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         for (Map.Entry<Long, Map<String, MaterializedView.BasePartitionInfo>> tableEntry
                 : changedTablePartitionInfos.entrySet()) {
             Long tableId = tableEntry.getKey();
+            if (mvContext.hasNextBatchPartition() && tableId != materializedView.getId()) {
+                continue;
+            }
             if (!currentVersionMap.containsKey(tableId)) {
                 currentVersionMap.put(tableId, Maps.newHashMap());
             }
@@ -373,6 +376,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         for (Map.Entry<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> tableEntry
                 : changedTablePartitionInfos.entrySet()) {
             BaseTableInfo baseTableInfo = tableEntry.getKey();
+            if (mvContext.hasNextBatchPartition() && baseTableInfo.getTableId() != materializedView.getId()) {
+                continue;
+            }
             if (!currentVersionMap.containsKey(baseTableInfo)) {
                 currentVersionMap.put(baseTableInfo, Maps.newHashMap());
             }
