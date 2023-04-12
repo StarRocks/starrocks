@@ -112,29 +112,21 @@ Before starting FEs, add the following configuration items in the FE configurati
 
 ### Configure BE nodes for shared-data StarRocks
 
-Before starting BEs, add the following configuration items in the BE configuration file **be.conf**:
+**Before starting BEs**, add the following configuration items in the BE configuration file **be.conf**:
 
 ```YAML
 starlet_port = <starlet_port>
+storage_root_path = <storage_root_path>
 ```
 
 | **Configuration item** | **Description**                |
 | ---------------------- | ------------------------------ |
 | starlet_port           | The BE heartbeat service port. Default value: `9070`.|
-
-If you want to enable local disk cache, add the following configuration item in the BE configuration file **be.conf**:
-
-```YAML
-starlet_cache_dir = <starlet_cache_dir>
-```
-
-| **Configuration item**   | **Description**        |
-| ------------ | ------------------------ |
-| starlet_cache_dir | The directory of the local disk cache. You can configure multiple directories and separate the directories with a colon (`:`).|
+| storage_root_path      | The storage volume directory that the local cached data depends on and the medium type of the storage. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. Default value: `${STARROCKS_HOME}/storage`. |
 
 > **NOTE**
 >
-> Whereas data has been stored in object storage, you do not need to specify `storage_root_path` in the BE configuration file when you deploy a shared-data StarRocks cluster.
+> The data is cached under the directory **\<storage_root_path\>/starlet_cache**.
 
 ## Use your shared-data StarRocks cluster
 
