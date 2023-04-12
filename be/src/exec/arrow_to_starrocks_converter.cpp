@@ -694,10 +694,9 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, JsonGuard<LT>> {
     }
 };
 
-// TODO: rename
 template <typename T>
-static void list_offsets_copy(const arrow::Array* layer, const size_t array_start_idx, const size_t num_elements,
-                              UInt32Column* col_offsets) {
+static void list_map_offsets_copy(const arrow::Array* layer, const size_t array_start_idx, const size_t num_elements,
+                                  UInt32Column* col_offsets) {
     using ArrowArrayType = typename arrow::TypeTraits<T>::ArrayType;
     using OffsetsType = typename T::offset_type;
     auto* concrete_array = down_cast<const ArrowArrayType*>(layer);
@@ -712,11 +711,10 @@ static void list_offsets_copy(const arrow::Array* layer, const size_t array_star
     offsets_copy<OffsetsType>(arrow_offsets_data, arrow_base_offset, num_elements, offsets_data, base_offset);
 }
 
-// TODO: rename
 template <typename T>
-static arrow::Array* get_list_array_child(const arrow::Array* array, size_t array_start_idx = 0,
-                                          size_t num_elements = 0, size_t* child_array_start_idx = nullptr,
-                                          size_t* child_array_num_elements = nullptr, int8_t child_id = 0) {
+static arrow::Array* get_list_map_array_child(const arrow::Array* array, size_t array_start_idx = 0,
+                                              size_t num_elements = 0, size_t* child_array_start_idx = nullptr,
+                                              size_t* child_array_num_elements = nullptr, int8_t child_id = 0) {
     using ArrowArrayType = typename arrow::TypeTraits<T>::ArrayType;
     using OffsetsType = typename T::offset_type;
     if (child_array_start_idx && child_array_num_elements) {
@@ -727,7 +725,6 @@ static arrow::Array* get_list_array_child(const arrow::Array* array, size_t arra
     if constexpr (std::is_same<T, arrow::MapType>::value) {
         if (child_id == 0) {
             return down_cast<const ArrowArrayType*>(array)->keys().get();
-
         } else {
             return down_cast<const ArrowArrayType*>(array)->items().get();
         }
@@ -744,8 +741,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
     static bool is_fixed_size_list(ArrowTypeId t) { return t == ArrowTypeId::FIXED_SIZE_LIST; }
     static bool is_any_list(ArrowTypeId t) { return is_list(t) || is_large_list(t) || is_fixed_size_list(t); }
 
-    static void fixed_size_list_offsets_copy(const arrow::Array* layer, const size_t array_start_idx,
-                                             const size_t num_elements, UInt32Column* col_offsets) {
+    static void fixed_size_list_map_offsets_copy(const arrow::Array* layer, const size_t array_start_idx,
+                                                 const size_t num_elements, UInt32Column* col_offsets) {
         using ArrowArrayType = typename arrow::TypeTraits<arrow::FixedSizeListType>::ArrayType;
         using OffsetsType = typename arrow::FixedSizeListType::offset_type;
         auto* concrete_array = down_cast<const ArrowArrayType*>(layer);
@@ -769,14 +766,14 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
                                                   size_t* child_array_num_elements) {
         auto type_id = array->type_id();
         if (is_list(type_id)) {
-            return get_list_array_child<arrow::ListType>(array, array_start_idx, num_elements, child_array_start_idx,
-                                                         child_array_num_elements);
+            return get_list_map_array_child<arrow::ListType>(array, array_start_idx, num_elements,
+                                                             child_array_start_idx, child_array_num_elements);
         } else if (is_large_list(type_id)) {
-            return get_list_array_child<arrow::LargeListType>(array, array_start_idx, num_elements,
-                                                              child_array_start_idx, child_array_num_elements);
-        } else if (is_fixed_size_list(type_id)) {
-            return get_list_array_child<arrow::FixedSizeListType>(array, array_start_idx, num_elements,
+            return get_list_map_array_child<arrow::LargeListType>(array, array_start_idx, num_elements,
                                                                   child_array_start_idx, child_array_num_elements);
+        } else if (is_fixed_size_list(type_id)) {
+            return get_list_map_array_child<arrow::FixedSizeListType>(array, array_start_idx, num_elements,
+                                                                      child_array_start_idx, child_array_num_elements);
         } else {
             return nullptr;
         }
@@ -794,7 +791,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, ArrayGuard<LT>> {
         } else if (is_large_list(type_id)) {
             list_offsets_copy<arrow::LargeListType>(array, array_start_idx, num_elements, col_offsets);
         } else if (is_fixed_size_list(type_id)) {
-            fixed_size_list_offsets_copy(array, array_start_idx, num_elements, col_offsets);
+            fixed_size_list_map_offsets_copy(array, array_start_idx, num_elements, col_offsets);
         } else {
             return Status::InternalError(strings::Substitute("Invalid arrow list type($0)", array->type()->name()));
         }
@@ -839,7 +836,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
             const TypeDescriptor& child_type = type_desc->children[i];
             size_t child_array_start_idx;
             size_t child_array_num_elements;
-            const auto* child_array = get_list_array_child<arrow::MapType>(
+            const auto* child_array = get_list_map_array_child<arrow::MapType>(
                     array, array_start_idx, num_elements, &child_array_start_idx, &child_array_num_elements, i);
             if (!child_array) {
                 return Status::InternalError(fmt::format("Unnest arrow map type({}) fail", array->type()->name()));
