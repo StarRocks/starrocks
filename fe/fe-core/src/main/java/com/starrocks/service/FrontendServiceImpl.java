@@ -413,7 +413,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
                         connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
-                        Analyzer.analyze(queryStatement, connectContext);
+                        try {
+                            Analyzer.analyze(queryStatement, connectContext);
+                        } catch (SemanticException e) {
+                            // ignore semantic exception because view may be is invalid
+                        }
                         Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(queryStatement);
                         for (TableName tableName : allTables.keySet()) {
                             if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
