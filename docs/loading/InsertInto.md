@@ -302,7 +302,7 @@ SELECT event_time, channel FROM source_wiki_edit;
 
 ## Load data asynchronously using INSERT
 
-Loading data with INSERT submits a synchronous transaction, which may fail because of session interruption or timeout. You can submit an asynchronous INSERT transaction using SUBMIT TASK.
+Loading data with INSERT submits a synchronous transaction, which may fail because of session interruption or timeout. You can submit an asynchronous INSERT transaction using SUBMIT TASK. This feature is supported since StarRocks v3.0.
 
 - The following example asynchronously inserts the data from the source table to the target table `insert_wiki_edit`.
 
