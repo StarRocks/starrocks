@@ -53,7 +53,7 @@ public abstract class SecurityIntegration {
 
     abstract AuthenticationProvider getAuthenticationProvider() throws AuthenticationException;
 
-    public Map<String, String> passMaskedProperties() {
+    public Map<String, String> getPropertyMapWithMasking() {
         return propertyMap;
     }
 }

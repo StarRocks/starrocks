@@ -20,8 +20,8 @@ import com.starrocks.sql.parser.NodePosition;
 import java.util.Map;
 
 public class CreateSecurityIntegrationStatement extends DdlStmt {
-    String name;
-    Map<String, String> propertyMap;
+    private final String name;
+    private final Map<String, String> propertyMap;
 
     public CreateSecurityIntegrationStatement(String name, Map<String, String> propertyMap, NodePosition pos) {
         super(pos);

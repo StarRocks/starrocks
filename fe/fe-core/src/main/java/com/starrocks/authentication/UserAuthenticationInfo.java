@@ -53,6 +53,11 @@ public class UserAuthenticationInfo implements Writable {
     @Expose(serialize = false)
     protected PatternMatcher hostPattern;
 
+    /**
+     * extra user authentication info when authenticating, it may have different usage for different
+     * auth plugin, since the authenticate info for different auth mechanism can vary a log, here we
+     * use a general Object map to represent this requirement.
+     */
     protected Map<String, Object> extraInfo = new HashMap<>();
 
     public boolean matchUser(String remoteUser) {

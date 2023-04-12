@@ -62,7 +62,11 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
     private String host;
     @SerializedName("isDomain")
     private boolean isDomain;
-    @SerializedName("eph")
+    /**
+     * A user is ephemeral meaning that it has a session level life circle, i.e. it's created on user connecting and
+     * destroyed after disconnected, currently it's used by ldap security integration where we use external ldap server
+     * to authenticate and the metadata of a user is not stored on StarRocks.
+     */
     private boolean ephemeral;
 
     private final NodePosition pos;

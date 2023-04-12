@@ -31,12 +31,12 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     public static final String LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY = "ldap_cache_refresh_interval";
 
 
-    LDAPSecurityIntegration(String name, Map<String, String> propertyMap) {
+    public LDAPSecurityIntegration(String name, Map<String, String> propertyMap) {
         super(name, propertyMap);
     }
 
     @Override
-    AuthenticationProvider getAuthenticationProvider() throws AuthenticationException {
+    public AuthenticationProvider getAuthenticationProvider() throws AuthenticationException {
         return AuthenticationProviderFactory.create(AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name());
     }
 
@@ -74,7 +74,7 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     }
 
     @Override
-    public Map<String, String> passMaskedProperties() {
+    public Map<String, String> getPropertyMapWithMasking() {
         Map<String, String> maskedMap = new HashMap<>(propertyMap);
         maskedMap.put(LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY, "******");
 
@@ -83,6 +83,6 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
 
     @Override
     public String toString() {
-        return "name: " + name + ", properties: " + passMaskedProperties();
+        return "name: " + name + ", properties: " + getPropertyMapWithMasking();
     }
 }

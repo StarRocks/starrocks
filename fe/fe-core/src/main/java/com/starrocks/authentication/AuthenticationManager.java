@@ -122,7 +122,6 @@ public class AuthenticationManager {
 
     @SerializedName("sim")
     private Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
-    private final ReentrantReadWriteLock securityIntegrationLock = new ReentrantReadWriteLock();
 
     public AuthenticationManager() {
         // default plugin
