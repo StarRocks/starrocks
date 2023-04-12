@@ -95,6 +95,7 @@ set(RUNTIME_FILES
     current_thread.cpp
     runtime_filter_cache.cpp
     lake_tablets_channel.cpp
+    command_executor.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

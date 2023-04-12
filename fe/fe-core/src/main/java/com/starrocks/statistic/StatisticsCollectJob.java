@@ -6,6 +6,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -84,7 +85,7 @@ public abstract class StatisticsCollectJob {
 
     public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
         int count = 0;
-        int maxRetryTimes = 10;
+        int maxRetryTimes = 5;
         do {
             LOG.debug("statistics collect sql : " + sql);
             StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
@@ -98,7 +99,7 @@ public abstract class StatisticsCollectJob {
                 LOG.warn("Statistics collect fail | Error Message [" + context.getState().getErrorMessage() + "] | " +
                         "SQL [" + sql + "]");
                 if (StringUtils.contains(context.getState().getErrorMessage(), "Too many versions")) {
-                    Thread.sleep(60000);
+                    Thread.sleep(Config.statistic_collect_too_many_version_sleep);
                     count++;
                 } else {
                     throw new DdlException(context.getState().getErrorMessage());
