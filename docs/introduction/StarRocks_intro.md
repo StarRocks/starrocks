@@ -68,7 +68,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPartItem title="Query semi-structured data">
 
 - [JSON](../sql-reference/sql-statements/data-types/JSON.md)
-- [ARRAY](../using_starrocks/Array.md)
+- [ARRAY](../sql-reference/sql-statements/data-types/Array.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
