@@ -96,8 +96,8 @@ void OlapScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* olap_scan_node = down_cast<OlapScanNode*>(_scan_node);
-    return std::make_shared<OlapChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
-                                             std::move(morsel), olap_scan_node, _ctx.get());
+    return std::make_shared<OlapChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(), std::move(morsel),
+                                             olap_scan_node, _ctx.get());
 }
 
 void OlapScanOperator::attach_chunk_source(int32_t source_index) {

@@ -18,13 +18,15 @@
 
 #include "common/statusor.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
 namespace starrocks::pipeline {
 
-ChunkSource::ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+ChunkSource::ChunkSource(ScanOperator* scan_op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                          BalancedChunkBuffer& chunk_buffer)
-        : _scan_operator_seq(scan_operator_id),
+        : _scan_op(scan_op),
+          _scan_operator_seq(scan_op->get_driver_sequence()),
           _runtime_profile(runtime_profile),
           _morsel(std::move(morsel)),
           _chunk_buffer(chunk_buffer),
@@ -35,20 +37,6 @@ Status ChunkSource::prepare(RuntimeState* state) {
     _io_task_wait_timer = ADD_TIMER(_runtime_profile, "IOTaskWaitTime");
     _io_task_exec_timer = ADD_TIMER(_runtime_profile, "IOTaskExecTime");
     return Status::OK();
-}
-
-StatusOr<ChunkPtr> ChunkSource::get_next_chunk_from_buffer() {
-    ChunkPtr chunk = nullptr;
-    _chunk_buffer.try_get(_scan_operator_seq, &chunk);
-    return chunk;
-}
-
-bool ChunkSource::has_output() const {
-    return !_chunk_buffer.empty(_scan_operator_seq);
-}
-
-bool ChunkSource::has_shared_output() const {
-    return !_chunk_buffer.all_empty();
 }
 
 void ChunkSource::pin_chunk_token(ChunkBufferTokenPtr chunk_token) {
@@ -72,7 +60,7 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             SCOPED_RAW_TIMER(&time_spent_ns);
 
             if (_chunk_token == nullptr && (_chunk_token = _chunk_buffer.limiter()->pin(1)) == nullptr) {
-                return _status;
+                break;
             }
 
             ChunkPtr chunk;
@@ -108,7 +96,6 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             break;
         }
     }
-
     return _status;
 }
 

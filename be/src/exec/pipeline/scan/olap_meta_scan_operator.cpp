@@ -64,7 +64,7 @@ Status OlapMetaScanOperator::do_prepare(RuntimeState* state) {
 void OlapMetaScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr OlapMetaScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
-    return std::make_shared<OlapMetaChunkSource>(_driver_sequence, _runtime_profile.get(), std::move(morsel), _ctx);
+    return std::make_shared<OlapMetaChunkSource>(this, _runtime_profile.get(), std::move(morsel), _ctx);
 }
 
 ChunkPtr OlapMetaScanOperator::get_chunk_from_buffer() {
