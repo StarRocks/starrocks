@@ -93,6 +93,8 @@ The following fields are provided in `tables_config`:
 
 ## load_tracking_logs
 
+This feature is supported since StarRocks v3.0.
+
 The following fields are provided in `load_tracking_logs`:
 
 | **Field**        | **Description**                                              |
