@@ -86,13 +86,14 @@ public class DecimalV3FunctionAnalyzer {
         }
 
         if (DECIMAL_IDENTICAL_TYPE_FUNCTION_SET.contains(fnName) || fnName.equalsIgnoreCase(FunctionSet.IF)) {
-            int commonTypeStartIdx = fnName.equalsIgnoreCase("if") ? 1 : 0;
+            boolean isIfFunc = fnName.equals(FunctionSet.IF);
+            int commonTypeStartIdx = isIfFunc ? 1 : 0;
             if (Arrays.stream(argTypes, commonTypeStartIdx, argTypes.length).noneMatch(Type::isDecimalV3)) {
                 return argTypes;
             }
             Type commonType = Type.getCommonType(argTypes, commonTypeStartIdx, argTypes.length);
             Type[] newArgType = new Type[argTypes.length];
-            newArgType[0] = argTypes[0];
+            newArgType[0] = isIfFunc ? Type.BOOLEAN : argTypes[0];
             Arrays.fill(newArgType, commonTypeStartIdx, argTypes.length, commonType);
             return newArgType;
         }
