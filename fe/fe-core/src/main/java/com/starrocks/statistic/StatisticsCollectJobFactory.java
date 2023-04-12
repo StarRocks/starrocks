@@ -126,10 +126,6 @@ public class StatisticsCollectJobFactory {
                 return;
             }
 
-            long timeInterval = job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL) != null ?
-                    Long.parseLong(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL)) :
-                    Config.statistic_auto_collect_table_interval;
-
             long sumDataSize = 0;
             for (Partition partition : ((OlapTable) table).getPartitions()) {
                 LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
@@ -138,8 +134,16 @@ public class StatisticsCollectJobFactory {
                 }
             }
 
+            long defaultInterval = sumDataSize > Config.statistic_auto_collect_small_table_size ?
+                    Config.statistic_auto_collect_large_table_interval :
+                    Config.statistic_auto_collect_small_table_interval;
+
+            long timeInterval = job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL) != null ?
+                    Long.parseLong(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL)) :
+                    defaultInterval;
+
             if (statisticsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now()) &&
-                    sumDataSize > Config.statistic_auto_collect_table_interval_size) {
+                    sumDataSize > Config.statistic_auto_collect_small_table_size) {
                 LOG.debug("statistics job doesn't work on the interval table: {}, " +
                                 "last collect time: {}, interval: {}, table size: {}MB",
                         table.getName(), tableUpdateTime, timeInterval, ByteSizeUnit.BYTES.toMB(sumDataSize));
@@ -157,13 +161,13 @@ public class StatisticsCollectJobFactory {
                         table.getName(), healthy, statisticAutoCollectRatio);
                 return;
             } else if (healthy < Config.statistic_auto_collect_sample_threshold) {
-                if (sumDataSize > Config.statistic_auto_collect_table_interval_size) {
+                if (sumDataSize > Config.statistic_auto_collect_small_table_size) {
                     LOG.debug("statistics job choose sample on real-time update table: {}" +
                                     ", last collect time: {}, current healthy: {}, full collect healthy limit: {}<, " +
                                     ", update data size: {}MB, full collect healthy data size limit: <{}MB",
                             table.getName(), statisticsUpdateTime, healthy,
                             Config.statistic_auto_collect_sample_threshold, ByteSizeUnit.BYTES.toMB(sumDataSize),
-                            ByteSizeUnit.BYTES.toMB(Config.statistic_auto_collect_table_interval_size));
+                            ByteSizeUnit.BYTES.toMB(Config.statistic_auto_collect_small_table_size));
                     createSampleStatsJob(allTableJobMap, job, db, table, columns);
                     return;
                 }

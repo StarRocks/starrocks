@@ -100,5 +100,6 @@ public class StatisticsSQLTest extends PlanTestBase {
         plan = getFragmentPlan(sqls.get(1).get(0));
         assertCContains(plan, "left(");
         assertCContains(plan, "char_length(");
+        assertCContains(plan, "hll_serialize(");
     }
 }
