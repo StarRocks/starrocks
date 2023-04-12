@@ -1,0 +1,192 @@
+-- name: test_invalid_type
+CREATE TABLE IF NOT EXISTS tbl4 (
+    k1      INT,
+    v1      INT SUM use_zone_map,
+    v2      INT SUM use_zone_map
+) ENGINE=OLAP
+AGGREGATE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+properties (
+"replication_num" = "1"
+);
+-- result:
+E: (1064, 'Getting analyzing error from line 6, column 0 to line 6, column 16. Detail message: USE_ZONE_MAP must be used in PRIMARY_KEYS or DUPLICATE_KEYS.')
+-- !result
+CREATE TABLE IF NOT EXISTS tbl4 (
+    k1      INT,
+    v1      INT use_zone_map,
+    v2      INT use_zone_map
+) ENGINE=OLAP
+UNIQUE KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+properties (
+"replication_num" = "1"
+);
+-- result:
+E: (1064, 'Getting analyzing error from line 6, column 0 to line 6, column 13. Detail message: USE_ZONE_MAP must be used in PRIMARY_KEYS or DUPLICATE_KEYS.')
+-- !result
+CREATE TABLE IF NOT EXISTS tbl4 (
+    k1      INT,
+    v1      INT,
+    v2      ARRAY<INT> use_zone_map
+) ENGINE=OLAP
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+properties (
+"replication_num" = "1"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column type [ARRAY<INT>] not support zone_map.')
+-- !result
+CREATE TABLE IF NOT EXISTS tbl4 (
+    k1      INT,
+    v1      INT,
+    v2      JSON
+) ENGINE=OLAP
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+properties (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+alter table tbl4 modify column v2 JSON use_zone_map;
+-- result:
+E: (1064, 'Unexpected exception: Column type [JSON] not support zonemap')
+-- !result
+-- name: test_create_with_zone_map
+CREATE TABLE IF NOT EXISTS tbl2 (
+    k1      varchar(20),
+    v1      varchar(20),
+    v2      varchar(20) use_zone_map
+) ENGINE=OLAP
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+properties (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into tbl2 values("100", "100", "100");
+-- result:
+-- !result
+insert into tbl2 values("200", "200", "200");
+-- result:
+-- !result
+insert into tbl2 values("300", "300", "300");
+-- result:
+-- !result
+select * from tbl2;
+-- result:
+100	100	100
+200	200	200
+300	300	300
+-- !result
+select * from tbl2 where v2 = "200";
+-- result:
+200	200	200
+-- !result
+-- name: test_max_min_in_pk
+CREATE TABLE IF NOT EXISTS tbl3 (
+    k1      INT,
+    v1      INT use_zone_map,
+    v2      INT use_zone_map
+) ENGINE=OLAP
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+properties (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into tbl3 values(100,100,100),(200,200,200),(300,300,300),(400,400,400);
+-- result:
+-- !result
+select max(v1), min(v2) from tbl3;
+-- result:
+400	100
+-- !result
+delete from tbl3 where k1 = 100;
+-- result:
+-- !result
+delete from tbl3 where k1 = 400;
+-- result:
+-- !result
+select max(v1), min(v2) from tbl3;
+-- result:
+300	200
+-- !result
+select * from tbl3 where v2 = 400;
+-- result:
+-- !result
+select * from tbl3 where v2 = 100;
+-- result:
+-- !result
+-- name: test_alter_zone_map
+CREATE TABLE IF NOT EXISTS tbl1 (
+    k1      varchar(20),
+    v1      varchar(20),
+    v2      varchar(20)
+) ENGINE=OLAP
+PRIMARY KEY(k1)
+DISTRIBUTED BY HASH(k1) BUCKETS 1
+properties (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into tbl1 values("100", "100", "100");
+-- result:
+-- !result
+insert into tbl1 values("200", "200", "200");
+-- result:
+-- !result
+insert into tbl1 values("300", "300", "300");
+-- result:
+-- !result
+select * from tbl1;
+-- result:
+100	100	100
+200	200	200
+300	300	300
+-- !result
+select * from tbl1 where v1 = "200";
+-- result:
+200	200	200
+-- !result
+alter table tbl1 modify column v1 varchar(20) use_zone_map;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into tbl1 values("400", "400", "400");
+-- result:
+-- !result
+select * from tbl1 where v1 = "200";
+-- result:
+200	200	200
+-- !result
+select * from tbl1 where v1 = "400";
+-- result:
+400	400	400
+-- !result
+alter table tbl1 modify column v1 varchar(20);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into tbl1 values("500", "500", "500");
+-- result:
+-- !result
+select * from tbl1 where v1 = "200";
+-- result:
+200	200	200
+-- !result
+select * from tbl1 where v1 = "500";
+-- result:
+500	500	500
+-- !result

@@ -33,7 +33,7 @@
 // under the License.
 // Define file format struct, like data header, index header.
 
-syntax="proto2";
+syntax = "proto2";
 
 package starrocks;
 option java_package = "com.starrocks.proto";
@@ -64,24 +64,24 @@ message ColumnPB {
     optional bool is_bf_column = 12;
     optional int32 referenced_column_id = 13;
     optional string referenced_column = 14;
-    optional bool has_bitmap_index = 15 [default=false];
-    optional bool visible = 16 [default=true];
+    optional bool has_bitmap_index = 15 [default = false];
+    optional bool visible = 16 [default = true];
     repeated ColumnPB children_columns = 17;
     optional bool is_auto_increment = 18;
+    optional bool use_zone_map = 19;
 }
 
 message TabletSchemaPB {
-    optional KeysType keys_type = 1;   
+    optional KeysType keys_type = 1;
     repeated ColumnPB column = 2;
     optional int32 num_short_key_columns = 3;
     optional int32 num_rows_per_row_block = 4;
-    // optional CompressKind compress_kind = 5; 
+    // optional CompressKind compress_kind = 5;
     optional double bf_fpp = 6;
     optional uint32 next_column_unique_id = 7;
-    optional bool DEPRECATED_is_in_memory = 8 [default=false];
+    optional bool DEPRECATED_is_in_memory = 8 [default = false];
     optional int64 deprecated_id = 9; // deprecated
-    optional CompressionTypePB compression_type = 10 [default=LZ4_FRAME];
+    optional CompressionTypePB compression_type = 10 [default = LZ4_FRAME];
     repeated uint32 sort_key_idxes = 11;
     optional int64 id = 50;
 }
-
