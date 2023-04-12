@@ -36,6 +36,13 @@ public class ModifyTablePropertyOperationLog implements Writable {
     private long tableId;
     @SerializedName(value = "properties")
     private Map<String, String> properties = new HashMap<>();
+    @SerializedName(value = "comment")
+    private String comment;
+
+    public ModifyTablePropertyOperationLog(long dbId, long tableId) {
+        this.dbId = dbId;
+        this.tableId = tableId;
+    }
 
     public ModifyTablePropertyOperationLog(long dbId, long tableId, Map<String, String> properties) {
         this.dbId = dbId;
@@ -53,6 +60,14 @@ public class ModifyTablePropertyOperationLog implements Writable {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
+    public void setComment(String comment) {
+        this.comment = comment;
     }
 
     @Override

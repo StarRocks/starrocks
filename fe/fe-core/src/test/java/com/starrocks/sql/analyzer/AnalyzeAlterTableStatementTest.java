@@ -138,4 +138,9 @@ public class AnalyzeAlterTableStatementTest {
         analyzeSuccess("alter table t0 drop rollup test1");
         analyzeSuccess("alter table t0 drop rollup test1, test2");
     }
+
+    @Test
+    public void testAlterTableComment() {
+        analyzeSuccess("alter table t0 comment = \"new comment\"");
+    }
 }

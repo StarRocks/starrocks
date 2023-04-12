@@ -688,6 +688,7 @@ alterClause
     | columnRenameClause
     | reorderColumnsClause
     | rollupRenameClause
+    | modifyCommentClause
 
     //Alter partition clause
     | addPartitionClause
@@ -771,6 +772,10 @@ swapTableClause
 
 modifyTablePropertiesClause
     : SET propertyList
+    ;
+
+modifyCommentClause
+    : COMMENT '=' string
     ;
 
 addColumnClause

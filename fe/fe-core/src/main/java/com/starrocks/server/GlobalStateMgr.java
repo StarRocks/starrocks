@@ -225,6 +225,7 @@ import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.BackupStmt;
@@ -3140,6 +3141,10 @@ public class GlobalStateMgr {
     // entry of rename table operation
     public void renameTable(Database db, OlapTable table, TableRenameClause tableRenameClause) throws DdlException {
         localMetastore.renameTable(db, table, tableRenameClause);
+    }
+
+    public void alterTableComment(Database db, Table table, AlterTableCommentClause clause) {
+        localMetastore.alterTableComment(db, table, clause);
     }
 
     public void replayRenameTable(TableInfo tableInfo) {
