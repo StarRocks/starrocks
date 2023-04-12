@@ -28,6 +28,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -181,6 +182,9 @@ public interface ConnectorMetadata {
     }
 
     default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {
+    }
+
+    default void alterTableComment(Database db, Table table, AlterTableCommentClause clause) {
     }
 
     default void truncateTable(TruncateTableStmt truncateTableStmt) throws DdlException {
