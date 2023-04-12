@@ -601,8 +601,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_INSERT_STRICT)
     private boolean enableInsertStrict = true;
 
-<<<<<<< HEAD
-=======
     @VariableMgr.VarAttr(name = ENABLE_SPILL)
     private boolean enableSpill = false;
 
@@ -621,7 +619,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)
     private long spillOperatorMaxBytes = 1024L * 1024 * 1000;
 
->>>>>>> 1b9b4e6be ([Enhancement] add sv `runtime_filter_early_return_selectivity` (#21395))
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
 
@@ -816,13 +813,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
     private boolean hudiMORForceJNIReader = false;
 
-<<<<<<< HEAD
     public boolean getUseScanBlockCache() {
         return useScanBlockCache;
     }
 
-=======
->>>>>>> 1b9b4e6be ([Enhancement] add sv `runtime_filter_early_return_selectivity` (#21395))
     @VarAttr(name = ENABLE_QUERY_CACHE)
     private boolean enableQueryCache = false;
 
@@ -931,12 +925,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableDistinctColumnBucketization;
     }
 
-<<<<<<< HEAD
-    public boolean getEnablePopulateBlockCache() {
-        return enablePopulateBlockCache;
-    }
-=======
->>>>>>> 1b9b4e6be ([Enhancement] add sv `runtime_filter_early_return_selectivity` (#21395))
     public boolean getHudiMORForceJNIReader() {
         return hudiMORForceJNIReader;
     }
@@ -1738,16 +1726,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_pipeline_query_statistic(enablePipelineQueryStatistic);
         tResult.setRuntime_filter_early_return_selectivity(runtimeFilterEarlyReturnSelectivity);
 
-<<<<<<< HEAD
-=======
         tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
-
         tResult.setUse_scan_block_cache(useScanBlockCache);
         tResult.setEnable_populate_block_cache(enablePopulateBlockCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
->>>>>>> 1b9b4e6be ([Enhancement] add sv `runtime_filter_early_return_selectivity` (#21395))
         return tResult;
     }
 

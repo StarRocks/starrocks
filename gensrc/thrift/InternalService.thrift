@@ -200,9 +200,6 @@ struct TQueryOptions {
   
   69: optional bool enable_populate_block_cache;
 
-<<<<<<< HEAD
-  70: optional i64 rpc_http_min_size;
-=======
   70: optional bool allow_throw_exception = 0;
 
   71: optional bool hudi_mor_force_jni_reader;
@@ -220,7 +217,6 @@ struct TQueryOptions {
   86: optional i32 io_tasks_per_scan_operator = 4;
   87: optional i32 connector_io_tasks_per_scan_operator = 16;
   88: optional double runtime_filter_early_return_selectivity = 0.05;
->>>>>>> 1b9b4e6be ([Enhancement] add sv `runtime_filter_early_return_selectivity` (#21395))
 }
 
 
