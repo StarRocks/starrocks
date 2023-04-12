@@ -382,6 +382,7 @@ import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -398,6 +399,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
@@ -1422,7 +1424,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 refreshSchemeDesc = new SyncRefreshSchemeDesc();
             } else {
                 // use new manual refresh
+<<<<<<< HEAD
                 refreshSchemeDesc = new ManualRefreshSchemeDesc(MaterializedView.RefreshMoment.IMMEDIATE);
+=======
+                refreshSchemeDesc =
+                        new ManualRefreshSchemeDesc(MaterializedView.RefreshMoment.IMMEDIATE, NodePosition.ZERO);
+>>>>>>> f887299a7 ([Enhancement] support ANSI SQL ignore nulls syntax (#21299))
             }
         }
         if (refreshSchemeDesc instanceof SyncRefreshSchemeDesc) {
@@ -5065,6 +5072,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitWindowFunction(StarRocksParser.WindowFunctionContext context) {
+<<<<<<< HEAD
         if (WINDOW_FUNCTION_SET.contains(context.name.getText().toLowerCase())) {
             FunctionCallExpr functionCallExpr = new FunctionCallExpr(context.name.getText().toLowerCase(),
                     new FunctionParams(false, visit(context.expression(), Expr.class)));
@@ -5072,6 +5080,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return functionCallExpr;
         }
         throw new ParsingException("Unknown window function " + context.name.getText());
+=======
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(context.name.getText().toLowerCase(),
+                new FunctionParams(false, visit(context.expression(), Expr.class)), createPos(context));
+        boolean ignoreNull = CollectionUtils.isNotEmpty(context.ignoreNulls())
+                && context.ignoreNulls().stream().anyMatch(Objects::nonNull);
+        functionCallExpr.setIgnoreNulls(ignoreNull);
+        return functionCallExpr;
+>>>>>>> f887299a7 ([Enhancement] support ANSI SQL ignore nulls syntax (#21299))
     }
 
     private AnalyticExpr buildOverClause(FunctionCallExpr functionCallExpr, StarRocksParser.OverContext context) {
