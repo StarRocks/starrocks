@@ -50,7 +50,7 @@ public:
     static constexpr const char* KEY_PASS_WORD = "password";
     static constexpr const char* KEY_HOST_PORT = "host_port";
     static constexpr const char* KEY_INDEX = "index";
-    static constexpr const char* KEY_TYPE = "type";
+    static constexpr const char* KEY_TYPE = "es.type";
     static constexpr const char* KEY_SHARD = "shard_id";
     static constexpr const char* KEY_QUERY = "query";
     static constexpr const char* KEY_BATCH_SIZE = "batch_size";
