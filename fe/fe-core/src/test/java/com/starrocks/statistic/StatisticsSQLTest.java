@@ -99,7 +99,8 @@ public class StatisticsSQLTest extends PlanTestBase {
         assertContains(plan, "count * 1024");
 
         plan = getFragmentPlan(sqls.get(1).get(0));
-        assertContains(plan, "left(");
-        assertContains(plan, "char_length(");
+        assertCContains(plan, "left(");
+        assertCContains(plan, "char_length(");
+        assertCContains(plan, "hll_serialize(");
     }
 }
