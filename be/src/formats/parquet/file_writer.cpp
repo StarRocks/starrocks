@@ -36,6 +36,7 @@
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
 #include "util/slice.h"
+#include "util/defer_op.h"
 
 namespace starrocks::parquet {
 
@@ -321,11 +322,34 @@ std::shared_ptr<::parquet::WriterProperties> ParquetBuildHelper::make_properties
     }
 }
 
+
+std::string FileWriterBase::Context::debug_string() const {
+    std::stringstream ss;
+    for (size_t i = 0; i < size(); ++i) {
+        ss << "(" << _idx2subcol[i] << ", " << _def_levels[i] << ", " << _rep_levels[i] << ")\n";
+    }
+    return ss.str();
+}
+
 FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
                                const std::vector<ExprContext*>& output_expr_ctxs)
-        : _properties(std::move(properties)), _schema(std::move(schema)), _output_expr_ctxs(output_expr_ctxs) {
+        : _properties(std::move(properties)), _schema(std::move(schema)) {
+    _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
+    _type_descs.reserve(output_expr_ctxs.size());
+    for (auto expr : output_expr_ctxs) {
+        _type_descs.push_back(expr->root()->type());
+    }
+}
+
+FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
+                               std::shared_ptr<::parquet::WriterProperties> properties,
+                               std::shared_ptr<::parquet::schema::GroupNode> schema,
+                               std::vector<TypeDescriptor> type_descs)
+        : _properties(std::move(properties)),
+          _schema(std::move(schema)),
+          _type_descs(std::move(type_descs)) {
     _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
 }
 
@@ -340,6 +364,7 @@ Status FileWriterBase::init() {
 
 void FileWriterBase::_generate_rg_writer() {
     if (_rg_writer == nullptr) {
+        DCHECK(_writer != nullptr);
         _rg_writer = _writer->AppendBufferedRowGroup();
     }
 }
@@ -351,15 +376,14 @@ Status FileWriterBase::write(Chunk* chunk) {
     _generate_rg_writer();
     _col_idx = 0; // reset index upon every write
 
-    Context ctx(0, chunk->num_rows());
+    Context ctx(0, 0, chunk->num_rows());
     for (int i = 0; i < chunk->num_rows(); i++) {
         ctx.append(i, 0, 0);
     }
 
     for (size_t i = 0; i < chunk->num_columns(); i++) {
         auto col = chunk->get_column_by_index(i);
-        auto type_desc = _output_expr_ctxs[i]->root()->type();
-        auto ret = _add_column_chunk(ctx, type_desc, _schema->field(i), col);
+        auto ret = _add_column_chunk(ctx, _type_descs[i], _schema->field(i), col);
         if (!ret.ok()) {
             return ret;
         }
@@ -373,7 +397,6 @@ Status FileWriterBase::write(Chunk* chunk) {
 
 Status FileWriterBase::_add_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
                                          const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
-    DCHECK(ctx.size() == col->size());
     switch (type_desc.type) {
     case TYPE_BOOLEAN: {
         return _add_boolean_column_chunk(ctx, type_desc, node, col);
@@ -456,25 +479,27 @@ Status FileWriterBase::_add_struct_column_chunk(Context& ctx, const TypeDescript
 
     const auto data_column = ColumnHelper::get_data_column(col.get());
     const auto struct_column = down_cast<StructColumn*>(data_column);
-    Context child_ctx(ctx._max_rep_level, ctx.size() + data_column->size());
+    Context child_ctx(ctx._max_def_level + node->is_optional(), ctx._max_rep_level, ctx.size() + data_column->size());
 
     int subcol_size = 0;
+    auto def_delta = node->is_optional();
     for (auto i = 0; i < ctx.size(); i++) {
         auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL) {
             child_ctx.append(Context::kNULL, def_level, rep_level);
             continue;
         }
-        if (nulls[idx]) {
+        if (nulls != nullptr && nulls[idx]) {
             child_ctx.append(Context::kNULL, def_level, rep_level);
             subcol_size++;
             continue;
         }
-        child_ctx.append(subcol_size++, def_level, rep_level);
+        child_ctx.append(subcol_size++, def_level + def_delta, rep_level);
     }
 
     for (size_t i = 0; i < type_desc.children.size(); i++) {
         auto sub_col = struct_column->field_column(type_desc.field_names[i]);
+        DCHECK(sub_col->size() == subcol_size);
         auto ret = _add_column_chunk(child_ctx, type_desc.children[i], group_node->field(i), sub_col);
         if (!ret.ok()) {
             return ret;
@@ -499,27 +524,27 @@ Status FileWriterBase::_add_array_column_chunk(Context& ctx, const TypeDescripto
     const auto array_column = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto elements = array_column->elements_column();
     const auto offsets = array_column->offsets_column()->get_data();
-    Context child_ctx(ctx._max_rep_level + 1, ctx.size() + elements->size());
+    Context child_ctx(ctx._max_def_level + node->is_optional() + 1, ctx._max_rep_level + 1, ctx.size() + elements->size());
 
     int subcol_size = 0;
     for (auto i = 0; i < ctx.size(); i++) {
         auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || nulls[idx]) {
-            child_ctx.append(def_level, rep_level, Context::kNULL);
+            child_ctx.append(Context::kNULL, def_level, rep_level);
             continue;
         }
         auto array_size = offsets[idx + 1] - offsets[idx];
         if (array_size == 0) {
-            child_ctx.append(def_level + outer_node->is_optional(), rep_level, Context::kNULL);
+            child_ctx.append(Context::kNULL, def_level + node->is_optional(), rep_level);
             continue;
         }
-        child_ctx.append(def_level + outer_node->is_optional() + inner_node->is_optional(), rep_level, subcol_size++);
+        child_ctx.append(subcol_size++, def_level + node->is_optional() + 1, rep_level);
         for (auto offset = 1; offset < array_size; offset++) {
-            child_ctx.append(def_level + outer_node->is_optional() + inner_node->is_optional(), ctx._max_rep_level,
-                             subcol_size++);
+            child_ctx.append(subcol_size++, def_level + node->is_optional() + 1, child_ctx._max_rep_level);
         }
     }
 
+    DCHECK(elements->size() == subcol_size);
     return _add_column_chunk(child_ctx, type_desc.children[0], inner_node, elements);
 }
 
@@ -542,10 +567,11 @@ Status FileWriterBase::_add_map_column_chunk(Context& ctx, const TypeDescriptor&
     const auto values = map_column->values_column();
     const auto offsets = map_column->offsets_column()->get_data();
 
-    Context key_ctx(ctx._max_rep_level + 1, ctx.size() + keys->size());
-    Context value_ctx(ctx._max_rep_level + 1, ctx.size() + values->size());
+    Context key_ctx(ctx._max_def_level + node->is_optional(), ctx._max_rep_level + 1, ctx.size() + keys->size());
+    Context value_ctx(ctx._max_def_level + node->is_optional(), ctx._max_rep_level + 1, ctx.size() + values->size());
 
     int subcol_size = 0;
+    int def_delta = outer_node->is_optional() + 1;
     for (auto i = 0; i < ctx.size(); i++) {
         auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || nulls[idx]) {
@@ -555,22 +581,24 @@ Status FileWriterBase::_add_map_column_chunk(Context& ctx, const TypeDescriptor&
         }
         auto map_size = offsets[idx + 1] - offsets[idx];
         if (map_size == 0) {
-            key_ctx.append(Context::kNULL, def_level + outer_node->is_optional(), rep_level);
-            value_ctx.append(Context::kNULL, def_level + outer_node->is_optional(), rep_level);
+            key_ctx.append(Context::kNULL, def_level + def_delta, rep_level);
+            value_ctx.append(Context::kNULL, def_level + def_delta, rep_level);
             continue;
         }
-        key_ctx.append(subcol_size, def_level + outer_node->is_optional() + key_node->is_optional(), rep_level);
-        value_ctx.append(subcol_size, def_level + outer_node->is_optional() + value_node->is_optional(), rep_level);
+        key_ctx.append(subcol_size, def_level + def_delta, rep_level);
+        value_ctx.append(subcol_size, def_level + def_delta, rep_level);
         subcol_size++;
         for (auto offset = 1; offset < map_size; offset++) {
-            key_ctx.append(subcol_size, def_level + outer_node->is_optional() + key_node->is_optional(),
+            key_ctx.append(subcol_size, def_level + def_delta,
                            key_ctx._max_rep_level);
-            value_ctx.append(subcol_size, def_level + outer_node->is_optional() + value_node->is_optional(),
+            value_ctx.append(subcol_size, def_level + def_delta,
                              value_ctx._max_rep_level);
             subcol_size++;
         }
     }
 
+    DCHECK(keys->size() == subcol_size);
+    DCHECK(values->size() == subcol_size);
     auto ret = _add_column_chunk(key_ctx, type_desc.children[0], key_node, keys);
     if (!ret.ok()) {
         return ret;
@@ -701,41 +729,75 @@ Status FileWriterBase::_add_datetime_column_chunk(Context& ctx, const TypeDescri
 template <LogicalType lt, ::parquet::Type::type pt>
 Status FileWriterBase::_add_int_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
-    unsigned char* nulls = nullptr;
+    const auto data_column = ColumnHelper::get_data_column(col.get());
+    const auto raw_col = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
+
+    uint8_t* nulls = nullptr;
     if (col->is_nullable()) {
         const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
         nulls = null_column->get_data().data();
     }
 
-    const auto data_column = ColumnHelper::get_data_column(col.get());
-    const auto raw_col = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
-
     auto col_writer =
             down_cast<::parquet::TypedColumnWriter<::parquet::PhysicalType<pt>>*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
-    using physical_type = typename ::parquet::type_traits<pt>::value_type;
-    std::vector<physical_type> values;
-    values.reserve(ctx.size());
-    for (auto i = 0; i < ctx.size(); i++) {
-        auto [idx, def_level, rep_level] = ctx.get(i);
-        if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
-            values.push_back(-1);
-            continue;
-        }
-        values.push_back(raw_col[idx]);
-    }
+    DeferOp defer([&] {
+        _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+        _col_idx++;
+    });
 
+    // Use the rep_levels in the context from caller since node is primitive.
+    int16_t* rep_levels_ptr = ctx._rep_levels.data();
+
+    int16_t* def_levels_ptr = nullptr;
+    std::vector<int16_t> def_levels;
     if (node->is_required()) {
-        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
+        // For required node, we use the def_levels in the context from caller
+        def_levels_ptr = ctx._def_levels.data();
     } else {
-        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { x++; });
-        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
-        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { x--; });
-    }
+        // For optional node, we should increment def_levels of these defined values
+        DCHECK(node->is_optional());
+        def_levels.reserve(ctx.size());
+        for (auto i = 0; i < ctx.size(); i++) {
+            auto [idx, def_level, rep_level] = ctx.get(i);
+            if (idx == Context::kNULL || (col->is_nullable() && nulls[idx])) {
+                def_levels.push_back(def_level);
+                continue;
+            }
+            def_levels.push_back(def_level + 1);
+        }
 
-    _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
-    _col_idx++;
+        def_levels_ptr = def_levels.data();
+    }
+    DCHECK(def_levels_ptr != nullptr);
+
+    // Type aliases of type in StarRocks and physical type in Parquet
+    using source_type = RunTimeCppType<lt>;
+    using target_type = typename ::parquet::type_traits<pt>::value_type;
+
+    if constexpr (std::is_same<source_type, target_type>::value) {
+        // If two types are identical, invoke WriteBatch without copying values
+        if (!col->is_nullable() || !col->has_null()) {
+            col_writer->WriteBatch(ctx.size(), def_levels_ptr, rep_levels_ptr, raw_col);
+        }
+
+        // Make bitset to denote not-null values
+        auto null_bitset = _make_null_bitset(col->size(), nulls);
+        col_writer->WriteBatchSpaced(ctx.size(), def_levels_ptr, rep_levels_ptr, null_bitset.data(), 0, raw_col);
+    } else {
+        // If two types are different, we have to copy values anyway
+        std::vector<target_type> values;
+        values.reserve(col->size());
+        for (size_t i = 0; i < col->size(); i++) {
+            if (col->is_nullable() && nulls[i]) {
+                continue;
+            }
+            values.push_back(static_cast<target_type>(raw_col[i]));
+        }
+
+        col_writer->WriteBatch(ctx.size(), def_levels_ptr, rep_levels_ptr, values.data());
+    }
     return Status::OK();
 }
 
@@ -828,6 +890,18 @@ Status FileWriterBase::_add_decimal_column_chunk(Context& ctx, const TypeDescrip
     _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
     _col_idx++;
     return Status::OK();
+}
+
+std::vector<uint8_t> FileWriterBase::_make_null_bitset(size_t n, const uint8_t* nulls) const {
+    // TODO(letian-jiang): optimize
+    DCHECK(nulls != nullptr);
+    std::vector<uint8_t> bitset((n + 7) / 8);
+    for (size_t i = 0; i < n; i++) {
+        if (!nulls[i]) {
+            bitset[i / 8] |= 1 << (i % 8);
+        }
+    }
+    return bitset;
 }
 
 // The current row group written bytes = total_bytes_written + total_compressed_bytes + estimated_bytes.

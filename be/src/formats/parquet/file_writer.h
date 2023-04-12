@@ -30,6 +30,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "column/nullable_column.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
@@ -96,6 +97,10 @@ public:
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
                    const std::vector<ExprContext*>& output_expr_ctxs);
 
+    FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
+                   std::shared_ptr<::parquet::schema::GroupNode> schema,
+                   std::vector<TypeDescriptor> type_descs);
+
     virtual ~FileWriterBase() = default;
 
     Status init();
@@ -118,7 +123,7 @@ protected:
 private:
     class Context {
     public:
-        Context(int16_t max_rep_level, size_t estimated_size = 0) : _max_rep_level(max_rep_level) {
+        Context(int16_t max_def_level, int16_t max_rep_level, size_t estimated_size = 0) : _max_def_level(max_def_level), _max_rep_level(max_rep_level) {
             _idx2subcol.reserve(estimated_size);
             _def_levels.reserve(estimated_size);
             _rep_levels.reserve(estimated_size);
@@ -131,12 +136,16 @@ private:
         }
 
         std::tuple<int, int16_t, int16_t> get(int i) const {
+            DCHECK_LT(i, size());
             return std::make_tuple(_idx2subcol[i], _def_levels[i], _rep_levels[i]);
         }
 
         int size() const { return _def_levels.size(); }
 
+        std::string debug_string() const;
+
     public:
+        const int16_t _max_def_level;
         const int16_t _max_rep_level;
         constexpr static int kNULL = -1;
 
@@ -181,13 +190,15 @@ private:
     Status _add_map_column_chunk(Context& ctx, const TypeDescriptor& type_desc, const ::parquet::schema::NodePtr& node,
                                  const ColumnPtr& col);
 
+    std::vector<uint8_t> _make_null_bitset(size_t n, const uint8_t* nulls) const;
+
 protected:
     std::shared_ptr<ParquetOutputStream> _outstream;
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
     std::unique_ptr<::parquet::ParquetFileWriter> _writer;
     ::parquet::RowGroupWriter* _rg_writer = nullptr;
-    std::vector<ExprContext*> _output_expr_ctxs;
+    std::vector<TypeDescriptor> _type_descs;
     std::shared_ptr<::parquet::FileMetaData> _file_metadata;
 
     const static int64_t kDefaultMaxRowGroupSize = 128 * 1024 * 1024; // 128MB
@@ -204,6 +215,12 @@ public:
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
                    const std::vector<ExprContext*>& output_expr_ctxs)
             : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs) {}
+
+
+    SyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
+                   std::shared_ptr<::parquet::schema::GroupNode> schema,
+                   std::vector<TypeDescriptor> type_descs)
+            : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), std::move(type_descs)) {}
 
     ~SyncFileWriter() override = default;
 
