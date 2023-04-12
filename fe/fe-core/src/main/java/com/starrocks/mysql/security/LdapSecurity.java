@@ -47,7 +47,8 @@ public class LdapSecurity {
             ctx = new InitialDirContext(env);
             return true;
         } catch (Exception e) {
-            LOG.warn("check ldap password failed, dn = {}, password = {}", dn, password, e);
+            LOG.warn("check ldap password failed, dn = {}", dn, e);
+            LOG.debug("check ldap password failed, dn = {}, password = {}", dn, password);
         } finally {
             if (ctx != null) {
                 try {
