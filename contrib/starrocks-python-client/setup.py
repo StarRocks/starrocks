@@ -51,6 +51,7 @@ setup(
     install_requires=[
         "sqlalchemy>=1.4, <2",
         "sqlalchemy-utils>=0.38.3, <0.39",
+        "mysqlclient>=2.1.0, <3",
     ],
     packages=find_packages(include=["starrocks", "starrocks.*"]),
     package_data={"": ["LICENSE", "README.md"]},
