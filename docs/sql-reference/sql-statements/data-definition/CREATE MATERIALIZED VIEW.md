@@ -22,11 +22,36 @@ In StarRocks v2.5, asynchronous async refresh materialized views support query r
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
 [distribution_desc]
-[REFRESH refresh_moment refresh_scheme_desc]
+[refresh_desc]
 [partition_expression]
+[order_by]
 [COMMENT ""]
 [PROPERTIES ("key"="value", ...)]
-AS (query)
+AS 
+query_statement
+
+distribution_desc : 
+  DISTRIBUTED BY HASH(expr) [BUCKETS num]
+  
+refresh_desc:
+  REFRESH refresh_moment refresh_scheme
+
+refresh_moment:
+  IMMEDIATE | DEFERRED
+
+refresh_scheme:
+    ASYNC
+  | ASYNC (START start_time) EVERY interval
+  | MANUAL
+
+partition_expression:
+    PARTITION BY date_col
+  | PARTITION BY date_trunc('MONTH', date_col)
+
+order_by:
+  ORDER BY (expr)
+
+
 ```
 
 Parameters in brackets [] is optional.
@@ -106,6 +131,11 @@ The partitioning strategy of the materialized view. As for the current version o
 - date_trunc function: Function used to truncate time unit. `PARTITION BY date_trunc("MONTH", 'dt')` means that the `dt` column is truncated to month as unit for partitioning. The date_trunc function supports truncating time to units including `YEAR`, `MONTH`, `DAY`, `HOUR`, and `MINUTE`.
 
 If this parameter is not specified, the materialized view adopts no partitioning strategy by default.
+
+**order_by** (optional)
+
+Specify the sort key of materialized view, like the sort key of a regular table. If not explicitlly specify the sort key, it will choose some of prefix columns from select list. 
+
 
 **COMMENT** (optional)
 
