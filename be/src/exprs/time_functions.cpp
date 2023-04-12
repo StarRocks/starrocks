@@ -2177,7 +2177,7 @@ StatusOr<ColumnPtr> TimeFunctions::next_day_common(FunctionContext* context, con
         auto dow = dow_str.value(row).to_string();
         int dow_weekday = weekday_from_dow_abbreviation(dow);
         if (dow_weekday == -1) {
-            throw std::runtime_error(dow + " not supported in next_day dow_string");
+            return Status::InvalidArgument(dow + " not supported in next_day dow_string");
         }
         int datetime_weekday = ((DateValue)time).weekday();
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, (6 + dow_weekday - datetime_weekday) % 7 + 1);
@@ -2203,7 +2203,7 @@ Status TimeFunctions::next_day_prepare(FunctionContext* context, FunctionContext
     auto dow = slice.to_string();
     int dow_weekday = weekday_from_dow_abbreviation(dow);
     if (dow_weekday == -1) {
-        throw std::runtime_error(dow + " not supported in next_day dow_string");
+        return Status::InvalidArgument(dow + " not supported in next_day dow_string");
     }
     auto* wdc = new WeekDayCtx();
     wdc->dow_weekday = dow_weekday;
@@ -2220,32 +2220,6 @@ Status TimeFunctions::next_day_close(FunctionContext* context, FunctionContext::
     }
 
     return Status::OK();
-}
-
-static int weekday_from_dow(const std::string& dow) {
-static int weekday_from_dow_abbreviation(const std::string& dow) {
-    const int err_tag = -1, base = 1000;
-    if (dow.length() < 2) {
-        return err_tag;
-    }
-    switch (dow[0] + dow[1] * base) {
-    case 'S' + 'u' * base:
-        return (dow == "Su" || dow == "Sun" || dow == "Sunday") ? 0 : err_tag;
-    case 'M' + 'o' * base:
-        return (dow == "Mo" || dow == "Mon" || dow == "Monday") ? 1 : err_tag;
-    case 'T' + 'u' * base:
-        return (dow == "Tu" || dow == "Tue" || dow == "Tuesday") ? 2 : err_tag;
-    case 'W' + 'e' * base:
-        return (dow == "We" || dow == "Wed" || dow == "Wednesday") ? 3 : err_tag;
-    case 'T' + 'h' * base:
-        return (dow == "Th" || dow == "Thu" || dow == "Thursday") ? 4 : err_tag;
-    case 'F' + 'r' * base:
-        return (dow == "Fr" || dow == "Fri" || dow == "Friday") ? 5 : err_tag;
-    case 'S' + 'a' * base:
-        return (dow == "Sa" || dow == "Sat" || dow == "Saturday") ? 6 : err_tag;
-    default:
-        return err_tag;
-    }
 }
 
 // previous_day
@@ -2294,7 +2268,7 @@ StatusOr<ColumnPtr> TimeFunctions::previous_day_common(FunctionContext* context,
         auto dow = dow_str.value(row).to_string();
         int dow_weekday = weekday_from_dow_abbreviation(dow);
         if (dow_weekday == -1) {
-            throw std::runtime_error(dow + " not supported in previous_day dow_string");
+            return Status::InvalidArgument(dow + " not supported in previous_day dow_string");
         }
         int datetime_weekday = ((DateValue)time).weekday();
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, -((6 + datetime_weekday - dow_weekday) % 7 + 1));
@@ -2320,7 +2294,7 @@ Status TimeFunctions::previous_day_prepare(FunctionContext* context, FunctionCon
     auto dow = slice.to_string();
     int dow_weekday = weekday_from_dow_abbreviation(dow);
     if (dow_weekday == -1) {
-        throw std::runtime_error(dow + " not supported in previous_day dow_string");
+        return Status::InvalidArgument(dow + " not supported in previous_day dow_string");
     }
     auto* wdc = new WeekDayCtx();
     wdc->dow_weekday = dow_weekday;

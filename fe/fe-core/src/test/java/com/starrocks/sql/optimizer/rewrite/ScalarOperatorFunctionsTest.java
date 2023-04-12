@@ -551,7 +551,6 @@ public class ScalarOperatorFunctionsTest {
         assertEquals(now, ScalarOperatorFunctions.curDate().getDate());
     }
 
-
     @Test
     public void nextDay() {
         assertEquals("2015-03-29T09:23:55", ScalarOperatorFunctions.nextDay(O_DT_20150323_092355,
