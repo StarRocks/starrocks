@@ -86,7 +86,7 @@ public class ShardDeleter extends LeaderDaemon {
         // group shards by be
         for (long shardId : shardIds) {
             try {
-                long backendId = starOSAgent.getPrimaryBackendIdByShard(shardId);
+                long backendId = starOSAgent.getPrimaryComputeNodeIdByShard(shardId);
                 shardIdsByBeMap.computeIfAbsent(backendId, k -> Sets.newHashSet()).add(shardId);
             } catch (UserException ignored1) {
                 // ignore error

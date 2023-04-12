@@ -525,7 +525,7 @@ public class SparkLoadJob extends BulkLoadJob {
 
                                 } else {
                                     // lake tablet
-                                    long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
+                                    long backendId = ((LakeTablet) tablet).getPrimaryComputeNodeId();
                                     Backend backend = GlobalStateMgr.getCurrentSystemInfo().
                                             getBackend(backendId);
                                     if (backend == null) {
