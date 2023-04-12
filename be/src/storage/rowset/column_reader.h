@@ -23,22 +23,22 @@
 
 #include <algorithm>
 #include <bitset>
-#include <cstddef> // for size_t
-#include <cstdint> // for uint32_t
-#include <memory>  // for unique_ptr
+#include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <utility>
 
 #include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
-#include "common/statusor.h"    // for Status
-#include "gen_cpp/segment.pb.h" // for ColumnMetaPB
+#include "common/statusor.h"
+#include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
 #include "storage/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/common.h"
-#include "storage/rowset/ordinal_page_index.h" // for OrdinalPageIndexIterator
+#include "storage/rowset/ordinal_page_index.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/zone_map_index.h"
@@ -87,8 +87,12 @@ public:
     static StatusOr<std::unique_ptr<ColumnReader>> create(ColumnMetaPB* meta, const Segment* segment);
 
     ColumnReader(const private_type&, const Segment* segment);
-
     ~ColumnReader();
+
+    ColumnReader(const ColumnReader&) = delete;
+    void operator=(const ColumnReader&) = delete;
+    ColumnReader(ColumnReader&&) = delete;
+    void operator=(ColumnReader&&) = delete;
 
     // create a new column iterator. Caller should free the returned iterator after unused.
     // TODO: StatusOr<std::unique_ptr<ColumnIterator>> new_iterator()
@@ -125,10 +129,6 @@ public:
 
     int32_t num_data_pages() { return _ordinal_index ? _ordinal_index->num_data_pages() : 0; }
 
-    ///-----------------------------------
-    /// vectorized APIs
-    ///-----------------------------------
-
     // page-level zone map filter.
     Status zone_map_filter(const std::vector<const ::starrocks::vectorized::ColumnPredicate*>& p,
                            const ::starrocks::vectorized::ColumnPredicate* del_predicate,
@@ -148,32 +148,20 @@ public:
 
     uint32_t num_rows() const { return _segment->num_rows(); }
 
-    // this function is just used for unit test
-    uint32_t num_rows_from_meta_pb(const ColumnMetaPB* meta) const { return meta->num_rows(); }
-
 private:
     const std::string& file_name() const { return _segment->file_name(); }
-
-    MemTracker* mem_tracker() const { return _segment->mem_tracker(); }
 
     FileSystem* file_system() const { return _segment->file_system(); }
 
     bool keep_in_memory() const { return _segment->keep_in_memory(); }
 
     struct private_type {
-        private_type(int) {}
+        explicit private_type(int) {}
     };
 
     constexpr static uint8_t kIsNullableMask = 1;
     constexpr static uint8_t kHasAllDictEncodedMask = 2;
     constexpr static uint8_t kAllDictEncodedMask = 4;
-
-    // Disable copy and assignment
-    ColumnReader(const ColumnReader&) = delete;
-    void operator=(const ColumnReader&) = delete;
-    // Disable move copy and move assignment
-    ColumnReader(ColumnReader&&) = delete;
-    void operator=(ColumnReader&&) = delete;
 
     Status _init(ColumnMetaPB* meta);
 
@@ -221,7 +209,7 @@ private:
     // so here we just use a normal pointer
     const Segment* _segment = nullptr;
 
-    uint8_t _flags;
+    uint8_t _flags = 0;
 };
 
 } // namespace starrocks

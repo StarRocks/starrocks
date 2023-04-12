@@ -16,7 +16,7 @@ Download the following files to your central control node:
 > You can access `http://cdn-thirdparty.starrocks.com` to get the corresponding installation index files and installers.
 
 ```shell
-wget https://github.com/wangtianyi2004/starrocks-controller/raw/main/sr-ctl
+wget https://github.com/wangtianyi2004/starrocks-controller/raw/main/stargo-pkg.tar.gz
 wget https://github.com/wangtianyi2004/starrocks-controller/blob/main/sr-c1.yaml
 wget https://github.com/wangtianyi2004/starrocks-controller/blob/main/repo.yaml
 ```

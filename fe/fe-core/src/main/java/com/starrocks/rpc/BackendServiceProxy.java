@@ -29,6 +29,8 @@ import com.baidu.jprotobuf.pbrpc.transport.RpcClientOptions;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.JdkUtils;
+import com.starrocks.proto.ExecuteCommandRequestPB;
+import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
@@ -196,6 +198,18 @@ public class BackendServiceProxy {
             return service.getInfo(request);
         } catch (Throwable e) {
             LOG.warn("failed to get info, address={}:{}", address.getHostname(), address.getPort(), e);
+            throw new RpcException(address.hostname, e.getMessage());
+        }
+    }
+
+    public Future<ExecuteCommandResultPB> executeCommand(TNetworkAddress address, ExecuteCommandRequestPB request)
+            throws RpcException {
+        try {
+            final PBackendService service = getProxy(address);
+            return service.executeCommandAsync(request);
+        } catch (Throwable e) {
+            LOG.warn("execute command exception, address={}:{} command:{}",
+                    address.getHostname(), address.getPort(), request.command, e);
             throw new RpcException(address.hostname, e.getMessage());
         }
     }

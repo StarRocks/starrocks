@@ -29,6 +29,7 @@
 #include "common/status.h"
 #include "common/tracer.h"
 #include "fmt/core.h"
+#include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "http/http_channel.h"
 #include "http/http_headers.h"
@@ -40,6 +41,7 @@
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
+#include "storage/tablet_updates.h"
 #include "util/defer_op.h"
 #include "util/json_util.h"
 
@@ -90,28 +92,27 @@ Status get_params(HttpRequest* req, uint64_t* tablet_id) {
     return Status::OK();
 }
 
-Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_result) {
-    if (_running) {
-        return Status::TooManyTasks("Manual compaction task is running");
-    }
-    _running = true;
-    auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_compaction"));
-    DeferOp defer([&]() { _running = false; });
-
-    uint64_t tablet_id;
-    RETURN_IF_ERROR(get_params(req, &tablet_id));
-
+Status CompactionAction::do_compaction(uint64_t tablet_id, const string& compaction_type,
+                                       const string& rowset_ids_string) {
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
     RETURN_IF(tablet == nullptr, Status::InvalidArgument(fmt::format("Not Found tablet:{}", tablet_id)));
 
-    std::string compaction_type = req->param(PARAM_COMPACTION_TYPE);
+    auto* mem_tracker = ExecEnv::GetInstance()->compaction_mem_tracker();
+    if (tablet->updates() != nullptr) {
+        if (rowset_ids_string.empty()) {
+            return tablet->updates()->compaction(mem_tracker);
+        } else {
+            return Status::NotSupported("not support rowset_id list");
+        }
+        return Status::OK();
+    }
+
     if (compaction_type != to_string(CompactionType::BASE_COMPACTION) &&
         compaction_type != to_string(CompactionType::CUMULATIVE_COMPACTION)) {
         return Status::NotSupported(fmt::format("unsupport compaction type:{}", compaction_type));
     }
 
     StarRocksMetrics::instance()->cumulative_compaction_request_total.increment(1);
-    auto* mem_tracker = ExecEnv::GetInstance()->compaction_mem_tracker();
 
     if (compaction_type == to_string(CompactionType::CUMULATIVE_COMPACTION)) {
         vectorized::CumulativeCompaction cumulative_compaction(mem_tracker, tablet);
@@ -147,7 +148,22 @@ Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_
     } else {
         __builtin_unreachable();
     }
-    _running = false;
+    return Status::OK();
+}
+
+Status CompactionAction::_handle_compaction(HttpRequest* req, std::string* json_result) {
+    bool expected = false;
+    if (!_running.compare_exchange_strong(expected, true)) {
+        return Status::TooManyTasks("Manual compaction task is running");
+    }
+    DeferOp defer([&]() { _running = false; });
+    auto scoped_span = trace::Scope(Tracer::Instance().start_trace("http_handle_compaction"));
+
+    uint64_t tablet_id;
+    RETURN_IF_ERROR(get_params(req, &tablet_id));
+    std::string compaction_type = req->param(PARAM_COMPACTION_TYPE);
+    string rowset_ids_string = req->param("rowset_ids");
+    RETURN_IF_ERROR(do_compaction(tablet_id, compaction_type, rowset_ids_string));
     *json_result = R"({"status": "Success", "msg": "compaction task executed successful"})";
     return Status::OK();
 }

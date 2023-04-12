@@ -46,15 +46,14 @@ INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false));
 
 > The parse_json function can interpret STRING data as JSON data. The json_object function can construct a JSON object or convert an existing table to a JSON file. For more information, see [parse_json](../../sql-functions/json-functions/json-constructor-functions/parse_json.md) and [json_object](../../sql-functions/json-functions/json-constructor-functions/json_object.md).
 
-- Method 2: Use Stream Load to import a JSON file and store the file as JSON data. For more information, see [Load JSON data](../../../loading/StreamLoad.md).
+- Method 2: Use Stream Load to load a JSON file and store the file as JSON data. For more information, see [Load JSON data](../../../loading/StreamLoad.md#load-json-data).
 
-  - If you want to import the specified values of a JSON object in a JSON file and store the values as JSON data, set `jsonpaths` to `$.a`, in which `a` specifies a key.
+  - If you want to load a root JSON object, set `jsonpaths` to `$`.
+  - If you want to load specific values of a JSON object, set `jsonpaths` to `$.a`, in which `a` specifies a key. For more information about JSON path expressions supported in StarRocks, see [JSON path](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md#json-path-expressions).
 
-  - If you want to import a JSON object from a JSON file and store the JSON object as JSON data, set `jsonpaths` to `$`.
+- Method 3: Use Broker Load to load a Parquet file and store the file as JSON data. For more information, see [Broker Load](../../../loading/BrokerLoad.md).
 
-- Method 3: Use Broker Load to import a Parquet file and store the file as JSON data. For more information, see [Broker Load](../../../loading/BrokerLoad.md).
-
-StarRocks supports the following data type conversions at Parquet file import.
+StarRocks supports the following data type conversions at Parquet file loading.
 
 | Data type of Parquet file                                    | JSON data type |
 | ------------------------------------------------------------ | -------------- |

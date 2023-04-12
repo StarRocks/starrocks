@@ -313,6 +313,16 @@ private:
     bool _auto_unregister = false;
 };
 
+#define MEM_TRACKER_SAFE_CONSUME(mem_tracker, mem_bytes) \
+    if (LIKELY((mem_tracker) != nullptr)) {              \
+        (mem_tracker)->consume(mem_bytes);               \
+    }
+
+#define MEM_TRACKER_SAFE_RELEASE(mem_tracker, mem_bytes) \
+    if (LIKELY((mem_tracker) != nullptr)) {              \
+        (mem_tracker)->release(mem_bytes);               \
+    }
+
 template <typename T>
 class DeleterWithMemTracker {
 public:

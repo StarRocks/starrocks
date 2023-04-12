@@ -22,7 +22,6 @@
 #include "storage/storage_engine.h"
 
 #include <algorithm>
-#include <csignal>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -81,8 +80,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _options(options),
           _available_storage_medium_type_count(0),
           _is_all_cluster_id_exist(true),
-
-          _tablet_manager(new TabletManager(options.metadata_mem_tracker, config::tablet_map_shard_size)),
+          _tablet_manager(new TabletManager(config::tablet_map_shard_size)),
           _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size, options.store_paths.size())),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
@@ -110,6 +108,14 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
         threads.emplace_back([data_dir] {
+            auto res = data_dir->load();
+            if (!res.ok()) {
+                LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
+            }
+        });
+        Thread::set_thread_name(threads.back(), "load_data_dir");
+
+        threads.emplace_back([data_dir] {
             if (config::manual_compact_before_data_dir_load) {
                 uint64_t live_sst_files_size_before = 0;
                 if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
@@ -129,12 +135,8 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
                               << data_dir->get_meta()->get_stats();
                 }
             }
-            auto res = data_dir->load();
-            if (!res.ok()) {
-                LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
-            }
         });
-        Thread::set_thread_name(threads.back(), "load_data_dir");
+        Thread::set_thread_name(threads.back(), "compact_data_dir");
     }
     for (auto& thread : threads) {
         thread.join();
@@ -382,6 +384,17 @@ Status StorageEngine::set_cluster_id(int32_t cluster_id) {
     _effective_cluster_id = cluster_id;
     _is_all_cluster_id_exist = true;
     return Status::OK();
+}
+
+std::vector<string> StorageEngine::get_store_paths() {
+    std::vector<string> paths;
+    {
+        std::lock_guard<std::mutex> l(_store_lock);
+        for (auto& it : _store_map) {
+            paths.push_back(it.first);
+        }
+    }
+    return paths;
 }
 
 std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium::type storage_medium) {
@@ -820,8 +833,8 @@ void StorageEngine::_clean_unused_rowset_metas() {
     std::vector<RowsetMetaSharedPtr> invalid_rowset_metas;
     auto clean_rowset_func = [this, &invalid_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
                                                            std::string_view meta_str) -> bool {
-        auto rowset_meta = std::make_shared<RowsetMeta>();
-        bool parsed = rowset_meta->init(meta_str);
+        bool parsed = false;
+        auto rowset_meta = std::make_shared<RowsetMeta>(meta_str, &parsed);
         if (!parsed) {
             LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
             // return false will break meta iterator, return true to skip this error

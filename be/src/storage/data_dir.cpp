@@ -248,8 +248,8 @@ Status DataDir::load() {
     LOG(INFO) << "begin loading rowset from meta";
     auto load_rowset_func = [&dir_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
                                                 std::string_view meta_str) -> bool {
-        auto rowset_meta = std::make_shared<RowsetMeta>();
-        bool parsed = rowset_meta->init(meta_str);
+        bool parsed = false;
+        auto rowset_meta = std::make_shared<RowsetMeta>(meta_str, &parsed);
         if (!parsed) {
             LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
             // return false will break meta iterator, return true to skip this error
@@ -294,7 +294,22 @@ Status DataDir::load() {
         }
         return true;
     };
-    Status load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
+    Status load_tablet_status =
+            TabletMetaManager::walk_until_timeout(_kv_store, load_tablet_func, config::load_tablet_timeout_seconds);
+    if (load_tablet_status.code() == TStatusCode::TIMEOUT) {
+        Status s = _kv_store->compact();
+        if (!s.ok()) {
+            LOG(ERROR) << "data dir " << _path << " compact meta befor load failed";
+            return s;
+        }
+        for (auto tablet_id : tablet_ids) {
+            _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
+        }
+        tablet_ids.clear();
+        failed_tablet_ids.clear();
+        load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
+    }
+
     if (failed_tablet_ids.size() != 0) {
         LOG(ERROR) << "load tablets from header failed"
                    << ", loaded tablet: " << tablet_ids.size() << ", error tablet: " << failed_tablet_ids.size()

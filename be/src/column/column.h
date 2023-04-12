@@ -147,7 +147,11 @@ public:
     // The type of |src| and |this| must be exactly matched.
     virtual void append(const Column& src, size_t offset, size_t count) = 0;
 
+    virtual void append_shallow_copy(const Column& src, size_t offset, size_t count) { append(src, offset, count); }
+
     virtual void append(const Column& src) { append(src, 0, src.size()); }
+
+    virtual void append_shallow_copy(const Column& src) { append_shallow_copy(src, 0, src.size()); }
 
     // Update elements to default value which hit by the filter
     virtual void fill_default(const Filter& filter) = 0;
@@ -173,12 +177,22 @@ public:
     // This function will copy the [3, 2] row of src to this column.
     virtual void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
 
+    virtual void append_selective_shallow_copy(const Column& src, const uint32_t* indexes, uint32_t from,
+                                               uint32_t size) {
+        return append_selective(src, indexes, from, size);
+    }
+
     void append_selective(const Column& src, const Buffer<uint32_t>& indexes) {
         return append_selective(src, indexes.data(), 0, indexes.size());
     }
 
+    void append_selective_shallow_copy(const Column& src, const Buffer<uint32_t>& indexes) {
+        return append_selective_shallow_copy(src, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
+    }
+
     // This function will get row through 'from' index from src, and copy size elements to this column.
-    virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) = 0;
+    // Currently only `ObjectColumn<BitmapValue>` support shallow copy
+    virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) = 0;
 
     // Append multiple `null` values into this column.
     // Return false if this is a non-nullable column, i.e, if `is_nullable` return false.

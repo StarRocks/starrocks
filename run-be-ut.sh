@@ -32,36 +32,42 @@ usage() {
   echo "
 Usage: $0 <options>
   Optional options:
-     --clean                        clean and build ut
-     --run                          build and run ut
-     --gtest_filter                 specify test cases
+     --test  [TEST_NAME]            run specific test
+     --dry-run                      dry-run unit tests
+     --clean                        clean old unit tests before run
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
+     --with-gcov                    enable to build with gcov
+     --module                       module to run uts
      --use-staros                   enable to build with staros
      -j                             build parallel
 
   Eg.
-    $0                              build ut
-    $0 --run                        build and run ut
-    $0 --run --gtest_filter scan*   build and run ut of specified cases
-    $0 --clean                      clean and build ut
-    $0 --clean --run                clean, build and run ut
+    $0                              run all unit tests
+    $0 --test CompactionUtilsTest   run compaction test
+    $0 --dry-run                    dry-run unit tests
+    $0 --clean                      clean old unit tests before run
     $0 --help                       display usage
   "
   exit 1
 }
 
+# -l run and -l gtest_filter only used for compatibility
 OPTS=$(getopt \
   -n $0 \
   -o '' \
-  -l 'run' \
+  -l 'test:' \
+  -l 'dry-run' \
   -l 'clean' \
-  -l "gtest_filter:" \
+  -l 'with-gcov' \
+  -l 'module:' \
   -l 'with-aws' \
   -l 'with-bench' \
   -l 'use-staros' \
   -o 'j:' \
   -l 'help' \
+  -l 'run' \
+  -l 'gtest_filter:' \
   -- "$@")
 
 if [ $? != 0 ] ; then
@@ -71,8 +77,9 @@ fi
 eval set -- "$OPTS"
 
 CLEAN=0
-RUN=0
-TEST_FILTER=*
+DRY_RUN=0
+TEST_NAME=*
+TEST_MODULE=".*"
 HELP=0
 WITH_AWS=OFF
 WITH_BENCH=OFF
@@ -80,9 +87,12 @@ USE_STAROS=OFF
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
-        --run) RUN=1 ; shift ;;
-        --gtest_filter) TEST_FILTER=$2 ; shift 2;; 
-        --help) HELP=1 ; shift ;; 
+        --dry-run) DRY_RUN=1 ; shift ;;
+        --run) shift ;; # Option only for compatibility
+        --test) TEST_NAME=$2 ; shift 2;;
+        --gtest_filter) TEST_NAME=$2 ; shift 2;; # Option only for compatibility
+        --module) TEST_MODULE=$2; shift 2;;
+        --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-bench) WITH_BENCH=ON; shift ;;
         --use-staros) USE_STAROS=ON; shift ;;
@@ -147,12 +157,11 @@ else
               -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH} ../
 fi
-time ${BUILD_SYSTEM} -j${PARALLEL}
+${BUILD_SYSTEM} -j${PARALLEL}
 
-if [ ${RUN} -ne 1 ]; then
-    echo "Finished"
-    exit 0
-fi
+echo "*********************************"
+echo "  Starting to Run BE Unit Tests  "
+echo "*********************************"
 
 echo "******************************"
 echo "    Running StarRocks BE Unittest    "
@@ -170,15 +179,6 @@ done
 mkdir -p $LOG_DIR
 mkdir -p ${UDF_RUNTIME_DIR}
 rm -f ${UDF_RUNTIME_DIR}/*
-
-if [ ${RUN} -ne 1 ]; then
-    echo "Finished"
-    exit 0
-fi
-
-echo "******************************"
-echo "    Running StarRocks BE Unittest    "
-echo "******************************"
 
 . ${STARROCKS_HOME}/bin/common.sh
 
@@ -213,10 +213,10 @@ export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
 
 # ===========================================================
 
-export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test/
+export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test
 
 if [ $WITH_AWS = "OFF" ]; then
-    TEST_FILTER="$TEST_FILTER:-*S3*"
+    TEST_NAME="$TEST_NAME*:-*S3*"
 fi
 
 # prepare util test_data
@@ -229,17 +229,26 @@ test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" |
 
 # run cases in starrocks_test in parallel if has gtest-parallel script.
 # reference: https://github.com/google/gtest-parallel
-if [ -x ${GTEST_PARALLEL} ]; then
-    ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_filter=${TEST_FILTER} --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
-else
-    ${STARROCKS_TEST_BINARY_DIR}/starrocks_test --gtest_filter=${TEST_FILTER}
+if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
+  echo "Run test: ${STARROCKS_TEST_BINARY_DIR}/starrocks_test"
+  if [ ${DRY_RUN} -eq 0 ]; then
+    if [ -x ${GTEST_PARALLEL} ]; then
+        ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test \
+            --gtest_catch_exceptions=0 --gtest_filter=${TEST_NAME} \
+            --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
+    else
+        ${STARROCKS_TEST_BINARY_DIR}/starrocks_test $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+    fi
+  fi
 fi
 
 for test in ${test_files[@]}
 do
-    file_name=${test##*/}
-    if [ -z $RUN_FILE ] || [ $file_name == $RUN_FILE ]; then
-        echo "=== Run $file_name ==="
-        $test --gtest_filter=${TEST_FILTER}
+    echo "Run test: $test"
+    if [ ${DRY_RUN} -eq 0 ]; then
+        file_name=${test##*/}
+        if [ -z $RUN_FILE ] || [ $file_name == $RUN_FILE ]; then
+            $test $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+        fi
     fi
 done

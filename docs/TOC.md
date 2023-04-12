@@ -17,6 +17,8 @@
   + [Data distribution](./table_design/Data_distribution.md)
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
+  + Concepts
+    + [Strict mode](./loading/load_concept/strict_mode.md)
   + [Overview of data loading](./loading/Loading_intro.md)
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS or cloud storage](./loading/BrokerLoad.md)
@@ -37,8 +39,6 @@
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Materialized view](./using_starrocks/Materialized_view.md)
-  + [External tables](./data_source/External_table.md)
-  + [Use catalogs to manage internal and external data](./data_source/Manage_data.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Bitmap indexing](./using_starrocks/Bitmap_index.md)

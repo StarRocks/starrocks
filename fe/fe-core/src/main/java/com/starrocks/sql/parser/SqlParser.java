@@ -32,9 +32,11 @@ public class SqlParser {
 
     public static StatementBase parseSingleSql(String sql, SessionVariable sessionVariable) {
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
+        lexer.setSqlMode(sessionVariable.getSqlMode());
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
-        setParserProperty(parser, sessionVariable);
+        parser.removeErrorListeners();
+        parser.addErrorListener(new ErrorHandler());
         StatementBase statement;
         try {
             StarRocksParser.SqlStatementsContext sqlStatements = parser.sqlStatements();
@@ -52,12 +54,6 @@ public class SqlParser {
             }
         }
         return statement;
-    }
-
-    public static void setParserProperty(StarRocksParser parser, SessionVariable sessionVariable) {
-        StarRocksParser.sqlMode = sessionVariable.getSqlMode();
-        parser.removeErrorListeners();
-        parser.addErrorListener(new ErrorHandler());
     }
 
 
@@ -81,9 +77,9 @@ public class SqlParser {
      */
     public static Expr parseSqlToExpr(String expressionSql, long sqlMode) {
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(expressionSql)));
+        lexer.setSqlMode(sqlMode);
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
-        StarRocksParser.sqlMode = sqlMode;
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         StarRocksParser.ExpressionContext expressionContext = parser.expression();
