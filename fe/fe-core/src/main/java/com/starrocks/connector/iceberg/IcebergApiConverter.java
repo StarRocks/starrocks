@@ -107,8 +107,9 @@ public class IcebergApiConverter {
             case BOOLEAN:
                 return Types.BooleanType.get();
             case INT:
-            case BIGINT:
                 return Types.IntegerType.get();
+            case BIGINT:
+                return Types.LongType.get();
             case FLOAT:
                 return Types.FloatType.get();
             case DOUBLE:
@@ -196,9 +197,7 @@ public class IcebergApiConverter {
 
     public static Map<String, String> rebuildCreateTableProperties(Map<String, String> createProperties) {
         ImmutableMap.Builder<String, String> tableProperties = ImmutableMap.builder();
-        createProperties.entrySet().stream()
-                .filter(entry -> createProperties.containsKey(entry.getKey()))
-                .forEach(tableProperties::put);
+        createProperties.entrySet().forEach(tableProperties::put);
 
         String fileFormat = createProperties.getOrDefault("file_format", TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
         if ("parquet".equalsIgnoreCase(fileFormat)) {
