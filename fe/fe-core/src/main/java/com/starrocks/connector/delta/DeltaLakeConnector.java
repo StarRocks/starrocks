@@ -46,6 +46,7 @@ public class DeltaLakeConnector implements Connector {
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
         this.internalMgr = new DeltaLakeInternalMgr(catalogName, properties, hdfsEnvironment);
         this.metadataFactory = createMetadataFactory();
+        // TODO extract to ConnectorConfigFactory
         validate();
         onCreate();
     }
