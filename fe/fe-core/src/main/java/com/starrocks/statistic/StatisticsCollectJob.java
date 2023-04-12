@@ -19,6 +19,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -95,11 +96,11 @@ public abstract class StatisticsCollectJob {
         return properties;
     }
 
-    public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
+    protected void collectStatisticSync(String sql, ConnectContext context) throws Exception {
         int count = 0;
         int maxRetryTimes = 5;
         do {
-            LOG.debug("statistics collect sql : " + sql);
+            LOG.debug("statistics collect sql : {}", sql);
             StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             context.setExecutor(executor);
@@ -108,8 +109,8 @@ public abstract class StatisticsCollectJob {
             executor.execute();
 
             if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
-                LOG.warn("Statistics collect fail | Error Message [" + context.getState().getErrorMessage() + "] | " +
-                        "SQL [" + sql + "]");
+                LOG.warn("Statistics collect fail | Error Message [{}] | {} | SQL [{}]",
+                        context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
                 if (StringUtils.contains(context.getState().getErrorMessage(), "Too many versions")) {
                     Thread.sleep(Config.statistic_collect_too_many_version_sleep);
                     count++;
