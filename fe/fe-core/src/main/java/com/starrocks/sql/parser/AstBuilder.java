@@ -5112,10 +5112,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             hints = context.aggregationFunction().bracketHint().identifier().stream().map(
                     RuleContext::getText).collect(Collectors.toList());
         }
+        boolean isDistinct = false;
+        if (context.aggregationFunction().setQuantifier() != null) {
+            isDistinct = context.aggregationFunction().setQuantifier().DISTINCT() != null;
+        }
 
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 context.aggregationFunction().ASTERISK_SYMBOL() == null ?
-                        new FunctionParams(context.aggregationFunction().DISTINCT() != null,
+                        new FunctionParams(isDistinct,
                                 visit(context.aggregationFunction().expression(), Expr.class), orderByElements) :
                         FunctionParams.createStarParam(), pos);
 
