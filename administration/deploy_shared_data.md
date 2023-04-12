@@ -128,25 +128,17 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 
 ```YAML
 starlet_port = <starlet_port>
+storage_root_path = <storage_root_path>
 ```
 
-| **配置项**   | **描述**                 |
-| ------------ | ------------------------ |
+| **配置项**              | **描述**                 |
+| ---------------------- | ------------------------ |
 | starlet_port | 用于 BE 心跳服务的端口。默认值：`9070`。 |
-
-如果要启用本地缓存，在 BE 配置文件 **be.conf** 中添加以下配置项：
-
-```YAML
-starlet_cache_dir = <starlet_cache_dir>
-```
-
-| **配置项**   | **描述**                 |
-| ------------ | ------------------------ |
-| starlet_cache_dir | local disk cache 目录，可配置多个目录，使用冒号 (`:`) 分割。 |
+| storage_root_path      | 本地缓存数据依赖的存储目录以及该存储介质的类型，多块盘配置使用分号（;）隔开。如果为 SSD 磁盘，需在路径后添加 `,medium:ssd`，如果为 HDD 磁盘，需在路径后添加 `,medium:hdd`。例如：`/data1,medium:hdd;/data2,medium:ssd`。默认值：`${STARROCKS_HOME}/storage`。 |
 
 > **说明**
 >
-> 由于数据存储在对象存储中，因此在部署 StarRocks 存算分离集群时，您无需在 BE 配置文件中指定 `storage_root_path`。
+> 本地缓存数据将存储在 **\<storage_root_path\>/starlet_cache** 路径下。
 
 ## 使用 StarRocks 存算分离集群
 
