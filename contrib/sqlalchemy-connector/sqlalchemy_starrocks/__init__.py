@@ -13,5 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+<<<<<<< HEAD:contrib/sqlalchemy-connector/sqlalchemy_starrocks/__init__.py
 __version__ = "0.1.0"
+=======
+__version__ = "1.0.4"
+>>>>>>> fd128f215 ([BugFix] Fix the ClassCastException when analyzing table (#20641)):contrib/starrocks-python-client/starrocks/__init__.py
 
