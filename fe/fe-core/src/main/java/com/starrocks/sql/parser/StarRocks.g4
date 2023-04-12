@@ -1904,10 +1904,10 @@ windowFunction
     | name = RANK '(' ')'
     | name = DENSE_RANK '(' ')'
     | name = NTILE  '(' expression? ')'
-    | name = LEAD  '(' (expression ignoreNulls? (',' expression)*)? ')'
-    | name = LAG '(' (expression ignoreNulls? (',' expression)*)? ')'
-    | name = FIRST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
-    | name = LAST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
+    | name = LEAD  '(' (expression ignoreNulls? (',' expression)*)? ')' ignoreNulls?
+    | name = LAG '(' (expression ignoreNulls? (',' expression)*)? ')' ignoreNulls?
+    | name = FIRST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')' ignoreNulls?
+    | name = LAST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')' ignoreNulls?
     ;
 
 whenClause
