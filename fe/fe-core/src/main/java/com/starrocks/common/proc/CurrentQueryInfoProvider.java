@@ -108,7 +108,7 @@ public class CurrentQueryInfoProvider {
         for (Pair<Request, Future<PCollectQueryStatisticsResult>> pair : futures) {
             try {
                 final PCollectQueryStatisticsResult result = pair.second.get(10, TimeUnit.SECONDS);
-                if (result.queryStatistics != null) {
+                if (result != null && result.queryStatistics != null) {
                     Preconditions.checkState(result.queryStatistics.size() == 1);
                     PCollectQueryStatistics queryStatistics = result.queryStatistics.get(0);
                     QueryStatistics statistics = new QueryStatistics();
@@ -188,7 +188,7 @@ public class CurrentQueryInfoProvider {
         for (Pair<Request, Future<PCollectQueryStatisticsResult>> pair : futures) {
             try {
                 final PCollectQueryStatisticsResult result = pair.second.get(10, TimeUnit.SECONDS);
-                if (result.queryStatistics != null) {
+                if (result != null && result.queryStatistics != null) {
                     for (PCollectQueryStatistics queryStatistics : result.queryStatistics) {
                         final String queryIdStr = DebugUtil.printId(queryStatistics.queryId);
                         QueryStatistics statistics = statisticsMap.get(queryIdStr);
