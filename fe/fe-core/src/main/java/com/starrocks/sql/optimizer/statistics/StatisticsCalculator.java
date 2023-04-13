@@ -569,9 +569,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
                 ColumnStatistic cs =
                         GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(table, smallColumn.getName());
-                double avgRowCount = cs.getRowCount() / Math.max(partitionCount, 1);
+                long avgRowCount = (long) (cs.getRowCount() / Math.max(partitionCount, 1));
                 for (Partition partition : selectedPartitions) {
-                    long partitionRowCount = 0;
+                    long partitionRowCount = cs.isUnknown() ? partition.getRowCount() : avgRowCount;
                     if (partitionCountModifiedAfterLastAnalyze > 0) {
                         LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
                         if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
@@ -579,7 +579,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                     basicStatsMeta.getUpdateRows() / partitionCountModifiedAfterLastAnalyze;
                         }
                     }
-                    rowCount += avgRowCount;
+
+                    rowCount += partitionRowCount;
                     optimizerContext.getDumpInfo()
                             .addPartitionRowCount(table, partition.getName(), partitionRowCount);
                 }
