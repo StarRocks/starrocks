@@ -729,8 +729,8 @@ Status ChunkWriter::_add_varchar_column_chunk(const Context& ctx, const TypeDesc
                                               const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     const auto data_column = ColumnHelper::get_data_column(col.get());
     auto raw_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(data_column);
-    auto vo = raw_col->get_offset();
-    auto vb = raw_col->get_bytes();
+    auto& vo = raw_col->get_offset();
+    auto& vb = raw_col->get_bytes();
 
     uint8_t* nulls = nullptr;
     if (col->is_nullable()) {
@@ -791,9 +791,9 @@ Status ChunkWriter::_add_array_column_chunk(const Context& ctx, const TypeDescri
         nulls = null_column->get_data().data();
     }
 
-    const auto array_column = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
-    const auto elements = array_column->elements_column();
-    const auto offsets = array_column->offsets_column()->get_data();
+    const auto& array_column = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
+    const auto& elements = array_column->elements_column();
+    const auto& offsets = array_column->offsets_column()->get_data();
     Context derived_ctx(ctx._max_def_level + node->is_optional() + 1, ctx._max_rep_level + 1,
                         ctx.size() + elements->size());
 
@@ -834,9 +834,9 @@ Status ChunkWriter::_add_map_column_chunk(const Context& ctx, const TypeDescript
     }
 
     const auto map_column = down_cast<MapColumn*>(ColumnHelper::get_data_column(col.get()));
-    const auto keys = map_column->keys_column();
-    const auto values = map_column->values_column();
-    const auto offsets = map_column->offsets_column()->get_data();
+    const auto& keys = map_column->keys_column();
+    const auto& values = map_column->values_column();
+    const auto& offsets = map_column->offsets_column()->get_data();
 
     Context derived_ctx(ctx._max_def_level + node->is_optional(), ctx._max_rep_level + 1, ctx.size() + offsets.size());
 
