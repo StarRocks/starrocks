@@ -24,8 +24,11 @@ import java.lang.management.ManagementFactory;
 import java.lang.management.ManagementPermission;
 import java.lang.management.MemoryMXBean;
 import java.lang.management.MemoryPoolMXBean;
+import java.lang.management.MemoryUsage;
 import java.lang.management.PlatformManagedObject;
 import java.lang.management.RuntimeMXBean;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.List;
@@ -465,5 +468,39 @@ public class JvmInfo {
             sb.append(" direct mem max: ").append(getDirectMemoryMax().toString());
             return sb.toString();
         }
+    }
+
+    public static String getThreadDump() {
+        return getThreadDumpWithPattern(null);
+    }
+
+    public static String getThreadDumpWithPattern(String pattern) {
+        StringBuilder sb = new StringBuilder();
+        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+        ThreadInfo[] threadInfos = threadMXBean.dumpAllThreads(true, true);
+        for (ThreadInfo threadInfo : threadInfos) {
+            if (threadInfo != null) {
+                String dump = threadInfo.toString();
+                if (pattern == null || dump.contains(pattern)) {
+                    sb.append(dump);
+                    sb.append('\n');
+                }
+            }
+        }
+        return sb.toString();
+    }
+
+    public static String getMemoryStats() {
+        List<MemoryPoolMXBean> memoryPools = ManagementFactory.getMemoryPoolMXBeans();
+        StringBuilder sb = new StringBuilder();
+        for (MemoryPoolMXBean pool : memoryPools) {
+            sb.append("Pool: " + pool.getName() + "\n");
+            MemoryUsage usage = pool.getUsage();
+            sb.append("  - Initial: " + usage.getInit() + "\n");
+            sb.append("  - Used: " + usage.getUsed() + "\n");
+            sb.append("  - Committed: " + usage.getCommitted() + "\n");
+            sb.append("  - Maximum: " + usage.getMax() + "\n");
+        }
+        return sb.toString();
     }
 }

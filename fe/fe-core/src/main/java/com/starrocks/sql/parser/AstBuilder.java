@@ -511,7 +511,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         String dbName = getIdentifierName(context.database);
 
-        Map<String, String> properties = new HashMap<>();;
+        Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
             List<Property> propertyList = visit(context.properties().property(), Property.class);
             for (Property property : propertyList) {
@@ -3166,7 +3166,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitExecuteScriptStatement(StarRocksParser.ExecuteScriptStatementContext context) {
-        long beId = Long.parseLong(context.INTEGER_VALUE().getText());
+        long beId = -1;
+        if (context.INTEGER_VALUE() != null) {
+            beId = Long.parseLong(context.INTEGER_VALUE().getText());
+        }
         StringLiteral stringLiteral = (StringLiteral) visit(context.string());
         String script = stringLiteral.getStringValue();
         return new ExecuteScriptStmt(beId, script, createPos(context));
