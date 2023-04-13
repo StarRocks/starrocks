@@ -415,25 +415,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
                         try {
                             Analyzer.analyze(queryStatement, connectContext);
+                            Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(queryStatement);
+                            for (TableName tableName : allTables.keySet()) {
+                                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                                    Table tbl = db.getTable(tableName.getTbl());
+                                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
+                                            tableName.getDb(), tbl)) {
+                                        break;
+                                    }
+                                } else {
+                                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
+                                            currentUser, tableName.getDb(), tableName.getTbl(), PrivPredicate.SHOW)) {
+                                        ddlSql = "";
+                                        break;
+                                    }
+                                }
+                            }
                         } catch (SemanticException e) {
                             // ignore semantic exception because view may be is invalid
                         }
-                        Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(queryStatement);
-                        for (TableName tableName : allTables.keySet()) {
-                            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                                Table tbl = db.getTable(tableName.getTbl());
-                                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
-                                        tableName.getDb(), tbl)) {
-                                    break;
-                                }
-                            } else {
-                                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
-                                        currentUser, tableName.getDb(), tableName.getTbl(), PrivPredicate.SHOW)) {
-                                    ddlSql = "";
-                                    break;
-                                }
-                            }
-                        }
+
                         status.setDdl_sql(ddlSql);
                     }
                     tablesResult.add(status);
