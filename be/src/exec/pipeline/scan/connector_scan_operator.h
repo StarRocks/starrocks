@@ -79,7 +79,7 @@ public:
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
     int update_pickup_morsel_state() override;
-
+     bool is_running_all_io_tasks() const override;
 private:
     struct PickupMorselState {
         int max_io_tasks = 0;

@@ -72,16 +72,6 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
 
 void ConnectorScanOperator::do_close(RuntimeState* state) {}
 
-bool ConnectorScanOperator::has_output() const {
-    bool ret = ScanOperator::has_output();
-    // when has no output, we need to adjust io tasks next time.
-    if (!ret) {
-        PickupMorselState& state = _pickup_morsel_state;
-        state.adjusted_io_tasks = false;
-    }
-    return ret;
-}
-
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
@@ -166,6 +156,31 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
     return scan_node->connector_type();
 }
 
+bool ConnectorScanOperator::has_output() const {
+    bool ret = ScanOperator::has_output();
+    // when has no output, we need to adjust io tasks next time.
+    if (!ret) {
+        PickupMorselState& state = _pickup_morsel_state;
+        if (!state.adjusted_io_tasks) {
+            ret = true;
+            state.adjusted_io_tasks = true;
+        }
+    } else {
+        state.adjusted_io_tasks = true;
+    }
+
+    return ret;
+}
+
+bool ConnectorScanOperator::is_running_all_io_tasks() const {
+    PickupMorselState& state = _pickup_morsel_state;
+    // VLOG_FILE << "[ZZZ] running all. seq = " << _driver_sequence << ", io = " << _num_running_io_tasks
+    //           << ", exp = " << state.max_io_tasks;
+    bool ret = (state.max_io_tasks != 0) && (_num_running_io_tasks >= state.max_io_tasks);
+    return ret;
+    // return ScanOperator::is_running_all_io_tasks();
+}
+
 int ConnectorScanOperator::update_pickup_morsel_state() {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
     int current_io_tasks = _num_running_io_tasks.load();
@@ -189,11 +204,12 @@ int ConnectorScanOperator::update_pickup_morsel_state() {
             io_tasks = std::max(MIN_IO_TASKS, io_tasks - 1);
             state.update_log_size = 0;
         } else if (chunks < thres) {
-            int delta = std::max(MIN_IO_TASKS, 2 << state.update_log_size);
+            // int delta = std::max(MIN_IO_TASKS, 2 << state.update_log_size);
+            int delta = 2;
             io_tasks = std::min(current_io_tasks + delta, _io_tasks_per_scan_operator);
-            if ((2 << (state.update_log_size + 1)) <= _io_tasks_per_scan_operator) {
-                state.update_log_size += 1;
-            }
+            // if ((2 << (state.update_log_size + 1)) <= _io_tasks_per_scan_operator) {
+            //     state.update_log_size += 1;
+            // }
         } else {
             // if buffer is enough. then don't do anything.
         }
