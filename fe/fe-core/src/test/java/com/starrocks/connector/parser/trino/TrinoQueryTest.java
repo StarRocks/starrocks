@@ -104,7 +104,6 @@ public class TrinoQueryTest extends TrinoTestBase {
     public void testSelectLiteral() throws Exception {
         String sql = "select date '1998-12-01'";
         assertPlanContains(sql, "<slot 2> : '1998-12-01'");
-        System.out.println(getFragmentPlan(sql));
     }
 
     @Test
@@ -314,7 +313,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         String sql = "select c0, c1[1] from test_map";
         assertPlanContains(sql, "1:Project\n" +
                 "  |  <slot 1> : 1: c0\n" +
-                "  |  <slot 4> : 2: c1[1]");
+                "  |  <slot 5> : 2: c1[1]");
 
         sql = "select c0 from test_map where c1[1] > 10";
         assertPlanContains(sql, "PREDICATES: 2: c1[1] > 10");
@@ -324,16 +323,22 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  |  output: avg(2: c1[1])");
 
         sql = "select c2[2][1] from test_map";
-        assertPlanContains(sql, "<slot 4> : 3: c2[2][1]");
+        assertPlanContains(sql, "<slot 5> : 3: c2[2][1]");
+
+        sql = "select c3['10'] from test_map";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 5> : 4: c3['10']");
+
+        analyzeFail("select c3[\"10\"] from test_map");
     }
 
     @Test
     public void testSelectMapFunction() throws Exception {
         String sql = "select map_keys(c1) from test_map";
-        assertPlanContains(sql, "<slot 4> : map_keys(2: c1)");
+        assertPlanContains(sql, "<slot 5> : map_keys(2: c1)");
 
         sql = "select map_values(c1) from test_map";
-        assertPlanContains(sql, "<slot 4> : map_values(2: c1)");
+        assertPlanContains(sql, "<slot 5> : map_values(2: c1)");
     }
 
     @Test
