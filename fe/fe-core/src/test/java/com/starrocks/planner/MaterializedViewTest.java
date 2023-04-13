@@ -15,7 +15,6 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;

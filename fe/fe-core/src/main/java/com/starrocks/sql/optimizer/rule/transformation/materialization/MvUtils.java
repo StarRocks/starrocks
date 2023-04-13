@@ -420,14 +420,6 @@ public class MvUtils {
         }
     }
 
-    public static ColumnRefSet getPredicateColumnRefSet(List<ScalarOperator> predicates) {
-        final ColumnRefSet predicateColumnRefSet = new ColumnRefSet();
-        for (ScalarOperator pred: predicates) {
-            predicateColumnRefSet.union(pred.getUsedColumns());
-        }
-        return predicateColumnRefSet;
-    }
-
     public static ScalarOperator rewriteOptExprCompoundPredicate(OptExpression root,
                                                                  ReplaceColumnRefRewriter columnRefRewriter) {
         List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(root);

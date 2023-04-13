@@ -708,6 +708,7 @@ public class MaterializedViewRewriter {
         }
     }
 
+    // Rewrite non-inner/cross join's on-predicates, all on-predicates should not compensated.
     private ScalarOperator rewriteJoinOnPredicates(ColumnRewriter columnRewriter,
                                                    Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns,
                                                    List<ScalarOperator> srcJoinOnPredicates,
@@ -717,13 +718,15 @@ public class MaterializedViewRewriter {
             return ConstantOperator.TRUE;
         }
         if (srcJoinOnPredicates.isEmpty() && !targetJoinOnPredicates.isEmpty()) {
-            return null;
+            return ConstantOperator.TRUE;
         }
         if (!srcJoinOnPredicates.isEmpty() && targetJoinOnPredicates.isEmpty()) {
             return null;
         }
-        final PredicateSplit srcJoinOnPredicateSplit = PredicateSplit.splitPredicate(Utils.compoundAnd(srcJoinOnPredicates));
-        final PredicateSplit targetJoinOnPredicateSplit = PredicateSplit.splitPredicate(Utils.compoundAnd(targetJoinOnPredicates));
+        final PredicateSplit srcJoinOnPredicateSplit =
+                PredicateSplit.splitPredicate(Utils.compoundAnd(srcJoinOnPredicates));
+        final PredicateSplit targetJoinOnPredicateSplit =
+                PredicateSplit.splitPredicate(Utils.compoundAnd(targetJoinOnPredicates));
 
         final EquivalenceClasses sourceEquivalenceClasses =
                 createEquivalenceClasses(srcJoinOnPredicateSplit.getEqualPredicates());
