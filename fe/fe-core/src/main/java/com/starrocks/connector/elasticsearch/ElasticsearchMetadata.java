@@ -37,7 +37,7 @@ public class ElasticsearchMetadata
 
     private final EsRestClient esRestClient;
     private final Map<String, String> properties;
-    public static final String DEFAULT_DB = "default";
+    public static final String DEFAULT_DB = "default_db";
     public static final long DEFAULT_DB_ID = 1L;
 
 
