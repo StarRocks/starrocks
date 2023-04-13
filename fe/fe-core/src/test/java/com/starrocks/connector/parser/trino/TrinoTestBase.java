@@ -18,9 +18,13 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -278,13 +282,33 @@ public class TrinoTestBase {
 
         starRocksAssert.withTable("create table test_map(c0 int, " +
                 "c1 map<int,int>, " +
-                "c2 array<map<int,int>>) " +
+                "c2 array<map<int,int>>, " +
+                "c3 map<varchar(65533), date>) " +
                 "engine=olap distributed by hash(c0) buckets 10 " +
                 "properties('replication_num'='1');");
 
         FeConstants.runningUnitTest = false;
 
         connectContext.getSessionVariable().setSqlDialect("trino");
+    }
+
+    public static void analyzeFail(String originStmt) {
+        analyzeFail(originStmt, "");
+    }
+
+    public static void analyzeFail(String originStmt, String exceptMessage) {
+        try {
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
+                    connectContext.getSessionVariable()).get(0);
+            Analyzer.analyze(statementBase, connectContext);
+            Assert.fail("Miss semantic error exception");
+        } catch (ParsingException | SemanticException | UnsupportedException e) {
+            if (!exceptMessage.equals("")) {
+                Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
+            }
+        } catch (Exception e) {
+            Assert.fail("analyze exception");
+        }
     }
 
     public String getFragmentPlan(String sql) throws Exception {
