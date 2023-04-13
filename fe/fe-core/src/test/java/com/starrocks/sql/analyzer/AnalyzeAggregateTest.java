@@ -227,4 +227,39 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select percentile_disc(tj,0.5) from tall group by tb");
     }
 
+    @Test
+    public void testWindowFunnelFunction() {
+        // For the argument `window_size`.
+        analyzeFail("SELECT window_funnel(-1, ti, 0, [ta='a', ta='b']) FROM tall",
+                "window argument must >= 0");
+        analyzeFail("SELECT window_funnel('VARCHAR', ti, 0, [ta='a', ta='b']) FROM tall",
+                "window argument must be numerical type");
+        analyzeFail("SELECT window_funnel(tc, ti, 0, [ta='a', ta='b']) FROM tall",
+                "window argument must be numerical type");
+
+        // For the argument `mode`.
+        analyzeFail("SELECT window_funnel(1, ti, -1, [ta='a', ta='b']) FROM tall",
+                "mode argument's range must be [0-7]");
+        analyzeFail("SELECT window_funnel(1, ti, 8, [ta='a', ta='b']) FROM tall",
+                "mode argument's range must be [0-7]");
+        analyzeFail("SELECT window_funnel(1, ti, 'VARCHAR', [ta='a', ta='b']) FROM tall",
+                "mode argument must be numerical type");
+        analyzeFail("SELECT window_funnel(1, ti, ta, [ta='a', ta='b']) FROM tall",
+                "mode argument must be numerical type");
+
+        // For the argument `time`.
+        analyzeFail("SELECT window_funnel(1, '2022-01-01', 0, [ta='a', ta='b']) FROM tall",
+                "time arg must be column");
+
+        // For the argument `condition`.
+        analyzeFail("SELECT window_funnel(1, ti, 0, ti) FROM tall",
+                "No matching function with signature");
+
+        // Successful statements.
+        analyzeSuccess("SELECT window_funnel(0, ti, 0, [ta='a', ta='b']) FROM tall");
+        analyzeSuccess("SELECT window_funnel(1, ti, 0, [ta='a', ta='b']) FROM tall");
+        analyzeSuccess("SELECT window_funnel(1, ta, 0, [ta='a', ta='b']) FROM tall");
+        analyzeSuccess("SELECT window_funnel(1, ta, 0, [true, true, false]) FROM tall");
+    }
+
 }
