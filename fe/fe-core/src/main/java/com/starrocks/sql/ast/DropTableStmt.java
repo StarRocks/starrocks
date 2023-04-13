@@ -49,6 +49,10 @@ public class DropTableStmt extends DdlStmt {
         return tableName;
     }
 
+    public String getCatalogName() {
+        return tableName.getCatalog();
+    }
+
     public String getDbName() {
         return tableName.getDb();
     }

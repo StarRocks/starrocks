@@ -33,6 +33,7 @@ import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -152,6 +153,12 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         transaction.commitTransaction();
         return true;
+    }
+
+    @Override
+    public void dropTable(DropTableStmt stmt) {
+        TableIdentifier identifier = TableIdentifier.of(stmt.getDbName(), stmt.getTableName());
+        icebergCatalog.dropTable(identifier, true);
     }
 
     @Override

@@ -176,6 +176,7 @@ public interface ConnectorMetadata {
     }
 
     default void dropTable(DropTableStmt stmt) throws DdlException {
+        throw new StarRocksConnectorException("This connector doesn't support dropping tables");
     }
 
     default void alterTable(AlterTableStmt stmt) throws UserException {
