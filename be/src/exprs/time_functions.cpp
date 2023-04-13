@@ -2177,7 +2177,7 @@ StatusOr<ColumnPtr> TimeFunctions::next_day_common(FunctionContext* context, con
         auto dow = dow_str.value(row).to_string();
         int dow_weekday = weekday_from_dow_abbreviation(dow);
         if (dow_weekday == -1) {
-            throw std::runtime_error(dow + " not supported in next_day dow_string");
+            return Status::InvalidArgument(dow + " not supported in next_day dow_string");
         }
         int datetime_weekday = ((DateValue)time).weekday();
         auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, (6 + dow_weekday - datetime_weekday) % 7 + 1);
@@ -2203,7 +2203,7 @@ Status TimeFunctions::next_day_prepare(FunctionContext* context, FunctionContext
     auto dow = slice.to_string();
     int dow_weekday = weekday_from_dow_abbreviation(dow);
     if (dow_weekday == -1) {
-        throw std::runtime_error(dow + " not supported in next_day dow_string");
+        return Status::InvalidArgument(dow + " not supported in next_day dow_string");
     }
     auto* wdc = new WeekDayCtx();
     wdc->dow_weekday = dow_weekday;
@@ -2212,6 +2212,97 @@ Status TimeFunctions::next_day_prepare(FunctionContext* context, FunctionContext
 }
 
 Status TimeFunctions::next_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        if (wdc != nullptr) {
+            delete wdc;
+        }
+    }
+
+    return Status::OK();
+}
+
+// previous_day
+StatusOr<ColumnPtr> TimeFunctions::previous_day(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (wdc == nullptr) {
+        return previous_day_common(context, columns);
+    }
+    return previous_day_wdc(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::previous_day_wdc(FunctionContext* context, const Columns& columns) {
+    auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (wdc->dow_weekday == -2) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
+    }
+    auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_DATE> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (time_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        TimestampValue time = time_viewer.value(row);
+        int datetime_weekday = ((DateValue)time).weekday();
+        auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, -((6 + datetime_weekday - wdc->dow_weekday) % 7 + 1));
+        result.append(date);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::previous_day_common(FunctionContext* context, const Columns& columns) {
+    auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
+    auto dow_str = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_DATE> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (time_viewer.is_null(row) || dow_str.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        TimestampValue time = time_viewer.value(row);
+        auto dow = dow_str.value(row).to_string();
+        int dow_weekday = weekday_from_dow_abbreviation(dow);
+        if (dow_weekday == -1) {
+            return Status::InvalidArgument(dow + " not supported in previous_day dow_string");
+        }
+        int datetime_weekday = ((DateValue)time).weekday();
+        auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, -((6 + datetime_weekday - dow_weekday) % 7 + 1));
+        result.append(date);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+Status TimeFunctions::previous_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_constant_column(1)) {
+        return Status::OK();
+    }
+
+    ColumnPtr column = context->get_constant_column(1);
+    if (column->only_null()) {
+        auto* wdc = new WeekDayCtx();
+        wdc->dow_weekday = -2;
+        context->set_function_state(scope, wdc);
+        return Status::OK();
+    }
+
+    Slice slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+    auto dow = slice.to_string();
+    int dow_weekday = weekday_from_dow_abbreviation(dow);
+    if (dow_weekday == -1) {
+        return Status::InvalidArgument(dow + " not supported in previous_day dow_string");
+    }
+    auto* wdc = new WeekDayCtx();
+    wdc->dow_weekday = dow_weekday;
+    context->set_function_state(scope, wdc);
+    return Status::OK();
+}
+
+Status TimeFunctions::previous_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
         auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         if (wdc != nullptr) {
