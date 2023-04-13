@@ -153,10 +153,6 @@ public class StreamLoadInfo {
         return partitions;
     }
 
-    public boolean isSpecifiedPartitions() {
-        return partitions != null;
-    }
-
     public String getPath() {
         return path;
     }
