@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.authentication.LDAPSecurityIntegration;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
@@ -25,12 +27,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import static com.starrocks.authentication.LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_BASE_DN_KEY;
 import static com.starrocks.authentication.LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY;
-import static com.starrocks.authentication.LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_ROOT_DN_KEY;
-import static com.starrocks.authentication.LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY;
-import static com.starrocks.authentication.SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY;
-import static com.starrocks.authentication.SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP;
 
 public class SecurityIntegrationStatementAnalyzer {
 
@@ -40,12 +37,12 @@ public class SecurityIntegrationStatementAnalyzer {
 
     public static class SecurityIntegrationStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         final Set<String> supportedAuthMechanism =
-                new HashSet<>(Collections.singletonList(SECURITY_INTEGRATION_TYPE_LDAP));
+                new HashSet<>(Collections.singletonList(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP));
         final Set<String> requiredProperties = new HashSet<>(Arrays.asList(
-                SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
-                LDAP_SEC_INTEGRATION_PROP_BASE_DN_KEY,
-                LDAP_SEC_INTEGRATION_PROP_ROOT_DN_KEY,
-                LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY));
+                SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
+                LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_BASE_DN_KEY,
+                LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_ROOT_DN_KEY,
+                LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY));
 
         public void analyze(StatementBase statement, ConnectContext context) {
             visit(statement, context);
@@ -64,7 +61,7 @@ public class SecurityIntegrationStatementAnalyzer {
 
             if (!supportedAuthMechanism.contains(propertyMap.get("type"))) {
                 throw new SemanticException("unsupported security integration type '" +
-                        propertyMap.get(SECURITY_INTEGRATION_PROPERTY_TYPE_KEY) + "'");
+                        propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY) + "'");
             }
 
             if (context.getGlobalStateMgr().getAuthenticationManager()

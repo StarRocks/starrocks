@@ -18,6 +18,7 @@ package com.starrocks.authentication;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.StarRocksFE;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
@@ -28,6 +29,7 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.qe.ConnectContext;
@@ -54,10 +56,6 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-
-import static com.starrocks.common.ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE;
-import static com.starrocks.mysql.privilege.AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL;
-import static com.starrocks.privilege.PrivilegeBuiltinConstants.ROOT_ROLE_ID;
 
 public class AuthenticationManager {
     private static final Logger LOG = LogManager.getLogger(AuthenticationManager.class);
@@ -230,7 +228,7 @@ public class AuthenticationManager {
                 break;
             }
 
-            if (authMechanism.equals(AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+            if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
                 Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
                         getBestMatchedUserIdentity(remoteUser, remoteHost);
                 if (matchedUserIdentity == null) {
@@ -256,7 +254,7 @@ public class AuthenticationManager {
                     try {
                         AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
                         UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-                        userAuthenticationInfo.extraInfo.put(AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name(),
+                        userAuthenticationInfo.extraInfo.put(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name(),
                                 securityIntegration);
                         provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
                                 userAuthenticationInfo);
@@ -265,7 +263,8 @@ public class AuthenticationManager {
                         ConnectContext currentContext = ConnectContext.get();
                         if (currentContext != null) {
                             // TODO(yiming): set role ids for ephemeral user in connection context
-                            currentContext.setCurrentRoleIds(new HashSet<>(Collections.singletonList(ROOT_ROLE_ID)));
+                            currentContext.setCurrentRoleIds(new HashSet<>(
+                                    Collections.singletonList(PrivilegeBuiltinConstants.ROOT_ROLE_ID)));
                         }
                     } catch (AuthenticationException e) {
                         LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",

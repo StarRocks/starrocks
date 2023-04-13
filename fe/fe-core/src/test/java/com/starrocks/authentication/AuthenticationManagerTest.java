@@ -48,8 +48,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.starrocks.authentication.AuthenticationManager.DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
-
 public class AuthenticationManagerTest {
     static ConnectContext ctx;
 
@@ -297,7 +295,8 @@ public class AuthenticationManagerTest {
         Assert.assertFalse(manager.doesUserExist(testUserWithIp));
 
         // can't get max connection after all test user are dropped
-        Assert.assertEquals(DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER, manager.getMaxConn("test"));
+        Assert.assertEquals(AuthenticationManager.DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER,
+                manager.getMaxConn("test"));
     }
 
     @Test

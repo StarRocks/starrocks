@@ -15,10 +15,10 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.mysql.privilege.AuthPlugin;
+
 import java.util.HashMap;
 import java.util.Map;
-
-import static com.starrocks.mysql.privilege.AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL;
 
 /**
  * Security integration specified in `Config.authentication_chain`.
@@ -37,7 +37,7 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
 
     @Override
     public AuthenticationProvider getAuthenticationProvider() throws AuthenticationException {
-        return AuthenticationProviderFactory.create(AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name());
+        return AuthenticationProviderFactory.create(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name());
     }
 
     public String getLdapServerHost() {

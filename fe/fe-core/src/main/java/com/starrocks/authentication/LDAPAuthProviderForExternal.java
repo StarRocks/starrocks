@@ -13,14 +13,13 @@
 // limitations under the License.
 package com.starrocks.authentication;
 
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.privilege.Password;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.StringUtils;
 
-import static com.starrocks.mysql.privilege.AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL;
-
 public class LDAPAuthProviderForExternal implements AuthenticationProvider {
-    public static final String PLUGIN_NAME = AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name();
+    public static final String PLUGIN_NAME = AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name();
 
     @Override
     public UserAuthenticationInfo validAuthenticationInfo(UserIdentity userIdentity,
