@@ -229,8 +229,9 @@ public class ScalarApply2JoinRule extends TransformationRule {
         assertOptExpression.getInputs().add(input.getInputs().get(1));
 
         // use hint, forbidden reorder un-correlate subquery
-        OptExpression joinOptExpression = new OptExpression(
-                LogicalJoinOperator.builder().setJoinType(JoinOperator.CROSS_JOIN).setJoinHint("broadcast").build());
+        OptExpression joinOptExpression = new OptExpression(LogicalJoinOperator.builder()
+                .setJoinType(JoinOperator.CROSS_JOIN)
+                .setJoinHint(JoinOperator.HINT_BROADCAST).build());
         joinOptExpression.getInputs().add(input.getInputs().get(0));
         joinOptExpression.getInputs().add(assertOptExpression);
 
