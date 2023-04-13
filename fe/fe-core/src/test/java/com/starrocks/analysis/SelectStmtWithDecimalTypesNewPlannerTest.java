@@ -811,5 +811,16 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
         ctx.getSessionVariable().setCboCteReuse(oldCboCteReUse);
     }
+
+    @Test
+    public void testDecimalTypedWhenClausesOfCaseWhenWithoutCaseClause() throws Exception {
+        String sql = "select case when col_decimal64p13s0 then col_decimal64p13s0 else 0 end from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan, plan.contains("  |  6 <-> if[(cast([3: col_decimal64p13s0, DECIMAL64(13,0), false]" +
+                " as BOOLEAN), [3: col_decimal64p13s0, DECIMAL64(13,0), false], 0); " +
+                "args: BOOLEAN,DECIMAL64,DECIMAL64; result: DECIMAL64(13,0); args nullable: true;" +
+                " result nullable: true]\n"));
+        System.out.println(plan);
+    }
 }
 
