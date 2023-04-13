@@ -85,7 +85,7 @@ The following table describes a few important fields in the **starrocks-fe-and-b
 | **Field** | **Description**                                              |
 | --------- | ------------------------------------------------------------ |
 | Kind      | The resource type of the object. The value must be `StarRocksCluster`. |
-| Metadata  | Metadata, in which the following sub-fields are nested:`name`: the name of the object. Each object name uniquely identifies an object of the same resource type.`namespace`: the namespace to which the object belongs. |
+| Metadata  | Metadata, in which the following sub-fields are nested:<ul><li>`name`: the name of the object. Each object name uniquely identifies an object of the same resource type.</li><li>`namespace`: the namespace to which the object belongs.</li></ul> |
 | Spec      | The expected status of the object. Valid values are `starRocksFeSpec`, `starRocksBeSpec`, and `starRocksCnSpec`. |
 
 You can also deploy the StarRocks cluster by using a modified configuration file modifying the configuration file to suit your needs. For supported fields and detailed descriptions, see [api.md](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md).
