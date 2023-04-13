@@ -265,9 +265,7 @@ LOAD LABEL test_db.label_7
 )
 WITH BROKER 
 (
-    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
-    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+    StorageCredentialParams
 )；
 ```
 
@@ -283,9 +281,7 @@ LOAD LABEL test_db.label_8
 )
 WITH BROKER 
 (
-    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
-    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+    StorageCredentialParams
 )；
 ```
 
