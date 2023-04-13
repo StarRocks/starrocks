@@ -1362,9 +1362,10 @@ public class MaterializedViewRewriter {
         return result;
     }
 
-    private PredicateSplit getCompensationPredicatesQueryToView(ColumnRewriter columnRewriter,
-                                                                RewriteContext rewriteContext,
-                                                                Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
+    private PredicateSplit getCompensationPredicatesQueryToView(
+            ColumnRewriter columnRewriter,
+            RewriteContext rewriteContext,
+            Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
         final List<ScalarOperator> queryJoinOnPredicates = mvRewriteContext.getQueryJoinOnPredicates();
         final List<ScalarOperator> mvJoinOnPredicates = mvRewriteContext.getMvJoinOnPredicates();
         final ScalarOperator queryJoinOnPredicateCompensations =
@@ -1382,9 +1383,10 @@ public class MaterializedViewRewriter {
                 true);
     }
 
-    private PredicateSplit getCompensationPredicatesViewToQuery(ColumnRewriter columnRewriter,
-                                                                RewriteContext rewriteContext,
-                                                                Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
+    private PredicateSplit getCompensationPredicatesViewToQuery(
+            ColumnRewriter columnRewriter,
+            RewriteContext rewriteContext,
+            Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
         final List<ScalarOperator> queryJoinOnPredicates = mvRewriteContext.getQueryJoinOnPredicates();
         final List<ScalarOperator> mvJoinOnPredicates = mvRewriteContext.getMvJoinOnPredicates();
         final ScalarOperator queryJoinOnPredicateCompensations =
