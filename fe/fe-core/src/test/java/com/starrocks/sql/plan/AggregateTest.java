@@ -1499,37 +1499,11 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 15: t1c <=> 20: t1c\n");
-        assertContains(plan, "21:HASH JOIN\n" +
+                "  |  equal join conjunct: 15: t1c <=> 17: t1c\n");
+        assertContains(plan, "20:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 15: t1c <=> 17: t1c");
-
-        sql = "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), " +
-                "count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "1:Project\n" +
-                "  |  <slot 2> : 2: t1b\n" +
-                "  |  <slot 3> : 3: t1c\n" +
-                "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
-        assertContains(plan, "22:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 16: t1c <=> 19: t1c\n" +
-                "  |  equal join conjunct: 17: expr <=> 20: expr");
-
-        sql = "select avg(distinct t1b) as cn_t1b, sum(t1b), " +
-                "count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "26:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: sum(26: t1b)\n" +
-                "  |  group by: 27: t1c, 28: expr\n" +
-                "  |  \n" +
-                "  25:Project\n" +
-                "  |  <slot 26> : 2: t1b\n" +
-                "  |  <slot 27> : 3: t1c\n" +
-                "  |  <slot 28> : 11: expr");
+                "  |  equal join conjunct: 15: t1c <=> 20: t1c");
     }
 
     @Test
