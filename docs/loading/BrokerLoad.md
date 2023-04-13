@@ -168,8 +168,7 @@ WITH BROKER
 
 > **NOTE**
 >
-> - Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
-> - If the IAM role associated with your AWS EC2 instance is granted permission to access your AWS S3 bucket, you can leave `aws.s3.access_key` and `aws.s3.secret_key` unspecified.
+> Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
 
 #### Load data from Google GCS
 
