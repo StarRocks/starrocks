@@ -80,9 +80,6 @@ public class MapExpr extends Expr {
     @Override
     protected String toSqlImpl() {
         StringBuilder sb = new StringBuilder();
-        if (this.explicitType) {
-            sb.append(this.type.toSql());
-        }
         sb.append('{');
         for (int i = 0; i < children.size(); i += 2) {
             if (i > 0) {
