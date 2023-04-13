@@ -33,7 +33,6 @@ CacheInputStream::CacheInputStream(std::shared_ptr<SeekableInputStream> stream, 
           _stream(stream),
           _offset(0),
           _size(size) {
-#ifdef WITH_BLOCK_CACHE
     // _cache_key = _filename;
     // use hash(filename) as cache key.
     _cache_key.resize(16);
@@ -43,10 +42,8 @@ CacheInputStream::CacheInputStream(std::shared_ptr<SeekableInputStream> stream, 
     int64_t file_size = _size;
     memcpy(data + 8, &file_size, sizeof(file_size));
     _buffer.reserve(BlockCache::instance()->block_size());
-#endif
 }
 
-#ifdef WITH_BLOCK_CACHE
 Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
     BlockCache* cache = BlockCache::instance();
     count = std::min(_size - offset, count);
@@ -127,13 +124,6 @@ Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count)
     DCHECK(p == pe);
     return Status::OK();
 }
-#else
-Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
-    int64_t load_size = std::min(count, _size - offset);
-    RETURN_IF_ERROR(_stream->read_at_fully(offset, out, load_size));
-    return Status::OK();
-}
-#endif
 
 StatusOr<int64_t> CacheInputStream::read(void* data, int64_t count) {
     RETURN_IF_ERROR(read_at_fully(_offset, data, count));
@@ -157,12 +147,8 @@ StatusOr<int64_t> CacheInputStream::get_size() {
 }
 
 int64_t CacheInputStream::get_align_size() const {
-#ifdef WITH_BLOCK_CACHE
     BlockCache* cache = BlockCache::instance();
     return cache->block_size();
-#else
-    return 0;
-#endif
 }
 
 StatusOr<std::string_view> CacheInputStream::peek(int64_t count) {
@@ -175,7 +161,6 @@ StatusOr<std::string_view> CacheInputStream::peek(int64_t count) {
     return s;
 }
 
-#ifdef WITH_BLOCK_CACHE
 void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t count) {
     BlockCache* cache = BlockCache::instance();
     const int64_t BLOCK_SIZE = cache->block_size();
@@ -211,10 +196,5 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
     }
     return;
 }
-#else
-void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int64_t offset, int64_t size) {
-    return;
-}
-#endif
 
 } // namespace starrocks::io
