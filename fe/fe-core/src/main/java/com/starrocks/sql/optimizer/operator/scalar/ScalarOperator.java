@@ -21,6 +21,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 
 import java.util.Collections;
 import java.util.List;
+import javax.annotation.Nullable;
 
 import static java.util.Objects.requireNonNull;
 
@@ -52,6 +53,28 @@ public abstract class ScalarOperator implements Cloneable {
         }
 
         return true;
+    }
+
+    public static boolean isTrue(@Nullable ScalarOperator op) {
+        if (op == null) {
+            return false;
+        }
+        return op.isTrue();
+    }
+
+    public static boolean isFalse(@Nullable ScalarOperator op) {
+        if (op == null) {
+            return false;
+        }
+        return op.isFalse();
+    }
+
+    public boolean isTrue() {
+        return this.equals(ConstantOperator.TRUE);
+    }
+
+    public boolean isFalse() {
+        return this.equals(ConstantOperator.FALSE);
     }
 
     public abstract boolean isNullable();

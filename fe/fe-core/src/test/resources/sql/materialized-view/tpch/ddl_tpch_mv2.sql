@@ -95,29 +95,3 @@ as select
    from
               customer
    group by c_custkey, c_phone, c_acctbal, substring(c_phone, 1  ,2);
-
--- query13
-create materialized view customer_order_mv_agg_mv1
-distributed by hash( c_custkey,
-       o_comment) buckets 24
-refresh deferred manual
-properties (
-    "replication_num" = "1"
-)
-as select
-              c_custkey,
-              o_comment,
-              count(o_orderkey) as c_count,
-              count(1) as c_count_star
-   from
-              (select
-                   c_custkey,o_comment,o_orderkey
-               from
-                   customer
-                       left outer join
-                   orders
-                   on orders.o_custkey=customer.c_custkey) a
-   group by
-       c_custkey,
-       o_comment
-;
