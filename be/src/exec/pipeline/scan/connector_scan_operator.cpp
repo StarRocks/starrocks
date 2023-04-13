@@ -62,11 +62,13 @@ ConnectorScanOperator::ConnectorScanOperator(OperatorFactory* factory, int32_t i
 
 Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     const TQueryOptions& options = state->query_options();
-    bool shared_scan = _scan_node->is_shared_scan_enabled();
-    _unique_metrics->add_info_string("SharedScan", shared_scan ? "True" : "False");
     if (options.__isset.enable_connector_adaptive_io_tasks) {
         _enable_adaptive_io_tasks = options.enable_connector_adaptive_io_tasks;
     }
+
+    bool shared_scan = _scan_node->is_shared_scan_enabled();
+    _unique_metrics->add_info_string("SharedScan", shared_scan ? "True" : "False");
+    _unique_metrics->add_info_string("AdaptiveIOTasks", _enable_adaptive_io_tasks ? "True" : "False");
     return Status::OK();
 }
 
@@ -156,24 +158,43 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
     return scan_node->connector_type();
 }
 
-bool ConnectorScanOperator::is_running_all_io_tasks() const {
-    int io_tasks = current_io_tasks;
+void ConnectorScanOperator::begin_driver_process() {
+    last_check_time = 0;
+    early_cut_all_io_tasks = 0;
+    expected_io_tasks = current_io_tasks;
+}
+void ConnectorScanOperator::after_pull_chunk(int64_t time) {
+    _op_running_time += time;
+}
 
-    int64_t now = GetCurrentTimeMicros();
-    if (early_cut_all_io_tasks == 0) {
-        early_cut_all_io_tasks = now;
-    } else if ((now - early_cut_all_io_tasks) > config::connector_io_tasks_check_interval) {
-        io_tasks = _io_tasks_per_scan_operator;
+void ConnectorScanOperator::after_driver_process() {
+    last_check_time = 0;
+    early_cut_all_io_tasks = 0;
+    expected_io_tasks = current_io_tasks;
+}
+
+bool ConnectorScanOperator::is_running_all_io_tasks() const {
+    if (!_enable_adaptive_io_tasks) {
+        return _num_running_io_tasks >= _io_tasks_per_scan_operator;
     }
 
-    bool ret = (io_tasks != 0) && (_num_running_io_tasks >= io_tasks);
+    if (expected_io_tasks != _io_tasks_per_scan_operator) {
+        int64_t now = GetCurrentTimeMicros();
+        if (early_cut_all_io_tasks == 0) {
+            early_cut_all_io_tasks = now;
+        } else if ((now - early_cut_all_io_tasks) > config::connector_io_tasks_check_interval) {
+            expected_io_tasks = _io_tasks_per_scan_operator;
+        }
+    }
+
+    bool ret = (expected_io_tasks != 0) && (_num_running_io_tasks >= expected_io_tasks);
     return ret;
     // return ScanOperator::is_running_all_io_tasks();
 }
 
 int ConnectorScanOperator::available_pickup_morsel_count() {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
-    early_cut_all_io_tasks = 0;
+
     // called every time before `pull_chunk` when there is chunk.
     // accumulate chunk source stats.
     double cs_speed = _cs_pull_rows * 1.0 / (_cs_pull_time + 1);

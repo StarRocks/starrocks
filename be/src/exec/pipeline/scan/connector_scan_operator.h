@@ -79,11 +79,14 @@ public:
     void set_buffer_finished() override;
     int available_pickup_morsel_count() override;
     void begin_pull_chunk(ChunkPtr res) override { _op_pull_rows += res->num_rows(); }
-    void after_pull_chunk(int64_t t) override { _op_running_time += t; }
+    void begin_driver_process() override;
+    void after_pull_chunk(int64_t time) override;
+    void after_driver_process() override;
     bool is_running_all_io_tasks() const override;
 
 public:
-    int current_io_tasks = 0;    
+    mutable int expected_io_tasks = 0;
+    int current_io_tasks = 0;
     int64_t last_check_time = 0;
     int last_delta = 1;
     double last_cs_speed = 0;

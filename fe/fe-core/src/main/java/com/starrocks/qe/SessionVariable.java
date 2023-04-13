@@ -2045,6 +2045,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
+        tResult.setEnable_connector_adaptive_io_tasks(enableConnectorAdaptiveIoTasks);        
         return tResult;
     }
 
