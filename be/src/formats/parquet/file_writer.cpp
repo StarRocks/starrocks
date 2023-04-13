@@ -375,30 +375,12 @@ Status FileWriterBase::write(Chunk* chunk) {
     }
 
     _generate_chunk_writer();
-
-//    _generate_rg_writer();
-//    _col_idx = 0; // reset index upon every write
-
     _chunk_writer->write(chunk);
-//    Context ctx(0, 0, chunk->num_rows());
-//    for (int i = 0; i < chunk->num_rows(); i++) {
-//        ctx.append(i, 0, 0);
-//    }
-//
-//    for (size_t i = 0; i < chunk->num_columns(); i++) {
-//        auto col = chunk->get_column_by_index(i);
-//        auto ret = _add_column_chunk(ctx, _type_descs[i], _schema->field(i), col);
-//        if (!ret.ok()) {
-//            return ret;
-//        }
-//    }
 
     if (_chunk_writer->estimated_buffered_bytes() > _max_row_group_size) {
         _flush_row_group();
     }
-//    if (_get_current_rg_written_bytes() > _max_row_group_size) {
-//        _flush_row_group();
-//    }
+
     return Status::OK();
 }
 
@@ -476,7 +458,7 @@ Status ChunkWriter::_add_column_chunk(Context& ctx, const TypeDescriptor& type_d
 Status ChunkWriter::_add_struct_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
                                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     DCHECK(type_desc.type == TYPE_STRUCT);
-    auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
+    auto struct_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
 
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
@@ -486,28 +468,27 @@ Status ChunkWriter::_add_struct_column_chunk(Context& ctx, const TypeDescriptor&
 
     const auto data_column = ColumnHelper::get_data_column(col.get());
     const auto struct_column = down_cast<StructColumn*>(data_column);
-    Context child_ctx(ctx._max_def_level + node->is_optional(), ctx._max_rep_level, ctx.size() + data_column->size());
+    Context derived_ctx(ctx._max_def_level + node->is_optional(), ctx._max_rep_level, ctx.size() + data_column->size());
 
     int subcol_size = 0;
-    auto def_delta = node->is_optional();
     for (auto i = 0; i < ctx.size(); i++) {
         auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL) {
-            child_ctx.append(Context::kNULL, def_level, rep_level);
+            derived_ctx.append(Context::kNULL, def_level, rep_level);
             continue;
         }
         if (nulls != nullptr && nulls[idx]) {
-            child_ctx.append(Context::kNULL, def_level, rep_level);
+            derived_ctx.append(Context::kNULL, def_level, rep_level);
             subcol_size++;
             continue;
         }
-        child_ctx.append(subcol_size++, def_level + def_delta, rep_level);
+        derived_ctx.append(subcol_size++, def_level + node->is_optional(), rep_level);
     }
 
     for (size_t i = 0; i < type_desc.children.size(); i++) {
         auto sub_col = struct_column->field_column(type_desc.field_names[i]);
         DCHECK(sub_col->size() == subcol_size);
-        auto ret = _add_column_chunk(child_ctx, type_desc.children[i], group_node->field(i), sub_col);
+        auto ret = _add_column_chunk(derived_ctx, type_desc.children[i], struct_node->field(i), sub_col);
         if (!ret.ok()) {
             return ret;
         }
@@ -531,28 +512,28 @@ Status ChunkWriter::_add_array_column_chunk(Context& ctx, const TypeDescriptor& 
     const auto array_column = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto elements = array_column->elements_column();
     const auto offsets = array_column->offsets_column()->get_data();
-    Context child_ctx(ctx._max_def_level + node->is_optional() + 1, ctx._max_rep_level + 1, ctx.size() + elements->size());
+    Context derived_ctx(ctx._max_def_level + node->is_optional() + 1, ctx._max_rep_level + 1, ctx.size() + elements->size());
 
     int subcol_size = 0;
     for (auto i = 0; i < ctx.size(); i++) {
         auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || nulls[idx]) {
-            child_ctx.append(Context::kNULL, def_level, rep_level);
+            derived_ctx.append(Context::kNULL, def_level, rep_level);
             continue;
         }
         auto array_size = offsets[idx + 1] - offsets[idx];
         if (array_size == 0) {
-            child_ctx.append(Context::kNULL, def_level + node->is_optional(), rep_level);
+            derived_ctx.append(Context::kNULL, def_level + node->is_optional(), rep_level);
             continue;
         }
-        child_ctx.append(subcol_size++, def_level + node->is_optional() + 1, rep_level);
+        derived_ctx.append(subcol_size++, def_level + node->is_optional() + 1, rep_level);
         for (auto offset = 1; offset < array_size; offset++) {
-            child_ctx.append(subcol_size++, def_level + node->is_optional() + 1, child_ctx._max_rep_level);
+            derived_ctx.append(subcol_size++, def_level + node->is_optional() + 1, derived_ctx._max_rep_level);
         }
     }
 
     DCHECK(elements->size() == subcol_size);
-    return _add_column_chunk(child_ctx, type_desc.children[0], inner_node, elements);
+    return _add_column_chunk(derived_ctx, type_desc.children[0], inner_node, elements);
 }
 
 Status ChunkWriter::_add_map_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
@@ -574,43 +555,36 @@ Status ChunkWriter::_add_map_column_chunk(Context& ctx, const TypeDescriptor& ty
     const auto values = map_column->values_column();
     const auto offsets = map_column->offsets_column()->get_data();
 
-    Context key_ctx(ctx._max_def_level + node->is_optional(), ctx._max_rep_level + 1, ctx.size() + keys->size());
-    Context value_ctx(ctx._max_def_level + node->is_optional(), ctx._max_rep_level + 1, ctx.size() + values->size());
+    Context derived_ctx(ctx._max_def_level + node->is_optional(), ctx._max_rep_level + 1, ctx.size() + offsets.size());
 
     int subcol_size = 0;
     int def_delta = outer_node->is_optional() + 1;
     for (auto i = 0; i < ctx.size(); i++) {
         auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || nulls[idx]) {
-            key_ctx.append(Context::kNULL, def_level, rep_level);
-            value_ctx.append(Context::kNULL, def_level, rep_level);
+            derived_ctx.append(Context::kNULL, def_level, rep_level);
             continue;
         }
         auto map_size = offsets[idx + 1] - offsets[idx];
         if (map_size == 0) {
-            key_ctx.append(Context::kNULL, def_level + def_delta, rep_level);
-            value_ctx.append(Context::kNULL, def_level + def_delta, rep_level);
+            derived_ctx.append(Context::kNULL, def_level + outer_node->is_optional(), rep_level);
             continue;
         }
-        key_ctx.append(subcol_size, def_level + def_delta, rep_level);
-        value_ctx.append(subcol_size, def_level + def_delta, rep_level);
+        derived_ctx.append(subcol_size, def_level + outer_node->is_optional() + 1, rep_level);
         subcol_size++;
         for (auto offset = 1; offset < map_size; offset++) {
-            key_ctx.append(subcol_size, def_level + def_delta,
-                           key_ctx._max_rep_level);
-            value_ctx.append(subcol_size, def_level + def_delta,
-                             value_ctx._max_rep_level);
+            derived_ctx.append(subcol_size, def_level + outer_node->is_optional() + 1,derived_ctx._max_rep_level);
             subcol_size++;
         }
     }
 
     DCHECK(keys->size() == subcol_size);
     DCHECK(values->size() == subcol_size);
-    auto ret = _add_column_chunk(key_ctx, type_desc.children[0], key_node, keys);
+    auto ret = _add_column_chunk(derived_ctx, type_desc.children[0], key_node, keys);
     if (!ret.ok()) {
         return ret;
     }
-    return _add_column_chunk(value_ctx, type_desc.children[1], value_node, values);
+    return _add_column_chunk(derived_ctx, type_desc.children[1], value_node, values);
 }
 
 Status ChunkWriter::_add_varchar_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
