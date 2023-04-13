@@ -126,7 +126,7 @@ storage_root_path = <storage_root_path>
 
 > **NOTE**
 >
-> The data is cached under the directory **\<storage_root_path\>/starlet_cache**.
+> The data is cached under the directory **<storage_root_path\>/starlet_cache**.
 
 ## Use your shared-data StarRocks cluster
 

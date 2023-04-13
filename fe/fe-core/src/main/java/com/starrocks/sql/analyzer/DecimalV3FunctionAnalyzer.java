@@ -129,8 +129,10 @@ public class DecimalV3FunctionAnalyzer {
             commonTypeStartIdx = 0;
             hasDecimalImpl = true;
         } else if (fnName.equalsIgnoreCase("if")) {
-            commonTypeStartIdx = 1;
-            hasDecimalImpl = true;
+            Type commonType = Type.getCommonType(argTypes, 1, argTypes.length);
+            argTypes[0] = Type.BOOLEAN;
+            Arrays.fill(argTypes, 1, argTypes.length, commonType);
+            return commonType;
         }
 
         if (hasDecimalImpl) {
