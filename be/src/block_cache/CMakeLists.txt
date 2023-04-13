@@ -20,22 +20,15 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/block_cache")
 
 set(CACHE_FILES
   block_cache.cpp
-  starcache_wrapper.cpp
+  fb_cachelib.cpp
 )
-
-if (${WITH_CACHELIB} STREQUAL "ON")
-    list(APPEND CACHE_FILES cachelib_wrapper.cpp)
-endif()
 
 add_library(BlockCache STATIC
     ${CACHE_FILES}
 )
 
-if (${WITH_CACHELIB} STREQUAL "ON")
-    set(CACHELIB_DIR ${THIRDPARTY_DIR}/cachelib)
-    link_directories(${CACHELIB_DIR}/deps/lib64)
+set(CACHELIB_DIR ${THIRDPARTY_DIR}/cachelib)
+link_directories(${CACHELIB_DIR}/deps/lib64)
 
-    include_directories(AFTER ${CACHELIB_DIR}/include)
-    include_directories(AFTER ${CACHELIB_DIR}/deps/include)
-endif()
-
+include_directories(AFTER ${CACHELIB_DIR}/include)
+include_directories(AFTER ${CACHELIB_DIR}/deps/include)

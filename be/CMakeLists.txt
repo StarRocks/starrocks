@@ -73,7 +73,7 @@ option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
 option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
-option(WITH_CACHELIB "Build binary with cachelib library" OFF)
+option(WITH_BLOCK_CACHE "Build binary with block cache feature" OFF)
 
 option(WITH_BENCH "Build binary with bench" OFF)
 
@@ -361,7 +361,7 @@ set(CACHELIB_DEPENDENCIES
     wangle
 )
 
-if (${WITH_CACHELIB} STREQUAL "ON")
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
     LINK_LIBRARIES(${THIRDPARTY_DIR}/cachelib/deps/lib64/libunwind.so)
     LINK_LIBRARIES(${THIRDPARTY_DIR}/cachelib/deps/lib64/liblzma.so)
     foreach(dep ${CACHELIB_DEPENDENCIES})
@@ -463,8 +463,8 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=return-type -Werror=switch")
 if (${USE_STAROS} STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DUSE_STAROS")
 endif()
-if (${WITH_CACHELIB} STREQUAL "ON")
-    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_CACHELIB")
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_BLOCK_CACHE")
 endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
@@ -620,10 +620,12 @@ set(STARROCKS_LINK_LIBS
     TestUtil
     Tools
     Geo
-    BlockCache
-    starcache
     ${WL_END_GROUP}
 )
+
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} BlockCache)
+endif()
 
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
     mysql
@@ -705,7 +707,7 @@ set(STARROCKS_DEPENDENCIES
     ${WL_END_GROUP}
 )
 
-if (${WITH_CACHELIB} STREQUAL "ON")
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
     set(STARROCKS_DEPENDENCIES
         ${STARROCKS_DEPENDENCIES}
         ${WL_START_GROUP}
@@ -857,8 +859,6 @@ add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/testutil)
 add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
-add_subdirectory(${SRC_DIR}/block_cache)
-add_subdirectory(${SRC_DIR}/thirdparty/starcache)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
@@ -867,6 +867,10 @@ add_subdirectory(${SRC_DIR}/script)
 if (WITH_BENCH STREQUAL "ON")
      message(STATUS "Build binary with bench")
     add_subdirectory(${SRC_DIR}/bench)
+endif()
+
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    add_subdirectory(${SRC_DIR}/block_cache)
 endif()
 
 if (${MAKE_TEST} STREQUAL "ON")
