@@ -119,6 +119,8 @@ insert into external_t select * from other_table;
 
 ### 建表示例
 
+#### 语法
+
 ~~~sql
 CREATE EXTERNAL TABLE elastic_search_external_table
 (
@@ -140,20 +142,124 @@ PROPERTIES
 );
 ~~~
 
-参数说明如下：
+#### 参数说明
 
-| **参数**             | **说明**                                                     |
-| -------------------- | ------------------------------------------------------------ |
-| hosts                | Elasticsearch 集群连接地址，用于获取 Elasticsearch 版本号以及索引的分片分布信息，可指定一个或多个。StarRocks 是根据 `GET /_nodes/http` API 返回的地址和 Elasticsearch 集群进行通讯，所以 `hosts` 参数值必须和 `GET /_nodes/http` 返回的地址一致，否则可能导致 BE 无法和 Elasticsearch 集群进行正常的通讯。 |
-| user                 | 开启 basic 认证的 Elasticsearch 集群的用户名，需要确保该用户有访问 /*cluster/state/* nodes/http 等路径权限和对索引的读取权限。 |
-| password             | 对应用户的密码信息。                                         |
-| index                | StarRocks 中的表对应的 Elasticsearch 的索引名字，可以是索引的别名。 |
-| type                 | 指定索引的类型，默认是 `_doc`。如果您要查询的是数据是在 Elasticsearch 8 及以上版本，那么在 StarRocks 中创建外部表时就不需要配置该参数，因为 Elasticsearch 8 以及上版本已经移除了 mapping types。 |
-| transport            | 内部保留，默认为 `http`。                                    |
-| es.nodes.wan.only    | 表示 StarRocks 是否仅使用 `hosts` 指定的地址，去访问 Elasticsearch 集群并获取数据。自 2.3.0 版本起，StarRocks 支持配置该参数。<ul><li>`true`：StarRocks 仅使用 `hosts` 指定的地址去访问 Elasticsearch 集群并获取数据，不会探测 Elasticsearch 集群的索引每个分片所在的数据节点地址。如果 StarRocks 无法访问 Elasticsearch 集群内部数据节点的地址，则需要配置为 `true`。</li><li>`false`：默认值，StarRocks 通过 `hosts` 中的地址，探测 Elasticsearch 集群索引各个分片所在数据节点的地址。StarRocks 经过查询规划后，相关 BE 节点会直接去请求 Elasticsearch 集群内部的数据节点，获取索引的分片数据。如果 StarRocks 可以访问 Elasticsearch 集群内部数据节点的地址，则建议保持默认值 `false`。</li></ul> |
-| es.net.ssl           | 是否允许使用 HTTPS 协议访问 Elasticsearch 集群。自 2.4 版本起，StarRocks 支持配置该参数。<ul><li>`true`：允许，HTTP 协议和 HTTPS 协议均可访问。</li><li>`false`：不允许，只能使用 HTTP 协议访问。</li></ul> |
-| enable_docvalue_scan | 是否从 Elasticsearch 列式存储获取查询字段的值。默认值：`true`。如果设置为 `true`，StarRocks 从 Elasticsearch 中获取数据会遵循以下两条原则：<ul><li>**尽力而为**: 自动探测要读取的字段是否开启列式存储。如果要获取的字段全部有列存，StarRocks 会从列式存储中获取所有字段的值。</li><li>**自动降级**: 如果要获取的字段中有任何一个字段没有列存，则 StarRocks 会从行存`_source` 中解析获取所有字段的值。</li></ul> |
-| enable_keyword_sniff | 是否对 Elasticsearch 中 TEXT 类型的字段进行探测，通过 KEYWORD 类型字段进行查询。设置为 `false` 会按照分词后的内容匹配。默认值：`true`。 |
+| **参数**             | **是否必须** | **默认值** | **说明**                                                     |
+| -------------------- | ------------ | ---------- | ------------------------------------------------------------ |
+| hosts                | 是           | 无         | Elasticsearch 集群连接地址，用于获取 Elasticsearch 版本号以及索引的分片分布信息，可指定一个或多个。StarRocks 是根据 `GET /_nodes/http` API 返回的地址和 Elasticsearch 集群进行通讯，所以 `hosts` 参数值必须和 `GET /_nodes/http` 返回的地址一致，否则可能导致 BE 无法和 Elasticsearch 集群进行正常的通讯。 |
+| index                | 是           | 无         | StarRocks 中的表对应的 Elasticsearch 的索引名字，可以是索引的别名。支持通配符匹配，比如设置 `index` 为 `hello*`，则 StarRocks 会匹配到所有以 `hello` 开头的索引。 |
+| user                 | 否           | 空         | 开启 basic 认证的 Elasticsearch 集群的用户名，需要确保该用户有访问 /*cluster/state/* nodes/http 等路径权限和对索引的读取权限。 |
+| password             | 否           | 空         | 对应用户的密码信息。                                         |
+| type                 | 否           | `_doc`     | 指定索引的类型。如果您要查询的是数据是在 Elasticsearch 8 及以上版本，那么在 StarRocks 中创建外部表时就不需要配置该参数，因为 Elasticsearch 8 以及上版本已经移除了 mapping types。 |
+| es.nodes.wan.only    | 否           | `false`    | 表示 StarRocks 是否仅使用 `hosts` 指定的地址，去访问 Elasticsearch 集群并获取数据。自 2.3.0 版本起，StarRocks 支持配置该参数。<ul><li>`true`：StarRocks 仅使用 `hosts` 指定的地址去访问 Elasticsearch 集群并获取数据，不会探测 Elasticsearch 集群的索引每个分片所在的数据节点地址。如果 StarRocks 无法访问 Elasticsearch 集群内部数据节点的地址，则需要配置为 `true`。</li><li>`false`：StarRocks 通过 `hosts` 中的地址，探测 Elasticsearch 集群索引各个分片所在数据节点的地址。StarRocks 经过查询规划后，相关 BE 节点会直接去请求 Elasticsearch 集群内部的数据节点，获取索引的分片数据。如果 StarRocks 可以访问 Elasticsearch 集群内部数据节点的地址，则建议保持默认值 `false`。</li></ul> |
+| es.net.ssl           | 否           | `false`    | 是否允许使用 HTTPS 协议访问 Elasticsearch 集群。自 2.4 版本起，StarRocks 支持配置该参数。<ul><li>`true`：允许，HTTP 协议和 HTTPS 协议均可访问。</li><li>`false`：不允许，只能使用 HTTP 协议访问。</li></ul> |
+| enable_docvalue_scan | 否           | `true`     | 是否从 Elasticsearch 列式存储获取查询字段的值。多数情况下，从列式存储中读取数据的性能要优于从行式存储中读取数据的性能。 |
+| enable_keyword_sniff | 否           | `true`     | 是否对 Elasticsearch 中 TEXT 类型的字段进行探测，通过 KEYWORD 类型字段进行查询。设置为 `false` 会按照分词后的内容匹配。默认值：`true`。 |
+
+##### 启用列式扫描优化查询速度
+
+如果设置 `enable_docvalue_scan` 为 `true`，StarRocks 从 Elasticsearch 中获取数据会遵循以下两条原则：
+
+* **尽力而为**: 自动探测要读取的字段是否开启列式存储。如果要获取的字段全部有列存，StarRocks 会从列式存储中获取所有字段的值。
+* **自动降级**: 如果要获取的字段中有任何一个字段没有列存，则 StarRocks 会从行存 `_source` 中解析获取所有字段的值。
+
+> **说明**
+>
+> * TEXT 类型的字段在 Elasticsearch 中没有列式存储。因此，如果要获取的字段值有 TEXT 类型字段时，会自动降级为从 `_source` 中获取。
+> * 在获取的字段数量过多（大于等于 25）的情况下，从 `docvalue` 中获取字段值的性能会和从 `_source` 中获取字段值基本一样。
+
+##### 探测 KEYWORD 类型字段
+
+如果设置 `enable_keyword_sniff` 为 `true`，在 Elasticsearch 中可以不建立索引直接进行数据导入，因为 Elasticsearch 会在数据导入完成后自动创建一个新的索引。针对字符串类型的字段，Elasticsearch 会创建一个既有 TEXT 类型又有 KEYWORD 类型的字段，这就是 Elasticsearch 的 Multi-Field 特性，Mapping 如下：
+
+~~~sql
+"k4": {
+   "type": "text",
+   "fields": {
+      "keyword": {   
+         "type": "keyword",
+         "ignore_above": 256
+      }
+   }
+}
+~~~
+
+对 `k4` 进行条件过滤（如 `=` 条件）时，StarRocks On Elasticsearch 会将查询转换为 Elasticsearch 的 TermQuery。
+
+原 SQL 过滤条件如下：
+
+~~~sql
+k4 = "StarRocks On Elasticsearch"
+~~~
+
+转换成 Elasticsearch 的查询 DSL 如下：
+
+~~~sql
+"term" : {
+    "k4": "StarRocks On Elasticsearch"
+
+}
+~~~
+
+由于 `k4` 的第一字段类型为 TEXT，在数据导入时 StarRocks 会根据 `k4` 设置的分词器（如果没有设置分词器，则默认使用 `standard` 分词器）进行分词处理得到 `StarRocks`、`On`、`Elasticsearch` 三个 `term`，如下所示：
+
+~~~sql
+POST /_analyze
+{
+  "analyzer": "standard",
+  "text": "StarRocks On Elasticsearch"
+}
+~~~
+
+分词的结果如下：
+
+~~~sql
+{
+   "tokens": [
+      {
+         "token": "starrocks",
+         "start_offset": 0,
+         "end_offset": 5,
+         "type": "<ALPHANUM>",
+         "position": 0
+      },
+      {
+         "token": "on",
+         "start_offset": 6,
+         "end_offset": 8,
+         "type": "<ALPHANUM>",
+         "position": 1
+      },
+      {
+         "token": "elasticsearch",
+         "start_offset": 9,
+         "end_offset": 11,
+         "type": "<ALPHANUM>",
+         "position": 2
+      }
+   ]
+}
+~~~
+
+假设执行如下查询：
+
+~~~sql
+"term" : {
+    "k4": "StarRocks On Elasticsearch"
+}
+~~~
+
+`StarRocks On Elasticsearch` 这个 `term` 匹配不到词典中的任何 `term`，不会返回任何结果，而设置 `enable_keyword_sniff` 为 `true` 以后，StarRocks 会自动将 `k4 = "StarRocks On Elasticsearch"` 转换成 `k4.keyword = "StarRocks On Elasticsearch"` 来完全匹配  SQL语义。转换后的 Elasticsearch 查询 DSL 如下：
+
+~~~sql
+"term" : {
+    "k4.keyword": "StarRocks On Elasticsearch"
+}
+~~~
+
+`k4.keyword` 的类型是 KEYWORD，数据写入Elasticsearch 是一个完整的 `term`，因此可以在词典中找到匹配的结果。
+
+#### 映射关系
 
 创建外部表时，需根据 Elasticsearch 的字段类型指定 StarRocks 中外部表的列类型，具体映射关系如下：
 
