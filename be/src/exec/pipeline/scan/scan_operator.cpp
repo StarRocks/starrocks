@@ -113,6 +113,10 @@ size_t ScanOperator::_buffer_unplug_threshold() const {
     return threshold;
 }
 
+bool ScanOperator::is_running_all_io_tasks() const {
+    return _num_running_io_tasks >= _io_tasks_per_scan_operator;
+}
+
 bool ScanOperator::has_output() const {
     if (_is_finished) {
         return false;
@@ -152,7 +156,7 @@ bool ScanOperator::has_output() const {
         return chunk_number > 0;
     }
 
-    if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
+    if (is_running_all_io_tasks()) {
         return false;
     }
 

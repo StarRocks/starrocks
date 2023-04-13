@@ -79,7 +79,7 @@ public:
     virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
     virtual void begin_pull_chunk(ChunkPtr res) {}
     virtual void after_pull_chunk(int64_t time) {}
-
+    virtual bool is_running_all_io_tasks() const;
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 

@@ -156,32 +156,48 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
     return scan_node->connector_type();
 }
 
+bool ConnectorScanOperator::is_running_all_io_tasks() const {
+    int io_tasks = current_io_tasks;
+
+    int64_t now = GetCurrentTimeMicros();
+    if (early_cut_all_io_tasks == 0) {
+        early_cut_all_io_tasks = now;
+    } else if ((now - early_cut_all_io_tasks) > config::connector_io_tasks_check_interval) {
+        io_tasks = _io_tasks_per_scan_operator;
+    }
+
+    bool ret = (io_tasks != 0) && (_num_running_io_tasks >= io_tasks);
+    return ret;
+    // return ScanOperator::is_running_all_io_tasks();
+}
+
 int ConnectorScanOperator::available_pickup_morsel_count() {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
 
+    early_cut_all_io_tasks = 0;
     // called every time before `pull_chunk` when there is chunk.
     // accumulate chunk source stats.
-    double cs_speed = _cs_pull_rows * 1000.0 / (_cs_pull_time + 1);
+    double cs_speed = _cs_pull_rows * 1.0 / (_cs_pull_time + 1);
 
     // accumulate scan operator stats.
-    double op_speed = _op_pull_rows * 1000.0 / (_op_running_time + 1);
+    double op_speed = _op_pull_rows * 1.0 / (_op_running_time + 1);
 
     int& io_tasks = current_io_tasks;
-    io_tasks = std::max(config::connector_io_tasks_min_size, io_tasks);
+    const int MIN_IO_TASKS = config::connector_io_tasks_min_size;
+    io_tasks = std::max(MIN_IO_TASKS, io_tasks);
 
     int64_t now = GetCurrentTimeMicros();
     if ((now - last_check_time) <= config::connector_io_tasks_check_interval * 1000) {
         return io_tasks;
     }
     last_check_time = now;
-    if (cs_speed >= op_speed) {
-        io_tasks -= 1;
-    } else if (cs_speed < last_cs_speed) {
+    if (cs_speed >= op_speed || cs_speed < last_cs_speed) {
         io_tasks -= 1;
     } else {
-        io_tasks += 1;
+        io_tasks += 2;
     }
     io_tasks = std::min(io_tasks, _io_tasks_per_scan_operator);
+    io_tasks = std::max(io_tasks, MIN_IO_TASKS);
 
     VLOG_FILE << "[XXX] pick mosrsel. id = " << _driver_sequence << ", cs = " << cs_speed << ", old = " << last_cs_speed
               << ", op = " << op_speed << ", value = " << io_tasks;

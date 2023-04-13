@@ -78,17 +78,16 @@ public:
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
     int available_pickup_morsel_count() override;
-     void begin_pull_chunk(ChunkPtr res) override {
-        _op_pull_rows += res->num_rows();
-     }
-     void after_pull_chunk(int64_t t) override {
-        _op_running_time += t;
-     }
+    void begin_pull_chunk(ChunkPtr res) override { _op_pull_rows += res->num_rows(); }
+    void after_pull_chunk(int64_t t) override { _op_running_time += t; }
+    bool is_running_all_io_tasks() const override;
+
 public:
-    int current_io_tasks = 0;
+    int current_io_tasks = 0;    
     int64_t last_check_time = 0;
     int last_delta = 1;
     double last_cs_speed = 0;
+    mutable int64_t early_cut_all_io_tasks = 0;
     std::atomic_int64_t _cs_pull_time = 0;
     std::atomic_int64_t _cs_pull_rows = 0;
     int64_t _op_running_time = 0;
