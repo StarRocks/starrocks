@@ -416,15 +416,6 @@ public class ExpressionAnalyzer {
                 Type keyType = node.getKeyCommonType();
                 Type valueType = node.getValueCommonType();
                 node.setType(new MapType(keyType, valueType));
-                try {
-                    for (int i = 0; i < node.getChildren().size(); i++) {
-                        if (!node.getChildren().get(i).getType().matchesType(i % 2 == 0 ? keyType : valueType)) {
-                            node.castChild(i % 2 == 0 ? keyType : valueType, i);
-                        }
-                    }
-                } catch (AnalysisException e) {
-                    throw new SemanticException(e.getMessage());
-                }
             } else {
                 node.setType(new MapType(Type.NULL, Type.NULL));
             }
