@@ -126,7 +126,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         boolean isRollup = isRollupAggregate(mvGroupingKeys, queryGroupingKeys);
 
         // Cannot ROLLUP distinct
-        if (isRollup && mvAggOp.getAggregations().values().stream().anyMatch(callOp -> callOp.isDistinct())) {
+        if (isRollup && !canRewriteForRollup(mvAggOp)) {
             return null;
         }
 
@@ -154,6 +154,10 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             }
             return rewriteProjection(rewriteContext, queryExprToMvExprRewriter, mvOptExpr);
         }
+    }
+
+    private boolean canRewriteForRollup(LogicalAggregationOperator aggOp) {
+        return aggOp.getAggregations().values().stream().noneMatch(callOp -> callOp.isDistinct());
     }
 
     // NOTE: this method is not exactly right to check whether it's a rollup aggregate:
