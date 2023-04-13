@@ -170,7 +170,8 @@ public class AuthenticationManagerTest {
         AuthorizationManager authorizationManager = ctx.getGlobalStateMgr().getAuthorizationManager();
 
         String sql = "create role test_r1";
-        CreateRoleStmt createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        CreateRoleStmt createStmt =
+                (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         authorizationManager.createRole(createStmt);
 
         sql = "create role test_r2";
