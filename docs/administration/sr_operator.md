@@ -259,7 +259,7 @@ The following is a [template](https://github.com/StarRocks/starrocks-kubernetes-
                     # When the average CPU utilization of CNs exceeds 60%, the number of CNs increases for scale-out.
                     # When the average CPU utilization of CNs is below 60%, the number of CNs decreases for scale-in.
                     type: Utilization
-            behavior: #  The scaling behavior is customized according to  business scenarios, helping you achieve rapid or slow scaling or disable scaling.
+            behavior: #  The scaling behavior is customized according to business scenarios, helping you achieve rapid or slow scaling or disable scaling.
                 policies:
                   - type: Pods
                     value: 1
