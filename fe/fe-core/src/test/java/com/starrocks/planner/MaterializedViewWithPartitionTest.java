@@ -59,7 +59,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         refreshMaterializedView(MATERIALIZED_DB_NAME, "partial_mv_6");
 
         // test match
-        testRewriteOK("select c1, c3, c2 from test_base_part where c3 < 2000")
+        sql("select c1, c3, c2 from test_base_part where c3 < 2000")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=4/5\n" +
@@ -67,7 +67,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=8/8");
 
         // test union all
-        testRewriteOK("select c1, c3, c2 from test_base_part")
+        sql("select c1, c3, c2 from test_base_part")
                 .contains("UNION")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
@@ -81,7 +81,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=2/2");
 
         // test union all
-        testRewriteOK("select c1, c3, c2 from test_base_part where c3 < 3000")
+        sql("select c1, c3, c2 from test_base_part where c3 < 3000")
                 .contains("UNION")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
@@ -96,7 +96,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=4/4");
 
         // test query delta
-        testRewriteOK("select c1, c3, c2 from test_base_part where c3 < 1000")
+        sql("select c1, c3, c2 from test_base_part where c3 < 1000")
                 .contains("partial_mv_6")
                 .contains("PREDICATES: 6: c3 <= 999\n" +
                         "     partitions=3/5");
@@ -116,12 +116,12 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         refreshMaterializedView(MATERIALIZED_DB_NAME, "partial_mv_6");
 
         // test match all
-        testRewriteOK("select c1, c3, c2 from test_base_part where c3 < 2000")
+        sql("select c1, c3, c2 from test_base_part where c3 < 2000")
                 .contains("partial_mv_6")
                 .contains("partitions=1/1");
 
         // test union
-        testRewriteOK("select c1, c3, c2 from test_base_part")
+        sql("select c1, c3, c2 from test_base_part")
                 .contains("UNION")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
@@ -135,7 +135,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
 
         // test query predicate
         // TODO: add more post actions after MV Rewrite:
-        testRewriteOK("select c1, c3, c2 from test_base_part where c3 < 1000")
+        sql("select c1, c3, c2 from test_base_part where c3 < 1000")
                 .contains("partial_mv_6")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
@@ -157,17 +157,17 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         refreshMaterializedView(MATERIALIZED_DB_NAME, "partial_mv_6");
 
         // test match all
-        testRewriteOK("select c1, c3, c2 from test_base_part where c2 < 2000")
+        sql("select c1, c3, c2 from test_base_part where c2 < 2000")
                 .contains("partial_mv_6")
                 .contains("partitions=5/5");
 
         // test query delta: with more predicates
-        testRewriteOK("select c1, c3, c2 from test_base_part where c2 < 2000 and c3 < 2000")
+        sql("select c1, c3, c2 from test_base_part where c2 < 2000 and c3 < 2000")
                 .contains("partial_mv_6")
                 .contains("partitions=4/5");
 
         // test union all
-        testRewriteOK("select c1, c3, c2 from test_base_part")
+        sql("select c1, c3, c2 from test_base_part")
                 .contains("UNION")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
@@ -179,7 +179,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     rollup: test_base_part");
 
         // test union all
-        testRewriteOK("select c1, c3, c2 from test_base_part where c2 < 3000 and c3 < 3000")
+        sql("select c1, c3, c2 from test_base_part where c2 < 3000 and c3 < 3000")
                 .contains("UNION")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
@@ -191,7 +191,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
 
         // test query delta
         // TODO: support remove redundant predicates.
-        testRewriteOK("select c1, c3, c2 from test_base_part where c2 < 1000 and c3 < 1000")
+        sql("select c1, c3, c2 from test_base_part where c2 < 1000 and c3 < 1000")
                 .contains("partial_mv_6")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
@@ -220,7 +220,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         refreshMaterializedView(MATERIALIZED_DB_NAME, "partial_mv_6");
 
         // exactly match
-        testRewriteOK(
+        sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
                         " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
@@ -232,11 +232,11 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=8/8");
 
         // test query delta
-        testRewriteOK(
+        sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
-                " inner join test_base_part2 t2 \n" +
-                " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
-                " where t1.c3 < 2000 and t2.c3 > 100;")
+                        " inner join test_base_part2 t2 \n" +
+                        " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
+                        " where t1.c3 < 2000 and t2.c3 > 100;")
                 .contains("TABLE: partial_mv_6\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 11: c3 <= 1999, 11: c3 >= 101\n" +
@@ -245,7 +245,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=6/6");
 
         // test query delta
-        testRewriteOK(
+        sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
                         " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
@@ -258,7 +258,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=6/6");
 
         // test query delta, agg + join
-        testRewriteOK(
+        sql(
                 " select count(1) from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
                         " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
@@ -272,7 +272,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
 
         // test union all
         // TODO: MV can be rewritten but cannot bingo(because cost?)!
-        testRewriteOK(
+        sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
                         " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
@@ -291,7 +291,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     rollup: test_base_part2\n" +
                         "     tabletRatio=10/10");
 
-        testRewriteOK(
+        sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
                         " on t1.c1=t2.c1 and t1.c3=t2.c3 ")
@@ -327,7 +327,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         refreshMaterializedView(MATERIALIZED_DB_NAME, "partial_mv_6");
 
         // exactly match
-        testRewriteOK(
+        sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
                         " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
@@ -338,7 +338,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     rollup: partial_mv_6");
 
         // test query delta
-        testRewriteOK(
+        sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
                         " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
@@ -349,7 +349,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     partitions=1/1");
 
         // test query delta
-        testRewriteOK(
+        sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
                         " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
@@ -360,7 +360,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     partitions=1/1");
 
         // test query delta, agg + join
-        testRewriteOK(
+        sql(
                 " select count(1) from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
                         " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
@@ -372,7 +372,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
 
         // test union all
         // TODO: MV can be rewritten but cannot bingo(because cost?)!
-        testRewriteOK(
+        sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
                         " on t1.c1 = t2.c1 and t1.c3=t2.c3 \n" +
@@ -390,7 +390,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     rollup: test_base_part2\n" +
                         "     tabletRatio=10/10");
 
-        testRewriteOK(
+        sql(
                 " select t1.c1, t1.c3, t2.c2 from test_base_part t1 \n" +
                         " inner join test_base_part2 t2 \n" +
                         " on t1.c1=t2.c1 and t1.c3=t2.c3 ")
@@ -421,7 +421,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         refreshMaterializedView(MATERIALIZED_DB_NAME, "partial_mv_7");
 
         // Union: MV table should be partition/distribution pruned.
-        testRewriteOK("select c1, c3, c2 from test_base_part")
+        sql("select c1, c3, c2 from test_base_part")
                 .contains("UNION")
                 .contains("TABLE: partial_mv_7\n" +
                         "     PREAGGREGATION: ON\n" +
@@ -431,7 +431,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                 .contains("TABLE: test_base_part");
 
         // match all
-        testRewriteOK("select c1, c3, c2 from test_base_part where c3 < 2000 and c1 = 1")
+        sql("select c1, c3, c2 from test_base_part where c3 < 2000 and c1 = 1")
                 .contains("TABLE: partial_mv_7\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=4/5\n" +
@@ -439,7 +439,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=4/8");
 
         // query delta: with more partition predicates
-        testRewriteOK("select c1, c3, c2 from test_base_part where c3 < 1000 and c1 = 1")
+        sql("select c1, c3, c2 from test_base_part where c3 < 1000 and c1 = 1")
                 .contains("TABLE: partial_mv_7\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 6: c3 <= 999\n" +
@@ -448,7 +448,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=3/6");
 
         // no match
-        testRewriteOK("select c1, c3, c2 from test_base_part where c3 < 1000")
+        sql("select c1, c3, c2 from test_base_part where c3 < 1000")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 3: c3 < 1000\n" +
@@ -470,7 +470,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
         refreshMaterializedView(MATERIALIZED_DB_NAME, "partial_mv_8");
 
         // test match all
-        testRewriteOK("select c1, c3, c2 from test_base_part where c2 > 10")
+        sql("select c1, c3, c2 from test_base_part where c2 > 10")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     partitions=5/5\n" +
@@ -478,7 +478,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=10/10");
 
         // test partition prune
-        testRewriteOK("select c1, c3, c2 from test_base_part where c2 > 10 and c3 < 1000")
+        sql("select c1, c3, c2 from test_base_part where c2 > 10 and c3 < 1000")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 6: c3 <= 999\n" +
@@ -487,7 +487,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=6/6");
 
         // test distribution prune
-        testRewriteOK("select c1, c3, c2 from test_base_part where c2 > 10 and c1 = 1")
+        sql("select c1, c3, c2 from test_base_part where c2 > 10 and c1 = 1")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 5: c1 = 1\n" +
@@ -496,7 +496,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=5/10");
 
         // test partition and distribution prune
-        testRewriteOK("select c1, c3, c2 from test_base_part where c2 > 10 and c3 < 1000 and c1 = 1")
+        sql("select c1, c3, c2 from test_base_part where c2 > 10 and c3 < 1000 and c1 = 1")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 5: c1 = 1, 6: c3 <= 999\n" +
@@ -505,7 +505,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=3/6");
 
         // test query delta
-        testRewriteOK("select c1, c3, c2 from test_base_part where c2 > 100 and c3 < 1000 and c1 = 1")
+        sql("select c1, c3, c2 from test_base_part where c2 > 100 and c3 < 1000 and c1 = 1")
                 .contains("TABLE: partial_mv_8\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 7: c2 >= 101, 5: c1 = 1, 6: c3 <= 999\n" +
@@ -514,7 +514,7 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     tabletRatio=3/6");
 
         // test non match
-        testRewriteOK("select c1, c3, c2 from test_base_part")
+        sql("select c1, c3, c2 from test_base_part")
                 .contains("TABLE: test_base_part\n" +
                         "     PREAGGREGATION: ON\n" +
                         "     PREDICATES: 9: c2 <= 10\n" +
