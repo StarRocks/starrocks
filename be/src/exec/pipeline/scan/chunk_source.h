@@ -56,8 +56,6 @@ public:
     int64_t get_cpu_time_spent() const { return _cpu_time_spent_ns; }
     int64_t get_scan_rows() const { return _scan_rows_num; }
     int64_t get_scan_bytes() const { return _scan_bytes; }
-    int64_t get_total_pull_time_ns() const { return _total_pull_time_ns; }
-    int64_t get_total_pull_chunk_rows() const { return _total_pull_chunk_rows; }
 
     RuntimeProfile::Counter* scan_timer() { return _scan_timer; }
     RuntimeProfile::Counter* io_task_wait_timer() { return _io_task_wait_timer; }
@@ -92,10 +90,6 @@ protected:
     int64_t _cpu_time_spent_ns = 0;
     int64_t _scan_rows_num = 0;
     int64_t _scan_bytes = 0;
-
-    // NOTE: These counters are maintained by ChunkSource class.
-    std::atomic<int64_t> _total_pull_time_ns = 0;
-    std::atomic<int64_t> _total_pull_chunk_rows = 0;
 
     BalancedChunkBuffer& _chunk_buffer;
     Status _status = Status::OK();

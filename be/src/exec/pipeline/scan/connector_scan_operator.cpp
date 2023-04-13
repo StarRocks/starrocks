@@ -79,14 +79,6 @@ ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int3
                                                   std::move(morsel), scan_node, factory->get_chunk_buffer());
 }
 
-void ConnectorScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int index) {
-    ChunkSourcePtr cs = _chunk_sources[index];
-    if (cs) {
-        _closed_chunk_source_total_running_time += cs->get_total_running_time();
-    }
-    ScanOperator::_close_chunk_source_unlocked(state, index);
-}
-
 void ConnectorScanOperator::attach_chunk_source(int32_t source_index) {
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     auto& active_inputs = factory->get_active_inputs();
@@ -164,21 +156,37 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
     return scan_node->connector_type();
 }
 
-int ConnectorScanOperator::available_pickup_morsel_count() const {
+int ConnectorScanOperator::available_pickup_morsel_count() {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
 
-    int64_t chunk_source_running_time = _closed_chunk_source_total_running_time;
+    // called every time before `pull_chunk` when there is chunk.
+    // accumulate chunk source stats.
+    double cs_speed = _cs_pull_rows * 1000.0 / (_cs_pull_time + 1);
 
-    for (int i = 0; i < _io_tasks_per_scan_operator; i++) {
-        ChunkSourcePtr cs = _chunk_sources[i];
-        if (_is_io_task_running[i] && (cs != nullptr)) {
-            chunk_source_running_time += cs->get_total_running_time();
-        }
+    // accumulate scan operator stats.
+    double op_speed = _op_pull_rows * 1000.0 / (_op_running_time + 1);
+
+    int& io_tasks = current_io_tasks;
+    io_tasks = std::max(config::connector_io_tasks_min_size, io_tasks);
+
+    int64_t now = GetCurrentTimeMicros();
+    if ((now - last_check_time) <= config::connector_io_tasks_check_interval * 1000) {
+        return io_tasks;
     }
+    last_check_time = now;
+    if (cs_speed >= op_speed) {
+        io_tasks -= 1;
+    } else if (cs_speed < last_cs_speed) {
+        io_tasks -= 1;
+    } else {
+        io_tasks += 1;
+    }
+    io_tasks = std::min(io_tasks, _io_tasks_per_scan_operator);
 
-    int64_t scan_op_runing_time = _total_running_time;
-    int exp = int(chunk_source_running_time * 1.0 / scan_op_runing_time + 0.5);
-    return exp - _num_running_io_tasks;
+    VLOG_FILE << "[XXX] pick mosrsel. id = " << _driver_sequence << ", cs = " << cs_speed << ", old = " << last_cs_speed
+              << ", op = " << op_speed << ", value = " << io_tasks;
+    last_cs_speed = cs_speed;
+    return io_tasks;
 }
 
 // ==================== ConnectorChunkSource ====================
@@ -203,6 +211,7 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
     _data_source->update_has_any_predicate();
+    _op = down_cast<ConnectorScanOperator*>(op);
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {
@@ -256,6 +265,9 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         return Status::EndOfFile("limit reach");
     }
 
+    int64_t time_spent_ns = 0;
+    SCOPED_RAW_TIMER(&time_spent_ns);
+
     while (_status.ok()) {
         ChunkPtr tmp;
         _status = _data_source->get_next(state, &tmp);
@@ -283,6 +295,8 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     _cpu_time_spent_ns = _data_source->cpu_time_spent();
     if (_ck_acc.has_output()) {
         *chunk = std::move(_ck_acc.pull());
+        _op->_cs_pull_time += time_spent_ns;
+        _op->_cs_pull_rows += (*chunk)->num_rows();
         _rows_read += (*chunk)->num_rows();
         _chunk_buffer.update_limiter(chunk->get());
         return Status::OK();

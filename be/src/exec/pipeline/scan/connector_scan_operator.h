@@ -77,12 +77,22 @@ public:
     ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
-    int available_pickup_morsel_count() const override;
-
-protected:
-    void _close_chunk_source_unlocked(RuntimeState* state, int index) override;
-
-private:
+    int available_pickup_morsel_count() override;
+     void begin_pull_chunk(ChunkPtr res) override {
+        _op_pull_rows += res->num_rows();
+     }
+     void after_pull_chunk(int64_t t) override {
+        _op_running_time += t;
+     }
+public:
+    int current_io_tasks = 0;
+    int64_t last_check_time = 0;
+    int last_delta = 1;
+    double last_cs_speed = 0;
+    std::atomic_int64_t _cs_pull_time = 0;
+    std::atomic_int64_t _cs_pull_rows = 0;
+    int64_t _op_running_time = 0;
+    int64_t _op_pull_rows = 0;
     bool _enable_adaptive_io_tasks = true;
 };
 
@@ -122,6 +132,7 @@ private:
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
+    ConnectorScanOperator* _op = nullptr;
 };
 
 } // namespace pipeline

@@ -58,8 +58,6 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
     for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         {
             SCOPED_RAW_TIMER(&time_spent_ns);
-            int64_t pull_chunk_ns = 0;
-            SCOPED_RAW_TIMER(&pull_chunk_ns);
 
             if (_chunk_token == nullptr && (_chunk_token = _chunk_buffer.limiter()->pin(1)) == nullptr) {
                 break;
@@ -84,8 +82,6 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
                 }
                 break;
             }
-            _total_pull_time_ns += pull_chunk_ns;
-            _total_pull_chunk_rows += chunk->num_rows();
 
             chunk->owner_info().set_owner_id(tablet_id, false);
             _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));

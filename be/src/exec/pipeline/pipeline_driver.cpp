@@ -225,6 +225,15 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         bool should_yield = false;
         size_t num_operators = _operators.size();
         size_t new_first_unfinished = _first_unfinished;
+
+        int64_t process_time_ns = 0;
+        SCOPED_RAW_TIMER(&process_time_ns);
+        DeferOp defer2([&]() {
+            if (ScanOperator* scan = source_scan_operator()) {
+                scan->after_pull_chunk(process_time_ns);
+            }
+        });
+
         for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
             {
                 SCOPED_RAW_TIMER(&time_spent);
@@ -637,7 +646,6 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
     if (ScanOperator* scan = source_scan_operator()) {
         query_ctx()->incr_cur_scan_rows_num(scan->get_last_scan_rows_num());
         query_ctx()->incr_cur_scan_bytes(scan->get_last_scan_bytes());
-        scan->update_total_running_time(time_spent);
     }
 
     // Update cpu cost of this query
