@@ -428,13 +428,19 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select count(*) from " +
                 "emps  left join locations on emps.locationid = locations.locationid " +
                 "where emps.deptno > 10");
-        // TODO: `locations.locationid ` will be pushed into `emps.locationid`.
+        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
+                "emps left join locations on emps.locationid = locations.locationid " +
+                "where emps.locationid > 10");
+        // TODO: Query's left outer join will be converted to Inner Join.
         testRewriteFail(mv, "select empid as col2, locations.locationid from " +
-                "emps  left join locations on emps.locationid = locations.locationid " +
+                "emps left join locations on emps.locationid = locations.locationid " +
                 "where locations.locationid > 10");
         testRewriteFail(mv, "select empid as col2, locations.locationid from " +
                 "emps inner join locations on emps.locationid = locations.locationid " +
                 "and locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and emps.locationid > 10");
     }
 
     @Test
@@ -451,12 +457,15 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteFail(mv, "select count(*) from " +
                 "emps  right join locations on emps.locationid = locations.locationid " +
                 "where emps.deptno > 10");
-        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
                 "emps  right join locations on emps.locationid = locations.locationid " +
                 "where locations.locationid > 10");
         testRewriteFail(mv, "select empid as col2, locations.locationid from " +
                 "emps inner join locations on emps.locationid = locations.locationid " +
                 "and locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and emps.locationid > 10");
     }
 
     @Test

@@ -394,19 +394,38 @@ public class MvUtils {
     //select count(1)
     //          from customer left outer join orders on c_custkey = o_custkey
     //          where o_comment not like '%special%requests%';
-    public static List<ScalarOperator> getExtraJoinOnPredicates(OptExpression root) {
+    public static List<ScalarOperator> getJoinOnPredicates(OptExpression root) {
         List<ScalarOperator> predicates = Lists.newArrayList();
-        getExtraJoinOnPredicates(root, predicates);
+        getJoinOnPredicates(root, predicates);
         return predicates;
     }
 
-    public static ColumnRefSet getExtraJoinOnPredicateColumnRefSet(OptExpression root) {
-        final List<ScalarOperator> queryExtraJoinOnPredicates = getExtraJoinOnPredicates(root);
-        final ColumnRefSet extraJoinOnPredicateColumnRefSet = new ColumnRefSet();
-        for (ScalarOperator queryjoinOnPredicate : queryExtraJoinOnPredicates) {
-            extraJoinOnPredicateColumnRefSet.union(queryjoinOnPredicate.getUsedColumns());
+    private static void getJoinOnPredicates(OptExpression root, List<ScalarOperator> predicates) {
+        Operator operator = root.getOp();
+
+        if (operator instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+            JoinOperator joinOperatorType = joinOperator.getJoinType();
+            // Collect all join on predicates which join type are not inner/cross join.
+            if ((joinOperatorType != JoinOperator.INNER_JOIN
+                    && joinOperatorType != JoinOperator.CROSS_JOIN) && joinOperator.getOnPredicate() != null) {
+                // Now join's on-predicates may be pushed down below join, so use original on-predicates
+                // instead of new on-predicates.
+                List<ScalarOperator> conjuncts = Utils.extractConjuncts(joinOperator.getOriginalOnPredicate());
+                predicates.addAll(conjuncts);
+            }
         }
-        return extraJoinOnPredicateColumnRefSet;
+        for (OptExpression child : root.getInputs()) {
+            getJoinOnPredicates(child, predicates);
+        }
+    }
+
+    public static ColumnRefSet getPredicateColumnRefSet(List<ScalarOperator> predicates) {
+        final ColumnRefSet predicateColumnRefSet = new ColumnRefSet();
+        for (ScalarOperator pred: predicates) {
+            predicateColumnRefSet.union(pred.getUsedColumns());
+        }
+        return predicateColumnRefSet;
     }
 
     public static ScalarOperator rewriteOptExprCompoundPredicate(OptExpression root,
@@ -444,26 +463,6 @@ public class MvUtils {
         }
         for (OptExpression child : root.getInputs()) {
             getAllPredicates(child, predicates);
-        }
-    }
-
-    private static void getExtraJoinOnPredicates(OptExpression root, List<ScalarOperator> predicates) {
-        Operator operator = root.getOp();
-
-        if (operator instanceof LogicalJoinOperator) {
-            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
-            JoinOperator joinOperatorType = joinOperator.getJoinType();
-            // Collect all join on predicates which join type are not inner/cross join.
-            if ((joinOperatorType != JoinOperator.INNER_JOIN
-                    && joinOperatorType != JoinOperator.CROSS_JOIN) && joinOperator.getOnPredicate() != null) {
-                // Now join's on-predicates may be pushed down below join, so use original on-predicates
-                // instead of new on-predicates.
-                List<ScalarOperator> conjuncts = Utils.extractConjuncts(joinOperator.getOriginalOnPredicate());
-                predicates.addAll(conjuncts);
-            }
-        }
-        for (OptExpression child : root.getInputs()) {
-            getExtraJoinOnPredicates(child, predicates);
         }
     }
 

@@ -43,7 +43,13 @@ public class RangeSimplifier {
     public ScalarOperator simplify(List<ScalarOperator> targets) {
         try {
             Map<Integer, Range<ConstantOperator>> srcColumnIdToRange = extractColumnIdRangeMapping(srcPredicates);
+            if (srcColumnIdToRange == null) {
+                return null;
+            }
             Map<Integer, Range<ConstantOperator>> targetColumnIdToRange = extractColumnIdRangeMapping(targets);
+            if (targetColumnIdToRange == null) {
+                return null;
+            }
 
             List<Integer> resultColumnIds = Lists.newArrayList();
             for (Map.Entry<Integer, Range<ConstantOperator>> targetEntry : targetColumnIdToRange.entrySet()) {
