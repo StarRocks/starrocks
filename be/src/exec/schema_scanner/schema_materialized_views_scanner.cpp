@@ -28,6 +28,7 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
         {"REFRESH_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"IS_ACTIVE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"INACTIVE_REASON", TYPE_VARCHAR, sizeof(StringValue), false},
         {"PARTITION_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TASK_ID", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
@@ -132,6 +133,14 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 6: {
+            // inactive_reason
+            ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+            const std::string* str = &tbl_status.inactive_reason;
+            Slice value(str->c_str(), str->length());
+            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            break;
+        }
+        case 7: {
             // partition_type
             {
                 const std::string* str = &tbl_status.partition_type;
@@ -140,7 +149,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 7: {
+        case 8: {
             // task_id
             {
                 const std::string* str = &tbl_status.task_id;
@@ -149,7 +158,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 8: {
+        case 9: {
             // task_name
             {
                 const std::string* str = &tbl_status.task_name;
@@ -158,7 +167,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 9: {
+        case 10: {
             // last_refresh_start_time
             {
                 const std::string* str = &tbl_status.last_refresh_start_time;
@@ -167,7 +176,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 10: {
+        case 11: {
             // last_refresh_finished_time
             {
                 const std::string* str = &tbl_status.last_refresh_finished_time;
@@ -176,7 +185,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 11: {
+        case 12: {
             // last_refresh_duration
             {
                 const std::string* str = &tbl_status.last_refresh_duration;
@@ -185,7 +194,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 12: {
+        case 13: {
             // last_refresh_state
             {
                 const std::string* str = &tbl_status.last_refresh_state;
@@ -194,7 +203,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 13: {
+        case 14: {
             // last_refresh_force_refresh
             {
                 const std::string* str = &tbl_status.last_refresh_force_refresh;
@@ -203,7 +212,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 14: {
+        case 15: {
             // last_refresh_start_partition
             {
                 const std::string* str = &tbl_status.last_refresh_start_partition;
@@ -212,7 +221,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 15: {
+        case 16: {
             // last_refresh_end_partition
             {
                 const std::string* str = &tbl_status.last_refresh_end_partition;
@@ -221,7 +230,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 16: {
+        case 17: {
             // last_refresh_base_refresh_partitions
             {
                 const std::string* str = &tbl_status.last_refresh_base_refresh_partitions;
@@ -230,7 +239,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 17: {
+        case 18: {
             // last_refresh_mv_refresh_partitions
             {
                 const std::string* str = &tbl_status.last_refresh_mv_refresh_partitions;
@@ -239,7 +248,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 18: {
+        case 19: {
             // last_refresh_error_code
             {
                 const std::string* str = &tbl_status.last_refresh_error_code;
@@ -248,7 +257,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 19: {
+        case 20: {
             // last_refresh_error_message
             {
                 const std::string* str = &tbl_status.last_refresh_error_message;
@@ -257,7 +266,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 20: {
+        case 21: {
             // table_rows
             {
                 const std::string* str = &tbl_status.rows;
@@ -266,7 +275,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             break;
         }
-        case 21: {
+        case 22: {
             // view_definition
             {
                 const std::string* str = &tbl_status.text;
