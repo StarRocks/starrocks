@@ -188,15 +188,9 @@ public class InsertPlanner {
             if (insertStmt.getTargetTable() instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
 
-                boolean enableAutomaticPartition;
-                if (insertStmt.isSpecifyPartition()) {
-                    enableAutomaticPartition = false;
-                } else {
-                    enableAutomaticPartition = olapTable.supportedAutomaticPartition();
-                }
-                dataSink = new OlapTableSink(olapTable, olapTuple, insertStmt.getTargetPartitionIds(),
-                        canUsePipeline, olapTable.writeQuorum(), olapTable.enableReplicatedStorage(),
-                        nullExprInAutoIncrement, enableAutomaticPartition);
+                dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
+                        insertStmt.getTargetPartitionIds(), canUsePipeline, olapTable.writeQuorum(),
+                        olapTable.enableReplicatedStorage(), nullExprInAutoIncrement);
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
             } else {
