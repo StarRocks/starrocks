@@ -18,7 +18,7 @@
 
 namespace starrocks::csv {
 
-class BinaryConverter final : public Converter {
+class StringConverter final : public Converter {
 public:
     Status write_string(OutputStream* os, const Column& column, size_t row_num, const Options& options) const override;
     Status write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
