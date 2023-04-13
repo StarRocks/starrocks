@@ -212,6 +212,11 @@ public class FunctionAnalyzer {
             } else {
                 throw new SemanticException("window argument must be numerical type");
             }
+
+            Expr timeExpr = functionCallExpr.getChild(1);
+            if (timeExpr.isConstant()) {
+                throw new SemanticException("time arg must be column", timeExpr.getPos());
+            }
         }
 
         if (fnName.getFunction().equals(FunctionSet.MAX_BY)) {
