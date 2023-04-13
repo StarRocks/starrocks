@@ -81,13 +81,13 @@ public:
     static void build_compression_type(::parquet::WriterProperties::Builder& builder,
                                        const TCompressionType::type& compression_type);
 
-    static std::shared_ptr<::parquet::schema::GroupNode> make_schema(const std::vector<std::string>& file_column_names,
+    static arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> make_schema(const std::vector<std::string>& file_column_names,
                                                                      const std::vector<ExprContext*>& output_expr_ctxs);
 
     static std::shared_ptr<::parquet::WriterProperties> make_properties(const ParquetBuilderOptions& options);
 
 private:
-    static ::parquet::schema::NodePtr _make_schema_node(const std::string& name, const TypeDescriptor& type_desc,
+    static arrow::Result<::parquet::schema::NodePtr> _make_schema_node(const std::string& name, const TypeDescriptor& type_desc,
                                                         ::parquet::Repetition::type rep_type);
 };
 

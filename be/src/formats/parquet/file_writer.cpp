@@ -142,21 +142,21 @@ void ParquetBuildHelper::build_compression_type(::parquet::WriterProperties::Bui
     }
 }
 
-std::shared_ptr<::parquet::schema::GroupNode> ParquetBuildHelper::make_schema(
+arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper::make_schema(
         const std::vector<std::string>& file_column_names, const std::vector<ExprContext*>& output_expr_ctxs) {
     ::parquet::schema::NodeVector fields;
 
     for (int i = 0; i < output_expr_ctxs.size(); i++) {
         auto column_expr = output_expr_ctxs[i]->root();
-        auto nodePtr = _make_schema_node(
+        ARROW_ASSIGN_OR_RAISE(auto node, _make_schema_node(
                 file_column_names[i], column_expr->type(),
-                column_expr->is_nullable() ? ::parquet::Repetition::OPTIONAL : ::parquet::Repetition::REQUIRED);
-        DCHECK(nodePtr != nullptr);
-        fields.push_back(std::move(nodePtr));
+                column_expr->is_nullable() ? ::parquet::Repetition::OPTIONAL : ::parquet::Repetition::REQUIRED));
+        DCHECK(node != nullptr);
+        fields.push_back(std::move(node));
     }
 
     return std::static_pointer_cast<::parquet::schema::GroupNode>(
-            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, fields));
+            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, std::move(fields)));
 }
 
 std::shared_ptr<::parquet::WriterProperties> ParquetBuildHelper::make_properties(const ParquetBuilderOptions& options) {
@@ -168,7 +168,7 @@ std::shared_ptr<::parquet::WriterProperties> ParquetBuildHelper::make_properties
 }
 
 // Repetition of subtype in nested type is set by default now, due to type descriptor has no nullable field.
-::parquet::schema::NodePtr ParquetBuildHelper::_make_schema_node(const std::string& name,
+arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(const std::string& name,
                                                                  const TypeDescriptor& type_desc,
                                                                  ::parquet::Repetition::type rep_type) {
     switch (type_desc.type) {
@@ -246,28 +246,28 @@ std::shared_ptr<::parquet::WriterProperties> ParquetBuildHelper::make_properties
         DCHECK(type_desc.children.size() == type_desc.field_names.size());
         ::parquet::schema::NodeVector fields;
         for (size_t i = 0; i < type_desc.children.size(); i++) {
-            auto child = _make_schema_node(type_desc.field_names[i], type_desc.children[i],
-                                           ::parquet::Repetition::OPTIONAL); // use optional as default
+            ARROW_ASSIGN_OR_RAISE(auto child, _make_schema_node(type_desc.field_names[i], type_desc.children[i],
+                                           ::parquet::Repetition::OPTIONAL)); // use optional as default
             fields.push_back(std::move(child));
         }
         return ::parquet::schema::GroupNode::Make(name, rep_type, fields);
     }
     case TYPE_ARRAY: {
         DCHECK(type_desc.children.size() == 1);
-        auto element = _make_schema_node("element", type_desc.children[0],
-                                         ::parquet::Repetition::OPTIONAL); // use optional as default
+        ARROW_ASSIGN_OR_RAISE(auto element, _make_schema_node("element", type_desc.children[0],
+                                         ::parquet::Repetition::OPTIONAL)); // use optional as default
         auto list = ::parquet::schema::GroupNode::Make("list", ::parquet::Repetition::REPEATED, {element});
         return ::parquet::schema::GroupNode::Make(name, rep_type, {list}, ::parquet::LogicalType::List());
     }
     case TYPE_MAP: {
         DCHECK(type_desc.children.size() == 2);
-        auto key = _make_schema_node("key", type_desc.children[0], ::parquet::Repetition::REQUIRED);
-        auto value = _make_schema_node("value", type_desc.children[1], ::parquet::Repetition::OPTIONAL);
+        ARROW_ASSIGN_OR_RAISE(auto key, _make_schema_node("key", type_desc.children[0], ::parquet::Repetition::REQUIRED));
+        ARROW_ASSIGN_OR_RAISE(auto value, _make_schema_node("value", type_desc.children[1], ::parquet::Repetition::OPTIONAL));
         auto key_value = ::parquet::schema::GroupNode::Make("key_value", ::parquet::Repetition::REPEATED, {key, value});
         return ::parquet::schema::GroupNode::Make(name, rep_type, {key_value}, ::parquet::LogicalType::Map());
     }
     default: {
-        return {};
+        return arrow::Status::TypeError(fmt::format("Type {} is not supported", type_desc.debug_string()));
     }
     }
 }
@@ -441,7 +441,7 @@ Status ChunkWriter::_add_column_chunk(const Context& ctx, const TypeDescriptor& 
         return _add_struct_column_chunk(ctx, type_desc, node, col);
     }
     default: {
-        return Status::InvalidArgument(fmt::format("Type {} is not supported", type_desc.debug_string()));
+        return Status::NotSupported(fmt::format("Type {} is not supported", type_desc.debug_string()));
     }
     }
 }
@@ -537,7 +537,7 @@ Status ChunkWriter::_add_int_column_chunk(const Context& ctx, const TypeDescript
     using source_type = RunTimeCppType<lt>;
     using target_type = typename ::parquet::type_traits<pt>::value_type;
 
-    if constexpr (std::is_same<source_type, target_type>::value) {
+    if constexpr (std::is_same_v<source_type, target_type>) {
         // If two types are identical, invoke WriteBatch without copying values
         if (!col->is_nullable() || !col->has_null()) {
             col_writer->WriteBatch(ctx.size(), def_levels_ptr, rep_levels_ptr, raw_col);
