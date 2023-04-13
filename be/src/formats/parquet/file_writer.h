@@ -170,7 +170,7 @@ private:
 
     std::vector<uint8_t> _make_null_bitset(size_t n, const uint8_t* nulls) const;
 
-    std::vector<int16_t> _make_def_levels(const Context& ctx, const uint8_t* nulls) const;
+    void _populate_def_levels(std::vector<int16_t>& def_levels, const Context& ctx, const uint8_t* nulls) const;
 
     ::parquet::RowGroupWriter* _rg_writer;
     std::vector<TypeDescriptor> _type_descs;

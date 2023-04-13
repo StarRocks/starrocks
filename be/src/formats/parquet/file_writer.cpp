@@ -481,7 +481,7 @@ Status ChunkWriter::_add_boolean_column_chunk(const Context& ctx, const TypeDesc
     } else {
         // For optional node, we should increment def_levels of these defined values
         DCHECK(node->is_optional());
-        def_levels = _make_def_levels(ctx, nulls);
+        _populate_def_levels(def_levels, ctx, nulls);
         def_levels_ptr = def_levels.data();
     }
     DCHECK(def_levels_ptr != nullptr);
@@ -533,7 +533,7 @@ Status ChunkWriter::_add_int_column_chunk(const Context& ctx, const TypeDescript
     } else {
         // For optional node, we should increment def_levels of these defined values
         DCHECK(node->is_optional());
-        def_levels = _make_def_levels(ctx, nulls);
+        _populate_def_levels(def_levels, ctx, nulls);
         def_levels_ptr = def_levels.data();
     }
     DCHECK(def_levels_ptr != nullptr);
@@ -597,7 +597,7 @@ Status ChunkWriter::_add_decimal128_column_chunk(const Context& ctx, const TypeD
     } else {
         // For optional node, we should increment def_levels of these defined values
         DCHECK(node->is_optional());
-        def_levels = _make_def_levels(ctx, nulls);
+        _populate_def_levels(def_levels, ctx, nulls);
         def_levels_ptr = def_levels.data();
     }
     DCHECK(def_levels_ptr != nullptr);
@@ -654,7 +654,7 @@ Status ChunkWriter::_add_date_column_chunk(const Context& ctx, const TypeDescrip
     } else {
         // For optional node, we should increment def_levels of these defined values
         DCHECK(node->is_optional());
-        def_levels = _make_def_levels(ctx, nulls);
+        _populate_def_levels(def_levels, ctx, nulls);
         def_levels_ptr = def_levels.data();
     }
     DCHECK(def_levels_ptr != nullptr);
@@ -705,7 +705,7 @@ Status ChunkWriter::_add_datetime_column_chunk(const Context& ctx, const TypeDes
     } else {
         // For optional node, we should increment def_levels of these defined values
         DCHECK(node->is_optional());
-        def_levels = _make_def_levels(ctx, nulls);
+        _populate_def_levels(def_levels, ctx, nulls);
         def_levels_ptr = def_levels.data();
     }
     DCHECK(def_levels_ptr != nullptr);
@@ -757,7 +757,7 @@ Status ChunkWriter::_add_varchar_column_chunk(const Context& ctx, const TypeDesc
     } else {
         // For optional node, we should increment def_levels of these defined values
         DCHECK(node->is_optional());
-        def_levels = _make_def_levels(ctx, nulls);
+        _populate_def_levels(def_levels, ctx, nulls);
         def_levels_ptr = def_levels.data();
     }
     DCHECK(def_levels_ptr != nullptr);
@@ -922,8 +922,8 @@ std::vector<uint8_t> ChunkWriter::_make_null_bitset(size_t n, const uint8_t* nul
     return bitset;
 }
 
-std::vector<int16_t> ChunkWriter::_make_def_levels(const Context& ctx, const uint8_t* nulls) const {
-    std::vector<int16_t> def_levels;
+void ChunkWriter::_populate_def_levels(std::vector<int16_t>& def_levels, const Context& ctx, const uint8_t* nulls) const {
+    DCHECK(def_levels.empty());
     def_levels.reserve(ctx.size());
     for (auto i = 0; i < ctx.size(); i++) {
         auto [idx, def_level, rep_level] = ctx.get(i);
@@ -933,7 +933,6 @@ std::vector<int16_t> ChunkWriter::_make_def_levels(const Context& ctx, const uin
         }
         def_levels.push_back(def_level + 1);
     }
-    return def_levels;
 }
 
 std::size_t FileWriterBase::file_size() const {
