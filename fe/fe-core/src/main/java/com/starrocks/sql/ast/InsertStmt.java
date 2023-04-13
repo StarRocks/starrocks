@@ -168,10 +168,6 @@ public class InsertStmt extends DmlStmt {
         return targetPartitionNames;
     }
 
-    public boolean isSpecifyPartition() {
-        return targetPartitionNames != null;
-    }
-
     public List<String> getTargetColumnNames() {
         return targetColumnNames;
     }

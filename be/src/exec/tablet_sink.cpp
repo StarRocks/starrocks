@@ -1346,9 +1346,9 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
             uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
             int invalid_row_index = 0;
 
-            // _enable_automatic_partition is true means' destination table using automatic partition
+            // _enable_automatic_partition is true means destination table using automatic partition
             // _has_automatic_partition is true means last send_chunk already create partition in nonblocking mode
-            // we don't need to create again since it will resend last chunk
+            // we don't need create again since it will resend last chunk
             if (_enable_automatic_partition && !_has_automatic_partition) {
                 _partition_not_exist_row_values.clear();
                 // only support single column partition now
