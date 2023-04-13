@@ -192,9 +192,9 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     }
     last_check_time = now;
     if (cs_speed >= op_speed || cs_speed < last_cs_speed) {
-        io_tasks -= 1;
+        io_tasks -= config::connector_io_tasks_dec;
     } else {
-        io_tasks += 2;
+        io_tasks += config::connector_io_tasks_inc;
     }
     io_tasks = std::min(io_tasks, _io_tasks_per_scan_operator);
     io_tasks = std::max(io_tasks, MIN_IO_TASKS);
