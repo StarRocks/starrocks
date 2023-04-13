@@ -7,7 +7,7 @@ Release date: April 13, 2023
 ### Improvements
 
 - Updated Docker image and the related [Docker deployment document](../quick_start/deploy_in_docker.md) for version 3.0. ([#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021))
-- Supports creating asynchronous INSERT tasks. For more information, see [INSERT](../loading/InsertInto.md#load-data-asynchronously-using-insert). ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
+- Supports creating asynchronous INSERT tasks. For more information, see [INSERT](../loading/InsertInto.md#load-data-asynchronously-using-insert) and [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md). ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
 - Supports adding MV partitions in batches, which improves the efficiency of partition addition during materialized view building. ([#21167](https://github.com/StarRocks/starrocks/pull/21167))
 
 ### Bug Fixes
@@ -18,7 +18,7 @@ Fixed the following issues:
 - Window functions [LEAD](../sql-reference/sql-functions/Window_function.md#lead) and [LAG](../sql-reference/sql-functions/Window_function.md#lag) incorrectly handle IGNORE NULLS. ([#21001](https://github.com/StarRocks/starrocks/pull/21001))
 - Adding temporary partitions conflicts with automatic partition creation. ([#21222](https://github.com/StarRocks/starrocks/issues/21222))
 
-## 3.0-rc01
+## 3.0.0-rc01
 
 Release date: March 31, 2023
 
