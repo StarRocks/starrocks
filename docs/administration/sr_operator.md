@@ -176,8 +176,6 @@ From outside the Kubernetes cluster, you can access the StarRocks cluster throug
     mysql -h a7509284bf3784983a596c6eec7fc212-618xxxxxx.us-west-2.elb.amazonaws.com -P9030 -uroot
     ```
 
-You can use the command `kubectl edit` or `kubectl patch` to update the StarRocks cluster configuration file for managing the cluster.
-
 ### Upgrade StarRocks Cluster
 
 #### Upgrade BE nodes
@@ -202,7 +200,7 @@ The upgrade process lasts for a while. You can run the command `kubectl -n starr
 
 This topic takes scaling out the BE and FE clusters as examples.
 
-**Scale out BE** **c****luster**
+**Scale out BE cluster**
 
 Run the following command to scale out the BE cluster to 9 nodes:
 
@@ -210,7 +208,7 @@ Run the following command to scale out the BE cluster to 9 nodes:
 kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":"9"}}}'
 ```
 
-**Scale out FE** **c****luster**
+**Scale out FE cluster**
 
 Run the following command to scale out the FE cluster to 4 nodes:
 
