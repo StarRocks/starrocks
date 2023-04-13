@@ -33,10 +33,10 @@
 #include "gutil/casts.h"
 #include "gutil/endian.h"
 #include "runtime/exec_env.h"
+#include "util/defer_op.h"
 #include "util/priority_thread_pool.hpp"
 #include "util/runtime_profile.h"
 #include "util/slice.h"
-#include "util/defer_op.h"
 
 namespace starrocks::parquet {
 
@@ -322,7 +322,6 @@ std::shared_ptr<::parquet::WriterProperties> ParquetBuildHelper::make_properties
     }
 }
 
-
 std::string ChunkWriter::Context::debug_string() const {
     std::stringstream ss;
     for (size_t i = 0; i < size(); ++i) {
@@ -347,9 +346,7 @@ FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
                                std::vector<TypeDescriptor> type_descs)
-        : _properties(std::move(properties)),
-          _schema(std::move(schema)),
-          _type_descs(std::move(type_descs)) {
+        : _properties(std::move(properties)), _schema(std::move(schema)), _type_descs(std::move(type_descs)) {
     _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
 }
 
@@ -384,8 +381,8 @@ Status FileWriterBase::write(Chunk* chunk) {
     return Status::OK();
 }
 
-Status ChunkWriter::_add_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
-                                         const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
+Status ChunkWriter::_add_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                      const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     switch (type_desc.type) {
     case TYPE_BOOLEAN: {
         return _add_boolean_column_chunk(ctx, type_desc, node, col);
@@ -431,14 +428,13 @@ Status ChunkWriter::_add_column_chunk(Context& ctx, const TypeDescriptor& type_d
         return _add_date_column_chunk(ctx, type_desc, node, col);
     }
     case TYPE_DECIMAL32: {
-        return _add_decimal_column_chunk<TYPE_DECIMAL32, ::parquet::Type::INT32>(ctx, type_desc, node, col);
+        return _add_int_column_chunk<TYPE_DECIMAL32, ::parquet::Type::INT32>(ctx, type_desc, node, col);
     }
     case TYPE_DECIMAL64: {
-        return _add_decimal_column_chunk<TYPE_DECIMAL64, ::parquet::Type::INT64>(ctx, type_desc, node, col);
+        return _add_int_column_chunk<TYPE_DECIMAL64, ::parquet::Type::INT64>(ctx, type_desc, node, col);
     }
     case TYPE_DECIMAL128: {
-        return _add_decimal_column_chunk<TYPE_DECIMAL128, ::parquet::Type::FIXED_LEN_BYTE_ARRAY>(ctx, type_desc, node,
-                                                                                                 col);
+        return _add_decimal128_column_chunk(ctx, type_desc, node, col);
     }
     case TYPE_STRUCT: {
         return _add_struct_column_chunk(ctx, type_desc, node, col);
@@ -455,8 +451,8 @@ Status ChunkWriter::_add_column_chunk(Context& ctx, const TypeDescriptor& type_d
     }
 }
 
-Status ChunkWriter::_add_struct_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
-                                                const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
+Status ChunkWriter::_add_struct_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                             const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     DCHECK(type_desc.type == TYPE_STRUCT);
     auto struct_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
 
@@ -496,8 +492,8 @@ Status ChunkWriter::_add_struct_column_chunk(Context& ctx, const TypeDescriptor&
     return Status::OK();
 }
 
-Status ChunkWriter::_add_array_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
-                                               const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
+Status ChunkWriter::_add_array_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                            const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     DCHECK(type_desc.type == TYPE_ARRAY);
     auto outer_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
     auto mid_node = std::static_pointer_cast<::parquet::schema::GroupNode>(outer_node->field(0));
@@ -512,7 +508,8 @@ Status ChunkWriter::_add_array_column_chunk(Context& ctx, const TypeDescriptor& 
     const auto array_column = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto elements = array_column->elements_column();
     const auto offsets = array_column->offsets_column()->get_data();
-    Context derived_ctx(ctx._max_def_level + node->is_optional() + 1, ctx._max_rep_level + 1, ctx.size() + elements->size());
+    Context derived_ctx(ctx._max_def_level + node->is_optional() + 1, ctx._max_rep_level + 1,
+                        ctx.size() + elements->size());
 
     int subcol_size = 0;
     for (auto i = 0; i < ctx.size(); i++) {
@@ -536,8 +533,8 @@ Status ChunkWriter::_add_array_column_chunk(Context& ctx, const TypeDescriptor& 
     return _add_column_chunk(derived_ctx, type_desc.children[0], inner_node, elements);
 }
 
-Status ChunkWriter::_add_map_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
-                                             const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
+Status ChunkWriter::_add_map_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                          const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     DCHECK(type_desc.type == TYPE_MAP);
     auto outer_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
     auto mid_node = std::static_pointer_cast<::parquet::schema::GroupNode>(outer_node->field(0));
@@ -558,7 +555,6 @@ Status ChunkWriter::_add_map_column_chunk(Context& ctx, const TypeDescriptor& ty
     Context derived_ctx(ctx._max_def_level + node->is_optional(), ctx._max_rep_level + 1, ctx.size() + offsets.size());
 
     int subcol_size = 0;
-    int def_delta = outer_node->is_optional() + 1;
     for (auto i = 0; i < ctx.size(); i++) {
         auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || nulls[idx]) {
@@ -573,7 +569,7 @@ Status ChunkWriter::_add_map_column_chunk(Context& ctx, const TypeDescriptor& ty
         derived_ctx.append(subcol_size, def_level + outer_node->is_optional() + 1, rep_level);
         subcol_size++;
         for (auto offset = 1; offset < map_size; offset++) {
-            derived_ctx.append(subcol_size, def_level + outer_node->is_optional() + 1,derived_ctx._max_rep_level);
+            derived_ctx.append(subcol_size, def_level + outer_node->is_optional() + 1, derived_ctx._max_rep_level);
             subcol_size++;
         }
     }
@@ -587,28 +583,48 @@ Status ChunkWriter::_add_map_column_chunk(Context& ctx, const TypeDescriptor& ty
     return _add_column_chunk(derived_ctx, type_desc.children[1], value_node, values);
 }
 
-Status ChunkWriter::_add_varchar_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
-                                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
-    unsigned char* nulls = nullptr;
-    if (col->is_nullable()) {
-        const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
-        nulls = null_column->get_data().data();
-    }
-
+Status ChunkWriter::_add_varchar_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     const auto data_column = ColumnHelper::get_data_column(col.get());
     auto raw_col = down_cast<const RunTimeColumnType<TYPE_VARCHAR>*>(data_column);
     auto vo = raw_col->get_offset();
     auto vb = raw_col->get_bytes();
 
+    uint8_t* nulls = nullptr;
+    if (col->is_nullable()) {
+        const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
+        nulls = null_column->get_data().data();
+    }
+
     auto col_writer = down_cast<::parquet::ByteArrayWriter*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
+
+    DeferOp defer([&] {
+        _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+        _col_idx++;
+    });
+
+    // Use the rep_levels in the context from caller since node is primitive.
+    auto rep_levels_ptr = ctx._rep_levels.data();
+
+    const int16_t* def_levels_ptr = nullptr;
+    std::vector<int16_t> def_levels;
+    if (node->is_required()) {
+        // For required node, we use the def_levels in the context from caller
+        def_levels_ptr = ctx._def_levels.data();
+    } else {
+        // For optional node, we should increment def_levels of these defined values
+        DCHECK(node->is_optional());
+        def_levels = _make_def_levels(ctx, nulls);
+        def_levels_ptr = def_levels.data();
+    }
+    DCHECK(def_levels_ptr != nullptr);
 
     std::vector<::parquet::ByteArray> values;
     values.reserve(ctx.size());
     for (auto i = 0; i < ctx.size(); i++) {
         auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
-            values.emplace_back(0, nullptr);
             continue;
         }
         auto len = static_cast<uint32_t>(vo[idx + 1] - vo[idx]);
@@ -616,100 +632,114 @@ Status ChunkWriter::_add_varchar_column_chunk(Context& ctx, const TypeDescriptor
         values.emplace_back(len, ptr);
     }
 
-    if (node->is_required()) {
-        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
-    } else {
-        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { x++; });
-        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
-        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { x--; });
-    }
-
-    _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
-    _col_idx++;
+    col_writer->WriteBatch(ctx.size(), def_levels_ptr, rep_levels_ptr, values.data());
     return Status::OK();
 }
 
-Status ChunkWriter::_add_date_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
-                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
-    unsigned char* nulls = nullptr;
+Status ChunkWriter::_add_date_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                           const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
+    const auto data_column = ColumnHelper::get_data_column(col.get());
+    auto raw_col = down_cast<const RunTimeColumnType<TYPE_DATE>*>(data_column)->get_data().data();
+
+    uint8_t* nulls = nullptr;
     if (col->is_nullable()) {
         const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
         nulls = null_column->get_data().data();
     }
-
-    const auto data_column = ColumnHelper::get_data_column(col.get());
-    auto raw_col = down_cast<const RunTimeColumnType<TYPE_DATE>*>(data_column)->get_data().data();
 
     auto col_writer = down_cast<::parquet::Int32Writer*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
+    DeferOp defer([&] {
+        _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+        _col_idx++;
+    });
+
+    // Use the rep_levels in the context from caller since node is primitive.
+    auto rep_levels_ptr = ctx._rep_levels.data();
+
+    const int16_t* def_levels_ptr = nullptr;
+    std::vector<int16_t> def_levels;
+    if (node->is_required()) {
+        // For required node, we use the def_levels in the context from caller
+        def_levels_ptr = ctx._def_levels.data();
+    } else {
+        // For optional node, we should increment def_levels of these defined values
+        DCHECK(node->is_optional());
+        def_levels = _make_def_levels(ctx, nulls);
+        def_levels_ptr = def_levels.data();
+    }
+    DCHECK(def_levels_ptr != nullptr);
+
     std::vector<int32_t> values;
     values.reserve(ctx.size());
+    auto unix_epoch_date = DateValue::create(1970, 1, 1);
     for (auto i = 0; i < ctx.size(); i++) {
         auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
-            values.push_back(-1);
             continue;
         }
-        int32_t unix_days = raw_col[idx]._julian - DateValue::create(1970, 1, 1)._julian; // TODO: add util function
+        int32_t unix_days = raw_col[idx]._julian - unix_epoch_date._julian;
         values.push_back(unix_days);
     }
 
-    if (node->is_required()) {
-        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
-    } else {
-        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { return x++; });
-        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
-        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { return x--; });
-    }
-
-    _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
-    _col_idx++;
+    col_writer->WriteBatch(ctx.size(), def_levels_ptr, rep_levels_ptr, values.data());
     return Status::OK();
 }
 
-Status ChunkWriter::_add_datetime_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
-                                                  const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
-    unsigned char* nulls = nullptr;
+Status ChunkWriter::_add_datetime_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                               const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
+    const auto data_column = ColumnHelper::get_data_column(col.get());
+    auto raw_col = down_cast<const RunTimeColumnType<TYPE_DATETIME>*>(data_column)->get_data().data();
+
+    uint8_t* nulls = nullptr;
     if (col->is_nullable()) {
         const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
         nulls = null_column->get_data().data();
     }
 
-    const auto data_column = ColumnHelper::get_data_column(col.get());
-    auto raw_col = down_cast<const RunTimeColumnType<TYPE_DATETIME>*>(data_column)->get_data().data();
-
     auto col_writer = down_cast<::parquet::Int64Writer*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
+
+    DeferOp defer([&] {
+        _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+        _col_idx++;
+    });
+
+    // Use the rep_levels in the context from caller since node is primitive.
+    auto rep_levels_ptr = ctx._rep_levels.data();
+
+    const int16_t* def_levels_ptr = nullptr;
+    std::vector<int16_t> def_levels;
+    if (node->is_required()) {
+        // For required node, we use the def_levels in the context from caller
+        def_levels_ptr = ctx._def_levels.data();
+    } else {
+        // For optional node, we should increment def_levels of these defined values
+        DCHECK(node->is_optional());
+        def_levels = _make_def_levels(ctx, nulls);
+        def_levels_ptr = def_levels.data();
+    }
+    DCHECK(def_levels_ptr != nullptr);
 
     std::vector<int64_t> values;
     values.reserve(ctx.size());
     for (auto i = 0; i < ctx.size(); i++) {
         auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
-            values.push_back(-1);
             continue;
         }
         int64_t milliseconds = raw_col[idx].to_unix_second() * 1000;
         values.push_back(milliseconds);
     }
 
-    if (node->is_required()) {
-        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
-    } else {
-        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { x++; });
-        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
-        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { x--; });
-    }
-
-    _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
-    _col_idx++;
+    col_writer->WriteBatch(ctx.size(), def_levels_ptr, rep_levels_ptr, values.data());
     return Status::OK();
 }
 
 template <LogicalType lt, ::parquet::Type::type pt>
-Status ChunkWriter::_add_int_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
-                                             const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
+Status ChunkWriter::_add_int_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                          const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     const auto data_column = ColumnHelper::get_data_column(col.get());
     const auto raw_col = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
 
@@ -729,9 +759,9 @@ Status ChunkWriter::_add_int_column_chunk(Context& ctx, const TypeDescriptor& ty
     });
 
     // Use the rep_levels in the context from caller since node is primitive.
-    int16_t* rep_levels_ptr = ctx._rep_levels.data();
+    auto rep_levels_ptr = ctx._rep_levels.data();
 
-    int16_t* def_levels_ptr = nullptr;
+    const int16_t* def_levels_ptr = nullptr;
     std::vector<int16_t> def_levels;
     if (node->is_required()) {
         // For required node, we use the def_levels in the context from caller
@@ -739,16 +769,7 @@ Status ChunkWriter::_add_int_column_chunk(Context& ctx, const TypeDescriptor& ty
     } else {
         // For optional node, we should increment def_levels of these defined values
         DCHECK(node->is_optional());
-        def_levels.reserve(ctx.size());
-        for (auto i = 0; i < ctx.size(); i++) {
-            auto [idx, def_level, rep_level] = ctx.get(i);
-            if (idx == Context::kNULL || (col->is_nullable() && nulls[idx])) {
-                def_levels.push_back(def_level);
-                continue;
-            }
-            def_levels.push_back(def_level + 1);
-        }
-
+        def_levels = _make_def_levels(ctx, nulls);
         def_levels_ptr = def_levels.data();
     }
     DCHECK(def_levels_ptr != nullptr);
@@ -782,94 +803,110 @@ Status ChunkWriter::_add_int_column_chunk(Context& ctx, const TypeDescriptor& ty
     return Status::OK();
 }
 
-Status ChunkWriter::_add_boolean_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
-                                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
-    unsigned char* nulls = nullptr;
+Status ChunkWriter::_add_boolean_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
+    const auto data_column = ColumnHelper::get_data_column(col.get());
+    const auto raw_col = down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(data_column)->get_data().data();
+
+    uint8_t* nulls = nullptr;
     if (col->is_nullable()) {
         const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
         nulls = null_column->get_data().data();
     }
 
-    const auto data_column = ColumnHelper::get_data_column(col.get());
-    const auto raw_col = down_cast<RunTimeColumnType<TYPE_BOOLEAN>*>(data_column)->get_data().data();
-
     auto col_writer = down_cast<::parquet::BoolWriter*>(_rg_writer->column(_col_idx));
     DCHECK(col_writer != nullptr);
 
-    auto values = new bool[ctx.size()];
+    DeferOp defer([&] {
+        _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+        _col_idx++;
+    });
+
+    // Use the rep_levels in the context from caller since node is primitive.
+    auto rep_levels_ptr = ctx._rep_levels.data();
+
+    const int16_t* def_levels_ptr = nullptr;
+    std::vector<int16_t> def_levels;
+    if (node->is_required()) {
+        // For required node, we use the def_levels in the context from caller
+        def_levels_ptr = ctx._def_levels.data();
+    } else {
+        // For optional node, we should increment def_levels of these defined values
+        DCHECK(node->is_optional());
+        def_levels = _make_def_levels(ctx, nulls);
+        def_levels_ptr = def_levels.data();
+    }
+    DCHECK(def_levels_ptr != nullptr);
+
+    // sizeof(bool) depends on implementation, thus we copy values to ensure correctness
+    // std::vector<bool> may not provide a contiguous section of memory
+    auto values = new bool[col->size()];
+    int j = 0; // ptr to the next values slot to populate
+    for (size_t i = 0; i < col->size(); i++) {
+        if (col->is_nullable() && nulls[i]) {
+            continue;
+        }
+        values[j++] = static_cast<bool>(raw_col[i]);
+    }
+
+    col_writer->WriteBatch(ctx.size(), def_levels_ptr, rep_levels_ptr, values);
+    return Status::OK();
+}
+
+Status ChunkWriter::_add_decimal128_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
+                                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
+    const auto data_column = ColumnHelper::get_data_column(col.get());
+    const auto raw_col = down_cast<RunTimeColumnType<TYPE_DECIMAL128>*>(data_column)->get_data().data();
+
+    uint8_t* nulls = nullptr;
+    if (col->is_nullable()) {
+        const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
+        nulls = null_column->get_data().data();
+    }
+
+    auto col_writer = down_cast<::parquet::FixedLenByteArrayWriter*>(_rg_writer->column(_col_idx));
+    DCHECK(col_writer != nullptr);
+
+    DeferOp defer([&] {
+        _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+        _col_idx++;
+    });
+
+    // Use the rep_levels in the context from caller since node is primitive.
+    auto rep_levels_ptr = ctx._rep_levels.data();
+
+    const int16_t* def_levels_ptr = nullptr;
+    std::vector<int16_t> def_levels;
+    if (node->is_required()) {
+        // For required node, we use the def_levels in the context from caller
+        def_levels_ptr = ctx._def_levels.data();
+    } else {
+        // For optional node, we should increment def_levels of these defined values
+        DCHECK(node->is_optional());
+        def_levels = _make_def_levels(ctx, nulls);
+        def_levels_ptr = def_levels.data();
+    }
+    DCHECK(def_levels_ptr != nullptr);
+
+    std::vector<unsigned __int128> values;
+    values.reserve(ctx.size());
     for (auto i = 0; i < ctx.size(); i++) {
         auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
             continue;
         }
-        values[i] = raw_col[idx];
+        auto big_endian_value = BigEndian::FromHost128(raw_col[idx]);
+        values.push_back(big_endian_value);
     }
 
-    if (node->is_required()) {
-        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values);
-    } else {
-        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { x++; });
-        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values);
-        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { x--; });
+    std::vector<::parquet::FixedLenByteArray> flba_values;
+    flba_values.reserve(values.size());
+    for (size_t i = 0; i < values.size(); i++) {
+        auto ptr = reinterpret_cast<const uint8_t*>(values.data() + i);
+        flba_values.emplace_back(ptr);
     }
 
-    _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
-    _col_idx++;
-    return Status::OK();
-}
-
-template <LogicalType lt, ::parquet::Type::type pt>
-Status ChunkWriter::_add_decimal_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
-                                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
-    unsigned char* nulls = nullptr;
-    if (col->is_nullable()) {
-        const auto null_column = down_cast<NullableColumn*>(col.get())->null_column();
-        nulls = null_column->get_data().data();
-    }
-
-    const auto data_column = ColumnHelper::get_data_column(col.get());
-    const auto raw_col = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
-
-    auto col_writer =
-            down_cast<::parquet::TypedColumnWriter<::parquet::PhysicalType<pt>>*>(_rg_writer->column(_col_idx));
-    DCHECK(col_writer != nullptr);
-
-    using physical_type = typename ::parquet::type_traits<pt>::value_type;
-    std::vector<physical_type> values;
-    values.reserve(ctx.size());
-
-    if constexpr (pt == ::parquet::Type::FIXED_LEN_BYTE_ARRAY) {
-        for (auto i = 0; i < ctx.size(); i++) {
-            auto [idx, def_level, rep_level] = ctx.get(i);
-            if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
-                values.emplace_back(nullptr);
-                continue;
-            }
-            auto big_endian_value = BigEndian::FromHost128(raw_col[idx]);
-            auto ptr = reinterpret_cast<const uint8_t*>(&big_endian_value);
-            values.emplace_back(ptr);
-        }
-    } else {
-        for (auto i = 0; i < ctx.size(); i++) {
-            auto [idx, def_level, rep_level] = ctx.get(i);
-            if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
-                values.push_back(-1);
-                continue;
-            }
-            values.push_back(raw_col[idx]);
-        }
-    }
-
-    if (node->is_required()) {
-        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
-    } else {
-        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { x++; });
-        col_writer->WriteBatch(ctx.size(), ctx._def_levels.data(), ctx._rep_levels.data(), values.data());
-        std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { x--; });
-    }
-
-    _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
-    _col_idx++;
+    col_writer->WriteBatch(ctx.size(), def_levels_ptr, rep_levels_ptr, flba_values.data());
     return Status::OK();
 }
 
@@ -885,6 +922,19 @@ std::vector<uint8_t> ChunkWriter::_make_null_bitset(size_t n, const uint8_t* nul
     return bitset;
 }
 
+std::vector<int16_t> ChunkWriter::_make_def_levels(const Context& ctx, const uint8_t* nulls) const {
+    std::vector<int16_t> def_levels;
+    def_levels.reserve(ctx.size());
+    for (auto i = 0; i < ctx.size(); i++) {
+        auto [idx, def_level, rep_level] = ctx.get(i);
+        if (idx == Context::kNULL || (nulls != nullptr && nulls[idx])) {
+            def_levels.push_back(def_level);
+            continue;
+        }
+        def_levels.push_back(def_level + 1);
+    }
+    return def_levels;
+}
 
 std::size_t FileWriterBase::file_size() const {
     DCHECK(_outstream != nullptr);
@@ -1004,15 +1054,15 @@ Status AsyncFileWriter::close(RuntimeState* state,
     return Status::InternalError("Submit close file error");
 }
 
-
-ChunkWriter::ChunkWriter(::parquet::RowGroupWriter *rg_writer, const std::vector<TypeDescriptor> &type_descs,
-                                const std::shared_ptr<::parquet::schema::GroupNode> schema) : _rg_writer(rg_writer), _type_descs(type_descs), _schema(schema) {
+ChunkWriter::ChunkWriter(::parquet::RowGroupWriter* rg_writer, const std::vector<TypeDescriptor>& type_descs,
+                         const std::shared_ptr<::parquet::schema::GroupNode> schema)
+        : _rg_writer(rg_writer), _type_descs(type_descs), _schema(schema) {
     int num_columns = rg_writer->num_columns();
     _estimated_buffered_bytes.resize(num_columns);
     std::fill(_estimated_buffered_bytes.begin(), _estimated_buffered_bytes.end(), 0);
 }
 
-Status ChunkWriter::write(Chunk *chunk) {
+Status ChunkWriter::write(Chunk* chunk) {
     _col_idx = 0; // reset index upon every write
 
     Context ctx(0, 0, chunk->num_rows());

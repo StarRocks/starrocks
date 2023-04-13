@@ -135,39 +135,40 @@ private:
         std::vector<int16_t> _rep_levels;
     };
 
-    Status _add_column_chunk(Context& ctx, const TypeDescriptor& type_desc, const ::parquet::schema::NodePtr& node,
+    Status _add_column_chunk(const Context& ctx, const TypeDescriptor& type_desc, const ::parquet::schema::NodePtr& node,
                              const ColumnPtr& col);
 
-    Status _add_boolean_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+    Status _add_boolean_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                      const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
     template <LogicalType lt, ::parquet::Type::type pt>
-    Status _add_int_column_chunk(Context& ctx, const TypeDescriptor& type_desc, const ::parquet::schema::NodePtr& node,
+    Status _add_int_column_chunk(const Context& ctx, const TypeDescriptor& type_desc, const ::parquet::schema::NodePtr& node,
                                  const ColumnPtr& col);
 
-    template <LogicalType lt, ::parquet::Type::type pt>
-    Status _add_decimal_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+    Status _add_decimal128_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                      const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
-    Status _add_varchar_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+    Status _add_varchar_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                      const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
-    Status _add_date_column_chunk(Context& ctx, const TypeDescriptor& type_desc, const ::parquet::schema::NodePtr& node,
+    Status _add_date_column_chunk(const Context& ctx, const TypeDescriptor& type_desc, const ::parquet::schema::NodePtr& node,
                                   const ColumnPtr& col);
 
-    Status _add_datetime_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+    Status _add_datetime_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                       const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
-    Status _add_struct_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+    Status _add_struct_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
-    Status _add_array_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+    Status _add_array_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
                                    const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
 
-    Status _add_map_column_chunk(Context& ctx, const TypeDescriptor& type_desc, const ::parquet::schema::NodePtr& node,
+    Status _add_map_column_chunk(const Context& ctx, const TypeDescriptor& type_desc, const ::parquet::schema::NodePtr& node,
                                  const ColumnPtr& col);
 
     std::vector<uint8_t> _make_null_bitset(size_t n, const uint8_t* nulls) const;
+
+    std::vector<int16_t> _make_def_levels(const Context& ctx, const uint8_t* nulls) const;
 
     ::parquet::RowGroupWriter* _rg_writer;
     std::vector<TypeDescriptor> _type_descs;
@@ -215,13 +216,11 @@ protected:
     std::unique_ptr<::parquet::ParquetFileWriter> _writer;
     std::unique_ptr<ChunkWriter> _chunk_writer;
 
-//    ::parquet::RowGroupWriter* _rg_writer = nullptr;
     std::vector<TypeDescriptor> _type_descs;
     std::shared_ptr<::parquet::FileMetaData> _file_metadata;
 
     const static int64_t kDefaultMaxRowGroupSize = 128 * 1024 * 1024; // 128MB
     int64_t _max_row_group_size = kDefaultMaxRowGroupSize;
-//    std::vector<int64_t> _buffered_values_estimate;
 };
 
 class SyncFileWriter : public FileWriterBase {
