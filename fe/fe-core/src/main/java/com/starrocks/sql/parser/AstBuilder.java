@@ -6166,7 +6166,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.HLL() != null) {
             ScalarType type = ScalarType.createHllType();
             return type;
-        } else if (context.VARBINARY() != null) {
+        } else if (context.BINARY() != null || context.VARBINARY() != null) {
             ScalarType type = ScalarType.createVarbinary(length);
             return type;
         } else {

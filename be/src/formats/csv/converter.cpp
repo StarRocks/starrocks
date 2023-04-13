@@ -15,7 +15,6 @@
 #include "formats/csv/converter.h"
 
 #include "formats/csv/array_converter.h"
-#include "formats/csv/binary_converter.h"
 #include "formats/csv/boolean_converter.h"
 #include "formats/csv/date_converter.h"
 #include "formats/csv/datetime_converter.h"
@@ -26,6 +25,8 @@
 #include "formats/csv/json_converter.h"
 #include "formats/csv/nullable_converter.h"
 #include "formats/csv/numeric_converter.h"
+#include "formats/csv/string_converter.h"
+#include "formats/csv/varbinary_converter.h"
 #include "runtime/types.h"
 
 namespace starrocks::csv {
@@ -52,7 +53,7 @@ static std::unique_ptr<Converter> create_converter(const TypeDescriptor& t, cons
         return std::make_unique<DecimalV2Converter>();
     case TYPE_CHAR:
     case TYPE_VARCHAR:
-        return std::make_unique<BinaryConverter>();
+        return std::make_unique<StringConverter>();
     case TYPE_DATE:
         return std::make_unique<DateConverter>();
     case TYPE_DATETIME:
@@ -75,6 +76,8 @@ static std::unique_ptr<Converter> create_converter(const TypeDescriptor& t, cons
         return std::make_unique<DecimalV3Converter<int128_t>>(t.precision, t.scale);
     case TYPE_JSON:
         return std::make_unique<JsonConverter>();
+    case TYPE_VARBINARY:
+        return std::make_unique<VarBinaryConverter>();
     default:
         break;
     }
