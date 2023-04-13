@@ -34,9 +34,11 @@ import com.starrocks.common.proc.ExternalDbsProcDir;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.hive.HiveMetastoreApiConverter;
+import com.starrocks.connector.ConnectorTableId;
+import com.starrocks.connector.ConnectorType;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -58,7 +60,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.ResourceMgr.NEED_MAPPING_CATALOG_RESOURCES;
-import static com.starrocks.connector.ConnectorMgr.SUPPORT_CONNECTOR_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
@@ -100,9 +101,13 @@ public class CatalogMgr {
         writeLock();
         try {
             Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
-            connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
+            Connector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
+            if (null == connector) {
+                LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
+                throw new DdlException("connector create failed");
+            }
             long id = isResourceMappingCatalog(catalogName) ?
-                    HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
+                    ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
                     GlobalStateMgr.getCurrentState().getNextId();
             Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
             catalogs.put(catalogName, catalog);
@@ -172,7 +177,7 @@ public class CatalogMgr {
         }
 
         // skip unsupport connector type
-        if (!SUPPORT_CONNECTOR_TYPE.contains(type)) {
+        if (!ConnectorType.isSupport(type)) {
             LOG.error("Replay catalog [{}] encounter unknown catalog type [{}], ignore it", catalogName, type);
             return;
         }
@@ -184,7 +189,11 @@ public class CatalogMgr {
             readUnlock();
         }
 
-        connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
+        Connector connector = connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
+        if (null == connector) {
+            LOG.error("connector create failed. catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
+            throw new DdlException("connector create failed");
+        }
         writeLock();
         try {
             catalogs.put(catalogName, catalog);
@@ -276,6 +285,14 @@ public class CatalogMgr {
 
     public List<List<String>> getCatalogsInfo() {
         return procNode.fetchResult().getRows();
+    }
+
+    public String getCatalogType(String catalogName) {
+        if (isInternalCatalog(catalogName)) {
+            return "internal";
+        } else {
+            return catalogs.get(catalogName).getType();
+        }
     }
 
     public Catalog getCatalogByName(String name) {

@@ -75,8 +75,8 @@ void ConnectorScanOperator::do_close(RuntimeState* state) {}
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
-    return std::make_shared<ConnectorChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
-                                                  std::move(morsel), this, scan_node, factory->get_chunk_buffer());
+    return std::make_shared<ConnectorChunkSource>(this, _chunk_source_profiles[chunk_source_index].get(),
+                                                  std::move(morsel), scan_node, factory->get_chunk_buffer());
 }
 
 void ConnectorScanOperator::_close_chunk_source_unlocked(RuntimeState* state, int index) {
@@ -182,10 +182,9 @@ int ConnectorScanOperator::available_pickup_morsel_count() const {
 }
 
 // ==================== ConnectorChunkSource ====================
-ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile,
-                                           MorselPtr&& morsel, ScanOperator* op, ConnectorScanNode* scan_node,
-                                           BalancedChunkBuffer& chunk_buffer)
-        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), chunk_buffer),
+ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                                           ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer)
+        : ChunkSource(op, runtime_profile, std::move(morsel), chunk_buffer),
           _scan_node(scan_node),
           _limit(scan_node->limit()),
           _runtime_in_filters(op->runtime_in_filters()),

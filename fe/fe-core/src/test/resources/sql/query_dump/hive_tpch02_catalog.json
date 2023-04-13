@@ -1,0 +1,87 @@
+{
+  "statement":"select\n    s_acctbal,\n    s_name,\n    n_name,\n    p_partkey,\n    p_mfgr,\n    s_address,\n    s_phone,\n    s_comment\nfrom\n    part,\n    supplier,\n    partsupp,\n    nation,\n    region\nwhere\n        p_partkey = ps_partkey\n  and s_suppkey = ps_suppkey\n  and p_size = 12\n  and p_type like '%COPPER'\n  and s_nationkey = n_nationkey\n  and n_regionkey = r_regionkey\n  and r_name = 'AMERICA'\n  and ps_supplycost = (\n    select\n        min(ps_supplycost)\n    from\n        partsupp,\n        supplier,\n        nation,\n        region\n    where\n            p_partkey = ps_partkey\n      and s_suppkey = ps_suppkey\n      and s_nationkey = n_nationkey\n      and n_regionkey = r_regionkey\n      and r_name = 'AMERICA'\n)\norder by\n    s_acctbal desc,\n    n_name,\n    s_name,\n    p_partkey limit 100;\n",
+  "table_meta":{
+    "hive_tpch_orc_100g.nation":"CREATE EXTERNAL TABLE `nation` (\n  `n_nationkey` int(11) NULL COMMENT \"\",\n  `n_name` varchar(25) NULL COMMENT \"\",\n  `n_regionkey` int(11) NULL COMMENT \"\",\n  `n_comment` varchar(152) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"HIVE\"\nPROPERTIES (\n\"database\" = \"hive_tpch_orc_100g\",\n\"table\" = \"nation\",\n\"resource\" = \"hive_catalog\"\n);",
+    "hive_tpch_orc_100g.part":"CREATE EXTERNAL TABLE `part` (\n  `p_partkey` int(11) NULL COMMENT \"\",\n  `p_name` varchar(55) NULL COMMENT \"\",\n  `p_mfgr` varchar(25) NULL COMMENT \"\",\n  `p_brand` varchar(10) NULL COMMENT \"\",\n  `p_type` varchar(25) NULL COMMENT \"\",\n  `p_size` int(11) NULL COMMENT \"\",\n  `p_container` varchar(10) NULL COMMENT \"\",\n  `p_retailprice` decimal64(15, 2) NULL COMMENT \"\",\n  `p_comment` varchar(23) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"HIVE\"\nPROPERTIES (\n\"database\" = \"hive_tpch_orc_100g\",\n\"table\" = \"part\",\n\"resource\" = \"hive_catalog\"\n);",
+    "hive_tpch_orc_100g.partsupp":"CREATE EXTERNAL TABLE `partsupp` (\n  `ps_partkey` int(11) NULL COMMENT \"\",\n  `ps_suppkey` int(11) NULL COMMENT \"\",\n  `ps_availqty` int(11) NULL COMMENT \"\",\n  `ps_supplycost` decimal64(15, 2) NULL COMMENT \"\",\n  `ps_comment` varchar(199) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"HIVE\"\nPROPERTIES (\n\"database\" = \"hive_tpch_orc_100g\",\n\"table\" = \"partsupp\",\n\"resource\" = \"hive_catalog\"\n);",
+    "hive_tpch_orc_100g.region":"CREATE EXTERNAL TABLE `region` (\n  `r_regionkey` int(11) NULL COMMENT \"\",\n  `r_name` varchar(25) NULL COMMENT \"\",\n  `r_comment` varchar(152) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"HIVE\"\nPROPERTIES (\n\"database\" = \"hive_tpch_orc_100g\",\n\"table\" = \"region\",\n\"resource\" = \"hive_catalog\"\n);",
+    "hive_tpch_orc_100g.supplier":"CREATE EXTERNAL TABLE `supplier` (\n  `s_suppkey` int(11) NULL COMMENT \"\",\n  `s_name` varchar(25) NULL COMMENT \"\",\n  `s_address` varchar(40) NULL COMMENT \"\",\n  `s_nationkey` int(11) NULL COMMENT \"\",\n  `s_phone` varchar(15) NULL COMMENT \"\",\n  `s_acctbal` decimal64(15, 2) NULL COMMENT \"\",\n  `s_comment` varchar(101) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"HIVE\"\nPROPERTIES (\n\"database\" = \"hive_tpch_orc_100g\",\n\"table\" = \"supplier\",\n\"resource\" = \"hive_catalog\"\n);"
+  },
+  "hms_table":{
+    "hive_catalog%hive_tpch_orc_100g%partsupp":[
+      {
+        "type":"hive"
+      },
+      "{\"OutputRowCount\":\"8.0E7\",\"PartitionColumns\":[],\"DataColumns\":[\"ps_partkey\",\"ps_suppkey\",\"ps_availqty\",\"ps_supplycost\",\"ps_comment\"],\"PartitionNames\":[]}"
+    ],
+    "hive_catalog%hive_tpch_orc_100g%nation":[
+      {
+        "type":"hive"
+      },
+      "{\"OutputRowCount\":\"25.0\",\"PartitionColumns\":[],\"DataColumns\":[\"n_nationkey\",\"n_name\",\"n_regionkey\",\"n_comment\"],\"PartitionNames\":[]}"
+    ],
+    "hive_catalog%hive_tpch_orc_100g%part":[
+      {
+        "type":"hive"
+      },
+      "{\"OutputRowCount\":\"2.0E7\",\"PartitionColumns\":[],\"DataColumns\":[\"p_partkey\",\"p_name\",\"p_mfgr\",\"p_brand\",\"p_type\",\"p_size\",\"p_container\",\"p_retailprice\",\"p_comment\"],\"PartitionNames\":[]}"
+    ],
+    "hive_catalog%hive_tpch_orc_100g%supplier":[
+      {
+        "type":"hive"
+      },
+      "{\"OutputRowCount\":\"1000000.0\",\"PartitionColumns\":[],\"DataColumns\":[\"s_suppkey\",\"s_name\",\"s_address\",\"s_nationkey\",\"s_phone\",\"s_acctbal\",\"s_comment\"],\"PartitionNames\":[]}"
+    ],
+    "hive_catalog%hive_tpch_orc_100g%region":[
+      {
+        "type":"hive"
+      },
+      "{\"OutputRowCount\":\"5.0\",\"PartitionColumns\":[],\"DataColumns\":[\"r_regionkey\",\"r_name\",\"r_comment\"],\"PartitionNames\":[]}"
+    ]
+  },
+  "table_row_count":{
+
+  },
+  "session_variables":"{\"enable_show_all_variables\":false,\"cbo_cte_reuse\":true,\"full_sort_max_buffered_bytes\":16777216,\"character_set_connection\":\"utf8\",\"cbo_use_correlated_join_estimate\":true,\"enable_insert_strict\":true,\"tx_isolation\":\"REPEATABLE-READ\",\"wait_timeout\":28800,\"cbo_cte_reuse_rate_v2\":1.15,\"transmission_encode_level\":7,\"character_set_results\":\"utf8\",\"transaction_isolation\":\"REPEATABLE-READ\",\"enable_global_runtime_filter\":true,\"load_transmission_compression_type\":\"NO_COMPRESSION\",\"cbo_enable_low_cardinality_optimize\":true,\"enable_resource_group_v2\":true,\"enable_rewrite_simple_agg_to_meta_scan\":false,\"new_planner_optimize_timeout\":30000000,\"enable_outer_join_reorder\":true,\"enable_adaptive_sink_dop\":false,\"force_schedule_local\":false,\"hudi_mor_force_jni_reader\":false,\"full_sort_late_materialization\":false,\"enable_profile\":false,\"cbo_enable_greedy_join_reorder\":true,\"load_mem_limit\":0,\"range_pruner_max_predicate\":100,\"sql_safe_updates\":0,\"enable_local_shuffle_agg\":true,\"rpc_http_min_size\":2147482624,\"cbo_debug_alive_backend_number\":0,\"global_runtime_filter_probe_min_size\":102400,\"nested_mv_rewrite_max_level\":3,\"query_delivery_timeout\":300,\"net_write_timeout\":60,\"cbo_prune_shuffle_column_rate\":0.1,\"collation_database\":\"utf8_general_ci\",\"spill_mem_table_size\":104857600,\"hash_join_push_down_right_table\":true,\"new_planner_agg_stage\":0,\"use_compute_nodes\":-1,\"collation_connection\":\"utf8_general_ci\",\"resource_group\":\"\",\"broadcast_row_limit\":15000000,\"enable_populate_block_cache\":true,\"profile_limit_fold\":true,\"exec_mem_limit\":2147483648,\"enable_sort_aggregate\":false,\"cbo_max_reorder_node_use_dp\":10,\"query_cache_force_populate\":false,\"runtime_filter_on_exchange_node\":false,\"disable_join_reorder\":false,\"enable_rule_based_materialized_view_rewrite\":true,\"enable_hive_column_stats\":true,\"enable_groupby_use_output_alias\":false,\"net_buffer_length\":16384,\"forward_to_leader\":false,\"count_distinct_column_buckets\":1024,\"full_sort_max_buffered_rows\":1024000,\"query_cache_agg_cardinality_limit\":5000000,\"query_timeout\":300,\"enable_pipeline_query_statistic\":true,\"cbo_max_reorder_node\":50,\"cboPushDownAggregateMode_v1\":-1,\"window_partition_mode\":1,\"enable_deliver_batch_fragments\":true,\"enable_tablet_internal_parallel_v2\":true,\"enable_distinct_column_bucketization\":true,\"enable_big_query_log\":true,\"interpolate_passthrough\":true,\"enable_incremental_mv\":false,\"analyze_mv\":\"sample\",\"runtime_filter_scan_wait_time\":20,\"SQL_AUTO_IS_NULL\":false,\"event_scheduler\":\"OFF\",\"prefer_compute_node\":false,\"max_pipeline_dop\":64,\"broadcast_right_table_scale_factor\":10,\"group_concat_max_len\":65535,\"parse_tokens_limit\":3500000,\"chunk_size\":4096,\"runtime_join_filter_push_down_limit\":1024000,\"global_runtime_filter_probe_min_selectivity\":0.5,\"query_mem_limit\":0,\"enable_filter_unused_columns_in_scan_stage\":true,\"big_query_log_cpu_second_threshold\":480,\"enable_scan_block_cache\":false,\"enable_materialized_view_single_table_view_delta_rewrite\":false,\"div_precision_increment\":4,\"runtime_adaptive_dop_max_block_rows_per_driver_seq\":16384,\"auto_increment_increment\":1,\"sql_dialect\":\"StarRocks\",\"cbo_push_down_distinct_below_window\":true,\"sql_mode_v2\":32,\"big_query_log_scan_rows_threshold\":1000000000,\"character_set_client\":\"utf8\",\"autocommit\":true,\"hdfs_backend_selector_scan_range_shuffle\":false,\"enable_column_expr_predicate\":true,\"pipeline_profile_level\":1,\"parallel_fragment_exec_instance_num\":1,\"max_scan_key_num\":-1,\"enable_runtime_adaptive_dop\":false,\"cbo_cte_max_limit\":10,\"net_read_timeout\":60,\"streaming_preaggregation_mode\":\"auto\",\"storage_engine\":\"olap\",\"hive_partition_stats_sample_size\":3000,\"enable_optimizer_trace_log\":false,\"enable_mv_planner\":false,\"spill_operator_min_bytes\":10485760,\"cbo_enable_dp_join_reorder\":true,\"tx_visible_wait_timeout\":10,\"enable_materialized_view_view_delta_rewrite\":true,\"cbo_max_reorder_node_use_exhaustive\":4,\"enable_sql_digest\":false,\"spill_mem_table_num\":2,\"profile_timeout\":2,\"cbo_push_down_aggregate\":\"global\",\"enable_spill\":false,\"pipeline_dop\":0,\"enable_query_dump\":false,\"single_node_exec_plan\":false,\"join_implementation_mode_v2\":\"auto\",\"global_runtime_filter_build_max_size\":67108864,\"sql_select_limit\":9223372036854775807,\"enable_materialized_view_rewrite\":true,\"statistic_collect_parallel\":1,\"enable_rewrite_sum_by_associative_rule\":true,\"query_cache_hot_partition_num\":3,\"enable_prune_complex_types\":true,\"query_cache_type\":0,\"disable_colocate_join\":false,\"max_parallel_scan_instance_num\":-1,\"query_cache_entry_max_rows\":409600,\"max_pushdown_conditions_per_column\":-1,\"connector_io_tasks_per_scan_operator\":16,\"default_table_compression\":\"lz4_frame\",\"enable_materialized_view_union_rewrite\":true,\"runtime_adaptive_dop_max_output_amplification_factor\":0,\"sql_quote_show_create\":true,\"enable_exchange_pass_through\":true,\"query_cache_entry_max_bytes\":4194304,\"innodb_read_only\":true,\"spill_mem_limit_threshold\":0.5,\"cbo_reorder_threshold_use_exhaustive\":6,\"enable_exchange_perf\":false,\"enable_predicate_reorder\":false,\"workgroup_id\":0,\"enable_query_cache\":false,\"enable_rewrite_groupingsets_to_union_all\":false,\"transmission_compression_type\":\"NO_COMPRESSION\",\"interactive_timeout\":3600,\"max_allowed_packet\":1048576,\"big_query_log_scan_bytes_threshold\":10737418240,\"collation_server\":\"utf8_general_ci\",\"time_zone\":\"Asia/Shanghai\",\"enable_multicolumn_global_runtime_filter\":false,\"character_set_server\":\"utf8\",\"tablet_internal_parallel_mode\":\"auto\",\"enable_pipeline\":true,\"cbo_use_nth_exec_plan\":0,\"io_tasks_per_scan_operator\":4,\"spill_mode\":\"auto\",\"parallel_exchange_instance_num\":-1,\"enable_shared_scan\":false,\"enable_query_debug_trace\":false,\"allow_default_partition\":false}",
+  "column_statistics":{
+    "hive_tpch_orc_100g.part":{
+      "p_partkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "p_type":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "p_mfgr":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "p_size":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "hive_tpch_orc_100g.supplier":{
+      "s_comment":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_phone":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_nationkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_name":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_address":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_acctbal":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "s_suppkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "hive_tpch_orc_100g.nation":{
+      "n_nationkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "n_regionkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "n_name":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "hive_tpch_orc_100g.partsupp":{
+      "ps_suppkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "ps_partkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "ps_supplycost":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "hive_tpch_orc_100g.region":{
+      "r_regionkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "r_name":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    }
+  },
+  "be_number":1,
+  "be_core_stat":{
+    "numOfHardwareCoresPerBe":"{\"10002\":104}",
+    "cachedAvgNumOfHardwareCores":104
+  },
+  "exception":[
+
+  ],
+  "version":"UNKNOWN",
+  "commit_version":"431529d"
+}

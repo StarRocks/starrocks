@@ -1264,9 +1264,14 @@ public class ShowExecutor {
         ShowLoadStmt showStmt = (ShowLoadStmt) stmt;
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Database db = globalStateMgr.getDb(showStmt.getDbName());
-        MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
-        long dbId = db.getId();
+        long dbId = -1;
+        if (showStmt.isAll()) {
+            dbId = -1;
+        } else {
+            Database db = globalStateMgr.getDb(showStmt.getDbName());
+            MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
+            dbId = db.getId();
+        }
 
         // combine the List<LoadInfo> of load(v1) and loadManager(v2)
         Set<String> statesValue = showStmt.getStates() == null ? null : showStmt.getStates().stream()
@@ -2512,11 +2517,11 @@ public class ShowExecutor {
         if (comment != null) {
             createCatalogSql.append("comment \"").append(catalog.getComment()).append("\"\n");
         }
-        Map<String, String> config = catalog.getConfig();
-        CloudCredentialUtil.maskCloudCredential(config);
+        Map<String, String> clonedConfig = new HashMap<>(catalog.getConfig());
+        CloudCredentialUtil.maskCloudCredential(clonedConfig);
         // Properties
         createCatalogSql.append("PROPERTIES (")
-                .append(new PrintableMap<>(config, " = ", true, true))
+                .append(new PrintableMap<>(clonedConfig, " = ", true, true))
                 .append("\n)");
         rows.add(Lists.newArrayList(catalogName, createCatalogSql.toString()));
         resultSet = new ShowResultSet(stmt.getMetaData(), rows);

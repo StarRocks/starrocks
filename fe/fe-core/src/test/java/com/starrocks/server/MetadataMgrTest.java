@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -163,5 +164,63 @@ public class MetadataMgrTest {
 
         com.starrocks.catalog.Table tbl4 = metadataMgr.getTable("hive_catalog", "hive_db", "not_exist_tbl");
         Assert.assertNull(tbl4);
+    }
+
+    @Test
+    public void testCreateIcebergTable() throws Exception {
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        AnalyzeTestUtil.getStarRocksAssert().withCatalog(createIcebergCatalogStmt);
+        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("iceberg_catalog", "iceberg_db");
+                result = new com.starrocks.catalog.Database();
+                minTimes = 0;
+            }
+        };
+
+        String stmt = "create external table iceberg_catalog.iceberg_db.iceberg_table (k1 int, k2 int) partition by (k2)";
+        CreateTableStmt createTableStmt =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, AnalyzeTestUtil.getConnectContext());
+
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("iceberg_catalog", "iceberg_db");
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadataMgr.createTable("iceberg_catalog", createTableStmt);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof DdlException);
+            Assert.assertTrue(e.getMessage().contains("Unknown database"));
+        }
+
+        new Expectations(metadataMgr) {
+            {
+                metadataMgr.getDb("iceberg_catalog", "iceberg_db");
+                result = new com.starrocks.catalog.Database();
+                minTimes = 0;
+
+                metadataMgr.listTableNames("iceberg_catalog", "iceberg_db");
+                result = Lists.newArrayList("iceberg_table");
+                minTimes = 0;
+            }
+        };
+
+        try {
+            metadataMgr.createTable("iceberg_catalog", createTableStmt);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof DdlException);
+            Assert.assertTrue(e.getMessage().contains("Table 'iceberg_table' already exists"));
+        }
+
+        createTableStmt.setIfNotExists();
+        Assert.assertFalse(metadataMgr.createTable("iceberg_catalog", createTableStmt));
     }
 }

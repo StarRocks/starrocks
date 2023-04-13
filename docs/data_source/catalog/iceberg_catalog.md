@@ -16,7 +16,6 @@ To ensure successful SQL workloads on your Iceberg cluster, your StarRocks clust
   - Parquet files support the following compression formats: SNAPPY, LZ4, ZSTD, GZIP, and NO_COMPRESSION.
   - ORC files support the following compression formats: ZLIB, SNAPPY, LZO, LZ4, ZSTD, and NO_COMPRESSION.
 
-- The data types of Delta Lake that StarRocks does not support are MAP and STRUCT.
 - Iceberg catalogs do not support Iceberg v2 tables.
 
 ## Integration preparations
@@ -198,7 +197,7 @@ If you choose AWS S3 as storage for your Iceberg cluster, take one of the follow
 - To choose IAM user as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "aws.s3.use_instance_profile" = 'false',
+  "aws.s3.use_instance_profile" = "false",
   "aws.s3.access_key" = "<iam_user_access_key>",
   "aws.s3.secret_key" = "<iam_user_secret_key>",
   "aws.s3.region" = "<aws_s3_region>"

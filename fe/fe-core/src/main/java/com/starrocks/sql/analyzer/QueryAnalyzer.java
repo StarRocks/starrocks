@@ -558,7 +558,13 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
-            Scope queryOutputScope = process(node.getQueryStatement(), scope);
+            Scope queryOutputScope;
+            try {
+                queryOutputScope = process(node.getQueryStatement(), scope);
+            } catch (SemanticException e) {
+                throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
+                        "function(s) or definer/invoker of view lack rights to use them");
+            }
             View view = node.getView();
             List<Field> fields = Lists.newArrayList();
             for (int i = 0; i < view.getBaseSchema().size(); ++i) {

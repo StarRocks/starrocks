@@ -66,7 +66,6 @@ public:
 
     connector::ConnectorType connector_type();
 
-    // TODO: refactor it into the base class
     void attach_chunk_source(int32_t source_index) override;
     void detach_chunk_source(int32_t source_index) override;
     bool has_shared_chunk_source() const override;
@@ -89,8 +88,8 @@ private:
 
 class ConnectorChunkSource : public ChunkSource {
 public:
-    ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                         ScanOperator* op, ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
+    ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                         ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
 
     ~ConnectorChunkSource() override;
 

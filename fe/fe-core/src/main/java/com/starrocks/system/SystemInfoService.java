@@ -508,6 +508,16 @@ public class SystemInfoService {
         return -1L;
     }
 
+    public long getComputeNodeWithStarletPort(String host, int starletPort) {
+        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
+        for (ComputeNode cn : idToComputeNode.values()) {
+            if (cn.getHost().equals(host) && cn.getStarletPort() == starletPort) {
+                return cn.getId();
+            }
+        }
+        return -1L;
+    }
+
     public static TNetworkAddress toBrpcHost(TNetworkAddress host) throws Exception {
         ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
@@ -582,6 +592,10 @@ public class SystemInfoService {
         return idToBackendRef.size();
     }
 
+    public int getAliveComputeNodeNumber() {
+        return getComputeNodeIds(true).size();
+    }
+
     public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
         ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
         for (ComputeNode computeNode : idToComputeNode.values()) {
@@ -653,6 +667,21 @@ public class SystemInfoService {
         }
         return backendIds;
     }
+
+    public List<Long> getAvailableComputeNodeIds() {
+        ImmutableMap<Long, ComputeNode>  idToComputeNode = idToComputeNodeRef;
+        List<Long> computeNodeIds = Lists.newArrayList(idToComputeNode.keySet());
+
+        Iterator<Long> iter = computeNodeIds.iterator();
+        while (iter.hasNext()) {
+            ComputeNode cn = this.getComputeNode(iter.next());
+            if (cn == null || !cn.isAvailable()) {
+                iter.remove();
+            }
+        }
+        return computeNodeIds;
+    }
+
 
     public List<Backend> getBackends() {
         return idToBackendRef.values().asList();
@@ -1082,6 +1111,10 @@ public class SystemInfoService {
     }
 
     public void checkClusterCapacity() throws DdlException {
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            return;
+        }
+
         if (getClusterAvailableCapacityB() <= 0L) {
             throw new DdlException("Cluster has no available capacity");
         }
@@ -1117,13 +1150,15 @@ public class SystemInfoService {
      */
     public Status checkExceedDiskCapacityLimit(Multimap<Long, Long> bePathsMap, boolean floodStage) {
         LOG.debug("pathBeMap: {}", bePathsMap);
-        ImmutableMap<Long, DiskInfo> pathHashToDiskInfo = pathHashToDishInfoRef;
-        for (Long beId : bePathsMap.keySet()) {
-            for (Long pathHash : bePathsMap.get(beId)) {
-                DiskInfo diskInfo = pathHashToDiskInfo.get(pathHash);
-                if (diskInfo != null && diskInfo.exceedLimit(floodStage)) {
-                    return new Status(TStatusCode.CANCELLED,
-                            "disk " + pathHash + " on backend " + beId + " exceed limit usage");
+        if (RunMode.getCurrentRunMode() != RunMode.SHARED_DATA) {
+            ImmutableMap<Long, DiskInfo> pathHashToDiskInfo = pathHashToDishInfoRef;
+            for (Long beId : bePathsMap.keySet()) {
+                for (Long pathHash : bePathsMap.get(beId)) {
+                    DiskInfo diskInfo = pathHashToDiskInfo.get(pathHash);
+                    if (diskInfo != null && diskInfo.exceedLimit(floodStage)) {
+                        return new Status(TStatusCode.CANCELLED,
+                                "disk " + pathHash + " on backend " + beId + " exceed limit usage");
+                    }
                 }
             }
         }

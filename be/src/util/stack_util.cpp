@@ -154,7 +154,8 @@ std::string get_stack_trace_for_thread(int tid, int timeout_ms) {
     return ret;
 }
 
-std::string get_stack_trace_for_threads(const std::vector<int>& tids, int timeout_ms) {
+std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tids, const string& pattern,
+                                                     int timeout_ms) {
     static bool sighandler_installed = false;
     if (!sighandler_installed) {
         if (!install_stack_trace_sighandler()) {
@@ -206,6 +207,10 @@ std::string get_stack_trace_for_threads(const std::vector<int>& tids, int timeou
     }
     string ret;
     for (auto& e : task_map) {
+        string stack_trace = e.first.to_string();
+        if (!pattern.empty() && stack_trace.find(pattern) == string::npos) {
+            continue;
+        }
         if (e.second.size() == 1) {
             ret += strings::Substitute("tid: $0\n", e.second[0]);
         } else {
@@ -218,15 +223,23 @@ std::string get_stack_trace_for_threads(const std::vector<int>& tids, int timeou
             }
             ret += "\n";
         }
-        ret += e.first.to_string();
+        ret += stack_trace;
         ret += "\n";
     }
     ret += strings::Substitute("total $0 threads, $1 identical groups", tids.size(), task_map.size());
     return ret;
 }
 
+std::string get_stack_trace_for_threads(const std::vector<int>& tids, int timeout_ms) {
+    return get_stack_trace_for_threads_with_pattern(tids, "", timeout_ms);
+}
+
 std::string get_stack_trace_for_all_threads() {
     return get_stack_trace_for_threads(get_thread_id_list(), 3000);
+}
+
+std::string get_stack_trace_for_function(const std::string& function_pattern) {
+    return get_stack_trace_for_threads_with_pattern(get_thread_id_list(), function_pattern, 3000);
 }
 
 std::vector<int> get_thread_id_list() {

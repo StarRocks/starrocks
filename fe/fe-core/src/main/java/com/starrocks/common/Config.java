@@ -1518,16 +1518,22 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static double statistic_auto_collect_ratio = 0.8;
 
+    @ConfField(mutable = true)
+    public static long statistics_full_collect_buffer = 1024L * 1024 * 20; // 20MB
+
     // If the health in statistic_full_collect_interval is lower than this value,
     // choose collect sample statistics first
     @ConfField(mutable = true)
     public static double statistic_auto_collect_sample_threshold = 0.3;
 
     @ConfField(mutable = true)
-    public static long statistic_auto_collect_table_interval_size = 5L * 1024 * 1024 * 1024; // 5G
+    public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
 
     @ConfField(mutable = true)
-    public static long statistic_auto_collect_table_interval = 3600L * 12; // unit: second, default 12h
+    public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
+
+    @ConfField(mutable = true)
+    public static long statistic_auto_collect_large_table_interval = 3600L * 12; // unit: second, default 12h
 
     /**
      * Full statistics collection max data size
@@ -1706,7 +1712,7 @@ public class Config extends ConfigBase {
      * Enable background refresh all external tables all partitions metadata on internal catalog.
      */
     @ConfField
-    public static boolean enable_background_refresh_connector_metadata = false;
+    public static boolean enable_background_refresh_connector_metadata = true;
 
     /**
      * Enable background refresh all external tables all partitions metadata based on resource in internal catalog.
@@ -2167,4 +2173,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long max_per_node_grep_log_limit = 500000;
 
+
+    /**
+     * only use compute node, test for multi-warehouse
+     */
+    @ConfField(mutable = true)
+    public static boolean only_use_compute_node = false;
 }
