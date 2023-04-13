@@ -738,10 +738,13 @@ public class InsertPlanTest extends PlanTestBase {
     @Test
     public void testInsertMapColumn() throws Exception {
         String explainString = getInsertExecPlan("insert into tmap values (2,2,{})");
-        Assert.assertTrue(explainString.contains("2 | 2 | MAP<bigint(20),char(20)>{}"));
+        Assert.assertTrue(explainString.contains("2 | 2 | {}"));
 
         explainString = getInsertExecPlan("insert into tmap values (2,2,null)");
         Assert.assertTrue(explainString.contains("2 | 2 | NULL"));
+
+        explainString = getInsertExecPlan("insert into tmap values (2,2,{2:2})");
+        Assert.assertTrue(explainString.contains("2 | 2 | {2:'2'}")); // implicit cast
     }
 
     @Test
