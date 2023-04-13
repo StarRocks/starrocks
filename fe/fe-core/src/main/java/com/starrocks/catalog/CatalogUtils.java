@@ -179,42 +179,56 @@ public class CatalogUtils {
         });
 
         // Filter out temporary partitions
-        Set<List<LiteralExpr>> tempSet = new HashSet<>();
-        Set<List<List<LiteralExpr>>> tempMultiSet = new HashSet<>();
+        Set<Object> tempSet = new HashSet<>();
+        Set<List<Object>> tempMultiSet = new HashSet<>();
         for (Partition partition : tempPartitionList) {
             if (!listMap.isEmpty()) {
-                tempSet.add(listMap.get(partition.getId()));
+                listMap.get(partition.getId()).forEach(item -> {
+                    tempSet.add(item.getRealObjectValue());
+                });
                 newListMap.remove(partition.getId());
             }
             if (!multiListMap.isEmpty()) {
-                tempMultiSet.add(multiListMap.get(partition.getId()));
+                multiListMap.get(partition.getId()).forEach(itemList -> {
+                    List<Object> cur = new ArrayList<>();
+                    itemList.forEach(item -> {
+                        cur.add(item.getRealObjectValue());
+                    });
+                    tempMultiSet.add(cur);
+                });
                 newMultiListMap.remove(partition.getId());
             }
         }
 
         // Check whether the remaining partition overlaps with the temporary partition
         if (!tempSet.isEmpty() && !newListMap.isEmpty()) {
-            for (List<LiteralExpr> list : tempSet) {
-                for (Map.Entry<Long, List<LiteralExpr>> entry : newListMap.entrySet()) {
-                    List<LiteralExpr> cur = entry.getValue();
-                    List<LiteralExpr> diff = list.stream().distinct().filter(cur::contains).collect(Collectors.toList());
-                    if (!diff.isEmpty()) {
-                        List<String> message = diff.stream().map(LiteralExpr::getStringValue).collect(Collectors.toList());
-                        throw new DdlException("Range: " + message + " conflicts with existing range");
-                    }
+            List<Object> newList = new ArrayList<>();
+            for (List<LiteralExpr> baseList : newListMap.values()) {
+                baseList.forEach(item -> {
+                    newList.add(item.getRealObjectValue());
+                });
+            }
+            for (Object tempSingle : tempSet) {
+                if (newList.contains(tempSingle)) {
+                    throw new DdlException("Range: " + tempSingle + " conflicts with existing range");
                 }
             }
         }
+
         if (!tempMultiSet.isEmpty() && !newMultiListMap.isEmpty()) {
-            for (List<List<LiteralExpr>> multiList : tempMultiSet) {
-                for (List<LiteralExpr> list : multiList) {
-                    for (Map.Entry<Long, List<List<LiteralExpr>>> entry : newMultiListMap.entrySet()) {
-                        List<List<LiteralExpr>> cur = entry.getValue();
-                        if (cur.contains(list)) {
-                            List<String> message = list.stream().map(LiteralExpr::getStringValue).collect(Collectors.toList());
-                            throw new DdlException("Range: " + message + " conflicts with existing range");
-                        }
-                    }
+            List<List<Object>> newMultiList = new ArrayList<>();
+            for (List<List<LiteralExpr>> baseMultiList : newMultiListMap.values()) {
+                baseMultiList.forEach(itemList -> {
+                    List<Object> objectList = new ArrayList<>();
+                    itemList.forEach(item -> {
+                        objectList.add(item.getRealObjectValue());
+                    });
+                    newMultiList.add(objectList);
+                });
+            }
+            for (List<Object> tempMulti : tempMultiSet) {
+                if (newMultiList.contains(tempMulti)) {
+                    throw new DdlException("Range: " + tempMulti + " conflicts with existing range");
                 }
             }
         }

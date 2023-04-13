@@ -210,7 +210,7 @@ public class TempPartitionTest {
     }
 
     @Test
-    public void testForSimpleListPartitionTable() throws Exception {
+    public void testForSingleListPartitionTable() throws Exception {
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test(\n" +
