@@ -12,8 +12,14 @@ LOAD LABEL [<database_name>.]<label_name>
     data_desc[, data_desc ...]
 )
 WITH BROKER
-[broker_properties]
-[opt_properties]
+(
+    StorageCredentialParams
+)
+[PROPERTIES
+(
+    opt_properties
+)
+]
 ```
 
 注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](/sql-reference/sql-statements/keywords.md)。
@@ -175,17 +181,17 @@ INTO TABLE <table_name>
 
 在 v2.4 及以前版本，您需要在导入语句中通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。自 v2.5 起，您不再需要指定 `broker_name`，但继续保留 `WITH BROKER` 关键字。参见[从 HDFS 或外部云存储系统导入数据 > 背景信息](../../../loading/BrokerLoad.md#背景信息)。
 
-### `broker_properties`
+### `StorageCredentialParams`
 
-用于提供访问数据源的鉴权信息。数据源不同，需要提供的鉴权信息也不同。
+StarRocks 访问存储系统的认证配置。
 
 #### HDFS
 
-社区版本的 HDFS，支持简单认证和 Kerberos 认证两种认证方式（Broker Load 默认使用简单认证），并且支持 NameNode 节点的 HA 配置。如果数据源为社区版本的 HDFS，可以提供如下配置信息：
+社区版 HDFS 支持简单认证和 Kerberos 认证两种认证方式（Broker Load 默认使用简单认证），并且支持 NameNode 节点的 HA 配置。如果存储系统为社区版 HDFS，您可以按如下指定认证方式和 HA 配置：
 
 - 认证方式
 
-  - 如果使用简单认证，需要指定如下配置：
+  - 如果使用简单认证，请按如下配置 `StorageCredentialParams`：
 
     ```Plain
     "hadoop.security.authentication" = "simple"
@@ -193,14 +199,15 @@ INTO TABLE <table_name>
     "password" = "<hdfs_password>"
     ```
 
-    上述配置中的参数说明如下表所述。
+    `StorageCredentialParams` 包含如下参数。
 
-    | **参数名称** | **参数说明**                                 |
-    | ------------ | -------------------------------------------- |
-    | username     | 用于访问 HDFS 集群中 NameNode 节点的用户名。 |
-    | password     | 用于访问 HDFS 集群中 NameNode 节点的密码。   |
+    | **参数名称**                     | **参数说明**                                 |
+    | ------------------------------- | -------------------------------------------- |
+    | hadoop.security.authentication  | 指定认证方式。取值范围：`simple` 和 `kerberos`。默认值：`simple`。`simple` 表示简单认证，即无认证。`kerberos` 表示 Kerberos 认证。 |
+    | username                        | 用于访问 HDFS 集群中 NameNode 节点的用户名。 |
+    | password                        | 用于访问 HDFS 集群中 NameNode 节点的密码。   |
 
-  - 如果使用 Kerberos 认证，需要指定如下配置：
+  - 如果使用 Kerberos 认证，请按如下配置 `StorageCredentialParams`：
 
     ```Plain
     "hadoop.security.authentication" = "kerberos",
@@ -209,13 +216,14 @@ INTO TABLE <table_name>
     "kerberos_keytab_content = "YWFhYWFh"
     ```
 
-    上述配置中的参数说明如下表所述。
+    `StorageCredentialParams` 包含如下参数。
 
-    | **参数名称**            | **参数说明**                                                 |
-    | ----------------------- | ------------------------------------------------------------ |
-    | kerberos_principal      | 用于指定 Kerberos 的用户或服务 (Principal)。每个 Principal 在 HDFS 集群内唯一，由如下三部分组成：<ul><li>`username` 或 `servicename`：HDFS 集群中用户或服务的名称。</li><li>`instance`：HDFS 集群要认证的节点所在服务器的名称，用来保证用户或服务全局唯一。比如，HDFS 集群中有多个 DataNode 节点，各节点需要各自独立认证。</li><li>`realm`：域，必须全大写。</li></ul>举例：`nn/zelda1@ZELDA.COM`。 |
-    | kerberos_keytab         | 用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。 |
-    | kerberos_keytab_content | 用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数跟 `kerberos_keytab` 参数二选一配置。 |
+    | **参数名称**                     | **参数说明**                                                 |
+    | ------------------------------- | ------------------------------------------------------------ |
+    | hadoop.security.authentication  | 指定认证方式。取值范围：`simple` 和 `kerberos`。默认值：`simple`。`simple` 表示简单认证，即无认证。`kerberos` 表示 Kerberos 认证。 |
+    | kerberos_principal              | 用于指定 Kerberos 的用户或服务 (Principal)。每个 Principal 在 HDFS 集群内唯一，由如下三部分组成：<ul><li>`username` 或 `servicename`：HDFS 集群中用户或服务的名称。</li><li>`instance`：HDFS 集群要认证的节点所在服务器的名称，用来保证用户或服务全局唯一。比如，HDFS 集群中有多个 DataNode 节点，各节点需要各自独立认证。</li><li>`realm`：域，必须全大写。</li></ul>举例：`nn/zelda1@ZELDA.COM`。 |
+    | kerberos_keytab                 | 用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。 |
+    | kerberos_keytab_content         | 用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数跟 `kerberos_keytab` 参数二选一配置。 |
 
    需要注意的是，在多 Kerberos 用户场景下，您必须部署一个独立的 Broker，并且在导入语句中通过 `WITH BROKER "<broker_name>"` 来指定使用哪个 Broker。另外还需要打开 Broker 进程的启动脚本文件 **start_broker.sh**，在文件 42 行附近修改如下信息让 Broker 进程读取 **krb5.conf** 文件信息：
 
@@ -255,25 +263,57 @@ INTO TABLE <table_name>
   | dfs.namenode.rpc-address.XXX.NN    | 指定 NameNode 的 RPC 地址信息。  <br>其中 `NN` 表示 `dfs.ha.namenodes.XXX` 中自定义 NameNode 的名称。 |
   | dfs.client.failover.proxy.provider | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
 
-#### Amazon S3
+#### AWS S3
 
-如果数据源为 Amazon S3，需要提供如下配置信息。
+如果存储系统为 AWS S3，请按如下配置 `StorageCredentialParams`：
 
-| **参数名称**      | **参数说明**                                            |
-| ----------------- | ------------------------------------------------------- |
-| aws.s3.access_key | 访问 Amazon S3 存储空间的 Access Key ID。      |
-| aws.s3.secret_key | 访问 Amazon S3 存储空间的 Secret Access Key。 |
-| aws.s3.endpoint   | 访问 Amazon S3 存储空间的连接地址。                             |
+- 基于 Instance Profile 进行认证和鉴权
 
-请参见 AWS 官方文档[访问密钥](https://docs.aws.amazon.com/zh_cn/IAM/latest/UserGuide/id_credentials_access-keys.html)。
+  ```SQL
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
 
-> **说明**
->
-> 如果您的 Amazon EC2 实例上绑定的 IAM 角色可以访问您的 Amazon S3 存储空间，那么您不需要提供 `aws.s3.access_key` 和 `aws.s3.secret_key` 配置，留空即可。
+- 基于 Assumed Role 进行认证和鉴权
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.iam_role_arn" = "<iam_role_arn>",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+- 基于 IAM User 进行认证和鉴权
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "false",
+  "aws.s3.access_key" = "<iam_user_access_key>",
+  "aws.s3.secret_key" = "<iam_user_secret_key>",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+`StorageCredentialParams` 包含如下参数。
+
+| 参数                        | 是否必须   | 说明                                                         |
+| --------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
+| aws.s3.iam_role_arn         | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。这样，StarRocks 在使用 Hive Catalog 访问 Hive 数据时将会担任该 IAM Role。 |
+| aws.s3.region               | 是       | AWS S3 Bucket 所在的地域。示例：`us-west-1`。                |
+| aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。这样，StarRocks 在使用 Hive Catalog 访问 Hive 数据时将会担任该 IAM Role。 |
+| aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。这样，StarRocks 在使用 Hive Catalog 访问 Hive 数据时将会担任该 IAM Role。 |
+
+有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
 
 #### Google GCS
 
-如果数据源为 Google GCS，需要提供如下配置信息。
+如果存储系统为 Google GCS，请按如下配置 `StorageCredentialParams`：
+
+```SQL
+"fs.s3a.access.key" = "<gcs_access_key>",
+"fs.s3a.secret.key" = "<gcs_secret_key>",
+"fs.s3a.endpoint" = "<gcs_endpoint>"
+```
+
+`StorageCredentialParams` 包含如下参数。
 
 | **参数名称**      | **参数说明**                                                 |
 | ----------------- | ------------------------------------------------------------ |
@@ -301,7 +341,15 @@ INTO TABLE <table_name>
 
 #### 阿里云 OSS
 
-如果数据源为阿里云 OSS，需要提供如下配置信息。
+如果存储系统为阿里云 OSS，请按如下配置 `StorageCredentialParams`：
+
+```SQL
+"fs.oss.accessKeyId" = "<oss_access_key>",
+"fs.oss.accessKeySecret" = "<oss_secret_key>",
+"fs.oss.endpoint" = "<oss_endpoint>"
+```
+
+`StorageCredentialParams` 包含如下参数。
 
 | **参数名称**           | **参数说明**                                                 |
 | ---------------------- | ------------------------------------------------------------ |
@@ -313,7 +361,15 @@ INTO TABLE <table_name>
 
 #### 腾讯云 COS
 
-如果数据源为腾讯云 COS，需要提供如下配置信息。
+如果存储系统为腾讯云 COS，请按如下配置 `StorageCredentialParams`：
+
+```SQL
+"fs.cosn.userinfo.secretId" = "<cos_access_key>",
+"fs.cosn.userinfo.secretKey" = "<cos_secret_key>",
+"fs.cosn.bucket.endpoint_suffix" = "<cos_endpoint>"
+```
+
+`StorageCredentialParams` 包含如下参数。
 
 | **参数名称**                   | **参数说明**                                                 |
 | ------------------------------ | ------------------------------------------------------------ |
@@ -325,7 +381,15 @@ INTO TABLE <table_name>
 
 #### 华为云 OBS
 
-如果数据源为华为云 OBS，需要提供如下配置信息。
+如果存储系统为华为云 OBS，请按如下配置 `StorageCredentialParams`：
+
+```SQL
+"fs.obs.access.key" = "<obs_access_key>",
+"fs.obs.secret.key" = "<obs_secret_key>",
+"fs.obs.endpoint" = "<obs_endpoint>"
+```
+
+`StorageCredentialParams` 包含如下参数。
 
 | **参数名称**           | **参数说明**                                                 |
 | ---------------------- | ------------------------------------------------------------ |
@@ -338,6 +402,28 @@ INTO TABLE <table_name>
 > **说明**
 >
 > 使用 Broker Load 从华为云 OBS 导入数据时，需要先下载[依赖库](https://github.com/huaweicloud/obsa-hdfs/releases/download/v45/hadoop-huaweicloud-2.8.3-hw-45.jar)添加到 **$BROKER_HOME/lib/** 路径下并重启 Broker。
+
+#### AWS S3 兼容存储
+
+如果存储系统为 AWS S3 兼容存储（如 MinIO），请按如下配置 `StorageCredentialParams`：
+
+```SQL
+"aws.s3.enable_ssl" = "<true | false>",
+"aws.s3.enable_path_style_access" = "<true | false>",
+"aws.s3.endpoint" = "<s3_endpoint>",
+"aws.s3.access_key" = "<iam_user_access_key>",
+"aws.s3.secret_key" = "<iam_user_secret_key>"
+```
+
+`StorageCredentialParams` 包含如下参数。
+
+| 参数                            | 是否必须 | 描述                                                         |
+| ------------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.enable_ssl               | 是       | 是否开启 SSL 连接。取值范围：`true` 和 `false`。默认值：`true`。 |
+| aws.s3.enable_path_style_access | 是       | 是否开启路径类型 URL 访问 (Path-Style URL Access)。取值范围：`true` 和 `false`。默认值：`false`。 |
+| aws.s3.endpoint                 | 是       | 用于访问 AWS S3 Bucket 的 Endpoint。                         |
+| aws.s3.access_key               | 是       | IAM User 的 Access Key。                                     |
+| aws.s3.secret_key               | 是       | IAM User 的 Secret Key。                                     |
 
 ### `opt_properties`
 
