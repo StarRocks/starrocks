@@ -47,6 +47,7 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctBlockingSinkOperator::pull_chunk
 
 Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     DCHECK_LE(chunk->num_rows(), state->chunk_size());
+<<<<<<< HEAD
     RETURN_IF_ERROR(_aggregator->evaluate_exprs(chunk.get()));
 
     {
@@ -64,15 +65,23 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
 #undef HASH_SET_METHOD
 
         _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
-        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
-
-        _aggregator->update_num_input_rows(chunk->num_rows());
+=======
+    {
+        SCOPED_TIMER(_aggregator->agg_compute_timer());
+        bool limit_with_no_agg = _aggregator->limit() != -1;
         if (limit_with_no_agg) {
             auto size = _aggregator->hash_set_variant().size();
             if (size >= _aggregator->limit()) {
-                // TODO(hcf) do something
+                set_finishing(state);
+                return Status::OK();
             }
         }
+        RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
+        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set(chunk->num_rows()));
+>>>>>>> c4080412d ([BugFix] Fix only-group by limit optimize couldn't work (#21439))
+        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
+
+        _aggregator->update_num_input_rows(chunk->num_rows());
     }
 
     return Status::OK();
