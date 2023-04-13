@@ -21,9 +21,9 @@
 
 namespace starrocks::csv {
 
-class BinaryConverterTest : public ::testing::Test {
+class StringConverterTest : public ::testing::Test {
 public:
-    BinaryConverterTest() {
+    StringConverterTest() {
         _type.type = TYPE_VARCHAR;
         _type.len = 6000;
     }
@@ -33,7 +33,7 @@ protected:
 };
 
 // NOLINTNEXTLINE
-TEST_F(BinaryConverterTest, test_read_string) {
+TEST_F(StringConverterTest, test_read_string) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
 
@@ -50,7 +50,7 @@ TEST_F(BinaryConverterTest, test_read_string) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(BinaryConverterTest, test_read_large_string01) {
+TEST_F(StringConverterTest, test_read_large_string01) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
 
@@ -59,7 +59,7 @@ TEST_F(BinaryConverterTest, test_read_large_string01) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(BinaryConverterTest, test_read_large_string02) {
+TEST_F(StringConverterTest, test_read_large_string02) {
     TypeDescriptor varchar_type;
     varchar_type.type = TYPE_VARCHAR;
     varchar_type.len = 10;
@@ -74,7 +74,7 @@ TEST_F(BinaryConverterTest, test_read_large_string02) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(BinaryConverterTest, test_read_quoted_string) {
+TEST_F(StringConverterTest, test_read_quoted_string) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
 
@@ -92,7 +92,7 @@ TEST_F(BinaryConverterTest, test_read_quoted_string) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(BinaryConverterTest, test_read_large_quoted_string01) {
+TEST_F(StringConverterTest, test_read_large_quoted_string01) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
 
@@ -106,7 +106,7 @@ TEST_F(BinaryConverterTest, test_read_large_quoted_string01) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(BinaryConverterTest, test_read_large_quoted_string02) {
+TEST_F(StringConverterTest, test_read_large_quoted_string02) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
 
@@ -120,7 +120,7 @@ TEST_F(BinaryConverterTest, test_read_large_quoted_string02) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(BinaryConverterTest, test_read_large_quoted_string03) {
+TEST_F(StringConverterTest, test_read_large_quoted_string03) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
 
@@ -138,7 +138,7 @@ TEST_F(BinaryConverterTest, test_read_large_quoted_string03) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(BinaryConverterTest, test_read_large_quoted_string04) {
+TEST_F(StringConverterTest, test_read_large_quoted_string04) {
     TypeDescriptor varchar_type;
     varchar_type.type = TYPE_VARCHAR;
     varchar_type.len = 10;
@@ -159,7 +159,7 @@ TEST_F(BinaryConverterTest, test_read_large_quoted_string04) {
 }
 
 // NOLINTNEXTLINE
-TEST_F(BinaryConverterTest, test_write_string) {
+TEST_F(StringConverterTest, test_write_string) {
     auto conv = csv::get_converter(_type, false);
     auto col = ColumnHelper::create_column(_type, false);
     (void)col->append_strings({"aaaaaaaaaaaa", "bbbbbbbb", "\"\"", "ccccc"});
