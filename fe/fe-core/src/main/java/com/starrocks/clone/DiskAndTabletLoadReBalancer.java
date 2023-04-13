@@ -403,7 +403,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
      *          skew worse for the second iteration, got to the next partition.
      *    4) After traverse all tablets, if neither the number of tablets selected in high load BE
      *       nor low load BE exceed the limit, change the group index in succession.
-     *    5) repeat 2), 3), 4) until there is no BE in high group.
+     *    5) repeat 2), 3), 4) until there isn't any BE in high group.
      */
     private List<TabletSchedCtx> balanceClusterDisk(ClusterLoadStatistic clusterStat,
                                                     TStorageMedium medium) {

@@ -1359,7 +1359,7 @@ public class Config extends ConfigBase {
      * {@link com.starrocks.authentication.SecurityIntegration}
      */
     @ConfField(mutable = true)
-    public static String[] authentication_chain = {"native"};
+    public static String[] authentication_chain = {AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
 
     /**
      * ldap server host for authentication_ldap_simple

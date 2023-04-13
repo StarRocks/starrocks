@@ -56,6 +56,8 @@ import java.util.regex.Pattern;
 public class ConfigBase {
     private static final Logger LOG = LogManager.getLogger(ConfigBase.class);
 
+    public static final String AUTHENTICATION_CHAIN_MECHANISM_NATIVE = "native";
+
     @Retention(RetentionPolicy.RUNTIME)
     public static @interface ConfField {
         boolean mutable() default false;
@@ -206,10 +208,11 @@ public class ConfigBase {
         switch (f.getName()) {
             case "authentication_chain":
                 Set<String> argsSet = new HashSet<>(Arrays.asList(arrayArgs));
-                if (!f.getType().getSimpleName().equals("String[]")
+                if (!f.getType().equals(String[].class)
                         || argsSet.size() != arrayArgs.length
-                        || !argsSet.contains("native")) {
-                    throw new InvalidConfException("'authentication_chain' configuration invalid, current value: "
+                        || !argsSet.contains(AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                    throw new InvalidConfException("'authentication_chain' configuration invalid, " +
+                            "'native' must be in the list, and cannot have duplicates, current value: "
                             + confVal);
                 }
                 break;

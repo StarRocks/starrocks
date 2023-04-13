@@ -55,6 +55,7 @@ import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static com.starrocks.common.ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE;
 import static com.starrocks.mysql.privilege.AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL;
 import static com.starrocks.privilege.PrivilegeBuiltinConstants.ROOT_ROLE_ID;
 
@@ -229,7 +230,7 @@ public class AuthenticationManager {
                 break;
             }
 
-            if (authMechanism.equals("native")) {
+            if (authMechanism.equals(AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
                 Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
                         getBestMatchedUserIdentity(remoteUser, remoteHost);
                 if (matchedUserIdentity == null) {
