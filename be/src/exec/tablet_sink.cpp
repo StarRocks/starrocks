@@ -1421,12 +1421,12 @@ Status OlapTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
                 state->update_num_rows_load_filtered(num_rows_load_filtered);
             }
             _number_output_rows += _validate_select_idx.size();
+            state->update_num_rows_load_sink(_validate_select_idx.size());
         }
     }
     // update incrementally so that FE can get the progress.
     // the real 'num_rows_load_total' will be set when sink being closed.
     _number_input_rows += num_rows;
-    state->update_num_rows_load_sink(num_rows);
     state->update_num_bytes_load_sink(serialize_size);
     StarRocksMetrics::instance()->load_rows_total.increment(num_rows);
     StarRocksMetrics::instance()->load_bytes_total.increment(serialize_size);
