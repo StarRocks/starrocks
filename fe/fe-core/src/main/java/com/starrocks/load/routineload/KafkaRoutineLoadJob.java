@@ -644,7 +644,9 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             convertCustomProperties(true);
         }
 
-        confluentSchemaRegistryUrl = dataSourceProperties.getConfluentSchemaRegistryUrl();
+        if (dataSourceProperties.getConfluentSchemaRegistryUrl() != null) {
+            confluentSchemaRegistryUrl = dataSourceProperties.getConfluentSchemaRegistryUrl();
+        }
 
         LOG.info("modify the data source properties of kafka routine load job: {}, datasource properties: {}",
                 this.id, dataSourceProperties);
