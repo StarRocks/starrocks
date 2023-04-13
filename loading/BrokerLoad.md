@@ -174,8 +174,7 @@ WITH BROKER
 
 > **说明**
 >
-> - 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
-> - 如果您的 AWS EC2 实例上绑定的 IAM 角色可以访问您的 AWS S3 存储空间，那么您不需要提供 `aws.s3.access_key` 和 `aws.s3.secret_key` 配置，留空即可。
+> 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
 
 #### 从 Google GCS 导入
 
@@ -277,7 +276,7 @@ WITH BROKER
 >
 > 从华为云 OBS 导入数据时，需要先下载[依赖库](https://github.com/huaweicloud/obsa-hdfs/releases/download/v45/hadoop-huaweicloud-2.8.3-hw-45.jar)添加到 **$BROKER_HOME/lib/** 路径下并重启 Broker。
 
-##### 从 AWS S3 兼容存储导入
+#### 从 AWS S3 兼容存储导入
 
 可以通过如下语句，把 AWS S3 兼容存储空间（如 MinIO） `bucket_minio` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
 
