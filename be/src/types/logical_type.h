@@ -269,6 +269,7 @@ VALUE_GUARD(LogicalType, BinaryLTGuard, lt_is_binary, TYPE_BINARY, TYPE_VARBINAR
 VALUE_GUARD(LogicalType, JsonGuard, lt_is_json, TYPE_JSON)
 VALUE_GUARD(LogicalType, FunctionGuard, lt_is_function, TYPE_FUNCTION)
 VALUE_GUARD(LogicalType, ObjectFamilyLTGuard, lt_is_object_family, TYPE_JSON, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE)
+VALUE_GUARD(LogicalType, ArrayGuard, lt_is_array, TYPE_ARRAY)
 VALUE_GUARD(LogicalType, MapGuard, lt_is_map, TYPE_MAP)
 VALUE_GUARD(LogicalType, StructGurad, lt_is_struct, TYPE_STRUCT)
 
