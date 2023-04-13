@@ -368,6 +368,44 @@ public class MvUtils {
         return predicates;
     }
 
+    // If join is not cross/inner join, MV Rewrite must rewrite, otherwise may cause bad results.
+    // eg.
+    // mv: select * from customer left outer join orders on c_custkey = o_custkey;
+    //
+    //query（cannot rewrite）:
+    //select count(1) from customer left outer join orders
+    //  on c_custkey = o_custkey and o_comment not like '%special%requests%';
+    //
+    //query（can rewrite）:
+    //select count(1)
+    //          from customer left outer join orders on c_custkey = o_custkey
+    //          where o_comment not like '%special%requests%';
+    public static List<ScalarOperator> getJoinOnPredicates(OptExpression root) {
+        List<ScalarOperator> predicates = Lists.newArrayList();
+        getJoinOnPredicates(root, predicates);
+        return predicates;
+    }
+
+    private static void getJoinOnPredicates(OptExpression root, List<ScalarOperator> predicates) {
+        Operator operator = root.getOp();
+
+        if (operator instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+            JoinOperator joinOperatorType = joinOperator.getJoinType();
+            // Collect all join on predicates which join type are not inner/cross join.
+            if ((joinOperatorType != JoinOperator.INNER_JOIN
+                    && joinOperatorType != JoinOperator.CROSS_JOIN) && joinOperator.getOnPredicate() != null) {
+                // Now join's on-predicates may be pushed down below join, so use original on-predicates
+                // instead of new on-predicates.
+                List<ScalarOperator> conjuncts = Utils.extractConjuncts(joinOperator.getOriginalOnPredicate());
+                predicates.addAll(conjuncts);
+            }
+        }
+        for (OptExpression child : root.getInputs()) {
+            getJoinOnPredicates(child, predicates);
+        }
+    }
+
     public static ScalarOperator rewriteOptExprCompoundPredicate(OptExpression root,
                                                                  ReplaceColumnRefRewriter columnRefRewriter) {
         List<ScalarOperator> conjuncts = MvUtils.getAllPredicates(root);

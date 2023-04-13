@@ -416,26 +416,57 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testMultiOuterJoinQueryComplete() {
-        for (String joinType: outerJoinTypes) {
-            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
-                    "" + joinType + " join locations on emps.locationid = locations.locationid";
-            testRewriteOK(mv, "select count(*) from " +
-                    "emps " + joinType + " join locations on emps.locationid = locations.locationid");
-            testRewriteOK(mv, "select empid as col2, emps.locationid from " +
-                    "emps " + joinType + " join locations on emps.locationid = locations.locationid " +
-                    "and emps.locationid > 10");
-            testRewriteOK(mv, "select count(*) from " +
-                    "emps " + joinType + " join locations on emps.locationid = locations.locationid " +
-                    "and emps.locationid > 10");
-            testRewriteOK(mv, "select empid as col2, locations.locationid from " +
-                    "emps " + joinType + " join locations on emps.locationid = locations.locationid " +
-                    "and locations.locationid > 10");
-            testRewriteFail(mv, "select empid as col2, locations.locationid from " +
-                    "emps inner join locations on emps.locationid = locations.locationid " +
-                    "and locations.locationid > 10");
-        }
+    public void testLeftOuterJoinQueryComplete() {
+        String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                " left join locations on emps.locationid = locations.locationid";
+        testRewriteOK(mv, "select count(*) from " +
+                "emps  left join locations on emps.locationid = locations.locationid");
+        testRewriteOK(mv, "select empid as col2, emps.locationid from " +
+                "emps  left join locations on emps.locationid = locations.locationid " +
+                "where emps.deptno > 10");
+        testRewriteOK(mv, "select count(*) from " +
+                "emps  left join locations on emps.locationid = locations.locationid " +
+                "where emps.deptno > 10");
+        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
+                "emps left join locations on emps.locationid = locations.locationid " +
+                "where emps.locationid > 10");
+        // TODO: Query's left outer join will be converted to Inner Join.
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps left join locations on emps.locationid = locations.locationid " +
+                "where locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and emps.locationid > 10");
     }
+
+    @Test
+    public void testRightOuterJoinQueryComplete() {
+        String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                " right join locations on emps.locationid = locations.locationid";
+        testRewriteOK(mv, "select count(*) from " +
+                "emps  right join locations on emps.locationid = locations.locationid");
+        // TODO: Query's right outer join will be converted to Inner Join.
+        testRewriteFail(mv, "select empid as col2, emps.locationid from " +
+                "emps  right join locations on emps.locationid = locations.locationid " +
+                "where emps.deptno > 10");
+        // TODO: Query's right outer join will be converted to Inner Join.
+        testRewriteFail(mv, "select count(*) from " +
+                "emps  right join locations on emps.locationid = locations.locationid " +
+                "where emps.deptno > 10");
+        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
+                "emps  right join locations on emps.locationid = locations.locationid " +
+                "where locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and emps.locationid > 10");
+    }
+
     @Test
     public void testMultiOuterJoinQueryDelta() {
         for (String joinType: outerJoinTypes) {
