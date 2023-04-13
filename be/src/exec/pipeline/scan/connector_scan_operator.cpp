@@ -158,14 +158,17 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
 
 bool ConnectorScanOperator::is_running_all_io_tasks() const {
     PickupMorselState& state = _pickup_morsel_state;
-    VLOG_FILE << "[ZZZ] running all. seq = " << _driver_sequence << ", io = " << _num_running_io_tasks
-              << ", exp = " << state.max_io_tasks;
-    return (state.max_io_tasks != 0) && (_num_running_io_tasks >= state.max_io_tasks);
+    // VLOG_FILE << "[ZZZ] running all. seq = " << _driver_sequence << ", io = " << _num_running_io_tasks
+    //           << ", exp = " << state.max_io_tasks;
+    bool ret = (state.max_io_tasks != 0) && (_num_running_io_tasks >= state.max_io_tasks);
+    return ret;
+    // return ScanOperator::is_running_all_io_tasks();
 }
 
 void ConnectorScanOperator::finish_driver_process() {
     PickupMorselState& state = _pickup_morsel_state;
     state.adjusted_io_tasks = false;
+    state.early_cut = 0;
 }
 
 bool ConnectorScanOperator::has_output() const {
@@ -191,21 +194,46 @@ int ConnectorScanOperator::update_pickup_morsel_state() {
     size_t chunks = num_buffered_chunks();
     size_t thres = _buffer_unplug_threshold();
     const int MIN_IO_TASKS = config::connector_io_tasks_min_size;
-    if (state.adjusted_io_tasks) {
-        return io_tasks;
-    }
+    // if (((state.flip_counter++) & 0x31) != 0) return io_tasks;
+    if (state.adjusted_io_tasks) return io_tasks;
+    state.adjusted_io_tasks = true;
 
     auto f = [&]() {
-        if (chunks >= (2 * thres)) {
-            io_tasks = std::max(MIN_IO_TASKS, io_tasks - 1);
-            VLOG_FILE << "[XXX] queue FULL. id = " << _driver_sequence << ", update to " << io_tasks;
-        } else if (chunks <= thres) {
-            io_tasks = std::min(io_tasks + MIN_IO_TASKS, _io_tasks_per_scan_operator);
-            VLOG_FILE << "[XXX] queue not full. id = " << _driver_sequence << ", update to " << io_tasks;
-        } else {
-            // if buffer is enough. then don't do anything.
+        size_t C = 0;
+        size_t P = 0;
+        for (int i = 0; i < state.N; i++) {
+            C += state.history_chunks[i];
+            P += state.history_P[i];
         }
-        return io_tasks;
+        double avgc = C * 1.0 / state.N;
+        double avgp = P * 1.0 / state.N;
+        state.history_chunks[state.history_index] = chunks;
+        if (chunks <= avgc) {
+            avgp += 1;
+        } else {
+            avgp -= 1;
+        }
+        int value = int(avgp + 0.5);
+        value = std::max<int>(value, MIN_IO_TASKS);
+        value = std::min<int>(value, _io_tasks_per_scan_operator);
+        state.history_P[state.history_index] = value;
+        state.history_index = (state.history_index + 1) % state.N;
+
+        VLOG_FILE << "[XX] id = " << _driver_sequence << ", chunks = " << chunks << ", c=" << avgc << ", p=" << avgp
+                  << ", P=" << value;
+
+        // if (chunks >= (2 * thres)) {
+        //     io_tasks = std::max(MIN_IO_TASKS, io_tasks - 1);
+        //     VLOG_FILE << "[XXX] queue FULL. id = " << _driver_sequence << ", update to " << io_tasks;
+        // } else if (chunks <= thres) {
+        //     io_tasks = std::min(io_tasks + MIN_IO_TASKS, _io_tasks_per_scan_operator);
+        //     VLOG_FILE << "[XXX] queue not full. id = " << _driver_sequence << ", update to " << io_tasks;
+        // } else {
+        //     // if buffer is enough. then don't do anything.
+        // }
+        // return io_tasks;
+        io_tasks = value;
+        return value;
     };
 
     int value = f();

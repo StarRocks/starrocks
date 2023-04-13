@@ -85,7 +85,14 @@ public:
 
 private:
     struct PickupMorselState {
+        static constexpr int N = 32;
+        int history_chunks[N];
+        int history_P[N];
+        int history_index = 0;
+        int flip_counter = 0;
+        int moving_value = 0;
         int max_io_tasks = 0;
+        int64 early_cut = 0;
         bool adjusted_io_tasks = false;
     };
     mutable PickupMorselState _pickup_morsel_state;
