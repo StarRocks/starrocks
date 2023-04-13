@@ -214,6 +214,9 @@ StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(SerdeContext& ctx) {
             // move to the next block
             continue;
         }
+        if (res.status().ok() && res.value()->is_empty()) {
+            continue;
+        }
         if (!res.status().is_end_of_file()) {
             return res;
         }
