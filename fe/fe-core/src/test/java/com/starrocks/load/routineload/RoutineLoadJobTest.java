@@ -310,7 +310,7 @@ public class RoutineLoadJobTest {
         Assert.assertEquals(Long.parseLong(maxErrorNumber),
                 (long) Deencapsulation.getField(routineLoadJob, "maxErrorNum"));
         Assert.assertEquals(Double.parseDouble(maxFilterRatio),
-                (long) Deencapsulation.getField(routineLoadJob, "maxFilterRatio"), 0.01);
+                (double) Deencapsulation.getField(routineLoadJob, "maxFilterRatio"), 0.01);
         Assert.assertEquals(Long.parseLong(maxBatchRows),
                 (long) Deencapsulation.getField(routineLoadJob, "maxBatchRows"));
         Assert.assertEquals(Boolean.parseBoolean(strictMode), routineLoadJob.isStrictMode());
