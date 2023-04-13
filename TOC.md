@@ -260,6 +260,7 @@
       + [SPARK LOAD](/sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)
       + [STOP ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)
       + [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)
+      + [SUBMIT TASK](/sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md)
       + [UPDATE](/sql-reference/sql-statements/data-manipulation/UPDATE.md)
     + 辅助命令
       + [DESC](/sql-reference/sql-statements/Utility/DESCRIBE.md)
