@@ -1519,7 +1519,7 @@ roleList
 
 
 executeScriptStatement
-    : ADMIN EXECUTE ON INTEGER_VALUE string
+    : ADMIN EXECUTE ON (FRONTEND | INTEGER_VALUE) string
     ;
 
 unsupportedStatement

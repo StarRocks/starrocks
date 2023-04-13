@@ -2148,4 +2148,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long max_per_node_grep_log_limit = 500000;
 
+    @ConfField
+    public static boolean enable_execute_script_on_frontend = true;
 }

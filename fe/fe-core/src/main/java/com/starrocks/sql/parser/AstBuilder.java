@@ -3129,7 +3129,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitExecuteScriptStatement(StarRocksParser.ExecuteScriptStatementContext context) {
-        long beId = Long.parseLong(context.INTEGER_VALUE().getText());
+        long beId = -1;
+        if (context.INTEGER_VALUE() != null) {
+            beId = Long.parseLong(context.INTEGER_VALUE().getText());
+        }
         StringLiteral stringLiteral = (StringLiteral) visit(context.string());
         String script = stringLiteral.getStringValue();
         return new ExecuteScriptStmt(beId, script);
