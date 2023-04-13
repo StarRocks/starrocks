@@ -68,12 +68,49 @@ struct WindowFunnelState {
 
     // first args is timestamp, second is event position.
     using TimestampEvent = std::pair<TimestampType, uint8_t>;
+<<<<<<< HEAD
     mutable std::vector<TimestampEvent> events_list;
     using TimestampVector = std::vector<TimestampType>;
     int64_t window_size;
     int32_t mode;
     uint8_t events_size;
     bool sorted = true;
+=======
+    struct TimestampTypePair {
+        TimestampType start_timestamp = -1;
+        TimestampType last_timestamp = -1;
+    };
+    using TimestampVector = std::vector<TimestampTypePair>;
+
+    // `window_size` is guaranteed to be non-negative by the analyzer in FE,
+    // so use -1 to indicate `window_size` hasn't been initialized.
+    static constexpr int64_t ABSENT_WINDOW_SIZE = -1;
+
+    int64_t window_size = ABSENT_WINDOW_SIZE;
+    mutable int32_t mode = 0;
+    uint8_t events_size;
+    bool sorted = true;
+    char buffer[reserve_list_size * sizeof(TimestampEvent)];
+    stack_memory_resource mr;
+    mutable std::pmr::vector<TimestampEvent> events_list;
+
+    WindowFunnelState() : mr(buffer, sizeof(buffer)), events_list(&mr) { events_list.reserve(reserve_list_size); }
+>>>>>>> 7aceedd2a ([BugFix] Find correct index of window_size for window_funnel (#21462))
+
+    void init_once(FunctionContext* ctx) {
+        if (window_size != ABSENT_WINDOW_SIZE) {
+            return;
+        }
+
+        // `agg_expr_ctxs` is different between update and merge mode of the AggregationOperator.
+        // - update mode: [InitLiteral(BIGINT), SlotRef(DATE/DATETIME), IntLiteral(INT), SlotRef(Array<BOOLEAN>)]
+        // - merge mode: [SlotRef(ARRAY<BIGINT>), InitLiteral(BIGINT), IntLiteral(INT)]
+        // Therefore, the index of `window_size` is 0 or 1.
+        size_t window_size_col_index = ctx->get_constant_column(0) != nullptr ? 0 : 1;
+        window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(window_size_col_index));
+
+        mode = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(2));
+    }
 
     void sort() const { std::stable_sort(std::begin(events_list), std::end(events_list)); }
 
@@ -98,8 +135,6 @@ struct WindowFunnelState {
         }
 
         std::vector<TimestampEvent> other_list;
-        window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(1));
-        mode = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(2));
 
         events_size = (uint8_t)datum_array[0].get_int64();
         bool other_sorted = (uint8_t)datum_array[1].get_int64();
@@ -369,9 +404,17 @@ class WindowFunnelAggregateFunction final
     using TimestampType = typename WindowFunnelState<PT>::TimestampType;
 
 public:
+<<<<<<< HEAD
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const {
         this->data(state).window_size = ColumnHelper::get_const_value<TYPE_BIGINT>(ctx->get_constant_column(0));
         this->data(state).mode = ColumnHelper::get_const_value<TYPE_INT>(ctx->get_constant_column(2));
+=======
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
+        DCHECK(columns[2]->is_constant());
+
+        this->data(state).init_once(ctx);
+>>>>>>> 7aceedd2a ([BugFix] Find correct index of window_size for window_funnel (#21462))
 
         // get timestamp
         TimeType tv;
@@ -430,6 +473,14 @@ public:
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+<<<<<<< HEAD
+=======
+        DCHECK(column->is_array());
+        DCHECK(!column->is_nullable());
+
+        this->data(state).init_once(ctx);
+
+>>>>>>> 7aceedd2a ([BugFix] Find correct index of window_size for window_funnel (#21462))
         const auto* input_column = down_cast<const ArrayColumn*>(column);
         auto ele_vector = input_column->get(row_num).get_array();
         this->data(state).deserialize_and_merge(ctx, ele_vector);
