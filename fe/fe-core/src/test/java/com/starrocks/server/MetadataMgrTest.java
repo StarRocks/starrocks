@@ -193,7 +193,7 @@ public class MetadataMgrTest {
         };
 
         try {
-            metadataMgr.createTable("iceberg_catalog", createTableStmt);
+            metadataMgr.createTable(createTableStmt);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof DdlException);
@@ -213,7 +213,7 @@ public class MetadataMgrTest {
         };
 
         try {
-            metadataMgr.createTable("iceberg_catalog", createTableStmt);
+            metadataMgr.createTable(createTableStmt);
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e instanceof DdlException);
@@ -221,6 +221,6 @@ public class MetadataMgrTest {
         }
 
         createTableStmt.setIfNotExists();
-        Assert.assertFalse(metadataMgr.createTable("iceberg_catalog", createTableStmt));
+        Assert.assertFalse(metadataMgr.createTable(createTableStmt));
     }
 }
