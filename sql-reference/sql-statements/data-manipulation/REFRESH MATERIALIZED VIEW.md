@@ -6,7 +6,7 @@
 
 > **注意**
 >
-> 您只能通过该命令手动刷新刷新方式为 ASYNC 或 MANUAL 的异步物化视图。您可以通过 [SHOW MATERIALIZED VIEW](../data-manipulation/SHOW%20MATERIALIZED%20VIEW.md) 查看物化视图的刷新方式。
+> 您只能通过该命令手动刷新刷新方式为 ASYNC 或 MANUAL 的异步物化视图。您可以通过 [SHOW MATERIALIZED VIEWS](../data-manipulation/SHOW%20MATERIALIZED%20VIEW.md) 查看物化视图的刷新方式。
 
 ## 语法
 

@@ -30,7 +30,7 @@ DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name
 1. 查看当前数据库中存在的物化视图。
 
     ```Plain
-    MySQL > SHOW MATERIALIZED VIEW\G
+    MySQL > SHOW MATERIALIZED VIEWS\G
     *************************** 1. row ***************************
               id: 470740
             name: order_mv1
@@ -49,7 +49,7 @@ DROP MATERIALIZED VIEW [IF EXISTS] [database.]mv_name
 3. 删除后重新查看当前数据库中存在的物化视图将不会显示该物化视图。
 
     ```Plain
-    MySQL > SHOW MATERIALIZED VIEW;
+    MySQL > SHOW MATERIALIZED VIEWS;
     Empty set (0.01 sec)
     ```
 

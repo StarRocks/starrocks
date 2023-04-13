@@ -359,24 +359,24 @@ mysql> EXPLAIN SELECT
 
 ### 查看异步物化视图
 
-您可以使用 [SHOW MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md) 或查询 Information Schema 中的系统元数据表来查看数据库中的异步物化视图。
+您可以使用 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md) 或查询 Information Schema 中的系统元数据表来查看数据库中的异步物化视图。
 
 - 查看当前数据仓库内所有异步物化视图。
 
   ```SQL
-  SHOW MATERIALIZED VIEW;
+  SHOW MATERIALIZED VIEWS;
   ```
 
 - 查看特定异步物化视图。
 
   ```SQL
-  SHOW MATERIALIZED VIEW WHERE NAME = "order_mv";
+  SHOW MATERIALIZED VIEWS WHERE NAME = "order_mv";
   ```
 
 - 通过名称匹配查看异步物化视图。
 
   ```SQL
-  SHOW MATERIALIZED VIEW WHERE NAME LIKE "order%";
+  SHOW MATERIALIZED VIEWS WHERE NAME LIKE "order%";
   ```
 
 - 通过 Information Schema 中的系统元数据表查看所有异步物化视图。
