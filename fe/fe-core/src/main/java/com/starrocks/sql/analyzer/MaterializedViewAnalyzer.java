@@ -478,13 +478,7 @@ public class MaterializedViewAnalyzer {
                 if (refExpr instanceof FunctionCallExpr || refExpr instanceof SlotRef) {
                     statement.setPartitionRefTableExpr(refExpr);
                 } else {
-                    throw new SemanticException(
-<<<<<<< HEAD
-                            "Materialized view partition function must related with column");
-=======
-                            "Materialized view partition function must related with column",
-                            expressionPartitionDesc.getPos());
->>>>>>> 3ba921e2a ([Feature] support creating materialized view on jdbc external table (#21293))
+                    throw new SemanticException("Materialized view partition function must related with column");
                 }
             }
         }
@@ -710,12 +704,7 @@ public class MaterializedViewAnalyzer {
             final String newMvName = statement.getNewMvName();
             if (newMvName != null) {
                 if (statement.getMvName().getTbl().equals(newMvName)) {
-<<<<<<< HEAD
                     throw new SemanticException("Same materialized view name %s", newMvName);
-=======
-                    throw new SemanticException("Same materialized view name " + newMvName,
-                            statement.getMvName().getPos());
->>>>>>> 3ba921e2a ([Feature] support creating materialized view on jdbc external table (#21293))
                 }
             } else if (refreshSchemeDesc != null) {
                 if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
@@ -727,27 +716,15 @@ public class MaterializedViewAnalyzer {
                     if (intervalLiteral != null) {
                         long step = ((IntLiteral) intervalLiteral.getValue()).getLongValue();
                         if (step <= 0) {
-<<<<<<< HEAD
                             throw new SemanticException("Unsupported negative or zero step value: %s", step);
-=======
-                            throw new SemanticException("Unsupported negative or zero step value: " + step,
-                                    async.getPos());
->>>>>>> 3ba921e2a ([Feature] support creating materialized view on jdbc external table (#21293))
                         }
                         final String unit = intervalLiteral.getUnitIdentifier().getDescription().toUpperCase();
                         try {
                             RefreshTimeUnit.valueOf(unit);
                         } catch (IllegalArgumentException e) {
-<<<<<<< HEAD
                             throw new SemanticException(
                                     "Unsupported interval unit: %s, only timeunit %s are supported.", unit,
                                     Arrays.asList(RefreshTimeUnit.values()));
-=======
-                            String msg =
-                                    String.format("Unsupported interval unit: %s, only timeunit %s are supported", unit,
-                                            Arrays.asList(RefreshTimeUnit.values()));
-                            throw new SemanticException(msg, intervalLiteral.getUnitIdentifier().getPos());
->>>>>>> 3ba921e2a ([Feature] support creating materialized view on jdbc external table (#21293))
                         }
                     }
                 }
@@ -793,12 +770,7 @@ public class MaterializedViewAnalyzer {
                 return null;
             }
             if (!(table.getPartitionInfo() instanceof RangePartitionInfo)) {
-<<<<<<< HEAD
                 throw new SemanticException("Not support refresh by partition for single partition mv.");
-=======
-                throw new SemanticException("Not support refresh by partition for single partition mv",
-                        mvName.getPos());
->>>>>>> 3ba921e2a ([Feature] support creating materialized view on jdbc external table (#21293))
             }
             Column partitionColumn =
                     ((RangePartitionInfo) table.getPartitionInfo()).getPartitionColumns().get(0);
