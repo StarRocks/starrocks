@@ -46,13 +46,15 @@ Broker Load 支持从如下外部存储系统导入数据：
 
 - HDFS
 
-- Amazon S3
+- AWS S3
 
 - Google GCS
 
 - 阿里云 OSS
 
 - 腾讯云 COS
+
+- AWS S3 兼容存储（如 MinIO）
 
 ## 基本原理
 
@@ -118,7 +120,7 @@ Broker Load 支持从如下外部存储系统导入数据：
    200,'北京'
    ```
 
-3. 把创建好的数据文件 `file1.csv` 和 `file2.csv` 分别上传到 HDFS 集群的 `/user/starrocks/` 路径下、Amazon S3 存储空间 `bucket_s3` 里的 `input` 文件夹下、 Google GCS 存储空间 `bucket_gcs` 里的 `input` 文件夹下、阿里云 OSS 存储空间 `bucket_oss` 里的 `input` 文件夹下、以及腾讯云 COS 存储空间 `bucket_cos` 里的 `input` 文件夹下。
+3. 把创建好的数据文件 `file1.csv` 和 `file2.csv` 分别上传到 HDFS 集群的 `/user/starrocks/` 路径下、AWS S3 存储空间 `bucket_s3` 里的 `input` 文件夹下、 Google GCS 存储空间 `bucket_gcs` 里的 `input` 文件夹下、阿里云 OSS 存储空间 `bucket_oss` 里的 `input` 文件夹下、以及腾讯云 COS 存储空间 `bucket_cos` 里的 `input` 文件夹下。
 
 #### 从 HDFS 导入
 
@@ -139,8 +141,7 @@ LOAD LABEL test_db.label1
 )
 WITH BROKER
 (
-    "username" = "hdfs_username",
-    "password" = "hdfs_password"
+    StorageCredentialParams
 )
 PROPERTIES
 (
@@ -148,9 +149,9 @@ PROPERTIES
 );
 ```
 
-#### 从 Amazon S3 导入
+#### 从 AWS S3 导入
 
-可以通过如下语句，把 Amazon S3 存储空间 `bucket_s3` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+可以通过如下语句，把 AWS S3 存储空间 `bucket_s3` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
 
 ```SQL
 LOAD LABEL test_db.label2
@@ -167,16 +168,14 @@ LOAD LABEL test_db.label2
 )
 WITH BROKER
 (
-    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
-    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+    StorageCredentialParams
 );
 ```
 
 > **说明**
 >
 > - 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
-> - 如果您的 Amazon EC2 实例上绑定的 IAM 角色可以访问您的 Amazon S3 存储空间，那么您不需要提供 `aws.s3.access_key` 和 `aws.s3.secret_key` 配置，留空即可。
+> - 如果您的 AWS EC2 实例上绑定的 IAM 角色可以访问您的 AWS S3 存储空间，那么您不需要提供 `aws.s3.access_key` 和 `aws.s3.secret_key` 配置，留空即可。
 
 #### 从 Google GCS 导入
 
@@ -197,9 +196,7 @@ LOAD LABEL test_db.label3
 )
 WITH BROKER
 (
-    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
-    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.s3a.endpoint" = "storage.googleapis.com"
+    StorageCredentialParams
 );
 ```
 
@@ -226,9 +223,7 @@ LOAD LABEL test_db.label4
 )
 WITH BROKER
 (
-    "fs.oss.accessKeyId" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "fs.oss.accessKeySecret" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.oss.endpoint" = "oss-cn-zhangjiakou-internal.aliyuncs.com"
+    StorageCredentialParams
 );
 ```
 
@@ -251,9 +246,7 @@ LOAD LABEL test_db.label5
 )
 WITH BROKER
 (
-    "fs.cosn.userinfo.secretId" = "xxxxxxxxxxxxxxxxx",
-    "fs.cosn.userinfo.secretKey" = "yyyyyyyyyyyyyyyy",
-    "fs.cosn.bucket.endpoint_suffix" = "cos.ap-beijing.myqcloud.com"
+    StorageCredentialParams
 );
 ```
 
@@ -276,9 +269,7 @@ LOAD LABEL test_db.label6
 )
 WITH BROKER
 (
-    "fs.obs.access.key" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "fs.obs.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.obs.endpoint" = "obs.cn-east-3.myhuaweicloud.com"
+    StorageCredentialParams
 );
 ```
 
@@ -286,9 +277,32 @@ WITH BROKER
 >
 > 从华为云 OBS 导入数据时，需要先下载[依赖库](https://github.com/huaweicloud/obsa-hdfs/releases/download/v45/hadoop-huaweicloud-2.8.3-hw-45.jar)添加到 **$BROKER_HOME/lib/** 路径下并重启 Broker。
 
+##### 从 AWS S3 兼容存储导入
+
+可以通过如下语句，把 AWS S3 兼容存储空间（如 MinIO） `bucket_minio` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+
+```SQL
+LOAD LABEL test_db.label7
+(
+    DATA INFILE("obs://bucket_minio/input/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    (id, name, score)
+    ,
+    DATA INFILE("obs://bucket_minio/input/file2.csv")
+    INTO TABLE table2
+    COLUMNS TERMINATED BY ","
+    (id, city)
+)
+WITH BROKER
+(
+    StorageCredentialParams
+);
+```
+
 #### 查询数据
 
-从 HDFS、Amazon S3、Google GCS、阿里云 OSS、腾讯云 COS、或者华为云 OBS 导入完成后，您可以使用 SELECT 语句来查看 StarRocks 表的数据，验证数据已经成功导入。
+从 HDFS、AWS S3、Google GCS、阿里云 OSS、腾讯云 COS、或者华为云 OBS 导入完成后，您可以使用 SELECT 语句来查看 StarRocks 表的数据，验证数据已经成功导入。
 
 1. 查询 `table1` 表的数据，如下所示：
 
@@ -319,7 +333,7 @@ WITH BROKER
 
 #### 使用说明
 
-以上导入操作以导入多个数据文件到多个目标表为例。您还可以指定导入一个数据文件或者一个路径下所有数据文件到一个目标表。这里假设您的 Amazon S3 存储空间 `bucket_s3` 里 `input` 文件夹下包含多个数据文件，其中一个数据文件名为 `file1.csv`。这些数据文件与目标表 `table1` 包含的列数相同、并且这些列能按顺序一一对应到目标表 `table1` 中的列。
+以上导入操作以导入多个数据文件到多个目标表为例。您还可以指定导入一个数据文件或者一个路径下所有数据文件到一个目标表。这里假设您的 AWS S3 存储空间 `bucket_s3` 里 `input` 文件夹下包含多个数据文件，其中一个数据文件名为 `file1.csv`。这些数据文件与目标表 `table1` 包含的列数相同、并且这些列能按顺序一一对应到目标表 `table1` 中的列。
 
 如果要把数据文件 `file1.csv` 导入到目标表 `table1` 中，可以执行如下语句:
 
