@@ -173,7 +173,6 @@ bool ConnectorScanOperator::is_running_all_io_tasks() const {
 
 int ConnectorScanOperator::available_pickup_morsel_count() {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
-
     early_cut_all_io_tasks = 0;
     // called every time before `pull_chunk` when there is chunk.
     // accumulate chunk source stats.
@@ -191,7 +190,9 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
         return io_tasks;
     }
     last_check_time = now;
-    if (cs_speed >= op_speed || cs_speed < last_cs_speed) {
+    // for slow query, at startup, cs/op could be both 0.
+    // for this case, w'd better to ramup but to wait.
+    if (cs_speed > op_speed || cs_speed < last_cs_speed) {
         io_tasks -= config::connector_io_tasks_dec;
     } else {
         io_tasks += config::connector_io_tasks_inc;
@@ -199,8 +200,9 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     io_tasks = std::min(io_tasks, _io_tasks_per_scan_operator);
     io_tasks = std::max(io_tasks, MIN_IO_TASKS);
 
-    VLOG_FILE << "[XXX] pick mosrsel. id = " << _driver_sequence << ", cs = " << cs_speed << ", old = " << last_cs_speed
-              << ", op = " << op_speed << ", value = " << io_tasks;
+    VLOG_FILE << "[XXX] pick mosrsel. id = " << _driver_sequence << ", cs = " << cs_speed << "( " << _cs_pull_rows
+              << "/" << _cs_pull_time << "), old = " << last_cs_speed << ", op = " << op_speed << "(" << _op_pull_rows
+              << "/" << _op_running_time << "), value = " << io_tasks;
     last_cs_speed = cs_speed;
     return io_tasks;
 }
@@ -282,26 +284,28 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     }
 
     int64_t time_spent_ns = 0;
-    SCOPED_RAW_TIMER(&time_spent_ns);
+    {
+        SCOPED_RAW_TIMER(&time_spent_ns);
 
-    while (_status.ok()) {
-        ChunkPtr tmp;
-        _status = _data_source->get_next(state, &tmp);
-        if (_status.ok()) {
-            if (tmp->num_rows() == 0) continue;
-            _ck_acc.push(tmp);
-            if (_ck_acc.has_output()) break;
-        } else if (!_status.is_end_of_file()) {
-            if (_status.is_time_out()) {
-                Status t = _status;
-                _status = Status::OK();
-                return t;
+        while (_status.ok()) {
+            ChunkPtr tmp;
+            _status = _data_source->get_next(state, &tmp);
+            if (_status.ok()) {
+                if (tmp->num_rows() == 0) continue;
+                _ck_acc.push(tmp);
+                if (_ck_acc.has_output()) break;
+            } else if (!_status.is_end_of_file()) {
+                if (_status.is_time_out()) {
+                    Status t = _status;
+                    _status = Status::OK();
+                    return t;
+                } else {
+                    return _status;
+                }
             } else {
-                return _status;
+                _ck_acc.finalize();
+                DCHECK(_status.is_end_of_file());
             }
-        } else {
-            _ck_acc.finalize();
-            DCHECK(_status.is_end_of_file());
         }
     }
 
