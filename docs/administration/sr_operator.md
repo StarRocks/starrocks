@@ -24,7 +24,7 @@ You can use the cloud-managed Kubernetes service, such as an [Amazon Elastic Kub
 
 **Create a GKE cluster**
 
-Before a GKE Cluster is created, make sure that you complete all the [prerequisites](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#before-you-begin). Follow the instructions provided in [Create a GKE cluster](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#create_cluster) to create a GKE cluster.
+Before you start to create a GKE cluster, make sure that you complete all the [prerequisites](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#before-you-begin). Then follow the instructions provided in [Create a GKE cluster](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#create_cluster) to create a GKE cluster.
 
 **Create a self-managed Kubernetes cluster**
 
@@ -88,13 +88,13 @@ The following table describes a few important fields in the **starrocks-fe-and-b
 | Metadata  | Metadata, in which the following sub-fields are nested:<ul><li>`name`: the name of the object. Each object name uniquely identifies an object of the same resource type.</li><li>`namespace`: the namespace to which the object belongs.</li></ul> |
 | Spec      | The expected status of the object. Valid values are `starRocksFeSpec`, `starRocksBeSpec`, and `starRocksCnSpec`. |
 
-You can also deploy the StarRocks cluster by using a modified configuration file modifying the configuration file to suit your needs. For supported fields and detailed descriptions, see [api.md](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md).
+You can also deploy the StarRocks cluster by using a modified configuration file. For supported fields and detailed descriptions, see [api.md](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md).
 
 Deploying the StarRocks cluster takes a while. During this period, you can use the command `kubectl -n starrocks get pods` to check the starting status of the StarRocks cluster. If all the pods are in the `Running` state and all containers inside the pods are `READY`, the StarRocks cluster is running as expected.
 
 > **NOTE**
 >
-> If you customize the namespace in which the StarRocks cluster is located, you need to replace`starrocks` with the name of your customized namespace.
+> If you customize the namespace in which the StarRocks cluster is located, you need to replace `starrocks` with the name of your customized namespace.
 
 ```bash
 $ kubectl -n starrocks get pods
@@ -121,7 +121,7 @@ The components of the StarRocks cluster can be accessed through their associated
 > **NOTE**
 >
 > - Only the FE Service is deployed by default. If you need to deploy the BE Service and CN Service, you need to configure `starRocksBeSpec` and `starRocksCnSpec` in the StarRocks cluster configuration file.
-> - The name of the Service is `<cluster name>-<component name>-service` by default, for example, `starrockscluster-sample-fe-service`. You can also specify the Service name in the spec of each component.
+> - The name of a Service is `<cluster name>-<component name>-service` by default, for example, `starrockscluster-sample-fe-service`. You can also specify the Service name in the spec of each component.
 
 #### Access StarRocks Cluster from within Kubernetes Cluster
 
@@ -170,7 +170,7 @@ From outside the Kubernetes cluster, you can access the StarRocks cluster throug
     starrockscluster-sample-fe-service   LoadBalancer   10.100.162.xxx   a7509284bf3784983a596c6eec7fc212-618xxxxxx.us-west-2.elb.amazonaws.com   8030:30629/TCP,9020:32544/TCP,9030:32244/TCP,9010:32024/TCP   129m               ClusterIP      None            <none>                                                                   9030/TCP                                                      23h
     ```
 
-3. Log in to your machine host  and access the StarRocks cluster by using the MySQL client.
+3. Log in to your machine host and access the StarRocks cluster by using the MySQL client.
 
     ```Bash
     mysql -h a7509284bf3784983a596c6eec7fc212-618xxxxxx.us-west-2.elb.amazonaws.com -P9030 -uroot
@@ -226,7 +226,7 @@ Run the command `kubectl -n starrocks edit src starrockscluster-sample` to confi
 >
 > If the automatic scaling policy for the CN cluster is configured, delete the `replicas` field from the `starRocksCnSpec` in the StarRocks cluster configuration file.
 
-Kubernetes also supports using `behavior` to customize scaling behaviors according to business scenarios, helping you achieve rapid or slow scaling or disabling scaling. For more information about automatic scaling policies, see [Horizontal Pod Scaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/).
+Kubernetes also supports using `behavior` to customize scaling behaviors according to business scenarios, helping you achieve rapid or slow scaling or disable scaling. For more information about automatic scaling policies, see [Horizontal Pod Scaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/).
 
 The following is a [template](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/starrocks-fe-and-cn-with-autoscaler.yaml) provided by StarRocks to help you configure automatic scaling policies:
 
@@ -259,7 +259,7 @@ The following is a [template](https://github.com/StarRocks/starrocks-kubernetes-
                     # When the average CPU utilization of CNs exceeds 60%, the number of CNs increases for scale-out.
                     # When the average CPU utilization of CNs is below 60%, the number of CNs decreases for scale-in.
                     type: Utilization
-            behavior: #  The scaling behavior is customized according to  business scenarios, helping you achieve rapid or slow scaling or disabling scaling.
+            behavior: #  The scaling behavior is customized according to  business scenarios, helping you achieve rapid or slow scaling or disable scaling.
                 policies:
                   - type: Pods
                     value: 1
