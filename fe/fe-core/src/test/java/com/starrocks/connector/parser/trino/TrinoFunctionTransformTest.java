@@ -65,9 +65,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select contains_sequence(c1, array['1','2']) from test_array";
         assertPlanContains(sql, "array_contains_all(2: c1, ARRAY<varchar>['1','2'])");
 
+<<<<<<< HEAD
         sql = "select contains_sequence(c1, array['1','2']) from test_array";
         assertPlanContains(sql, "array_contains_all(2: c1, ARRAY<varchar>['1','2'])");
 
+=======
+>>>>>>> c071c3176 ([UT] add some map type test for trino parser (#21563))
         sql = "select slice(array[1,2,3,4], 2, 2)";
         assertPlanContains(sql, "array_slice(ARRAY<tinyint(4)>[1,2,3,4], 2, 2)");
     }
