@@ -422,8 +422,8 @@ vectorized_functions = [
     [50371, 'date_slice', 'DATE', ['DATE', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
     [50372, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
     [50373, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
-
-    [50400, 'next_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::next_day'],
+    [50400, 'next_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::next_day', 'TimeFunctions::next_day_prepare', 'TimeFunctions::next_day_close'],
+    [50401, 'previous_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::previous_day', 'TimeFunctions::previous_day_prepare', 'TimeFunctions::previous_day_close'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
