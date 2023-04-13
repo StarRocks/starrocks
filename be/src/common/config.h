@@ -109,12 +109,8 @@ CONF_Int32(push_worker_count_normal_priority, "3");
 // The count of thread to high priority batch load.
 CONF_Int32(push_worker_count_high_priority, "3");
 
-#ifdef BE_TEST
-CONF_Int32(transaction_publish_version_worker_count, "1");
-#else
 // The count of thread to publish version per transaction
-CONF_Int32(transaction_publish_version_worker_count, "8");
-#endif
+CONF_mInt32(transaction_publish_version_worker_count, "0");
 
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
@@ -843,7 +839,7 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
 // spill dirs
-CONF_String(spill_local_storage_dir, "spill");
+CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
 // when spill occurs, whether enable skip synchronous flush
 CONF_mBool(experimental_spill_skip_sync, "true");
 // spill Initial number of partitions
@@ -892,6 +888,8 @@ CONF_Int64(block_cache_max_concurrent_inserts, "1000000");
 // Once this is reached, requests will be rejected until the parcel memory usage gets under the limit.
 CONF_Int64(block_cache_max_parcel_memory_mb, "256");
 CONF_Bool(block_cache_report_stats, "false");
+// cachelib, starcache
+CONF_String(block_cache_engine, "starcache");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB

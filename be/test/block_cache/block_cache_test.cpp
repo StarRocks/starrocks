@@ -32,17 +32,18 @@ protected:
 
 TEST_F(BlockCacheTest, hybrid_cache) {
     BlockCache* cache = BlockCache::instance();
-    const size_t block_size = 4 * 1024;
+    const size_t block_size = 1 * 1024 * 1024;
 
     CacheOptions options;
     options.mem_space_size = 20 * 1024 * 1024;
     size_t quota = 500 * 1024 * 1024;
     options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = quota});
     options.block_size = block_size;
+    options.engine = "starcache";
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
 
-    const size_t batch_size = 2 * block_size + 1234;
+    const size_t batch_size = block_size - 1234;
     const size_t rounds = 20;
     const std::string cache_key = "test_file";
 
@@ -76,13 +77,11 @@ TEST_F(BlockCacheTest, hybrid_cache) {
     auto res = cache->read_cache(cache_key, 0, batch_size, value);
     ASSERT_TRUE(res.status().is_not_found());
 
-    // invalid offset
-    res = cache->read_cache(cache_key, 1000000, batch_size, value);
-    ASSERT_TRUE(res.status().is_invalid_argument());
-
     // not found
     res = cache->read_cache(cache_key, block_size * 1000, batch_size, value);
     ASSERT_TRUE(res.status().is_not_found());
+
+    cache->shutdown();
 }
 
 } // namespace starrocks

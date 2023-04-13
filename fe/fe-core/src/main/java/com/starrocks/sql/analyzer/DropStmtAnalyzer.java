@@ -55,9 +55,18 @@ public class DropStmtAnalyzer {
         @Override
         public Void visitDropTableStatement(DropTableStmt statement, ConnectContext context) {
             MetaUtils.normalizationTableName(context, statement.getTableNameObject());
+
+            // check catalog
+            String catalogName = statement.getCatalogName();
+            try {
+                MetaUtils.checkCatalogExistAndReport(catalogName);
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+            }
+
             String dbName = statement.getDbName();
             // check database
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
@@ -65,7 +74,7 @@ public class DropStmtAnalyzer {
             Table table;
             String tableName = statement.getTableName();
             try {
-                table = db.getTable(statement.getTableName());
+                table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
                 if (table == null) {
                     if (statement.isSetIfExists()) {
                         LOG.info("drop table[{}] which does not exist", tableName);
@@ -104,6 +113,12 @@ public class DropStmtAnalyzer {
                     throw new SemanticException(PARSER_ERROR_MSG.noCatalogSelected());
                 }
                 statement.setCatalogName(context.getCurrentCatalog());
+            }
+
+            try {
+                MetaUtils.checkCatalogExistAndReport(statement.getCatalogName());
+            } catch (AnalysisException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, statement.getCatalogName());
             }
 
             String dbName = statement.getDbName();

@@ -74,6 +74,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -1247,7 +1248,7 @@ public class ExpressionAnalyzer {
                 whenTypes.add(node.getChild(i).getType());
             }
 
-            Type compatibleType = Type.NULL;
+            Type compatibleType = Type.BOOLEAN;
             if (null != caseExpr) {
                 compatibleType = TypeManager.getCompatibleTypeForCaseWhen(whenTypes);
             }
@@ -1329,8 +1330,7 @@ public class ExpressionAnalyzer {
                 node.setStrValue(session.getCurrentUserIdentity().toString());
             } else if (funcType.equalsIgnoreCase("CURRENT_ROLE")) {
                 node.setType(Type.VARCHAR);
-
-                AuthorizationManager manager = session.getGlobalStateMgr().getAuthorizationManager();
+                AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
                 List<String> roleName = new ArrayList<>();
 
                 try {
@@ -1356,7 +1356,7 @@ public class ExpressionAnalyzer {
                 node.setStrValue("");
             } else if (funcType.equalsIgnoreCase("CURRENT_CATALOG")) {
                 node.setType(Type.VARCHAR);
-                node.setStrValue(session.getCurrentCatalog().toString());
+                node.setStrValue(session.getCurrentCatalog());
             }
             return null;
         }

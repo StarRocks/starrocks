@@ -254,6 +254,7 @@
       + [SPARK LOAD](./sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)
       + [STOP ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)
       + [STREAM LOAD](./sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)
+      + [SUBMIT TASK](./sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md)
       + [UPDATE](./sql-reference/sql-statements/data-manipulation/UPDATE.md)
     + Auxiliary Commands
       + [DESC](./sql-reference/sql-statements/Utility/DESCRIBE.md)
@@ -280,6 +281,7 @@
         + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
+        + [BINARY](./sql-reference/sql-statements/data-types/BINARY.md)
     + [Keywords](./sql-reference/sql-statements/keywords.md)
     + [AUTO_INCREMENT](./sql-reference/sql-statements/auto_increment.md)
   + Function Reference
@@ -428,6 +430,7 @@
       + [months_add](./sql-reference/sql-functions/date-time-functions/months_add.md)
       + [months_diff](./sql-reference/sql-functions/date-time-functions/months_diff.md)
       + [months_sub](./sql-reference/sql-functions/date-time-functions/months_sub.md)
+      + [next_day](./sql-reference/sql-functions/date-time-functions/next_day.md)
       + [now](./sql-reference/sql-functions/date-time-functions/now.md)
       + [quarter](./sql-reference/sql-functions/date-time-functions/quarter.md)
       + [second](./sql-reference/sql-functions/date-time-functions/second.md)

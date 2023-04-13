@@ -423,6 +423,8 @@ vectorized_functions = [
     [50372, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
     [50373, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
 
+    [50400, 'next_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::next_day'],
+
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
     [60010, 'LIKE', 'BOOLEAN', ['VARCHAR', 'VARCHAR'], 'LikePredicate::like', 'LikePredicate::like_prepare',
@@ -525,6 +527,9 @@ vectorized_functions = [
     [80011, 'hll_cardinality', 'BIGINT', ['VARCHAR'], 'HyperloglogFunctions::hll_cardinality_from_string'],
     [80020, 'hll_hash', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_hash'],
     [80030, 'hll_empty', 'HLL', [], 'HyperloglogFunctions::hll_empty'],
+
+    [80040, 'hll_serialize', 'VARBINARY', ['HLL'], 'HyperloglogFunctions::hll_serialize'],
+    [80041, 'hll_deserialize', 'HLL', ['VARBINARY'], 'HyperloglogFunctions::hll_deserialize'],
 
     # bitmap function
     [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap', False],

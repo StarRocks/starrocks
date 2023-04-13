@@ -16,17 +16,17 @@
 
 #include <fmt/format.h>
 
-#include "block_cache/fb_cachelib.h"
+#ifdef WITH_CACHELIB
+#include "block_cache/cachelib_wrapper.h"
+#endif
+
+#include "block_cache/starcache_wrapper.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
-
-BlockCache::BlockCache() {
-    _kv_cache = std::make_unique<FbCacheLib>();
-}
 
 BlockCache* BlockCache::instance() {
     static BlockCache cache;
@@ -36,6 +36,18 @@ BlockCache* BlockCache::instance() {
 Status BlockCache::init(const CacheOptions& options) {
     // TODO: check block size limit
     _block_size = options.block_size;
+    if (options.engine == "starcache") {
+        _kv_cache = std::make_unique<StarCacheWrapper>();
+        LOG(INFO) << "init starcache block engine";
+#ifdef WITH_CACHELIB
+    } else if (options.engine == "cachelib") {
+        _kv_cache = std::make_unique<CacheLibWrapper>();
+        LOG(INFO) << "init cachelib block engine";
+#endif
+    } else {
+        LOG(ERROR) << "unsupported block cache engine: " << options.engine;
+        return Status::NotSupported("unsupported block cache engine");
+    }
     return _kv_cache->init(options);
 }
 
@@ -84,7 +96,9 @@ Status BlockCache::remove_cache(const CacheKey& cache_key, off_t offset, size_t 
 }
 
 Status BlockCache::shutdown() {
-    return _kv_cache->shutdown();
+    Status st = _kv_cache->shutdown();
+    _kv_cache = nullptr;
+    return st;
 }
 
 } // namespace starrocks

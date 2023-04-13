@@ -456,7 +456,7 @@ public class OlapTableSink extends DataSink {
                 for (Tablet tablet : index.getTablets()) {
                     if (table.isCloudNativeTableOrMaterializedView()) {
                         locationParam.addToTablets(new TTabletLocation(
-                                tablet.getId(), Lists.newArrayList(((LakeTablet) tablet).getPrimaryBackendId())));
+                                tablet.getId(), Lists.newArrayList(((LakeTablet) tablet).getPrimaryComputeNodeId())));
                     } else {
                         // we should ensure the replica backend is alive
                         // otherwise, there will be a 'unknown node id, id=xxx' error for stream load

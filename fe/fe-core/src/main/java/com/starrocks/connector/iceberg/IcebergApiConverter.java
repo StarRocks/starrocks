@@ -17,6 +17,8 @@ package com.starrocks.connector.iceberg;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -24,8 +26,12 @@ import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
 import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.TableProperties;
+import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
+import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -35,11 +41,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
-import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
+import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
+import static org.apache.iceberg.hive.IcebergHiveCatalog.LOCATION_PROPERTY;
 
 public class IcebergApiConverter {
     private static final Logger LOG = LogManager.getLogger(IcebergApiConverter.class);
@@ -61,6 +69,65 @@ public class IcebergApiConverter {
                 .setMetricsReporter(metricsReporter);
 
         return tableBuilder.build();
+    }
+
+    public static Schema toIcebergApiSchema(List<Column> columns) {
+        List<Types.NestedField> icebergColumns = new ArrayList<>();
+        for (Column column : columns) {
+            int index = icebergColumns.size();
+            org.apache.iceberg.types.Type type = toIcebergColumnType(column.getType());
+            Types.NestedField field = Types.NestedField.of(
+                    index, column.isAllowNull(), column.getName(), type, column.getComment());
+            icebergColumns.add(field);
+        }
+
+        org.apache.iceberg.types.Type icebergSchema = Types.StructType.of(icebergColumns);
+        AtomicInteger nextFieldId = new AtomicInteger(1);
+        icebergSchema = TypeUtil.assignFreshIds(icebergSchema, nextFieldId::getAndIncrement);
+        return new Schema(icebergSchema.asStructType().fields());
+    }
+
+    // TODO(stephen): support iceberg transform partition like `partition by day(dt)`
+    public static PartitionSpec parsePartitionFields(Schema schema, List<String> fields) {
+        PartitionSpec.Builder builder = PartitionSpec.builderFor(schema);
+        for (String field : fields) {
+            builder.identity(field);
+        }
+        return builder.build();
+    }
+
+    public static Optional<String> getTableLocation(Map<String, String> tableProperties) {
+        return Optional.ofNullable(tableProperties.get(LOCATION_PROPERTY));
+    }
+
+    public static org.apache.iceberg.types.Type toIcebergColumnType(Type type) {
+        PrimitiveType primitiveType = type.getPrimitiveType();
+
+        switch (primitiveType) {
+            case BOOLEAN:
+                return Types.BooleanType.get();
+            case INT:
+                return Types.IntegerType.get();
+            case BIGINT:
+                return Types.LongType.get();
+            case FLOAT:
+                return Types.FloatType.get();
+            case DOUBLE:
+                return Types.DoubleType.get();
+            case DATE:
+                return Types.DateType.get();
+            case DATETIME:
+                return Types.TimestampType.withoutZone();
+            case VARCHAR:
+            case CHAR:
+                return Types.StringType.get();
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                return Types.DecimalType.of(type.getPrecision(), (((ScalarType) type).getScalarScale()));
+            default:
+                throw new StarRocksConnectorException("Unsupported column type %s", primitiveType);
+        }
     }
 
     public static List<Column> toFullSchemas(Table nativeTbl) {
@@ -126,5 +193,23 @@ public class IcebergApiConverter {
             tIcebergSchemaField.setChildren(children);
         }
         return tIcebergSchemaField;
+    }
+
+    public static Map<String, String> rebuildCreateTableProperties(Map<String, String> createProperties) {
+        ImmutableMap.Builder<String, String> tableProperties = ImmutableMap.builder();
+        createProperties.entrySet().forEach(tableProperties::put);
+
+        String fileFormat = createProperties.getOrDefault("file_format", TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
+        if ("parquet".equalsIgnoreCase(fileFormat)) {
+            tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "parquet");
+        } else if ("avro".equalsIgnoreCase(fileFormat)) {
+            tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "avro");
+        } else if ("orc".equalsIgnoreCase(fileFormat)) {
+            tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "orc");
+        } else if (fileFormat != null) {
+            throw new IllegalArgumentException("Unsupported format in USING: " + fileFormat);
+        }
+
+        return tableProperties.build();
     }
 }

@@ -16,12 +16,10 @@ StarRocks v2.4 further supports overwriting data into a table by using INSERT OV
 
 ## Precautions
 
-- Because INSERT transaction is synchronous, you can cancel it only by pressing the **Ctrl** and **C** keys from your MySQL client.
-
+- You can cancel a synchronous INSERT transaction only by pressing the **Ctrl** and **C** keys from your MySQL client.
+- You can submit an asynchronous INSERT task using [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md).
 - As for the current version of StarRocks, the INSERT transaction fails by default if the data of any rows does not comply with the schema of the table. For example, the INSERT transaction fails if the length of a field in any row exceeds the length limit for the mapping field in the table. You can set the session variable `enable_insert_strict` to `false` to allow the transaction to continue by filtering out the rows that mismatch the table.
-
 - If you execute the INSERT statement frequently to load small batches of data into StarRocks, excessive data versions are generated. It severely affects query performance. We recommend that, in production, you should not load data with the INSERT command too often or use it as a routine for data loading on a daily basis. Should your application or analytic scenario demand solutions to loading streaming data or small data batches separately, we recommend you use Apache Kafka® as your data source and load the data via [Routine Load](../loading/RoutineLoad.md).
-
 - If you execute the INSERT OVERWRITE statement, StarRocks creates temporary partitions for the partitions which store the original data, inserts new data into the temporary partitions, and swaps the original partitions with the temporary partitions. All these operations are executed in the FE Leader node. Hence, if the FE Leader node crashes while executing INSERT OVERWRITE command, the whole load transaction will fail, and the temporary partitions will be truncated.
 
 ## Preparation
@@ -300,6 +298,48 @@ WITH LABEL insert_load_wikipedia_ow_3
     channel
 )
 SELECT event_time, channel FROM source_wiki_edit;
+```
+
+## Load data asynchronously using INSERT
+
+Loading data with INSERT submits a synchronous transaction, which may fail because of session interruption or timeout. You can submit an asynchronous INSERT transaction using [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md). This feature is supported since StarRocks v3.0.
+
+- The following example asynchronously inserts the data from the source table to the target table `insert_wiki_edit`.
+
+```SQL
+SUBMIT TASK AS INSERT INTO insert_wiki_edit
+SELECT * FROM source_wiki_edit;
+```
+
+- The following example asynchronously overwrites the table `insert_wiki_edit` with the data from the source table.
+
+```SQL
+SUBMIT TASK AS INSERT OVERWRITE insert_wiki_edit
+SELECT * FROM source_wiki_edit;
+```
+
+- The following example asynchronously overwrites the table `insert_wiki_edit` with the data from the source table, and extends the query timeout to `100000` seconds using hint.
+
+```SQL
+SUBMIT /*+set_var(query_timeout=100000)*/ TASK AS
+INSERT OVERWRITE insert_wiki_edit
+SELECT * FROM source_wiki_edit;
+```
+
+- The following example asynchronously overwrites the table `insert_wiki_edit` with the data from the source table, and specifies the task name as `async`.
+
+```SQL
+SUBMIT TASK async
+AS INSERT OVERWRITE insert_wiki_edit
+SELECT * FROM source_wiki_edit;
+```
+
+You can check the status of an asynchronous INSERT task by querying the metadata table `task_runs` in Information Schema.
+
+The following example checks the status of the INSERT task `async`.
+
+```SQL
+SELECT * FROM information_schema.task_runs WHERE task_name = 'async';
 ```
 
 ## Check the INSERT transaction status

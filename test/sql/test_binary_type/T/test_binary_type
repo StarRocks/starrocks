@@ -1,0 +1,21 @@
+-- name: test_binary_type
+create table t0(c0 INT, c1 binary(16), c2 binary, c3 varbinary, c4 varchar(16)) 
+        DUPLICATE KEY(c0) 
+        DISTRIBUTED BY HASH(c0) 
+        BUCKETS 1 
+        PROPERTIES('replication_num'='1');
+-- insert 1 row
+insert into t0 values (1, x'ab01', x'abab', x'abac','ab01');
+select hex(c1), hex(c2), hex(c3), hex(c4) from t0 order by c0;
+
+-- insert 1 row
+insert into t0 values (2, x'ab01', x'abab', x'abac','ab01');
+select hex(c1), hex(c2), hex(c3), hex(c4) from t0 order by c0;
+
+create table t1(c0 INT, c1 binary(16), c2 binary, c3 varbinary, c4 varchar(16)) 
+        DUPLICATE KEY(c0) 
+        DISTRIBUTED BY HASH(c0) 
+        BUCKETS 1 
+        PROPERTIES('replication_num'='1');
+insert into t1 select * from t0;
+select hex(c1), hex(c2), hex(c3), hex(c4) from t1 order by c0;
