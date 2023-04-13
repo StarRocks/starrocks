@@ -448,6 +448,43 @@ public class ScalarOperatorFunctions {
         }
     }
 
+    @ConstantFunction(name = "previous_day", argTypes = {DATETIME, VARCHAR}, returnType = DATE)
+    public static ConstantOperator previousDay(ConstantOperator date, ConstantOperator dow) {
+        int dateDowValue = date.getDate().getDayOfWeek().getValue();
+        switch (dow.getVarchar()) {
+            case "Sunday":
+            case "Sun":
+            case "Su":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue - 1L) % 7 + 1L));
+            case "Monday":
+            case "Mon":
+            case "Mo":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 5L) % 7 + 1L));
+            case "Tuesday":
+            case "Tue":
+            case "Tu":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 4L) % 7 + 1L));
+            case "Wednesday":
+            case "Wed":
+            case "We":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 3L) % 7 + 1L));
+            case "Thursday":
+            case "Thu":
+            case "Th":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 2L) % 7 + 1L));
+            case "Friday":
+            case "Fri":
+            case "Fr":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 1L) % 7 + 1L));
+            case "Saturday":
+            case "Sat":
+            case "Sa":
+                return ConstantOperator.createDate(date.getDate().minusDays(dateDowValue % 7 + 1L));
+            default:
+                throw new IllegalArgumentException(dow + " not supported in previous_day dow_string");
+        }
+    }
+
     /**
      * Math function
      */
