@@ -826,12 +826,8 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
         UInt32Column* col_offsets = col_map->offsets_column().get();
         list_map_offsets_copy<arrow::MapType>(array, array_start_idx, num_elements, col_offsets);
         // keys, values
-        size_t kv_size[2];
-        kv_size[0] = col_map->keys().size();
-        kv_size[1] = col_map->values().size();
-        ColumnPtr kv_columns[2];
-        kv_columns[0] = col_map->keys_column();
-        kv_columns[1] = col_map->values_column();
+        size_t kv_size[] = {col_map->keys().size(), col_map->values().size()};
+        ColumnPtr kv_columns[] = {col_map->keys_column(), col_map->values_column()};
         for (auto i = 0; i < 2; ++i) {
             const TypeDescriptor& child_type = type_desc->children[i];
             size_t child_array_start_idx;
