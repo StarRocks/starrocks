@@ -1401,8 +1401,17 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testAsTableNoOlapTable() {
-        String sql = "create materialized view mv1 " +
+    public void testMySQLTable() throws Exception {
+        String sql1 = "create materialized view mv1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
+        UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
+
+        String sql2 = "create materialized view mv1 " +
                 "partition by ss " +
                 "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
@@ -1411,9 +1420,11 @@ public class CreateMaterializedViewTest {
                 ")" +
                 "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
+            Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Create materialized view do not support the table type: MYSQL"));
+            Assert.assertTrue(e.getMessage()
+                    .contains("Materialized view with partition does not support base table type : MYSQL"));
         }
     }
 
@@ -2422,6 +2433,30 @@ public class CreateMaterializedViewTest {
                 "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH ASYNC AS select     s_suppkey,     s_nationkey," +
                 "sum(s_acctbal) as total_s_acctbal,      count(s_phone) as s_phone_count from hive0.tpch.supplier as supp " +
                 "group by s_suppkey, s_nationkey order by s_suppkey;");
+    }
+
+    @Test
+    public void testJdbcTable() throws Exception {
+        starRocksAssert.withResource("create external resource jdbc0\n" +
+                "properties (\n" +
+                "    \"type\"=\"jdbc\",\n" +
+                "    \"user\"=\"postgres\",\n" +
+                "    \"password\"=\"changeme\",\n" +
+                "    \"jdbc_uri\"=\"jdbc:postgresql://127.0.0.1:5432/jdbc_test\",\n" +
+                "    \"driver_url\"=\"https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar\",\n" +
+                "    \"driver_class\"=\"org.postgresql.Driver\"\n" +
+                "); ");
+        starRocksAssert.withTable("create external table jdbc_tbl (\n" +
+                "     `id` bigint NULL,\n" +
+                "     `data` varchar(200) NULL\n" +
+                " ) ENGINE=jdbc\n" +
+                " properties (\n" +
+                "     \"resource\"=\"jdbc0\",\n" +
+                "     \"table\"=\"dest_tbl\"\n" +
+                " );");
+        starRocksAssert.withMaterializedView("create materialized view mv_jdbc " +
+                "distributed by hash(id) refresh deferred manual " +
+                "as select * from jdbc_tbl;");
     }
 
     @Test
