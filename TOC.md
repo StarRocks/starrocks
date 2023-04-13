@@ -460,6 +460,7 @@
       + [multi_distinct_sum](/sql-reference/sql-functions/aggregate-functions/multi_distinct_sum.md)
       + [percentile_approx](/sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
       + [percentile_cont](/sql-reference/sql-functions/aggregate-functions/percentile_cont.md)
+      + [percentile_disc](/sql-reference/sql-functions/aggregate-functions/percentile_disc.md)
       + [retention](/sql-reference/sql-functions/aggregate-functions/retention.md)
       + [sum](/sql-reference/sql-functions/aggregate-functions/sum.md)
       + [std](/sql-reference/sql-functions/aggregate-functions/std.md)

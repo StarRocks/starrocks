@@ -30,7 +30,27 @@ PERCENTILE_DISC (expr, percentile)
 
 ## 示例
 
-假设有表 `exam`，数据如下。
+创建表 `exam`，插入数据。
+
+```sql
+CREATE TABLE exam (
+    subject STRING,
+    exam_result INT
+) 
+DISTRIBUTED BY HASH(`subject`) BUCKETS 1;
+
+insert into exam values
+('chemistry',80),
+('chemistry',100),
+('chemistry',null),
+('math',60),
+('math',70),
+('math',85),
+('physics',75),
+('physics',80),
+('physics',85),
+('physics',99);
+```
 
 ```Plain
 select * from exam order by Subject;
