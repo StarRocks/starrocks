@@ -134,7 +134,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
         }
         case 6: {
             // inactive_reason
-            ColumnPtr column = (*chunk)->get_column_by_slot_id(6);
+            ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
             const std::string* str = &tbl_status.inactive_reason;
             Slice value(str->c_str(), str->length());
             fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
@@ -215,6 +215,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
         case 15: {
             // last_refresh_start_partition
             {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
                 const std::string* str = &tbl_status.last_refresh_start_partition;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
