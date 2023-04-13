@@ -323,7 +323,7 @@ std::shared_ptr<::parquet::WriterProperties> ParquetBuildHelper::make_properties
 }
 
 
-std::string FileWriterBase::Context::debug_string() const {
+std::string ChunkWriter::Context::debug_string() const {
     std::stringstream ss;
     for (size_t i = 0; i < size(); ++i) {
         ss << "(" << _idx2subcol[i] << ", " << _def_levels[i] << ", " << _rep_levels[i] << ")\n";
@@ -358,14 +358,14 @@ Status FileWriterBase::init() {
     if (_writer == nullptr) {
         return Status::InternalError("Failed to create file writer");
     }
-    _buffered_values_estimate.resize(_writer->num_columns());
     return Status::OK();
 }
 
-void FileWriterBase::_generate_rg_writer() {
-    if (_rg_writer == nullptr) {
+void FileWriterBase::_generate_chunk_writer() {
+    if (_chunk_writer == nullptr) {
         DCHECK(_writer != nullptr);
-        _rg_writer = _writer->AppendBufferedRowGroup();
+        auto rg_writer = _writer->AppendBufferedRowGroup();
+        _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema);
     }
 }
 
@@ -373,29 +373,36 @@ Status FileWriterBase::write(Chunk* chunk) {
     if (!chunk->has_rows()) {
         return Status::OK();
     }
-    _generate_rg_writer();
-    _col_idx = 0; // reset index upon every write
 
-    Context ctx(0, 0, chunk->num_rows());
-    for (int i = 0; i < chunk->num_rows(); i++) {
-        ctx.append(i, 0, 0);
-    }
+    _generate_chunk_writer();
 
-    for (size_t i = 0; i < chunk->num_columns(); i++) {
-        auto col = chunk->get_column_by_index(i);
-        auto ret = _add_column_chunk(ctx, _type_descs[i], _schema->field(i), col);
-        if (!ret.ok()) {
-            return ret;
-        }
-    }
+//    _generate_rg_writer();
+//    _col_idx = 0; // reset index upon every write
 
-    if (_get_current_rg_written_bytes() > _max_row_group_size) {
+    _chunk_writer->write(chunk);
+//    Context ctx(0, 0, chunk->num_rows());
+//    for (int i = 0; i < chunk->num_rows(); i++) {
+//        ctx.append(i, 0, 0);
+//    }
+//
+//    for (size_t i = 0; i < chunk->num_columns(); i++) {
+//        auto col = chunk->get_column_by_index(i);
+//        auto ret = _add_column_chunk(ctx, _type_descs[i], _schema->field(i), col);
+//        if (!ret.ok()) {
+//            return ret;
+//        }
+//    }
+
+    if (_chunk_writer->estimated_buffered_bytes() > _max_row_group_size) {
         _flush_row_group();
     }
+//    if (_get_current_rg_written_bytes() > _max_row_group_size) {
+//        _flush_row_group();
+//    }
     return Status::OK();
 }
 
-Status FileWriterBase::_add_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+Status ChunkWriter::_add_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
                                          const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     switch (type_desc.type) {
     case TYPE_BOOLEAN: {
@@ -466,7 +473,7 @@ Status FileWriterBase::_add_column_chunk(Context& ctx, const TypeDescriptor& typ
     }
 }
 
-Status FileWriterBase::_add_struct_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+Status ChunkWriter::_add_struct_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
                                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     DCHECK(type_desc.type == TYPE_STRUCT);
     auto group_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
@@ -508,7 +515,7 @@ Status FileWriterBase::_add_struct_column_chunk(Context& ctx, const TypeDescript
     return Status::OK();
 }
 
-Status FileWriterBase::_add_array_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+Status ChunkWriter::_add_array_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
                                                const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     DCHECK(type_desc.type == TYPE_ARRAY);
     auto outer_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
@@ -548,7 +555,7 @@ Status FileWriterBase::_add_array_column_chunk(Context& ctx, const TypeDescripto
     return _add_column_chunk(child_ctx, type_desc.children[0], inner_node, elements);
 }
 
-Status FileWriterBase::_add_map_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+Status ChunkWriter::_add_map_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     DCHECK(type_desc.type == TYPE_MAP);
     auto outer_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
@@ -606,7 +613,7 @@ Status FileWriterBase::_add_map_column_chunk(Context& ctx, const TypeDescriptor&
     return _add_column_chunk(value_ctx, type_desc.children[1], value_node, values);
 }
 
-Status FileWriterBase::_add_varchar_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+Status ChunkWriter::_add_varchar_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
                                                  const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
@@ -643,12 +650,12 @@ Status FileWriterBase::_add_varchar_column_chunk(Context& ctx, const TypeDescrip
         std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { x--; });
     }
 
-    _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+    _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
     _col_idx++;
     return Status::OK();
 }
 
-Status FileWriterBase::_add_date_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+Status ChunkWriter::_add_date_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
                                               const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
@@ -682,12 +689,12 @@ Status FileWriterBase::_add_date_column_chunk(Context& ctx, const TypeDescriptor
         std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { return x--; });
     }
 
-    _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+    _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
     _col_idx++;
     return Status::OK();
 }
 
-Status FileWriterBase::_add_datetime_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+Status ChunkWriter::_add_datetime_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
                                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
@@ -721,13 +728,13 @@ Status FileWriterBase::_add_datetime_column_chunk(Context& ctx, const TypeDescri
         std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { x--; });
     }
 
-    _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+    _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
     _col_idx++;
     return Status::OK();
 }
 
 template <LogicalType lt, ::parquet::Type::type pt>
-Status FileWriterBase::_add_int_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+Status ChunkWriter::_add_int_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     const auto data_column = ColumnHelper::get_data_column(col.get());
     const auto raw_col = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
@@ -743,7 +750,7 @@ Status FileWriterBase::_add_int_column_chunk(Context& ctx, const TypeDescriptor&
     DCHECK(col_writer != nullptr);
 
     DeferOp defer([&] {
-        _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+        _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
         _col_idx++;
     });
 
@@ -780,11 +787,11 @@ Status FileWriterBase::_add_int_column_chunk(Context& ctx, const TypeDescriptor&
         // If two types are identical, invoke WriteBatch without copying values
         if (!col->is_nullable() || !col->has_null()) {
             col_writer->WriteBatch(ctx.size(), def_levels_ptr, rep_levels_ptr, raw_col);
+        } else {
+            // Make bitset to denote not-null values
+            auto null_bitset = _make_null_bitset(col->size(), nulls);
+            col_writer->WriteBatchSpaced(ctx.size(), def_levels_ptr, rep_levels_ptr, null_bitset.data(), 0, raw_col);
         }
-
-        // Make bitset to denote not-null values
-        auto null_bitset = _make_null_bitset(col->size(), nulls);
-        col_writer->WriteBatchSpaced(ctx.size(), def_levels_ptr, rep_levels_ptr, null_bitset.data(), 0, raw_col);
     } else {
         // If two types are different, we have to copy values anyway
         std::vector<target_type> values;
@@ -801,7 +808,7 @@ Status FileWriterBase::_add_int_column_chunk(Context& ctx, const TypeDescriptor&
     return Status::OK();
 }
 
-Status FileWriterBase::_add_boolean_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+Status ChunkWriter::_add_boolean_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
                                                  const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
@@ -832,13 +839,13 @@ Status FileWriterBase::_add_boolean_column_chunk(Context& ctx, const TypeDescrip
         std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { x--; });
     }
 
-    _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+    _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
     _col_idx++;
     return Status::OK();
 }
 
 template <LogicalType lt, ::parquet::Type::type pt>
-Status FileWriterBase::_add_decimal_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
+Status ChunkWriter::_add_decimal_column_chunk(Context& ctx, const TypeDescriptor& type_desc,
                                                  const ::parquet::schema::NodePtr& node, const ColumnPtr& col) {
     unsigned char* nulls = nullptr;
     if (col->is_nullable()) {
@@ -887,12 +894,12 @@ Status FileWriterBase::_add_decimal_column_chunk(Context& ctx, const TypeDescrip
         std::for_each(ctx._def_levels.begin(), ctx._def_levels.end(), [](auto& x) { x--; });
     }
 
-    _buffered_values_estimate[_col_idx] = col_writer->EstimatedBufferedValueBytes();
+    _estimated_buffered_bytes[_col_idx] = col_writer->EstimatedBufferedValueBytes();
     _col_idx++;
     return Status::OK();
 }
 
-std::vector<uint8_t> FileWriterBase::_make_null_bitset(size_t n, const uint8_t* nulls) const {
+std::vector<uint8_t> ChunkWriter::_make_null_bitset(size_t n, const uint8_t* nulls) const {
     // TODO(letian-jiang): optimize
     DCHECK(nulls != nullptr);
     std::vector<uint8_t> bitset((n + 7) / 8);
@@ -904,23 +911,13 @@ std::vector<uint8_t> FileWriterBase::_make_null_bitset(size_t n, const uint8_t* 
     return bitset;
 }
 
-// The current row group written bytes = total_bytes_written + total_compressed_bytes + estimated_bytes.
-// total_bytes_written: total bytes written by the page writer
-// total_compressed_types: total bytes still compressed but not written
-// estimated_bytes: estimated size of all column chunk uncompressed values that are not written to a page yet. it
-// mainly includes value buffer size and repetition buffer size and definition buffer value for each column.
-std::size_t FileWriterBase::_get_current_rg_written_bytes() const {
-    if (_rg_writer == nullptr) {
-        return 0;
-    }
-
-    auto estimated_bytes = std::accumulate(_buffered_values_estimate.begin(), _buffered_values_estimate.end(), 0);
-    return _rg_writer->total_bytes_written() + _rg_writer->total_compressed_bytes() + estimated_bytes;
-}
 
 std::size_t FileWriterBase::file_size() const {
     DCHECK(_outstream != nullptr);
-    return _outstream->Tell().MoveValueUnsafe() + _get_current_rg_written_bytes();
+    if (_chunk_writer == nullptr) {
+        return _outstream->Tell().MoveValueUnsafe();
+    }
+    return _outstream->Tell().MoveValueUnsafe() + _chunk_writer->estimated_buffered_bytes();
 }
 
 Status FileWriterBase::split_offsets(std::vector<int64_t>& splitOffsets) const {
@@ -941,9 +938,10 @@ Status FileWriterBase::split_offsets(std::vector<int64_t>& splitOffsets) const {
 }
 
 void SyncFileWriter::_flush_row_group() {
-    _rg_writer->Close();
-    _rg_writer = nullptr;
-    std::fill(_buffered_values_estimate.begin(), _buffered_values_estimate.end(), 0);
+    if (_chunk_writer != nullptr) {
+        _chunk_writer->close();
+        _chunk_writer = nullptr;
+    }
 }
 
 Status SyncFileWriter::close() {
@@ -951,10 +949,11 @@ Status SyncFileWriter::close() {
         return Status::OK();
     }
 
+    _flush_row_group();
     _writer->Close();
-    _rg_writer = nullptr;
+
     auto st = _outstream->Close();
-    if (st != ::arrow::Status::OK()) {
+    if (!st.ok()) {
         return Status::InternalError("Close file failed!");
     }
 
@@ -982,9 +981,10 @@ void AsyncFileWriter::_flush_row_group() {
     }
     bool ret = _executor_pool->try_offer([&]() {
         SCOPED_TIMER(_io_timer);
-        _rg_writer->Close();
-        _rg_writer = nullptr;
-        std::fill(_buffered_values_estimate.begin(), _buffered_values_estimate.end(), 0);
+        if (_chunk_writer != nullptr) {
+            _chunk_writer->close();
+            _chunk_writer = nullptr;
+        }
         {
             auto lock = std::unique_lock(_m);
             _rg_writer_closing = false;
@@ -1010,20 +1010,69 @@ Status AsyncFileWriter::close(RuntimeState* state,
             auto lock = std::unique_lock(_m);
             _cv.wait(lock, [&] { return !_rg_writer_closing; });
         }
-        _writer->Close();
-        _rg_writer = nullptr;
+        _flush_row_group();
         _file_metadata = _writer->metadata();
         auto st = _outstream->Close();
+        if (!st.ok()) {
+            return Status::InternalError("Close outstream failed");
+        }
+
         if (cb != nullptr) {
             cb(this, state);
         }
         _closed.store(true);
+        return Status::OK();
     });
+
     if (ret) {
         return Status::OK();
-    } else {
-        return Status::InternalError("Submit close file error");
     }
+    return Status::InternalError("Submit close file error");
+}
+
+
+ChunkWriter::ChunkWriter(::parquet::RowGroupWriter *rg_writer, const std::vector<TypeDescriptor> &type_descs,
+                                const std::shared_ptr<::parquet::schema::GroupNode> schema) : _rg_writer(rg_writer), _type_descs(type_descs), _schema(schema) {
+    int num_columns = rg_writer->num_columns();
+    _estimated_buffered_bytes.resize(num_columns);
+    std::fill(_estimated_buffered_bytes.begin(), _estimated_buffered_bytes.end(), 0);
+}
+
+Status ChunkWriter::write(Chunk *chunk) {
+    _col_idx = 0; // reset index upon every write
+
+    Context ctx(0, 0, chunk->num_rows());
+    for (int i = 0; i < chunk->num_rows(); i++) {
+        ctx.append(i, 0, 0);
+    }
+
+    for (size_t i = 0; i < chunk->num_columns(); i++) {
+        auto col = chunk->get_column_by_index(i);
+        auto ret = _add_column_chunk(ctx, _type_descs[i], _schema->field(i), col);
+        if (!ret.ok()) {
+            return ret;
+        }
+    }
+
+    return Status::OK();
+}
+
+void ChunkWriter::close() {
+    _rg_writer->Close();
+}
+
+// The current row group written bytes = total_bytes_written + total_compressed_bytes + estimated_bytes.
+// total_bytes_written: total bytes written by the page writer
+// total_compressed_types: total bytes still compressed but not written
+// estimated_bytes: estimated size of all column chunk uncompressed values that are not written to a page yet. it
+// mainly includes value buffer size and repetition buffer size and definition buffer value for each column.
+int64_t ChunkWriter::estimated_buffered_bytes() const {
+    if (_rg_writer == nullptr) {
+        return 0;
+    }
+    // TODO(letian-jiang): check this
+    auto estimated_bytes = std::accumulate(_estimated_buffered_bytes.begin(), _estimated_buffered_bytes.end(), 0);
+    return _rg_writer->total_bytes_written() + _rg_writer->total_compressed_bytes() + estimated_bytes;
 }
 
 } // namespace starrocks::parquet

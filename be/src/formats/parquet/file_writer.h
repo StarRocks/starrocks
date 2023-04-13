@@ -91,34 +91,15 @@ private:
                                                         ::parquet::Repetition::type rep_type);
 };
 
-class FileWriterBase {
+class ChunkWriter {
 public:
-    FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
-                   std::shared_ptr<::parquet::schema::GroupNode> schema,
-                   const std::vector<ExprContext*>& output_expr_ctxs);
-
-    FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
-                   std::shared_ptr<::parquet::schema::GroupNode> schema,
-                   std::vector<TypeDescriptor> type_descs);
-
-    virtual ~FileWriterBase() = default;
-
-    Status init();
+    ChunkWriter(::parquet::RowGroupWriter* rg_writer, const std::vector<TypeDescriptor>& type_descs, const std::shared_ptr<::parquet::schema::GroupNode> schema);
 
     Status write(Chunk* chunk);
 
-    std::size_t file_size() const;
+    void close();
 
-    void set_max_row_group_size(int64_t rg_size) { _max_row_group_size = rg_size; }
-
-    std::shared_ptr<::parquet::FileMetaData> metadata() const { return _file_metadata; }
-
-    Status split_offsets(std::vector<int64_t>& splitOffsets) const;
-
-    virtual bool closed() const = 0;
-
-protected:
-    virtual void _flush_row_group() = 0;
+    int64_t estimated_buffered_bytes() const;
 
 private:
     class Context {
@@ -154,10 +135,6 @@ private:
         std::vector<int16_t> _rep_levels;
     };
 
-    void _generate_rg_writer();
-
-    std::size_t _get_current_rg_written_bytes() const;
-
     Status _add_column_chunk(Context& ctx, const TypeDescriptor& type_desc, const ::parquet::schema::NodePtr& node,
                              const ColumnPtr& col);
 
@@ -192,21 +169,59 @@ private:
 
     std::vector<uint8_t> _make_null_bitset(size_t n, const uint8_t* nulls) const;
 
+    ::parquet::RowGroupWriter* _rg_writer;
+    std::vector<TypeDescriptor> _type_descs;
+    std::shared_ptr<::parquet::schema::GroupNode> _schema;
+
+    int _col_idx;
+    std::vector<int64_t> _estimated_buffered_bytes;
+};
+
+class FileWriterBase {
+public:
+    FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
+                   std::shared_ptr<::parquet::schema::GroupNode> schema,
+                   const std::vector<ExprContext*>& output_expr_ctxs);
+
+    FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
+                   std::shared_ptr<::parquet::schema::GroupNode> schema,
+                   std::vector<TypeDescriptor> type_descs);
+
+    virtual ~FileWriterBase() = default;
+
+    Status init();
+
+    Status write(Chunk* chunk);
+
+    std::size_t file_size() const;
+
+    void set_max_row_group_size(int64_t rg_size) { _max_row_group_size = rg_size; }
+
+    std::shared_ptr<::parquet::FileMetaData> metadata() const { return _file_metadata; }
+
+    Status split_offsets(std::vector<int64_t>& splitOffsets) const;
+
+    virtual bool closed() const = 0;
+
+protected:
+    void _generate_chunk_writer();
+
+    virtual void _flush_row_group() = 0;
+
 protected:
     std::shared_ptr<ParquetOutputStream> _outstream;
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
     std::unique_ptr<::parquet::ParquetFileWriter> _writer;
-    ::parquet::RowGroupWriter* _rg_writer = nullptr;
+    std::unique_ptr<ChunkWriter> _chunk_writer;
+
+//    ::parquet::RowGroupWriter* _rg_writer = nullptr;
     std::vector<TypeDescriptor> _type_descs;
     std::shared_ptr<::parquet::FileMetaData> _file_metadata;
 
     const static int64_t kDefaultMaxRowGroupSize = 128 * 1024 * 1024; // 128MB
     int64_t _max_row_group_size = kDefaultMaxRowGroupSize;
-    std::vector<int64_t> _buffered_values_estimate;
-
-private:
-    int _col_idx{0}; // used to track column writer index
+//    std::vector<int64_t> _buffered_values_estimate;
 };
 
 class SyncFileWriter : public FileWriterBase {
