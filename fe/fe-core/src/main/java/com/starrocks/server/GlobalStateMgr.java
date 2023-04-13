@@ -1564,7 +1564,7 @@ public class GlobalStateMgr {
                     if (table == null) {
                         LOG.warn("Setting the materialized view {}({}) to invalid because " +
                                 "the table {} was not exist.", mv.getName(), mv.getId(), baseTableInfo.getTableName());
-                        mv.setInactiveAndReason("base table dropped: " + baseTableInfo.getTableName());
+                        mv.setInactiveAndReason("base table dropped: " + baseTableInfo.getTableId());
                         continue;
                     }
                     if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
