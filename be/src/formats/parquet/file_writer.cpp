@@ -106,56 +106,6 @@ arrow::Status ParquetOutputStream::Close() {
     return arrow::Status::OK();
 }
 
-void ParquetBuildHelper::build_file_data_type(::parquet::Type::type& parquet_data_type,
-                                              const LogicalType& column_data_type) {
-    switch (column_data_type) {
-    case TYPE_BOOLEAN: {
-        parquet_data_type = ::parquet::Type::BOOLEAN;
-        break;
-    }
-    case TYPE_TINYINT:
-    case TYPE_SMALLINT:
-    case TYPE_INT: {
-        parquet_data_type = ::parquet::Type::INT32;
-        break;
-    }
-    case TYPE_BIGINT:
-    case TYPE_DATE:
-    case TYPE_DATETIME: {
-        parquet_data_type = ::parquet::Type::INT64;
-        break;
-    }
-    case TYPE_LARGEINT: {
-        parquet_data_type = ::parquet::Type::INT96;
-        break;
-    }
-    case TYPE_FLOAT: {
-        parquet_data_type = ::parquet::Type::FLOAT;
-        break;
-    }
-    case TYPE_DOUBLE: {
-        parquet_data_type = ::parquet::Type::DOUBLE;
-        break;
-    }
-    case TYPE_CHAR:
-    case TYPE_VARCHAR:
-    case TYPE_DECIMAL:
-    case TYPE_DECIMAL32:
-    case TYPE_DECIMAL64:
-    case TYPE_DECIMALV2: {
-        parquet_data_type = ::parquet::Type::BYTE_ARRAY;
-        break;
-    }
-    default:
-        parquet_data_type = ::parquet::Type::UNDEFINED;
-    }
-}
-
-void ParquetBuildHelper::build_parquet_repetition_type(::parquet::Repetition::type& parquet_repetition_type,
-                                                       const bool is_nullable) {
-    parquet_repetition_type = is_nullable ? ::parquet::Repetition::OPTIONAL : ::parquet::Repetition::REQUIRED;
-}
-
 void ParquetBuildHelper::build_compression_type(::parquet::WriterProperties::Builder& builder,
                                                 const TCompressionType::type& compression_type) {
     switch (compression_type) {
