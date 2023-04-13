@@ -120,18 +120,15 @@ public class OlapTableSink extends DataSink {
     private boolean nullExprInAutoIncrement;
     private boolean missAutoIncrementColumn;
     private int autoIncrementSlotId;
-    private boolean enableAutomaticPartition;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
-                         TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
-                         boolean nullExprInAutoIncrement, boolean enableAutomaticPartition) {
-        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum, enableReplicatedStorage,
-                nullExprInAutoIncrement, enableAutomaticPartition);
+                         TWriteQuorumType writeQuorum, boolean enableReplicatedStorage, boolean nullExprInAutoIncrement) {
+        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum, enableReplicatedStorage, nullExprInAutoIncrement);
     }
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          boolean enablePipelineLoad, TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
-                         boolean nullExprInAutoIncrement, boolean enableAutomaticPartition) {
+                         boolean nullExprInAutoIncrement) {
         this.dstTable = dstTable;
         this.tupleDescriptor = tupleDescriptor;
         Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
@@ -142,7 +139,7 @@ public class OlapTableSink extends DataSink {
         this.enableReplicatedStorage = enableReplicatedStorage;
         this.nullExprInAutoIncrement = nullExprInAutoIncrement;
         this.missAutoIncrementColumn = false;
-        this.enableAutomaticPartition = enableAutomaticPartition;
+
         this.autoIncrementSlotId = -1;
         if (tupleDescriptor != null) {
             for (int i = 0; i < this.tupleDescriptor.getSlots().size(); ++i) {
@@ -295,7 +292,7 @@ public class OlapTableSink extends DataSink {
         partitionParam.setDb_id(dbId);
         partitionParam.setTable_id(table.getId());
         partitionParam.setVersion(0);
-        partitionParam.setEnable_automatic_partition(enableAutomaticPartition);
+        partitionParam.setEnable_automatic_partition(table.supportedAutomaticPartition());
 
         PartitionType partType = table.getPartitionInfo().getType();
         switch (partType) {
