@@ -215,7 +215,7 @@ public class FunctionAnalyzer {
 
             Expr timeExpr = functionCallExpr.getChild(1);
             if (timeExpr.isConstant()) {
-                throw new SemanticException("time arg must be column", timeExpr.getPos());
+                throw new SemanticException("time arg must be column");
             }
         }
 
