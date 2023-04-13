@@ -269,48 +269,96 @@ from mail_merge;
 * 时间类型：DATE、DATETIME
 * 从 2.5 版本开始，`LAG()` 函数支持查询 BITMAP 和 HLL 类型的数据。
 
-**语法：**
+**语法**
 
 ~~~SQL
 LAG(expr [IGNORE NULLS] [, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ~~~
 
-**参数说明：**
+**参数说明**
 
 * `expr`: 需要计算的目标字段。
 * `offset`: 偏移量，表示向前查找的行数，必须为**正整数**。如果未指定，默认按照 1 处理。
 * `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。
-* `IGNORE NULLS`：从 3.0 版本开始，`LAG()` 支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认返回结果会包含 NULL 值。比如，如果指定的当前行之前的第 `offset` 行的值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，向前遍历 `offset` 行时会忽略取值为 NULL 的行，继续向前遍历非 NULL 值。如果未找到非 NULL 值，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
+* `IGNORE NULLS`：从 3.0 版本开始，`LAG()` 支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认返回结果会包含 NULL 值。比如，如果指定的当前行之前的第 `offset` 行的值为 NULL，则返回 NULL，参考示例一。如果指定了 `IGNORE NULLS`，向前遍历 `offset` 行时会忽略取值为 NULL 的行，继续向前遍历非 NULL 值。如果指定了 IGNORE NULLS，但是在当前行之前并不存在 offset 个非 NULL 值，则返回 NULL 或 `default` (如果指定)，参考示例二。
 
-以下示例计算 `stock_ticker` 表中股票 JDR **前一天**的收盘价 `closing_price`。`default` 设置为 0，表示如果没有符合条件的行，则返回 0，比如下面示例中返回结果的第一行。
+**示例**
+
+示例一：lag 中未指定 IGNORE NULLS
+
+建表并插入数据：
 
 ~~~SQL
-select stock_symbol, closing_date, closing_price,
-    lag(closing_price, 1, 0)
-    over(
-    partition by stock_symbol
-    order by closing_date
-    ) as "yesterday closing"
-from stock_ticker
-order by closing_date;
+CREATE TABLE test_tbl (col_1 INT, col_2 INT)
+DISTRIBUTED BY HASH(col_1) BUCKETS 3;
+
+INSERT INTO test_tbl VALUES 
+    (1, NULL),
+    (2, 4),
+    (3, NULL),
+    (4, 2),
+    (5, NULL),
+    (6, 7),
+    (7, 6),
+    (8, 5),
+    (9, NULL),
+    (10, NULL);
 ~~~
 
-返回：
+查询数据，指定 `offset` 为 2，向前查找 2 行；`default` 为 0，表示如果没有符合条件的行，则返回 0。
 
-~~~Plain
-+--------------+---------------------+---------------+-------------------+
-| stock_symbol | closing_date        | closing_price | yesterday closing |
-+--------------+---------------------+---------------+-------------------+
-| JDR          | 2014-09-13 00:00:00 | 12.86         | 0                 |
-| JDR          | 2014-09-14 00:00:00 | 12.89         | 12.86             |
-| JDR          | 2014-09-15 00:00:00 | 12.94         | 12.89             |
-| JDR          | 2014-09-16 00:00:00 | 12.55         | 12.94             |
-| JDR          | 2014-09-17 00:00:00 | 14.03         | 12.55             |
-| JDR          | 2014-09-18 00:00:00 | 14.75         | 14.03             |
-| JDR          | 2014-09-19 00:00:00 | 13.98         | 14.75             |
-+--------------+---------------------+---------------+-------------------+
+返回结果：
+
+~~~SQL
+SELECT col_1, col_2, LAG(col_2,2,0) OVER (ORDER BY col_1) 
+FROM test_tbl ORDER BY col_1;
++-------+-------+---------------------------------------------+
+| col_1 | col_2 | lag(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
++-------+-------+---------------------------------------------+
+|     1 |  NULL |                                           0 |
+|     2 |     4 |                                           0 |
+|     3 |  NULL |                                        NULL |
+|     4 |     2 |                                           4 |
+|     5 |  NULL |                                        NULL |
+|     6 |     7 |                                           2 |
+|     7 |     6 |                                        NULL |
+|     8 |     5 |                                           7 |
+|     9 |  NULL |                                           6 |
+|    10 |  NULL |                                           5 |
++-------+-------+---------------------------------------------+
 ~~~
+
+可以看到对于前两行，往前遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
+
+对于第 3 行数据 NULL，往前遍历两行对应的值是 NULL，因为未指定 IGNORE NULLS，允许返回结果包含 NULL，所以返回 NULL。
+
+示例二：lag 中指定了 IGNORE NULLS
+
+依然使用上面的数据表。
+
+~~~SQL
+SELECT col_1, col_2, LAG(col_2 IGNORE NULLS,2,0) OVER (ORDER BY col_1) 
+FROM test_tbl ORDER BY col_1;
++-------+-------+---------------------------------------------+
+| col_1 | col_2 | lag(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
++-------+-------+---------------------------------------------+
+|     1 |  NULL |                                           0 |
+|     2 |     4 |                                           0 |
+|     3 |  NULL |                                           0 |
+|     4 |     2 |                                           0 |
+|     5 |  NULL |                                           4 |
+|     6 |     7 |                                           4 |
+|     7 |     6 |                                           2 |
+|     8 |     5 |                                           7 |
+|     9 |  NULL |                                           6 |
+|    10 |  NULL |                                           6 |
++-------+-------+---------------------------------------------+
+~~~
+
+可以看到对于第 1-4 行，因为在当前行之前不存在 2 个 非 NULL 值，因此返回默认值 0。
+
+对于第 7 行数据 6，往前遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
 
 <br/>
 
@@ -373,39 +421,82 @@ OVER([<partition_by_clause>] [<order_by_clause>])
 * `expr`: 需要计算的目标字段。
 * `offset`: 偏移量，表示向后查找的行数，必须为**正整数**。如果未指定，默认按照 1 处理。
 * `default`: 没有找到符合条件的行时，返回的默认值。如果未指定 `default`，默认返回 NULL。`default` 的数据类型必须和 `expr` 兼容。
-* `IGNORE NULLS`：从 3.0 版本开始，`LEAD()` 支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认返回结果会包含 NULL 值。比如，如果指定的当前行之后的第 `offset` 行的值为 NULL，则返回 NULL。如果指定了 `IGNORE NULLS`，向后遍历 `offset` 行时会忽略取值为 NULL 的行，继续向后遍历非 NULL 值。如果未找到非 NULL 值，那么即使指定了 `IGNORE NULLS`，也会返回 NULL。
+* `IGNORE NULLS`：从 3.0 版本开始，`LEAD()` 支持 `IGNORE NULLS`，即是否在计算结果中忽略 NULL 值。如果不指定 `IGNORE NULLS`，默认返回结果会包含 NULL 值。比如，如果指定的当前行之后的第 `offset` 行的值为 NULL，则返回 NULL，参考示例一。如果指定了 `IGNORE NULLS`，向后遍历 `offset` 行时会忽略取值为 NULL 的行，继续向后遍历非 NULL 值。如果指定了 IGNORE NULLS，但是在当前行之后并不存在 offset 个非 NULL 值，则返回 NULL 或 `default` (如果指定)，参考示例二。
 
-以下示例计算第二天的收盘价对比当天收盘价的走势，即第二天收盘价比当天高还是低。
+示例一：lead 中未指定 IGNORE NULLS
 
-`default` 设置为 0，表示如果没有符合条件的行，则返回 0，
+建表并插入数据：
 
 ~~~SQL
-select stock_symbol, closing_date, closing_price,
-    case(lead(closing_price, 1, 0) 
-         over (partition by stock_symbol
-         order by closing_date) - closing_price) > 0 
-        when true then "higher"
-        when false then "flat or lower" end
-    as "trending"
-from stock_ticker
-order by closing_date;
+CREATE TABLE test_tbl (col_1 INT, col_2 INT)
+DISTRIBUTED BY HASH(col_1) BUCKETS 3;
+
+INSERT INTO test_tbl VALUES 
+    (1, NULL),
+    (2, 4),
+    (3, NULL),
+    (4, 2),
+    (5, NULL),
+    (6, 7),
+    (7, 6),
+    (8, 5),
+    (9, NULL),
+    (10, NULL);
 ~~~
 
-返回：
+查询数据，指定 `offset` 为 2，向后查找 2 行；`default` 为 0，表示如果没有符合条件的行，则返回 0。
 
-~~~Plain
-+--------------+---------------------+---------------+---------------+
-| stock_symbol | closing_date        | closing_price | trending      |
-+--------------+---------------------+---------------+---------------+
-| JDR          | 2014-09-13 00:00:00 | 12.86         | higher        |
-| JDR          | 2014-09-14 00:00:00 | 12.89         | higher        |
-| JDR          | 2014-09-15 00:00:00 | 12.94         | flat or lower |
-| JDR          | 2014-09-16 00:00:00 | 12.55         | higher        |
-| JDR          | 2014-09-17 00:00:00 | 14.03         | higher        |
-| JDR          | 2014-09-18 00:00:00 | 14.75         | flat or lower |
-| JDR          | 2014-09-19 00:00:00 | 13.98         | flat or lower |
-+--------------+---------------------+---------------+---------------+
+返回结果：
+
+~~~SQL
+SELECT col_1, col_2, LEAD(col_2,2,0) OVER (ORDER BY col_1) 
+FROM test_tbl ORDER BY col_1;
++-------+-------+----------------------------------------------+
+| col_1 | col_2 | lead(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
++-------+-------+----------------------------------------------+
+|     1 |  NULL |                                         NULL |
+|     2 |     4 |                                            2 |
+|     3 |  NULL |                                         NULL |
+|     4 |     2 |                                            7 |
+|     5 |  NULL |                                            6 |
+|     6 |     7 |                                            5 |
+|     7 |     6 |                                         NULL |
+|     8 |     5 |                                         NULL |
+|     9 |  NULL |                                            0 |
+|    10 |  NULL |                                            0 |
++-------+-------+----------------------------------------------+
 ~~~
+
+可以看到对于第 1 行数据 NULL，往后遍历两行对应的数据是 NULL，因为未指定 IGNORE NULLS，允许返回结果包含 NULL，所以返回 NULL。
+
+对于最后两行，因为往后遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
+
+示例二：lead 中指定了 IGNORE NULLS
+
+依然使用上面的数据表。
+
+~~~SQL
+SELECT col_1, col_2, LEAD(col_2 IGNORE NULLS,2,0) OVER (ORDER BY col_1) 
+FROM test_tbl ORDER BY col_1;
++-------+-------+----------------------------------------------+
+| col_1 | col_2 | lead(col_2, 2, 0) OVER (ORDER BY col_1 ASC ) |
++-------+-------+----------------------------------------------+
+|     1 |  NULL |                                            2 |
+|     2 |     4 |                                            7 |
+|     3 |  NULL |                                            7 |
+|     4 |     2 |                                            6 |
+|     5 |  NULL |                                            6 |
+|     6 |     7 |                                            5 |
+|     7 |     6 |                                            0 |
+|     8 |     5 |                                            0 |
+|     9 |  NULL |                                            0 |
+|    10 |  NULL |                                            0 |
++-------+-------+----------------------------------------------+
+~~~
+
+可以看到对于第 7-10 行，往后遍历时不存在 2 个 非 NULL 值，因此返回默认值 0。
+
+对于第 1 行数据 NULL，往后遍历两行对应的值是 NULL，因为指定了 IGNORE NULLS，会忽略这一行，继续往前遍历，因此返回第 4 行的 2。
 
 <br>
 
