@@ -103,6 +103,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public static final String LOG_REJECTED_RECORD_NUM_PROPERTY = "log_rejected_record_num";
 
+    public static final String ENABLE_PROFILE = "enable_profile";
+
     // the value is csv or json, default is csv
     public static final String FORMAT = "format";
     public static final String STRIP_OUTER_ARRAY = "strip_outer_array";
@@ -155,6 +157,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(ENCLOSE)
             .add(ESCAPE)
             .add(LOG_REJECTED_RECORD_NUM_PROPERTY)
+            .add(LoadStmt.ENABLE_PROFILE)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -197,6 +200,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private boolean partialUpdate = false;
     private String mergeConditionStr;
     private String partialUpdateMode = "row";
+
+    // if set true, routineLoadTask will generate profile
+    private boolean enableProfile = false;
+
     /**
      * RoutineLoad support json data.
      * Require Params:
@@ -552,6 +559,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         mergeConditionStr = jobProperties.get(LoadStmt.MERGE_CONDITION);
 
         partialUpdateMode = jobProperties.get(LoadStmt.PARTIAL_UPDATE_MODE);
+
+        enableProfile = Util.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.ENABLE_PROFILE),
+                false,
+                LoadStmt.ENABLE_PROFILE + "should be a boolean");
 
         if (ConnectContext.get() != null) {
             timezone = ConnectContext.get().getSessionVariable().getTimeZone();
@@ -915,6 +926,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             throw new AnalysisException(propertyName + " must be a integer: " + valueString);
         }
         return value;
+    }
+
+    public boolean isEnableProfile() {
+        return enableProfile;
     }
 
     private static SessionVariable buildSessionVariables(Map<String, String> sessionVariables) {

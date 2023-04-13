@@ -98,6 +98,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     private String brokerList;
     private String topic;
+
     // optional, user want to load partitions.
     private List<Integer> customKafkaPartitions = Lists.newArrayList();
     // current kafka partitions is the actually partition which will be fetched
@@ -112,6 +113,12 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     public KafkaRoutineLoadJob() {
         // for serialization, id is dummy
         super(-1, LoadDataSourceType.KAFKA);
+    }
+
+    public KafkaRoutineLoadJob(Long id, String name,
+                               long dbId, long tableId, String brokerList, String topic, boolean enableProfile) {
+        this(id, name, dbId, tableId, brokerList, topic);
+        this.enableProfile = enableProfile;
     }
 
     public KafkaRoutineLoadJob(Long id, String name,
@@ -413,7 +420,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         // init kafka routine load job
         long id = GlobalStateMgr.getCurrentState().getNextId();
         KafkaRoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob(id, stmt.getName(),
-                db.getId(), tableId, stmt.getKafkaBrokerList(), stmt.getKafkaTopic());
+                db.getId(), tableId, stmt.getKafkaBrokerList(), stmt.getKafkaTopic(), stmt.isEnableProfile());
         kafkaRoutineLoadJob.setOptional(stmt);
         kafkaRoutineLoadJob.checkCustomProperties();
         kafkaRoutineLoadJob.checkCustomPartition(kafkaRoutineLoadJob.customKafkaPartitions);

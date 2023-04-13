@@ -65,12 +65,16 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.streamload.StreamLoadInfo;
+import com.starrocks.load.streamload.StreamLoadManager;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
@@ -119,6 +123,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     public static final long DEFAULT_TASK_SCHED_INTERVAL_SECOND = 10;
     public static final boolean DEFAULT_STRICT_MODE = false; // default is false
+
+    protected boolean enableProfile = false;
 
     protected static final String STAR_STRING = "*";
 
@@ -762,7 +768,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     public void prepare() throws UserException {
     }
 
-    public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId) throws UserException {
+    public TExecPlanFragmentParams plan(TUniqueId loadId, long txnId, String label) throws UserException {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("db " + dbId + " does not exist");
@@ -779,6 +785,32 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     new StreamLoadPlanner(db, (OlapTable) table, info);
             TExecPlanFragmentParams planParams = planner.plan(loadId);
             planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
+            if (isEnableProfile()) {
+                planParams.query_options.setEnable_profile(true);
+                StreamLoadManager streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadManager();
+
+                StreamLoadTask streamLoadTask = streamLoadManager.createLoadTask(db, table.getName(), label,
+                        Config.routine_load_task_timeout_second);
+                streamLoadTask.setTxnId(txnId);
+                streamLoadTask.setLabel(label);
+                streamLoadTask.setTUniqueId(loadId);
+                streamLoadManager.addLoadTask(streamLoadTask);
+
+                Coordinator coord = new Coordinator(planner, planParams.getCoord());
+                streamLoadTask.setCoordinator(coord);
+
+                QeProcessorImpl.INSTANCE.registerQuery(loadId, coord);
+                LOG.info(new LogBuilder("Register stream load query").add("loadId", loadId).
+                        add("streamLoadTaskId", streamLoadTask.getId()));
+
+                LOG.info(new LogBuilder("routine load task create stream load task success").
+                        add("transactionId", txnId).
+                        add("label", label).
+                        add("streamLoadTaskId", streamLoadTask.getId()));
+
+            } else {
+                planParams.query_options.setEnable_profile(false);
+            }
             // add table indexes to transaction state
             TransactionState txnState =
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), txnId);
@@ -877,6 +909,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     RoutineLoadTaskInfo routineLoadTaskInfo = routineLoadTaskInfoOptional.get();
                     taskBeId = routineLoadTaskInfo.getBeId();
                     executeTaskOnTxnStatusChanged(routineLoadTaskInfo, txnState, TransactionStatus.COMMITTED, null);
+                    routineLoadTaskInfo.afterCommitted(txnState, txnOperated);
                 }
                 ++committedTaskNum;
                 LOG.debug("routine load task committed. task id: {}, job id: {}", txnState.getLabel(), id);
@@ -1005,6 +1038,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                             .add("msg", "txn abort with reason " + txnStatusChangeReasonString)
                             .build());
                 }
+                routineLoadTaskInfo.afterAborted(txnState, txnOperated, txnStatusChangeReasonString);
                 ++abortedTaskNum;
                 TransactionState.TxnStatusChangeReason txnStatusChangeReason = null;
                 if (txnStatusChangeReasonString != null) {
@@ -1443,6 +1477,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         jobProperties.put("maxBatchRows", String.valueOf(maxBatchRows));
         jobProperties.put("currentTaskConcurrentNum", String.valueOf(currentTaskConcurrentNum));
         jobProperties.put("desireTaskConcurrentNum", String.valueOf(desireTaskConcurrentNum));
+        jobProperties.put("enable_profile", String.valueOf(enableProfile));
         jobProperties.putAll(this.jobProperties);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(jobProperties);
@@ -1465,6 +1500,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     public boolean isFinal() {
         return state.isFinalState();
+    }
+
+    public boolean isEnableProfile() {
+        return enableProfile && Config.enable_stream_load_profile;
     }
 
     public static RoutineLoadJob read(DataInput in) throws IOException {
@@ -1708,6 +1747,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY)) {
             this.maxBatchRows = Long.parseLong(
                     copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY));
+        }
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.ENABLE_PROFILE)) {
+            this.enableProfile = Boolean.parseBoolean(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.ENABLE_PROFILE));
         }
         this.jobProperties.putAll(copiedJobProperties);
     }

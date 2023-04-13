@@ -93,7 +93,11 @@ public class ProfileManager {
     private WriteLock writeLock;
 
     private Deque<ProfileElement> profileDeque;
+    // The frequency of load may be relatively high,
+    // so do not use the same deque and map of the query to reduce the impact on the query
+    private Deque<ProfileElement> loadProfileDeque;
     private Map<String, ProfileElement> profileMap; // from QueryId to RuntimeProfile
+    private Map<String, ProfileElement> loadProfileMap; // from LoadId to RuntimeProfile
 
     public static ProfileManager getInstance() {
         if (INSTANCE == null) {
@@ -108,6 +112,8 @@ public class ProfileManager {
         writeLock = lock.writeLock();
         profileDeque = new LinkedList<ProfileElement>();
         profileMap = new ConcurrentHashMap<String, ProfileElement>();
+        loadProfileDeque = new LinkedList<ProfileElement>();
+        loadProfileMap = new ConcurrentHashMap<String, ProfileElement>();
     }
 
     public ProfileElement createElement(RuntimeProfile summaryProfile, String profileString) {
@@ -124,7 +130,7 @@ public class ProfileManager {
         return element;
     }
 
-    public String pushProfile(RuntimeProfile profile) {
+    private String generateProfileString(RuntimeProfile profile) {
         if (profile == null) {
             return "";
         }
@@ -142,7 +148,11 @@ public class ProfileManager {
                 profileString = profile.toString();
                 LOG.warn("unknown profile format '{}',  use default format instead.", Config.profile_info_format);
         }
+        return profileString;
+    }
 
+    public String pushProfile(RuntimeProfile profile) {
+        String profileString = generateProfileString(profile);
         ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
         String queryId = element.infoStrings.get(ProfileManager.QUERY_ID);
         // check when push in, which can ensure every element in the list has QUERY_ID column,
@@ -166,6 +176,34 @@ public class ProfileManager {
 
         return profileString;
     }
+
+    public String pushLoadProfile(RuntimeProfile profile) {
+        String profileString = generateProfileString(profile);
+
+        ProfileElement element = createElement(profile.getChildList().get(0).first, profileString);
+        String loadId = element.infoStrings.get(ProfileManager.QUERY_ID);
+        // check when push in, which can ensure every element in the list has QUERY_ID column,
+        // so there is no need to check when remove element from list.
+        if (Strings.isNullOrEmpty(loadId)) {
+            LOG.warn("the key or value of Map is null, "
+                    + "may be forget to insert 'QUERY_ID' column into infoStrings");
+        }
+
+        loadProfileMap.put(loadId, element);
+        writeLock.lock();
+        try {
+            if (loadProfileDeque.size() >= Config.load_profile_info_reserved_num) {
+                loadProfileMap.remove(profileDeque.getFirst().infoStrings.get(loadId));
+                loadProfileDeque.removeFirst();
+            }
+            loadProfileDeque.addLast(element);
+        } finally {
+            writeLock.unlock();
+        }
+
+        return profileString;
+    }
+
 
     public List<List<String>> getAllQueries() {
         List<List<String>> result = Lists.newArrayList();
@@ -192,7 +230,7 @@ public class ProfileManager {
         ProfileElement element = new ProfileElement();
         readLock.lock();
         try {
-            element = profileMap.get(queryID);
+            element = profileMap.get(queryID) == null ? loadProfileMap.get(queryID) : profileMap.get(queryID);
             if (element == null) {
                 return null;
             }

@@ -104,6 +104,8 @@ public class LoadStmt extends DdlStmt {
 
     public static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
 
+    public static final String ENABLE_PROFILE = "enable_profile";
+
     // for load data from Baidu Object Store(BOS)
     public static final String BOS_ENDPOINT = "bos_endpoint";
     public static final String BOS_ACCESSKEY = "bos_accesskey";

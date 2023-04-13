@@ -267,7 +267,6 @@ public class StreamLoadPlanner {
         // Since stream load has only one fragment,
         // the backend number can be directly assigned to 0
         params.setBackend_num(0);
-        GlobalStateMgr.getCurrentState();
         TNetworkAddress coordAddress = new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port);
         params.setCoord(coordAddress);
 

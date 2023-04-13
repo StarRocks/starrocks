@@ -992,14 +992,22 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
     }
 
     public void collectProfile() {
+        long currentTimestamp = System.currentTimeMillis();
+        long totalTimeMs = currentTimestamp - createTimeMs;
+
+        // For the usage scenarios of flink cdc or routine load,
+        // the frequency of stream load maybe very high, resulting in many profiles,
+        // but we may only care about the long-duration stream load profile.
+        if (totalTimeMs < Config.stream_load_profile_collect_second * 1000) {
+            return;
+        }
+
         RuntimeProfile profile = new RuntimeProfile("Load");
         RuntimeProfile summaryProfile = new RuntimeProfile("Summary");
         summaryProfile.addInfoString(ProfileManager.QUERY_ID, DebugUtil.printId(loadId));
         summaryProfile.addInfoString(ProfileManager.START_TIME,
                 TimeUtils.longToTimeString(createTimeMs));
 
-        long currentTimestamp = System.currentTimeMillis();
-        long totalTimeMs = currentTimestamp - createTimeMs;
         summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(System.currentTimeMillis()));
         summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
 
@@ -1025,7 +1033,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             }
         }
 
-        String profileContent = ProfileManager.getInstance().pushProfile(profile);
+        String profileContent = ProfileManager.getInstance().pushLoadProfile(profile);
         LOG.info(profileContent);
         LOG.debug(profileContent);
         return;
@@ -1059,6 +1067,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
             return;
         }
+
         writeLock();
         try {
             if (isFinalState()) {
@@ -1228,6 +1237,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         return label;
     }
 
+    public void setLabel(String label) {
+        this.label = label;
+    }
+
     public long getId() {
         return id;
     }
@@ -1242,6 +1255,10 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
 
     public long getTxnId() {
         return txnId;
+    }
+
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
     }
 
     public boolean isSyncStreamLoad() {
