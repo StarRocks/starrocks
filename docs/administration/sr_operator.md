@@ -1,311 +1,292 @@
-# Deploy and manage CNs on Kubernetes with StarRocks Operator [Preview]
+# Deploy and Manage StarRocks on Kubernetes with StarRocks Operator
 
-From 2.4 onwards, StarRocks introduces a new type of node, a stateless compute node (CN for short), in addition to FEs and BEs. CNs provide compute services and are responsible for completing part of the execution plan. They don't store or manage data. Multiple CNs consist of a CN cluster. It can be containerized, deployed, and maintained on Kubernetes to achieve auto-scaling. Thus, the StarRocks cluster as a whole can better support data analytics workloads that consume a lot of compute resources, such as data lake analytics.
+This topic introduces how to use the StarRocks Operator to automate the deployment and management of a StarRocks cluster on a Kubernetes cluster.
 
-This topic describes how to use StarRocks operator to deploy a CN cluster on Kubernetes to achieve auto-scaling.
+## How it works
 
-## Concepts
+![img](../assets/starrocks_operator.png)
 
-- **Kubernetes**
+## Before you begin
 
-    [Kubernetes](https://kubernetes.io/docs/home/), also known as K8s, is an open-source system for automating deployment, scaling, and management of containerized applications.
+### Create Kubernetes cluster
 
-    > A container bundles and runs a lightweight and portable executable image that contains software and all of its dependencies.
+You can use the cloud-managed Kubernetes service, such as an [Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/cn/eks/?nc2=h_ql_prod_ct_eks) or [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine?hl=zh-cn) cluster, or a self-managed Kubernetes cluster.
 
-- **Operator**
+**Create an Amazon EKS cluster**
 
-    [Operators](https://kubernetes.io/docs/concepts/extend-kubernetes/operator/) are software extensions to Kubernetes that make use of [custom resources](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/) to manage applications and their components. StarRocks Operator can deploy StarRocks compute service on cloud. It can simplify operation and maintenance, and realize auto-scaling of computing resources.
+1. Check that [the following command-line tools are installed in your environment](https://docs.aws.amazon.com/eks/latest/userguide/getting-started.html):
+   1. Install and configure AWS command-line tool AWS CLI.
+   2. Install EKS cluster command-line tool eksctl.
+   3. Install Kubernetes cluster command-line tool kubectl.
+2. Use one of the following methods to create an EKS cluster:
+   1. [Use eksctl to quickly create an EKS cluster](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-eksctl.html).
+   2. [Manually create an EKS cluster with the AWS console and AWS CLI](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-console.html).
 
-- **Node**
+**Create a GKE cluster**
 
-    [Node](https://kubernetes.io/docs/concepts/architecture/nodes/) is the actual resources provider in a Kubernetes cluster and are the place where Pods are scheduled to run. In a production environment, a Kubernetes cluster usually consists of multiple Nodes.
+Before you start to create a GKE cluster, make sure that you complete all the [prerequisites](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#before-you-begin). Then follow the instructions provided in [Create a GKE cluster](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#create_cluster) to create a GKE cluster.
 
-- **Pod**
+**Create a self-managed Kubernetes cluster**
 
-    [Pod](https://kubernetes.io/docs/concepts/workloads/pods/) is the smallest deployable units of computing that you can create and manage in Kubernetes. A Pod (as in a pod of whales or pea pod) is a group of one or more [containers](https://kubernetes.io/docs/concepts/containers/), with shared storage and network resources, and a specification for how to run the containers.
+Follow the instructions provided in [Bootstrapping clusters with kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/) to create a self-managed Kubernetes cluster. You can use [Minikube](https://kubernetes.io/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) and [Docker Desktop](https://docs.docker.com/desktop/) to create a single-node private Kubernetes cluster with minimum steps.
 
-    When a StarRocks Operator is in work, FEs detect compute services through Direct Connect. But StarRocks does not allow nodes in one cluster to share the same IP. So StarRocks Operator only supports a Pod containing a CN and scheduled to run on one Node.
+### Deploy StarRocks Operator
 
-- **CN**
+1. Add the custom resource StarRocksCluster.
 
-    CN is a stateless compute node and is responsible for carrying out part of the execution plan. It doesn't store data. Multiple CNs consist of a CN cluster. It can be containerized, and be deployed and maintained on Kubernetes. StarRocks operator senses a CN cluster's resource load and deploys more or less CNs accordingly to achieve autoscaling.
+   ```bash
+   kubectl apply -f https://raw.githubusercontent.com/StarRocks/starrocks-kubernetes-operator/main/deploy/starrocks.com_starrocksclusters.yaml
+   ```
 
-## Principle
+2. Deploy the StarRocks Operator. You can choose to deploy the StarRocks Operator by using a default configuration file or a custom configuration file.
+   1. Deploy the StarRocks Operator by using a default configuration file.
 
-- **Interaction between StarRocks Operator, CN cluster, and StarRocks**
+      ```bash
+      kubectl apply -f https://raw.githubusercontent.com/StarRocks/starrocks-kubernetes-operator/main/deploy/operator.yaml
+      ```
 
-    StarRocks Operator connects to FE by using FE's IP address and query port and adds CNs to a StarRocks cluster. If you query the data stored in BEs, FE assigns the execution plan to CNs and BEs according to the data distribution and operator types in the execution plan. CNs receive data after BEs shuffle data, perform some operators (e.g. JOIN), and returns the computation results to FE.
+      The StarRocks Operator is deployed to the namespace `starrocks` and manages all StarRocks clusters under all namespaces.
+   2. Deploy the StarRocks Operator by using a custom configuration file.
+      - Download the configuration file **operator.yaml**, which is used to deploy the StarRocks Operator.
 
-    Also, to query data from data lake, such as HDFS, AWS S3, FE assigns the execution plan to CNs, and CNs directly access the external data source, perform all the operators, and finally returns the computation results to FE.
-
-- **Scaling policy of StarRocks Operator**
-
-    StarRocks Operator senses the CN cluster resource load in a K8s cluster, and automatically deploys more or less CNs to achieve autoscaling according to the configured scaling policy.
-
-## Environment preparation
-
-- [Deploy a StarRocks cluster](../quick_start/Deploy.md).
-
-- [Install a Kubernetes cluster](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/).
-
-   > Note:
-   >
-   > If you want to quickly get started with this feature, you can create a single-node Kubernetes cluster with Minikube.
-
-- [Install the GO language development environment](https://go.dev/doc/install) on the machine that deploys StarRocks Operator. This is because the GO language is used to compile StarRocks Operator code while the StarRocks Operator image is created.
-
-## Prepare Docker images
-
-You need to build Docker images, including StarRocks Operator, CN, and CN Group images, and push the images to a remote Docker repository. When you deploy StarRocks Operator, CN, and CN Group, you will pull images from the remote repository.
-
-### Prepare StarRocks Operator image
-
-1. Download the StarRocks Operator code and save it to the directory **$your_code_path/****starrocks****-kubernetes-operator** .
-
-    ```Bash
-    cd $your_code_path
-    git clone https://github.com/StarRocks/starrocks-kubernetes-operator
-    ```
-
-2. Enter the directory **$your_code_path/****starrocks****-kubernetes-operator**.
-
-    ```Bash
-    cd starrocks-kubernetes-operator
-    ```
-
-3. Create a StarRocks Operator image.
-
-    ```Bash
-    make docker IMG="starrocks-kubernetes-operator:v1.0"
-    ```
-
-4. Execute `docker login` and enter your account and password to log in to the remote Docker repository Docker Hub.
-
-    > Note: You need to register an account and create a Docker repository in [Docker Hub](https://hub.docker.com) in advance.
-
-5. Tag the StarRocks Operator image and push it to the remote Docker repository.
-
-    ```Bash
-    docker tag $operator_image_id $account/repo:tag
-    docker push $account/repo:tag
-    ```
-
-    > NOTE
-    >
-    > - `dockerImageId`: StarRocks Operator image ID. To see images ID, execute the `docker images` command.
-    >
-    > - `account/repo:tag`: StarRocks Operator image tag, e.g. `starrocks/sr-cn-test:operator`. `account` is your Docker Hub account, `repo` is the Docker repository in Docker Hub, and `tag` is the tag you determined for StarRocks Operator image.
-
-### Prepare a CN image
-
-1. Download the StarRocks code from the Github repository.
-
-    ```Bash
-    git clone https://github.com/StarRocks/starrocks
-    ```
-
-2. Enter the directory **docker**.
-
-    ```Bash
-    cd $your_path/starrocks/docker
-    ```
-
-3. Compile StarRocks and create a CN image.
-
-    ```Plaintext
-    ./build.sh -b branch-2.4
-    ```
-
-4. Tag the CN image and push it to the remote Docker repository.
-
-    ```Bash
-    docker tag $cn_Image_Id $account/repo:tag
-    docker push $account/repo:tag
-    ```
-
-### Prepare a CN Group image
-
-1. Enter the directory **starrocks****-kubernetes-operator****/components**.
-
-    ```Bash
-    cd $your_code_path/starrocks-kubernetes-operator/components
-    ```
-
-2. Create a CN Group image and push it to the remote Docker repository.
-
-    ```Bash
-    # Build a image.
-    make docker IMG="computenodegroup:v1.0"
-    # Push the image to docker hub.
-    make push IMG="computenodegroup:v1.0"
-    ```
-
-## Deploy StarRocks Operator
-
-1. Enter the directory **starrocks****-kubernetes-operator****/deploy**.
-
-    ```Bash
-    cd $your_code_path/starrocks-kubernetes-operator/deploy
-    ```
-
-2. Configure **manager.yaml.** Configure the StarRocks Operator image tag. For example, `starrocks/sr-cn-test:operator.`
-   ![image](../assets/9.2.png)
-
-3. Execute the following command to deploy StarRocks Operator.
-
-    ```Bash
-    kubectl apply -f starrocks.com_computenodegroups.yaml
-    kubectl apply -f namespace.yaml
-    kubectl apply -f leader_election_role.yaml
-    kubectl apply -f role.yaml
-    kubectl apply -f role_binding.yaml
-    kubectl apply -f leader_election_role_binding.yaml
-    kubectl apply -f service_account.yaml
-    kubectl apply -f manager.yaml 
-    ```
-
-4. Check the pod status by executing `kubectl get pod -n starrocks`. Check whether `STATUS` is `Running`.
-
-    ```Bash
-    kubectl get pod -n starrocks
-    NAMESPACE     NAME                                                READY   STATUS             RESTARTS        AGE
-    starrocks     cn-controller-manager-69598d4b48-6qj2p              1/1     Running            0               13h
-    ```
-
-## Deploy a CN cluster
-
-1. Enter the directory **starrocks****-kubernetes-operator/examples/cn**.
-
-    ```Bash
-    cd $your_code_path/starrocks-kubernetes-operator/examples/cn
-    ```
-
-2. Configure **cn.yaml**.
-   1. `cnImage`: CN image tag in the remote repository. For example, `starrocks/sr-cn-test:v3`.
-   2. `componentsImage` : CN Group image tag in the remote repository. For example, `starrocks/computenodegroup:v1.0`.
-   3. `<fe_ip>:<fe_query_port>`: any FE's IP address and `query_port` port (defaults to `9030`).
-
-        ```Bash
-            feInfo:
-                accountSecret: test-secret # Secret of the FE account
-                addresses: # FE addresses
-                - <fe_ip>:<fe_query_port>
+        ```bash
+        curl -O https://raw.githubusercontent.com/StarRocks/starrocks-kubernetes-operator/main/deploy/operator.yaml
         ```
 
-   4. Add the `command` configuration: specify the absolute path of **start_cn.shell** in the CN Group image.
-      ![image](../assets/9.3.png)
+      - Modify the configuration file **operator.yaml** to suit your needs.
+      - Deploy the StarRocks Operator.
 
-3. Deploy a CN cluster.
+        ```bash
+        kubectl apply -f operator.yaml
+        ```
 
-    ```Bash
-    cd examples/cn
-    kubectl apply -f fe-account.yaml
-    kubectl apply -f cn-config.yaml
-    kubectl apply -f cn.yaml
+3. Check the running status of the StarRocks Operator. If the pod is in the `Running` state and all containers inside the pod are `READY`, the StarRocks Operator is running as expected.
+
+    ```bash
+    $ kubectl -n starrocks get pods
+    NAME                                  READY   STATUS    RESTARTS   AGE
+    starrocks-controller-65bb8679-jkbtg   1/1     Running   0          5m6s
     ```
 
-4. Check the CN cluster status.
+> **NOTE**
+>
+> If you customize the namespace in which the StarRocks Operator is located, you need to replace`starrocks` with the name of your customized namespace.
+
+## Deploy StarRocks Cluster
+
+You can directly use the [sample configuration files](https://github.com/StarRocks/starrocks-kubernetes-operator/tree/main/examples/starrocks) provided by StarRocks to deploy a StarRocks cluster (an object instantiated by using the custom resource StarRocks Cluster). For example, you can use **starrocks-fe-and-be.yaml** to deploy a StarRocks cluster that contains three FE nodes and three BE nodes.
+
+```bash
+kubectl apply -f https://raw.githubusercontent.com/StarRocks/starrocks-kubernetes-operator/main/examples/starrocks/starrocks-fe-and-be.yaml
+```
+
+The following table describes a few important fields in the **starrocks-fe-and-be.yaml** file.
+
+| **Field** | **Description**                                              |
+| --------- | ------------------------------------------------------------ |
+| Kind      | The resource type of the object. The value must be `StarRocksCluster`. |
+| Metadata  | Metadata, in which the following sub-fields are nested:<ul><li>`name`: the name of the object. Each object name uniquely identifies an object of the same resource type.</li><li>`namespace`: the namespace to which the object belongs.</li></ul> |
+| Spec      | The expected status of the object. Valid values are `starRocksFeSpec`, `starRocksBeSpec`, and `starRocksCnSpec`. |
+
+You can also deploy the StarRocks cluster by using a modified configuration file. For supported fields and detailed descriptions, see [api.md](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md).
+
+Deploying the StarRocks cluster takes a while. During this period, you can use the command `kubectl -n starrocks get pods` to check the starting status of the StarRocks cluster. If all the pods are in the `Running` state and all containers inside the pods are `READY`, the StarRocks cluster is running as expected.
+
+> **NOTE**
+>
+> If you customize the namespace in which the StarRocks cluster is located, you need to replace `starrocks` with the name of your customized namespace.
+
+```bash
+$ kubectl -n starrocks get pods
+NAME                                  READY   STATUS    RESTARTS   AGE
+starrocks-controller-65bb8679-jkbtg   1/1     Running   0          22h
+starrockscluster-sample-be-0          1/1     Running   0          23h
+starrockscluster-sample-be-1          1/1     Running   0          23h
+starrockscluster-sample-be-2          1/1     Running   0          22h
+starrockscluster-sample-fe-0          1/1     Running   0          21h
+starrockscluster-sample-fe-1          1/1     Running   0          21h
+starrockscluster-sample-fe-2          1/1     Running   0          22h
+```
+
+> **Note**
+>
+> If some pods cannot start after a long period of time, you can use `kubectl logs -n starrocks <pod_name>` to view the log information or use `kubectl -n starrocks describe pod <pod_name>` to view the event information to locate the problem.
+
+## Manage StarRocks Cluster
+
+### Access StarRocks Cluster
+
+The components of the StarRocks cluster can be accessed through their associated Services, such as the FE Service. For detailed descriptions of Services and their access addresses, see [api.md](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md) and [Services](https://kubernetes.io/docs/concepts/services-networking/service/).
+
+> **NOTE**
+>
+> - Only the FE Service is deployed by default. If you need to deploy the BE Service and CN Service, you need to configure `starRocksBeSpec` and `starRocksCnSpec` in the StarRocks cluster configuration file.
+> - The name of a Service is `<cluster name>-<component name>-service` by default, for example, `starrockscluster-sample-fe-service`. You can also specify the Service name in the spec of each component.
+
+#### Access StarRocks Cluster from within Kubernetes Cluster
+
+From within the Kubernetes cluster, the StarRocks cluster can be accessed through the FE Service's ClusterIP.
+
+1. Obtain the internal virtual IP address `CLUSTER-IP` and port `PORT(S)` of the FE Service.
 
     ```Bash
-    $ kubectl get pod -n starrocks # NAMESPACE is default to be starrocks
-    NAMESPACE     NAME                                                READY   STATUS             RESTARTS        AGE
-    starrocks     cn-controller-manager-69598d4b48-6qj2p              1/1     Running            0               13h
-    starrocks     computenodegroup-sample-8-4-21-45-5dcb56ff5-4l522   2/2     Running            0               12m
-    starrocks     computenodegroup-sample-8-4-21-45-5dcb56ff5-cfvmj   2/2     Running            0               4m29s
-    starrocks     computenodegroup-sample-8-4-21-45-5dcb56ff5-lz5s2   2/2     Running            0               4m23s
-    starrocks     computenodegroup-sample-8-4-21-45-5dcb56ff5-s7dwz   2/2     Running            0               12m
+    $ kubectl -n starrocks get svc 
+    NAME                                 TYPE        CLUSTER-IP       EXTERNAL-IP   PORT(S)                               AGE
+    be-domain-search                     ClusterIP   None             <none>        9050/TCP                              23m
+    fe-domain-search                     ClusterIP   None             <none>        9030/TCP                              25m
+    starrockscluster-sample-fe-service   ClusterIP   10.100.162.xxx   <none>        8030/TCP,9020/TCP,9030/TCP,9010/TCP   25m
     ```
 
-After the CN cluster is running successfully, StarRocks Operator uses the FE IP address and query port number configured in the **cn.yaml** to add CNs into the StarRocks cluster.
+2. Access the StarRocks cluster by using the MySQL client from within the Kubernetes cluster.
 
-## Configure [policy for horizontal pod autoscaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-policies)
+   ```Bash
+   mysql -h 10.100.162.xxx -P 9030 -uroot
+   ```
 
-1. If you want to configure [policy for horizontal pod autoscaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-policies), you can edit the **cn.yaml** file `$your_code_path/starrocks-kubernetes-operator/examples/cn/cn.yaml`.
+#### Access StarRocks Cluster from outside Kubernetes Cluster
+
+From outside the Kubernetes cluster, you can access the StarRocks cluster through the FE Service's LoadBalancer or NodePort. This topic uses LoadBalancer as an example:
+
+1. Run the command `kubectl -n starrocks edit src starrockscluster-sample` to update the StarRocks cluster configuration file, and change the Service type of `starRocksFeSpec` to `LoadBalancer`.
+
+    ```YAML
+    starRocksFeSpec:
+        image: starrocks/alpine-fe:2.4.1
+        replicas: 3
+        requests:
+        cpu: 4
+        memory: 16Gi
+        service:            
+        type: LoadBalancer # specified as LoadBalancer
+    ```
+
+2. Obtain the IP address `EXTERNAL-IP` and port `PORT(S)` that the FE Service exposes to the outside.
 
     ```Bash
-    autoScalingPolicy: # Auto-scaling policy of CN cluster
-        maxReplicas: 10 # Maximum number of CNs
-        minReplicas: 1 # Minimum number of CNs
-        hpaPolicy:
-            metrics: # The metrics and scaling threshold. For more information, see metricspec.
-            - type: Resource
-                resource:
-                name: memory
-                target:
-                    averageUtilization: 30
-                    type: Utilization
-            - type: Resource
+    $ kubectl -n starrocks get svc
+    NAME                                 TYPE           CLUSTER-IP       EXTERNAL-IP                                                              PORT(S)                                                       AGE
+    be-domain-search                     ClusterIP      None             <none>                                                                   9050/TCP                                                      127m
+    fe-domain-search                     ClusterIP      None             <none>                                                                   9030/TCP                                                      129m
+    starrockscluster-sample-fe-service   LoadBalancer   10.100.162.xxx   a7509284bf3784983a596c6eec7fc212-618xxxxxx.us-west-2.elb.amazonaws.com   8030:30629/TCP,9020:32544/TCP,9030:32244/TCP,9010:32024/TCP   129m               ClusterIP      None            <none>                                                                   9030/TCP                                                      23h
+    ```
+
+3. Log in to your machine host and access the StarRocks cluster by using the MySQL client.
+
+    ```Bash
+    mysql -h a7509284bf3784983a596c6eec7fc212-618xxxxxx.us-west-2.elb.amazonaws.com -P9030 -uroot
+    ```
+
+### Upgrade StarRocks Cluster
+
+#### Upgrade BE nodes
+
+Run the following command to specify a new BE image file, such as `starrocks/be-ubuntu:2.5.0-fix-uid`:
+
+```bash
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"image":"starrocks/be-ubuntu:2.5.0-fix-uid"}}}'
+```
+
+#### Upgrade FE nodes
+
+Run the following command to specify a new FE image file, such as `starrocks/fe-ubuntu:2.5.0-fix-uid`:
+
+```bash
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksFeSpec":{"image":"starrocks/fe-ubuntu:2.5.0-fix-uid"}}}'
+```
+
+The upgrade process lasts for a while. You can run the command `kubectl -n starrocks get pods` to view the upgrade progress.
+
+#### Scale out and in StarRocks cluster
+
+This topic takes scaling out the BE and FE clusters as examples.
+
+**Scale out BE cluster**
+
+Run the following command to scale out the BE cluster to 9 nodes:
+
+```bash
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":"9"}}}'
+```
+
+**Scale out FE cluster**
+
+Run the following command to scale out the FE cluster to 4 nodes:
+
+```bash
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksFeSpec":{"replicas":"4"}}}'
+```
+
+The scaling process lasts for a while. You can use the command `kubectl -n starrocks get pods` to view the scaling progress.
+
+### Automatic scaling for CN cluster
+
+Run the command `kubectl -n starrocks edit src starrockscluster-sample` to configure the automatic scaling policy for the CN cluster. You can specify the resource metrics for CNs as the average CPU utilization, average memory usage, elastic scaling threshold, upper elastic scaling limit, and lower elastic scaling limit. The upper elastic scaling limit and lower elastic scaling limit specify the maximum number and minimum number of CNs allowed for elastic scaling.
+
+> **NOTE**
+>
+> If the automatic scaling policy for the CN cluster is configured, delete the `replicas` field from the `starRocksCnSpec` in the StarRocks cluster configuration file.
+
+Kubernetes also supports using `behavior` to customize scaling behaviors according to business scenarios, helping you achieve rapid or slow scaling or disable scaling. For more information about automatic scaling policies, see [Horizontal Pod Scaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/).
+
+The following is a [template](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/starrocks-fe-and-cn-with-autoscaler.yaml) provided by StarRocks to help you configure automatic scaling policies:
+
+```YAML
+  starRocksCnSpec:
+    image: starrocks/centos-cn:2.4.1
+    requests:
+      cpu: 4
+      memory: 4Gi
+    autoScalingPolicy: # Automatic scaling policy of the CN cluster.
+          maxReplicas: 10 # The maximum number of CNs is set to 10.
+          minReplicas: 1 # The minimum number of CNs is set to 1.
+          hpaPolicy:
+            metrics: # Resource metrics
+              - type: Resource
                 resource: 
-                name: cpu
-                target:
-                    averageUtilization: 30
+                  name: memory # The average memory usage of CNs is specified as a resource metric.
+                  target:
+                    averageUtilization: 30 
+                    # The elastic scaling threshold is 30%.
+                    # When the average memory utilization of CNs exceeds 30%, the number of CNs increases for scale-out.
+                    # When the average memory utilization of CNs is below 30%, the number of CNs decreases for scale-in.
                     type: Utilization
-            behavior: # Scaling behavior
-            scaleUp:
+              - type: Resource
+                resource: 
+                  name: cpu # The average CPU utilization of CNs is specified as a resource metric.
+                  target:
+                    averageUtilization: 60
+                    # The elastic scaling threshold is 60%.
+                    # When the average CPU utilization of CNs exceeds 60%, the number of CNs increases for scale-out.
+                    # When the average CPU utilization of CNs is below 60%, the number of CNs decreases for scale-in.
+                    type: Utilization
+            behavior: #  The scaling behavior is customized according to business scenarios, helping you achieve rapid or slow scaling or disable scaling.
                 policies:
-                - type: Pods
+                  - type: Pods
                     value: 1
                     periodSeconds: 10
-            scaleDown:
+              scaleDown:
                 selectPolicy: Disabled
-    ```
+```
 
-    The description for some parameters is as follows:
+The following table describes a few important fields:
 
-    > For more parameters and detailed description, see [Horizontal Pod Autoscaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/).
+- The upper and lower elastic scaling limit.
 
-    - Set the maximum and minimum numbers of CNs for horizontal scaling.
+```YAML
+maxReplicas: 10 # The maximum number of CNs is set to 10.
+minReplicas: 1 # The minimum number of CNs is set to 1.
+```
 
-        ```Bash
-        # The maximum number of CNs. The upper limit is 10.
-        maxReplicas: 10 
-        # The minimum number of CNs. The lower limit is 1.
-        minReplicas: 1
-        ```
+- The elastic scaling threshold.
 
-    - Set the CPU utilization threshold for horizontal scaling.
-
-        ```Bash
-        - type: Resource
-        resource:
-            name: cpu
-            target:
-            averageUtilization: 30
-        ```
-
-2. Validate the auto-scaling policy.
-
-    ```Plaintext
-    kubectl apply -f cn/cn.yaml
-    ```
-
-## **FAQ**
-
-### Unable to Deploy CN
-
-Execute `Kubectl get po -A` to check the status of pods.
-
-- **Problem description:** If the returned result shows that `reason` is `unhealthy`, the HTTP health check fails.
-![image](../assets/9.4.png)
-
-- **Solution**: Refer to [Deploy a CN cluster](#deploy-a-cn-cluster) and check FE's IP address and the query port number in **cn.yaml**.
-![image](../assets/9.5.png)
-
-- **Problem description:** If `Message` shows `exec: "be/bin/start_cn.sh": stat be/bin/start_cn.sh: no such file or directory`, it means getting the startup script fail.
-
-    ```Plain
-    Events:
-    Type     Reason     Age                    From               Message
-    ----     ------     ----                   ----               -------
-    Normal   Scheduled  5m53s                  default-scheduler  Successfully assigned starrocks/computenodegroup-sample-5979687fd-qw28w to ip-172-31-44-58
-    Normal   Pulling    5m51s                  kubelet            Pulling image "adzfolc/computenodegroup:v1.1"
-    Normal   Started    5m48s                  kubelet            Started container register
-    Normal   Pulled     5m48s                  kubelet            Successfully pulled image "adzfolc/computenodegroup:v1.1" in 2.865218014s
-    Normal   Created    5m48s                  kubelet            Created container register
-    Normal   Created    5m3s (x4 over 5m51s)   kubelet            Created container cn-container
-    Warning  Failed     5m3s (x4 over 5m51s)   kubelet            Error: failed to start container "cn-container": Error response from daemon: OCI runtime create failed: container_linux.go:380: starting container process caused: exec: "be/bin/start_cn.sh": stat be/bin/start_cn.sh: no such file or directory: unknown
-    Normal   Pulled     4m15s (x5 over 5m51s)  kubelet            Container image "adzfolc/sr-cn-test:v3" already present on machine
-    Warning  BackOff    41s (x27 over 5m46s)   kubelet            Back-off restarting failed container
-    ```
-
-- **Solution:** Refer to [Deploy a CN cluster](#deploy-a-cn-cluster) and check the path of **start_cn.shell** in **cn.yaml**.
+```YAML
+# For example, the average CPU utilization of CNs is specified as a resource metric.
+# The elastic scaling threshold is 60%.
+# When the average CPU utilization of CNs exceeds 60%, the number of CNs increases for scale-out.
+# When the average CPU utilization of CNs is below 60%, the number of CNs decreases for scale-in.
+- type: Resource
+  resource:
+    name: cpu
+    target:
+      averageUtilization: 60
+```
