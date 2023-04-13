@@ -159,14 +159,14 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
 bool ConnectorScanOperator::has_output() const {
     bool ret = ScanOperator::has_output();
     // when has no output, we need to adjust io tasks next time.
+    PickupMorselState& state = _pickup_morsel_state;
     if (!ret) {
-        PickupMorselState& state = _pickup_morsel_state;
         if (!state.adjusted_io_tasks) {
             ret = true;
             state.adjusted_io_tasks = true;
         }
     } else {
-        state.adjusted_io_tasks = true;
+        state.adjusted_io_tasks = false;
     }
 
     return ret;
@@ -184,11 +184,13 @@ bool ConnectorScanOperator::is_running_all_io_tasks() const {
 int ConnectorScanOperator::update_pickup_morsel_state() {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
     int current_io_tasks = _num_running_io_tasks.load();
+    PickupMorselState& state = _pickup_morsel_state;
+    int& io_tasks = state.max_io_tasks;
+
+    if (!state.adjusted_io_tasks) return io_tasks;
 
     auto f = [&]() {
         const int MIN_IO_TASKS = config::connector_io_tasks_min_size;
-        PickupMorselState& state = _pickup_morsel_state;
-        int& io_tasks = state.max_io_tasks;
 
         // update max io tasks.
         io_tasks = std::max(io_tasks, current_io_tasks);
@@ -206,7 +208,7 @@ int ConnectorScanOperator::update_pickup_morsel_state() {
         } else if (chunks < thres) {
             // int delta = std::max(MIN_IO_TASKS, 2 << state.update_log_size);
             int delta = 2;
-            io_tasks = std::min(current_io_tasks + delta, _io_tasks_per_scan_operator);
+            io_tasks = std::min(io_tasks + delta, _io_tasks_per_scan_operator);
             // if ((2 << (state.update_log_size + 1)) <= _io_tasks_per_scan_operator) {
             //     state.update_log_size += 1;
             // }
