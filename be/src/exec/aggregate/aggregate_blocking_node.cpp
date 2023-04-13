@@ -180,16 +180,7 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
     auto spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));
     if (std::is_same_v<SinkFactory, SpillableAggregateBlockingSinkOperatorFactory>) {
-        OpFactories spill_process_operators;
-
-        auto spill_process_factory = std::make_shared<SpillProcessOperatorFactory>(
-                context->next_operator_id(), "spill-process", id(), spill_channel_factory);
-        spill_process_factory->set_degree_of_parallelism(degree_of_parallelism);
-        spill_process_operators.emplace_back(std::move(spill_process_factory));
-
-        auto noop_sink_factory = std::make_shared<NoopSinkOperatorFactory>(context->next_operator_id(), id());
-        spill_process_operators.emplace_back(std::move(noop_sink_factory));
-        context->add_pipeline(std::move(spill_process_operators));
+        context->interpolate_spill_process(spill_channel_factory, degree_of_parallelism);
     }
 
     // create aggregator factory
