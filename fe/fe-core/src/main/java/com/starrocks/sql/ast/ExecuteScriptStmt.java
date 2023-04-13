@@ -38,6 +38,10 @@ public class ExecuteScriptStmt extends StatementBase {
         return script;
     }
 
+    public boolean isFrontendScript() {
+        return beId == -1;
+    }
+
     public void setTimeoutSec(long timeoutSec) {
         this.timeoutSec = timeoutSec;
     }
