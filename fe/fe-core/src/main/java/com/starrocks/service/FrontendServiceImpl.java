@@ -519,8 +519,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
             status.setLast_refresh_error_code(rowSet.get(17));
             status.setLast_refresh_error_message(rowSet.get(18));
-            status.setRows(rowSet.get(19));
-            status.setText(rowSet.get(20));
+            status.setText(rowSet.get(19));
+            status.setRows(rowSet.get(20));
+            status.setInactive_reason(rowSet.get(21));
             tablesResult.add(status);
         }
         return result;
