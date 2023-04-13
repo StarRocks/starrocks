@@ -2306,9 +2306,7 @@ public class OlapTable extends Table {
             Table tmpTable = db.getTable(mvId.getId());
             if (tmpTable != null) {
                 MaterializedView mv = (MaterializedView) tmpTable;
-                mv.setActive(false);
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                        "the table {} was dropped.", mv.getName(), mv.getId(), getName());
+                mv.setInactiveAndReason("base-table dropped: " + getName());
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
             }

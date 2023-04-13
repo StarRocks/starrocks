@@ -1564,7 +1564,7 @@ public class GlobalStateMgr {
                     if (table == null) {
                         LOG.warn("Setting the materialized view {}({}) to invalid because " +
                                 "the table {} was not exist.", mv.getName(), mv.getId(), baseTableInfo.getTableName());
-                        mv.setActive(false);
+                        mv.setInactiveAndReason("base table dropped: " + baseTableInfo.getTableName());
                         continue;
                     }
                     if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
@@ -1572,7 +1572,7 @@ public class GlobalStateMgr {
                         LOG.warn("Setting the materialized view {}({}) to invalid because " +
                                         "the materialized view{}({}) is invalid.", mv.getName(), mv.getId(),
                                 baseMv.getName(), baseMv.getId());
-                        mv.setActive(false);
+                        mv.setInactiveAndReason("base mv is not active: " + baseMv.getName());
                         continue;
                     }
                     MvId mvId = new MvId(db.getId(), mv.getId());
