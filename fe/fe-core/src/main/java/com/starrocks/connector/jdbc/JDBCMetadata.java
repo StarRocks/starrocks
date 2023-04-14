@@ -69,7 +69,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     public List<String> listDbNames() {
         try (Connection connection = getConnection()) {
             return schemaResolver.listSchemas(connection).stream()
-                    .map(String::toLowerCase)
+                    .map(schema -> isIgnorecase(schema))
                     .collect(Collectors.toList());
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
@@ -96,7 +96,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                 ImmutableList.Builder<String> list = ImmutableList.builder();
                 while (resultSet.next()) {
                     String tableName = resultSet.getString("TABLE_NAME");
-                    list.add(tableName.toLowerCase());
+                    list.add(isIgnorecase(tableName));
                 }
                 return list.build();
             }
@@ -121,4 +121,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         }
     }
 
+    private String isIgnorecase(String value) {
+        return (Boolean.valueOf(properties.getOrDefault("lower_case_table_names", "true")) ? value.toLowerCase() : value);
+    }
 }
