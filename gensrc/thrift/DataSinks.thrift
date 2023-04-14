@@ -197,6 +197,7 @@ struct TOlapTableSink {
     23: optional bool abort_delete // Deprecated
     24: optional i32 auto_increment_slot_id
     25: optional Types.TPartialUpdateMode partial_update_mode
+    26: optional string label
 }
 
 struct TSchemaTableSink {

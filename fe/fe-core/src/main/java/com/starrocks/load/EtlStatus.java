@@ -67,6 +67,7 @@ public class EtlStatus implements Writable {
 
     private TEtlState state;
     private String trackingUrl;
+    private List<String> rejectedRecordPaths = Lists.newArrayList();
 
     /**
      * This field is useless in RUNTIME
@@ -123,6 +124,14 @@ public class EtlStatus implements Writable {
 
     public void setTrackingUrl(String trackingUrl) {
         this.trackingUrl = Strings.nullToEmpty(trackingUrl);
+    }
+
+    public List<String> getRejectedRecordPaths() {
+        return rejectedRecordPaths;
+    }
+
+    public void setRejectedRecordPaths(List<String> rejectedRecordPaths) {
+        this.rejectedRecordPaths = rejectedRecordPaths;
     }
 
     public Map<String, String> getCounters() {
