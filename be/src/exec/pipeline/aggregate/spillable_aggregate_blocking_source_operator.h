@@ -25,10 +25,11 @@ namespace starrocks::pipeline {
 class SpillableAggregateBlockingSourceOperator final : public AggregateBlockingSourceOperator {
 public:
     template <class... Args>
-    SpillableAggregateBlockingSourceOperator(const SortedStreamingAggregatorPtr& aggregator, Args&&... args)
+    SpillableAggregateBlockingSourceOperator(const AggregatorPtr& aggregator,
+                                             const SortedStreamingAggregatorPtr& stream_aggregator, Args&&... args)
             : AggregateBlockingSourceOperator(aggregator, std::forward<Args>(args)...,
                                               "spillable_aggregate_source_operator"),
-              _aggregator(aggregator) {}
+              _stream_aggregator(stream_aggregator) {}
 
     ~SpillableAggregateBlockingSourceOperator() override = default;
 
@@ -48,24 +49,26 @@ private:
     bool _is_finished = false;
     bool _has_last_chunk = true;
     ChunkPipelineAccumulator _accumulator;
-    SortedStreamingAggregatorPtr _aggregator = nullptr;
+    SortedStreamingAggregatorPtr _stream_aggregator = nullptr;
+    bool _stream_aggregator_inited = false;
 };
 
 class SpillableAggregateBlockingSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     SpillableAggregateBlockingSourceOperatorFactory(int32_t id, int32_t plan_node_id,
-                                                    StreamingAggregatorFactoryPtr aggregator_factory)
+                                                    AggregatorFactoryPtr aggregator_factory)
             : SourceOperatorFactory(id, "spillable_aggregate_blocking_source", plan_node_id),
-              _aggregator_factory(std::move(aggregator_factory)) {}
+              _hash_aggregator_factory(std::move(aggregator_factory)) {}
 
     ~SpillableAggregateBlockingSourceOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<SpillableAggregateBlockingSourceOperator>(
-                _aggregator_factory->get_or_create(driver_sequence), this, _id, _plan_node_id, driver_sequence);
-    }
+    Status prepare(RuntimeState* state) override;
+
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
 private:
-    StreamingAggregatorFactoryPtr _aggregator_factory;
+    AggregatorFactoryPtr _hash_aggregator_factory;
+    // _stream_aggregatory_factory is only used when spilling happens
+    StreamingAggregatorFactoryPtr _stream_aggregator_factory;
 };
 } // namespace starrocks::pipeline
