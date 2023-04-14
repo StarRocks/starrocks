@@ -44,11 +44,11 @@ public:
 
     // Close this scanner
     void close() override;
+    static Status parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs);
 
 private:
     Status _construct_json_types();
     Status _construct_cast_exprs();
-    static Status _parse_json_paths(const std::string& jsonpath, std::vector<std::vector<SimpleJsonPath>>* path_vecs);
     Status _create_src_chunk(ChunkPtr* chunk);
     Status _open_next_reader();
     StatusOr<ChunkPtr> _cast_chunk(const ChunkPtr& src_chunk);
