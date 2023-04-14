@@ -536,7 +536,7 @@ Query Cache 的存储占用 BE 的少量内存，默认缓存大小为 512 MB，
 
 - 部分查询首次发起，因为要填充 Query Cache，可能有轻微的性能惩罚，导致延迟加大。
 - 当 Query Cache 配置较大的内存容量时，会占用 BE 上可用于查询评估的内存容量。建议配置 Query Cache 的内存容量不超过可用于查询评估的内存容量的 1/6。
-- 当 Pipeline 处理的 Tablet 数量少于 `pipeline_dop` 取值时，Query Cache 不开启。此时您可以将 `pipeline_dop` 设置为较小的值，例如设置为 `1`。
+- 当 Pipeline 处理的 Tablet 数量少于 `pipeline_dop` 取值时，Query Cache 不开启。此时您可以将 `pipeline_dop` 设置为较小的值，例如设置为 `1`。从 3.0 版本开始，支持根据查询并发度自适应调节 `pipeline_dop`。
 
 ## 示例
 

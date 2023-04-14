@@ -6,7 +6,7 @@
 
 ### 功能优化
 
-- 更新 3.0 版本的 Docker 镜像和相关部署文档。 ([#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021))
+- 更新 3.0 版本的 Docker 镜像和相关[部署文档](../quick_start/deploy_with_docker.md)。 ([#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021))
 - 提供异步 ETL 命令接口，支持创建异步 INSERT 任务。更多信息，参考[INSERT](../loading/InsertInto.md) 和 [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md)。 ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
 - 物化视图支持批量创建分区，提升物化视图构建时的分区创建效率。([#21167](https://github.com/StarRocks/starrocks/pull/21167))
 
@@ -15,7 +15,7 @@
 修复了以下问题：
 
 - 使用 VARCHAR 作为物化视图分区列时导致 FE 无法正常启动。([#19366](https://github.com/StarRocks/starrocks/issues/19366))
-- 窗口函数 [lead](../sql-reference/sql-functions/Window_function.md#使用-lead-窗口函数) 和 [lag](../sql-reference/sql-functions/Window_function.md#使用-lag-窗口函数) 对 IGNORE NULLS 的处理不正确。 ([#21001](https://github.com/StarRocks/starrocks/pull/21001)) 参考[lead/lag ignore nulls文档](https://starrocks.feishu.cn/docx/MTbYdt6atonrXoxx6vgcN0fUnGb)
+- 窗口函数 [lead](../sql-reference/sql-functions/Window_function.md#使用-lead-窗口函数) 和 [lag](../sql-reference/sql-functions/Window_function.md#使用-lag-窗口函数) 对 IGNORE NULLS 的处理不正确。 ([#21001](https://github.com/StarRocks/starrocks/pull/21001))
 - 插入临时分区和自动创建分区发生冲突。（[#21222](https://github.com/StarRocks/starrocks/issues/21222)）
 
 ## 3.0.0-rc01
@@ -51,7 +51,7 @@
 <!--- [Preview] 支持大查询的算子落盘，可以在内存不足时利用磁盘空间来保证查询稳定执行成功。-->
 - [Query Cache](../using_starrocks/query_cache.md) 支持更多使用场景，包括各种 Broadcast Join、Bucket Shuffle Join 等 Join 场景。
 - 支持 [Global UDF](../sql-reference/sql-functions/JAVA_UDF.md)。
-- 动态自适应并行度，可以根据查询并发自适应调节 `pipeline_dop`。
+- 动态自适应并行度，可以根据查询并发度自适应调节 `pipeline_dop`。
 
 **函数**
 
@@ -106,7 +106,7 @@
 ### 行为变更
 
 - RBAC 升级以后会兼容之前的用户和权限，但是 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) 等相关语法有大幅改动。
-- SHOW MATERIALIZED VIEW 更名为 SHOW MATERIALIZED VIEWS。
+- SHOW MATERIALIZED VIEW 更名为 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md)。
 
 ### 升级注意事项
 

@@ -32,7 +32,10 @@ SHOW PROPERTY FOR 'user';
 
 如需调整查询并发度，推荐您修改 Pipeline 执行引擎相关变量。
 
-> 注意：自 StarRocks 2.2 版本起，正式发布 Pipeline 引擎。
+> **说明**
+>
+> - 自 2.2 版本起，正式发布 Pipeline 引擎。
+> - 自 3.0 版本起，支持根据查询并发度自适应调节 `pipeline_dop`。
 
 ```sql
 SET enable_pipeline_engine = true;
