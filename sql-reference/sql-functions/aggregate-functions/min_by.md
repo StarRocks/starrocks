@@ -1,13 +1,15 @@
-# max_by
+# min_by
 
 ## 功能
 
-返回与 `y` 的最大值相关联的 `x` 值。比如 `SELECT max_by(subject, exam_result) FROM exam;` 表示返回 `exam` 表中考试得分最高的科目。该函数从 2.5 版本开始支持。
+返回与 `y` 的最小值关联的 `x` 值。比如 `SELECT min_by(subject, exam_result) FROM exam;` 表示返回 `exam` 表中考试得分最低的科目。
+
+该函数从 2.5 版本开始支持。
 
 ## 语法
 
 ```Haskell
-max_by(x,y)
+min_by(x,y)
 ```
 
 ## 参数说明
@@ -26,7 +28,7 @@ max_by(x,y)
 
 - `y` 值包含 NULL 时，NULL 对应的行不参与计算。
 
-- 如果存在多行都有最大值，则返回最先出现的那个 `x` 值。
+- 如果存在多行都有最小值，则返回最先出现的那个 `x` 值。
 
 ## 示例
 
@@ -65,16 +67,14 @@ max_by(x,y)
     6 rows in set (0.03 sec)
     ```
 
-3. 返回得分最高的 1 个科目。
-
-   可以看到有 2 个科目 `physics` 和 `music` 都是最高分 95。返回第一个出现的科目 `physics`。
+3. 返回得分最低的 1 个科目。
 
     ```Plain
-    SELECT max_by(subject, exam_result) FROM exam;
+    SELECT min_by(subject, exam_result) FROM exam;
     +------------------------------+
-    | max_by(subject, exam_result) |
+    | min_by(subject, exam_result) |
     +------------------------------+
-    | physics                      |
+    | english                      |
     +------------------------------+
-    1 row in set (0.02 sec)
+    1 row in set (0.01 sec)
     ```
