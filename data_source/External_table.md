@@ -1,16 +1,16 @@
 # 外部表
 
-StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、StarRocks、Elasticsearch、Apache Hive™、Apache Iceberg 和 Apache Hudi。**从 3.0 版本起，对于查询 Hive、Iceberg 和 Hudi 数据源的场景，推荐使用 Catalog**。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../data_source/catalog/iceberg_catalog.md) 和 [Hudi catalog](../data_source/catalog/hudi_catalog.md)。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
+StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源。外部表指的是保存在其他数据源中的数据表，而 StartRocks 只保存表对应的元数据，并直接向外部表所在数据源发起查询。目前 StarRocks 已支持的第三方数据源包括 MySQL、StarRocks、Elasticsearch、Apache Hive™、Apache Iceberg 和 Apache Hudi。**对于 StarRocks 数据源，现阶段只支持 Insert 写入，不支持读取，对于其他数据源，现阶段只支持读取，还不支持写入**。
+
+> **NOTICE**
+>
+> 从 3.0 版本起，对于查询 Hive、Iceberg 和 Hudi 数据源的场景，推荐使用 Catalog**。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../data_source/catalog/iceberg_catalog.md) 和 [Hudi catalog](../data_source/catalog/hudi_catalog.md)。
 
 从 2.5 版本开始，查询外部数据源时支持 Local Cache，提升对热数据的查询性能。参见[Local Cache](Block_cache.md)。
-
-<br/>
 
 ## MySQL 外部表
 
 星型模型中，数据一般划分为维度表 (dimension table) 和事实表 (fact table)。维度表数据量少，但会涉及 UPDATE 操作。目前 StarRocks 中还不直接支持 UPDATE 操作（可以通过 Unique/Primary 数据模型实现），在一些场景下，可以把维度表存储在 MySQL 中，查询时直接读取维度表。
-
-<br/>
 
 在使用 MySQL 的数据之前，需在 StarRocks 创建外部表 (CREATE EXTERNAL TABLE)，与之相映射。StarRocks 中创建 MySQL 外部表时需要指定 MySQL 的相关连接信息，如下所示。
 
@@ -577,7 +577,7 @@ StarRocks 支持对目标表进行谓词下推，把过滤条件推给目标表�
 * 创建 JDBC 外部表时，不支持索引，也不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
 * 查询 JDBC 外部表时，不支持下推函数。
 
-## Hive 外表
+## (Deprecated) Hive 外部表
 
 ### 创建 Hive 资源
 
@@ -864,7 +864,7 @@ Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可�
   * 手动执行缓存方式执行效率较低，相比之下自动增量更新性能开销较小，建议用户开启该功能进行更新缓存。
   * 当 Hive 数据存储为 Parquet、ORC、CSV 格式时，StarRocks 2.3及以上版本支持 Hive 外部表同步 ADD COLUMN、REPLACE COLUMN 等表结构变更（Schema Change）。
 
-## Apache Iceberg 外部表
+## (Deprecated) Iceberg 外部表
 
 如要查询 Iceberg 数据，需要在 StarRocks 中创建 Iceberg 外部表，并将外部表与需要查询的 Iceberg 表建立映射。
 
@@ -1035,7 +1035,7 @@ StarRocks 不支持查询以下类型的数据： TIMESTAMPTZ、STRUCT 和 MAP�
 select count(*) from iceberg_tbl;
 ~~~
 
-## Apache Hudi 外表
+## (Deprecated) Hudi 外部表
 
 从 2.2.0 版本开始，StarRocks 支持通过外表的方式查询 Hudi 数据湖中的数据，帮助您实现对数据湖的极速分析。本文介绍如何在 StarRock 创建外表，查询 Hudi 中的数据。
 

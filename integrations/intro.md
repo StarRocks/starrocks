@@ -4,7 +4,15 @@
 
 ## BI 工具
 
-[Superset](./superset_support.md)
+[Apache Superset](./BI_integrations/Superset.md)
+
+[DataGrip](./BI_integrations/DataGrip.md)
+
+[Hex](./BI_integrations/Hex.md)
+
+[Querybook](./BI_integrations/Querybook.md)
+
+[Tableau Desktop](./BI_integrations/Tableau_Desktop.md)
 
 ## 数据集成
 
