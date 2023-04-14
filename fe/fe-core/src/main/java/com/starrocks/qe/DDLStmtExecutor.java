@@ -66,6 +66,7 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -522,6 +523,17 @@ public class DDLStmtExecutor {
                     context.getGlobalStateMgr().getAuth().updateUserProperty(stmt);
                 }
             });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement stmt,
+                                                                     ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                context.getGlobalStateMgr().getAuthenticationManager().createSecurityIntegration(
+                        stmt.getName(), stmt.getPropertyMap());
+            });
+
             return null;
         }
 

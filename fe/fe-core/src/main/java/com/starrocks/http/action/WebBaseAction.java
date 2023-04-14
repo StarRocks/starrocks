@@ -199,6 +199,7 @@ public class WebBaseAction extends BaseAction {
             ctx.setRemoteIP(authInfo.remoteIp);
             ctx.setCurrentUserIdentity(currentUser);
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+            // TODO(yiming): set role ids for ephemeral user
             ctx.setCurrentRoleIds(currentUser);
 
             ctx.setThreadLocalInfo();

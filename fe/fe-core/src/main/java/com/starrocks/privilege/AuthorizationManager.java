@@ -15,6 +15,7 @@
 package com.starrocks.privilege;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.cache.CacheLoader;
 import com.google.common.cache.LoadingCache;
@@ -128,13 +129,16 @@ public class AuthorizationManager {
 
     public void initBuiltinRolesAndUsers() {
         try {
-            // built-in role ids are hard-coded negative numbers because globalStateMgr.getNextId() cannot be called by a follower
+            // built-in role ids are hard-coded negative numbers
+            // because globalStateMgr.getNextId() cannot be called by a follower
             // 1. builtin root role
-            RolePrivilegeCollection rolePrivilegeCollection = initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.ROOT_ROLE_ID,
+            RolePrivilegeCollection rolePrivilegeCollection =
+                    initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.ROOT_ROLE_ID,
                     PrivilegeBuiltinConstants.ROOT_ROLE_NAME);
             // GRANT ALL ON ALL
             for (ObjectType objectType : provider.getAllPrivObjectTypes()) {
-                initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType, provider.getAvailablePrivType(objectType));
+                initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType,
+                        provider.getAvailablePrivType(objectType));
             }
             rolePrivilegeCollection.disableMutable();  // not mutable
 
@@ -516,7 +520,8 @@ public class AuthorizationManager {
                             "Every user and role has role PUBLIC implicitly granted.");
                 }
 
-                RolePrivilegeCollection parentCollection = getRolePrivilegeCollectionUnlocked(parentRoleId, true);
+                RolePrivilegeCollection parentCollection =
+                        getRolePrivilegeCollectionUnlocked(parentRoleId, true);
 
                 // to avoid circle, verify roleName is not predecessor role of parentRoleName
                 Set<Long> parentRolePredecessors = getAllPredecessorsUnlocked(parentRoleId);
@@ -690,7 +695,8 @@ public class AuthorizationManager {
         }
     }
 
-    public boolean allowGrant(ConnectContext context, ObjectType type, List<PrivilegeType> wants, List<PEntryObject> objects) {
+    public boolean allowGrant(ConnectContext context, ObjectType type,
+                              List<PrivilegeType> wants, List<PEntryObject> objects) {
         try {
             PrivilegeCollection collection = mergePrivilegeCollection(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds());
@@ -722,7 +728,8 @@ public class AuthorizationManager {
     /**
      * init all builtin privilege when a user is created, called by AuthenticationManager
      */
-    public UserPrivilegeCollection onCreateUser(UserIdentity user, List<String> defaultRoleName) throws PrivilegeException {
+    public UserPrivilegeCollection onCreateUser(UserIdentity user,
+                                                List<String> defaultRoleName) throws PrivilegeException {
         userWriteLock();
         try {
             UserPrivilegeCollection privilegeCollection = new UserPrivilegeCollection();
@@ -738,7 +745,8 @@ public class AuthorizationManager {
             }
 
             userToPrivilegeCollection.put(user, privilegeCollection);
-            LOG.info("user privilege for {} is created, role {} is granted", user, PrivilegeBuiltinConstants.PUBLIC_ROLE_NAME);
+            LOG.info("user privilege for {} is created, role {} is granted",
+                    user, PrivilegeBuiltinConstants.PUBLIC_ROLE_NAME);
             return privilegeCollection;
         } finally {
             userWriteUnlock();
@@ -784,36 +792,46 @@ public class AuthorizationManager {
     /**
      * used for cache to do the actual merge job
      */
-    protected PrivilegeCollection loadPrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIds)
+    protected PrivilegeCollection loadPrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIdsSpecified)
             throws PrivilegeException {
         PrivilegeCollection collection = new PrivilegeCollection();
-        userReadLock();
         try {
-            UserPrivilegeCollection userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
-            collection.merge(userPrivilegeCollection);
-            roleReadLock();
-            try {
-                // 1. get all parent roles by default, but can be specified with `SET ROLE` statement
-                if (roleIds == null) {
-                    roleIds = new HashSet<>(userPrivilegeCollection.getAllRoles());
+            userReadLock();
+            Set<Long> validRoleIds;
+            if (userIdentity.isEphemeral()) {
+                Preconditions.checkState(roleIdsSpecified != null,
+                        "ephemeral use should always have current role ids specified");
+                validRoleIds = roleIdsSpecified;
+            } else {
+                // Merge privileges directly granted to user first.
+                UserPrivilegeCollection userPrivilegeCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
+                collection.merge(userPrivilegeCollection);
+                // 1. Get all parent roles by default, but we support user to activate only part
+                // of the owned roles by `SET ROLE` statement, in this case we restrict
+                // the privileges from roles to only the activated ones.
+                validRoleIds = new HashSet<>(userPrivilegeCollection.getAllRoles());
+                if (roleIdsSpecified != null) {
+                    validRoleIds.retainAll(roleIdsSpecified);
                 }
+            }
 
-                // 2. get all predecessors base on step 1
+            try {
+                roleReadLock();
+                // 2. Get all predecessors base on step 1
                 // The main purpose of the secondary verification of UserPrivilegeCollection here is.
-                // Because the user's permissions may be revoke while the session is not disconnected,
+                // Because the user's permissions may be revoked while the session is not disconnected,
                 // the role list stored in the session cannot be changed at this time
                 // (because the current session and the session initiated by the revoke operation may not be the same),
                 // but for the user The operation will cause the cache to invalid, so in the next load process after
                 // the cache fails, we need to determine whether the user still has access to this role.
-                Set<Long> validRoleIds = new HashSet<>(userPrivilegeCollection.getAllRoles());
-                validRoleIds.retainAll(roleIds);
                 validRoleIds = getAllPredecessorsUnlocked(validRoleIds);
 
-                // 3. merge privilege collections of all predecessors
+                // 3. Merge privilege collections of all predecessors.
                 for (long roleId : validRoleIds) {
                     // Because the drop role is an asynchronous behavior, the parentRole may not exist.
                     // Here, for the role that does not exist, choose to ignore it directly
-                    RolePrivilegeCollection rolePrivilegeCollection = getRolePrivilegeCollectionUnlocked(roleId, false);
+                    RolePrivilegeCollection rolePrivilegeCollection =
+                            getRolePrivilegeCollectionUnlocked(roleId, false);
                     if (rolePrivilegeCollection != null) {
                         collection.merge(rolePrivilegeCollection);
                     }
@@ -847,6 +865,7 @@ public class AuthorizationManager {
                 roleIds = getRoleIdsByUser(pair.first);
             }
 
+            // TODO(yiming): modify for ephemeral user
             for (long badRoleId : badRoles) {
                 if (roleIds.contains(badRoleId)) {
                     badKeys.add(pair);
@@ -1131,7 +1150,8 @@ public class AuthorizationManager {
 
             globalStateMgr.getEditLog().logDropRole(
                     rolePrivCollectionModified, provider.getPluginId(), provider.getPluginVersion());
-            LOG.info("dropped role {}[{}]", stmt.getRoles().toString(), rolePrivCollectionModified.keySet().toString());
+            LOG.info("dropped role {}[{}]",
+                    stmt.getRoles().toString(), rolePrivCollectionModified.keySet().toString());
         } catch (PrivilegeException e) {
             throw new DdlException("failed to drop role: " + e.getMessage(), e);
         } finally {

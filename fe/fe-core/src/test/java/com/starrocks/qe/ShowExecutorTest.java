@@ -408,6 +408,7 @@ public class ShowExecutorTest {
         ShowDbStmt stmt = new ShowDbStmt(null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchBlockCatalog());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ShowResultSet resultSet = executor.execute();
     }
 
