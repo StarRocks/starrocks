@@ -51,6 +51,10 @@ public:
     SortedAggregateStreamingSinkOperatorFactory(int32_t id, int32_t plan_node_id,
                                                 StreamingAggregatorFactoryPtr aggregator_factory,
                                                 const SpillProcessChannelFactoryPtr& _)
+            : SortedAggregateStreamingSinkOperatorFactory(id, plan_node_id, std::move(aggregator_factory)) {}
+
+    SortedAggregateStreamingSinkOperatorFactory(int32_t id, int32_t plan_node_id,
+                                                StreamingAggregatorFactoryPtr aggregator_factory)
             : OperatorFactory(id, "aggregate_streaming_sink", plan_node_id),
               _aggregator_factory(std::move(aggregator_factory)) {}
 
