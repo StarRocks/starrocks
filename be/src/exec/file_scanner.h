@@ -25,6 +25,8 @@ class RandomAccessFile;
 
 namespace starrocks {
 
+const int64_t MAX_ERROR_LINES_IN_FILE = 50;
+
 struct ScannerCounter {
     int64_t num_rows_filtered = 0;
     int64_t num_rows_unselected = 0;

@@ -134,6 +134,9 @@ set(EXEC_FILES
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
+        ./formats/avro/binary_column_test.cpp
+        ./formats/avro/numeric_column_test.cpp
+        ./formats/avro/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_lazy_load_test.cpp
         ./formats/orc/orc_test_util/MemoryOutputStream.cc
