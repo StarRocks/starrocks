@@ -940,5 +940,5 @@ vectorized_functions = [
     [170005, 'map_filter', 'ANY_MAP',  ['ANY_MAP', 'ARRAY_BOOLEAN'], 'MapFunctions::map_filter'],
 
     # struct functions
-    [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
+    # [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
 ]

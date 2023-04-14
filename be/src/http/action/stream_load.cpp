@@ -531,6 +531,17 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             return Status::InvalidArgument("Invalid load_dop format");
         }
     }
+    if (!http_req->header(HTTP_LOG_REJECTED_RECORD_NUM).empty()) {
+        try {
+            auto log_rejected_record_num = std::stoll(http_req->header(HTTP_LOG_REJECTED_RECORD_NUM));
+            if (log_rejected_record_num < -1) {
+                return Status::InvalidArgument("log_rejected_record_num must be equal or greater than -1");
+            }
+            request.__set_log_rejected_record_num(log_rejected_record_num);
+        } catch (const std::invalid_argument& e) {
+            return Status::InvalidArgument("Invalid log_rejected_record_num format");
+        }
+    }
     int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);

@@ -86,6 +86,7 @@ public class BrokerFileGroup implements Writable {
     // fileFormat may be null, which means format will be decided by file's suffix
     private String fileFormat;
     private boolean isNegative;
+    private boolean specifyPartition = false;
     private List<Long> partitionIds; // can be null, means no partition specified
     private List<String> filePaths;
 
@@ -162,6 +163,7 @@ public class BrokerFileGroup implements Writable {
         // partitionId
         PartitionNames partitionNames = dataDescription.getPartitionNames();
         if (partitionNames != null) {
+            specifyPartition = true;
             partitionIds = Lists.newArrayList();
             for (String pName : partitionNames.getPartitionNames()) {
                 Partition partition = olapTable.getPartition(pName, partitionNames.isTemp());
@@ -265,6 +267,10 @@ public class BrokerFileGroup implements Writable {
             srcTableId = srcTable.getId();
             isLoadFromTable = true;
         }
+    }
+
+    public boolean isSpecifyPartition() {
+        return specifyPartition;
     }
 
     public long getTableId() {

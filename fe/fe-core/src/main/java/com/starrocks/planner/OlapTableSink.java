@@ -45,6 +45,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -120,15 +121,18 @@ public class OlapTableSink extends DataSink {
     private boolean nullExprInAutoIncrement;
     private boolean missAutoIncrementColumn;
     private int autoIncrementSlotId;
+    private boolean enableAutomaticPartition;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
-                         TWriteQuorumType writeQuorum, boolean enableReplicatedStorage, boolean nullExprInAutoIncrement) {
-        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum, enableReplicatedStorage, nullExprInAutoIncrement);
+                         TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
+                         boolean nullExprInAutoIncrement, boolean enableAutomaticPartition) {
+        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum, enableReplicatedStorage,
+                nullExprInAutoIncrement, enableAutomaticPartition);
     }
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          boolean enablePipelineLoad, TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
-                         boolean nullExprInAutoIncrement) {
+                         boolean nullExprInAutoIncrement, boolean enableAutomaticPartition) {
         this.dstTable = dstTable;
         this.tupleDescriptor = tupleDescriptor;
         Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
@@ -139,7 +143,7 @@ public class OlapTableSink extends DataSink {
         this.enableReplicatedStorage = enableReplicatedStorage;
         this.nullExprInAutoIncrement = nullExprInAutoIncrement;
         this.missAutoIncrementColumn = false;
-
+        this.enableAutomaticPartition = enableAutomaticPartition;
         this.autoIncrementSlotId = -1;
         if (tupleDescriptor != null) {
             for (int i = 0; i < this.tupleDescriptor.getSlots().size(); ++i) {
@@ -165,6 +169,7 @@ public class OlapTableSink extends DataSink {
                         .getTransactionState(dbId, txnId);
         if (txnState != null) {
             tSink.setTxn_trace_parent(txnState.getTraceParent());
+            tSink.setLabel(txnState.getLabel());
         }
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
@@ -172,6 +177,10 @@ public class OlapTableSink extends DataSink {
         tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tSink.setWrite_quorum_type(writeQuorum);
         tSink.setEnable_replicated_storage(enableReplicatedStorage);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db != null) {
+            tSink.setDb_name(db.getFullName());
+        }
         tDataSink = new TDataSink(TDataSinkType.DATA_SPLIT_SINK);
         tDataSink.setType(TDataSinkType.OLAP_TABLE_SINK);
         tDataSink.setOlap_table_sink(tSink);
@@ -292,7 +301,7 @@ public class OlapTableSink extends DataSink {
         partitionParam.setDb_id(dbId);
         partitionParam.setTable_id(table.getId());
         partitionParam.setVersion(0);
-        partitionParam.setEnable_automatic_partition(table.supportedAutomaticPartition());
+        partitionParam.setEnable_automatic_partition(enableAutomaticPartition);
 
         PartitionType partType = table.getPartitionInfo().getType();
         switch (partType) {

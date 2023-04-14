@@ -102,9 +102,11 @@ public class UpdatePlanner {
                 for (Partition partition : table.getPartitions()) {
                     partitionIds.add(partition.getId());
                 }
+                OlapTable olapTable = (OlapTable) table;
                 DataSink dataSink =
-                        new OlapTableSink(((OlapTable) table), olapTuple, partitionIds, ((OlapTable) table).writeQuorum(),
-                                ((OlapTable) table).enableReplicatedStorage(), updateStmt.nullExprInAutoIncrement());
+                        new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
+                                olapTable.enableReplicatedStorage(), updateStmt.nullExprInAutoIncrement(),
+                                olapTable.supportedAutomaticPartition());
                 execPlan.getFragments().get(0).setSink(dataSink);
                 execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             } else if (table instanceof SchemaTable) {
