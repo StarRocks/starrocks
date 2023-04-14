@@ -1,13 +1,13 @@
 # AUTO_INCREMENT
 
-Since version 3.0, StarRocks supports the `AUTO_INCREMENT` column attribute , which can simplify data management. This topic introduces the application scenarios, usage and features of the `AUTO_INCREMENT` column attribute.
+Since version 3.0, StarRocks supports the `AUTO_INCREMENT` column attribute, which can simplify data management. This topic introduces the application scenarios, usage and features of the `AUTO_INCREMENT` column attribute.
 
 ## Introduction
 
 When a new data row is loaded into a table, StarRocks automatically assigns a globally unique integer value for the row's `AUTO_INCREMENT` column as its unique ID within the table, and the subsequent values for the `AUTO_INCREMENT` column automatically increase at a specific step starting from the ID of the row. An `AUTO_INCREMENT` colum can be used to simplify data management and speed up some queries. Here are some application scenarios of an `AUTO_INCREMENT` column:
 
-- Serve as primary keys: An `AUTO_INCREMENT` column can be used as primary keys to ensure that each row has a unique ID and make it easy to query and manage data.
-- Join tables: When multiple tables are joined, an `AUTO_INCREMENT` column can be used as Join Keys, which can expedite queries compared to using columns whose data types are STRING, including UUID.
+- Serve as primary keys: An `AUTO_INCREMENT` column can be used as the primary key to ensure that each row has a unique ID and make it easy to query and manage data.
+- Join tables: When multiple tables are joined, an `AUTO_INCREMENT` column can be used as the Join Key, which can expedite queries compared to using a column whose data type is STRING, including UUID.
 - Count the number of distinct values in a high-cardinality column: An `AUTO_INCREMENT` column can be used to represent the unique value column in a dictionary. Compared to directly counting distinct STRING values, counting distinct integer values of the `AUTO_INCREMENT` column can sometimes improve the query speed by several times or even tens of times.
 
 You need to specify an `AUTO_INCREMENT` column in the CREATE TABLE statement. The data types of an `AUTO_INCREMENT` column must be BIGINT. The value for an AUTO_INCREMENT column can be [implicitly assigned](#assign-values-implicitly) or [explicitly specified](#specify-values-explicitly). It starts from 1, and increments by 1 for each new row.
@@ -98,7 +98,7 @@ mysql > SELECT * FROM test_tbl1;
 
 ### Uniqueness
 
-In general, StarRocks guarantees that the values for the `AUTO_INCREMENT` column are globally unique within a table. We recommend that you do not explicitly assign and implicitly specify the values for the `AUTO_INCREMENT` column at the same time. If you do so, it may break the global uniqueness of auto-incremented IDs. Here is a simple example: Create a table named `test_tbl2` with two columns, `id` and `number`. Specify the column `number` as the `AUTO_INCREMENT` column.
+In general, StarRocks guarantees that the values for a `AUTO_INCREMENT` column are globally unique within a table. We recommend that you do not explicitly assign and implicitly specify the values for the `AUTO_INCREMENT` column at the same time. If you do so, it may break the global uniqueness of auto-incremented IDs. Here is a simple example: Create a table named `test_tbl2` with two columns, `id` and `number`. Specify the column `number` as the `AUTO_INCREMENT` column.
 
 ```SQL
 CREATE TABLE test_tbl2
@@ -176,7 +176,7 @@ mysql > SELECT * FROM test_tbl3;
 5 rows in set (0.07 sec)
 ```
 
-## Partial updates and `AUTO_INCREMENT` columns
+## Partial updates and `AUTO_INCREMENT` column
 
 This section explains how to update only a few specified columns in a table that contains an `AUTO_INCREMENT` column.
 
