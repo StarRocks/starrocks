@@ -78,31 +78,19 @@ PROPERTIES (
 );
 
 -- Create MV: customer_mv
-create materialized view customer_mv
-DISTRIBUTED BY HASH(c_custkey) buckets 10
-REFRESH MANUAL
-PROPERTIES (
-    "replication_num" = "1"
-)
-as select
-              c_custkey, c_phone, c_acctbal, count(1) as c_count, sum(c_acctbal) as c_sum
-   from
-              customer
-   group by c_custkey, c_phone, c_acctbal;
-
--- Create MV: customer_mv
-CREATE MATERIALIZED VIEW test_customer_mv
+CREATE MATERIALIZED VIEW customer_mv
 DISTRIBUTED BY HASH(c_custkey) buckets 10
 REFRESH MANUAL
 PROPERTIES (
     "replication_num" = "1"
 )
 AS SELECT
-              c_custkey, c_phone, c_acctbal, count(1) AS c_count, sum(c_acctbal) AS c_sum
+              c_custkey, c_phone, c_acctbal, count(1) as c_count, sum(c_acctbal) as c_sum
    FROM
               customer
-   GROUP BY c_custkey, c_phone, c_acctbal; 
+   GROUP BY c_custkey, c_phone, c_acctbal;
 
+-- Refresh the MV
 REFRESH MATERIALIZED VIEW customer_mv;
 ```
 
