@@ -102,6 +102,7 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_clear_transaction;
     std::unique_ptr<ThreadPool> _thread_pool_storage_medium_migrate;
     std::unique_ptr<ThreadPool> _thread_pool_check_consistency;
+    std::unique_ptr<ThreadPool> _thread_pool_compaction;
 
     std::unique_ptr<ThreadPool> _thread_pool_upload;
     std::unique_ptr<ThreadPool> _thread_pool_download;
@@ -192,6 +193,9 @@ void AgentServer::Impl::init_or_die() {
                                        config::check_consistency_worker_count, std::numeric_limits<int>::max(),
                                        _thread_pool_check_consistency);
 
+        BUILD_DYNAMIC_TASK_THREAD_POOL("manual_compaction", 0, 1, std::numeric_limits<int>::max(),
+                                       _thread_pool_compaction);
+
         BUILD_DYNAMIC_TASK_THREAD_POOL("upload", config::upload_worker_count, config::upload_worker_count,
                                        std::numeric_limits<int>::max(), _thread_pool_upload);
 
@@ -264,6 +268,7 @@ void AgentServer::Impl::stop() {
         _thread_pool_clear_transaction->shutdown();
         _thread_pool_storage_medium_migrate->shutdown();
         _thread_pool_check_consistency->shutdown();
+        _thread_pool_compaction->shutdown();
         _thread_pool_upload->shutdown();
         _thread_pool_download->shutdown();
         _thread_pool_make_snapshot->shutdown();
@@ -331,6 +336,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TYPE(TTaskType::CLONE, clone_req);
             HANDLE_TYPE(TTaskType::STORAGE_MEDIUM_MIGRATE, storage_medium_migrate_req);
             HANDLE_TYPE(TTaskType::CHECK_CONSISTENCY, check_consistency_req);
+            HANDLE_TYPE(TTaskType::COMPACTION, compaction_req);
             HANDLE_TYPE(TTaskType::UPLOAD, upload_req);
             HANDLE_TYPE(TTaskType::DOWNLOAD, download_req);
             HANDLE_TYPE(TTaskType::MAKE_SNAPSHOT, snapshot_req);
@@ -430,6 +436,10 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         case TTaskType::CHECK_CONSISTENCY:
             HANDLE_TASK(TTaskType::CHECK_CONSISTENCY, all_tasks, run_check_consistency_task,
                         CheckConsistencyTaskRequest, check_consistency_req, _exec_env);
+            break;
+        case TTaskType::COMPACTION:
+            HANDLE_TASK(TTaskType::COMPACTION, all_tasks, run_compaction_task, CompactionTaskRequest, compaction_req,
+                        _exec_env);
             break;
         case TTaskType::UPLOAD:
             HANDLE_TASK(TTaskType::UPLOAD, all_tasks, run_upload_task, UploadAgentTaskRequest, upload_req, _exec_env);
@@ -547,6 +557,8 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
         return _thread_pool_release_snapshot.get();
     case TTaskType::CHECK_CONSISTENCY:
         return _thread_pool_check_consistency.get();
+    case TTaskType::COMPACTION:
+        return _thread_pool_compaction.get();
     case TTaskType::UPLOAD:
         return _thread_pool_upload.get();
     case TTaskType::DOWNLOAD:
