@@ -254,6 +254,7 @@ public:
 
     const MemPool* mem_pool() const { return _mem_pool.get(); }
     bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
+    bool only_group_by_exprs() { return _is_only_group_by_columns; }
     const std::vector<ExprContext*>& conjunct_ctxs() { return _conjunct_ctxs; }
     const std::vector<ExprContext*>& group_by_expr_ctxs() { return _group_by_expr_ctxs; }
     const std::vector<FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }
@@ -475,7 +476,7 @@ public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map_with_selection(size_t chunk_size);
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
-    Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk);
+    Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk, bool* use_intermediate_as_output = nullptr);
 
     void build_hash_set(size_t chunk_size);
     void build_hash_set_with_selection(size_t chunk_size);
@@ -599,6 +600,9 @@ public:
     void set_aggr_mode(AggrMode aggr_mode) { _aggr_mode = aggr_mode; }
 
     const AggregatorParamsPtr& aggregator_param() { return _aggregator_param; }
+
+    const TPlanNode& t_node() { return _tnode; }
+    const AggrMode aggr_mode() { return _aggr_mode; }
 
 private:
     const TPlanNode& _tnode;

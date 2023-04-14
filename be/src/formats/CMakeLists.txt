@@ -34,6 +34,9 @@ add_library(Formats STATIC
         json/nullable_column.cpp
         json/numeric_column.cpp
         json/binary_column.cpp
+        avro/nullable_column.cpp
+        avro/numeric_column.cpp
+        avro/binary_column.cpp
         orc/orc_chunk_reader.cpp
         orc/orc_input_stream.cpp
         orc/orc_mapping.cpp

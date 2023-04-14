@@ -4,16 +4,16 @@
 		"name": "id",
 		"type": "string"
 	}, {
-		"name": "event_signature",
+		"name": "eventsignature",
 		"type": ["null", "string"]
 	}, {
-		"name": "event_params",
+		"name": "eventparams",
 		"type": ["null", {
 			"items": "string",
 			"type": "array"
 		}]
 	}, {
-		"name": "raw_log",
+		"name": "rawlog",
 		"type": ["null", {
 			"fields": [{
 				"name": "id",
@@ -26,6 +26,6 @@
 			"type": "record"
 		}]
 	}],
-	"name": "decoded_logs",
+	"name": "decodedlogs",
 	"type": "record"
 }]

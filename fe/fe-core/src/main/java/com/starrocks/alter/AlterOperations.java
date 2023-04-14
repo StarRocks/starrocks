@@ -101,6 +101,10 @@ public class AlterOperations {
         return currentOps.contains(AlterOpType.TRUNCATE_PARTITION);
     }
 
+    public boolean hasCompactOp() {
+        return currentOps.contains(AlterOpType.COMPACT);
+    }
+
     public boolean hasAlterCommentOp() {
         return currentOps.contains(AlterOpType.ALTER_COMMENT);
     }

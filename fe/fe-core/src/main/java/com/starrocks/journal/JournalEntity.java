@@ -112,6 +112,7 @@ import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.ResumeWarehouseLog;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
+import com.starrocks.persist.SecurityIntegrationInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.ShardInfo;
 import com.starrocks.persist.SwapTableOperationLog;
@@ -805,6 +806,11 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_DROP_USER_V2: {
                 data = UserIdentity.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
+                data = SecurityIntegrationInfo.read(in);
                 isRead = true;
                 break;
             }

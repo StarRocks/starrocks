@@ -239,7 +239,7 @@
       + [SHOW DYNAMIC PARTITION TABLES](./sql-reference/sql-statements/data-manipulation/SHOW%20DYNAMIC%20PARTITION%20TABLES.md)
       + [SHOW EXPORT](./sql-reference/sql-statements/data-manipulation/SHOW%20EXPORT.md)
       + [SHOW LOAD](./sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md)
-      + [SHOW MATERIALIZED VIEW](./sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md)
+      + [SHOW MATERIALIZED VIEWS](./sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md)
       + [SHOW PARTITIONS](./sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md)
       + [SHOW PROPERTY](./sql-reference/sql-statements/data-manipulation/SHOW%20PROPERTY.md)
       + [SHOW REPOSITORIES](./sql-reference/sql-statements/data-manipulation/SHOW%20REPOSITORIES.md)
@@ -306,6 +306,7 @@
       + [multi_distinct_count](./sql-reference/sql-functions/aggregate-functions/multi_distinct_count.md)
       + [percentile_approx](./sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
       + [percentile_cont](./sql-reference/sql-functions/aggregate-functions/percentile_cont.md)
+      + [percentile_disc](./sql-reference/sql-functions/aggregate-functions/percentile_disc.md)
       + [retention](./sql-reference/sql-functions/aggregate-functions/retention.md)
       + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
       + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
@@ -596,6 +597,9 @@
       + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Struct Functions
       + [row](/sql-reference/sql-functions/struct-functions/row.md)
+    + Binary Functions
+      + [to_binary](/sql-reference/sql-functions/binary-functions/to_binary.md)
+      + [from_binary](/sql-reference/sql-functions/binary-functions/from_binary.md)
     + Utility Functions
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)

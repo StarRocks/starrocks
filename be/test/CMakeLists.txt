@@ -74,6 +74,7 @@ set(EXEC_FILES
         ./exprs/decimal_binary_function_test.cpp
         ./exprs/array_expr_test.cpp
         ./exprs/array_functions_test.cpp
+        ./exprs/binary_function_test.cpp
         ./exprs/binary_functions_test.cpp
         ./exprs/binary_predicate_test.cpp
         ./exprs/bitmap_functions_test.cpp
@@ -101,6 +102,7 @@ set(EXEC_FILES
         ./exprs/lambda_map_expr_test.cpp
         ./exprs/like_test.cpp
         ./exprs/map_element_expr_test.cpp
+        ./exprs/map_expr_test.cpp
         ./exprs/map_functions_test.cpp
         ./exprs/math_functions_test.cpp
         ./exprs/null_if_expr_test.cpp
@@ -137,6 +139,9 @@ set(EXEC_FILES
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
+        ./formats/avro/binary_column_test.cpp
+        ./formats/avro/numeric_column_test.cpp
+        ./formats/avro/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_lazy_load_test.cpp
         ./formats/orc/orc_test_util/MemoryOutputStream.cc
