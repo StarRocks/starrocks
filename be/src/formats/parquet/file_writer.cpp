@@ -159,6 +159,22 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper:
             ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, std::move(fields)));
 }
 
+arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper::make_schema(
+        const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs) {
+    ::parquet::schema::NodeVector fields;
+
+    for (int i = 0; i < type_descs.size(); i++) {
+        ARROW_ASSIGN_OR_RAISE(auto node,
+                              _make_schema_node(file_column_names[i], type_descs[i],
+                                                ::parquet::Repetition::OPTIONAL));
+        DCHECK(node != nullptr);
+        fields.push_back(std::move(node));
+    }
+
+    return std::static_pointer_cast<::parquet::schema::GroupNode>(
+            ::parquet::schema::GroupNode::Make("table", ::parquet::Repetition::REQUIRED, std::move(fields)));
+}
+
 std::shared_ptr<::parquet::WriterProperties> ParquetBuildHelper::make_properties(const ParquetBuilderOptions& options) {
     ::parquet::WriterProperties::Builder builder;
     builder.version(::parquet::ParquetVersion::PARQUET_2_0);

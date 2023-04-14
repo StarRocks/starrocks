@@ -79,6 +79,9 @@ public:
     static arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> make_schema(
             const std::vector<std::string>& file_column_names, const std::vector<ExprContext*>& output_expr_ctxs);
 
+    static arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> make_schema(
+            const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs);
+
     static std::shared_ptr<::parquet::WriterProperties> make_properties(const ParquetBuilderOptions& options);
 
 private:
