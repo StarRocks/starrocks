@@ -286,9 +286,7 @@ jobs:
           cd elastic-service && git pull
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}}
 
-      - run: echo ${{ steps.run_ut.outputs.COV_DIR }}/${{ steps.run_ut.outputs.COV_FILE }}
-
-      - name: copy cov
+      - name: Prepare coverage files
         run: |
           cd ${{ github.workspace }}/fe/fe-core
           cp -rf ${{ steps.run_ut.outputs.COV_DIR }} target/
