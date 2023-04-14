@@ -21,13 +21,13 @@ namespace starrocks::spill {
 
 Status DirManager::init() {
     std::vector<starrocks::StorePath> storage_paths;
-    RETURN_IF_ERROR(parse_conf_store_paths(config::storage_root_path, &storage_paths));
+    RETURN_IF_ERROR(parse_conf_store_paths(config::spill_local_storage_dir, &storage_paths));
     if (storage_paths.empty()) {
-        return Status::InvalidArgument("cannot find storage_root_path");
+        return Status::InvalidArgument("cannot find spill_local_storage_dir");
     }
 
     for (const auto& path : storage_paths) {
-        std::string spill_dir_path = path.path + "/" + config::spill_local_storage_dir;
+        std::string spill_dir_path = path.path;
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(spill_dir_path));
         RETURN_IF_ERROR(fs->create_dir_if_missing(spill_dir_path));
         RETURN_IF_ERROR(fs->iterate_dir(spill_dir_path, [fs, &spill_dir_path](std::string_view sub_dir) {

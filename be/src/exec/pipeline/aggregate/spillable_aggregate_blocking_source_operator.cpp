@@ -50,13 +50,12 @@ bool SpillableAggregateBlockingSourceOperator::is_finished() const {
     if (!_aggregator->spiller()->spilled()) {
         return AggregateBlockingSourceOperator::is_finished();
     }
-    return AggregateBlockingSourceOperator::is_finished() && _aggregator->is_spilled_eos() && !_has_last_chunk;
+    return _aggregator->is_spilled_eos() && !_has_last_chunk;
 }
 
 Status SpillableAggregateBlockingSourceOperator::set_finished(RuntimeState* state) {
     _is_finished = true;
     RETURN_IF_ERROR(AggregateBlockingSourceOperator::set_finished(state));
-    _aggregator->spiller()->set_finished();
     return Status::OK();
 }
 
@@ -69,8 +68,8 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::pull_chunk(RuntimeS
 
     if (res != nullptr) {
         const int64_t old_size = res->num_rows();
-        RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_aggregator->conjunct_ctxs(), res.get()));
-        _aggregator->update_num_rows_returned(-(old_size - static_cast<int64_t>(res->num_rows())));
+        RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_stream_aggregator->conjunct_ctxs(), res.get()));
+        _stream_aggregator->update_num_rows_returned(-(old_size - static_cast<int64_t>(res->num_rows())));
     }
 
     return res;
@@ -78,7 +77,16 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::pull_chunk(RuntimeS
 
 StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk(RuntimeState* state) {
     DCHECK(_accumulator.need_input());
+
+    // first time, lazy init
+    if (!_stream_aggregator_inited) {
+        RETURN_IF_ERROR(_stream_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+        RETURN_IF_ERROR(_stream_aggregator->open(state));
+        _stream_aggregator_inited = true;
+    }
+
     ChunkPtr res;
+
     if (!_aggregator->is_spilled_eos()) {
         auto executor = _aggregator->spill_channel()->io_executor();
         ASSIGN_OR_RETURN(auto chunk,
@@ -87,16 +95,17 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
         if (chunk->is_empty()) {
             return chunk;
         }
-
-        RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
-        RETURN_IF_ERROR(_aggregator->evaluate_agg_fn_exprs(chunk.get(), true));
-        ASSIGN_OR_RETURN(res, _aggregator->streaming_compute_agg_state(chunk->num_rows(), false));
+        RETURN_IF_ERROR(_stream_aggregator->evaluate_groupby_exprs(chunk.get()));
+        RETURN_IF_ERROR(_stream_aggregator->evaluate_agg_fn_exprs(chunk.get(), true));
+        ASSIGN_OR_RETURN(res, _stream_aggregator->streaming_compute_agg_state(chunk->num_rows(), false));
         _accumulator.push(std::move(res));
 
     } else {
         _has_last_chunk = false;
-        ASSIGN_OR_RETURN(res, _aggregator->pull_eos_chunk());
-        _accumulator.push(std::move(res));
+        ASSIGN_OR_RETURN(res, _stream_aggregator->pull_eos_chunk());
+        if (res != nullptr && !res->is_empty()) {
+            _accumulator.push(std::move(res));
+        }
         _accumulator.finalize();
     }
 
@@ -108,4 +117,16 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
     return nullptr;
 }
 
+Status SpillableAggregateBlockingSourceOperatorFactory::prepare(RuntimeState* state) {
+    _stream_aggregator_factory = std::make_shared<StreamingAggregatorFactory>(_hash_aggregator_factory->t_node());
+    _stream_aggregator_factory->set_aggr_mode(_hash_aggregator_factory->aggr_mode());
+    return Status::OK();
+}
+
+OperatorPtr SpillableAggregateBlockingSourceOperatorFactory::create(int32_t degree_of_parallelism,
+                                                                    int32_t driver_sequence) {
+    return std::make_shared<SpillableAggregateBlockingSourceOperator>(
+            _hash_aggregator_factory->get_or_create(driver_sequence),
+            _stream_aggregator_factory->get_or_create(driver_sequence), this, _id, _plan_node_id, driver_sequence);
+}
 } // namespace starrocks::pipeline
