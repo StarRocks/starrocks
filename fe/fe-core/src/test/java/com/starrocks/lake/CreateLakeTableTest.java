@@ -15,12 +15,14 @@
 package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -87,8 +89,7 @@ public class CreateLakeTableTest {
         return (LakeTable) table;
     }
 
-    @Test
-    public void testCreateLakeTable(@Mocked StarOSAgent agent) throws UserException {
+    private FilePathInfo getPathInfo() {
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
 
@@ -104,20 +105,21 @@ public class CreateLakeTableTest {
 
         builder.setFsInfo(fsInfo);
         builder.setFullPath("s3://test-bucket/1/");
-        FilePathInfo pathInfo = builder.build();
+        return builder.build();
+    }
 
+    @Test
+    public void testCreateLakeTable(@Mocked StarOSAgent agent) throws UserException {
         new Expectations(agent) {
             {
                 agent.allocateFilePath(anyLong);
-                result = pathInfo;
+                result = getPathInfo();
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
                 agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
-                agent.getPrimaryBackendIdByShard(anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
                 agent.getPrimaryBackendIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
@@ -154,35 +156,16 @@ public class CreateLakeTableTest {
 
     @Test
     public void testCreateLakeTableWithStorageCache(@Mocked StarOSAgent agent) throws UserException {
-        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
-        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
-
-        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
-        s3FsBuilder.setBucket("test-bucket");
-        s3FsBuilder.setRegion("test-region");
-        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
-
-        fsBuilder.setFsType(FileStoreType.S3);
-        fsBuilder.setFsKey("test-bucket");
-        fsBuilder.setS3FsInfo(s3FsInfo);
-        FileStoreInfo fsInfo = fsBuilder.build();
-
-        builder.setFsInfo(fsInfo);
-        builder.setFullPath("s3://test-bucket/1/");
-        FilePathInfo pathInfo = builder.build();
-
         new Expectations() {
             {
                 agent.allocateFilePath(anyLong);
-                result = pathInfo;
+                result = getPathInfo();
                 agent.createShardGroup(anyLong, anyLong, anyLong);
                 result = GlobalStateMgr.getCurrentState().getNextId();
                 agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
-                agent.getPrimaryBackendIdByShard(anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
                 agent.getPrimaryBackendIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
@@ -287,5 +270,50 @@ public class CreateLakeTableTest {
                 () -> createTable(
                         "create table lake_test.auto_partition (key1 date, key2 varchar(10), key3 int)\n" +
                                 "partition by date_trunc(\"day\", key1) distributed by hash(key2) buckets 3;"));
+    }
+
+    @Test
+    public void testExplainRowCount(@Mocked StarOSAgent agent) throws Exception {
+        new Expectations(agent) {
+            {
+                agent.allocateFilePath(anyLong);
+                result = getPathInfo();
+                agent.createShardGroup(anyLong, anyLong, anyLong);
+                result = GlobalStateMgr.getCurrentState().getNextId();
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
+                result = Lists.newArrayList(20001L, 20002L, 20003L);
+                agent.getPrimaryBackendIdByShard(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+                agent.getBackendIdsByShard(anyLong);
+                result = Sets.newHashSet(GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0));
+            }
+        };
+
+        new MockUp<Partition>() {
+            @Mock
+            public boolean hasData() {
+                return true;
+            }
+        };
+
+        new MockUp<LakeTablet>() {
+            @Mock
+            public long getRowCount(long version) {
+                return 2L;
+            }
+        };
+
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table lake_test.duplicate_key_rowcount (key1 int, key2 varchar(10))\n" +
+                        "distributed by hash(key1) buckets 3 properties('replication_num' = '1');"));
+        checkLakeTable("lake_test", "duplicate_key_rowcount");
+
+        // check explain result
+        String sql = "select * from lake_test.duplicate_key_rowcount";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("actualRows=6"));
     }
 }
