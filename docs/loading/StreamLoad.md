@@ -97,7 +97,7 @@ Run the following command to load the data of `example1.csv` into `table1`:
 ```Bash
 curl --location-trusted -u root: -H "label:123" \
     -H "column_separator:," \
-    -H "Expect:100-continue"\
+    -H "Expect:100-continue" \
     -H "columns: id, name, score" \
     -T example1.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
