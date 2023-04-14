@@ -1,0 +1,109 @@
+-- name: test_binary_functions
+select to_binary('ab'); 
+select to_binary('ab', 'HEX');
+-- result:
+b'\xab'
+-- !result
+select to_binary('ab', 'hex');
+-- result:
+b'\xab'
+-- !result
+select to_binary('qw==', 'ENCODE64');
+-- result:
+b'\xab'
+-- !result
+select to_binary('qw==', 'encode64');
+-- result:
+b'\xab'
+-- !result
+select to_binary('ab', 'utf8');
+-- result:
+ab
+-- !result
+select to_binary('ab', 'UTF8');
+-- result:
+ab
+-- !result
+select from_binary(to_binary('ab', 'utf8'), 'utf8');
+-- result:
+ab
+-- !result
+select from_binary(to_binary('ab', 'hex'), 'hex');
+-- result:
+AB
+-- !result
+select from_binary(to_binary('ab', 'hex'), 'encode64');
+-- result:
+qw==
+-- !result
+select to_binary('', 'hex');
+-- result:
+-- !result
+select to_binary('', 'utf8');
+-- result:
+-- !result
+select to_binary('', 'encode64');
+-- result:
+None
+-- !result
+select to_binary('1', 'hex');
+-- result:
+-- !result
+select to_binary('XY', 'hex');
+-- result:
+-- !result
+select to_binary('XYZ0', 'hex');
+-- result:
+-- !result
+select to_binary('1', 'encode64');
+-- result:
+-- !result
+select from_binary(to_binary('X', 'hex'), 'hex');
+-- result:
+-- !result
+select from_binary(to_binary('0X', 'hex'), 'hex');
+-- result:
+-- !result
+select from_binary(to_binary('1', 'encode64'), 'hex');
+-- result:
+-- !result
+create table t0(c0 INT, c1 varbinary(16), c2 varchar(16)) 
+        DUPLICATE KEY(c0) 
+        DISTRIBUTED BY HASH(c0) 
+        BUCKETS 1 
+        PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into t0 values (1, x'ab01', 'ab01');
+-- result:
+-- !result
+select from_binary(c1, 'hex'), from_binary(to_binary(c2, 'hex'), 'hex')  from t0;
+-- result:
+AB01	AB01
+-- !result
+select hex(from_binary(c1, 'utf8')), from_binary(to_binary(c2, 'encode64'), 'hex')  from t0;
+-- result:
+AB01	69BD35
+-- !result
+select from_binary(c1, 'encode64'), from_binary(to_binary(c2, 'utf8'), 'hex')  from t0;
+-- result:
+qwE=	61623031
+-- !result
+insert into t0 values (2, x'abab', 'abab');
+-- result:
+-- !result
+select from_binary(c1, 'hex'), from_binary(to_binary(c2, 'hex'), 'hex')  from t0 order by c0;
+-- result:
+AB01	AB01
+ABAB	ABAB
+-- !result
+select hex(from_binary(c1, 'utf8')), from_binary(to_binary(c2, 'encode64'), 'hex')  from t0 order by c0;
+-- result:
+AB01	69BD35
+ABAB	69B69B
+-- !result
+select from_binary(c1, 'encode64'), from_binary(to_binary(c2, 'utf8'), 'hex')  from t0 order by c0;
+-- result:
+qwE=	61623031
+q6s=	61626162
+-- !result
