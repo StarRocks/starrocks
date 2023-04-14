@@ -879,6 +879,7 @@ public class Alter {
             db.createTable(view);
 
             LOG.info("replay modify view[{}] definition to {}", viewName, inlineViewDef);
+             LOG.info("test");
         } finally {
             db.writeUnlock();
         }
