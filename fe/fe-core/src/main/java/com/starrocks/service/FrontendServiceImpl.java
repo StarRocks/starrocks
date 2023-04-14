@@ -1432,6 +1432,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 throw new UserException("txn does not exist: " + request.getTxnId());
             }
             txnState.addTableIndexes((OlapTable) table);
+            plan.setImport_label(txnState.getLabel());
+            plan.setDb_name(dbName);
+            plan.setLoad_job_id(request.getTxnId());
 
             return plan;
         } finally {

@@ -93,6 +93,9 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
         if (!runtime_state->get_error_log_file_path().empty()) {
             params.__set_tracking_url(to_load_error_http_path(runtime_state->get_error_log_file_path()));
         }
+        if (!runtime_state->get_rejected_record_file_path().empty()) {
+            params.__set_rejected_record_path(runtime_state->get_rejected_record_file_path());
+        }
         if (!runtime_state->export_output_files().empty()) {
             params.__isset.export_files = true;
             params.export_files = runtime_state->export_output_files();

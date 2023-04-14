@@ -51,6 +51,7 @@ import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.load.loadv2.BulkLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -163,6 +164,7 @@ public class Coordinator {
     private List<String> deltaUrls;
     private Map<String, String> loadCounters;
     private String trackingUrl;
+    private Set<String> rejectedRecordPaths = new HashSet<>();
     // for export
     private List<String> exportFiles;
     private final List<TTabletCommitInfo> commitInfos = Lists.newArrayList();
@@ -225,6 +227,10 @@ public class Coordinator {
                 this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
             }
         }
+        if (sessionVariables.containsKey(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)) {
+            this.queryOptions.setLog_rejected_record_num(
+                    Long.parseLong(sessionVariables.get(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)));
+        }
         this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
         this.needReport = true;
 
@@ -252,6 +258,10 @@ public class Coordinator {
             if (loadCompressionType != null) {
                 this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
             }
+        }
+        if (sessionVariables.containsKey(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)) {
+            this.queryOptions.setLog_rejected_record_num(
+                    Long.parseLong(sessionVariables.get(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)));
         }
         this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
         this.needReport = true;
@@ -291,6 +301,10 @@ public class Coordinator {
                 if (loadCompressionType != null) {
                     this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
                 }
+            }
+            if (sessionVariables.containsKey(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)) {
+                this.queryOptions.setLog_rejected_record_num(
+                        Long.parseLong(sessionVariables.get(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)));
             }
         }
 
@@ -352,6 +366,10 @@ public class Coordinator {
     public String getTrackingUrl() {
         return trackingUrl;
     }
+
+    public List<String> getRejectedRecordPaths() {
+        return rejectedRecordPaths.stream().collect(Collectors.toList());
+    }   
 
     public long getStartTime() {
         return this.queryGlobals.getTimestamp_ms();
@@ -1460,6 +1478,9 @@ public class Coordinator {
             }
             if (params.isSetFailInfos()) {
                 updateFailInfos(params.getFailInfos());
+            }
+            if (params.isSetRejected_record_path()) {
+                rejectedRecordPaths.add(execState.address.hostname + ":" + params.getRejected_record_path());
             }
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }

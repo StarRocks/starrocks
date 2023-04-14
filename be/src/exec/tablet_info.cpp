@@ -397,7 +397,7 @@ Status OlapTablePartitionParam::add_partitions(const std::vector<TOlapTableParti
 
 Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions,
                                              std::vector<uint32_t>* indexes, std::vector<uint8_t>* selection,
-                                             int* invalid_row_index, int64_t txn_id,
+                                             std::vector<int>* invalid_row_indexs, int64_t txn_id,
                                              std::vector<std::vector<std::string>>* partition_not_exist_row_values) {
     size_t num_rows = chunk->num_rows();
     partitions->resize(num_rows);
@@ -441,8 +441,8 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                                 << row.debug_string();
                         (*partitions)[i] = nullptr;
                         (*selection)[i] = 0;
-                        if (invalid_row_index != nullptr) {
-                            *invalid_row_index = i;
+                        if (invalid_row_indexs != nullptr) {
+                            invalid_row_indexs->emplace_back(i);
                         }
                     }
                 } else if (LIKELY(is_list_partition || _part_contains(it->second, &row))) {
@@ -464,8 +464,8 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                                 << " end " << it->second->end_key.debug_string();
                         (*partitions)[i] = nullptr;
                         (*selection)[i] = 0;
-                        if (invalid_row_index != nullptr) {
-                            *invalid_row_index = i;
+                        if (invalid_row_indexs != nullptr) {
+                            invalid_row_indexs->emplace_back(i);
                         }
                     }
                 }

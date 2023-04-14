@@ -221,6 +221,11 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
     if (scan_range.ranges.empty()) {
         return Status::EndOfFile("scan range is empty");
     }
+    if (runtime_state()->enable_log_rejected_record() &&
+        scan_range.ranges[0].format_type != TFileFormatType::FORMAT_CSV_PLAIN &&
+        scan_range.ranges[0].format_type != TFileFormatType::FORMAT_JSON) {
+        return Status::InternalError("only support csv/json format to log rejected record");
+    }
     //create scanner object and open
     std::unique_ptr<FileScanner> scanner = _create_scanner(scan_range, counter);
     if (scanner == nullptr) {

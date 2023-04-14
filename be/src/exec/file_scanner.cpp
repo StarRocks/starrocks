@@ -20,6 +20,7 @@
 #include "column/column_helper.h"
 #include "column/hash_set.h"
 #include "column/vectorized_fwd.h"
+#include "exec/csv_scanner.h"
 #include "fs/fs.h"
 #include "fs/fs_broker.h"
 #include "gutil/strings/substitute.h"
@@ -210,6 +211,15 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::ChunkPtr& src, star
 
                     filter[i] = 0;
                     _error_counter++;
+
+                    if (_state->enable_log_rejected_record()) {
+                        std::stringstream error_msg;
+                        error_msg << "Value '" << src_col->debug_item(i) << "' is out of range. "
+                                  << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
+                        // TODO(meegoo): support other file format
+                        _state->append_rejected_record_to_file(src->rebuild_csv_row(i, ","), error_msg.str(),
+                                                               src->source_filename());
+                    }
 
                     // avoid print too many debug log
                     if (_error_counter > 50) {

@@ -336,7 +336,7 @@ public:
 
 private:
     template <LogicalType LT>
-    void _validate_decimal(RuntimeState* state, Column* column, const SlotDescriptor* desc,
+    void _validate_decimal(RuntimeState* state, Chunk* chunk, Column* column, const SlotDescriptor* desc,
                            std::vector<uint8_t>* validate_selection);
     // This method will change _validate_selection
     void _validate_data(RuntimeState* state, Chunk* chunk);

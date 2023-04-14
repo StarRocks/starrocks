@@ -61,17 +61,18 @@ enum OLAPDataVersion {
 };
 
 // storage_root_path file path
-static const std::string ALIGN_TAG_PREFIX = "/align_tag";   // NOLINT
-static const std::string MINI_PREFIX = "/mini_download";    // NOLINT
-static const std::string CLUSTER_ID_PREFIX = "/cluster_id"; // NOLINT
-static const std::string DATA_PREFIX = "/data";             // NOLINT
-static const std::string DPP_PREFIX = "/dpp_download";      // NOLINT
-static const std::string SNAPSHOT_PREFIX = "/snapshot";     // NOLINT
-static const std::string TRASH_PREFIX = "/trash";           // NOLINT
-static const std::string UNUSED_PREFIX = "/unused";         // NOLINT
-static const std::string ERROR_LOG_PREFIX = "/error_log";   // NOLINT
-static const std::string CLONE_PREFIX = "/clone";           // NOLINT
-static const std::string TMP_PREFIX = "/tmp";               // NOLINT
+static const std::string ALIGN_TAG_PREFIX = "/align_tag";             // NOLINT
+static const std::string MINI_PREFIX = "/mini_download";              // NOLINT
+static const std::string CLUSTER_ID_PREFIX = "/cluster_id";           // NOLINT
+static const std::string DATA_PREFIX = "/data";                       // NOLINT
+static const std::string DPP_PREFIX = "/dpp_download";                // NOLINT
+static const std::string SNAPSHOT_PREFIX = "/snapshot";               // NOLINT
+static const std::string TRASH_PREFIX = "/trash";                     // NOLINT
+static const std::string UNUSED_PREFIX = "/unused";                   // NOLINT
+static const std::string ERROR_LOG_PREFIX = "/error_log";             // NOLINT
+static const std::string REJECTED_RECORD_PREFIX = "/rejected_record"; // NOLINT
+static const std::string CLONE_PREFIX = "/clone";                     // NOLINT
+static const std::string TMP_PREFIX = "/tmp";                         // NOLINT
 
 static const int32_t OLAP_DATA_VERSION_APPLIED = STARROCKS_V1;
 

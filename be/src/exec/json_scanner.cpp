@@ -491,6 +491,12 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
                 _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
                 LOG(WARNING) << "failed to construct row: " << st;
             }
+            if (_state->enable_log_rejected_record()) {
+                std::string_view sv;
+                (void)!row.raw_json().get(sv);
+                _state->append_rejected_record_to_file(std::string(sv.data(), sv.size()), st.to_string(),
+                                                       _file->filename());
+            }
             // Before continuing to process other rows, we need to first clean the fail parsed row.
             chunk->set_num_rows(chunk_row_num);
         }
