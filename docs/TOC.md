@@ -10,7 +10,7 @@
 + Quick Start
   + Deploy
     + [Deploy StarRocks in Linux](./quick_start/Deploy.md)
-    + [Deploy StarRocks in Docker](./quick_start/deploy_in_docker.md)
+    + [Deploy StarRocks with Docker](./quick_start/deploy_with_docker.md)
   + [Create a table](./quick_start/Create_table.md)
   + [Load and query data](./quick_start/Import_and_query.md)
 + Table Design
@@ -73,7 +73,6 @@
   + Deployment
     + [Deploy a shared-data StarRocks cluster](./administration/deploy_shared_data.md)
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
-    + [Deploy StarRocks in Docker](./quick_start/deploy_in_docker.md)
     + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/sr_operator.md)
     + [Deploy CN](./administration/deploy_cn.md)
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
