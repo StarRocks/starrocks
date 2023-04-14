@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.jdbc;
 
+import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -33,7 +34,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class JDBCMetadata implements ConnectorMetadata {
 
@@ -68,9 +68,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     @Override
     public List<String> listDbNames() {
         try (Connection connection = getConnection()) {
-            return schemaResolver.listSchemas(connection).stream()
-                    .map(schema -> isIgnorecase(schema))
-                    .collect(Collectors.toList());
+            return Lists.newArrayList(schemaResolver.listSchemas(connection));
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
         }
@@ -96,7 +94,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                 ImmutableList.Builder<String> list = ImmutableList.builder();
                 while (resultSet.next()) {
                     String tableName = resultSet.getString("TABLE_NAME");
-                    list.add(isIgnorecase(tableName));
+                    list.add(tableName);
                 }
                 return list.build();
             }
@@ -119,9 +117,5 @@ public class JDBCMetadata implements ConnectorMetadata {
             LOG.warn(e.getMessage());
             return null;
         }
-    }
-
-    private String isIgnorecase(String value) {
-        return (Boolean.valueOf(properties.getOrDefault("lower_case_table_names", "true")) ? value.toLowerCase() : value);
     }
 }
