@@ -260,7 +260,7 @@ public class QueryAnalyzer {
                             resolveTableName.getTbl()));
                 }
 
-                Table table = resolveTable(tableRelation.getName());
+                Table table = resolveTable(tableRelation.getName(), session, metadataMgr);
                 if (table instanceof View) {
                     View view = (View) table;
                     QueryStatement queryStatement = view.getQueryStatement();
@@ -796,7 +796,7 @@ public class QueryAnalyzer {
         }
     }
 
-    private Table resolveTable(TableName tableName) {
+    public static Table resolveTable(TableName tableName, ConnectContext session, MetadataMgr metadataMgr) {
         try {
             MetaUtils.normalizationTableName(session, tableName);
             String catalogName = tableName.getCatalog();

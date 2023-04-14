@@ -18,20 +18,23 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.ValuesRelation;
-import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -49,9 +52,10 @@ public class InsertAnalyzer {
         /*
          *  Target table
          */
-        MetaUtils.normalizationTableName(session, insertStmt.getTableName());
-        Database database = MetaUtils.getDatabase(session, insertStmt.getTableName());
-        Table table = MetaUtils.getTable(session, insertStmt.getTableName());
+        TableName tableName = insertStmt.getTableName();
+        MetadataMgr metadataMgr =  GlobalStateMgr.getCurrentState().getMetadataMgr();
+        Table table = QueryAnalyzer.resolveTable(tableName, session, metadataMgr);
+        Database database = metadataMgr.getDb(tableName.getCatalog(), tableName.getDb());
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(
@@ -70,7 +74,7 @@ public class InsertAnalyzer {
                                 ((OlapTable) table).getState());
                 throw unsupportedException(msg);
             }
-        } else if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
+        } else if (!(table instanceof OlapTable) && !(table instanceof MysqlTable) && !(table instanceof JDBCTable)) {
             throw unsupportedException("Only support insert into olap table or mysql table");
         }
 
