@@ -184,6 +184,8 @@ public:
     int32_t timeout_second = -1;
     AuthInfo auth;
 
+    int64_t log_rejected_record_num = 0;
+
     // the following members control the max progress of a consuming
     // process. if any of them reach, the consuming will finish.
     int64_t max_interval_s = 5;
@@ -220,6 +222,7 @@ public:
     int64_t last_active_ts = 0;
 
     std::string error_url;
+    std::string rejected_record_path;
     // if label already be used, set existing job's status here
     // should be RUNNING or FINISHED
     std::string existing_job_status;

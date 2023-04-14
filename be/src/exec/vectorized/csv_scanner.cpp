@@ -13,6 +13,10 @@
 
 namespace starrocks::vectorized {
 
+const std::string& CSVScanner::ScannerCSVReader::filename() {
+    return _file->filename();
+}
+
 Status CSVScanner::ScannerCSVReader::_fill_buffer() {
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
 
@@ -235,11 +239,21 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
                           << "Expect " << _num_fields_in_csv << ", but got " << fields.size();
                 _report_error(record.to_string(), error_msg.str());
             }
+            if (_state->enable_log_rejected_record()) {
+                std::stringstream error_msg;
+                error_msg << "Value count does not match column count. "
+                          << "Expect " << _num_fields_in_csv << ", but got " << fields.size();
+                _state->append_rejected_record_to_file(record.to_string(), error_msg.str(), _curr_reader->filename());
+            }
             continue;
         }
         if (!validate_utf8(record.data, record.size)) {
             if (_counter->num_rows_filtered++ < 50) {
                 _report_error(record.to_string(), "Invalid UTF-8 row");
+            }
+            if (_state->enable_log_rejected_record()) {
+                _state->append_rejected_record_to_file(record.to_string(), "Invalid UTF-8 row",
+                                                       _curr_reader->filename());
             }
             continue;
         }
@@ -260,6 +274,13 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
                     error_msg << "Value '" << field.to_string() << "' is out of range. "
                               << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
                     _report_error(record.to_string(), error_msg.str());
+                }
+                if (_state->enable_log_rejected_record()) {
+                    std::stringstream error_msg;
+                    error_msg << "Value '" << field.to_string() << "' is out of range. "
+                              << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
+                    _state->append_rejected_record_to_file(record.to_string(), error_msg.str(),
+                                                           _curr_reader->filename());
                 }
                 has_error = true;
                 break;

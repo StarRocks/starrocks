@@ -170,6 +170,7 @@ struct TOlapTableSink {
     18: optional Types.TWriteQuorumType write_quorum_type
     19: optional bool enable_replicated_storage
     20: optional string merge_condition
+    26: optional string label
 }
 
 struct TSchemaTableSink {

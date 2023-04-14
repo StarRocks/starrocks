@@ -66,7 +66,7 @@ public:
     // has been filtered out for not being able to find tablet.
     // it could be any row, becauset it's just for outputing error message for user to diagnose.
     Status find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions, std::vector<uint32_t>* indexes,
-                        std::vector<uint8_t>* selection, int* invalid_row_index);
+                        std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs);
 
     const std::vector<OlapTablePartition*>& get_partitions() const { return _partitions; }
 

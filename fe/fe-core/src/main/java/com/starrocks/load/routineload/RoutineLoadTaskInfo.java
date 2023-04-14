@@ -21,6 +21,7 @@
 
 package com.starrocks.load.routineload;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
@@ -189,8 +190,10 @@ public abstract class RoutineLoadTaskInfo {
         // begin a txn for task
         RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
+        String label =
+                Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id));
         txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
-                routineLoadJob.getDbId(), Lists.newArrayList(routineLoadJob.getTableId()), DebugUtil.printId(id), null,
+                routineLoadJob.getDbId(), Lists.newArrayList(routineLoadJob.getTableId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, routineLoadJob.getId(),
                 timeoutMs / 1000);

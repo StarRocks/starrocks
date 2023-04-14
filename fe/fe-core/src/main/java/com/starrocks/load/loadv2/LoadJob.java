@@ -111,6 +111,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     protected boolean partialUpdate = false;
     protected int priority = LoadPriority.NORMAL_VALUE;
+    protected long logRejectedRecordNum = 0;
     // reuse deleteFlag as partialUpdate
     // @Deprecated
     // protected boolean deleteFlag = false;
@@ -326,6 +327,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
             if (properties.containsKey(LoadStmt.PRIORITY)) {
                 priority = LoadPriority.priorityByName(properties.get(LoadStmt.PRIORITY));
+            }
+
+            if (properties.containsKey(LoadStmt.LOG_REJECTED_RECORD_NUM)) {
+                logRejectedRecordNum = Long.parseLong(properties.get(LoadStmt.LOG_REJECTED_RECORD_NUM));
             }
         }
     }
@@ -766,6 +771,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             // tracking url
             jobInfo.add(loadingStatus.getTrackingUrl());
             jobInfo.add(loadingStatus.getLoadStatistic().toShowInfoStr());
+            if (!loadingStatus.getRejectedRecordPaths().isEmpty()) {
+                jobInfo.add(Joiner.on(", ").join(loadingStatus.getRejectedRecordPaths()));
+            } else {
+                jobInfo.add(FeConstants.null_string);
+            }
             return jobInfo;
         } finally {
             readUnlock();

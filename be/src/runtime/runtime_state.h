@@ -208,16 +208,36 @@ public:
 
     void add_export_output_file(const std::string& file) { _export_output_files.push_back(file); }
 
-    void set_load_job_id(int64_t job_id) { _load_job_id = job_id; }
+    void set_txn_id(int64_t txn_id) { _txn_id = txn_id; }
 
-    int64_t load_job_id() const { return _load_job_id; }
+    int64_t load_job_id() const { return _txn_id; }
+
+    void set_db(const std::string& db) { _db = db; }
+
+    const std::string& db() const { return _db; }
+
+    void set_load_label(const std::string& label) { _load_label = label; }
+
+    const std::string& load_label() const { return _load_label; }
 
     const std::string& get_error_log_file_path() const { return _error_log_file_path; }
+
+    const std::string& get_rejected_record_file_path() const { return _rejected_record_file_path; }
 
     // is_summary is true, means we are going to write the summary line
     void append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary = false);
 
     bool has_reached_max_error_msg_num(bool is_summary = false);
+
+    Status create_rejected_record_file();
+
+    bool enable_log_rejected_record() {
+        return _query_options.log_rejected_record_num == -1 ||
+               _query_options.log_rejected_record_num > _num_log_rejected_rows;
+    }
+
+    void append_rejected_record_to_file(const std::string& record, const std::string& error_msg,
+                                        const std::string& source);
 
     int64_t num_bytes_load_from_source() const noexcept { return _num_bytes_load_from_source.load(); }
 
@@ -349,6 +369,10 @@ private:
     // Logs error messages.
     std::vector<std::string> _error_log;
 
+    std::mutex _rejected_record_lock;
+    std::string _rejected_record_file_path;
+    std::unique_ptr<std::ofstream> _rejected_record_file;
+
     // _error_log[_unreported_error_idx+] has been not reported to the coordinator.
     int _unreported_error_idx;
 
@@ -419,10 +443,13 @@ private:
     std::atomic<int64_t> _num_rows_load_unselected{0}; // rows filtered by predicates
 
     std::atomic<int64_t> _num_print_error_rows{0};
+    std::atomic<int64_t> _num_log_rejected_rows{0}; // rejected rows
 
     std::vector<std::string> _export_output_files;
 
-    int64_t _load_job_id = 0;
+    int64_t _txn_id = 0;
+    std::string _load_label;
+    std::string _db;
 
     std::string _error_log_file_path;
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path

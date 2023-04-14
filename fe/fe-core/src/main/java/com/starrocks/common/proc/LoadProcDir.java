@@ -38,7 +38,7 @@ public class LoadProcDir implements ProcDirInterface {
             .add("JobId").add("Label").add("State").add("Progress")
             .add("Type").add("Priority").add("EtlInfo").add("TaskInfo").add("ErrorMsg").add("CreateTime")
             .add("EtlStartTime").add("EtlFinishTime").add("LoadStartTime").add("LoadFinishTime")
-            .add("URL").add("JobDetails")
+            .add("URL").add("JobDetails").add("RejectedRecordPaths")
             .build();
 
     // label and state column index of result

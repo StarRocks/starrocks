@@ -60,6 +60,7 @@ public class StreamLoadInfo {
     private TCompressionType compressionType = TCompressionType.NO_COMPRESSION;
     private int loadParallelRequestNum = 0;
     private boolean enableReplicatedStorage = false;
+    private long logRejectedRecordNum = 0;
 
     public StreamLoadInfo(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -86,6 +87,10 @@ public class StreamLoadInfo {
 
     public long getTxnId() {
         return txnId;
+    }
+
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
     }
 
     public TFileType getFileType() {
@@ -182,6 +187,14 @@ public class StreamLoadInfo {
 
     public int getLoadParallelRequestNum() {
         return loadParallelRequestNum;
+    }
+
+    public long getLogRejectedRecordNum() {
+        return logRejectedRecordNum;
+    }
+
+    public void setLogRejectedRecordNum(long logRejectedRecordNum) {
+        this.logRejectedRecordNum = logRejectedRecordNum;
     }
 
     public static StreamLoadInfo fromStreamLoadContext(TUniqueId id, long txnId, int timeout, StreamLoadParam context)
@@ -334,6 +347,10 @@ public class StreamLoadInfo {
         if (request.isSetMerge_condition()) {
             mergeConditionStr = request.getMerge_condition();
         }
+
+        if (request.isSetLog_rejected_record_num()) {
+            logRejectedRecordNum = request.getLog_rejected_record_num();
+        }
     }
 
     public static StreamLoadInfo fromRoutineLoadJob(RoutineLoadJob routineLoadJob) throws UserException {
@@ -345,6 +362,7 @@ public class StreamLoadInfo {
         StreamLoadInfo streamLoadInfo = new StreamLoadInfo(dummyId, -1L /* dummy txn id */,
                 TFileType.FILE_STREAM, fileFormatType);
         streamLoadInfo.setOptionalFromRoutineLoadJob(routineLoadJob);
+        streamLoadInfo.setLogRejectedRecordNum(routineLoadJob.getLogRejectedRecordNum());
         return streamLoadInfo;
     }
 

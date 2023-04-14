@@ -860,6 +860,12 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     if (table_sink.__isset.enable_replicated_storage) {
         _enable_replicated_storage = table_sink.enable_replicated_storage;
     }
+    if (table_sink.__isset.db_name) {
+        _db_name = table_sink.db_name;
+    }
+    if (table_sink.__isset.label) {
+        _label = table_sink.label;
+    }
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
     _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));
@@ -878,6 +884,9 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
 
 Status OlapTableSink::prepare(RuntimeState* state) {
     _span->AddEvent("prepare");
+    state->set_db(_db_name);
+    state->set_txn_id(_txn_id);
+    state->set_load_label(_label);
 
     // profile must add to state's object pool
     _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
@@ -1182,9 +1191,9 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
         }
         {
             uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
-            int invalid_row_index = 0;
+            std::vector<int> invalid_row_indexs;
             RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
-                                                                &_validate_selection, &invalid_row_index));
+                                                                &_validate_selection, &invalid_row_indexs));
 
             // Note: must padding char column after find_tablets.
             _padding_char_column(chunk);
@@ -1202,10 +1211,19 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
             _validate_select_idx.resize(selected_size);
 
             if (num_rows_after_validate - _validate_select_idx.size() > 0) {
-                if (!state->has_reached_max_error_msg_num()) {
-                    std::string debug_row = chunk->debug_row(invalid_row_index);
-                    state->append_error_msg_to_file(debug_row,
-                                                    "The row is out of partition ranges. Please add a new partition.");
+                std::stringstream ss;
+                ss << "The row is out of partition ranges. Please add a new partition.";
+                if (!state->has_reached_max_error_msg_num() && invalid_row_indexs.size() > 0) {
+                    std::string debug_row = chunk->debug_row(invalid_row_indexs.back());
+                    state->append_error_msg_to_file(debug_row, ss.str());
+                }
+                for (auto i : invalid_row_indexs) {
+                    if (state->enable_log_rejected_record()) {
+                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), ss.str(),
+                                                              chunk->source_filename());
+                    } else {
+                        break;
+                    }
                 }
             }
 
@@ -1561,8 +1579,8 @@ void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, con
 }
 
 template <PrimitiveType PT>
-void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
-                                      std::vector<uint8_t>* validate_selection) {
+void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Chunk* chunk, vectorized::Column* column,
+                                      const SlotDescriptor* desc, std::vector<uint8_t>* validate_selection) {
     using CppType = vectorized::RunTimeCppType<PT>;
     using ColumnType = vectorized::RunTimeColumnType<PT>;
     auto* data_column = down_cast<ColumnType*>(vectorized::ColumnHelper::get_data_column(column));
@@ -1579,6 +1597,15 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* c
             if (datum > max_decimal || datum < min_decimal) {
                 (*validate_selection)[i] = VALID_SEL_FAILED;
                 _print_decimalv3_error_msg<PT>(state, datum, desc);
+                if (state->enable_log_rejected_record()) {
+                    auto decimal_str =
+                            DecimalV3Cast::to_string<CppType>(datum, desc->type().precision, desc->type().scale);
+                    std::string error_msg =
+                            strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
+                                                desc->col_name(), desc->type().debug_string());
+                    state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), error_msg,
+                                                          chunk->source_filename());
+                }
             }
         }
     }
@@ -1622,6 +1649,10 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
                             state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
                         }
 #endif
+                        if (state->enable_log_rejected_record()) {
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(),
+                                                                  chunk->source_filename());
+                        }
                     }
                 }
             }
@@ -1651,6 +1682,13 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
                     if (offset[j + 1] - offset[j] > len) {
                         _validate_selection[j] = VALID_SEL_FAILED;
                         _print_varchar_error_msg(state, binary->get_slice(j), desc);
+                        if (state->enable_log_rejected_record()) {
+                            std::string error_msg =
+                                    strings::Substitute("String (length=$0) is too long. The max length of '$1' is $2",
+                                                        binary->get_slice(j).size, desc->col_name(), desc->type().len);
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg,
+                                                                  chunk->source_filename());
+                        }
                     }
                 }
             }
@@ -1670,19 +1708,26 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
                     if (datas[j] > _max_decimalv2_val[i] || datas[j] < _min_decimalv2_val[i]) {
                         _validate_selection[j] = VALID_SEL_FAILED;
                         _print_decimal_error_msg(state, datas[j], desc);
+                        if (state->enable_log_rejected_record()) {
+                            std::string error_msg = strings::Substitute(
+                                    "Decimal '$0' is out of range. The type of '$1' is $2'", datas[j].to_string(),
+                                    desc->col_name(), desc->type().debug_string());
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg,
+                                                                  chunk->source_filename());
+                        }
                     }
                 }
             }
             break;
         }
         case TYPE_DECIMAL32:
-            _validate_decimal<TYPE_DECIMAL32>(state, column, desc, &_validate_selection);
+            _validate_decimal<TYPE_DECIMAL32>(state, chunk, column, desc, &_validate_selection);
             break;
         case TYPE_DECIMAL64:
-            _validate_decimal<TYPE_DECIMAL64>(state, column, desc, &_validate_selection);
+            _validate_decimal<TYPE_DECIMAL64>(state, chunk, column, desc, &_validate_selection);
             break;
         case TYPE_DECIMAL128:
-            _validate_decimal<TYPE_DECIMAL128>(state, column, desc, &_validate_selection);
+            _validate_decimal<TYPE_DECIMAL128>(state, chunk, column, desc, &_validate_selection);
             break;
         default:
             break;

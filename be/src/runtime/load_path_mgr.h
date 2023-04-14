@@ -53,6 +53,10 @@ public:
     std::string get_load_error_absolute_path(const std::string& file_path);
     const std::string& get_load_error_file_dir() const { return _error_log_dir; }
 
+    std::string get_load_rejected_record_absolute_path(const std::string& rejected_record_dir, const std::string& db,
+                                                       const std::string& label, const int64_t id,
+                                                       const TUniqueId& fragment_instance_id);
+
 private:
     bool is_too_old(time_t cur_time, const std::string& label_dir, int64_t reserve_hours);
     void clean_one_path(const std::string& path);

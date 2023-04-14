@@ -84,6 +84,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String MAX_BATCH_ROWS_PROPERTY = "max_batch_rows";
     public static final String MAX_BATCH_SIZE_PROPERTY = "max_batch_size";  // deprecated
 
+    public static final String LOG_REJECTED_RECORD_NUM_PROPERTY = "log_rejected_record_num";
+
     // the value is csv or json, default is csv
     public static final String FORMAT = "format";
     public static final String STRIP_OUTER_ARRAY = "strip_outer_array";
@@ -124,6 +126,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(LoadStmt.TIMEZONE)
             .add(LoadStmt.PARTIAL_UPDATE)
             .add(LoadStmt.MERGE_CONDITION)
+            .add(LOG_REJECTED_RECORD_NUM_PROPERTY)
             .build();
 
     private static final ImmutableSet<String> KAFKA_PROPERTIES_SET = new ImmutableSet.Builder<String>()
@@ -157,6 +160,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private long maxErrorNum = -1;
     private long maxBatchIntervalS = -1;
     private long maxBatchRows = -1;
+    private long logRejectedRecordNum = 0;
     private boolean strictMode = true;
     private String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     private boolean partialUpdate = false;
@@ -196,6 +200,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final Predicate<Long> MAX_ERROR_NUMBER_PRED = (v) -> v >= 0L;
     public static final Predicate<Long> MAX_BATCH_INTERVAL_PRED = (v) -> v >= 5;
     public static final Predicate<Long> MAX_BATCH_ROWS_PRED = (v) -> v >= 200000;
+    public static final Predicate<Long> LOG_REJECTED_RECORD_NUM_PRED = (v) -> v >= -1L;
 
     public CreateRoutineLoadStmt(LabelName labelName, String tableName, List<ParseNode> loadPropertyList,
                                  Map<String, String> jobProperties,
@@ -262,6 +267,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
 
     public long getMaxBatchRows() {
         return maxBatchRows;
+    }
+
+    public long getLogRejectedRecordNum() {
+        return logRejectedRecordNum;
     }
 
     public boolean isStrictMode() {
@@ -441,6 +450,10 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         maxBatchRows = Util.getLongPropertyOrDefault(jobProperties.get(MAX_BATCH_ROWS_PROPERTY),
                 RoutineLoadJob.DEFAULT_MAX_BATCH_ROWS, MAX_BATCH_ROWS_PRED,
                 MAX_BATCH_ROWS_PROPERTY + " should >= 200000");
+
+        logRejectedRecordNum = Util.getLongPropertyOrDefault(jobProperties.get(LOG_REJECTED_RECORD_NUM_PROPERTY),
+                0, LOG_REJECTED_RECORD_NUM_PRED,
+                LOG_REJECTED_RECORD_NUM_PROPERTY + " should >= -1");
 
         strictMode = Util.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.STRICT_MODE),
                 RoutineLoadJob.DEFAULT_STRICT_MODE,

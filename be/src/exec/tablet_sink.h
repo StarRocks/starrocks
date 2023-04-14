@@ -292,8 +292,8 @@ public:
 
 private:
     template <PrimitiveType PT>
-    void _validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
-                           std::vector<uint8_t>* validate_selection);
+    void _validate_decimal(RuntimeState* state, vectorized::Chunk* chunk, vectorized::Column* column,
+                           const SlotDescriptor* desc, std::vector<uint8_t>* validate_selection);
     // This method will change _validate_selection
     void _validate_data(RuntimeState* state, vectorized::Chunk* chunk);
 
@@ -441,6 +441,8 @@ private:
     bool _enable_replicated_storage = false;
 
     TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
+    std::string _label;
+    std::string _db_name;
 };
 
 } // namespace stream_load
