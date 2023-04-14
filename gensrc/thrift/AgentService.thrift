@@ -206,6 +206,11 @@ struct TCheckConsistencyReq {
     4: required Types.TVersionHash version_hash // Deprecated
 }
 
+struct TCompactionReq {
+    1: optional list<Types.TTableId> tablet_ids
+    2: optional bool is_base_compaction
+}
+
 struct TUploadReq {
     1: required i64 job_id;
     2: required map<string, string> src_dest_map
@@ -370,6 +375,7 @@ struct TAgentTaskRequest {
     25: optional i64 recv_time // time the task is inserted to queue
     26: optional TUpdateTabletMetaInfoReq update_tablet_meta_info_req
     27: optional TDropAutoIncrementMapReq drop_auto_increment_map_req
+    28: optional TCompactionReq compaction_req
 }
 
 struct TAgentResult {

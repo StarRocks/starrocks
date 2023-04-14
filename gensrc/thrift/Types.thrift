@@ -199,6 +199,7 @@ enum TTaskType {
     UNINSTALL_PLUGIN,
     // this use for calculate enum count
     DROP_AUTO_INCREMENT_MAP,
+    COMPACTION,
     NUM_TASK_TYPE
 }
 
