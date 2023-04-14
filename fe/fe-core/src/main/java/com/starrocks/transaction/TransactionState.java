@@ -929,7 +929,7 @@ public class TransactionState implements Writable {
     }
 
     public boolean allPublishTasksFinishedOrQuorumWaitTimeout(Set<Long> publishErrorReplicas) {
-        boolean timeout = System.currentTimeMillis() - getCommitTime() > Config.quorom_publish_wait_time_ms;
+        boolean timeout = System.currentTimeMillis() - getCommitTime() > Config.quorum_publish_wait_time_ms;
         for (PublishVersionTask publishVersionTask : getPublishVersionTasks().values()) {
             if (publishVersionTask.isFinished()) {
                 publishErrorReplicas.addAll(publishVersionTask.getErrorReplicas());

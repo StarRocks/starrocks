@@ -26,6 +26,8 @@ import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 public class UserAuthenticationInfo implements Writable {
     protected static final String ANY_HOST = "%";
@@ -50,6 +52,13 @@ public class UserAuthenticationInfo implements Writable {
     protected PatternMatcher userPattern;
     @Expose(serialize = false)
     protected PatternMatcher hostPattern;
+
+    /**
+     * extra user authentication info when authenticating, it may have different usage for different
+     * auth plugin, since the authenticate info for different auth mechanism can vary a log, here we
+     * use a general Object map to represent this requirement.
+     */
+    protected Map<String, Object> extraInfo = new HashMap<>();
 
     public boolean matchUser(String remoteUser) {
         return isAnyUser || userPattern.match(remoteUser);
