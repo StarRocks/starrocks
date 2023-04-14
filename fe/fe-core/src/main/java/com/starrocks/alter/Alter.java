@@ -287,7 +287,7 @@ public class Alter {
             if (newMvName != null) {
                 processRenameMaterializedView(oldMvName, newMvName, db, materializedView);
             } else if (refreshSchemeDesc != null) {
-                // change refresh scheme
+                // change refresh schemes
                 processChangeRefreshScheme(refreshSchemeDesc, materializedView, dbName);
             } else if (modifyTablePropertiesClause != null) {
                 try {
@@ -386,6 +386,7 @@ public class Alter {
             GlobalStateMgr.getCurrentState().getEditLog().logAlterMaterializedViewProperties(log);
         }
         LOG.info("alter materialized view properties {}, id: {}", propClone, materializedView.getId());
+        LOG.info("test");
     }
 
     private void processChangeRefreshScheme(RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView,
