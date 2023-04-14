@@ -41,7 +41,45 @@ Status SchemaBeThreadsScanner::start(RuntimeState* state) {
     auto o_id = get_backend_id();
     _be_id = o_id.has_value() ? o_id.value() : -1;
     _infos.clear();
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_be_threads_scanner.cpp
     Thread::get_thread_infos(_infos);
+=======
+    int64_t start_ts = 0;
+    if (_param->log_start_ts > 0) {
+        start_ts = _param->log_start_ts;
+    }
+    int64_t end_ts = 0;
+    if (_param->log_end_ts > 0) {
+        end_ts = _param->log_end_ts;
+    }
+    string level;
+    string pattern;
+    if (_param->log_level != nullptr) {
+        level = *_param->log_level;
+    }
+    if (_param->log_pattern != nullptr) {
+        pattern = *_param->log_pattern;
+    }
+    size_t limit = 0;
+    if (_param->log_limit > 0) {
+        limit = _param->log_limit;
+    }
+    int64_t ts0 = MonotonicMillis();
+    Status st = grep_log(start_ts, end_ts, level[0], pattern, limit, _infos);
+    int64_t ts1 = MonotonicMillis();
+    string msg =
+            strings::Substitute("grep_log pattern:$0 level:$1 start_ts:$2 end_ts:$3 limit:$4 #result:$5 duration:$6ms",
+                                pattern, level, start_ts, end_ts, limit, _infos.size(), (ts1 - ts0));
+    if (st.ok()) {
+        VLOG(3) << msg;
+    } else {
+        LOG(WARNING) << msg << " error:" << st.get_error_msg();
+        // send err info to client as log
+        auto& err_log = _infos.emplace_back();
+        err_log.log = strings::Substitute("grep_log failed pattern:$0 level:$1 limit:$2 error:$3", pattern, level,
+                                          _param->limit, st.get_error_msg());
+    }
+>>>>>>> b74afce0d ([Enhancement] Change LOG to VLOG (#21605)):be/src/exec/schema_scanner/schema_be_logs_scanner.cpp
     _cur_idx = 0;
     return Status::OK();
 }
