@@ -3063,7 +3063,12 @@ public class GlobalStateMgr {
                 throw new DdlException("Empty schema");
             }
             if (shortKeyColumnCount == 0) {
-                throw new DdlException("Data type of first column cannot be " + indexColumns.get(0).getType());
+                if (sortKeyIdxes.size() > 0) {
+                    throw new DdlException("Data type of first sort column cannot be " + 
+                            indexColumns.get(sortKeyIdxes.get(0)).getType());
+                } else {
+                    throw new DdlException("Data type of first column cannot be " + indexColumns.get(0).getType());
+                }
             }
         } // end calc shortKeyColumnCount
 
