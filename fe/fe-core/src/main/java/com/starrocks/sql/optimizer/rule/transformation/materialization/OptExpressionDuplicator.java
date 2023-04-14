@@ -258,6 +258,8 @@ public class OptExpressionDuplicator {
             return null;
         }
 
+        // rewrite shuffle columns and joinEquivalentColumns in HashDistributionSpec
+        // because the columns ids have changed
         private HashDistributionSpec processHashDistributionSpec(
                 HashDistributionSpec originSpec,
                 ColumnRefFactory columnRefFactory,
