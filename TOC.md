@@ -8,6 +8,9 @@
   + [系统架构](/introduction/Architecture.md)
   + [产品特性](/introduction/Features.md)
 + 快速开始
+  + 部署 StarRocks
+    + [在 Linux 中部署](/quick_start/Deploy.md)
+    + [使用 Docker 部署](/quick_start/deploy_with_docker.md)
   + [手动部署 StarRocks](/quick_start/Deploy.md)
   + [创建表](/quick_start/Create_table.md)
   + [导入和查询数据](/quick_start/Import_and_query.md)
