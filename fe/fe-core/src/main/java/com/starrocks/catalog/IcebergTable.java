@@ -68,6 +68,7 @@ public class IcebergTable extends Table {
     private Optional<IcebergMetricsReporter> metricsReporter = Optional.empty();
 
     private Map<String, String> icebergProperties = Maps.newHashMap();
+    private List<Column> partitionColumns;
 
     public IcebergTable() {
         super(TableType.ICEBERG);
@@ -119,10 +120,14 @@ public class IcebergTable extends Table {
     }
 
     public List<Column> getPartitionColumns() {
-        List<PartitionField> identityPartitionFields = this.getNativeTable().spec().fields().stream().
-                filter(partitionField -> partitionField.transform().isIdentity()).collect(Collectors.toList());
-        return identityPartitionFields.stream().map(partitionField -> getColumn(partitionField.name())).collect(
-                Collectors.toList());
+        if (partitionColumns == null) {
+            List<PartitionField> identityPartitionFields = this.getNativeTable().spec().fields().stream().
+                    filter(partitionField -> partitionField.transform().isIdentity()).collect(Collectors.toList());
+            partitionColumns = identityPartitionFields.stream().map(partitionField -> getColumn(partitionField.name()))
+                    .collect(Collectors.toList());
+        }
+
+        return partitionColumns;
     }
 
     public boolean isUnPartitioned() {
@@ -224,6 +229,11 @@ public class IcebergTable extends Table {
 
     @Override
     public boolean isSupported() {
+        return true;
+    }
+
+    @Override
+    public boolean supportInsert() {
         return true;
     }
 

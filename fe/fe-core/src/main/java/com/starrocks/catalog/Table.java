@@ -658,4 +658,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     public boolean supportsUpdate() {
         return false;
     }
+
+    public boolean supportInsert() {
+        return false;
+    }
 }

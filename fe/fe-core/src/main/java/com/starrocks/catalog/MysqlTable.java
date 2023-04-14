@@ -281,4 +281,9 @@ public class MysqlTable extends Table {
     public boolean isSupported() {
         return true;
     }
+
+    @Override
+    public boolean supportInsert() {
+        return true;
+    }
 }

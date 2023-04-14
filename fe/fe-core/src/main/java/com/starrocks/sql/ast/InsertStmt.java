@@ -192,6 +192,10 @@ public class InsertStmt extends DmlStmt {
         this.targetColumns = targetColumns;
     }
 
+    public boolean isStaticPartitionInsert() {
+        return targetPartitionNames != null && targetPartitionNames.isStaticPartitionInsert();
+    }
+
     @Override
     public RedirectStatus getRedirectStatus() {
         if (isExplain()) {

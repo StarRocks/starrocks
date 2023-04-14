@@ -14,17 +14,22 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
@@ -50,8 +55,18 @@ public class InsertAnalyzer {
          *  Target table
          */
         MetaUtils.normalizationTableName(session, insertStmt.getTableName());
-        Database database = MetaUtils.getDatabase(session, insertStmt.getTableName());
-        Table table = MetaUtils.getTable(session, insertStmt.getTableName());
+        String catalogName = insertStmt.getTableName().getCatalog();
+        String dbName = insertStmt.getTableName().getDb();
+        String tableName = insertStmt.getTableName().getTbl();
+
+        try {
+            MetaUtils.checkCatalogExistAndReport(catalogName);
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+        }
+
+        Database database = MetaUtils.getDatabase(catalogName, dbName);
+        Table table = MetaUtils.getTable(catalogName, dbName, tableName);
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(
@@ -70,14 +85,15 @@ public class InsertAnalyzer {
                                 ((OlapTable) table).getState());
                 throw unsupportedException(msg);
             }
-        } else if (!(table instanceof OlapTable) && !(table instanceof MysqlTable)) {
-            throw unsupportedException("Only support insert into olap table or mysql table");
+        } else if (!table.supportInsert()) {
+            throw unsupportedException("Only support insert into olap table or mysql table or iceberg table");
         }
 
         List<Long> targetPartitionIds = Lists.newArrayList();
+        PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
         if (table instanceof OlapTable) {
             OlapTable olapTable = (OlapTable) table;
-            PartitionNames targetPartitionNames = insertStmt.getTargetPartitionNames();
+            targetPartitionNames = insertStmt.getTargetPartitionNames();
 
             if (targetPartitionNames != null) {
                 if (targetPartitionNames.getPartitionNames().isEmpty()) {
@@ -105,6 +121,42 @@ public class InsertAnalyzer {
                     throw new SemanticException("data cannot be inserted into table with empty partition." +
                             "Use `SHOW PARTITIONS FROM %s` to see the currently partitions of this table. ",
                             olapTable.getName());
+                }
+            }
+        }
+
+        if (table instanceof IcebergTable && insertStmt.isStaticPartitionInsert()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            List<String> partitionKeys = targetPartitionNames.getPartitionKeys();
+            List<Expr> partitionValues = targetPartitionNames.getPartitionValues();
+            List<String> tablePartitionColumnNames = icebergTable.getPartitionColumnNames();
+
+            Preconditions.checkState(partitionKeys.size() == partitionValues.size(),
+                    "Partition keys size must be equal to the partition values size. %d vs %d",
+                    partitionKeys.size(), partitionValues.size());
+
+            if (tablePartitionColumnNames.size() != partitionKeys.size()) {
+                throw new SemanticException("Must include all partition column names");
+            }
+
+            for (int i = 0; i < partitionKeys.size(); i++) {
+                String actualName = partitionKeys.get(i);
+                String expectedName = tablePartitionColumnNames.get(i);
+                Expr partitionValue = partitionValues.get(i);
+                if (!actualName.equalsIgnoreCase(expectedName)) {
+                    throw new SemanticException("Expected: %s, but actual: %s", expectedName, actualName);
+                }
+
+                if (!partitionValue.isLiteral()) {
+                    throw new SemanticException("partition value should be literal expression");
+                }
+
+                LiteralExpr literalExpr = (LiteralExpr) partitionValue;
+                Column column = icebergTable.getColumn(actualName);
+                try {
+                    literalExpr.castTo(column.getType());
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
                 }
             }
         }
@@ -139,7 +191,13 @@ public class InsertAnalyzer {
             }
         }
 
-        if (query.getRelationFields().size() != mentionedColumns.size()) {
+        int mentionedColumnSize = mentionedColumns.size();
+        if (table instanceof IcebergTable && insertStmt.isStaticPartitionInsert()) {
+            // full column size = mentioned column size + partition column size for static partition insert
+            mentionedColumnSize -= table.getPartitionColumnNames().size();
+        }
+
+        if (query.getRelationFields().size() != mentionedColumnSize) {
             throw new SemanticException("Column count doesn't match value count");
         }
         // check default value expr
