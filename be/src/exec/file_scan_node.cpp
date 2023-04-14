@@ -18,6 +18,7 @@
 #include <sstream>
 
 #include "column/chunk.h"
+#include "exec/avro_scanner.h"
 #include "exec/csv_scanner.h"
 #include "exec/json_scanner.h"
 #include "exec/orc_scanner.h"
@@ -209,7 +210,7 @@ std::unique_ptr<FileScanner> FileScanNode::_create_scanner(const TBrokerScanRang
     } else if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_JSON) {
         return std::make_unique<JsonScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     } else if (scan_range.ranges[0].format_type == TFileFormatType::FORMAT_AVRO) {
-        return std::make_unique<JsonScanner>(runtime_state(), runtime_profile(), scan_range, counter);
+        return std::make_unique<AvroScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     } else {
         return std::make_unique<CSVScanner>(runtime_state(), runtime_profile(), scan_range, counter);
     }

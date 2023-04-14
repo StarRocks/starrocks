@@ -1228,7 +1228,7 @@ void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size,
     });
 }
 
-Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk) {
+Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk, bool* use_intermediate_as_output) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
 
     RETURN_IF_ERROR(_hash_map_variant.visit([&](auto& variant_value) {
@@ -1240,7 +1240,8 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
 
         const auto hash_map_size = _hash_map_variant.size();
         auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
-        auto use_intermediate = _use_intermediate_as_output();
+        auto use_intermediate =
+                use_intermediate_as_output != nullptr ? *use_intermediate_as_output : _use_intermediate_as_output();
         Columns group_by_columns = _create_group_by_columns(num_rows);
         Columns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
 

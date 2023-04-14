@@ -623,6 +623,9 @@ public class AnalyzerUtils {
             }
         } else if (srcType.isArrayType()) {
             newType = new ArrayType(transformType(((ArrayType) srcType).getItemType()));
+        } else if (srcType.isMapType()) {
+            newType = new MapType(transformType(((MapType) srcType).getKeyType()),
+                    transformType(((MapType) srcType).getValueType()));
         } else {
             throw new SemanticException("Unsupported CTAS transform type: %s", srcType);
         }

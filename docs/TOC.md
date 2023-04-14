@@ -598,6 +598,9 @@
       + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Struct Functions
       + [row](/sql-reference/sql-functions/struct-functions/row.md)
+    + Binary Functions
+      + [to_binary](/sql-reference/sql-functions/binary-functions/to_binary.md)
+      + [from_binary](/sql-reference/sql-functions/binary-functions/from_binary.md)
     + Utility Functions
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)

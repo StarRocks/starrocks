@@ -29,8 +29,10 @@
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
+#include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
+#include "exec/pipeline/spill_process_operator.h"
 #include "exec/sorted_streaming_aggregator.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
@@ -177,6 +179,9 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
     auto degree_of_parallelism = context->source_operator(ops_with_sink)->degree_of_parallelism();
     auto spill_channel_factory =
             std::make_shared<SpillProcessChannelFactory>(degree_of_parallelism, std::move(executor));
+    if (std::is_same_v<SinkFactory, SpillableAggregateBlockingSinkOperatorFactory>) {
+        context->interpolate_spill_process(spill_channel_factory, degree_of_parallelism);
+    }
 
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
     auto* upstream_source_op = context->source_operator(ops_with_sink);
@@ -264,7 +269,7 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
     } else {
         if (runtime_state()->enable_spill() && has_group_by_keys) {
             ops_with_source =
-                    _decompose_to_pipeline<StreamingAggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
+                    _decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
                                            SpillableAggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
         } else {
             ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
