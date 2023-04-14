@@ -22,6 +22,8 @@ public:
                             LocalExchangeSourceOperatorFactory* source)
             : _name(name), _memory_manager(std::move(memory_manager)), _source(source) {}
 
+    virtual ~LocalExchanger() = default;
+
     virtual Status accept(const vectorized::ChunkPtr& chunk, int32_t sink_driver_sequence) = 0;
 
     virtual void finish(RuntimeState* state) {
