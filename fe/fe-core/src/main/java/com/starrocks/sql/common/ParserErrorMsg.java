@@ -118,6 +118,8 @@ public interface ParserErrorMsg {
     @BaseMessage("Refresh start time must be after current time")
     String invalidStartTime();
 
+    @BaseMessage("Invalid map format, which should be key:value")
+    String invalidMapFormat();
 
     // --------- error in analyzing phase ---------
     @BaseMessage("Invalid {0} id format ''{1}''")

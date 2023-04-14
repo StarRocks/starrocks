@@ -271,7 +271,7 @@ public class AnalyzeCreateTableTest {
         analyzeSuccess("create external table table1 (col0 int, col1 array<array<int>>) " +
                 "engine=hive properties('key' = 'value')");
 
-        analyzeFail("create table table1 (col0 int, col1 array<map<int,int>>) " +
+        analyzeSuccess("create table table1 (col0 int, col1 array<map<int,int>>) " +
                 "engine=olap distributed by hash(col0) buckets 10");
         analyzeSuccess("create external table table1 (col0 int, col1 array<map<int,int>>) " +
                 "engine=hive properties('key' = 'value')");
@@ -281,7 +281,7 @@ public class AnalyzeCreateTableTest {
         analyzeSuccess("create external table table1 (col0 int, col1 array<struct<a int>>) " +
                 "engine=hive properties('key' = 'value')");
 
-        analyzeFail("create table table1 (col0 int, col1 map<int,int>) " +
+        analyzeSuccess("create table table1 (col0 int, col1 map<int,int>) " +
                 "engine=olap distributed by hash(col0) buckets 10");
         analyzeSuccess("create external table table1 (col0 int, col1 map<int,int>) " +
                 "engine=hive properties('key' = 'value')");

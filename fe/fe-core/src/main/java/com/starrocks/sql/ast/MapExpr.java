@@ -15,15 +15,19 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.common.TypeManager;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
 
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 
 public class MapExpr extends Expr {
     private boolean explicitType = false;
@@ -35,18 +39,34 @@ public class MapExpr extends Expr {
         this.explicitType = this.type != null;
     }
 
+    // key expr, value expr, key expr, value expr ...
+    public MapExpr(Type type, List<Expr> items, NodePosition pos) {
+        super(pos);
+        this.type = type;
+        this.children = Expr.cloneList(items);
+        this.explicitType = this.type != null;
+    }
+
     public MapExpr(MapExpr other) {
         super(other);
     }
 
-    public Expr getKeyExpr() {
+    public Type getKeyCommonType() {
         Preconditions.checkState(children.size() > 1);
-        return children.get(0);
+        ArrayList<Type> keyExprsType = Lists.newArrayList();
+        for (int i = 0; i < children.size(); i += 2) {
+            keyExprsType.add(children.get(i).getType());
+        }
+        return TypeManager.getCommonSuperType(keyExprsType);
     }
 
-    public Expr getValueExpr() {
+    public Type getValueCommonType() {
         Preconditions.checkState(children.size() > 1);
-        return children.get(1);
+        ArrayList<Type> valueExprsType = Lists.newArrayList();
+        for (int i = 1; i < children.size(); i += 2) {
+            valueExprsType.add(children.get(i).getType());
+        }
+        return TypeManager.getCommonSuperType(valueExprsType);
     }
 
     @Override
@@ -60,10 +80,34 @@ public class MapExpr extends Expr {
     @Override
     protected String toSqlImpl() {
         StringBuilder sb = new StringBuilder();
-        sb.append('[');
-        sb.append(children.stream().map(Expr::toSql).collect(Collectors.joining(",")));
-        sb.append(']');
+        sb.append('{');
+        for (int i = 0; i < children.size(); i += 2) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            sb.append(children.get(i).toSql() + ":" + children.get(i + 1).toSql());
+        }
+        sb.append('}');
         return sb.toString();
+    }
+
+    @Override
+    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
+        ArrayList<Expr> newItems = new ArrayList<>();
+        MapType mapType = (MapType) targetType;
+        Type keyType = mapType.getKeyType();
+        Type valueType = mapType.getValueType();
+        for (int i = 0; i < getChildren().size(); i++) {
+            Expr child = getChild(i);
+            if (child.getType().matchesType(i % 2 == 0 ? keyType : valueType)) {
+                newItems.add(child);
+            } else {
+                newItems.add(child.castTo(i % 2 == 0 ? keyType : valueType));
+            }
+        }
+        MapExpr e = new MapExpr(targetType, newItems);
+        e.analysisDone();
+        return e;
     }
 
     @Override
