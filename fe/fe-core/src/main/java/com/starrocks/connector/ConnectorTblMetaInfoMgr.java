@@ -28,9 +28,9 @@ public class ConnectorTblMetaInfoMgr {
     private static final Logger LOG = LogManager.getLogger(ConnectorTblMetaInfoMgr.class);
 
     // catalogName -> dbName -> tableIdentifier -> ConnectorTableInfo
-    private Table<String, String, Map<String, ConnectorTableInfo>> connectorTableMetaInfos;
+    private final Table<String, String, Map<String, ConnectorTableInfo>> connectorTableMetaInfos;
 
-    private ReentrantReadWriteLock lock;
+    private final ReentrantReadWriteLock lock;
 
     public ConnectorTblMetaInfoMgr() {
         connectorTableMetaInfos = HashBasedTable.create();
@@ -71,23 +71,22 @@ public class ConnectorTblMetaInfoMgr {
         }
     }
 
-    public boolean removeConnectorTableInfo(String catalog, String db, String tableIdentifier,
-                                            ConnectorTableInfo connectorTableInfo) {
+    public void removeConnectorTableInfo(String catalog, String db, String tableIdentifier,
+                                         ConnectorTableInfo connectorTableInfo) {
         writeLock();
         try {
             Map<String, ConnectorTableInfo> tableInfoMap = connectorTableMetaInfos.get(catalog, db);
             if (tableInfoMap == null) {
-                return false;
+                return;
             }
 
             ConnectorTableInfo tableInfo = tableInfoMap.get(tableIdentifier);
             if (tableInfo == null) {
-                return false;
+                return;
             }
             tableInfo.removeMetaInfo(connectorTableInfo);
             LOG.info("{}.{}.{} remove persistent connector table info : {}", catalog, db, tableIdentifier,
                     connectorTableInfo);
-            return true;
         } finally {
             writeUnlock();
         }

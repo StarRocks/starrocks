@@ -242,7 +242,6 @@ public class OptExternalPartitionPruner {
         }
     }
 
-
     private static void computeMinMaxConjuncts(LogicalScanOperator operator, OptimizerContext context)
             throws AnalysisException {
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
