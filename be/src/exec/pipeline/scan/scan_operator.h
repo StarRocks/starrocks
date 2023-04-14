@@ -82,6 +82,7 @@ public:
     virtual void after_pull_chunk(int64_t time) {}
     virtual void after_driver_process() {}
     virtual bool is_running_all_io_tasks() const;
+
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 

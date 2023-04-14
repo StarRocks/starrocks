@@ -69,6 +69,7 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     bool shared_scan = _scan_node->is_shared_scan_enabled();
     _unique_metrics->add_info_string("SharedScan", shared_scan ? "True" : "False");
     _unique_metrics->add_info_string("AdaptiveIOTasks", _enable_adaptive_io_tasks ? "True" : "False");
+    _start_running_time = GetCurrentTimeMicros();
     return Status::OK();
 }
 
@@ -162,7 +163,13 @@ void ConnectorScanOperator::begin_driver_process() {
     last_check_time = 0;
     early_cut_all_io_tasks = 0;
     expected_io_tasks = current_io_tasks;
+    // _unpluging = true;
 }
+
+void ConnectorScanOperator::begin_pull_chunk(ChunkPtr res) {
+    _op_pull_rows = _op_pull_rows + 1;
+}
+
 void ConnectorScanOperator::after_pull_chunk(int64_t time) {
     _op_running_time += time;
 }
@@ -189,41 +196,79 @@ bool ConnectorScanOperator::is_running_all_io_tasks() const {
 
     bool ret = (expected_io_tasks != 0) && (_num_running_io_tasks >= expected_io_tasks);
     return ret;
-    // return ScanOperator::is_running_all_io_tasks();
 }
 
 int ConnectorScanOperator::available_pickup_morsel_count() {
-    if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
+    // if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
 
-    // called every time before `pull_chunk` when there is chunk.
-    // accumulate chunk source stats.
-    double cs_speed = _cs_pull_rows * 1.0 / (_cs_pull_time + 1);
-
-    // accumulate scan operator stats.
-    double op_speed = _op_pull_rows * 1.0 / (_op_running_time + 1);
+    const int MIN_IO_TASKS = config::connector_io_tasks_min_size;
+    int64_t now = GetCurrentTimeMicros();
 
     int& io_tasks = current_io_tasks;
-    const int MIN_IO_TASKS = config::connector_io_tasks_min_size;
     io_tasks = std::max(MIN_IO_TASKS, io_tasks);
 
-    int64_t now = GetCurrentTimeMicros();
+    if (!_enable_adaptive_io_tasks) {
+        io_tasks = _io_tasks_per_scan_operator;
+    }
+
     if ((now - last_check_time) <= config::connector_io_tasks_check_interval * 1000) {
         return io_tasks;
     }
     last_check_time = now;
+
+    int64_t cs_running_time = (now - _start_running_time) * 1000;
+
+    constexpr double SCALE = 100000000; //100ms
+
+    // called every time before `pull_chunk` when there is chunk.
+    // accumulate chunk source stats.
+    double cs_speed = _cs_pull_rows * SCALE / (cs_running_time + 1);
+
+    // accumulate scan operator stats.
+    double op_speed = _op_pull_rows * SCALE / (_op_running_time + 1);
+
     // for slow query, at startup, cs/op could be both 0.
     // for this case, w'd better to ramup but to wait.
-    if (cs_speed > op_speed || cs_speed < last_cs_speed) {
-        io_tasks -= config::connector_io_tasks_dec;
+    std::string flag = "";
+    if (cs_speed < (op_speed * 1.2)) {
+        if (!try_add_before) {
+            expect_ratio = (io_tasks + config::connector_io_tasks_inc) * 1.0 / io_tasks;
+            io_tasks += config::connector_io_tasks_inc;
+            try_add_before = true;
+            flag += "[TRY]";
+            last_cs_speed = cs_speed;
+        } else {
+            if (cs_speed < (last_cs_speed * expect_ratio)) {
+                try_add_before = false;
+                io_tasks -= config::connector_io_tasks_dec;
+                flag += "[DEC]";
+            } else {
+                io_tasks += config::connector_io_tasks_dec;
+                flag += "[INC]";
+            }
+        }
     } else {
-        io_tasks += config::connector_io_tasks_inc;
+        try_add_before = false;
+        io_tasks -= config::connector_io_tasks_dec;
     }
     io_tasks = std::min(io_tasks, _io_tasks_per_scan_operator);
     io_tasks = std::max(io_tasks, MIN_IO_TASKS);
 
-    VLOG_FILE << "[XXX] pick mosrsel. id = " << _driver_sequence << ", cs = " << cs_speed << "( " << _cs_pull_rows
-              << "/" << _cs_pull_time << "), old = " << last_cs_speed << ", op = " << op_speed << "(" << _op_pull_rows
-              << "/" << _op_running_time << "), value = " << io_tasks;
+    if (!_enable_adaptive_io_tasks) {
+        io_tasks = _io_tasks_per_scan_operator;
+    }
+
+    // VLOG_FILE << "[XXX] pick mosrsel. id = " << _driver_sequence << ", cs = " << cs_speed << "( " << _cs_pull_rows
+    //           << "/" << cs_running_time << "), old = " << last_cs_speed << "(" << cs_speed / last_cs_speed
+    //           << "), op = " << op_speed << "(" << _op_pull_rows << "/" << _op_running_time << "), value = " << io_tasks
+    //           << ", current = " << _num_running_io_tasks << ", flag = " << flag << ", unplug = " << _unpluging  << ", chunk/thres = "
+    //           << num_buffered_chunks() << "/" << _buffer_unplug_threshold();
+
+    VLOG_FILE << "[XXX] pick mosrsel. id = " << _driver_sequence << ", cs = " << cs_speed << ", old = " << last_cs_speed
+              << ", op = " << op_speed << ", proposal = " << io_tasks << ", current = " << _num_running_io_tasks
+              << ", flag = " << flag << ", unplug = " << _unpluging << ", chunk/thres = " << num_buffered_chunks()
+              << "/" << _buffer_unplug_threshold();
+
     last_cs_speed = cs_speed;
     return io_tasks;
 }
@@ -304,29 +349,24 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         return Status::EndOfFile("limit reach");
     }
 
-    int64_t time_spent_ns = 0;
-    {
-        SCOPED_RAW_TIMER(&time_spent_ns);
-
-        while (_status.ok()) {
-            ChunkPtr tmp;
-            _status = _data_source->get_next(state, &tmp);
-            if (_status.ok()) {
-                if (tmp->num_rows() == 0) continue;
-                _ck_acc.push(tmp);
-                if (_ck_acc.has_output()) break;
-            } else if (!_status.is_end_of_file()) {
-                if (_status.is_time_out()) {
-                    Status t = _status;
-                    _status = Status::OK();
-                    return t;
-                } else {
-                    return _status;
-                }
+    while (_status.ok()) {
+        ChunkPtr tmp;
+        _status = _data_source->get_next(state, &tmp);
+        if (_status.ok()) {
+            if (tmp->num_rows() == 0) continue;
+            _ck_acc.push(tmp);
+            if (_ck_acc.has_output()) break;
+        } else if (!_status.is_end_of_file()) {
+            if (_status.is_time_out()) {
+                Status t = _status;
+                _status = Status::OK();
+                return t;
             } else {
-                _ck_acc.finalize();
-                DCHECK(_status.is_end_of_file());
+                return _status;
             }
+        } else {
+            _ck_acc.finalize();
+            DCHECK(_status.is_end_of_file());
         }
     }
 
@@ -336,8 +376,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     _cpu_time_spent_ns = _data_source->cpu_time_spent();
     if (_ck_acc.has_output()) {
         *chunk = std::move(_ck_acc.pull());
-        _op->_cs_pull_time += time_spent_ns;
-        _op->_cs_pull_rows += (*chunk)->num_rows();
+        _op->_cs_pull_rows = _op->_cs_pull_rows + 1;
         _rows_read += (*chunk)->num_rows();
         _chunk_buffer.update_limiter(chunk->get());
         return Status::OK();

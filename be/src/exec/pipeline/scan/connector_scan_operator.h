@@ -78,7 +78,7 @@ public:
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
     int available_pickup_morsel_count() override;
-    void begin_pull_chunk(ChunkPtr res) override { _op_pull_rows += res->num_rows(); }
+    void begin_pull_chunk(ChunkPtr res) override;
     void begin_driver_process() override;
     void after_pull_chunk(int64_t time) override;
     void after_driver_process() override;
@@ -88,13 +88,14 @@ public:
     mutable int expected_io_tasks = 0;
     int current_io_tasks = 0;
     int64_t last_check_time = 0;
-    int last_delta = 1;
+    bool try_add_before = false;
     double last_cs_speed = 0;
+    double expect_ratio = 0;
     mutable int64_t early_cut_all_io_tasks = 0;
-    std::atomic_int64_t _cs_pull_time = 0;
-    std::atomic_int64_t _cs_pull_rows = 0;
+    std::atomic<int64_t> _cs_pull_rows = 0;
     int64_t _op_running_time = 0;
     int64_t _op_pull_rows = 0;
+    int64_t _start_running_time = 0;
     bool _enable_adaptive_io_tasks = true;
 };
 
