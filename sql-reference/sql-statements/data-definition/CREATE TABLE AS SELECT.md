@@ -4,6 +4,8 @@
 
 CREATE TABLE AS SELECT（简称 CTAS）语句可用于同步或异步查询原表并基于查询结果创建新表，然后将查询结果插入到新表中。
 
+您可以通过 [SUBMIT TASK](../data-manipulation/SUBMIT%20TASK.md) 创建异步 CTAS 任务。
+
 ## 语法
 
 - 同步查询原表并基于查询结果创建新表，然后将查询结果插入到新表中。
