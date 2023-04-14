@@ -102,8 +102,8 @@ public class LocalWarehouse extends Warehouse {
     }
 
     @Override
-    public void addNodes(Map<Long, ComputeNode> cns) {
-        cluster.addNodes(cns, this.getFullName());
+    public void addNodes(ComputeNode cn) {
+        cluster.addNodes(cn, this.getFullName());
     }
 
     @Override
@@ -115,5 +115,4 @@ public class LocalWarehouse extends Warehouse {
     public void setClusters(Map<Long, Cluster> clusters) throws DdlException {
         throw new SemanticException("not implemented");
     }
-
 }

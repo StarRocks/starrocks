@@ -81,7 +81,7 @@ public class WarehouseManager implements Writable {
     public Warehouse getAnyAvailableWarehouse() {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return fullNameToWh.entrySet().
-                    stream().filter(e -> e.getValue().getAnyAvailableCluster().getComputeNodeMap().size() > 0).
+                    stream().filter(e -> e.getValue().getAnyAvailableCluster().getComputeNodeList().size() > 0).
                     findAny().map(Map.Entry::getValue).orElse(null);
         }
     }

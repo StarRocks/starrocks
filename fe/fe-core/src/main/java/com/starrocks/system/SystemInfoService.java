@@ -91,7 +91,6 @@ import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -126,7 +125,6 @@ public class SystemInfoService {
     public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
             throws DdlException {
 
-        Map<Long, ComputeNode> computeNodes = new HashMap<>();
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
             if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
@@ -135,10 +133,8 @@ public class SystemInfoService {
             if (getComputeNodeWithHeartbeatPort(pair.first, pair.second) != null) {
                 throw new DdlException("Same compute node already exists[" + pair.first + ":" + pair.second + "]");
             }
-        }
 
-        for (Pair<String, Integer> pair : hostPortPairs) {
-            computeNodes.putAll(addComputeNode(pair.first, pair.second));
+            addComputeNode(pair.first, pair.second);
         }
     }
 
@@ -162,13 +158,11 @@ public class SystemInfoService {
     }
 
     // Final entry of adding compute node
-    private Map<Long, ComputeNode> addComputeNode(String host, int heartbeatPort) throws DdlException {
-        Map<Long, ComputeNode> computeNodes = new HashMap<>();
+    private void addComputeNode(String host, int heartbeatPort) throws DdlException {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         // update idToComputor
         Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
         copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
-        computeNodes.put(newComputeNode.getId(), newComputeNode);
         idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
 
         setComputeNodeOwner(newComputeNode);
@@ -177,14 +171,12 @@ public class SystemInfoService {
         if (Config.only_use_compute_node) {
             String currentWh = ConnectContext.get().getCurrentWarehouse();
             Warehouse currentWarehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(currentWh);
-            currentWarehouse.addNodes(computeNodes);
+            currentWarehouse.addNodes(newComputeNode);
         }
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
         LOG.info("finished to add {} ", newComputeNode);
-
-        return computeNodes;
     }
     private void setComputeNodeOwner(ComputeNode computeNode) {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
@@ -1013,9 +1005,7 @@ public class SystemInfoService {
         // add it to warehouse
         if (Config.only_use_compute_node) {
             String warehouseName = newComputeNode.getWarehouseName();
-            Map<Long, ComputeNode> cns  = new HashMap<>();
-            cns.put(newComputeNode.getId(), newComputeNode);
-            GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName).addNodes(cns);
+            GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName).addNodes(newComputeNode);
         }
     }
 

@@ -95,7 +95,7 @@ public abstract class Warehouse implements Writable {
 
     public abstract void setClusters(Map<Long, Cluster> clusters) throws DdlException;
 
-    public abstract void addNodes(Map<Long, ComputeNode> cns);
+    public abstract void addNodes(ComputeNode cn);
 
     @Override
     public void write(DataOutput out) throws IOException {

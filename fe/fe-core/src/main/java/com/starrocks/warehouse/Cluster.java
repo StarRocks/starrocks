@@ -29,16 +29,16 @@ import org.jline.utils.Log;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Cluster implements Writable {
     @SerializedName(value = "id")
     private long id;
     @SerializedName(value = "wgid")
     private long workerGroupId;
-    @SerializedName(value = "cnMaps")
-    private Map<Long, ComputeNode> computeNodeMap = new HashMap<>();
+    @SerializedName(value = "computeNodeList")
+    private List<ComputeNode> computeNodeList = new ArrayList<>();
 
     public Cluster(long id) {
         this.id = id;
@@ -58,24 +58,21 @@ public class Cluster implements Writable {
         this.workerGroupId = workerGroupId;
     }
 
-    public void addNodes(Map<Long, ComputeNode> cns, String warehouseName) {
-        computeNodeMap.putAll(cns);
+    public void addNodes(ComputeNode cn, String warehouseName) {
+        computeNodeList.add(cn);
         if (RunMode.allowCreateLakeTable()) {
             // add worker to group
-            for (Map.Entry<Long, ComputeNode> entry : cns.entrySet()) {
-                ComputeNode computeNode = entry.getValue();
-                computeNode.setWorkerGroupId(workerGroupId);
-                computeNode.setWarehouseName(warehouseName);
-            }
+            cn.setWorkerGroupId(workerGroupId);
+            cn.setWarehouseName(warehouseName);
         }
     }
 
-    public Map<Long, ComputeNode> getComputeNodeMap() {
-        return computeNodeMap;
+    public List<ComputeNode> getComputeNodeList() {
+        return computeNodeList;
     }
 
     public void clearComputeNodes() {
-        computeNodeMap.clear();
+        computeNodeList.clear();
     }
 
     public long getWorkerGroupId() {
