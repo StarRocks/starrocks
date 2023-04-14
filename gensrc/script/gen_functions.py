@@ -73,6 +73,7 @@ ${license}
 #include "exprs/struct_functions.h"
 #include "exprs/math_functions.h"
 #include "exprs/bit_functions.h"
+#include "exprs/binary_functions.h"
 #include "exprs/string_functions.h"
 #include "exprs/time_functions.h"
 #include "exprs/like_predicate.h"
