@@ -177,9 +177,14 @@ Status NodeChannel::open_wait() {
 
     // add batch closure
     _add_batch_closure = ReusableClosure<PTabletWriterAddBatchResult>::create();
-    _add_batch_closure->addFailedHandler([this]() {
+    _add_batch_closure->addFailedHandler([this](const std::string& err_msg) {
         _cancelled = true;
         _err_st = _add_batch_closure->result.status();
+        if (_err_st.ok()) {
+            _err_st = Status::Cancelled(err_msg);
+        }
+        LOG(WARNING) << "tablet_writer_add_chunk failed, load_info: " << this->print_load_info()
+                     << " ,error: " << err_msg;
     });
 
     _add_batch_closure->addSuccessHandler([this](const PTabletWriterAddBatchResult& result, bool is_last_rpc) {
