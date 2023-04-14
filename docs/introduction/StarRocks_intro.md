@@ -20,11 +20,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPart title="Get started​">
 <NavBoxPartItem>
 
-<<<<<<< HEAD
-- [Deploy StarRocks](../quick_start/Deploy.md)
-=======
 - [Deploy with Docker](../quick_start/deploy_with_docker.md)
->>>>>>> c0f6c8d49 (Upd docker deploy (#21624))
 - [Create a table](../quick_start/create_table.md)
 - [Ingest and query data](../quick_start/Import_and_query.md)
 
