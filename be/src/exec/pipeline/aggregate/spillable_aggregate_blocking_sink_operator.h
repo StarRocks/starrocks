@@ -40,7 +40,9 @@ public:
 
     Status prepare(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
-    bool pending_finish() const override { return _aggregator->has_pending_data(); }
+    bool pending_finish() const override {
+        return _aggregator->has_pending_data() || _aggregator->has_pending_restore();
+    }
 
 private:
     Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);

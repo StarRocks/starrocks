@@ -837,7 +837,7 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
 // spill dirs
-CONF_String(spill_local_storage_dir, "spill");
+CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
 // when spill occurs, whether enable skip synchronous flush
 CONF_mBool(experimental_spill_skip_sync, "true");
 // spill Initial number of partitions

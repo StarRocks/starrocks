@@ -51,10 +51,8 @@ Status JsonFunctions::_get_parsed_paths(const std::vector<std::string>& path_exp
         auto& current = path_exprs[i];
 
         if (i == 0) {
-            if (current != "$") {
+            if (current.size() == 0 || current[0] != '$') {
                 parsed_paths->emplace_back("", -1, true);
-            } else {
-                parsed_paths->emplace_back("$", -1, true);
                 continue;
             }
         }
