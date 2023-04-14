@@ -42,6 +42,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropRollupClause;
@@ -496,6 +497,15 @@ public class AlterTableStatementAnalyzer {
                 clause.analyze(null);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCompactionClause(CompactionClause clause, ConnectContext context) {
+            final List<String> partitionNames = clause.getPartitionNames();
+            if (partitionNames.stream().anyMatch(Strings::isNullOrEmpty)) {
+                throw new SemanticException("there are empty partition name");
             }
             return null;
         }
