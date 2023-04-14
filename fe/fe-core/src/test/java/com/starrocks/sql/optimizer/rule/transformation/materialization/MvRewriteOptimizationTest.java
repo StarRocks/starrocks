@@ -2361,4 +2361,35 @@ public class MvRewriteOptimizationTest {
                 "     PREAGGREGATION: ON");
         dropMv("test", "forbid_mv_1");
     }
+
+    @Test
+    public void testNullPartitionRewriteWithLoad() throws Exception {
+        {
+            cluster.runSql("test", "insert into test_base_part values(1, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(100, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(200, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(1000, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(2000, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(2500, 1, 2, 3)");
+
+            createAndRefreshMv("test", "partial_mv_12", "CREATE MATERIALIZED VIEW `partial_mv_12`\n" +
+                    "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                    "PARTITION BY (`c3`)\n" +
+                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
+                    "REFRESH MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"storage_medium\" = \"HDD\"\n" +
+                    ")\n" +
+                    "AS SELECT `c1`, `c3`, sum(`c4`) AS `total`\n" +
+                    "FROM `test_base_part`\n" +
+                    "WHERE `c3` is null\n" +
+                    "GROUP BY `c3`, `c1`;");
+
+            String query = "select c1, c3, sum(c4) from test_base_part group by c1, c3;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "partial_mv_12", "PREDICATES: 10: c3 IS NOT NULL");
+            starRocksAssert.dropMaterializedView("partial_mv_12");
+        }
+    }
 }
