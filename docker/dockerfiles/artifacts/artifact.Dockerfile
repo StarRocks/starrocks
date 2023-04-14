@@ -9,15 +9,17 @@
 
 ARG builder=starrocks/dev-env-ubuntu:main-latest
 ARG RELEASE_VERSION
+ARG BUILD_TYPE=Release
 ARG MAVEN_OPTS="-Dmaven.artifact.threads=128"
 
 FROM ${builder} as fe-builder
 ARG RELEASE_VERSION
+ARG BUILD_TYPE
 ARG MAVEN_OPTS
 COPY . /build/starrocks
 WORKDIR /build/starrocks
 # clean and build Frontend and Spark Dpp application
-RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --fe --clean
+RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --fe --clean
 
 
 FROM ${builder} as broker-builder
@@ -33,7 +35,7 @@ FROM ${builder} as be-builder
 ARG RELEASE_VERSION
 ARG MAVEN_OPTS
 # build Backend in different mode (build_type could be Release, DEBUG, or ASAN). Default value is Release.
-ARG BUILD_TYPE=Release
+ARG BUILD_TYPE
 COPY . /build/starrocks
 WORKDIR /build/starrocks
 RUN --mount=type=cache,target=/root/.m2/ STARROCKS_VERSION=${RELEASE_VERSION} BUILD_TYPE=${BUILD_TYPE} MAVEN_OPTS=${MAVEN_OPTS} ./build.sh --be --use-staros --clean -j `nproc`
