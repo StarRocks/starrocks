@@ -534,7 +534,7 @@ The parameters in the preceding API operations are as follows:
 
 - StarRocks needs to populate the query cache with the computation results of queries that are initiated for the first time. As a result, the query performance may be slightly lower than expected, and the query latency is increased.
 - If you configure a large query cache size, the amount of memory that can be provisioned to query evaluation on the BE is decreased. We recommend that the query cache size do not exceed 1/6 of the memory capacity provisioned to query evaluation.
-- If the number of tablets that need to be processed is smaller than the value of `pipeline_dop`, the query cache does not work. To enable the query cache to work, you can set `pipeline_dop` to a smaller value such as `1`.
+- If the number of tablets that need to be processed is smaller than the value of `pipeline_dop`, the query cache does not work. To enable the query cache to work, you can set `pipeline_dop` to a smaller value such as `1`. From v3.0 onwards, StarRocks adaptively adjusts this parameter based on query parallelism.
 
 ## Examples
 

@@ -266,6 +266,8 @@ SELECT /*+ SET_VAR
 
   The parallelism of a pipeline instance, which is used to adjust the query concurrency. Default value: 0, indicating the system automatically adjusts the parallelism of each pipeline instance. You can also set this parameter to a value greater than 0. Generally, set the value to half the number of physical CPU cores.
 
+  From v3.0 onwards, StarRocks adaptively adjusts this parameter based on query parallelism.
+
 * enable_sort_aggregate (2.5 and later)
 
   Specifies whether to enable sorted streaming. `true` indicates sorted streaming is enabled to sort data in data streams.
