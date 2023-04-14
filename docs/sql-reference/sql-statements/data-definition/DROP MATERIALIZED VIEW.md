@@ -32,7 +32,7 @@ Example 1: Drop an existing materialized view
 1. View all existing materialized views in the database.
 
   ```Plain
-  MySQL > SHOW MATERIALIZED VIEW\G
+  MySQL > SHOW MATERIALIZED VIEWS\G
   *************************** 1. row ***************************
               id: 470740
           name: order_mv1
@@ -51,7 +51,7 @@ Example 1: Drop an existing materialized view
 3. Check if the dropped materialized view exists.
 
   ```Plain
-  MySQL > SHOW MATERIALIZED VIEW;
+  MySQL > SHOW MATERIALIZED VIEWS;
   Empty set (0.01 sec)
   ```
 

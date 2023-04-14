@@ -56,7 +56,7 @@ The creation of a materialized view is currently an asynchronous operation. The 
 
 * View all materialized views under this database
 
-`SHOW MATERIALIZED VIEW [IN|FROM db_name]`
+`SHOW MATERIALIZED VIEWS [IN|FROM db_name]`
 
 * View the table structure of the specified materialized view
 

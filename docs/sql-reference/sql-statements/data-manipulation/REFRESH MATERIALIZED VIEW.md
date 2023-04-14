@@ -6,7 +6,7 @@ Manually refresh a specific asynchronous materialized view or partitions within.
 
 > **CAUTION**
 >
-> You can only manually refresh materialized views that adopt ASYNC or MANUAL refresh strategy. You can check the refresh strategy of an asynchronous materialized view using [SHOW MATERIALIZED VIEW](../data-manipulation/SHOW%20MATERIALIZED%20VIEW.md).
+> You can only manually refresh materialized views that adopt ASYNC or MANUAL refresh strategy. You can check the refresh strategy of an asynchronous materialized view using [SHOW MATERIALIZED VIEWS](../data-manipulation/SHOW%20MATERIALIZED%20VIEW.md).
 
 ## Syntax
 

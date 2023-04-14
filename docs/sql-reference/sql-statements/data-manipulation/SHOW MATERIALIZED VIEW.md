@@ -1,13 +1,15 @@
-# SHOW MATERIALIZED VIEW
+# SHOW MATERIALIZED VIEWS
 
 ## Description
 
 Shows all or one specific asynchronous materialized view.
 
+Since v3.0, the name of this statement is changed from SHOW MATERIALIZED VIEW to SHOW MATERIALIZED VIEWS.
+
 ## Syntax
 
 ```SQL
-SHOW MATERIALIZED VIEW
+SHOW MATERIALIZED VIEWS
 [FROM db_name]
 [
 WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
@@ -107,7 +109,7 @@ REFRESH MATERIALIZED VIEW customer_mv;
 Example 1: Show a specific materialized view.
 
 ```Plain
-mysql> SHOW MATERIALIZED VIEW WHERE NAME='customer_mv'\G;
+mysql> SHOW MATERIALIZED VIEWS WHERE NAME='customer_mv'\G;
 *************************** 1. row ***************************
                         id: 10142
                       name: customer_mv
@@ -138,7 +140,7 @@ GROUP BY `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`;
 Example 2: Show materialized views by matching the name.
 
 ```Plain
-mysql> SHOW MATERIALIZED VIEW WHERE NAME LIKE 'customer_mv'\G;
+mysql> SHOW MATERIALIZED VIEWS WHERE NAME LIKE 'customer_mv'\G;
 *************************** 1. row ***************************
                         id: 10142
                       name: customer_mv
