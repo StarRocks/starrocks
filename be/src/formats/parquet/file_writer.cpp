@@ -19,7 +19,6 @@
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
 #include <parquet/arrow/writer.h>
-#include <parquet/exception.h>
 
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -337,7 +336,7 @@ Status FileWriterBase::write(Chunk* chunk) {
 }
 
 ChunkWriter::ChunkWriter(::parquet::RowGroupWriter* rg_writer, const std::vector<TypeDescriptor>& type_descs,
-                         const std::shared_ptr<::parquet::schema::GroupNode> schema)
+                         const std::shared_ptr<::parquet::schema::GroupNode>& schema)
         : _rg_writer(rg_writer), _type_descs(type_descs), _schema(schema) {
     int num_columns = rg_writer->num_columns();
     _estimated_buffered_bytes.resize(num_columns);
@@ -922,7 +921,8 @@ std::vector<uint8_t> ChunkWriter::_make_null_bitset(size_t n, const uint8_t* nul
     return bitset;
 }
 
-void ChunkWriter::_populate_def_levels(std::vector<int16_t>& def_levels, const Context& ctx, const uint8_t* nulls) const {
+void ChunkWriter::_populate_def_levels(std::vector<int16_t>& def_levels, const Context& ctx,
+                                       const uint8_t* nulls) const {
     DCHECK(def_levels.empty());
     def_levels.reserve(ctx.size());
     for (auto i = 0; i < ctx.size(); i++) {
@@ -990,7 +990,7 @@ AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, st
                                  const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
                                  RuntimeProfile* parent_profile)
         : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs),
-          _file_name(file_name),
+          _file_name(std::move(file_name)),
           _file_dir(file_dir),
           _executor_pool(executor_pool),
           _parent_profile(parent_profile) {
