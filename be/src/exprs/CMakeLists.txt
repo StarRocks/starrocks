@@ -30,6 +30,7 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_window.cpp
   anyval_util.cpp
   base64.cpp
+  binary_functions.cpp
   expr_context.cpp
   expr.cpp
   function_context.cpp
