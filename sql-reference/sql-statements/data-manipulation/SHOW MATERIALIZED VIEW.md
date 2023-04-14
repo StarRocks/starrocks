@@ -80,32 +80,20 @@ PROPERTIES (
 );
 
 -- Create MV: customer_mv
-create materialized view customer_mv
-distributed by hash(c_custkey) buckets 10
-refresh manual
-properties (
+CREATE MATERIALIZED VIEW customer_mv
+DISTRIBUTED BY HASH(c_custkey) buckets 10
+REFRESH MANUAL
+PROPERTIES (
     "replication_num" = "1"
 )
-as select
+AS SELECT
               c_custkey, c_phone, c_acctbal, count(1) as c_count, sum(c_acctbal) as c_sum
-   from
+   FROM
               customer
-   group by c_custkey, c_phone, c_acctbal;
+   GROUP BY c_custkey, c_phone, c_acctbal;
 
--- Create MV: customer_mv
-create materialized view test_customer_mv
-distributed by hash(c_custkey) buckets 10
-refresh manual
-properties (
-    "replication_num" = "1"
-)
-as select
-              c_custkey, c_phone, c_acctbal, count(1) as c_count, sum(c_acctbal) as c_sum
-   from
-              customer
-   group by c_custkey, c_phone, c_acctbal; 
-
-refresh materialized view customer_mv;
+-- Refresh the MV
+REFRESH MATERIALIZED VIEW customer_mv;
 ```
 
 示例一：通过精确匹配查看特定物化视图
