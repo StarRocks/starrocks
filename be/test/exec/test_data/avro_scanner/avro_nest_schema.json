@@ -1,0 +1,20 @@
+{
+    "type": "record",
+    "name": "nest",
+    "fields" : [
+        {"name": "booleantype", "type" : "boolean"},
+        {"name": "longtype", "type": "long"},
+        {"name": "doubletype", "type": "double"},
+        {"name": "stringtype", "type": "string"},
+        {"name": "nesttype", "type": 
+            {
+                "type": "record",
+                "name": "ThirdRecord",
+                "fields" : [
+                    {"name": "booleantype", "type" : "boolean"},
+                    {"name": "longtype", "type": "long"}
+                ]
+            }
+        }
+    ]
+}
