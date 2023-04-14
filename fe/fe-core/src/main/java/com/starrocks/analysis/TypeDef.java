@@ -77,10 +77,6 @@ public class TypeDef implements ParseNode {
         return new TypeDef(ScalarType.createVarchar(len));
     }
 
-    public static TypeDef createChar(int len) {
-        return new TypeDef(ScalarType.createCharType(len));
-    }
-
     //
     @Override
     public void analyze(Analyzer analyzer) throws AnalysisException {
@@ -103,13 +99,6 @@ public class TypeDef implements ParseNode {
     }
 
     public void analyze(boolean isOlap) throws AnalysisException {
-        if (isOlap && (!FeConstants.runningUnitTest)) {
-            // we haven't support create table with map or struct type column in native table
-            Type innerType = Type.getInnermostType(parsedType);
-            if (innerType.isMapType() || innerType.isStructType()) {
-                throw new AnalysisException("Unsupported data type: " + parsedType.toSql());
-            }
-        }
         analyze();
     }
 
