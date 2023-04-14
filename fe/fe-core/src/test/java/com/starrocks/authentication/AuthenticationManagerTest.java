@@ -170,7 +170,8 @@ public class AuthenticationManagerTest {
         AuthorizationManager authorizationManager = ctx.getGlobalStateMgr().getAuthorizationManager();
 
         String sql = "create role test_r1";
-        CreateRoleStmt createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        CreateRoleStmt createStmt =
+                (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         authorizationManager.createRole(createStmt);
 
         sql = "create role test_r2";
@@ -292,9 +293,11 @@ public class AuthenticationManagerTest {
         sql = "drop user 'test'@'10.1.1.1' ";
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
         DDLStmtExecutor.execute(dropStmt, ctx);
+        Assert.assertFalse(manager.doesUserExist(testUserWithIp));
 
         // can't get max connection after all test user are dropped
-        Assert.assertThrows(NullPointerException.class, () -> manager.getMaxConn("test"));
+        Assert.assertEquals(AuthenticationManager.DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER,
+                manager.getMaxConn("test"));
     }
 
     @Test

@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/aggregate/sorted_aggregate_streaming_sink_operator.h"
 
+#include "column/vectorized_fwd.h"
 #include "exec/sorted_streaming_aggregator.h"
 #include "runtime/current_thread.h"
 
@@ -75,9 +76,14 @@ Status SortedAggregateStreamingSinkOperator::push_chunk(RuntimeState* state, con
 
     RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
     RETURN_IF_ERROR(_aggregator->evaluate_agg_fn_exprs(chunk.get()));
-    ASSIGN_OR_RETURN(auto res, _aggregator->streaming_compute_agg_state(chunk_size));
+    ChunkPtr res;
+    if (!_aggregator->only_group_by_exprs()) {
+        ASSIGN_OR_RETURN(res, _aggregator->streaming_compute_agg_state(chunk_size));
+    } else {
+        ASSIGN_OR_RETURN(res, _aggregator->streaming_compute_distinct(chunk_size));
+    }
     DCHECK(_accumulator.need_input());
-    if (!res->is_empty()) {
+    if (res && !res->is_empty()) {
         _accumulator.push(std::move(res));
     }
     if (_accumulator.has_output()) {

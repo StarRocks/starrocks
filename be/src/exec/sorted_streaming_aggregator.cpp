@@ -297,16 +297,7 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
 
     // selector[i] == 0 means selected
     std::vector<uint8_t> selector(chunk_size);
-    size_t selected_size = 0;
-    {
-        SCOPED_TIMER(_agg_stat->agg_compute_timer);
-        for (size_t i = 1; i < _cmp_vector.size(); ++i) {
-            selector[i - 1] = _cmp_vector[i] == 0;
-            selected_size += !selector[i - 1];
-        }
-        // we will never select the last rows
-        selector[chunk_size - 1] = 1;
-    }
+    size_t selected_size = _init_selector(selector, chunk_size);
 
     // finalize state
     // group[i] != group[i - 1] means we have add a new state for group[i], then we need call finalize for group[i - 1]
@@ -336,6 +327,51 @@ StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_agg_state(size_t
     DCHECK(!_last_columns[0]->empty());
 
     return result_chunk;
+}
+
+StatusOr<ChunkPtr> SortedStreamingAggregator::streaming_compute_distinct(size_t chunk_size) {
+    if (chunk_size == 0) {
+        return std::make_shared<Chunk>();
+    }
+    _cmp_vector.resize(chunk_size);
+    if (_last_columns.empty()) {
+        _last_columns.resize(_group_by_columns.size());
+        for (int i = 0; i < _last_columns.size(); ++i) {
+            _last_columns[i] = _group_by_columns[i]->clone_empty();
+        }
+    }
+
+    RETURN_IF_ERROR(_compute_group_by(chunk_size));
+    // selector[i] == 0 means selected
+    std::vector<uint8_t> selector(chunk_size);
+    size_t selected_size = _init_selector(selector, chunk_size);
+    auto res_group_by_columns = _create_group_by_columns(chunk_size);
+    RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selected_size, selector, res_group_by_columns));
+    auto result_chunk = _build_output_chunk(res_group_by_columns, {}, false);
+
+    // prepare for next
+    for (size_t i = 0; i < _last_columns.size(); ++i) {
+        // last column should never be the same column with new input column
+        DCHECK_NE(_last_columns[i].get(), _group_by_columns[i].get());
+        _last_columns[i]->reset_column();
+        _last_columns[i]->append(*_group_by_columns[i], chunk_size - 1, 1);
+    }
+
+    return result_chunk;
+}
+
+size_t SortedStreamingAggregator::_init_selector(std::vector<uint8_t>& selector, size_t chunk_size) {
+    size_t selected_size = 0;
+    {
+        SCOPED_TIMER(_agg_stat->agg_compute_timer);
+        for (size_t i = 1; i < _cmp_vector.size(); ++i) {
+            selector[i - 1] = _cmp_vector[i] == 0;
+            selected_size += !selector[i - 1];
+        }
+        // we will never select the last rows
+        selector[chunk_size - 1] = 1;
+    }
+    return selected_size;
 }
 
 Status SortedStreamingAggregator::_compute_group_by(size_t chunk_size) {
@@ -462,7 +498,7 @@ Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, siz
 }
 
 StatusOr<ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
-    if (_last_state == nullptr) {
+    if (_last_state == nullptr && _last_columns.empty()) {
         return nullptr;
     }
     bool use_intermediate = _use_intermediate_as_output();

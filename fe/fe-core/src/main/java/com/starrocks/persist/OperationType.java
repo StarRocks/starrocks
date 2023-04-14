@@ -294,6 +294,7 @@ public class OperationType {
     public static final short OP_DROP_ROLE_V2 = 10266;
     public static final short OP_AUTH_UPGRADE_V2 = 10267;
     public static final short OP_UPDATE_USER_PROP_V2 = 10268;
+    public static final short OP_CREATE_SECURITY_INTEGRATION = 10269;
 
     // integrate with starmgr
     public static final short OP_STARMGR = 11000;
