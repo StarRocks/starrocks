@@ -306,6 +306,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (stmt.getMaxBatchRows() != -1) {
             this.maxBatchRows = stmt.getMaxBatchRows();
         }
+        jobProperties.put(LoadStmt.LOG_REJECTED_RECORD_NUM, String.valueOf(stmt.getLogRejectedRecordNum()));
         jobProperties.put(LoadStmt.PARTIAL_UPDATE, String.valueOf(stmt.isPartialUpdate()));
         jobProperties.put(LoadStmt.TIMEZONE, stmt.getTimezone());
         jobProperties.put(LoadStmt.STRICT_MODE, String.valueOf(stmt.isStrictMode()));
@@ -546,6 +547,15 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         return maxBatchRows;
     }
 
+    public long getLogRejectedRecordNum() {
+        String v = jobProperties.get(LoadStmt.LOG_REJECTED_RECORD_NUM);
+        if (v == null) {
+            return 0;
+        } else {
+            return Long.valueOf(v);
+        }
+    }
+
     public long getTaskSchedIntervalS() {
         return taskSchedIntervalS;
     }
@@ -752,8 +762,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             if (table == null) {
                 throw new MetaNotFoundException("table " + this.tableId + " does not exist");
             }
+            StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
+            info.setTxnId(txnId);
             StreamLoadPlanner planner =
-                    new StreamLoadPlanner(db, (OlapTable) table, StreamLoadInfo.fromRoutineLoadJob(this));
+                    new StreamLoadPlanner(db, (OlapTable) table, info);
             TExecPlanFragmentParams planParams = planner.plan(loadId);
             planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
             // add table indexes to transaction state
@@ -763,6 +775,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 throw new MetaNotFoundException("txn does not exist: " + txnId);
             }
             txnState.addTableIndexes(planner.getDestTable());
+
+            planParams.setImport_label(txnState.getLabel());
+            planParams.setDb_name(db.getFullName());
+            planParams.setLoad_job_id(txnId);
 
             return planParams;
         } finally {

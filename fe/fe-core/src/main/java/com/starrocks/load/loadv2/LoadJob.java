@@ -126,6 +126,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     protected boolean partialUpdate = false;
     protected int priority = LoadPriority.NORMAL_VALUE;
+    protected long logRejectedRecordNum = 0;
     // reuse deleteFlag as partialUpdate
     // @Deprecated
     // protected boolean deleteFlag = false;
@@ -339,6 +340,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
             if (properties.containsKey(LoadStmt.PRIORITY)) {
                 priority = LoadPriority.priorityByName(properties.get(LoadStmt.PRIORITY));
+            }
+
+            if (properties.containsKey(LoadStmt.LOG_REJECTED_RECORD_NUM)) {
+                logRejectedRecordNum = Long.parseLong(properties.get(LoadStmt.LOG_REJECTED_RECORD_NUM));
             }
         }
     }
@@ -877,6 +882,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             if (!loadingStatus.getTrackingUrl().equals(EtlStatus.DEFAULT_TRACKING_URL)) {
                 info.setUrl(loadingStatus.getTrackingUrl());
                 info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
+            }
+            if (!loadingStatus.getRejectedRecordPaths().isEmpty()) {
+                info.setRejected_record_path(Joiner.on(", ").join(loadingStatus.getRejectedRecordPaths()));
             }
             info.setJob_details(loadingStatus.getLoadStatistic().toShowInfoStr());
             info.setNum_filtered_rows(loadingStatus.getLoadStatistic().totalFilteredRows());

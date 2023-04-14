@@ -590,6 +590,7 @@ public class SchemaTable extends Table {
                                     .column("ERROR_MSG", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("TRACKING_URL", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("TRACKING_SQL", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("REJECTED_RECORD_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .build()))
                     .put("load_tracking_logs", new SchemaTable(
                             SystemId.LOAD_TRACKING_LOGS_ID,
