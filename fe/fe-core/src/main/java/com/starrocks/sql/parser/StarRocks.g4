@@ -217,6 +217,19 @@ statement
     | showGrantsStatement
     | createSecurityIntegrationStatement
 
+    // Security Policy
+    | createMaskingPolicyStatement
+    | dropMaskingPolicyStatement
+    | alterMaskingPolicyStatement
+    | showMaskingPolicyStatement
+    | showCreateMaskingPolicyStatement
+
+    | createRowAccessPolicyStatement
+    | dropRowAccessPolicyStatement
+    | alterRowAccessPolicyStatement
+    | showRowAccessPolicyStatement
+    | showCreateRowAccessPolicyStatement
+
     // Backup Restore Statement
     | backupStatement
     | cancelBackupStatement
@@ -507,6 +520,10 @@ alterViewStatement
 
 dropViewStatement
     : DROP VIEW (IF EXISTS)? qualifiedName
+    ;
+
+columnNameWithComment
+    : columnName=identifier comment?
     ;
 
 // ------------------------------------------- Task Statement ----------------------------------------------------------
@@ -1323,6 +1340,10 @@ showGrantsStatement
     | SHOW GRANTS FOR ROLE identifierOrString
     ;
 
+createSecurityIntegrationStatement
+    : CREATE SECURITY INTEGRATION identifier properties
+    ;
+
 authOption
     : IDENTIFIED BY PASSWORD? string                                                                    #authWithoutPlugin
     | IDENTIFIED WITH identifierOrString ((BY | AS) string)?                                            #authWithPlugin
@@ -1346,24 +1367,71 @@ privilegeTypeList
 
 privilegeType
     : ALL PRIVILEGES?
-    | GRANT| NODE| OPERATE| DELETE| DROP| INSERT| SELECT | ALTER| EXPORT| UPDATE| USAGE| PLUGIN| FILE| BLACKLIST
-    | REPOSITORY| REFRESH| IMPERSONATE
-    | CREATE (DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW| RESOURCE| RESOURCE GROUP|
-        EXTERNAL CATALOG)
+    | ALTER | APPLY | BLACKLIST
+    | CREATE (
+        DATABASE| TABLE| VIEW| FUNCTION| GLOBAL FUNCTION| MATERIALIZED VIEW| RESOURCE| RESOURCE GROUP| EXTERNAL CATALOG | POLICY)
+    | DELETE | DROP | EXPORT | FILE | IMPERSONATE | INSERT | GRANT | NODE | OPERATE
+    | PLUGIN | REPOSITORY| REFRESH | SELECT | UPDATE | USAGE
     ;
 
 privObjectType
-    : TABLE| DATABASE| SYSTEM | RESOURCE| VIEW| CATALOG| MATERIALIZED VIEW| RESOURCE GROUP
+    : CATALOG | DATABASE | MATERIALIZED VIEW | POLICY | RESOURCE | RESOURCE GROUP| SYSTEM | TABLE| VIEW
     ;
 
 privObjectTypePlural
-    : TABLES| DATABASES| USERS| RESOURCES| VIEWS| CATALOGS| MATERIALIZED VIEWS| FUNCTIONS| RESOURCE GROUPS
-    | GLOBAL FUNCTIONS
+    : CATALOGS | DATABASES | FUNCTIONS | GLOBAL FUNCTIONS | MATERIALIZED VIEWS | POLICIES | RESOURCES | RESOURCE GROUPS
+    | TABLES | USERS | VIEWS
     ;
 
-createSecurityIntegrationStatement
-    : CREATE SECURITY INTEGRATION identifier properties
+// ---------------------------------------- Security Policy Statement ---------------------------------------------------
+
+createMaskingPolicyStatement
+    : CREATE (OR REPLACE)? MASKING POLICY (IF NOT EXISTS)? policyName=qualifiedName
+        AS '(' policySignature (',' policySignature)* ')' RETURNS type ARROW expression comment?
     ;
+
+dropMaskingPolicyStatement
+    : DROP (IF EXISTS)? MASKING POLICY policyName=qualifiedName FORCE?
+    ;
+
+alterMaskingPolicyStatement
+    : ALTER MASKING POLICY (IF EXISTS)? policyName=qualifiedName SET BODY ARROW expression
+    | ALTER MASKING POLICY (IF EXISTS)? policyName=qualifiedName SET COMMENT '=' string
+    | ALTER MASKING POLICY (IF EXISTS)? policyName=qualifiedName RENAME TO newPolicyName=identifier
+    ;
+
+showMaskingPolicyStatement
+    : SHOW MASKING POLICIES ((FROM | IN) db=qualifiedName)?
+    ;
+
+showCreateMaskingPolicyStatement
+    : SHOW CREATE MASKING POLICY policyName=qualifiedName
+    ;
+
+createRowAccessPolicyStatement
+    : CREATE (OR REPLACE)? ROW ACCESS POLICY (IF NOT EXISTS)? policyName=qualifiedName
+      AS '(' policySignature (',' policySignature)* ')' RETURNS BOOLEAN ARROW expression comment?
+    ;
+
+dropRowAccessPolicyStatement
+    : DROP (IF EXISTS)? ROW ACCESS POLICY policyName=qualifiedName FORCE?
+    ;
+
+alterRowAccessPolicyStatement
+    : ALTER ROW ACCESS POLICY (IF EXISTS)? policyName=qualifiedName SET BODY ARROW expression
+    | ALTER ROW ACCESS POLICY (IF EXISTS)? policyName=qualifiedName SET COMMENT '=' string
+    | ALTER ROW ACCESS POLICY (IF EXISTS)? policyName=qualifiedName RENAME TO newPolicyName=identifier
+    ;
+
+showRowAccessPolicyStatement
+    : SHOW ROW ACCESS POLICIES ((FROM | IN) db=qualifiedName)?
+    ;
+
+showCreateRowAccessPolicyStatement
+    : SHOW CREATE ROW ACCESS POLICY policyName=qualifiedName
+    ;
+
+policySignature : identifier type;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
 
@@ -2086,10 +2154,6 @@ comment
     : COMMENT string
     ;
 
-columnNameWithComment
-    : identifier comment?
-    ;
-
 outfile
     : INTO OUTFILE file=string fileFormat? properties?
     ;
@@ -2244,10 +2308,12 @@ number
     ;
 
 nonReserved
-    : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
-    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BINARY | BOOLEAN | BROKER | BUCKETS | BUILTIN | BASE
-    | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS | CUMULATIVE
-    | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG | COMPACT
+    : ACCESS | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT
+    | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
+    | BUILTIN | BASE
+    | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
+    | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT
+    | CONFIG | COMPACT
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
@@ -2258,12 +2324,11 @@ nonReserved
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL | LOW_PRIORITY | LOCK
-    | MANUAL | MAP | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE | MINUS
+    | MASKING | MANUAL | MAP | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE | MINUS
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
-    | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
-    | PRIVILEGES
-    | PROPERTIES | PROPERTY
+    | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | POLICY | POLICIES | PRECEDING | PROC
+    | PROCESSLIST | PRIVILEGES | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA | QUALIFY
     | REMOVE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
@@ -2274,7 +2339,7 @@ nonReserved
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION | TRACE
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES
-    | UNBOUNDED | UNCOMMITTED | UNINSTALL | USAGE | USER | USERS | UNLOCK
+    | UNBOUNDED | UNCOMMITTED | UNSET | UNINSTALL | USAGE | USER | USERS | UNLOCK
     | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
