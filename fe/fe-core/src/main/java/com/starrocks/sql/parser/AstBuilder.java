@@ -146,6 +146,7 @@ import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.ColumnSeparator;
+import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
@@ -3434,6 +3435,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String rollupName = ((Identifier) visit(context.rollupName)).getValue();
         String newRollupName = ((Identifier) visit(context.newRollupName)).getValue();
         return new RollupRenameClause(rollupName, newRollupName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitCompactionClause(StarRocksParser.CompactionClauseContext ctx) {
+        NodePosition pos = createPos(ctx);
+        boolean baseCompaction = ctx.CUMULATIVE() == null;
+
+        if (ctx.identifier() != null) {
+            final String partitionName = ((Identifier) visit(ctx.identifier())).getValue();
+            return new CompactionClause(Collections.singletonList(partitionName), baseCompaction, pos);
+        } else if (ctx.identifierList() != null) {
+            final List<Identifier> identifierList = visit(ctx.identifierList().identifier(), Identifier.class);
+            return new CompactionClause(identifierList.stream().map(Identifier::getValue).collect(toList()),
+                    baseCompaction, pos);
+        } else {
+            return new CompactionClause(baseCompaction, pos);
+        }
     }
 
     // ---------Alter partition clause---------

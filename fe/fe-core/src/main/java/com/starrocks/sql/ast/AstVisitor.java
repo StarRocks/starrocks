@@ -855,6 +855,10 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    public R visitCompactionClause(CompactionClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     //Alter partition clause
 
     public R visitModifyPartitionClause(ModifyPartitionClause clause, C context) {
