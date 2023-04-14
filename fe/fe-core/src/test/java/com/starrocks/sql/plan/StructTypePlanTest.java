@@ -31,6 +31,7 @@ public class StructTypePlanTest extends PlanTestBase {
         starRocksAssert.withTable("create table test(c0 INT, " +
                 "c1 struct<a int, b array<struct<a int, b int>>>," +
                 "c2 struct<a int, b int>," +
+                "c2_0 struct<a int, b varchar(10)>, " +
                 "c3 struct<a int, b int, c struct<a int, b int>, d array<int>>) " +
                 "duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
@@ -40,6 +41,27 @@ public class StructTypePlanTest extends PlanTestBase {
     @Before
     public void setup() throws Exception {
         connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
+    }
+
+    @Test
+    public void testStruct() throws Exception {
+        String sql = "select * from test union all select * from test";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:UNION\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  3:EXCHANGE");
+        sql = "select c2 from test union all select c2_0 from test";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:Project\n" +
+                "  |  <slot 6> : CAST(3: c2 AS STRUCT<col0 int(11), col1 varchar(10)>)\n" +
+                "  |  \n" +
+                "  1:OlapScanNode", "0:UNION\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  3:EXCHANGE");
     }
 
     @Test
