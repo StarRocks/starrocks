@@ -170,6 +170,15 @@ struct TOlapTableSink {
     18: optional Types.TWriteQuorumType write_quorum_type
     19: optional bool enable_replicated_storage
     20: optional string merge_condition
+<<<<<<< HEAD
+=======
+    21: optional bool null_expr_in_auto_increment
+    22: optional bool miss_auto_increment_column
+    23: optional bool abort_delete // Deprecated
+    24: optional i32 auto_increment_slot_id
+    25: optional Types.TPartialUpdateMode partial_update_mode
+    26: optional string label
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
 }
 
 struct TSchemaTableSink {

@@ -155,6 +155,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
     public static final String ENABLE_REALTIME_REFRESH_MV = "enable_realtime_mv";
 
+    public static final String LOG_REJECTED_RECORD_NUM = "log_rejected_record_num";
+
     /**
      * Whether to allow the generation of one-phase local aggregation with the local shuffle operator
      * (ScanNode->LocalShuffleNode->OnePhaseAggNode) regardless of the differences between grouping keys
@@ -393,6 +395,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PREFER_COMPUTE_NODE)
     private boolean preferComputeNode = false;
+
+    @VariableMgr.VarAttr(name = LOG_REJECTED_RECORD_NUM)
+    private long logRejectedRecordNum = 0;
 
     /**
      * If enable this variable (only take effect for pipeline), it will deliver fragment instances
@@ -1300,6 +1305,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableRealtimeRefreshMv(boolean enable) {
         this.enableRealtimeRefreshMV = enable;
+    }
+
+    public long getLogRejectedRecordNum() {
+        return logRejectedRecordNum;
+    }
+
+    public void setLogRejectedRecordNum(long logRejectedRecordNum) {
+        this.logRejectedRecordNum = logRejectedRecordNum;
     }
 
     public boolean isEnablePipelineEngine() {

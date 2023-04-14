@@ -13,6 +13,10 @@
 
 namespace starrocks::vectorized {
 
+const std::string& CSVScanner::ScannerCSVReader::filename() {
+    return _file->filename();
+}
+
 Status CSVScanner::ScannerCSVReader::_fill_buffer() {
     SCOPED_RAW_TIMER(&_counter->file_read_ns);
 
@@ -200,6 +204,113 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
     return std::move(chunk);
 }
 
+<<<<<<< HEAD:be/src/exec/vectorized/csv_scanner.cpp
+=======
+Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
+    const int capacity = _state->chunk_size();
+    DCHECK_EQ(0, chunk->num_rows());
+    Status status;
+
+    int num_columns = chunk->num_columns();
+    _column_raw_ptrs.resize(num_columns);
+    for (int i = 0; i < num_columns; i++) {
+        _column_raw_ptrs[i] = chunk->get_column_by_index(i).get();
+    }
+
+    csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
+    for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
+        status = _curr_reader->next_record(row);
+        if (!status.ok() && !status.is_end_of_file()) {
+            return status;
+        }
+
+        // skip empty row
+        if (row.columns.size() == 0) {
+            if (status.is_end_of_file()) {
+                break;
+            }
+            continue;
+        }
+
+        const char* data = _curr_reader->buffBasePtr() + row.parsed_start;
+        CSVReader::Record record(data, row.parsed_end - row.parsed_start);
+        if (row.columns.size() != _num_fields_in_csv) {
+            if (status.is_end_of_file()) {
+                break;
+            }
+            if (_counter->num_rows_filtered++ < 50) {
+                std::stringstream error_msg;
+                error_msg << "Value count does not match column count. "
+                          << "Expect " << _num_fields_in_csv << ", but got " << row.columns.size();
+
+                _report_error(record.to_string(), error_msg.str());
+            }
+            if (_state->enable_log_rejected_record()) {
+                std::stringstream error_msg;
+                error_msg << "Value count does not match column count. "
+                          << "Expect " << _num_fields_in_csv << ", but got " << row.columns.size();
+                _state->append_rejected_record_to_file(record.to_string(), error_msg.str(), _curr_reader->filename());
+            }
+            continue;
+        }
+        if (!validate_utf8(record.data, record.size)) {
+            if (_counter->num_rows_filtered++ < 50) {
+                _report_error(record.to_string(), "Invalid UTF-8 row");
+            }
+            if (_state->enable_log_rejected_record()) {
+                _state->append_rejected_record_to_file(record.to_string(), "Invalid UTF-8 row",
+                                                       _curr_reader->filename());
+            }
+            continue;
+        }
+
+        SCOPED_RAW_TIMER(&_counter->fill_ns);
+        bool has_error = false;
+        for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
+            auto slot = _src_slot_descriptors[j];
+            if (slot == nullptr) {
+                continue;
+            }
+            const CSVColumn& column = row.columns[j];
+            char* basePtr = nullptr;
+            if (column.is_escaped_column) {
+                basePtr = _curr_reader->escapeDataPtr();
+            } else {
+                basePtr = _curr_reader->buffBasePtr();
+            }
+
+            const Slice data(basePtr + column.start_pos, column.length);
+            options.type_desc = &(slot->type());
+            if (!_converters[k]->read_string_for_adaptive_null_column(_column_raw_ptrs[k], data, options)) {
+                chunk->set_num_rows(num_rows);
+                if (_counter->num_rows_filtered++ < 50) {
+                    std::stringstream error_msg;
+                    error_msg << "Value '" << data.to_string() << "' is out of range. "
+                              << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
+                    _report_error(record.to_string(), error_msg.str());
+                }
+                if (_state->enable_log_rejected_record()) {
+                    std::stringstream error_msg;
+                    error_msg << "Value '" << data.to_string() << "' is out of range. "
+                              << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
+                    _state->append_rejected_record_to_file(record.to_string(), error_msg.str(),
+                                                           _curr_reader->filename());
+                }
+                has_error = true;
+                break;
+            }
+            k++;
+        }
+        num_rows += !has_error;
+        if (status.is_end_of_file()) {
+            break;
+        }
+    }
+    row.columns.clear();
+    return chunk->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
+}
+
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122)):be/src/exec/csv_scanner.cpp
 Status CSVScanner::_parse_csv(Chunk* chunk) {
     const int capacity = _state->chunk_size();
     DCHECK_EQ(0, chunk->num_rows());
@@ -235,11 +346,21 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
                           << "Expect " << _num_fields_in_csv << ", but got " << fields.size();
                 _report_error(record.to_string(), error_msg.str());
             }
+            if (_state->enable_log_rejected_record()) {
+                std::stringstream error_msg;
+                error_msg << "Value count does not match column count. "
+                          << "Expect " << _num_fields_in_csv << ", but got " << fields.size();
+                _state->append_rejected_record_to_file(record.to_string(), error_msg.str(), _curr_reader->filename());
+            }
             continue;
         }
         if (!validate_utf8(record.data, record.size)) {
             if (_counter->num_rows_filtered++ < 50) {
                 _report_error(record.to_string(), "Invalid UTF-8 row");
+            }
+            if (_state->enable_log_rejected_record()) {
+                _state->append_rejected_record_to_file(record.to_string(), "Invalid UTF-8 row",
+                                                       _curr_reader->filename());
             }
             continue;
         }
@@ -260,6 +381,13 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
                     error_msg << "Value '" << field.to_string() << "' is out of range. "
                               << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
                     _report_error(record.to_string(), error_msg.str());
+                }
+                if (_state->enable_log_rejected_record()) {
+                    std::stringstream error_msg;
+                    error_msg << "Value '" << field.to_string() << "' is out of range. "
+                              << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
+                    _state->append_rejected_record_to_file(record.to_string(), error_msg.str(),
+                                                           _curr_reader->filename());
                 }
                 has_error = true;
                 break;

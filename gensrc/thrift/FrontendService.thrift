@@ -375,6 +375,47 @@ struct TGetTaskRunInfoResult {
     1: optional list<TTaskRunInfo> task_runs
 }
 
+<<<<<<< HEAD
+=======
+struct TGetLoadsParams {
+    1: optional string db
+    2: optional i64 job_id
+    3: optional i64 txn_id
+    4: optional string label
+}
+
+struct TGetLoadsResult {
+    1: optional list<TLoadInfo> loads
+}
+
+struct TLoadInfo {
+    1: optional i64 job_id
+    2: optional string label
+    3: optional string state
+    4: optional string progress
+    5: optional string type
+    6: optional string priority
+    7: optional string etl_info
+    8: optional string task_info
+    9: optional string create_time
+    10: optional string etl_start_time
+    11: optional string etl_finish_time
+    12: optional string load_start_time
+    13: optional string load_finish_time
+    14: optional string url
+    15: optional string job_details
+    16: optional string error_msg
+    17: optional string db
+    18: optional i64 txn_id
+    19: optional string tracking_sql
+    20: optional i64 num_scan_rows
+    21: optional i64 num_filtered_rows
+    22: optional i64 num_unselected_rows
+    23: optional i64 num_sink_rows
+    24: optional string rejected_record_path
+}
+
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
 // getTableNames returns a list of unqualified table names
 struct TGetTablesResult {
   1: list<string> tables
@@ -454,6 +495,15 @@ struct TReportExecStatusParams {
   20: optional InternalService.TLoadJobType load_type
 
   21: optional list<Types.TTabletFailInfo> failInfos
+<<<<<<< HEAD
+=======
+
+  22: optional i64 filtered_rows
+
+  23: optional i64 unselected_rows
+
+  24: optional string rejected_record_path
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
 }
 
 struct TFeResult {
@@ -600,6 +650,7 @@ struct TStreamLoadPutRequest {
     29: optional i32 load_dop
     30: optional bool enable_replicated_storage
     31: optional string merge_condition
+    32: optional i64 log_rejected_record_num
     // only valid when file type is CSV
     50: optional string rowDelimiter
 }

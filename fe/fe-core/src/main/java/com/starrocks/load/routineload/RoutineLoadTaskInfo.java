@@ -21,6 +21,11 @@
 
 package com.starrocks.load.routineload;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Joiner;
+import com.google.common.base.Objects;
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
@@ -189,8 +194,10 @@ public abstract class RoutineLoadTaskInfo {
         // begin a txn for task
         RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
+        String label =
+                Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id));
         txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
-                routineLoadJob.getDbId(), Lists.newArrayList(routineLoadJob.getTableId()), DebugUtil.printId(id), null,
+                routineLoadJob.getDbId(), Lists.newArrayList(routineLoadJob.getTableId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK, routineLoadJob.getId(),
                 timeoutMs / 1000);

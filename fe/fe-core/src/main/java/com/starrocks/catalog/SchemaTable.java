@@ -480,6 +480,48 @@ public class SchemaTable extends Table {
                                                     ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
                                             .column("TABLE_ROWS", ScalarType.createVarchar(50))
                                             .build()))
+<<<<<<< HEAD
+=======
+                    .put("loads", new SchemaTable(
+                            SystemId.LOADS_ID,
+                            "loads",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("LABEL", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("DATABASE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PROGRESS", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("PRIORITY", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("SCAN_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("FILTERED_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("UNSELECTED_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("SINK_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("ETL_INFO", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TASK_INFO", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("ETL_START_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("ETL_FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("LOAD_START_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("LOAD_FINISH_TIME", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("JOB_DETAILS", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("ERROR_MSG", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TRACKING_URL", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TRACKING_SQL", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("REJECTED_RECORD_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
+                    .put("load_tracking_logs", new SchemaTable(
+                            SystemId.LOAD_TRACKING_LOGS_ID,
+                            "load_tracking_logs",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("JOB_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("LABEL", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("DATABASE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TRACKING_LOG", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                    .build()))
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
                     .put("tables_config",
                             new SchemaTable(
                                     SystemId.TABLES_CONFIG_ID,

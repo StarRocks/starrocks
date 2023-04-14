@@ -45,8 +45,12 @@ import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListUtil;
 import com.starrocks.common.util.RuntimeProfile;
+<<<<<<< HEAD
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;
+=======
+import com.starrocks.load.loadv2.BulkLoadJob;
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.planner.DataPartition;
@@ -216,6 +220,7 @@ public class Coordinator {
     private List<String> deltaUrls;
     private Map<String, String> loadCounters;
     private String trackingUrl;
+    private Set<String> rejectedRecordPaths = new HashSet<>();
     // for export
     private List<String> exportFiles;
     private final List<TTabletCommitInfo> commitInfos = Lists.newArrayList();
@@ -319,10 +324,18 @@ public class Coordinator {
                 this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
             }
         }
+<<<<<<< HEAD
         String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
         this.queryGlobals.setNow_string(nowString);
         this.queryGlobals.setTimestamp_ms(startTime);
         this.queryGlobals.setTime_zone(timezone);
+=======
+        if (sessionVariables.containsKey(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)) {
+            this.queryOptions.setLog_rejected_record_num(
+                    Long.parseLong(sessionVariables.get(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)));
+        }
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
         this.needReport = true;
         this.preferComputeNode = false;
         this.useComputeNodeNumber = -1;
@@ -353,10 +366,18 @@ public class Coordinator {
                 this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
             }
         }
+<<<<<<< HEAD
         String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
         this.queryGlobals.setNow_string(nowString);
         this.queryGlobals.setTimestamp_ms(startTime);
         this.queryGlobals.setTime_zone(timezone);
+=======
+        if (sessionVariables.containsKey(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)) {
+            this.queryOptions.setLog_rejected_record_num(
+                    Long.parseLong(sessionVariables.get(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)));
+        }
+        this.queryGlobals = CoordinatorPreprocessor.genQueryGlobals(startTime, timezone);
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
         this.needReport = true;
         this.preferComputeNode = false;
         this.useComputeNodeNumber = -1;
@@ -392,6 +413,10 @@ public class Coordinator {
                 if (loadCompressionType != null) {
                     this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
                 }
+            }
+            if (sessionVariables.containsKey(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)) {
+                this.queryOptions.setLog_rejected_record_num(
+                        Long.parseLong(sessionVariables.get(BulkLoadJob.LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY)));
             }
         }
 
@@ -464,6 +489,17 @@ public class Coordinator {
         return trackingUrl;
     }
 
+<<<<<<< HEAD
+=======
+    public List<String> getRejectedRecordPaths() {
+        return rejectedRecordPaths.stream().collect(Collectors.toList());
+    }   
+
+    public long getStartTime() {
+        return this.queryGlobals.getTimestamp_ms();
+    }
+
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
     public void setExecMemoryLimit(long execMemoryLimit) {
         this.queryOptions.setMem_limit(execMemoryLimit);
     }
@@ -2496,6 +2532,9 @@ public class Coordinator {
             }
             if (params.isSetFailInfos()) {
                 updateFailInfos(params.getFailInfos());
+            }
+            if (params.isSetRejected_record_path()) {
+                rejectedRecordPaths.add(execState.address.hostname + ":" + params.getRejected_record_path());
             }
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }

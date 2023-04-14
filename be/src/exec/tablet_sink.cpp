@@ -860,6 +860,7 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     if (table_sink.__isset.enable_replicated_storage) {
         _enable_replicated_storage = table_sink.enable_replicated_storage;
     }
+<<<<<<< HEAD
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
     _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));
@@ -878,6 +879,15 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
 
 Status OlapTableSink::prepare(RuntimeState* state) {
     _span->AddEvent("prepare");
+=======
+    if (table_sink.__isset.db_name) {
+        state->set_db(table_sink.db_name);
+    }
+    state->set_txn_id(table_sink.txn_id);
+    if (table_sink.__isset.label) {
+        state->set_load_label(table_sink.label);
+    }
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
 
     // profile must add to state's object pool
     _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
@@ -1182,10 +1192,55 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
         }
         {
             uint32_t num_rows_after_validate = SIMD::count_nonzero(_validate_selection);
+<<<<<<< HEAD
             int invalid_row_index = 0;
             RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
                                                                 &_validate_selection, &invalid_row_index));
 
+=======
+            std::vector<int> invalid_row_indexs;
+
+            // _enable_automatic_partition is true means destination table using automatic partition
+            // _has_automatic_partition is true means last send_chunk already create partition in nonblocking mode
+            // we don't need create again since it will resend last chunk
+            if (_enable_automatic_partition && !_has_automatic_partition) {
+                _partition_not_exist_row_values.clear();
+                // only support single column partition now
+                _partition_not_exist_row_values.resize(1);
+
+                RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
+                                                                    &_validate_selection, &invalid_row_indexs, _txn_id,
+                                                                    &_partition_not_exist_row_values));
+
+                if (!_partition_not_exist_row_values[0].empty()) {
+                    _is_automatic_partition_running.store(true, std::memory_order_release);
+                    RETURN_IF_ERROR(_automatic_partition_token->submit_func([this] {
+                        this->_automatic_partition_status = this->_automatic_create_partition();
+                        if (!this->_automatic_partition_status.ok()) {
+                            LOG(WARNING) << "Failed to automatic create partition, err="
+                                         << this->_automatic_partition_status;
+                        }
+                        _is_automatic_partition_running.store(false, std::memory_order_release);
+                    }));
+
+                    if (_nonblocking_send_chunk) {
+                        _has_automatic_partition = true;
+                        return Status::EAgain("");
+                    } else {
+                        _automatic_partition_token->wait();
+                        // after the partition is created, go through the data again
+                        RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
+                                                                            &_validate_selection, &invalid_row_indexs,
+                                                                            _txn_id, nullptr));
+                    }
+                }
+            } else {
+                RETURN_IF_ERROR(_vectorized_partition->find_tablets(chunk, &_partitions, &_tablet_indexes,
+                                                                    &_validate_selection, &invalid_row_indexs, _txn_id,
+                                                                    nullptr));
+                _has_automatic_partition = false;
+            }
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
             // Note: must padding char column after find_tablets.
             _padding_char_column(chunk);
 
@@ -1202,10 +1257,30 @@ Status OlapTableSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) 
             _validate_select_idx.resize(selected_size);
 
             if (num_rows_after_validate - _validate_select_idx.size() > 0) {
+<<<<<<< HEAD
                 if (!state->has_reached_max_error_msg_num()) {
                     std::string debug_row = chunk->debug_row(invalid_row_index);
                     state->append_error_msg_to_file(debug_row,
                                                     "The row is out of partition ranges. Please add a new partition.");
+=======
+                std::stringstream ss;
+                if (_enable_automatic_partition) {
+                    ss << "The row create partition failed since " << _automatic_partition_status.to_string();
+                } else {
+                    ss << "The row is out of partition ranges. Please add a new partition.";
+                }
+                if (!state->has_reached_max_error_msg_num() && invalid_row_indexs.size() > 0) {
+                    std::string debug_row = chunk->debug_row(invalid_row_indexs.back());
+                    state->append_error_msg_to_file(debug_row, ss.str());
+                }
+                for (auto i : invalid_row_indexs) {
+                    if (state->enable_log_rejected_record()) {
+                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), ss.str(),
+                                                              chunk->source_filename());
+                    } else {
+                        break;
+                    }
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
                 }
             }
 
@@ -1560,8 +1635,13 @@ void _print_decimalv3_error_msg(RuntimeState* state, const CppType& decimal, con
 #endif
 }
 
+<<<<<<< HEAD
 template <PrimitiveType PT>
 void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
+=======
+template <LogicalType LT>
+void OlapTableSink::_validate_decimal(RuntimeState* state, Chunk* chunk, Column* column, const SlotDescriptor* desc,
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
                                       std::vector<uint8_t>* validate_selection) {
     using CppType = vectorized::RunTimeCppType<PT>;
     using ColumnType = vectorized::RunTimeColumnType<PT>;
@@ -1578,7 +1658,20 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, vectorized::Column* c
             const auto& datum = data[i];
             if (datum > max_decimal || datum < min_decimal) {
                 (*validate_selection)[i] = VALID_SEL_FAILED;
+<<<<<<< HEAD
                 _print_decimalv3_error_msg<PT>(state, datum, desc);
+=======
+                _print_decimalv3_error_msg<LT>(state, datum, desc);
+                if (state->enable_log_rejected_record()) {
+                    auto decimal_str =
+                            DecimalV3Cast::to_string<CppType>(datum, desc->type().precision, desc->type().scale);
+                    std::string error_msg =
+                            strings::Substitute("Decimal '$0' is out of range. The type of '$1' is $2'", decimal_str,
+                                                desc->col_name(), desc->type().debug_string());
+                    state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), error_msg,
+                                                          chunk->source_filename());
+                }
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
             }
         }
     }
@@ -1598,6 +1691,38 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
             _validate_selection[j] &= 0x1;
         }
 
+<<<<<<< HEAD
+=======
+        // update_column for auto increment column.
+        if (_has_auto_increment && _auto_increment_slot_id == desc->id() && column_ptr->is_nullable()) {
+            auto* nullable = down_cast<NullableColumn*>(column_ptr.get());
+            // If _null_expr_in_auto_increment == true, it means that user specify a null value in auto
+            // increment column, we abort the entire chunk and append a single error msg. Because be know
+            // nothing about whether this row is specified by the user as null or setted during planning.
+            if (nullable->has_null() && _null_expr_in_auto_increment) {
+                std::stringstream ss;
+                ss << "NULL value in auto increment column '" << desc->col_name() << "'";
+
+                for (size_t j = 0; j < num_rows; ++j) {
+                    _validate_selection[j] = VALID_SEL_FAILED;
+                    // If enable_log_rejected_record is true, we need to log the rejected record.
+                    if (nullable->is_null(j) && state->enable_log_rejected_record()) {
+                        state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(),
+                                                              chunk->source_filename());
+                    }
+                }
+#if BE_TEST
+                LOG(INFO) << ss.str();
+#else
+                if (!state->has_reached_max_error_msg_num()) {
+                    state->append_error_msg_to_file("", ss.str());
+                }
+#endif
+            }
+            chunk->update_column(nullable->data_column(), desc->id());
+        }
+
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
         // Validate column nullable info
         // Column nullable info need to respect slot nullable info
         if (desc->is_nullable() && !column_ptr->is_nullable()) {
@@ -1622,6 +1747,10 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
                             state->append_error_msg_to_file(chunk->debug_row(j), ss.str());
                         }
 #endif
+                        if (state->enable_log_rejected_record()) {
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), ss.str(),
+                                                                  chunk->source_filename());
+                        }
                     }
                 }
             }
@@ -1651,6 +1780,13 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
                     if (offset[j + 1] - offset[j] > len) {
                         _validate_selection[j] = VALID_SEL_FAILED;
                         _print_varchar_error_msg(state, binary->get_slice(j), desc);
+                        if (state->enable_log_rejected_record()) {
+                            std::string error_msg =
+                                    strings::Substitute("String (length=$0) is too long. The max length of '$1' is $2",
+                                                        binary->get_slice(j).size, desc->col_name(), desc->type().len);
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg,
+                                                                  chunk->source_filename());
+                        }
                     }
                 }
             }
@@ -1670,19 +1806,26 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
                     if (datas[j] > _max_decimalv2_val[i] || datas[j] < _min_decimalv2_val[i]) {
                         _validate_selection[j] = VALID_SEL_FAILED;
                         _print_decimal_error_msg(state, datas[j], desc);
+                        if (state->enable_log_rejected_record()) {
+                            std::string error_msg = strings::Substitute(
+                                    "Decimal '$0' is out of range. The type of '$1' is $2'", datas[j].to_string(),
+                                    desc->col_name(), desc->type().debug_string());
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), error_msg,
+                                                                  chunk->source_filename());
+                        }
                     }
                 }
             }
             break;
         }
         case TYPE_DECIMAL32:
-            _validate_decimal<TYPE_DECIMAL32>(state, column, desc, &_validate_selection);
+            _validate_decimal<TYPE_DECIMAL32>(state, chunk, column, desc, &_validate_selection);
             break;
         case TYPE_DECIMAL64:
-            _validate_decimal<TYPE_DECIMAL64>(state, column, desc, &_validate_selection);
+            _validate_decimal<TYPE_DECIMAL64>(state, chunk, column, desc, &_validate_selection);
             break;
         case TYPE_DECIMAL128:
-            _validate_decimal<TYPE_DECIMAL128>(state, column, desc, &_validate_selection);
+            _validate_decimal<TYPE_DECIMAL128>(state, chunk, column, desc, &_validate_selection);
             break;
         default:
             break;

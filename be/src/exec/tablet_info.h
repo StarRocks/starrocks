@@ -150,4 +150,108 @@ private:
     std::unordered_map<int64_t, NodeInfo> _nodes;
 };
 
+<<<<<<< HEAD
+=======
+struct ChunkRow {
+    ChunkRow() = default;
+    ChunkRow(Columns* columns_, uint32_t index_) : columns(columns_), index(index_) {}
+
+    std::string debug_string();
+
+    Columns* columns = nullptr;
+    uint32_t index = 0;
+};
+
+struct OlapTablePartition {
+    int64_t id = 0;
+    ChunkRow start_key;
+    ChunkRow end_key;
+    std::vector<ChunkRow> in_keys;
+    int64_t num_buckets = 0;
+    std::vector<OlapTableIndexTablets> indexes;
+};
+
+struct PartionKeyComparator {
+    // return true if lhs < rhs
+    // 'nullptr' is max value, but 'null' is min value
+    bool operator()(const ChunkRow* lhs, const ChunkRow* rhs) const {
+        if (lhs->columns == nullptr) {
+            return false;
+        } else if (rhs->columns == nullptr) {
+            return true;
+        }
+        DCHECK_EQ(lhs->columns->size(), rhs->columns->size());
+
+        for (size_t i = 0; i < lhs->columns->size(); ++i) {
+            int cmp = (*lhs->columns)[i]->compare_at(lhs->index, rhs->index, *(*rhs->columns)[i], -1);
+            if (cmp != 0) {
+                return cmp < 0;
+            }
+        }
+        // equal, return false
+        return false;
+    }
+};
+
+// store an olap table's tablet information
+class OlapTablePartitionParam {
+public:
+    OlapTablePartitionParam(std::shared_ptr<OlapTableSchemaParam> schema, const TOlapTablePartitionParam& param);
+    ~OlapTablePartitionParam();
+
+    Status init(RuntimeState* state);
+
+    Status prepare(RuntimeState* state);
+    Status open(RuntimeState* state);
+    void close(RuntimeState* state);
+
+    int64_t db_id() const { return _t_param.db_id; }
+    int64_t table_id() const { return _t_param.table_id; }
+    int64_t version() const { return _t_param.version; }
+
+    bool enable_automatic_partition() const { return _t_param.enable_automatic_partition; }
+
+    // `invalid_row_index` stores index that chunk[index]
+    // has been filtered out for not being able to find tablet.
+    // it could be any row, becauset it's just for outputing error message for user to diagnose.
+    Status find_tablets(Chunk* chunk, std::vector<OlapTablePartition*>* partitions, std::vector<uint32_t>* indexes,
+                        std::vector<uint8_t>* selection, std::vector<int>* invalid_row_indexs, int64_t txn_id,
+                        std::vector<std::vector<std::string>>* partition_not_exist_row_values);
+
+    const std::map<int64_t, OlapTablePartition*>& get_partitions() const { return _partitions; }
+
+    Status add_partitions(const std::vector<TOlapTablePartition>& partitions);
+
+    bool is_un_partitioned() const { return _partition_columns.empty(); }
+
+private:
+    Status _create_partition_keys(const std::vector<TExprNode>& t_exprs, ChunkRow* part_key);
+
+    void _compute_hashes(Chunk* chunk, std::vector<uint32_t>* indexes);
+
+    // check if this partition contain this key
+    bool _part_contains(OlapTablePartition* part, ChunkRow* key) const {
+        if (part->start_key.columns == nullptr) {
+            // start_key is nullptr means the lower bound is boundless
+            return true;
+        }
+        return !PartionKeyComparator()(key, &part->start_key);
+    }
+
+private:
+    std::shared_ptr<OlapTableSchemaParam> _schema;
+    TOlapTablePartitionParam _t_param;
+
+    std::vector<SlotDescriptor*> _partition_slot_descs;
+    std::vector<SlotDescriptor*> _distributed_slot_descs;
+    Columns _partition_columns;
+    std::vector<Column*> _distributed_columns;
+    std::vector<ExprContext*> _partitions_expr_ctxs;
+
+    ObjectPool _obj_pool;
+    std::map<int64_t, OlapTablePartition*> _partitions;
+    std::map<ChunkRow*, OlapTablePartition*, PartionKeyComparator> _partitions_map;
+};
+
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
 } // namespace starrocks

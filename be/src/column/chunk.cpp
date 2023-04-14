@@ -356,6 +356,18 @@ std::string Chunk::debug_row(uint32_t index) const {
     return os.str();
 }
 
+std::string Chunk::rebuild_csv_row(size_t index, const std::string& delimiter) const {
+    std::stringstream os;
+    for (size_t col = 0; col < _columns.size() - 1; ++col) {
+        os << _columns[col]->debug_item(index);
+        os << delimiter;
+    }
+    if (_columns.size() > 0) {
+        os << _columns[_columns.size() - 1]->debug_item(index);
+    }
+    return os.str();
+}
+
 std::string Chunk::debug_columns() const {
     std::stringstream os;
     os << "nullable[";

@@ -291,8 +291,13 @@ public:
     ObjectPool* pool() { return _pool; }
 
 private:
+<<<<<<< HEAD
     template <PrimitiveType PT>
     void _validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
+=======
+    template <LogicalType LT>
+    void _validate_decimal(RuntimeState* state, Chunk* chunk, Column* column, const SlotDescriptor* desc,
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
                            std::vector<uint8_t>* validate_selection);
     // This method will change _validate_selection
     void _validate_data(RuntimeState* state, vectorized::Chunk* chunk);

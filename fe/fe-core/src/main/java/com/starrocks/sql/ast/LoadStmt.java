@@ -75,6 +75,12 @@ public class LoadStmt extends DdlStmt {
     public static final String PARTIAL_UPDATE = "partial_update";
     public static final String PRIORITY = "priority";
     public static final String MERGE_CONDITION = "merge_condition";
+<<<<<<< HEAD
+=======
+    public static final String CASE_SENSITIVE = "case_sensitive";
+    public static final String LOG_REJECTED_RECORD_NUM = "log_rejected_record_num";
+
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
 
     // for load data from Baidu Object Store(BOS)
     public static final String BOS_ENDPOINT = "bos_endpoint";
@@ -112,6 +118,11 @@ public class LoadStmt extends DdlStmt {
             .add(TIMEZONE)
             .add(PARTIAL_UPDATE)
             .add(PRIORITY)
+<<<<<<< HEAD
+=======
+            .add(CASE_SENSITIVE)
+            .add(LOG_REJECTED_RECORD_NUM)
+>>>>>>> f219246f6 ([Feature] Support log rejected record through stream load / routine load / broker load with csv/json format (#21122))
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions,
@@ -254,6 +265,19 @@ public class LoadStmt extends DdlStmt {
         if (priorityProperty != null) {
             if (LoadPriority.priorityByName(priorityProperty) == null) {
                 throw new DdlException(PRIORITY + " should in HIGHEST/HIGH/NORMAL/LOW/LOWEST");
+            }
+        }
+
+        // log rejected record num
+        final String logRejectedRecordNumProperty = properties.get(LOG_REJECTED_RECORD_NUM);
+        if (logRejectedRecordNumProperty != null) {
+            try {
+                final long logRejectedRecordNum = Long.parseLong(logRejectedRecordNumProperty);
+                if (logRejectedRecordNum < -1) {
+                    throw new DdlException(LOG_REJECTED_RECORD_NUM + " must be equal or greater than -1");
+                }
+            } catch (NumberFormatException e) {
+                throw new DdlException(LOG_REJECTED_RECORD_NUM + " is not a number.");
             }
         }
     }

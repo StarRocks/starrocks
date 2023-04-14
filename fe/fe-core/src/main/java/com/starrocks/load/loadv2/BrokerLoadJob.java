@@ -366,6 +366,9 @@ public class BrokerLoadJob extends BulkLoadJob {
         if (attachment.getTrackingUrl() != null) {
             loadingStatus.setTrackingUrl(attachment.getTrackingUrl());
         }
+        if (!attachment.getRejectedRecordPaths().isEmpty()) {
+            loadingStatus.setRejectedRecordPaths(attachment.getRejectedRecordPaths());
+        }
         commitInfos.addAll(attachment.getCommitInfoList());
         failInfos.addAll(attachment.getFailInfoList());
         progress = (int) ((double) finishedTaskIds.size() / idToTasks.size() * 100);
