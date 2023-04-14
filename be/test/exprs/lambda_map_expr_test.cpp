@@ -79,7 +79,6 @@ protected:
         expr_node.__isset.child_type = true;
         expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
 
-        create_lambda_expr();
         cur_chunk.append_column(const_int_column(1, 5), 1);
     }
     void TearDown() override { _objpool.clear(); }
@@ -94,7 +93,7 @@ protected:
         return e;
     }
 
-    void create_lambda_expr() {
+    void create_lambda_expr(const TypeDescriptor& type_map) {
         // create lambda functions
         TExprNode tlambda_func;
         tlambda_func.opcode = TExprOpcode::ADD;
@@ -120,13 +119,10 @@ protected:
         ColumnRef* col2 = _objpool.add(new ColumnRef(int_slot_ref));
 
         TExprNode tmap_expr;
-        tmap_expr.opcode = TExprOpcode::ADD;
-        tmap_expr.child_type = TPrimitiveType::INT;
-        tmap_expr.node_type = TExprNodeType::MAP_EXPR;
-        tmap_expr.num_children = 2;
-        tmap_expr.__isset.opcode = true;
-        tmap_expr.__isset.child_type = true;
-        tmap_expr.type = gen_type_desc(TPrimitiveType::INT);
+        tmap_expr.__set_node_type(TExprNodeType::MAP_EXPR);
+        tmap_expr.__set_is_nullable(true);
+        tmap_expr.__set_type(type_map.to_thrift());
+        tmap_expr.__set_num_children(0);
         auto* map_expr = _objpool.add(MapExprFactory::from_thrift(tmap_expr));
         map_expr->add_child(col1);
         map_expr->add_child(col2);
@@ -184,6 +180,7 @@ TEST_F(MapApplyExprTest, test_map_int_int) {
     type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
     type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
 
+    create_lambda_expr(type_map_int_int);
     auto column = ColumnHelper::create_column(type_map_int_int, true);
 
     DatumMap map1;
@@ -282,6 +279,7 @@ TEST_F(MapApplyExprTest, test_map_varchar_int) {
 
     TypeDescriptor type_varchar(LogicalType::TYPE_VARCHAR);
     type_varchar.len = 10;
+    create_lambda_expr(type_map_varchar_int);
 
     auto column = ColumnHelper::create_column(type_map_varchar_int, false);
 

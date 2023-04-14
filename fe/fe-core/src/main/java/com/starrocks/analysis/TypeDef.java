@@ -106,7 +106,7 @@ public class TypeDef implements ParseNode {
         if (isOlap && (!FeConstants.runningUnitTest)) {
             // we haven't support create table with map or struct type column in native table
             Type innerType = Type.getInnermostType(parsedType);
-            if (innerType.isMapType() || innerType.isStructType()) {
+            if (innerType.isStructType()) {
                 throw new AnalysisException("Unsupported data type: " + parsedType.toSql());
             }
         }
