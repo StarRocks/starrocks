@@ -7,7 +7,7 @@ Since version 3.0, StarRocks supports the `AUTO_INCREMENT` column attribute, whi
 When a new data row is loaded into a table, StarRocks automatically assigns a globally unique integer value for the row's `AUTO_INCREMENT` column as its unique ID within the table, and the subsequent values for the `AUTO_INCREMENT` column automatically increase at a specific step starting from the ID of the row. An `AUTO_INCREMENT` colum can be used to simplify data management and speed up some queries. Here are some application scenarios of an `AUTO_INCREMENT` column:
 
 - Serve as primary keys: An `AUTO_INCREMENT` column can be used as the primary key to ensure that each row has a unique ID and make it easy to query and manage data.
-- Join tables: When multiple tables are joined, an `AUTO_INCREMENT` column can be used as the Join Key, which can expedite queries compared to using a column whose data type is STRING, including UUID.
+- Join tables: When multiple tables are joined, an `AUTO_INCREMENT` column can be used as the Join Key, which can expedite queries compared to using a column whose data type is STRING, for example UUID.
 - Count the number of distinct values in a high-cardinality column: An `AUTO_INCREMENT` column can be used to represent the unique value column in a dictionary. Compared to directly counting distinct STRING values, counting distinct integer values of the `AUTO_INCREMENT` column can sometimes improve the query speed by several times or even tens of times.
 
 You need to specify an `AUTO_INCREMENT` column in the CREATE TABLE statement. The data types of an `AUTO_INCREMENT` column must be BIGINT. The value for an AUTO_INCREMENT column can be [implicitly assigned](#assign-values-implicitly) or [explicitly specified](#specify-values-explicitly). It starts from 1, and increments by 1 for each new row.
@@ -327,7 +327,7 @@ This feature can be used to build a dictionary table for fastly computing distin
 - Each table can have only one `AUTO_INCREMENT` column.
 - The data type of the `AUTO_INCREMENT` column must be BIGINT.
 - The `AUTO_INCREMENT` column must be `NOT NULL` and does not have a default value.
-- You can delete data from the Primary Key table with an `AUTO_INCREMENT` column. However, if the `AUTO_INCREMENT` column is not the primary key or part of the primary key, the following limits exist when you delete data:
+- You can delete data from the Primary Key table with an `AUTO_INCREMENT` column. However, if the `AUTO_INCREMENT` column is not the primary key or part of the primary key, you need to note the following limits when you delete data:
 
   - During the DELETE operation, there is also a load job for partial updates, which only contains UPSERT operations. If both the UPSERT and DELETE operations hit the same data row and the UPSERT operation is executed after the DELETE operation, the UPSERT operation may not take effect.
   - There is a load job for partial updates, which includes multiple UPSERT and DELETE operations on the same data row. If a certain UPSERT operation is executed after the DELETE operation, the UPSERT operation may not take effect.
