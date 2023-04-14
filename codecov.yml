@@ -1,5 +1,7 @@
 comment:
   layout: "newheader, diff, flags, files, newfooter"
+codecov:
+  allow_coverage_offsets: true
 coverage:
   status:
     project:
