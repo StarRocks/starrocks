@@ -239,6 +239,9 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
             for (String columnName : columns) {
+                if (columnName.contains("'")) {
+                    continue;
+                }
                 totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partition, columnName));
             }
         }
