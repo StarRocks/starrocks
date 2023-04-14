@@ -411,6 +411,11 @@ private:
     void _reset_output();
 
 public:
+    // The ordinal value is comprising the following two parts
+    // 1. chunk_id, which is assigned by `add_original_chunk
+    // 2. offset in chunk
+    // And for sake of performance, we use 64-bit to store these two parts, chunk_id takes first 44-bits
+    // and offset takes 20-bits.
     constexpr static size_t MAX_CHUNK_SIZE = 0xfffff;
     constexpr static size_t OFFSET_BITS = 20;
 

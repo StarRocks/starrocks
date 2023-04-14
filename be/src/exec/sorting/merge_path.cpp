@@ -555,6 +555,8 @@ ChunkPtr detail::LeafNode::_generate_ordinal(size_t chunk_id, size_t num_rows) {
     auto* raw_array = down_cast<Int64Column*>(ordinal_column.get())->get_data().data();
 
     for (size_t row = 0; row < num_rows; row++) {
+        // The first (64 - OFFSET_BITS) bits are used for chunk_id
+        // The last OFFSET_BITS bits are used for offset in chunk
         raw_array[row] =
                 (static_cast<int64_t>(chunk_id) << MergePathCascadeMerger::OFFSET_BITS) | static_cast<int64_t>(row);
     }
@@ -1131,6 +1133,8 @@ ChunkPtr MergePathCascadeMerger::_restore_according_to_ordinal(int32_t parallel_
     };
 
     for (int64_t ordinal : ordinals) {
+        // The first (64 - OFFSET_BITS) bits are used for chunk_id
+        // The last OFFSET_BITS bits are used for offset in chunk
         const auto chunk_id = static_cast<size_t>(ordinal) >> OFFSET_BITS;
         const auto row = static_cast<size_t>(ordinal) & MAX_CHUNK_SIZE;
         if (prev_chunk_id == -1) {
