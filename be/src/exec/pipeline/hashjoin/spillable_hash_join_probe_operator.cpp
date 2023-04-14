@@ -92,6 +92,11 @@ bool SpillableHashJoinProbeOperator::has_output() const {
         for (size_t i = 0; i < _probers.size(); ++i) {
             if (_current_reader[i]->has_output_data()) {
                 return true;
+            } else if (!_current_reader[i]->has_restore_task()) {
+                auto query_ctx = runtime_state()->query_ctx()->weak_from_this();
+                auto wreader = std::weak_ptr(_current_reader[i]);
+                auto guard = spill::ResourceMemTrackerGuard(tls_mem_tracker, std::move(query_ctx), std::move(wreader));
+                _current_reader[i]->trigger_restore(runtime_state(), *_executor, guard);
             }
         }
     }

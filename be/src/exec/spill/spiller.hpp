@@ -145,7 +145,9 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
             _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
             guard.scoped_end();
         });
-
+        if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
+            return Status::OK();
+        }
         _spiller->update_spilled_task_status(flush_task(state, mem_table));
         return Status::OK();
     };
@@ -176,8 +178,9 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
             RETURN_IF(!guard.scoped_begin(), Status::OK());
             auto defer = DeferOp([&]() { _running_restore_tasks--; });
             {
+                Status res;
                 SerdeContext ctx;
-                auto res = _stream->prefetch(ctx);
+                res = _stream->prefetch(ctx);
 
                 if (!res.is_end_of_file() && !res.ok()) {
                     _spiller->update_spilled_task_status(std::move(res));

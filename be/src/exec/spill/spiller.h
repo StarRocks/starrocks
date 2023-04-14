@@ -123,7 +123,12 @@ public:
 
     bool restore_finished() const { return _reader->restore_finished(); }
 
-    void cancel() { _writer->cancel(); }
+    bool is_cancel() { return _is_cancel; }
+
+    void cancel() {
+        _is_cancel = true;
+        _writer->cancel();
+    }
 
     void set_finished() { cancel(); }
 
@@ -175,5 +180,7 @@ private:
     std::shared_ptr<spill::Serde> _serde;
     spill::BlockManager* _block_manager = nullptr;
     std::shared_ptr<spill::BlockGroup> _block_group;
+
+    std::atomic_bool _is_cancel = false;
 };
 } // namespace starrocks::spill
