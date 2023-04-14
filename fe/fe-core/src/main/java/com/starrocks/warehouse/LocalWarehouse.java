@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
+import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.ComputeNode;
@@ -34,8 +35,26 @@ public class LocalWarehouse extends Warehouse {
     @SerializedName(value = "cluster")
     Cluster cluster;
 
+    private QueryableReentrantReadWriteLock rwLock;
+
+    private void readLock() {
+        this.rwLock.readLock().lock();
+    }
+    private void readUnlock() {
+        this.rwLock.readLock().unlock();
+    }
+
+    private void writeLock() {
+        this.rwLock.writeLock().lock();
+    }
+
+    private void writeUnLock() {
+        this.rwLock.writeLock().unlock();
+    }
+
     public LocalWarehouse(long id, String name) {
         super(id, name);
+        this.rwLock = new QueryableReentrantReadWriteLock(true);
         long clusterId = GlobalStateMgr.getCurrentState().getNextId();
         cluster = new Cluster(clusterId);
     }

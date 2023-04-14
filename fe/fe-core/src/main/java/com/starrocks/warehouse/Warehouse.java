@@ -20,7 +20,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
@@ -45,8 +44,6 @@ public abstract class Warehouse implements Writable {
     @SerializedName(value = "id")
     private long id;
 
-    private QueryableReentrantReadWriteLock rwLock;
-
     public enum WarehouseState {
         INITIALIZING,
         RUNNING,
@@ -59,25 +56,9 @@ public abstract class Warehouse implements Writable {
 
     private volatile boolean exist = true;
 
-    protected void readLock() {
-        this.rwLock.readLock().lock();
-    }
-    protected void readUnlock() {
-        this.rwLock.readLock().unlock();
-    }
-
-    protected void writeLock() {
-        this.rwLock.writeLock().lock();
-    }
-
-    protected void writeUnLock() {
-        this.rwLock.writeLock().unlock();
-    }
-
     public Warehouse(long id, String name) {
         this.id = id;
         this.name = name;
-        this.rwLock = new QueryableReentrantReadWriteLock(true);
     }
 
     public long getId() {
@@ -94,14 +75,6 @@ public abstract class Warehouse implements Writable {
 
     public WarehouseState getState() {
         return state;
-    }
-
-    public long getTotalRunningSqls() {
-        return -1L;
-    }
-
-    public int getTotalPendingSqls() {
-        return -1;
     }
 
     public void setExist(boolean exist) {
