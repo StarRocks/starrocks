@@ -136,7 +136,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |tablet_create_timeout_second|1|创建 tablet 的超时时长，单位为秒。|
 |tablet_delete_timeout_second|2|删除 tablet 的超时时长，单位为秒。|
 |check_consistency_default_timeout_second|600|副本一致性检测的超时时间，单位为秒。|
-|tablet_sched_slot_num_per_path|8|一个 BE 存储目录能够同时执行 tablet 相关任务的数目。参数别名 `schedule_slot_num_per_path`。|
+|tablet_sched_slot_num_per_path|8|一个 BE 存储目录能够同时执行 tablet 相关任务的数目。参数别名 `schedule_slot_num_per_path`。从 2.5 版本开始，该参数默认值从 4 变为 8。|
 |tablet_sched_max_scheduling_tablets|2000|可同时调度的 tablet 的数量。如果正在调度的 tablet 数量超过该值，跳过 tablet 均衡和修复检查。|
 |tablet_sched_disable_balance|FALSE|是否禁用 Tablet 均衡调度。参数别名 `disable_balance`。|
 |tablet_sched_disable_colocate_balance|FALSE|是否禁用 Colocate Table 的副本均衡。参数别名 `disable_colocate_balance`。|
