@@ -569,7 +569,7 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    // ---------------------------------------- Privilege Statement ----------------------------------------------------
+    // ---------------------------------------- Authz Statement ----------------------------------------------------
 
     public R visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {
         return visitStatement(statement, context);
@@ -632,6 +632,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitShowGrantsStatement(ShowGrantsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement, C context) {
         return visitStatement(statement, context);
     }
 

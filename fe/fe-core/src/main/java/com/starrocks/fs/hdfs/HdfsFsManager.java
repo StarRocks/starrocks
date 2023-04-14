@@ -1425,7 +1425,7 @@ public class HdfsFsManager {
         public void run() {
             try {
                 for (HdfsFs fileSystem : cachedFileSystem.values()) {
-                    if (fileSystem.isExpired(Config.hdfs_file_sytem_expire_seconds)) {
+                    if (fileSystem.isExpired(Config.hdfs_file_system_expire_seconds)) {
                         LOG.info("file system " + fileSystem + " is expired, close and remove it");
                         fileSystem.getLock().lock();
                         try {

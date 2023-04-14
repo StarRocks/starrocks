@@ -129,7 +129,6 @@ public class PrivilegeActions {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds());
             // 1. check for specified action on any table in this db
-
             if (manager.provider.isAvailablePrivType(ObjectType.TABLE, privilegeType)) {
                 PEntryObject allTableInDbObject = manager.provider.generateObject(
                         ObjectType.TABLE,

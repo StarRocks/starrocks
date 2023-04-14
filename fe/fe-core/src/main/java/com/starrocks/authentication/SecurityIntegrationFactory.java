@@ -12,15 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
-public class AuthenticationException extends Exception {
-    public AuthenticationException(String msg) {
-        super(msg);
-    }
+import java.util.Map;
 
-    public AuthenticationException(String msg, Exception e) {
-        super(msg, e);
+public class SecurityIntegrationFactory {
+    public static SecurityIntegration createSecurityIntegration(String name, Map<String, String> propertyMap)
+            throws AuthenticationException {
+        String type = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY);
+        if (type.equals(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
+            return new LDAPSecurityIntegration(name, propertyMap);
+        } else {
+            throw new AuthenticationException("unsupported '" + type + "' type security integration");
+        }
+
     }
 }

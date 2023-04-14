@@ -18,6 +18,7 @@ package com.starrocks.authentication;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.StarRocksFE;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
@@ -28,8 +29,10 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.privilege.AuthorizationManager;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.UserPrivilegeCollection;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
@@ -44,20 +47,21 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AuthenticationManager {
     private static final Logger LOG = LogManager.getLogger(AuthenticationManager.class);
     private static final String DEFAULT_PLUGIN = PlainPasswordAuthenticationProvider.PLUGIN_NAME;
-
     public static final String ROOT_USER = "root";
+    public static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 100;
 
     // core data structure
     // user identity -> all the authentication information
@@ -115,6 +119,34 @@ public class AuthenticationManager {
     // set by load() to distinguish brand-new environment with upgraded environment
     private boolean isLoaded = false;
 
+    @SerializedName("sim")
+    private Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
+
+    public AuthenticationManager() {
+        // default plugin
+        AuthenticationProviderFactory.installPlugin(
+                PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
+        AuthenticationProviderFactory.installPlugin(
+                LDAPAuthProviderForNative.PLUGIN_NAME, new LDAPAuthProviderForNative());
+        AuthenticationProviderFactory.installPlugin(
+                KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider());
+        AuthenticationProviderFactory.installPlugin(
+                LDAPAuthProviderForExternal.PLUGIN_NAME, new LDAPAuthProviderForExternal());
+
+        // default user
+        userToAuthenticationInfo = new UserAuthInfoTreeMap();
+        UserAuthenticationInfo info = new UserAuthenticationInfo();
+        try {
+            info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
+        } catch (AuthenticationException e) {
+            throw new RuntimeException("should not happened!", e);
+        }
+        info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
+        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
+        userToAuthenticationInfo.put(UserIdentity.ROOT, info);
+        userNameToProperty.put(UserIdentity.ROOT.getQualifiedUser(), new UserProperty());
+    }
+
     private void readLock() {
         lock.readLock().lock();
     }
@@ -131,29 +163,6 @@ public class AuthenticationManager {
         lock.writeLock().unlock();
     }
 
-    public AuthenticationManager() {
-        // default plugin
-        AuthenticationProviderFactory.installPlugin(
-                PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
-        AuthenticationProviderFactory.installPlugin(
-                LDAPAuthenticationProvider.PLUGIN_NAME, new LDAPAuthenticationProvider());
-        AuthenticationProviderFactory.installPlugin(
-                KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider());
-
-        // default user
-        userToAuthenticationInfo = new UserAuthInfoTreeMap();
-        UserAuthenticationInfo info = new UserAuthenticationInfo();
-        try {
-            info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
-        } catch (AuthenticationException e) {
-            throw new RuntimeException("should not happened!", e);
-        }
-        info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
-        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
-        userToAuthenticationInfo.put(UserIdentity.ROOT, info);
-        userNameToProperty.put(UserIdentity.ROOT.getQualifiedUser(), new UserProperty());
-    }
-
     public boolean doesUserExist(UserIdentity userIdentity) {
         readLock();
         try {
@@ -164,7 +173,13 @@ public class AuthenticationManager {
     }
 
     public long getMaxConn(String userName) {
-        return userNameToProperty.get(userName).getMaxConn();
+        UserProperty userProperty = userNameToProperty.get(userName);
+        if (userProperty == null) {
+            // TODO(yiming): find a better way to specify max connections for external user, like ldap, kerberos etc.
+            return DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER;
+        } else {
+            return userNameToProperty.get(userName).getMaxConn();
+        }
     }
 
     public String getDefaultPlugin() {
@@ -195,29 +210,71 @@ public class AuthenticationManager {
 
     public Map.Entry<UserIdentity, UserAuthenticationInfo> getBestMatchedUserIdentity(
             String remoteUser, String remoteHost) {
-        return userToAuthenticationInfo.entrySet().stream()
-                .filter(entry -> match(remoteUser, remoteHost, entry.getKey().isDomain(), entry.getValue()))
-                .findFirst().orElse(null);
+        try {
+            readLock();
+            return userToAuthenticationInfo.entrySet().stream()
+                    .filter(entry -> match(remoteUser, remoteHost, entry.getKey().isDomain(), entry.getValue()))
+                    .findFirst().orElse(null);
+        } finally {
+            readUnlock();
+        }
     }
 
     public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                getBestMatchedUserIdentity(remoteUser, remoteHost);
-        if (matchedUserIdentity == null) {
-            LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
-        } else {
-            try {
-                AuthenticationProvider provider =
-                        AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
-                provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
-                        matchedUserIdentity.getValue());
-                return matchedUserIdentity.getKey();
-            } catch (AuthenticationException e) {
-                LOG.debug("failed to authenticate, ", e);
+        String[] authChain = Config.authentication_chain;
+        UserIdentity authenticatedUser = null;
+        for (String authMechanism : authChain) {
+            if (authenticatedUser != null) {
+                break;
+            }
+
+            if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
+                        getBestMatchedUserIdentity(remoteUser, remoteHost);
+                if (matchedUserIdentity == null) {
+                    LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
+                } else {
+                    try {
+                        AuthenticationProvider provider =
+                                AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
+                        provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
+                                matchedUserIdentity.getValue());
+                        authenticatedUser = matchedUserIdentity.getKey();
+                    } catch (AuthenticationException e) {
+                        LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
+                                remoteUser, remoteHost, e.getMessage());
+                    }
+                }
+            } else {
+                SecurityIntegration securityIntegration =
+                        nameToSecurityIntegrationMap.getOrDefault(authMechanism, null);
+                if (securityIntegration == null) {
+                    LOG.info("'{}' authentication mechanism not found", authMechanism);
+                } else {
+                    try {
+                        AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
+                        UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
+                        userAuthenticationInfo.extraInfo.put(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name(),
+                                securityIntegration);
+                        provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
+                                userAuthenticationInfo);
+                        // the ephemeral user is identified as 'username'@'auth_mechanism'
+                        authenticatedUser = UserIdentity.createEphemeralUserIdent(remoteUser, authMechanism);
+                        ConnectContext currentContext = ConnectContext.get();
+                        if (currentContext != null) {
+                            // TODO(yiming): set role ids for ephemeral user in connection context
+                            currentContext.setCurrentRoleIds(new HashSet<>(
+                                    Collections.singletonList(PrivilegeBuiltinConstants.ROOT_ROLE_ID)));
+                        }
+                    } catch (AuthenticationException e) {
+                        LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
+                                remoteUser, remoteHost, securityIntegration, e.getMessage());
+                    }
+                }
             }
         }
 
-        return null;
+        return authenticatedUser;
     }
 
     public UserIdentity checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd) {
@@ -309,6 +366,35 @@ public class AuthenticationManager {
         }
     }
 
+    public void createSecurityIntegration(String name, Map<String, String> propertyMap) throws DdlException {
+        SecurityIntegration securityIntegration;
+        try {
+            securityIntegration =
+                    SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
+        } catch (AuthenticationException e) {
+            throw new DdlException("failed to create security integration, error: " + e.getMessage(), e);
+        }
+        nameToSecurityIntegrationMap.put(name, securityIntegration);
+        GlobalStateMgr.getCurrentState().getEditLog().logCreateSecurityIntegration(name, propertyMap);
+        LOG.info("finished to create security integration '{}'", securityIntegration.toString());
+    }
+
+    public void alterSecurityIntegration(String name, Map<String, String> propertyMap) {
+        // TODO(yiming): 'type' cannot be changed
+    }
+
+    public SecurityIntegration getSecurityIntegration(String name) {
+        return nameToSecurityIntegrationMap.get(name);
+    }
+
+    public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap)
+            throws AuthenticationException {
+        // using concurrent hash map and COW, we don't need lock protection here
+        SecurityIntegration securityIntegration =
+                SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);;
+        nameToSecurityIntegrationMap.put(name, securityIntegration);
+    }
+
     public void replayUpdateUserProperty(UserPropertyInfo info) throws DdlException {
         try {
             writeLock();
@@ -365,7 +451,6 @@ public class AuthenticationManager {
             LOG.info("user property for {} is dropped: {}", userName, userNameToProperty.get(userName));
             userNameToProperty.remove(userName);
         }
-        // 3. TODO remove authentication
     }
 
     public void replayCreateUser(
@@ -481,11 +566,8 @@ public class AuthenticationManager {
             writer.writeJson(this);
             // 1 json for num user
             writer.writeJson(userToAuthenticationInfo.size());
-            Iterator<Map.Entry<UserIdentity, UserAuthenticationInfo>> iterator =
-                    userToAuthenticationInfo.entrySet().iterator();
-            while (iterator.hasNext()) {
+            for (Map.Entry<UserIdentity, UserAuthenticationInfo> entry : userToAuthenticationInfo.entrySet()) {
                 // 2 json for each user(kv)
-                Map.Entry<UserIdentity, UserAuthenticationInfo> entry = iterator.next();
                 writer.writeJson(entry.getKey());
                 writer.writeJson(entry.getValue());
             }

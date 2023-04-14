@@ -62,6 +62,7 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -719,6 +720,14 @@ public class Analyzer {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }
+
+        @Override
+        public Void visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement,
+                                                            ConnectContext context) {
+            SecurityIntegrationStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
 
         // ---------------------------------------- Backup Restore Statement -------------------------------------------
 
