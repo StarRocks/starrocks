@@ -25,10 +25,9 @@ namespace starrocks::pipeline {
 class SpillableAggregateBlockingSinkOperator : public AggregateBlockingSinkOperator {
 public:
     template <class... Args>
-    SpillableAggregateBlockingSinkOperator(SortedStreamingAggregatorPtr aggregator, Args&&... args)
+    SpillableAggregateBlockingSinkOperator(AggregatorPtr aggregator, Args&&... args)
             : AggregateBlockingSinkOperator(aggregator, std::forward<Args>(args)...,
-                                            "spillable_aggregate_block_sink_operator"),
-              _aggregator(aggregator) {}
+                                            "spillable_aggregate_block_sink_operator") {}
 
     ~SpillableAggregateBlockingSinkOperator() override = default;
 
@@ -44,10 +43,18 @@ public:
         return _aggregator->has_pending_data() || _aggregator->has_pending_restore();
     }
 
+    void mark_need_spill() override {
+        Operator::mark_need_spill();
+        _spill_strategy = spill::SpillStrategy::SPILL_ALL;
+        TRACE_SPILL_LOG << "AggregateBlockingSink, mark spill " << (void*)this;
+    }
+
 private:
     Status _spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk);
+    Status _spill_aggregated_data(RuntimeState* state);
 
-    SortedStreamingAggregatorPtr _aggregator;
+    std::function<StatusOr<ChunkPtr>()> _generate_spill_task(RuntimeState* state);
+
     spill::SpillStrategy _spill_strategy = spill::SpillStrategy::NO_SPILL;
 
     bool _is_finished = false;
@@ -56,7 +63,7 @@ private:
 class SpillableAggregateBlockingSinkOperatorFactory : public OperatorFactory {
 public:
     SpillableAggregateBlockingSinkOperatorFactory(int32_t id, int32_t plan_node_id,
-                                                  StreamingAggregatorFactoryPtr aggregator_factory,
+                                                  AggregatorFactoryPtr aggregator_factory,
                                                   SpillProcessChannelFactoryPtr spill_channel_factory)
             : OperatorFactory(id, "spillable_aggregate_blocking_sink", plan_node_id),
               _aggregator_factory(std::move(aggregator_factory)),
@@ -75,7 +82,7 @@ private:
 
     std::shared_ptr<spill::SpilledOptions> _spill_options;
     std::shared_ptr<spill::SpillerFactory> _spill_factory = std::make_shared<spill::SpillerFactory>();
-    StreamingAggregatorFactoryPtr _aggregator_factory;
+    AggregatorFactoryPtr _aggregator_factory;
     SpillProcessChannelFactoryPtr _spill_channel_factory;
 };
 
