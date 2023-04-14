@@ -206,6 +206,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     private static final String PROPS_JSONPATHS = "jsonpaths";
     private static final String PROPS_JSONROOT = "json_root";
 
+    private String confluentSchemaRegistryUrl;
+
     // for csv
     protected boolean trimspace = false;
     protected byte enclose = 0;
@@ -342,6 +344,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             } else {
                 jobProperties.put(PROPS_JSONPATHS, "");
             }
+            this.confluentSchemaRegistryUrl = stmt.getConfluentSchemaRegistryUrl();
         } else {
             throw new UserException("Invalid format type.");
         }
@@ -370,6 +373,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (routineLoadDesc.getPartitionNames() != null) {
             partitions = routineLoadDesc.getPartitionNames();
         }
+    }
+
+    public String getConfluentSchemaRegistryUrl() {
+        return confluentSchemaRegistryUrl;
+    }
+
+    public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
+        this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
     }
 
     @Override

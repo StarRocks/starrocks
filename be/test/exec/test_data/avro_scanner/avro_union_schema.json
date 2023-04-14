@@ -1,0 +1,10 @@
+{
+    "type": "record",
+    "name": "nest",
+    "fields" : [
+        {"name": "booleantype", "type" : "boolean"},
+        {"name": "longtype", "type": "long"},
+        {"name": "doubletype", "type": "double"},
+        {"name": "uniontype", "type": ["null", "string"]}
+    ]
+}

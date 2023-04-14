@@ -14,6 +14,7 @@
 
 #include "connector/file_connector.h"
 
+#include "exec/avro_scanner.h"
 #include "exec/csv_scanner.h"
 #include "exec/exec_node.h"
 #include "exec/json_scanner.h"
@@ -79,9 +80,7 @@ Status FileDataSource::_create_scanner() {
     } else if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_JSON) {
         _scanner = std::make_unique<JsonScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     } else if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_AVRO) {
-        // TODO(yangzaorang): we use json as an intermediate format to parse avro format, but there are
-        // performance issues here, and we could directly parse avro format data later.
-        _scanner = std::make_unique<JsonScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
+        _scanner = std::make_unique<AvroScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     } else {
         _scanner = std::make_unique<CSVScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     }
