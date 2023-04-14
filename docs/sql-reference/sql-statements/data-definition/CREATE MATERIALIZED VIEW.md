@@ -88,7 +88,7 @@ If this parameter is not specified, the materialized view adopts no partitioning
 
 **order_by** (optional)
 
-Specify the sort key of materialized view. If you do not specify the sort key, StarRocks chooses some of the prefix columns from SELECT list as the sort keys.
+Specify the sort key of materialized view. If you do not specify the sort key, StarRocks chooses some of the prefix columns from SELECT list as the sort keys. This parameter has been supported since StarRocks v3.0.
 
 **COMMENT** (optional)
 
