@@ -2219,4 +2219,60 @@ public class AggregateTest extends PlanTestBase {
                 "result: PERCENTILE; args nullable: true;");
         FeConstants.runningUnitTest = false;
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testMultiCountDistinctWithMoreGroupBy() throws Exception {
+        String sql = "select count(distinct t1c), count(distinct t1d), count(distinct t1e)" +
+                "from test_all_type group by t1a, t1b";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "multi_distinct_count");
+
+        sql = "select count(distinct t1c), count(distinct t1d), count(distinct t1e)" +
+                "from test_all_type group by t1a";
+
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "multi_distinct_count");
+    }
+
+
+    @Test
+    public void testRemoveExchange() throws Exception {
+        int oldValue = connectContext.getSessionVariable().getNewPlannerAggStage();
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+        String sql = "select sum(v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)");
+
+        sql = "select sum(v1 + v2) from t0 group by v3";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  3:Project\n" +
+                "  |  <slot 5> : 5: sum\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(4: expr)");
+        connectContext.getSessionVariable().setNewPlanerAggStage(oldValue);
+    }
+
+    @Test
+    public void testDistinctConst() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "SELECT DISTINCT 16 col0 FROM t0 AS cor0 LEFT JOIN t1 AS cor1 ON NULL IS NULL";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "6:Project\n" +
+                "  |  <slot 7> : 16\n" +
+                "  |  limit: 1");
+        sql = "SELECT DISTINCT 61 AS col0 FROM t0 AS cor0 LEFT JOIN t1 AS cor1 ON NOT NULL IS NOT NULL, t0 AS cor2;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "11:Project\n" +
+                "  |  <slot 10> : 61\n" +
+                "  |  limit: 1");
+    }
+>>>>>>> 3186ea61a ([BugFix] set INIT phase when building a new limitOperator (#21608))
 }
