@@ -1,6 +1,10 @@
 # External tables
 
-StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. StarRocks supports the following data sources: MySQL, StarRocks, Elasticsearch, Apache Hive™, Apache Iceberg, and Apache Hudi. **Since v3.0, we recommend that you use catalogs to query Hive, Iceberg, and Hudi data.** See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md). **Currently, you can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
+StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. StarRocks supports the following data sources: MySQL, StarRocks, Elasticsearch, Apache Hive™, Apache Iceberg, and Apache Hudi. **Currently, you can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
+
+> **NOTICE**
+>
+> Since v3.0, we recommend that you use catalogs to query Hive, Iceberg, and Hudi data.** See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
 
 From 2.5 onwards, StarRocks provides the Local Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Local Cache](Block_cache.md)。
 
@@ -573,7 +577,7 @@ The mapping between the target database and StarRocks varies based on the type o
 
 * When you query JDBC external tables, StarRocks cannot push down functions to the tables.
 
-## Hive external table
+## (Deprecated) Hive external table
 
 ### Create a Hive resource
 
@@ -738,7 +742,7 @@ select count(*) from profile_wos_p7;
     3. When you run `REFRESH EXTERNAL TABLE hive_t`, StarRocks first checks if the column information of the Hive external table is the same as the column information of the Hive table returned by the Hive Metastore. If the schema of the Hive table changes, such as adding columns or remove columns, StarRocks synchronizes the changes to the Hive external table. After synchronization, the column order of the Hive external table remains the same as the column order of the Hive table, with the partition column being the last column.
 * When Hive data is stored in the Parquet, ORC, and CSV format, you can synchronize schema changes (such as ADD COLUMN and REPLACE COLUMN) of a Hive table to a Hive external table in StarRocks 2.3 and later versions.
 
-## Apache Iceberg external table
+## (Deprecated) Iceberg external table
 
 From v2.1.0, StarRocks allows you to query data from Apache Iceberg by using external tables. To query data in Iceberg, you need to create an Iceberg external table in StarRocks. When you create the table, you need to establish mapping between the external table and the Iceberg table you want to query.
 
@@ -907,7 +911,7 @@ After an external table is created, you can query the data in Apache Iceberg by 
 select count(*) from iceberg_tbl;
 ~~~
 
-## Hudi external table
+## (Deprecated) Hudi external table
 
 From v2.2.0, StarRocks allows you to query data from Hudi data lakes by using Hudi external tables, thus facilitating blazing-fast data lake analytics. This topic describes how to create a Hudi external table in your StarRocks cluster and use the Hudi external table to query data from a Hudi data lake.
 
