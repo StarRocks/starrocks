@@ -100,11 +100,7 @@ mysql> select * from tj where id = 1;
 
 ```Plain Text
 mysql> select * from tj where j->'a' = parse_json('1');
-+------+---------------------+
-|   id |         j           |
-+------+---------------------+
-|   1  | {"a": 1, "b": true} |
-+------+---------------------+
+Empty set (0.05 sec)
 
 mysql> select * from tj where cast(j->'a' as INT) = 1; 
 +------+---------------------+
@@ -152,11 +148,12 @@ mysql> select * from tj
        where j->'a' <= parse_json('3')
        order by cast(j->'a' as int);
 +------+----------------------+
-| id   |           j          |
+| id   | j                    |
 +------+----------------------+
-|  1   | {"a": 1, "b": true}  |
-|  2   | {"a": 2, "b": false} |
-|  3   | {"a": 3, "b": true}  |
+|    1 | {"a": 1, "b": true}  |
+|    2 | {"a": 2, "b": false} |
+|    3 | {"a": 3, "b": true}  |
+|    4 | {"a": 4, "b": false} |
 +------+----------------------+
 ```
 
