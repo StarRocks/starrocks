@@ -510,12 +510,12 @@ enum TPartialUpdateMode {
 }
 
 struct TIcebergColumnStats {
-    1: optional map<i32, i64> columnSizes
-    2: optional map<i32, i64> valueCounts
-    3: optional map<i32, i64> nullValueCounts
-    4: optional map<i32, i64> nanValueCounts
-    5: optional map<i32, binary> lowerBounds;
-    6: optional map<i32, binary> upperBounds;
+    1: optional map<i32, i64> column_sizes
+    2: optional map<i32, i64> value_counts
+    3: optional map<i32, i64> null_value_counts
+    4: optional map<i32, i64> nan_value_counts
+    5: optional map<i32, binary> lower_bounds;
+    6: optional map<i32, binary> upper_bounds;
 }
 
 struct TIcebergDataFile {
