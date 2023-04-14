@@ -2258,4 +2258,19 @@ public class AggregateTest extends PlanTestBase {
                 "  |  output: sum(4: expr)");
         connectContext.getSessionVariable().setNewPlanerAggStage(oldValue);
     }
+
+    @Test
+    public void testDistinctConst() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "SELECT DISTINCT 16 col0 FROM t0 AS cor0 LEFT JOIN t1 AS cor1 ON NULL IS NULL";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "6:Project\n" +
+                "  |  <slot 7> : 16\n" +
+                "  |  limit: 1");
+        sql = "SELECT DISTINCT 61 AS col0 FROM t0 AS cor0 LEFT JOIN t1 AS cor1 ON NOT NULL IS NOT NULL, t0 AS cor2;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "11:Project\n" +
+                "  |  <slot 10> : 61\n" +
+                "  |  limit: 1");
+    }
 }

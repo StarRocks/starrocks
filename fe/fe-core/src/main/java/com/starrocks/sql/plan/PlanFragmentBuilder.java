@@ -2621,7 +2621,7 @@ public class PlanFragmentBuilder {
         @Override
         public PlanFragment visitPhysicalLimit(OptExpression optExpression, ExecPlan context) {
             // PhysicalLimit use for enforce gather property, Enforcer will produce more PhysicalDistribution, there
-            // don't need do anything.
+            // don't need to do anything.
             return visit(optExpression.inputAt(0), context);
         }
 
