@@ -246,6 +246,7 @@ public:
 
     const MemPool* mem_pool() const { return _mem_pool.get(); }
     bool is_none_group_by_exprs() { return _group_by_expr_ctxs.empty(); }
+    bool only_group_by_exprs() { return _is_only_group_by_columns; }
     const std::vector<ExprContext*>& conjunct_ctxs() { return _conjunct_ctxs; }
     const std::vector<ExprContext*>& group_by_expr_ctxs() { return _group_by_expr_ctxs; }
     const std::vector<FunctionContext*>& agg_fn_ctxs() { return _agg_fn_ctxs; }

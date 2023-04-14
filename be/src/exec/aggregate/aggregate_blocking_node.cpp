@@ -183,14 +183,11 @@ pipeline::OpFactories AggregateBlockingNode::_decompose_to_pipeline(pipeline::Op
         context->interpolate_spill_process(id(), spill_channel_factory, degree_of_parallelism);
     }
 
-    // create aggregator factory
-    // shared by sink operator and source operator
-    auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
-
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
     auto* upstream_source_op = context->source_operator(ops_with_sink);
     auto operators_generator = [this, should_cache, upstream_source_op, context,
                                 spill_channel_factory](bool post_cache) {
+        // create aggregator factory
         // shared by sink operator and source operator
         auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
