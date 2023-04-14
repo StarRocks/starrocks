@@ -28,21 +28,28 @@
 
 namespace starrocks::pipeline {
 bool SpillableAggregateBlockingSinkOperator::need_input() const {
-    return !is_finished() && !_aggregator->is_full();
+    return !is_finished() && !_aggregator->is_full() && !_aggregator->spill_channel()->has_task();
 }
 
 bool SpillableAggregateBlockingSinkOperator::is_finished() const {
-    return AggregateBlockingSinkOperator::is_finished() && _is_finished;
+    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
+        return AggregateBlockingSinkOperator::is_finished();
+    }
+    return _is_finished;
 }
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
-    RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
-
+    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
+        RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
+        return Status::OK();
+    }
     // ugly code
     // TODO: fixme
     auto io_executor = _aggregator->spill_channel()->io_executor();
-    RETURN_IF_ERROR(_aggregator->spiller()->flush(state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker)));
 
+    auto flush_function = [this](RuntimeState* state, auto io_executor) {
+        return _aggregator->spiller()->flush(state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker));
+    };
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         _aggregator->spill_channel()->set_finishing();
         return _aggregator->spiller()->set_flush_all_call_back(
@@ -52,7 +59,28 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
                 },
                 state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker));
     };
-    RETURN_IF_ERROR(set_call_back_function(state, io_executor));
+
+    if (_aggregator->spill_channel()->is_working()) {
+        DCHECK(_spill_strategy == spill::SpillStrategy::SPILL_ALL);
+        std::function<StatusOr<ChunkPtr>()> flush_task = [this, state, io_executor,
+                                                          flush_function]() -> StatusOr<ChunkPtr> {
+            RETURN_IF_ERROR(flush_function(state, io_executor));
+            return Status::EndOfFile("eos");
+        };
+        _aggregator->spill_channel()->add_spill_task({flush_task});
+        std::function<StatusOr<ChunkPtr>()> task = [state, io_executor, set_call_back_function,
+                                                    this]() -> StatusOr<ChunkPtr> {
+            RETURN_IF_ERROR(set_call_back_function(state, io_executor));
+            return Status::EndOfFile("eos");
+        };
+        _aggregator->spill_channel()->add_spill_task({task});
+    } else {
+        if (_spill_strategy == spill::SpillStrategy::SPILL_ALL) {
+            // if spilling happens, should flush data
+            RETURN_IF_ERROR(flush_function(state, io_executor));
+        }
+        RETURN_IF_ERROR(set_call_back_function(state, io_executor));
+    }
 
     return Status::OK();
 }
@@ -77,26 +105,59 @@ Status SpillableAggregateBlockingSinkOperator::push_chunk(RuntimeState* state, c
     if (chunk == nullptr || chunk->is_empty()) {
         return Status::OK();
     }
-    RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
-    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
-        return AggregateBlockingSinkOperator::push_chunk(state, chunk);
-    } else if (_spill_strategy == spill::SpillStrategy::SPILL_ALL) {
+    RETURN_IF_ERROR(AggregateBlockingSinkOperator::push_chunk(state, chunk));
+    set_revocable_mem_bytes(_aggregator->hash_map_memory_usage());
+    if (_spill_strategy == spill::SpillStrategy::SPILL_ALL) {
         return _spill_all_inputs(state, chunk);
-    } else {
-        return Status::OK();
     }
+    return Status::OK();
 }
 
 Status SpillableAggregateBlockingSinkOperator::_spill_all_inputs(RuntimeState* state, const ChunkPtr& chunk) {
     // spill all data
-    auto spillable = std::make_shared<Chunk>();
-    RETURN_IF_ERROR(_aggregator->convert_to_spill_format(chunk.get(), &spillable));
+    DCHECK(!_aggregator->is_none_group_by_exprs());
+    _aggregator->hash_map_variant().visit(
+            [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
+    CHECK(!_aggregator->spill_channel()->has_task());
+    RETURN_IF_ERROR(_spill_aggregated_data(state));
+    return Status::OK();
+}
 
-    auto executor = _aggregator->spill_channel()->io_executor();
-    RETURN_IF_ERROR(
-            _aggregator->spiller()->spill(state, spillable, *executor, spill::MemTrackerGuard(tls_mem_tracker)));
+Status SpillableAggregateBlockingSinkOperator::_spill_aggregated_data(RuntimeState* state) {
+    auto io_executor = _aggregator->spill_channel()->io_executor();
+    auto spiller = _aggregator->spiller();
+    auto spill_channel = _aggregator->spill_channel();
+    auto process_task = _generate_spill_task(state);
+    while (!_aggregator->spiller()->is_full()) {
+        auto chunk_st = process_task();
+        if (chunk_st.ok()) {
+            RETURN_IF_ERROR(
+                    spiller->spill(state, chunk_st.value(), *io_executor, spill::MemTrackerGuard(tls_mem_tracker)));
+        } else if (chunk_st.status().is_end_of_file()) {
+            // no more data in aggregator, reset state
+            RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr));
+            return Status::OK();
+        } else {
+            return chunk_st.status();
+        }
+    }
+    spill_channel->add_spill_task(std::move(process_task));
 
     return Status::OK();
+}
+
+std::function<StatusOr<ChunkPtr>()> SpillableAggregateBlockingSinkOperator::_generate_spill_task(RuntimeState* state) {
+    return [this, state]() -> StatusOr<ChunkPtr> {
+        bool use_intermediate_as_output = true;
+        if (!_aggregator->is_ht_eos()) {
+            auto chunk = std::make_shared<Chunk>();
+            RETURN_IF_ERROR(
+                    _aggregator->convert_hash_map_to_chunk(state->chunk_size(), &chunk, &use_intermediate_as_output));
+            return chunk;
+        }
+        RETURN_IF_ERROR(_aggregator->reset_state(state, {}, nullptr));
+        return Status::EndOfFile("no more data in current aggregator");
+    };
 }
 
 Status SpillableAggregateBlockingSinkOperatorFactory::prepare(RuntimeState* state) {
@@ -126,6 +187,7 @@ Status SpillableAggregateBlockingSinkOperatorFactory::prepare(RuntimeState* stat
 OperatorPtr SpillableAggregateBlockingSinkOperatorFactory::create(int32_t degree_of_parallelism,
                                                                   int32_t driver_sequence) {
     auto aggregator = _aggregator_factory->get_or_create(driver_sequence);
+
     auto op = std::make_shared<SpillableAggregateBlockingSinkOperator>(aggregator, this, _id, _plan_node_id,
                                                                        driver_sequence);
     // create spiller
