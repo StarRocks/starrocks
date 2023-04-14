@@ -840,6 +840,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 || partitionDesc instanceof SingleRangePartitionDesc) {
             addPartitions(db, tableName, ImmutableList.of(partitionDesc),
                     addPartitionClause);
+        } else if (partitionDesc instanceof RangePartitionDesc) {
+            addPartitions(db, tableName,
+                    Lists.newArrayList(((RangePartitionDesc) partitionDesc).getSingleRangePartitionDescs()),
+                    addPartitionClause);
         } else if (partitionDesc instanceof MultiRangePartitionDesc) {
             db.readLock();
             RangePartitionInfo rangePartitionInfo;
