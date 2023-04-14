@@ -482,7 +482,7 @@ void detail::LeafNode::process_input(int32_t parallel_idx) {
     while (!_provider_eos) {
         ChunkPtr chunk;
         {
-            SCOPED_TIMER(_merger->get_metrics(parallel_idx)._provider_timer);
+            SCOPED_TIMER(_merger->get_metrics(parallel_idx)._sorted_run_provider_timer);
             if (!_provider(false, &chunk, &_provider_eos)) {
                 break;
             }
@@ -702,11 +702,12 @@ void MergePathCascadeMerger::bind_profile(int32_t parallel_idx, RuntimeProfile* 
             ADD_CHILD_TIMER(metrics.profile, "6-PendingStageTime", overall_stage_timer_name);
     metrics.stage_timers[detail::Stage::FINISHED] =
             ADD_CHILD_TIMER(metrics.profile, "7-FinishedStageTime", overall_stage_timer_name);
-    metrics._provider_timer = ADD_CHILD_TIMER(metrics.profile, "ProviderTime", "3-ProcessStageTime");
+    metrics._sorted_run_provider_timer =
+            ADD_CHILD_TIMER(metrics.profile, "SortedRunProviderTime", "3-ProcessStageTime");
     metrics._late_materialization_generate_ordinal_timer =
             ADD_CHILD_TIMER(metrics.profile, "LateMaterializationGenerateOrdinalTime", "3-ProcessStageTime");
-    metrics._late_materialization_restore_from_ordinal_timer =
-            ADD_CHILD_TIMER(metrics.profile, "LateMaterializationRestoreFromOrdinalTime", "4-SplitChunkStageTime");
+    metrics._late_materialization_restore_according_to_ordinal_timer = ADD_CHILD_TIMER(
+            metrics.profile, "LateMaterializationRestoreAccordingToOrdinalTime", "4-SplitChunkStageTime");
     metrics._late_materialization_max_buffer_chunk_num = metrics.profile->add_counter(
             "LateMaterializationMaxBufferChunkNum", TUnit::UNIT,
             RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM, TCounterMergeType::SKIP_FIRST_MERGE));
@@ -988,7 +989,7 @@ void MergePathCascadeMerger::_split_chunk(int32_t parallel_idx) {
         DCHECK_GE(remain_size, chunk->num_rows());
         remain_size -= chunk->num_rows();
         if (_late_materialization) {
-            chunk = _restore_from_ordinal(parallel_idx, chunk);
+            chunk = _restore_according_to_ordinal(parallel_idx, chunk);
         }
         _output_chunks[parallel_idx].push_back(std::move(chunk));
     }
@@ -1087,8 +1088,8 @@ void MergePathCascadeMerger::_init_late_materialization() {
     _late_materialization = total_late_materialized_cost <= total_original_cost;
 }
 
-ChunkPtr MergePathCascadeMerger::_restore_from_ordinal(int32_t parallel_idx, const ChunkPtr& chunk) {
-    SCOPED_TIMER(_metrics[parallel_idx]._late_materialization_restore_from_ordinal_timer);
+ChunkPtr MergePathCascadeMerger::_restore_according_to_ordinal(int32_t parallel_idx, const ChunkPtr& chunk) {
+    SCOPED_TIMER(_metrics[parallel_idx]._late_materialization_restore_according_to_ordinal_timer);
 
     if (chunk == nullptr || chunk->is_empty()) {
         return nullptr;

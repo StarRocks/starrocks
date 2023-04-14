@@ -348,9 +348,9 @@ struct Metrics {
     std::vector<RuntimeProfile::Counter*> stage_timers;
     std::vector<RuntimeProfile::Counter*> stage_counters;
 
-    RuntimeProfile::Counter* _provider_timer;
+    RuntimeProfile::Counter* _sorted_run_provider_timer;
     RuntimeProfile::Counter* _late_materialization_generate_ordinal_timer;
-    RuntimeProfile::Counter* _late_materialization_restore_from_ordinal_timer;
+    RuntimeProfile::Counter* _late_materialization_restore_according_to_ordinal_timer;
     RuntimeProfile::Counter* _late_materialization_max_buffer_chunk_num;
 };
 } // namespace detail
@@ -398,7 +398,7 @@ private:
     void _finishing();
 
     void _init_late_materialization();
-    ChunkPtr _restore_from_ordinal(int32_t parallel_idx, const ChunkPtr& chunk);
+    ChunkPtr _restore_according_to_ordinal(int32_t parallel_idx, const ChunkPtr& chunk);
 
     void _process_limit(ChunkPtr& chunk);
 
