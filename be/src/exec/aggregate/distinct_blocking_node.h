@@ -29,5 +29,10 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override;
 
     pipeline::OpFactories decompose_to_pipeline(pipeline::PipelineBuilderContext* context) override;
+
+private:
+    template <class AggFactory, class SourceFactory, class SinkFactory>
+    pipeline::OpFactories _decompose_to_pipeline(pipeline::OpFactories& ops_with_sink,
+                                                 pipeline::PipelineBuilderContext* context);
 };
 } // namespace starrocks

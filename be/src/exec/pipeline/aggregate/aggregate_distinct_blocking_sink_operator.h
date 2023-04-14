@@ -59,33 +59,23 @@ private:
 class AggregateDistinctBlockingSinkOperatorFactory final : public OperatorFactory {
 public:
     AggregateDistinctBlockingSinkOperatorFactory(int32_t id, int32_t plan_node_id,
-                                                 AggregatorFactoryPtr aggregator_factory,
-                                                 std::vector<ExprContext*> partition_by_exprs)
+                                                 AggregatorFactoryPtr aggregator_factory)
             : OperatorFactory(id, "aggregate_distinct_blocking_sink", plan_node_id),
-              _aggregator_factory(std::move(aggregator_factory)),
-              _partition_by_exprs(std::move(partition_by_exprs)) {}
+              _aggregator_factory(std::move(aggregator_factory)) {}
 
     ~AggregateDistinctBlockingSinkOperatorFactory() override = default;
 
     Status prepare(RuntimeState* state) override {
         RETURN_IF_ERROR(OperatorFactory::prepare(state));
-        RETURN_IF_ERROR(Expr::prepare(_partition_by_exprs, state));
-        RETURN_IF_ERROR(Expr::open(_partition_by_exprs, state));
         return Status::OK();
     }
-    void close(RuntimeState* state) override {
-        Expr::close(_partition_by_exprs, state);
-        OperatorFactory::close(state);
-    }
+    void close(RuntimeState* state) override { OperatorFactory::close(state); }
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateDistinctBlockingSinkOperator>(
                 this, _id, _plan_node_id, driver_sequence, _aggregator_factory->get_or_create(driver_sequence));
     }
 
-    std::vector<ExprContext*>& partition_by_exprs() { return _partition_by_exprs; }
-
 private:
     AggregatorFactoryPtr _aggregator_factory = nullptr;
-    std::vector<ExprContext*> _partition_by_exprs;
 };
 } // namespace starrocks::pipeline
