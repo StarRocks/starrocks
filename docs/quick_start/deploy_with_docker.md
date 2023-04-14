@@ -1,134 +1,178 @@
-# Quick start: Deploy StarRocks with Docker
+# Deploy StarRocks with Docker
 
-This quickstart provides a guide to:
-* Use [Docker](https://docs.docker.com/engine/install/) to deploy StarRocks with one FE and one BE.
-* Connect to StarRocks with MySQL client.
-* Create a table, insert some data, and query the data.
+This QuickStart tutorial guides you through the procedures to deploy StarRocks on your local machine with Docker. Before getting started, you can read [StarRocks Architecture](../introduction/Architecture.md) for more conceptual details.
+
+By following these steps, you can deploy a simple StarRocks cluster with **one FE node** and **one BE node**. It can help you complete the upcoming QuickStart tutorials on [creating a table](../quick_start/Create_table.md) and [importing and querying data](../quick_start/Import_and_query.md), and thereby acquaints you with the basic operations of StarRocks.
+
+> **CAUTION**
+>
+> Deploying StarRocks in Docker containers merely applies to the situation when you need to verify a DEMO with a small dataset. It is not recommended for a massive testing or production environment.
 
 ## Prerequisites
 
-1. Docker
-2. MySQL client
+Before deploying StarRocks in Docker, make sure the following requirements are satisfied:
 
-## Step 1: Deploy
+- **Hardware**
 
-To choose a StarRocks version, go to the [StarRocks Dockerhub repository](https://hub.docker.com/r/starrocks/allin1-ubuntu/tags) and choose a version based on the version tag.
+  We recommend deploying StarRocks on a machine with 8 CPU cores and 16 GB of memory or more.
 
-For example, to deploy StarRocks 3.0.0-rc01, run the following command:
+- **Software**
 
-```sh
-docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 -itd starrocks/allin1-ubuntu:3.0.0-rc01
+  You must have the following software installed on your machine:
+
+  - [Docker Engine](https://docs.docker.com/engine/install/) (17.06.0 or later)
+  - MySQL client (5.5 or later)
+
+## Step 1: Download the StarRocks Docker image
+
+Download a StarRocks Docker image from [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/allin1-ubuntu/tags). You can choose a specific version based on the tag of the image.
+
+```Bash
+# Replace <image_tag> with the tag of the image that you want to download, for example, `2.5.4`.
+sudo docker pull starrocks/allin1-ubuntu:<image_tag>
 ```
 
-Then you can check the container status with:
+## Step 2: Deploy StarRocks in Docker container
 
-```sh
-docker ps
+After the Docker image is downloaded, you can deploy StarRocks by running the following command:
+
+```Bash
+# Replace <image_tag> with the tag of the image that you downloaded, for example, `2.5.4`.
+sudo docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 \
+    -itd starrocks/allin1-ubuntu:<image_tag>
 ```
 
-## Step 2: Connect to StarRocks
+> **TROUBLESHOOTING**
+>
+> If any of the above ports on the host machine is occupied, the system prints "docker: Error response from daemon: driver failed programming external connectivity on endpoint tender_torvalds (): Bind for 0.0.0.0:xxxx failed: port is already allocated.". You can allocate available ports on the host machine by changing the ports preceding the colons (:) in the command.
 
-StarRocks needs some time to get ready. We recommend that you wait at least 30 seconds before connecting.
+You can check if the container is created and running properly by running the following command:
 
-```sh
+```Bash
+sudo docker ps
+```
+
+As shown below, if the `STATUS` of your StarRocks containers is `Up`, you have successfully deployed StarRocks in the Docker container.
+
+```Plain
+CONTAINER ID   IMAGE                                          COMMAND                  CREATED         STATUS                 PORTS                                                                                                                             NAMES
+8962368f9208   starrocks/allin1-ubuntu:branch-3.0-0afb97bbf   "/bin/sh -c ./start_…"   4 minutes ago   Up 4 minutes           0.0.0.0:8037->8030/tcp, :::8037->8030/tcp, 0.0.0.0:8047->8040/tcp, :::8047->8040/tcp, 0.0.0.0:9037->9030/tcp, :::9037->9030/tcp   xxxxx
+```
+
+## Step 3: Connect to StarRocks
+
+After StarRocks is deployed properly, you can connect to it via a MySQL client.
+
+```Bash
 mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
 ```
 
-## Step 3: Using StarRocks
+> **CAUTION**
+>
+> If you have allocated a different port for `9030` in the `docker run` command, you must replace `9030` in the above command with the port you have allocated.
 
-Use the following commands to check the status of FE and BE. If `Alive` shows true for both FE and BE, StarRocks is healthy and ready to go.
-
-FE
+You can check the status of the FE node by executing the following SQL:
 
 ```SQL
 SHOW PROC '/frontends'\G
 ```
 
-```plaintext
+Example:
+
+```Plain
 StarRocks > SHOW PROC '/frontends'\G
 *************************** 1. row ***************************
-             Name: be552e5f0de9_9010_1680659932444
-               IP: be552e5f0de9
+             Name: 8962368f9208_9010_1681370634632
+               IP: 8962368f9208
       EditLogPort: 9010
          HttpPort: 8030
         QueryPort: 9030
           RpcPort: 9020
              Role: LEADER
-        ClusterId: 1556630880
+        ClusterId: 555505802
              Join: true
             Alive: true
-ReplayedJournalId: 944
-    LastHeartbeat: 2023-04-05 02:49:36
+ReplayedJournalId: 99
+    LastHeartbeat: 2023-04-13 07:28:50
          IsHelper: true
            ErrMsg: 
-        StartTime: 2023-04-05 01:59:00
-          Version: 2.5.4-1021a9299
-1 row in set (0.05 sec)
-
+        StartTime: 2023-04-13 07:24:11
+          Version: BRANCH-3.0-0afb97bbf
+1 row in set (0.02 sec)
 ```
 
-BE
+- If the field `Alive` is `true`, this FE node is properly started and added to the cluster.
+- If the field `Role` is `FOLLOWER`, this FE node is eligible to be elected as the Leader FE node.
+- If the field `Role` is `LEADER`, this FE node is the Leader FE node.
+
+You can check the status of the BE node by executing the following SQL:
 
 ```SQL
 SHOW PROC '/backends'\G
 ```
 
-```plaintext
+Example:
+
+```Plain
 StarRocks > SHOW PROC '/backends'\G
 *************************** 1. row ***************************
             BackendId: 10004
-                   IP: be552e5f0de9
+                   IP: 8962368f9208
         HeartbeatPort: 9050
                BePort: 9060
              HttpPort: 8040
              BrpcPort: 8060
-        LastStartTime: 2023-04-05 01:59:13
-        LastHeartbeat: 2023-04-05 02:50:06
+        LastStartTime: 2023-04-13 07:24:25
+        LastHeartbeat: 2023-04-13 07:29:05
                 Alive: true
  SystemDecommissioned: false
 ClusterDecommissioned: false
-            TabletNum: 32
-     DataUsedCapacity: 4.474 KB
-        AvailCapacity: 197.683 GB
-        TotalCapacity: 235.983 GB
-              UsedPct: 16.23 %
-       MaxDiskUsedPct: 16.23 %
+            TabletNum: 30
+     DataUsedCapacity: 0.000 
+        AvailCapacity: 527.437 GB
+        TotalCapacity: 1.968 TB
+              UsedPct: 73.83 %
+       MaxDiskUsedPct: 73.83 %
                ErrMsg: 
-              Version: 2.5.4-1021a9299
-               Status: {"lastSuccessReportTabletsTime":"2023-04-05 02:49:14"}
-    DataTotalCapacity: 197.683 GB
+              Version: BRANCH-3.0-0afb97bbf
+               Status: {"lastSuccessReportTabletsTime":"2023-04-13 07:28:26"}
+    DataTotalCapacity: 527.437 GB
           DataUsedPct: 0.00 %
-             CpuCores: 7
+             CpuCores: 16
     NumRunningQueries: 0
-           MemUsedPct: 0.24 %
-           CpuUsedPct: 0.5 %
-1 row in set (0.03 sec)
+           MemUsedPct: 0.02 %
+           CpuUsedPct: 0.1 %
+1 row in set (0.00 sec)
 ```
 
-Now you can create a table and insert some data.
+If the field `Alive` is `true`, this BE node is properly started and added to the cluster.
 
-**_NOTE:_** This quickstart deploys one BE, you need to add `properties ("replication_num" = "1")` in the CREATE TABLE clause, so only one replica of data is persisted in the BE.
+## Stop and remove the Docker container
 
-```SQL
-CREATE DATABASE test;
+After completing the whole QuickStart tutorial, you can stop and remove the container that hosts your StarRocks cluster with its container ID.
 
-USE test;
+> **NOTE**
+>
+> You can get the `container_id` of your Docker container by running `sudo docker ps`.
 
-CREATE TABLE tbl(c1 int, c2 int) distributed by hash(c1) properties ("replication_num" = "1");
+Run the following command to stop the container:
 
-INSERT INTO tbl VALUES (1, 1), (2, 2), (3, 3);
+```Bash
+# Replace <container_id> with the container ID of your StarRocks cluster.
+sudo docker stop <container_id>
 ```
 
-Query the data
+If you do not need the container any longer, you can remove it by running the following command:
 
-```plaintext
-StarRocks > SELECT * FROM tbl;
-+------+------+
-| c1   | c2   |
-+------+------+
-|    3 |    3 |
-|    1 |    1 |
-|    2 |    2 |
-+------+------+
-3 rows in set (0.03 sec)
+```Bash
+# Replace <container_id> with the container ID of your StarRocks cluster.
+sudo docker rm <container_id>
 ```
+
+> **CAUTION**
+>
+> The removal of the container is irreversible. Make sure you have a backup of the important data in the container before removing it.
+
+## What to do next
+
+Having deployed StarRocks, you can continue the QuickStart tutorials on [creating a table](../quick_start/Create_table.md) and [importing and querying data](../quick_start/Import_and_query.md).
