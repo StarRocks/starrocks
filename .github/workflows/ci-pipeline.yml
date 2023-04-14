@@ -299,7 +299,7 @@ jobs:
           files: ${{ github.workspace }}/fe/fe-core/target/${{ steps.run_ut.outputs.COV_FILE }}
           dry_run: false
           name: fe-ut
-          fail_ci_if_error: true
+          fail_ci_if_error: false
           verbose: true
 
       - name: UT Report
