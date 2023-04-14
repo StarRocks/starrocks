@@ -26,13 +26,13 @@ CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
 -- refresh_desc
 [REFRESH 
 -- refresh_moment
-		[IMMEDIATE | DEFERRED]
+    [IMMEDIATE | DEFERRED]
 -- refresh_scheme
- 		[ASYNC | ASYNC (START <start_time>) EVERY INTERVAL <refresh_interval> | MANUAL]
+    [ASYNC | ASYNC (START <start_time>) EVERY INTERVAL <refresh_interval> | MANUAL]
 ]
 -- partition_expression
 [PARTITION BY 
-		{<date_column> | date_trunc(fmt, <date_column>)}
+    {<date_column> | date_trunc(fmt, <date_column>)}
 ]
 -- order_by_expression
 [ORDER BY (<sort_key>)]
