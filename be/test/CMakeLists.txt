@@ -101,6 +101,7 @@ set(EXEC_FILES
         ./exprs/lambda_map_expr_test.cpp
         ./exprs/like_test.cpp
         ./exprs/map_element_expr_test.cpp
+        ./exprs/map_expr_test.cpp
         ./exprs/map_functions_test.cpp
         ./exprs/math_functions_test.cpp
         ./exprs/null_if_expr_test.cpp
