@@ -22,7 +22,6 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -99,11 +98,6 @@ public class LocalWarehouse extends Warehouse {
         } finally {
             readUnlock();
         }
-    }
-
-    @Override
-    public void addNodes(ComputeNode cn) {
-        cluster.addNodes(cn, this.getFullName());
     }
 
     @Override

@@ -171,7 +171,7 @@ public class SystemInfoService {
         if (Config.only_use_compute_node) {
             String currentWh = ConnectContext.get().getCurrentWarehouse();
             Warehouse currentWarehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(currentWh);
-            currentWarehouse.addNodes(newComputeNode);
+            currentWarehouse.getAnyAvailableCluster().addNodes(newComputeNode, currentWh);
         }
 
         // log
@@ -1005,7 +1005,8 @@ public class SystemInfoService {
         // add it to warehouse
         if (Config.only_use_compute_node) {
             String warehouseName = newComputeNode.getWarehouseName();
-            GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName).addNodes(newComputeNode);
+            GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName).
+                    getAnyAvailableCluster().addNodes(newComputeNode, warehouseName);
         }
     }
 

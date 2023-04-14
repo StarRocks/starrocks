@@ -21,7 +21,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -95,7 +94,6 @@ public abstract class Warehouse implements Writable {
 
     public abstract void setClusters(Map<Long, Cluster> clusters) throws DdlException;
 
-    public abstract void addNodes(ComputeNode cn);
 
     @Override
     public void write(DataOutput out) throws IOException {
