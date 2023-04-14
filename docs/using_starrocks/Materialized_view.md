@@ -359,24 +359,24 @@ You can alter the property of an asynchronous materialized view using [ALTER MAT
 
 ### Show asynchronous materialized views
 
-You can view the asynchronous materialized views in your database by using [SHOW MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md) or querying the system metadata table in Information Schema.
+You can view the asynchronous materialized views in your database by using [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md) or querying the system metadata table in Information Schema.
 
 - Check all asynchronous materialized views in your database.
 
   ```SQL
-  SHOW MATERIALIZED VIEW;
+  SHOW MATERIALIZED VIEWS;
   ```
 
 - Check a specific asynchronous materialized view.
 
   ```SQL
-  SHOW MATERIALIZED VIEW WHERE NAME = "order_mv";
+  SHOW MATERIALIZED VIEWS WHERE NAME = "order_mv";
   ```
 
 - Check specific asynchronous materialized views by matching the name.
 
   ```SQL
-  SHOW MATERIALIZED VIEW WHERE NAME LIKE "order%";
+  SHOW MATERIALIZED VIEWS WHERE NAME LIKE "order%";
   ```
 
 - Check all asynchronous materialized views by querying the metadata table in Information Schema.
