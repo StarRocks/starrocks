@@ -174,8 +174,15 @@ public class StreamLoadPlanner {
         TWriteQuorumType writeQuorum = destTable.writeQuorum();
 
         List<Long> partitionIds = getAllPartitionIds();
+        boolean enableAutomaticPartition;
+        if (streamLoadInfo.isSpecifiedPartitions()) {
+            enableAutomaticPartition = false;
+        } else {
+            enableAutomaticPartition = destTable.supportedAutomaticPartition();
+        }
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
-                destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement());
+                destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement(),
+                enableAutomaticPartition);
         if (missAutoIncrementColumn.size() == 1 && missAutoIncrementColumn.get(0) == Boolean.TRUE) {
             olapTableSink.setMissAutoIncrementColumn();
         }
@@ -261,8 +268,8 @@ public class StreamLoadPlanner {
     private List<Long> getAllPartitionIds() throws DdlException {
         List<Long> partitionIds = Lists.newArrayList();
 
-        PartitionNames partitionNames = streamLoadInfo.getPartitions();
-        if (partitionNames != null) {
+        if (streamLoadInfo.isSpecifiedPartitions()) {
+            PartitionNames partitionNames = streamLoadInfo.getPartitions();
             for (String partName : partitionNames.getPartitionNames()) {
                 Partition part = destTable.getPartition(partName, partitionNames.isTemp());
                 if (part == null) {
