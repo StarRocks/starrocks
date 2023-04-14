@@ -22,25 +22,21 @@ CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) AS SELECT event_day,
 -- !result
 [UC]REFRESH MATERIALIZED VIEW mv1;
 -- result:
-d8bba3f3-da53-11ed-a137-9671fef9d69f
+05511e19-da7e-11ed-a137-9671fef9d69f
 -- !result
 SELECT * FROM mv1;
 -- result:
 -- !result
-SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name = 'mv1';
+SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name='mv1' and table_schema='db_${uuid0}';
 -- result:
-true	null
-true	null
 true	null
 -- !result
 DROP TABLE ss;
 -- result:
 -- !result
-SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name = 'mv1';
+SELECT is_active, inactive_reason FROM information_schema.materialized_views WHERE table_name='mv1' and table_schema='db_${uuid0}';
 -- result:
 false	base-table dropped: ss
-true	null
-true	null
 -- !result
 REFRESH MATERIALIZED VIEW mv1;
 -- result:
