@@ -1,8 +1,8 @@
-# SHOW MATERIALIZED VIEW
+# SHOW MATERIALIZED VIEWS
 
 ## 功能
 
-展示所有或指定异步物化视图信息。
+展示所有或指定异步物化视图信息。该语句从 3.0 版本开始更名为 SHOW MATERIALIZED VIEWS，之前版本为 SHOW MATERIALIZED VIEW。
 
 > **注意**
 >
@@ -11,7 +11,7 @@
 ## 语法
 
 ```SQL
-SHOW MATERIALIZED VIEW
+SHOW MATERIALIZED VIEWS
 [FROM db_name]
 [
 WHERE NAME { = "mv_name" | LIKE "mv_name_matcher"}
@@ -111,7 +111,7 @@ refresh materialized view customer_mv;
 示例一：通过精确匹配查看特定物化视图
 
 ```Plain
-mysql> show materialized view  where name='customer_mv'\G;
+mysql> show materialized views  where name='customer_mv'\G;
 *************************** 1. row ***************************
                         id: 10142
                       name: customer_mv
@@ -142,7 +142,7 @@ GROUP BY `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`;
 示例二：通过模糊匹配查看物化视图
 
 ```Plain
-mysql> show materialized view  where name like 'customer_mv'\G;
+mysql> show materialized views  where name like 'customer_mv'\G;
 *************************** 1. row ***************************
                         id: 10142
                       name: customer_mv
