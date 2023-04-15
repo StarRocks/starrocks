@@ -83,7 +83,7 @@ public:
     void after_pull_chunk(int64_t time) override;
     void after_driver_process() override;
     bool is_running_all_io_tasks() const override;
-
+    bool has_output() const override;
 public:
     mutable int expected_io_tasks = 0;
     int current_io_tasks = 0;
@@ -92,10 +92,11 @@ public:
     double last_cs_speed = 0;
     double expect_ratio = 0;
     mutable int64_t early_cut_all_io_tasks = 0;
-    std::atomic<int64_t> _cs_pull_rows = 0;
+    std::atomic<int64_t> _cs_pull_rows = 0;    
     int64_t _op_running_time = 0;
     int64_t _op_pull_rows = 0;
     int64_t _start_running_time = 0;
+    bool in_process = false;
     bool _enable_adaptive_io_tasks = true;
 };
 

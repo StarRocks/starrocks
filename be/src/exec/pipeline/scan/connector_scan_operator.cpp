@@ -160,10 +160,14 @@ connector::ConnectorType ConnectorScanOperator::connector_type() {
 }
 
 void ConnectorScanOperator::begin_driver_process() {
-    last_check_time = 0;
+    // last_check_time = 0;
     early_cut_all_io_tasks = 0;
-    expected_io_tasks = current_io_tasks;
-    // _unpluging = true;
+    in_process = true;
+    VLOG_FILE << "[XXX] begin driver process. id = " << _driver_sequence << ", now = " << _num_running_io_tasks
+              << ", exp = " << current_io_tasks << ", chunks = " << num_buffered_chunks()
+              << ", thres = " << _buffer_unplug_threshold() << ", unplug = " << _unpluging;
+    // VLOG_FILE << "[XXX] begin driver process. id = " << _driver_sequence;
+    _unpluging = true;
 }
 
 void ConnectorScanOperator::begin_pull_chunk(ChunkPtr res) {
@@ -175,9 +179,23 @@ void ConnectorScanOperator::after_pull_chunk(int64_t time) {
 }
 
 void ConnectorScanOperator::after_driver_process() {
-    last_check_time = 0;
+    // last_check_time = 0;
     early_cut_all_io_tasks = 0;
-    expected_io_tasks = current_io_tasks;
+    in_process = false;
+    VLOG_FILE << "[XXX] after driver process. id = " << _driver_sequence << ", now = " << _num_running_io_tasks
+              << ", exp = " << current_io_tasks << ", chunks = " << num_buffered_chunks()
+              << ", thres = " << _buffer_unplug_threshold() << ", unplug = " << _unpluging;
+    // VLOG_FILE << "[XXX] after driver process. id = " << _driver_sequence;
+    _unpluging = false;
+}
+
+bool ConnectorScanOperator::has_output() const {
+    bool ret = ScanOperator::has_output();
+    VLOG_FILE << "[XXX] has_output. id = " << _driver_sequence << ", ret = " << ret
+              << ", now = " << _num_running_io_tasks << ", exp = " << current_io_tasks
+              << ", chunks = " << num_buffered_chunks() << ", thres = " << _buffer_unplug_threshold()
+              << ", unplug = " << _unpluging;
+    return ret;
 }
 
 bool ConnectorScanOperator::is_running_all_io_tasks() const {
@@ -185,16 +203,41 @@ bool ConnectorScanOperator::is_running_all_io_tasks() const {
         return _num_running_io_tasks >= _io_tasks_per_scan_operator;
     }
 
-    if (expected_io_tasks != _io_tasks_per_scan_operator) {
-        int64_t now = GetCurrentTimeMicros();
-        if (early_cut_all_io_tasks == 0) {
-            early_cut_all_io_tasks = now;
-        } else if ((now - early_cut_all_io_tasks) > config::connector_io_tasks_check_interval) {
-            expected_io_tasks = _io_tasks_per_scan_operator;
+    // if (expected_io_tasks != _io_tasks_per_scan_operator) {
+    //     if (!in_process) {
+    //         int64_t now = GetCurrentTimeMicros();
+    //         // if (early_cut_all_io_tasks == 0) {
+    //             // early_cut_all_io_tasks = now;
+    //         } else if (((now - early_cut_all_io_tasks) > config::connector_io_tasks_check_interval * 1000) &&
+    //                    ((now - last_check_time) > config::connector_io_tasks_check_interval * 1000)) {
+    //             if (num_buffered_chunks() > 0) {
+    //                 expected_io_tasks = _io_tasks_per_scan_operator;
+    //             }
+    //         // }
+    //     } else {
+    //         expected_io_tasks = current_io_tasks;
+    //     }
+    // }
+
+    VLOG_FILE << "[XXX] is running tasks. id = " << _driver_sequence << ", now = " << _num_running_io_tasks
+              << ", exp = " << expected_io_tasks;
+    bool ret = (expected_io_tasks != 0) && (_num_running_io_tasks >= expected_io_tasks);
+
+    // has output in poller.
+    // we must wait the first chunk arrival.
+    if (!in_process) {
+        if (ret) {
+            int64_t now = GetCurrentTimeMicros();
+            if (early_cut_all_io_tasks == 0) {
+                early_cut_all_io_tasks = now;
+            } else {
+                if (((now - early_cut_all_io_tasks) > config::connector_io_tasks_check_interval * 1000) &&
+                    (num_buffered_chunks() > 0)) {
+                    return false;
+                }
+            }
         }
     }
-
-    bool ret = (expected_io_tasks != 0) && (_num_running_io_tasks >= expected_io_tasks);
     return ret;
 }
 
@@ -232,10 +275,12 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     std::string flag = "";
     if (cs_speed < (op_speed * 1.2)) {
         if (!try_add_before) {
-            expect_ratio = (io_tasks + config::connector_io_tasks_inc) * 1.0 / io_tasks;
+            const int smooth = 4;
+            // expect_ratio = (io_tasks + config::connector_io_tasks_inc + smooth) * 1.0 / (io_tasks + smooth);
+            expect_ratio = 1.05;
             io_tasks += config::connector_io_tasks_inc;
             try_add_before = true;
-            flag += "[TRY]";
+            flag += "[TRY][" + std::to_string(expect_ratio) + "]";
             last_cs_speed = cs_speed;
         } else {
             if (cs_speed < (last_cs_speed * expect_ratio)) {
@@ -264,12 +309,21 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     //           << ", current = " << _num_running_io_tasks << ", flag = " << flag << ", unplug = " << _unpluging  << ", chunk/thres = "
     //           << num_buffered_chunks() << "/" << _buffer_unplug_threshold();
 
+    auto doround = [&](double x) { return round(x * 10000.0) / 10000.0; };
+
+    if (flag.size() < 15) {
+        for (int i = 0; i < 15 - flag.size(); i++) {
+            flag += " ";
+        }
+    }
     VLOG_FILE << "[XXX] pick mosrsel. id = " << _driver_sequence << ", cs = " << cs_speed << ", old = " << last_cs_speed
+              << "(" << doround(cs_speed / last_cs_speed) << ")"
               << ", op = " << op_speed << ", proposal = " << io_tasks << ", current = " << _num_running_io_tasks
               << ", flag = " << flag << ", unplug = " << _unpluging << ", chunk/thres = " << num_buffered_chunks()
               << "/" << _buffer_unplug_threshold();
 
     last_cs_speed = cs_speed;
+    expected_io_tasks = io_tasks;
     return io_tasks;
 }
 
