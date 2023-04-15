@@ -163,9 +163,9 @@ void ConnectorScanOperator::begin_driver_process() {
     // last_check_time = 0;
     early_cut_all_io_tasks = 0;
     in_process = true;
-    VLOG_FILE << "[XXX] begin driver process. id = " << _driver_sequence << ", now = " << _num_running_io_tasks
-              << ", exp = " << current_io_tasks << ", chunks = " << num_buffered_chunks()
-              << ", thres = " << _buffer_unplug_threshold() << ", unplug = " << _unpluging;
+    // VLOG_FILE << "[XXX] begin driver process. id = " << _driver_sequence << ", now = " << _num_running_io_tasks
+    //           << ", exp = " << current_io_tasks << ", chunks = " << num_buffered_chunks()
+    //           << ", thres = " << _buffer_unplug_threshold() << ", unplug = " << _unpluging;
     // VLOG_FILE << "[XXX] begin driver process. id = " << _driver_sequence;
     _unpluging = true;
 }
@@ -182,19 +182,19 @@ void ConnectorScanOperator::after_driver_process() {
     // last_check_time = 0;
     early_cut_all_io_tasks = 0;
     in_process = false;
-    VLOG_FILE << "[XXX] after driver process. id = " << _driver_sequence << ", now = " << _num_running_io_tasks
-              << ", exp = " << current_io_tasks << ", chunks = " << num_buffered_chunks()
-              << ", thres = " << _buffer_unplug_threshold() << ", unplug = " << _unpluging;
+    // VLOG_FILE << "[XXX] after driver process. id = " << _driver_sequence << ", now = " << _num_running_io_tasks
+    //           << ", exp = " << current_io_tasks << ", chunks = " << num_buffered_chunks()
+    //           << ", thres = " << _buffer_unplug_threshold() << ", unplug = " << _unpluging;
     // VLOG_FILE << "[XXX] after driver process. id = " << _driver_sequence;
     _unpluging = false;
 }
 
 bool ConnectorScanOperator::has_output() const {
     bool ret = ScanOperator::has_output();
-    VLOG_FILE << "[XXX] has_output. id = " << _driver_sequence << ", ret = " << ret
-              << ", now = " << _num_running_io_tasks << ", exp = " << current_io_tasks
-              << ", chunks = " << num_buffered_chunks() << ", thres = " << _buffer_unplug_threshold()
-              << ", unplug = " << _unpluging;
+    // VLOG_FILE << "[XXX] has_output. id = " << _driver_sequence << ", ret = " << ret
+    //           << ", now = " << _num_running_io_tasks << ", exp = " << current_io_tasks
+    //           << ", chunks = " << num_buffered_chunks() << ", thres = " << _buffer_unplug_threshold()
+    //           << ", unplug = " << _unpluging;
     return ret;
 }
 
@@ -219,8 +219,8 @@ bool ConnectorScanOperator::is_running_all_io_tasks() const {
     //     }
     // }
 
-    VLOG_FILE << "[XXX] is running tasks. id = " << _driver_sequence << ", now = " << _num_running_io_tasks
-              << ", exp = " << expected_io_tasks;
+    // VLOG_FILE << "[XXX] is running tasks. id = " << _driver_sequence << ", now = " << _num_running_io_tasks
+    //           << ", exp = " << expected_io_tasks;
     bool ret = (expected_io_tasks != 0) && (_num_running_io_tasks >= expected_io_tasks);
 
     // has output in poller.
@@ -230,12 +230,14 @@ bool ConnectorScanOperator::is_running_all_io_tasks() const {
             int64_t now = GetCurrentTimeMicros();
             if (early_cut_all_io_tasks == 0) {
                 early_cut_all_io_tasks = now;
-            } else {
-                if (((now - early_cut_all_io_tasks) > config::connector_io_tasks_check_interval * 1000) &&
-                    (num_buffered_chunks() > 0)) {
-                    return false;
-                }
             }
+            int64_t delta = now - early_cut_all_io_tasks;
+            if (delta > config::connector_io_tasks_check_interval * 1000 && num_buffered_chunks() > 0) {
+                return false;
+            }
+            // if (delta > config::connector_io_tasks_check_interval * 1000 * 2) {
+            //     return false;
+            // }
         }
     }
     return ret;
@@ -275,7 +277,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     std::string flag = "";
     if (cs_speed < (op_speed * 1.2)) {
         if (!try_add_before) {
-            const int smooth = 4;
+            const int smooth = 6;
             // expect_ratio = (io_tasks + config::connector_io_tasks_inc + smooth) * 1.0 / (io_tasks + smooth);
             expect_ratio = 1.05;
             io_tasks += config::connector_io_tasks_inc;
