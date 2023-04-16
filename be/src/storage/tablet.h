@@ -317,7 +317,6 @@ private:
     StatusOr<bool> _prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version);
     void _commit_binlog(int64_t version);
     void _abort_binlog(const RowsetSharedPtr& rowset, int64_t version);
-    void _delete_unused_binlog();
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;

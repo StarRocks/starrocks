@@ -552,32 +552,16 @@ void Tablet::_delete_stale_rowset_by_version(const Version& version) {
     VLOG(3) << "delete stale rowset. tablet=" << full_name() << ", version=" << version;
 }
 
-void Tablet::_delete_unused_binlog() {
-    if (_binlog_manager == nullptr) {
-        return;
-    }
-
-    bool binlog_enable = false;
-    {
-        int64_t now = UnixSeconds();
-        std::shared_lock rdlock(_meta_lock);
-        auto config = _tablet_meta->get_binlog_config();
-        binlog_enable = config != nullptr && config->binlog_enable;
-        if (binlog_enable) {
-            _binlog_manager->check_expire_and_capacity(now, config->binlog_ttl_second, config->binlog_max_size);
-        }
-    }
-
-    if (binlog_enable) {
-        _binlog_manager->delete_unused_binlog();
-    }
-}
-
 void Tablet::delete_expired_inc_rowsets() {
-    _delete_unused_binlog();
     int64_t now = UnixSeconds();
     std::vector<Version> expired_versions;
     std::unique_lock wrlock(_meta_lock);
+    auto config = _tablet_meta->get_binlog_config();
+    bool binlog_enable = config != nullptr && config->binlog_enable;
+    if (binlog_enable) {
+        _binlog_manager->check_expire_and_capacity(now, config->binlog_ttl_second, config->binlog_max_size);
+    }
+
     for (auto& rs_meta : _tablet_meta->all_inc_rs_metas()) {
         int64_t diff = now - rs_meta->creation_time();
         bool inc_rowset_expired = diff >= config::inc_rowset_expired_sec;
@@ -604,6 +588,15 @@ void Tablet::delete_expired_inc_rowsets() {
     }
 
     save_meta();
+    wrlock.unlock();
+
+    if (binlog_enable) {
+        // delete binlog files after the tablet meta is persisted, so that we can recover the
+        // binlog file accurately according to the binlog_min_version and inc_rs_metas in
+        // the table meta. Otherwise, binlog files may be not found for some versions if the
+        // mate is not persisted successfully, but the binlog file has been deleted
+        _binlog_manager->delete_unused_binlog();
+    }
 }
 
 void Tablet::delete_expired_stale_rowset() {

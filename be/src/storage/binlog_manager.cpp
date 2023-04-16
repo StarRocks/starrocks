@@ -59,12 +59,15 @@ Status BinlogManager::init() {
     std::set<int64_t> binlog_file_ids;
     Status status = BinlogUtil::list_binlog_file_ids(_path, &binlog_file_ids);
     if (!status.ok()) {
-        LOG(ERROR) << "Failed to init binlog under " << _path << ", " << status;
+        std::string errMsg =
+                fmt::format("Failed to init binlog because an error happens when listing files, tablet {}, status: {}",
+                            _tablet_id, status.to_string());
+        LOG(ERROR) << errMsg;
         _init_failure.store(true);
-        return status;
+        return Status::InternalError(errMsg);
     }
 
-    std::vector<int64_t> useless_file_ids;
+    std::set<int64_t> useless_file_ids;
     std::vector<BinlogFileMetaPBPtr> useful_file_meta;
     // load binlog file metas from the largest file id to the smallest
     for (auto it = binlog_file_ids.rbegin(); it != binlog_file_ids.rend(); it++) {
@@ -78,13 +81,24 @@ Status BinlogManager::init() {
             max_seq_id = last_meta->start_seq_id();
         }
         BinlogFileLoadFilterImpl filter(max_version, max_seq_id, _rowset_fetcher.get());
-        StatusOr status_or = BinlogFileReader::load(file_id, file_path, &filter);
+        StatusOr status_or = BinlogFileReader::load_meta(file_id, file_path, &filter);
         if (!status_or.ok()) {
-            useless_file_ids.push_back(file_id);
-            LOG(WARNING) << "Can't load binlog file " << file_path << ", " << status_or.status();
-            continue;
+            std::string errMsg = fmt::format(
+                    "Failed to init binlog because load_meta error, tablet {}, "
+                    "file_path: {}, status: {}",
+                    _tablet_id, file_path, status_or.status().to_string());
+            LOG(ERROR) << errMsg;
+            _init_failure.store(true);
+            return Status::InternalError(errMsg);
         }
-        useful_file_meta.push_back(status_or.value());
+
+        // TODO verify the lsn is continuous
+
+        if (status_or.value()->num_pages() > 0) {
+            useful_file_meta.push_back(status_or.value());
+        } else {
+            useless_file_ids.insert(file_id);
+        }
     }
 
     std::reverse(useful_file_meta.begin(), useful_file_meta.end());

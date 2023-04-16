@@ -38,7 +38,7 @@ Status BinlogFileReader::seek(int64_t version, int64_t seq_id) {
     ASSIGN_OR_RETURN(_file, fs->new_random_access_file(_file_path))
     ASSIGN_OR_RETURN(_file_size, _file->get_size())
     _file_header = std::make_unique<BinlogFileHeaderPB>();
-    Status status = page_file_header(_file.get(), _file_size, _file_header.get(), &_current_file_pos);
+    Status status = parse_file_header(_file.get(), _file_size, _file_header.get(), &_current_file_pos);
     if (!status.ok()) {
         LOG(WARNING) << "Fail to parse file header " << _file_path << ", " << status;
         return Status::InternalError("Fail to parse file header " + _file_path);
@@ -254,8 +254,8 @@ Status BinlogFileReader::_read_page_content(int page_index, PageHeaderPB* page_h
     return Status::OK();
 }
 
-Status BinlogFileReader::page_file_header(RandomAccessFile* read_file, int64_t file_size,
-                                          BinlogFileHeaderPB* file_header, int64_t* read_file_size) {
+Status BinlogFileReader::parse_file_header(RandomAccessFile* read_file, int64_t file_size,
+                                           BinlogFileHeaderPB* file_header, int64_t* read_file_size) {
     // Header base size: magic_number + header_pb_size(uint32_t) + header_pb_checksum(uint32_t)
     size_t header_base_size = k_binlog_magic_number_length + 8;
     if (file_size < header_base_size) {
@@ -404,21 +404,32 @@ Status BinlogFileReader::parse_page_header(RandomAccessFile* read_file, int64_t 
     return Status::OK();
 }
 
-Status BinlogFileReader::scan_pages_to_load(int64_t file_id, RandomAccessFile* read_file, int64_t file_size,
-                                            BinlogFileLoadFilter* filter, BinlogFileMetaPB* file_meta) {
+StatusOr<BinlogFileMetaPBPtr> BinlogFileReader::load_meta_by_scan_pages(int64_t file_id, RandomAccessFile* read_file,
+                                                                        int64_t file_size,
+                                                                        BinlogFileDataFilter* filter) {
+    BinlogFileMetaPBPtr file_meta = std::make_shared<BinlogFileMetaPB>();
+    file_meta->set_id(file_id);
+    file_meta->set_num_pages(0);
+    Status status;
     std::unique_ptr<BinlogFileHeaderPB> file_header = std::make_unique<BinlogFileHeaderPB>();
     int64_t read_file_size;
-    RETURN_IF_ERROR(page_file_header(read_file, file_size, file_header.get(), &read_file_size));
-    file_meta->Clear();
-    file_meta->set_id(file_id);
+    status = parse_file_header(read_file, file_size, file_header.get(), &read_file_size);
+    if (!status.ok()) {
+        VLOG(3) << "Failed to parse binlog file header when loading meta, file path: " << read_file->filename() << ", "
+                << status;
+        // The binlog file can be useless, but failed to delete, so return NotFound
+        return Status::NotFound("Failed to parse file header, file path: " + read_file->filename());
+    }
+
     std::unordered_set<int64_t> rowsets;
     int64_t file_pos = read_file_size;
     int64_t num_pages = 0;
     std::unique_ptr<PageHeaderPB> page_header = std::make_unique<PageHeaderPB>();
-    Status status;
     while (true) {
         status = parse_page_header(read_file, file_size, file_pos, num_pages, page_header.get(), &read_file_size);
         if (!status.ok()) {
+            VLOG(3) << "Failed to parse binlog page header when loading meta, file path: " << read_file->filename()
+                    << ", file_pos: " << file_pos << ", page_index: " << num_pages << ", " << status;
             break;
         }
 
@@ -454,8 +465,9 @@ Status BinlogFileReader::scan_pages_to_load(int64_t file_id, RandomAccessFile* r
         num_pages += 1;
         file_pos += read_file_size + page_header->compressed_size();
     }
+
     if (num_pages == 0) {
-        return Status::Corruption("There is no valid pages");
+        return Status::NotFound("There is no valid data in binlog file, path: " << read_file->filename());
     }
 
     file_meta->set_num_pages(num_pages);
@@ -464,12 +476,11 @@ Status BinlogFileReader::scan_pages_to_load(int64_t file_id, RandomAccessFile* r
         file_meta->add_rowsets(rid);
     }
 
-    return Status::OK();
+    return file_meta;
 }
 
-StatusOr<std::shared_ptr<BinlogFileMetaPB>> BinlogFileReader::load(int64_t file_id, std::string& file_path,
-                                                                   BinlogFileLoadFilter* filter) {
-    // TODO how to distinguish corruption and invalid meta
+StatusOr<BinlogFileMetaPBPtr> BinlogFileReader::load_meta(int64_t file_id, std::string& file_path,
+                                                          BinlogFileDataFilter* filter) {
     std::shared_ptr<FileSystem> fs;
     ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(file_path))
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(file_path))
@@ -478,7 +489,7 @@ StatusOr<std::shared_ptr<BinlogFileMetaPB>> BinlogFileReader::load(int64_t file_
     std::shared_ptr<BinlogFileMetaPB> file_meta = std::make_shared<BinlogFileMetaPB>();
     Status st = parse_file_footer(read_file.get(), file_size, file_meta.get());
     if (!st.ok()) {
-        LOG(WARNING) << "Failed to parse binlog file footer " << file_path << ", " << st;
+        VLOG(3) << "Failed to parse binlog file footer, file path: " << file_path << ", " << st;
     } else {
         // verify the file meta from footer is valid
         if (filter->is_valid_seq(file_meta->end_version(), file_meta->end_seq_id())) {
@@ -493,11 +504,10 @@ StatusOr<std::shared_ptr<BinlogFileMetaPB>> BinlogFileReader::load(int64_t file_
                 return file_meta;
             }
         }
-        LOG(WARNING) << "Binlog file footer not matches the filter, file path: " << file_path;
+        VLOG(3) << "Binlog file footer is not valid, file path: " << file_path;
     }
 
-    RETURN_IF_ERROR(scan_pages_to_load(file_id, read_file.get(), file_size, filter, file_meta.get()));
-    return file_meta;
+    return load_meta_by_scan_pages(file_id, read_file.get(), file_size, filter);
 }
 
 } // namespace starrocks

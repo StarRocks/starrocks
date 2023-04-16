@@ -425,9 +425,9 @@ TEST_F(BinlogFileTest, test_random_begin_commit_abort) {
 // TODO add tests for primary key
 TEST_F(BinlogFileTest, test_primary_key) {}
 
-class BinlogFileLoadFilterTest : public BinlogFileLoadFilter {
+class BinlogFileDataFilterTest : public BinlogFileDataFilter {
 public:
-    BinlogFileLoadFilterTest(int64_t max_version, int64_t max_seq_id, std::unordered_set<int64_t>* rowset_ids)
+    BinlogFileDataFilterTest(int64_t max_version, int64_t max_seq_id, std::unordered_set<int64_t>* rowset_ids)
             : _max_version(max_version), _max_seq_id(max_seq_id), _rowset_ids(rowset_ids) {}
 
     bool is_valid_seq(int64_t version, int64_t seq_id) override {
@@ -501,15 +501,15 @@ void BinlogFileTest::test_load(bool append_meta) {
 
         // filter by rowset id
         if (i + 1 < metas_for_each_page.size() && meta->end_version() < metas_for_each_page[i + 1]->end_version()) {
-            BinlogFileLoadFilterTest filter(INT64_MAX, INT64_MAX, &filter_rowset_ids);
-            auto status_or = BinlogFileReader::load(file_id, file_path, &filter);
+            BinlogFileDataFilterTest filter(INT64_MAX, INT64_MAX, &filter_rowset_ids);
+            auto status_or = BinlogFileReader::load_meta(file_id, file_path, &filter);
             ASSERT_OK(status_or.status());
             verify_file_meta(meta.get(), status_or.value());
         }
 
         // filter by seq id
-        BinlogFileLoadFilterTest filter(meta->end_version(), meta->end_seq_id() + 1, nullptr);
-        auto status_or = BinlogFileReader::load(file_id, file_path, &filter);
+        BinlogFileDataFilterTest filter(meta->end_version(), meta->end_seq_id() + 1, nullptr);
+        auto status_or = BinlogFileReader::load_meta(file_id, file_path, &filter);
         ASSERT_OK(status_or.status());
         verify_file_meta(meta.get(), status_or.value());
     }

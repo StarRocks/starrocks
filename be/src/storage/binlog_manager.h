@@ -93,7 +93,7 @@ private:
     Tablet& _tablet;
 };
 
-class BinlogFileLoadFilterImpl : public BinlogFileLoadFilter {
+class BinlogFileLoadFilterImpl : public BinlogFileDataFilter {
 public:
     BinlogFileLoadFilterImpl(int64_t max_version, int64_t max_seq_id, RowsetFetcher* rowset_fetcher);
 
