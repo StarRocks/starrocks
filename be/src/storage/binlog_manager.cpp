@@ -55,7 +55,7 @@ BinlogManager::~BinlogManager() {
     }
 }
 
-Status BinlogManager::init() {
+Status BinlogManager::init(int64_t min_version, int64_t max_version) {
     std::set<int64_t> binlog_file_ids;
     Status status = BinlogUtil::list_binlog_file_ids(_path, &binlog_file_ids);
     if (!status.ok()) {
@@ -225,11 +225,11 @@ void BinlogManager::_apply_build_result(BinlogBuildResult* result) {
     _active_binlog_writer = result->active_writer;
 }
 
-void BinlogManager::check_expire_and_capacity(int64_t current_second, int64_t binlog_ttl_second,
+bool BinlogManager::check_expire_and_capacity(int64_t current_second, int64_t binlog_ttl_second,
                                               int64_t binlog_max_size) {
     std::unique_lock lock(_meta_lock);
     _check_wait_reader_binlog_files();
-    _check_alive_binlog_files(current_second, binlog_ttl_second, binlog_max_size);
+    bool expired_or_overcapacity = _check_alive_binlog_files(current_second, binlog_ttl_second, binlog_max_size);
 
     LOG(INFO) << "Check binlog expire and capacity, tablet: " << _tablet_id
               << ", num alive binlog files: " << _alive_binlog_files.size()
@@ -240,6 +240,8 @@ void BinlogManager::check_expire_and_capacity(int64_t current_second, int64_t bi
               << ", num wait reader rowset: " << _wait_reader_rowset_count_map.size()
               << ", total_wait_reader_binlog_file_size: " << _total_wait_reader_binlog_file_size
               << ", total_wait_reader_rowset_data_size: " << _total_wait_reader_rowset_data_size;
+
+    return expired_or_overcapacity;
 }
 
 void BinlogManager::_check_wait_reader_binlog_files() {
@@ -276,7 +278,7 @@ void BinlogManager::_check_wait_reader_binlog_files() {
               << ", num of still wait files: " << _wait_reader_binlog_files.size();
 }
 
-void BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t binlog_ttl_second,
+bool BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t binlog_ttl_second,
                                               int64_t binlog_max_size) {
     int64_t expiration_time = current_second - binlog_ttl_second;
     int64_t active_file_id = _active_binlog_writer != nullptr ? _active_binlog_writer->file_id() : -1;
@@ -287,6 +289,7 @@ void BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t bi
     int64_t last_file_id = -1;
     int64_t num_files = 0;
     int64_t num_unused_files = 0;
+    bool expired_or_overcapacity = false;
     for (auto it = _alive_binlog_files.begin(); it != _alive_binlog_files.end();) {
         auto& binlog_file = it->second;
         auto& meta = binlog_file->file_meta();
@@ -300,6 +303,7 @@ void BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t bi
             break;
         }
 
+        expired_or_overcapacity = true;
         if (binlog_file->reader_count() > 0) {
             need_wait_reader = true;
         }
@@ -345,6 +349,8 @@ void BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t bi
     LOG(INFO) << "Check alive binlog files, tablet: " << _tablet_id << ", num files: " << num_files
               << ", first file id: " << first_file_id << ", last file id: " << last_file_id
               << ", num unused files: " << num_unused_files;
+
+    return expired_or_overcapacity;
 }
 
 void BinlogManager::delete_unused_binlog() {

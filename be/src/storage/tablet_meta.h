@@ -201,6 +201,14 @@ public:
         _binlog_config->update(new_config);
     }
 
+    int64_t get_binlog_min_version() {
+        return _binlog_min_version;
+    }
+
+    void set_binlog_min_version(int64 min_version) {
+        _binlog_min_version = min_version;
+    }
+
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
 
@@ -245,6 +253,7 @@ private:
     TabletUpdates* _updates = nullptr;
 
     std::shared_ptr<BinlogConfig> _binlog_config;
+    int64_t _binlog_min_version = -1;
 
     std::shared_mutex _meta_lock;
 };

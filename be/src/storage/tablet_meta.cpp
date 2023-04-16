@@ -275,6 +275,10 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
         binlog_config.update(tablet_meta_pb.binlog_config());
         set_binlog_config(binlog_config);
     }
+
+    if (tablet_meta_pb.has_binlog_min_version()) {
+        _binlog_min_version = tablet_meta_pb.binlog_min_version();
+    }
 }
 
 void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
@@ -327,6 +331,10 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
 
     if (_binlog_config != nullptr) {
         _binlog_config->to_pb(tablet_meta_pb->mutable_binlog_config());
+    }
+
+    if (_binlog_min_version != -1) {
+        tablet_meta_pb->set_binlog_min_version(_binlog_min_version);
     }
 }
 

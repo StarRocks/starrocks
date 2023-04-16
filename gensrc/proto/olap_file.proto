@@ -279,6 +279,7 @@ message TabletMetaPB {
     optional TabletUpdatesPB updates = 50;                        // used for new updatable tablet
     optional bool enable_persistent_index = 51 [default = false]; // used for persistent index in primary index
     optional BinlogConfigPB binlog_config = 52;
+    optional int64 binlog_min_version = 53;
 }
 
 message OLAPIndexHeaderMessage {

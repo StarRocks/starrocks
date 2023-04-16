@@ -191,7 +191,7 @@ public:
 
     ~BinlogManager();
 
-    Status init();
+    Status init(int64_t min_version, int64_t max_version);
 
     //  The process of an ingestion is as following, and protected by Tablet#_meta_lock to ensure there is
     //  no concurrent ingestion for duplicate key table
@@ -238,7 +238,8 @@ public:
     // because Tablet#_inc_rs_version_map may be visited. This method only updates metas
     // of binlog files that should be deleted, but not do the deletion which will be done
     // in delete_unused_binlog() later, so Tablet#_meta_lock will not be blocked too long.
-    void check_expire_and_capacity(int64_t current_second, int64_t binlog_ttl_second, int64_t binlog_max_size);
+    // Return true if there is expired or overcapacity binlog.
+    bool check_expire_and_capacity(int64_t current_second, int64_t binlog_ttl_second, int64_t binlog_max_size);
 
     // Whether the rowset is used by the binlog.
     bool is_rowset_used(int64_t rowset_id);
@@ -295,7 +296,7 @@ public:
 private:
     void _apply_build_result(BinlogBuildResult* result);
     void _check_wait_reader_binlog_files();
-    void _check_alive_binlog_files(int64_t current_second, int64_t binlog_ttl_second, int64_t binlog_max_size);
+    bool _check_alive_binlog_files(int64_t current_second, int64_t binlog_ttl_second, int64_t binlog_max_size);
     Status _check_init_failure();
 
     int64_t _tablet_id;

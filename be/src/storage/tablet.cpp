@@ -251,6 +251,10 @@ Status Tablet::load_rowset(const RowsetSharedPtr& rowset) {
         return st;
     }
 
+    if (rowset->version().second < _tablet_meta->get_binlog_min_version()) {
+        return st;
+    }
+
     auto rs = _inc_rs_version_map.find(rowset->version());
     if (rs != _inc_rs_version_map.end()) {
         // this should not happen
@@ -277,9 +281,25 @@ Status Tablet::finish_load_rowsets() {
         return Status::OK();
     }
 
-    Status status = _binlog_manager->init();
+    int64_t min_version = INT64_MAX;
+    int64_t max_version = 0;
+    for (auto& item : _inc_rs_version_map) {
+        int64_t ver = item.first.first;
+        if (ver < _tablet_meta->get_binlog_min_version()) {
+            continue;
+        }
+        min_version = std::min(min_version, ver);
+        max_version = std::max(max_version, ver);
+    }
+
+    Status status = _binlog_manager->init(min_version, max_version);
     if (!status.ok()) {
-        LOG(WARNING) << "Fail to initialize binlog for tablet " << tablet_id() << ", " << status;
+        LOG(WARNING) << "Fail to initialize binlog for tablet " << full_name()
+                     << ", min version: " << min_version << ", max_version: " << max_version
+                     << ", " << status;
+    } else {
+        VLOG(3) << "Success to initialize binlog in finish_load_rowsets, tablet: " << full_name()
+                << ", min version: " << min_version << ", max_version: " << max_version;
     }
 
     return status;
@@ -429,7 +449,14 @@ void Tablet::update_binlog_config(const BinlogConfig& new_config) {
         return;
     }
     _tablet_meta->set_binlog_config(new_config);
-    LOG(INFO) << "set binlog config of tablet: " << tablet_id() << ", " << new_config.to_string();
+    // set minimum version if this will enable binlog
+    if (new_config.binlog_enable && (old_config == nullptr || !old_config->binlog_enable)) {
+        Version max_version = _tablet_meta->max_version();
+        _tablet_meta->set_binlog_min_version(max_version.second + 1);
+    }
+
+    LOG(INFO) << "set binlog config of tablet: " << tablet_id() << ", " << new_config.to_string()
+              << ", minimum version: " << _tablet_meta->get_binlog_min_version();
 }
 
 StatusOr<bool> Tablet::_prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version) {
@@ -569,8 +596,14 @@ void Tablet::delete_expired_inc_rowsets() {
     std::unique_lock wrlock(_meta_lock);
     auto config = _tablet_meta->get_binlog_config();
     bool binlog_enable = config != nullptr && config->binlog_enable;
+    int64_t old_binlog_min_version = _tablet_meta->get_binlog_min_version();
     if (binlog_enable) {
-        _binlog_manager->check_expire_and_capacity(now, config->binlog_ttl_second, config->binlog_max_size);
+        bool expired_or_overcapacity = _binlog_manager->check_expire_and_capacity(now, config->binlog_ttl_second, config->binlog_max_size);
+        if (expired_or_overcapacity) {
+            BinlogRange binlog_range = _binlog_manager->current_binlog_range();
+            int64_t binlog_min_version = binlog_range.is_empty() ? _tablet_meta->max_version().second + 1 : binlog_range.start_version();
+            _tablet_meta->set_binlog_min_version(binlog_min_version);
+        }
     }
 
     for (auto& rs_meta : _tablet_meta->all_inc_rs_metas()) {
@@ -589,16 +622,15 @@ void Tablet::delete_expired_inc_rowsets() {
         }
     }
 
-    if (expired_versions.empty()) {
-        return;
-    }
-
     for (auto& version : expired_versions) {
         _delete_inc_rowset_by_version(version);
         VLOG(3) << "delete expire incremental data. tablet=" << full_name() << ", version=" << version.first;
     }
 
-    save_meta();
+    if (!expired_versions.empty() || old_binlog_min_version > _tablet_meta->get_binlog_min_version()) {
+        save_meta();
+    }
+
     wrlock.unlock();
 
     if (binlog_enable) {

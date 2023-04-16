@@ -698,11 +698,14 @@ void BinlogManagerTest::test_binlog_delete(bool expired, bool overcapacity) {
 
         int64_t current_second = expired ? param.current_second : param.binlog_ttl_second;
         int64_t max_size = overcapacity ? param.binlog_max_size : INT64_MAX;
-        binlog_manager->check_expire_and_capacity(current_second, param.binlog_ttl_second, max_size);
+        bool expired_or_overcapacity =
+                binlog_manager->check_expire_and_capacity(current_second, param.binlog_ttl_second, max_size);
         if (is_alive) {
             verify_alive_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 0);
+            ASSERT_FALSE(expired_or_overcapacity);
         } else {
             verify_alive_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, i + 1);
+            ASSERT_TRUE(expired_or_overcapacity);
         }
         verify_wait_reader_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, i, i - 1);
     }
@@ -744,9 +747,11 @@ TEST_F(BinlogManagerTest, test_wait_reader) {
     std::vector<ExpireAndCapacityParams> params;
     generate_params(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, params);
 
+    bool expired_or_overcapacity = false;
     auto& param_4 = params[4];
-    binlog_manager->check_expire_and_capacity(param_4.binlog_ttl_second, param_4.binlog_ttl_second,
-                                              param_4.binlog_max_size);
+    expired_or_overcapacity = binlog_manager->check_expire_and_capacity(
+            param_4.binlog_ttl_second, param_4.binlog_ttl_second, param_4.binlog_max_size);
+    ASSERT_TRUE(expired_or_overcapacity);
     verify_alive_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 5);
     verify_wait_reader_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 0, -1);
     ASSERT_EQ(5, binlog_manager->unused_binlog_file_ids().get_size());
@@ -756,23 +761,26 @@ TEST_F(BinlogManagerTest, test_wait_reader) {
                                                  file_info_5->rowsets.front().start_seq_id);
     ASSERT_OK(st_5.status());
     auto& param_9 = params[9];
-    binlog_manager->check_expire_and_capacity(param_9.binlog_ttl_second, param_9.binlog_ttl_second,
-                                              param_9.binlog_max_size);
+    expired_or_overcapacity = binlog_manager->check_expire_and_capacity(
+            param_9.binlog_ttl_second, param_9.binlog_ttl_second, param_9.binlog_max_size);
+    ASSERT_TRUE(expired_or_overcapacity);
     verify_alive_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 10);
     verify_wait_reader_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 5, 9);
     ASSERT_EQ(5, binlog_manager->unused_binlog_file_ids().get_size());
 
     auto& param_14 = params[14];
-    binlog_manager->check_expire_and_capacity(param_14.binlog_ttl_second, param_14.binlog_ttl_second,
-                                              param_14.binlog_max_size);
+    expired_or_overcapacity = binlog_manager->check_expire_and_capacity(
+            param_14.binlog_ttl_second, param_14.binlog_ttl_second, param_14.binlog_max_size);
+    ASSERT_TRUE(expired_or_overcapacity);
     verify_alive_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 15);
     verify_wait_reader_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 5, 14);
     ASSERT_EQ(5, binlog_manager->unused_binlog_file_ids().get_size());
 
     st_5.value().reset();
     auto& param_last = params.back();
-    binlog_manager->check_expire_and_capacity(param_last.binlog_ttl_second, param_last.binlog_ttl_second,
-                                              param_last.binlog_max_size);
+    expired_or_overcapacity = binlog_manager->check_expire_and_capacity(
+            param_last.binlog_ttl_second, param_last.binlog_ttl_second, param_last.binlog_max_size);
+    ASSERT_TRUE(expired_or_overcapacity);
     verify_alive_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, params.size());
     verify_wait_reader_binlog_files(binlog_manager.get(), rowset_fetcher.get(), binlog_file_infos, 0, -1);
     ASSERT_EQ(params.size(), binlog_manager->unused_binlog_file_ids().get_size());
@@ -908,7 +916,7 @@ TEST_F(BinlogManagerTest, test_init) {
     generate_binlog_file(6, binlog_file_info_6, &binlog_page_metas_6);
     expect_metas.push_back(binlog_page_metas_6.back());
 
-    ASSERT_OK(binlog_manager->init());
+    ASSERT_OK(binlog_manager->init(1, 6));
 
     LsnMap& alive_binlog_files = binlog_manager->alive_binlog_files();
     RowsetCountMap& rowset_count_map = binlog_manager->alive_rowset_count_map();
