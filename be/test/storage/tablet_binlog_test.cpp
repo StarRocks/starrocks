@@ -130,6 +130,34 @@ void TabletBinlogTest::ingest_random_binlog(TabletSharedPtr tablet, int64_t star
     }
 }
 
+TEST_F(TabletBinlogTest, test_config_binlog) {
+    std::shared_ptr<BinlogConfig> binlog_config = _tablet->tablet_meta()->get_binlog_config();
+    ASSERT_EQ(1, binlog_config->version);
+    ASSERT_TRUE(binlog_config->binlog_enable);
+    ASSERT_EQ(30 * 60, binlog_config->binlog_ttl_second);
+    ASSERT_EQ(INT64_MAX, binlog_config->binlog_max_size);
+
+    // higher version will override the configuration
+    BinlogConfig binlog_config_3;
+    binlog_config_3.update(3, true, 823, 984);
+    _tablet->update_binlog_config(binlog_config_3);
+    binlog_config = _tablet->tablet_meta()->get_binlog_config();
+    ASSERT_EQ(3, binlog_config->version);
+    ASSERT_TRUE(binlog_config->binlog_enable);
+    ASSERT_EQ(823, binlog_config->binlog_ttl_second);
+    ASSERT_EQ(984, binlog_config->binlog_max_size);
+
+    // lower version would not override the configuration
+    BinlogConfig binlog_config_2;
+    binlog_config_2.update(2, true, 323, 475);
+    _tablet->update_binlog_config(binlog_config_2);
+    binlog_config = _tablet->tablet_meta()->get_binlog_config();
+    ASSERT_EQ(3, binlog_config->version);
+    ASSERT_TRUE(binlog_config->binlog_enable);
+    ASSERT_EQ(823, binlog_config->binlog_ttl_second);
+    ASSERT_EQ(984, binlog_config->binlog_max_size);
+}
+
 TEST_F(TabletBinlogTest, test_generate_binlog) {
     std::vector<DupKeyVersionInfo> version_infos;
     ingest_random_binlog(_tablet, 2, 100, &version_infos);

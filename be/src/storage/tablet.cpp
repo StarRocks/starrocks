@@ -421,6 +421,17 @@ Status Tablet::support_binlog() {
     return Status::InternalError("Not support binlog, keys type: " + KeysType_Name(keys_type()));
 }
 
+void Tablet::update_binlog_config(const BinlogConfig& new_config) {
+    std::shared_ptr<BinlogConfig> old_config = _tablet_meta->get_binlog_config();
+    if (old_config != nullptr && old_config->version >= new_config.version) {
+        VLOG(3) << "skip to update binlog config of tablet: " << tablet_id()
+                << ", current version: " << old_config->version << ", new version: " << new_config.version;
+        return;
+    }
+    _tablet_meta->set_binlog_config(new_config);
+    LOG(INFO) << "set binlog config of tablet: " << tablet_id() << ", " << new_config.to_string();
+}
+
 StatusOr<bool> Tablet::_prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version) {
     auto config = _tablet_meta->get_binlog_config();
     if (config == nullptr || !config->binlog_enable) {

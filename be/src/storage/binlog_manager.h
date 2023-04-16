@@ -63,7 +63,7 @@ struct BinlogConfig {
         binlog_config_pb->set_binlog_max_size(binlog_max_size);
     }
 
-    std::string to_string() {
+    std::string to_string() const {
         return strings::Substitute(
                 "BinlogConfig={version=$0, binlog_enable=$1, binlog_ttl_second=$2, binlog_max_size=$3}", version,
                 binlog_enable, binlog_ttl_second, binlog_max_size);
