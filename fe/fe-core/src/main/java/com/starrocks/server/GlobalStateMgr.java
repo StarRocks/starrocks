@@ -1143,10 +1143,6 @@ public class GlobalStateMgr {
                 initDefaultCluster();
             }
 
-            if (!warehouseMgr.warehouseExists(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
-                initDefaultWarehouse();
-            }
-
             // MUST set leader ip before starting checkpoint thread.
             // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();
@@ -3463,10 +3459,6 @@ public class GlobalStateMgr {
 
     public void initDefaultCluster() {
         localMetastore.initDefaultCluster();
-    }
-
-    public void initDefaultWarehouse() {
-        warehouseMgr.initDefaultWarehouse();
     }
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
