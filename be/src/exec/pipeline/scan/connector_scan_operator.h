@@ -53,7 +53,7 @@ private:
     ActiveInputSet _active_inputs;
 };
 
-    class ConnectorScanOperatorAdaptiveProcessor;
+class ConnectorScanOperatorAdaptiveProcessor;
 class ConnectorScanOperator : public ScanOperator {
 public:
     ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,

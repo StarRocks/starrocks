@@ -257,7 +257,7 @@ public:
     int64_t num_bytes_read() const { return _stats.bytes_read; }
     int64_t raw_rows_read() const { return _stats.raw_rows_read; }
     int64_t num_rows_read() const { return _stats.num_rows_read; }
-    int64_t cpu_time_spent() const { return _total_running_time - _stats.io_ns;}
+    int64_t cpu_time_spent() const { return _total_running_time - _stats.io_ns; }
     int64_t io_time_spent() const { return _stats.io_ns; }
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
