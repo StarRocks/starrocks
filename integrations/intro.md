@@ -6,8 +6,6 @@
 
 [Apache Superset](./BI_integrations/Superset.md)
 
-[DataGrip](./BI_integrations/DataGrip.md)
-
 [Hex](./BI_integrations/Hex.md)
 
 [Querybook](./BI_integrations/Querybook.md)
@@ -31,6 +29,10 @@
 [Apache Spark Connector](https://github.com/StarRocks/starrocks-connector-for-apache-spark)
 
 [Apache Kafka](https://docs.starrocks.io/en-us/main/loading/RoutineLoad.md)
+
+## IDE 工具
+
+[DataGrip](./BI_integrations/DataGrip.md)
 
 ## 集群管理
 
