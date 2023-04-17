@@ -365,6 +365,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 List<ScalarOperator> predicates = Utils.extractConjuncts(scanOperator.getPredicate());
 
                 // check column could apply dict optimize and replace string column to dict column
+                Set<ColumnRefOperator> hasEncodedColumnRefs = Sets.newHashSet();
                 for (Integer columnId : context.tableIdToStringColumnIds.get(tableId)) {
                     ColumnRefOperator stringColumn = context.columnRefFactory.getColumnRef(columnId);
                     if (!scanOperator.getColRefToColumnMetaMap().containsKey(stringColumn)) {
@@ -390,6 +391,10 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     if (!checkColumnCouldApply.getAsBoolean()) {
                         continue;
                     }
+                    if (hasEncodedColumnRefs.contains(stringColumn)) {
+                        continue;
+                    }
+                    hasEncodedColumnRefs.add(stringColumn);
 
                     ColumnRefOperator newDictColumn = createNewDictColumn(context, stringColumn);
 
