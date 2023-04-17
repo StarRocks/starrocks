@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -542,9 +543,8 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "GROUP BY `test_base_part`.`c3`, `test_base_part`.`c1`;");
 
             String query = "select c1, c3, sum(c4) from test_base_part group by c1, c3;";
-            testRewriteOK(query)
-                    .contains("partial_mv_9")
-                    .contains("PREDICATES: (10: c3 >= 1000) OR (10: c3 IS NULL)");
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "partial_mv_9", "PREDICATES: (10: c3 >= 1000) OR (10: c3 IS NULL)");
             starRocksAssert.dropMaterializedView("partial_mv_9");
         }
 
@@ -564,11 +564,9 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "GROUP BY `test_base_part`.`c3`, `test_base_part`.`c1`;");
 
             String query = "select c1, c3, sum(c4) from test_base_part where c3 < 2000 group by c1, c3;";
-            testRewriteOK(query)
-                    .contains("partial_mv_11")
-                    .contains("PREDICATES: 10: c3 > 999")
-                    .contains("partitions=2/5")
-                    .notContains("10: c3 IS NULL");
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "partial_mv_11", "PREDICATES: 10: c3 > 999", "partitions=2/5");
+            PlanTestBase.assertNotContains(plan, "10: c3 IS NULL");
             starRocksAssert.dropMaterializedView("partial_mv_11");
         }
 
@@ -598,9 +596,8 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "GROUP BY `c3`, `c1`;");
 
             String query = "select c1, c3, sum(c4) from test_base_part_not_null group by c1, c3;";
-            testRewriteOK(query)
-                    .contains("partial_mv_10")
-                    .contains("partitions=2/5");
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "partial_mv_10", "partitions=2/5");
             starRocksAssert.dropMaterializedView("partial_mv_10");
         }
 
@@ -620,9 +617,8 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "GROUP BY `test_base_part`.`c3`, `test_base_part`.`c1`;");
 
             String query = "select c1, c3, sum(c4) from test_base_part group by c1, c3;";
-            testRewriteOK(query)
-                    .contains("partial_mv_12")
-                    .contains("PREDICATES: 10: c3 IS NOT NULL");
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "partial_mv_12", "PREDICATES: 10: c3 IS NOT NULL");
             starRocksAssert.dropMaterializedView("partial_mv_12");
         }
 
@@ -642,9 +638,8 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                     "GROUP BY `test_base_part`.`c3`, `test_base_part`.`c1`;");
 
             String query = "select c1, c3, sum(c4) from test_base_part group by c1, c3;";
-            testRewriteOK(query)
-                    .contains("partial_mv_13")
-                    .contains("PREDICATES: 10: c3 IS NULL");
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "partial_mv_13", "PREDICATES: 10: c3 IS NULL");
             starRocksAssert.dropMaterializedView("partial_mv_13");
         }
     }
