@@ -307,6 +307,9 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
         } else {
             // if speedup ratio is not as expected, we revert.
             do_dec_io_tasks();
+            if ((cs_speed * P.expected_speedup_ratio) < P.last_cs_speed) {
+                do_dec_io_tasks();
+            }
         }
     }
 
