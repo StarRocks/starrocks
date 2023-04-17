@@ -119,6 +119,7 @@ import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterPolicyStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
@@ -156,6 +157,7 @@ import com.starrocks.sql.ast.CreateImageClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreatePolicyStmt;
 import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
@@ -189,6 +191,7 @@ import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropObserverClause;
 import com.starrocks.sql.ast.DropPartitionClause;
+import com.starrocks.sql.ast.DropPolicyStmt;
 import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
@@ -245,6 +248,8 @@ import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
+import com.starrocks.sql.ast.PolicyName;
+import com.starrocks.sql.ast.PolicyType;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.sql.ast.PropertySet;
 import com.starrocks.sql.ast.QualifiedName;
@@ -302,6 +307,7 @@ import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
+import com.starrocks.sql.ast.ShowCreatePolicyStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
@@ -321,6 +327,7 @@ import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowOpenTableStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
+import com.starrocks.sql.ast.ShowPolicyStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
 import com.starrocks.sql.ast.ShowProcesslistStmt;
@@ -2753,6 +2760,167 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitHelpStatement(StarRocksParser.HelpStatementContext context) {
         String mask = ((Identifier) visit(context.identifierOrString())).getValue();
         return new HelpStmt(mask, createPos(context));
+    }
+
+    // ---------------------------------------- Security Policy Statement ---------------------------------------------------
+
+    @Override
+    public ParseNode visitCreateMaskingPolicyStatement(StarRocksParser.CreateMaskingPolicyStatementContext context) {
+        List<String> argNames = new ArrayList<>();
+        List<TypeDef> argTypes = new ArrayList<>();
+        for (StarRocksParser.PolicySignatureContext arg : context.policySignature()) {
+            argNames.add(((Identifier) visit(arg.identifier())).getValue());
+            argTypes.add(new TypeDef(getType(arg.type())));
+        }
+
+        QualifiedName qualifiedName = getQualifiedName(context.policyName);
+        PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
+
+        String comment = context.comment() == null ? "" : ((StringLiteral) visit(context.comment())).getStringValue();
+
+        return new CreatePolicyStmt(context.OR() != null, context.IF() != null,
+                PolicyType.COLUMN_MASKING, policyName, argNames, argTypes, new TypeDef(getType(context.type())),
+                (Expr) visit(context.expression()), comment, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropMaskingPolicyStatement(StarRocksParser.DropMaskingPolicyStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
+        return new DropPolicyStmt(PolicyType.COLUMN_MASKING, policyName, context.IF() != null, context.FORCE() != null,
+                createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterMaskingPolicyStatement(StarRocksParser.AlterMaskingPolicyStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.policyName);
+        PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
+
+        if (context.BODY() != null) {
+            return new AlterPolicyStmt(PolicyType.COLUMN_MASKING, policyName, context.IF() != null,
+                    new AlterPolicyStmt.PolicySetBody((Expr) visit(context.expression())), createPos(context));
+        } else if (context.COMMENT() != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+            return new AlterPolicyStmt(PolicyType.COLUMN_MASKING, policyName, context.IF() != null,
+                    new AlterPolicyStmt.PolicySetComment(stringLiteral.getValue()), createPos(context));
+        } else {
+            String newPolicyName = ((Identifier) visit(context.newPolicyName)).getValue();
+            return new AlterPolicyStmt(PolicyType.COLUMN_MASKING, policyName, context.IF() != null,
+                    new AlterPolicyStmt.PolicyRename(newPolicyName), createPos(context));
+        }
+    }
+
+    @Override
+    public ParseNode visitShowMaskingPolicyStatement(StarRocksParser.ShowMaskingPolicyStatementContext context) {
+        String database = null;
+        String catalog = null;
+        // catalog.db
+        if (context.qualifiedName() != null) {
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            List<String> parts = qualifiedName.getParts();
+            if (parts.size() == 2) {
+                catalog = qualifiedName.getParts().get(0);
+                database = qualifiedName.getParts().get(1);
+            } else if (parts.size() == 1) {
+                database = qualifiedName.getParts().get(0);
+            }
+        }
+
+        return new ShowPolicyStmt(catalog, database, PolicyType.COLUMN_MASKING, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowCreateMaskingPolicyStatement(StarRocksParser.ShowCreateMaskingPolicyStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
+        return new ShowCreatePolicyStmt(PolicyType.COLUMN_MASKING, policyName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitCreateRowAccessPolicyStatement(StarRocksParser.CreateRowAccessPolicyStatementContext context) {
+        List<String> argNames = new ArrayList<>();
+        List<TypeDef> argTypes = new ArrayList<>();
+        for (StarRocksParser.PolicySignatureContext arg : context.policySignature()) {
+            argNames.add(((Identifier) visit(arg.identifier())).getValue());
+            argTypes.add(new TypeDef(getType(arg.type())));
+        }
+
+        QualifiedName qualifiedName = getQualifiedName(context.policyName);
+        PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
+
+        String comment = context.comment() == null ? "" : ((StringLiteral) visit(context.comment())).getStringValue();
+
+        return new CreatePolicyStmt(context.OR() != null, context.IF() != null,
+                PolicyType.ROW_ACCESS, policyName, argNames, argTypes, new TypeDef(Type.BOOLEAN),
+                (Expr) visit(context.expression()), comment, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterRowAccessPolicyStatement(StarRocksParser.AlterRowAccessPolicyStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.policyName);
+        PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
+
+        if (context.SET() != null) {
+            return new AlterPolicyStmt(PolicyType.ROW_ACCESS, policyName, context.IF() != null,
+                    new AlterPolicyStmt.PolicySetBody((Expr) visit(context.expression())), createPos(context));
+        } else if (context.COMMENT() != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.string());
+            return new AlterPolicyStmt(PolicyType.ROW_ACCESS, policyName, context.IF() != null,
+                    new AlterPolicyStmt.PolicySetComment(stringLiteral.getValue()), createPos(context));
+        } else {
+            String newPolicyName = ((Identifier) visit(context.newPolicyName)).getValue();
+            return new AlterPolicyStmt(PolicyType.ROW_ACCESS, policyName, context.IF() != null,
+                    new AlterPolicyStmt.PolicyRename(newPolicyName), createPos(context));
+        }
+    }
+
+    @Override
+    public ParseNode visitDropRowAccessPolicyStatement(StarRocksParser.DropRowAccessPolicyStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
+        return new DropPolicyStmt(PolicyType.ROW_ACCESS, policyName, context.IF() != null, context.FORCE() != null,
+                createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowRowAccessPolicyStatement(StarRocksParser.ShowRowAccessPolicyStatementContext context) {
+        String database = null;
+        String catalog = null;
+        // catalog.db
+        if (context.qualifiedName() != null) {
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            List<String> parts = qualifiedName.getParts();
+            if (parts.size() == 2) {
+                catalog = qualifiedName.getParts().get(0);
+                database = qualifiedName.getParts().get(1);
+            } else if (parts.size() == 1) {
+                database = qualifiedName.getParts().get(0);
+            }
+        }
+
+        return new ShowPolicyStmt(catalog, database, PolicyType.ROW_ACCESS, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowCreateRowAccessPolicyStatement(StarRocksParser.ShowCreateRowAccessPolicyStatementContext context) {
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        PolicyName policyName = qualifiedNameToPolicyName(qualifiedName);
+        return new ShowCreatePolicyStmt(PolicyType.ROW_ACCESS, policyName, createPos(context));
+    }
+
+    private PolicyName qualifiedNameToPolicyName(QualifiedName qualifiedName) {
+        // Hierarchy: catalog.database.policy_name
+        List<String> parts = qualifiedName.getParts();
+        if (parts.size() == 3) {
+            return new PolicyName(parts.get(0), parts.get(1), parts.get(2), qualifiedName.getPos());
+        } else if (parts.size() == 2) {
+            return new PolicyName(null, qualifiedName.getParts().get(0), qualifiedName.getParts().get(1),
+                    qualifiedName.getPos());
+        } else if (parts.size() == 1) {
+            return new PolicyName(null, null, qualifiedName.getParts().get(0), qualifiedName.getPos());
+        } else {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidTableFormat(qualifiedName.toString()));
+        }
     }
 
     // ------------------------------------------- Backup Store Statement ----------------------------------------------
