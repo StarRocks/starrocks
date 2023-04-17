@@ -291,11 +291,24 @@ jobs:
           cd ${{ github.workspace }}/fe/fe-core
           cp -rf ${{ steps.run_ut.outputs.COV_DIR }} target/
 
+      - name: MERGE_COMMIT_SHA
+        id: merge_commit_sha
+        run: |
+          set -x
+          merge_commit_sha=`curl -L \
+          -H "Accept: application/vnd.github+json" \
+          -H "Authorization:  token ${{ secrets.GITHUB_TOKEN }}" \
+          -H "X-GitHub-Api-Version: 2022-11-28" \
+          https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.number }} 2>/dev/null \
+          | jq .merge_commit_sha`
+          merge_commit_sha=$(echo ${merge_commit_sha//\"})
+          echo "merge_commit_sha=${merge_commit_sha}" >> $GITHUB_OUTPUT
+
       - name: Upload cov with merge_commit_sha
         uses: codecov/codecov-action@v3
         with:
           override_branch: ${{ github.base_ref }}
-          override_commit: ${{ github.event.pull_request.merge_commit_sha }}
+          override_commit: ${{ steps.merge_commit_sha.outputs.merge_commit_sha }}
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ github.workspace }}/fe/fe-core/target/${{ steps.run_ut.outputs.COV_FILE }}
           dry_run: false
