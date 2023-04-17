@@ -161,7 +161,7 @@ void AgentServer::Impl::init_or_die() {
 #else
         int max_publish_version_worker_count = config::transaction_publish_version_worker_count;
         if (max_publish_version_worker_count <= 0) {
-            max_publish_version_worker_count = CpuInfo::num_cores() / 2;
+            max_publish_version_worker_count = CpuInfo::num_cores();
         }
         max_publish_version_worker_count =
                 std::max(max_publish_version_worker_count, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
