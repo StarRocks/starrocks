@@ -65,7 +65,7 @@ Before starting FEs, add the following configuration items in the FE configurati
     aws_s3_region = <region>
     aws_s3_endpoint = <endpoint_url>
     aws_s3_access_key = <access_key>
-    aws_s3_secret_key = <secrete_key>
+    aws_s3_secret_key = <secret_key>
     ```
 
   - If you use Instance Profile to access S3, add the following configuration items:
@@ -117,7 +117,7 @@ Before starting FEs, add the following configuration items in the FE configurati
   aws_s3_region = <region>                   # For example: us-east-1
   aws_s3_endpoint = <endpoint_url>           # For example: https://storage.googleapis.com
   aws_s3_access_key = <access_key>
-  aws_s3_secret_key = <secrete_key>
+  aws_s3_secret_key = <secret_key>
   ```
 
 
@@ -131,7 +131,7 @@ Before starting FEs, add the following configuration items in the FE configurati
   aws_s3_region = <region>                   # For example: us-east-1
   aws_s3_endpoint = <endpoint_url>           # For example: http://172.26.xx.xxx:39000
   aws_s3_access_key = <access_key>
-  aws_s3_secret_key = <secrete_key>
+  aws_s3_secret_key = <secret_key>
   ```
 
 ### Configure BE nodes for shared-data StarRocks
