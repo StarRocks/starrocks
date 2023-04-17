@@ -141,32 +141,6 @@ PROPERTIES
 
 #### 参数说明
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-* `hosts`：Elasticsearch 集群连接地址，用于获取 Elasticsearch 版本号以及索引的分片分布信息，可指定一个或多个。StarRocks 是根据 `GET /_nodes/http` API 返回的地址和 Elasticsearch 集群进行通讯，所以 `hosts` 参数值必须和 `GET /_nodes/http` 返回的地址一致，否则可能导致 BE 无法和 Elasticsearch 集群进行正常的通讯。
-* `user`：开启 basic 认证的 Elasticsearch 集群的用户名，需要确保该用户有访问 **/*cluster/state/* nodes/http** 等路径权限和对索引的读取权限。
-* `password`：对应用户的密码信息。
-* `index`：StarRocks 中的表对应的 Elasticsearch 的索引名字，可以是索引的别名。
-* `type`：指定索引的类型，默认是 `_doc`。如果您要查询的是数据是在 Elasticsearch 8 及以上版本，那么在 StarRocks 中创建外部表时就不需要配置该参数，因为 Elasticsearch 8 以及上版本已经移除了 mapping types。
-* `transport`：内部保留，默认为 `http`。
-* `es.nodes.wan.only`：表示 StarRocks 是否仅使用 `hosts` 指定的地址，去访问 Elasticsearch 集群并获取数据。自 2.3.0 版本起，StarRocks 支持配置该参数。
-  * `true`：StarRocks 仅使用 `hosts` 指定的地址去访问 Elasticsearch 集群并获取数据，不会探测 Elasticsearch 集群的索引每个分片所在的数据节点地址。如果 StarRocks 无法访问 Elasticsearch 集群内部数据节点的地址，则需要配置为 `true`。
-  * `false`：默认值，StarRocks 通过 `hosts` 中的地址，探测 Elasticsearch 集群索引各个分片所在数据节点的地址。StarRocks 经过查询规划后，相关 BE 节点会直接去请求 Elasticsearch 集群内部的数据节点，获取索引的分片数据。如果 StarRocks 可以访问 Elasticsearch 集群内部数据节点的地址，则建议保持默认值 `false`。
-=======
-| **参数**             | **说明**                                                     |
-| -------------------- | ------------------------------------------------------------ |
-| hosts                | Elasticsearch 集群连接地址，用于获取 Elasticsearch 版本号以及索引的分片分布信息，可指定一个或多个。StarRocks 是根据 `GET /_nodes/http` API 返回的地址和 Elasticsearch 集群进行通讯，所以 `hosts` 参数值必须和 `GET /_nodes/http` 返回的地址一致，否则可能导致 BE 无法和 Elasticsearch 集群进行正常的通讯。 |
-| user                 | 开启 basic 认证的 Elasticsearch 集群的用户名，需要确保该用户有访问 /*cluster/state/* nodes/http 等路径权限和对索引的读取权限。 |
-| password             | 对应用户的密码信息。                                         |
-| index                | StarRocks 中的表对应的 Elasticsearch 的索引名字，可以是索引的别名。 |
-| type                 | 指定索引的类型，默认是 `_doc`。如果您要查询的是数据是在 Elasticsearch 8 及以上版本，那么在 StarRocks 中创建外部表时就不需要配置该参数，因为 Elasticsearch 8 以及上版本已经移除了 mapping types。 |
-| transport            | 内部保留，默认为 `http`。                                    |
-| es.nodes.wan.only    | 表示 StarRocks 是否仅使用 `hosts` 指定的地址，去访问 Elasticsearch 集群并获取数据。自 2.3.0 版本起，StarRocks 支持配置该参数。<ul><li>`true`：StarRocks 仅使用 `hosts` 指定的地址去访问 Elasticsearch 集群并获取数据，不会探测 Elasticsearch 集群的索引每个分片所在的数据节点地址。如果 StarRocks 无法访问 Elasticsearch 集群内部数据节点的地址，则需要配置为 `true`。</li><li>`false`：默认值，StarRocks 通过 `hosts` 中的地址，探测 Elasticsearch 集群索引各个分片所在数据节点的地址。StarRocks 经过查询规划后，相关 BE 节点会直接去请求 Elasticsearch 集群内部的数据节点，获取索引的分片数据。如果 StarRocks 可以访问 Elasticsearch 集群内部数据节点的地址，则建议保持默认值 `false`。</li></ul> |
-| es.net.ssl           | 是否允许使用 HTTPS 协议访问 Elasticsearch 集群。自 2.4 版本起，StarRocks 支持配置该参数。<ul><li>`true`：允许，HTTP 协议和 HTTPS 协议均可访问。</li><li>`false`：不允许，只能使用 HTTP 协议访问。</li></ul> |
-| enable_docvalue_scan | 是否从 Elasticsearch 列式存储获取查询字段的值。默认值：`true`。如果设置为 `true`，StarRocks 从 Elasticsearch 中获取数据会遵循以下两条原则：<ul><li>**尽力而为**: 自动探测要读取的字段是否开启列式存储。如果要获取的字段全部有列存，StarRocks 会从列式存储中获取所有字段的值。</li><li>**自动降级**: 如果要获取的字段中有任何一个字段没有列存，则 StarRocks 会从行存`_source` 中解析获取所有字段的值。</li></ul> |
-| enable_keyword_sniff | 是否对 Elasticsearch 中 TEXT 类型的字段进行探测，通过 KEYWORD 类型字段进行查询。设置为 `false` 会按照分词后的内容匹配。默认值：`true`。 |
->>>>>>> 8609be55 ([Doc] update external table doc (#5000))
-=======
 | **参数**             | **是否必须** | **默认值** | **说明**                                                     |
 | -------------------- | ------------ | ---------- | ------------------------------------------------------------ |
 | hosts                | 是           | 无         | Elasticsearch 集群连接地址，用于获取 Elasticsearch 版本号以及索引的分片分布信息，可指定一个或多个。StarRocks 是根据 `GET /_nodes/http` API 返回的地址和 Elasticsearch 集群进行通讯，所以 `hosts` 参数值必须和 `GET /_nodes/http` 返回的地址一致，否则可能导致 BE 无法和 Elasticsearch 集群进行正常的通讯。 |
@@ -283,7 +257,6 @@ POST /_analyze
 `k4.keyword` 的类型是 KEYWORD，数据写入Elasticsearch 是一个完整的 `term`，因此可以在词典中找到匹配的结果。
 
 #### 映射关系
->>>>>>> 6dd339d1 ([Doc] update external table (#5028))
 
 创建外部表时，需根据 Elasticsearch 的字段类型指定 StarRocks 中外部表的列类型，具体映射关系如下：
 
