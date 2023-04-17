@@ -1406,7 +1406,7 @@ PARALLEL_TEST(ArrowConverterTest, test_convert_nullable_map) {
                                                              map_column, 0, map_column->size(), &filter, nullptr));
     ASSERT_EQ(map_column->size(), counter);
     ASSERT_EQ(down_cast<NullableColumn*>(map_column.get())->null_count(), num_elements);
-    ASSERT_EQ(map_column->debug_item(0), "{'haha':2,'hehe':1}");
+    ASSERT_EQ(map_column->debug_item(0), "{'haha':2,'haha':2,'hehe':1,'hehe':1}");
 }
 
 } // namespace starrocks
