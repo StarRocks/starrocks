@@ -235,6 +235,11 @@ set(EXEC_FILES
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
         ./runtime/memory_scratch_sink_test.cpp
+<<<<<<< HEAD
+=======
+        ./runtime/command_executor_test.cpp
+        ./runtime/exec_env_test.cpp
+>>>>>>> 024b5dbbb (Make query_column_mem_limit configurable (#21632))
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp

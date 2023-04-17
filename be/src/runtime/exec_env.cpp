@@ -29,9 +29,12 @@
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
+<<<<<<< HEAD
+=======
+#include "exec/spill/dir_manager.h"
+>>>>>>> 024b5dbbb (Make query_column_mem_limit configurable (#21632))
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
-#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService_types.h"
@@ -54,6 +57,12 @@
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
+<<<<<<< HEAD
+=======
+#include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/tablet_manager.h"
+#include "storage/lake/update_manager.h"
+>>>>>>> 024b5dbbb (Make query_column_mem_limit configurable (#21632))
 #include "storage/page_cache.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_schema_map.h"
@@ -77,6 +86,17 @@ static int64_t calc_max_load_memory(int64_t process_mem_limit) {
     int32_t max_load_memory_percent = config::load_process_max_memory_limit_percent;
     int64_t max_load_memory_bytes = process_mem_limit * max_load_memory_percent / 100;
     return std::min<int64_t>(max_load_memory_bytes, config::load_process_max_memory_limit_bytes);
+}
+
+int64_t ExecEnv::calc_max_query_memory(int64_t process_mem_limit, int64_t percent) {
+    if (process_mem_limit <= 0) {
+        // -1 means no limit
+        return -1;
+    }
+    if (percent < 0 || percent > 100) {
+        percent = 90;
+    }
+    return process_mem_limit * percent / 100;
 }
 
 static int64_t calc_max_compaction_memory(int64_t process_mem_limit) {
@@ -310,8 +330,19 @@ Status ExecEnv::init_mem_tracker() {
         return Status::InternalError(ss.str());
     }
 
+<<<<<<< HEAD
     _mem_tracker = new MemTracker(MemTracker::PROCESS, bytes_limit, "process");
     _query_pool_mem_tracker = new MemTracker(MemTracker::QUERY_POOL, bytes_limit * 0.9, "query_pool", _mem_tracker);
+=======
+    _process_mem_tracker = regist_tracker(MemTracker::PROCESS, bytes_limit, "process");
+    int64_t query_pool_mem_limit =
+            calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
+    _query_pool_mem_tracker =
+            regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool", this->process_mem_tracker());
+
+    int64_t load_mem_limit = calc_max_load_memory(_process_mem_tracker->limit());
+    _load_mem_tracker = regist_tracker(MemTracker::LOAD, load_mem_limit, "load", process_mem_tracker());
+>>>>>>> 024b5dbbb (Make query_column_mem_limit configurable (#21632))
 
     int64_t load_mem_limit = calc_max_load_memory(_mem_tracker->limit());
     _load_mem_tracker = new MemTracker(MemTracker::LOAD, load_mem_limit, "load", _mem_tracker);
