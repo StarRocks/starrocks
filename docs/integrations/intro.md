@@ -6,15 +6,13 @@ This topic introduces how to integrate with StarRocks.
 
 [Apache Superset](../integrations/BI_integrations/Superset.md)
 
-[DataGrip](../integrations/BI_integrations/DataGrip.md)
-
 [Hex](../integrations/BI_integrations/Hex.md)
 
 [Querybook](../integrations/BI_integrations/Querybook.md)
 
 [Tableau Desktop](../integrations/BI_integrations/Tableau_Desktop.md)
 
-## Data Integration
+## Data integration
 
 [DBT](https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector)
 
@@ -32,7 +30,13 @@ This topic introduces how to integrate with StarRocks.
 
 [Apache Kafka](../loading/RoutineLoad.md)
 
-## Cluster Management
+## IDE tools
+
+[Jupyter](./jupysql.md)
+
+[DataGrip](../integrations/BI_integrations/DataGrip.md)
+
+## Cluster management
 
 [Kubernetes](https://github.com/StarRocks/starrocks-kubernetes-operator)
 
