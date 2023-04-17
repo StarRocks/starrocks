@@ -118,7 +118,7 @@ if [[ -z ${USE_AVX2} ]]; then
 fi
 if [[ -z ${USE_AVX512} ]]; then
     # Enable it by default
-    USE_AVX512=ON
+    USE_AVX512=OFF
 fi
 echo "Build Backend UT"
 
