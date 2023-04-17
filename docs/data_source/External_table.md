@@ -112,6 +112,8 @@ StarRocks and Elasticsearch are two popular analytics systems. StarRocks is perf
 
 ### Example of creating an Elasticsearch external table
 
+#### Syntax
+
 ~~~sql
 CREATE EXTERNAL TABLE elastic_search_external_table
 (
@@ -134,18 +136,124 @@ PROPERTIES (
 
 The followint table describes the parameters.
 
-| **Parameter**        | **Description**                                              |
-| -------------------- | ------------------------------------------------------------ |
-| hosts                | The connection address of the Elasticsearch cluster. You can specify one or more addresses. StarRocks can parse the Elasticsearch version and index shard allocation from this address. StarRocks communicates with your Elasticsearch cluster based on the address returned by the `GET /_nodes/http` API operation. Therefore, the value of the `host` parameter must be the same as the address returned by the `GET /_nodes/http` API operation. Otherwise, BEs may not be able to communicate with your Elasticsearch cluster. |
-| user                 | The username that is used to log in to the Elasticsearch cluster with basic authentication enabled. Make sure you have access to `/*cluster/state/*nodes/http` and the index. |
-| password             | The password that is used to log in to the Elasticsearch cluster. |
-| index                | The name of the Elasticsearch index that is created on the table in StarRocks. The name can be an alias. |
-| type                 | The type of the index. Default value: `_doc`. If you want to query data in Elasticsearch 8 and later versions, you do not need to configure this parameter because the mapping types have been removed in Elasticsearch 8 and later versions. |
-| transport            | This parameter is reserved. Default value: `http`.           |
-| es.nodes.wan.only    | Specifies whether StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data.<ul><li>`true`: StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data and does not sniff data nodes on which the shards of the Elasticsearch index reside. If StarRocks cannot access the addresses of the data nodes inside the Elasticsearch cluster, you need to set this parameter to `true`.</li><li>`false`: default value. StarRocks uses the addresses specified by `host` to sniff data nodes on which the shards of the Elasticsearch cluster indexes reside. After StarRocks generates a query execution plan, the relevant BEs directly access the data nodes inside the Elasticsearch cluster to fetch data from the shards of indexes. If StarRocks can access the addresses of the data nodes inside the Elasticsearch cluster, we recommend that you retain the default value `false`.</li></ul> |
-| es.net.ssl           | Specifies whether the HTTPS protocol can be used to access your Elasticsearch cluster. Only StarRocks 2.4 and later versions support configuring this parameter.<ul><li>`true`: Both the HTTPS and HTTP protocols can be used to access your Elasticsearch cluster.</li><li>`false`: Only the HTTP protocol can be used to access your Elasticsearch cluster.</li></ul> |
-| enable_docvalue_scan | Specifies whether to obtain the values of the target fields from Elasticsearch columnar storage. Default value: `true`. If this parameter is set to `true`, StarRocks follows these rules when it obtains data from Elasticsearch:<ul><li>**Try and see**: StarRocks automatically checks if columnar storage is enabled for the target fields. If so, StarRocks obtains all values in the target fields from columnar storage.</li><li>**Auto-downgrading**: If any one of the target fields is unavailable in columnar storage, StarRocks parses and obtains all values in the target fields from row storage (`_source`).</li></ul> |
-| enable_keyword_sniff | Specifies whether to sniff TEXT-type fields in Elasticsearch based on KEYWORD-type fields. If this parameter is set to `false`, StarRocks performs matching after tokenization. Default value: `true`. |
+| **Parameter**        | **Required** | **Default value** | **Description**                                              |
+| -------------------- | ------------ | ----------------- | ------------------------------------------------------------ |
+| hosts                | Yes          | None              | The connection address of the Elasticsearch cluster. You can specify one or more addresses. StarRocks can parse the Elasticsearch version and index shard allocation from this address. StarRocks communicates with your Elasticsearch cluster based on the address returned by the `GET /_nodes/http` API operation. Therefore, the value of the `host` parameter must be the same as the address returned by the `GET /_nodes/http` API operation. Otherwise, BEs may not be able to communicate with your Elasticsearch cluster. |
+| index                | Yes          | None              | The name of the Elasticsearch index that is created on the table in StarRocks. The name can be an alias. This parameter supports wildcards (*). For example, if you set `index` to `hello*`, StarRocks retrieves all indexes whose names start with `hello`. |
+| user                 | No           | Empty             | The username that is used to log in to the Elasticsearch cluster with basic authentication enabled. Make sure you have access to `/*cluster/state/*nodes/http` and the index. |
+| password             | No           | Empty             | The password that is used to log in to the Elasticsearch cluster. |
+| type                 | No           | `_doc`            | The type of the index. Default value: `_doc`. If you want to query data in Elasticsearch 8 and later versions, you do not need to configure this parameter because the mapping types have been removed in Elasticsearch 8 and later versions. |
+| es.nodes.wan.only    | No           | `false`           | Specifies whether StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data.<ul><li>`true`: StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data and does not sniff data nodes on which the shards of the Elasticsearch index reside. If StarRocks cannot access the addresses of the data nodes inside the Elasticsearch cluster, you need to set this parameter to `true`.</li><li>`false`: StarRocks uses the addresses specified by `host` to sniff data nodes on which the shards of the Elasticsearch cluster indexes reside. After StarRocks generates a query execution plan, the relevant BEs directly access the data nodes inside the Elasticsearch cluster to fetch data from the shards of indexes. If StarRocks can access the addresses of the data nodes inside the Elasticsearch cluster, we recommend that you retain the default value `false`.</li></ul> |
+| es.net.ssl           | No           | `false`           | Specifies whether the HTTPS protocol can be used to access your Elasticsearch cluster. Only StarRocks 2.4 and later versions support configuring this parameter.<ul><li>`true`: Both the HTTPS and HTTP protocols can be used to access your Elasticsearch cluster.</li><li>`false`: Only the HTTP protocol can be used to access your Elasticsearch cluster.</li></ul> |
+| enable_docvalue_scan | No           | `true`            | Specifies whether to obtain the values of the target fields from Elasticsearch columnar storage. In most cases, reading data from columnar storage outperforms reading data from row storage. |
+| enable_keyword_sniff | No           | `true`            | Specifies whether to sniff TEXT-type fields in Elasticsearch based on KEYWORD-type fields. If this parameter is set to `false`, StarRocks performs matching after tokenization. |
+
+##### Columnar scan for faster queries
+
+If you set `enable_docvalue_scan` to `true`, StarRocks follows these rules when it obtains data from Elasticsearch:
+
+* **Try and see**: StarRocks automatically checks if columnar storage is enabled for the target fields. If so, StarRocks obtains all values in the target fields from columnar storage.
+* **Auto-downgrading**: If any one of the target fields is unavailable in columnar storage, StarRocks parses and obtains all values in the target fields from row storage (`_source`).
+
+> **NOTE**
+>
+> * Columnar storage is unavailable for TEXT-type fields in Elasticsearch. Therefore, if you query fields containing TEXT-type values, StarRocks obtains the values of the fields from `_source`.
+> * If you query a large number (greater than or equal to 25) of fields, reading field values from `docvalue` does not show noticeable benefits compared with reading field values from `_source`.
+
+##### Sniff KEYWORD-type fields
+
+If you set `enable_keyword_sniff` to `true`, Elasticsearch allows direct data ingestion without an index because it will automatically create an index after ingestion. For STRING-type fields, Elasticsearch will create a field with both TEXT and KEYWORD types. This is how the Multi-Field feature of Elasticsearch works. The mapping is as follows:
+
+~~~SQL
+"k4": {
+   "type": "text",
+   "fields": {
+      "keyword": {   
+         "type": "keyword",
+         "ignore_above": 256
+      }
+   }
+}
+~~~
+
+For example, to conduct "=" filtering on `k4`, StarRocks on Elasticsearch will convert the filtering operation into an Elasticsearch TermQuery.
+
+The original SQL filter is as follows:
+
+~~~SQL
+k4 = "StarRocks On Elasticsearch"
+~~~
+
+The converted Elasticsearch query DSL is as follows:
+
+~~~SQL
+"term" : {
+    "k4": "StarRocks On Elasticsearch"
+
+}
+~~~
+
+The first field of `k4` is TEXT, and it will be tokenized by the analyzer configured for `k4` (or by the standard analyzer if no analyzer has been configured for `k4`) after data ingestion. As a result, the first field will be tokenized into three terms: `StarRocks`, `On`, and `Elasticsearch`. The details are as follows:
+
+~~~SQL
+POST /_analyze
+{
+  "analyzer": "standard",
+  "text": "StarRocks On Elasticsearch"
+}
+~~~
+
+The tokenization results are as follows:
+
+~~~SQL
+{
+   "tokens": [
+      {
+         "token": "starrocks",
+         "start_offset": 0,
+         "end_offset": 5,
+         "type": "<ALPHANUM>",
+         "position": 0
+      },
+      {
+         "token": "on",
+         "start_offset": 6,
+         "end_offset": 8,
+         "type": "<ALPHANUM>",
+         "position": 1
+      },
+      {
+         "token": "elasticsearch",
+         "start_offset": 9,
+         "end_offset": 11,
+         "type": "<ALPHANUM>",
+         "position": 2
+      }
+   ]
+}
+~~~
+
+Suppose you conduct a query as follows:
+
+~~~SQL
+"term" : {
+    "k4": "StarRocks On Elasticsearch"
+}
+~~~
+
+There is no term in the dictionary that matches the term `StarRocks On Elasticsearch`, and therefore no result will be returned.
+
+However, if you have set `enable_keyword_sniff` to `true`, StarRocks will convert `k4 = "StarRocks On Elasticsearch"` to `k4.keyword = "StarRocks On Elasticsearch"` to match the SQL semantics. The converted `StarRocks On Elasticsearch` query DSL is as follows:
+
+~~~SQL
+"term" : {
+    "k4.keyword": "StarRocks On Elasticsearch"
+}
+~~~
+
+`k4.keyword` is of the KEYWORD type. Therefore, the data is written into Elasticsearch as a complete term, allowing for successful matching.
+
+#### Mapping of column data types
 
 When you create an external table, you need to specify the data types of columns in the external table based on the data types of columns in the Elasticsearch table. The following table shows the mapping of column data types.
 

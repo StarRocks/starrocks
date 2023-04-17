@@ -101,18 +101,15 @@ Example 2: Filter the data of the JSON column to retrieve the data that meets th
 
 ```Plain%20Text
 mysql> select * from tj where j->'a' = parse_json('1');
-+------+---------------------+
-|   id |         j           |
-+------+---------------------+
-|   1  | {"a": 1, "b": true} |
-+------+---------------------+
+Empty set (0.05 sec)
 
-mysql> select * from tj where cast(j->'a' as INT) = 1; 
+mysql> select * from tj where cast(j->'a' as INT) = 1;
 +------+---------------------+
-|   id |         j           |
+| id   | j                   |
 +------+---------------------+
-|   1  | {"a": 1, "b": true} |
+|    1 | {"a": 1, "b": true} |
 +------+---------------------+
+1 row in set (0.05 sec)
 ```
 
 Example 3: Use the CAST function to convert the values in the JSON column of the table to BOOLEAN values. Then, filter the data of the JSON column to retrieve the data that meets the specified filter condition.
@@ -150,15 +147,17 @@ Example 5: Sort the data of the table by using the JSON column as a sort key.
 
 ```Plain%20Text
 mysql> select * from tj
-       where j->'a' <= parse_json('3')
-       order by cast(j->'a' as int);
+    ->        where j->'a' <= parse_json('3')
+    ->        order by cast(j->'a' as int);
 +------+----------------------+
-| id   |           j          |
+| id   | j                    |
 +------+----------------------+
-|  1   | {"a": 1, "b": true}  |
-|  2   | {"a": 2, "b": false} |
-|  3   | {"a": 3, "b": true}  |
+|    1 | {"a": 1, "b": true}  |
+|    2 | {"a": 2, "b": false} |
+|    3 | {"a": 3, "b": true}  |
+|    4 | {"a": 4, "b": false} |
 +------+----------------------+
+4 rows in set (0.05 sec)
 ```
 
 ## JSON functions and operators

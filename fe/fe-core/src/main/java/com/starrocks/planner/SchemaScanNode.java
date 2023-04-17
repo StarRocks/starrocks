@@ -246,7 +246,7 @@ public class SchemaScanNode extends ScanNode {
         for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
             // if user specifies BE id, we try to scan all BEs(including bad BE)
             // if user doesn't specify BE id, we only scan live BEs
-            if ((be.isAlive() && beId == null) || be.getId() == beId) {
+            if ((be.isAlive() && beId == null) || (beId != null && beId.equals(be.getId()))) {
                 if (beScanRanges == null) {
                     beScanRanges = Lists.newArrayList();
                 }

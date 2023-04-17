@@ -292,6 +292,7 @@
       + [multi_distinct_count](./sql-reference/sql-functions/aggregate-functions/multi_distinct_count.md)
       + [percentile_approx](./sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
       + [percentile_cont](./sql-reference/sql-functions/aggregate-functions/percentile_cont.md)
+      + [percentile_disc](./sql-reference/sql-functions/aggregate-functions/percentile_disc.md)
       + [retention](./sql-reference/sql-functions/aggregate-functions/retention.md)
       + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
       + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
