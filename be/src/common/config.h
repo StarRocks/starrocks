@@ -478,7 +478,7 @@ CONF_mInt64(write_buffer_size, "104857600");
 // user should set these configs properly if necessary.
 CONF_Int64(load_process_max_memory_limit_bytes, "107374182400"); // 100GB
 CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
-CONF_Bool(enable_new_load_on_memory_limit_exceeded, "false");
+CONF_mBool(enable_new_load_on_memory_limit_exceeded, "true");
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
