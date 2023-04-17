@@ -15,8 +15,8 @@
 
 package com.starrocks.connector.jdbc;
 
-import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
