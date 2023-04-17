@@ -18,8 +18,8 @@ Tableau Desktop 支持对 StarRocks 的内部数据和外部数据进行查询�
 
   URL 参数说明如下：
 
-  - `Host`：StarRocks 集群的主机 IP 地址。
-  - `Port`：StarRocks 集群的查询端口，如 `9030`。
+  - `Host`：StarRocks 集群的 FE 主机 IP 地址。
+  - `Port`：StarRocks 集群的 FE 查询端口，如 `9030`。
   - `Catalog`：StarRocks 集群中的目标 Catalog。Internal Catalog 和 External Catalog 均支持。
   - `Database`：StarRocks 集群中的目标数据库。内部数据库和外部数据库均支持。
 

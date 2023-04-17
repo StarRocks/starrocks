@@ -10,8 +10,8 @@ DataGrip 支持查询 StarRocks 中的内部数据和外部数据。
 
 需要设置的参数说明如下：
 
-- **Host**：StarRocks 集群的主机 IP 地址。
-- **Port**：StarRocks 集群的查询端口，如 `9030`。
+- **Host**：StarRocks 集群的 FE 主机 IP 地址。
+- **Port**：StarRocks 集群的 FE 查询端口，如 `9030`。
 - **Authentication**：鉴权方式。选择 **Username & Password**。
 - **User**：用于登录 StarRocks 集群的用户名，如 `admin`。
 - **Password**：用于登录 StarRocks 集群的用户密码。
