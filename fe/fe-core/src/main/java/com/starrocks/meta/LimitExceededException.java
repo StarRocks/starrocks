@@ -17,9 +17,9 @@ package com.starrocks.meta;
 import java.io.IOException;
 
 // Used to mark whether the metadata write exceeds the acceptable size.
-public class LimitExceedException extends IOException {
+public class LimitExceededException extends IOException {
 
-    public LimitExceedException(String message) {
+    public LimitExceededException(String message) {
         super(message);
     }
 

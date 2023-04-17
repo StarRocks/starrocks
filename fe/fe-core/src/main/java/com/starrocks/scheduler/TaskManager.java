@@ -27,6 +27,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.meta.LimitExceededException;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -468,7 +469,7 @@ public class TaskManager {
         boolean retry = false;
         try {
             Text.writeString(dos, s);
-        } catch (IOException ex) {
+        } catch (LimitExceededException ex) {
             retry = true;
         }
         if (retry) {

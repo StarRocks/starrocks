@@ -34,7 +34,7 @@
 
 package com.starrocks.common.io;
 
-import com.starrocks.meta.LimitExceedException;
+import com.starrocks.meta.LimitExceededException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -408,7 +408,7 @@ public class Text implements Writable {
         ByteBuffer bytes = encode(s);
         int length = bytes.limit();
         if (length > MAX_BYTES_TO_WRITE) {
-            throw new LimitExceedException("Metadata cannot be written to logs larger than 1GB. " +
+            throw new LimitExceededException("Metadata cannot be written to logs larger than 1GB. " +
                     "Current size: " + length + " bytes.");
         }
         out.writeInt(length);
