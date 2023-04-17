@@ -16,7 +16,6 @@
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 
 import java.util.Objects;
@@ -45,7 +44,7 @@ public class CastOperator extends CallOperator {
     @Override
     public boolean isNullable() {
         ScalarOperator fromOperator = getChild(0);
-        if (ScalarType.isFullyCompatible(fromOperator.getType(), getType())) {
+        if (fromOperator.getType().isFullyCompatible(getType())) {
             return fromOperator.isNullable();
         }
         return true;
