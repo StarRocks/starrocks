@@ -102,6 +102,7 @@ public class TypeManager {
             if (!fieldCommon.isValid()) {
                 return Type.INVALID;
             }
+            fieldTypes.add(fieldCommon);
         }
         // TODO(alvin): needed to assign field names for this struct type
         return new StructType(fieldTypes);
