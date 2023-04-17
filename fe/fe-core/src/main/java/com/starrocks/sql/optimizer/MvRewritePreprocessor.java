@@ -89,7 +89,7 @@ public class MvRewritePreprocessor {
         // all mvs that match SPJG pattern and can ben used to try mv rewrite
         List<String> candidateMvNames = context.getCandidateMvs().stream()
                 .map(materializationContext -> materializationContext.getMv().getName()).collect(Collectors.toList());
-        String mvInfo = "relatedMvNames:" + relatedMvNames + ", candidateMvNames:" + candidateMvNames;
+        String mvInfo = String.format("relatedMvNames: %s, candidateMvNames: %s", relatedMvNames, candidateMvNames);
         OptimizerTraceUtil.log(connectContext, mvInfo);
     }
 
