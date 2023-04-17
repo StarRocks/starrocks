@@ -37,6 +37,8 @@
 
 namespace starrocks::parquet {
 
+// Wraps parquet::RowGroupWriter.
+// Write chunks into buffer. Flush on closing.
 class ChunkWriter {
 public:
     ChunkWriter(::parquet::RowGroupWriter* rg_writer, const std::vector<TypeDescriptor>& type_descs,
@@ -55,4 +57,4 @@ private:
     std::vector<int64_t> _estimated_buffered_bytes;
 };
 
-} // namespace starrocks
+} // namespace starrocks::parquet

@@ -65,7 +65,8 @@ inline TupleDescriptor* create_tuple_descriptor(RuntimeState* state, ObjectPool*
     return row_desc->tuple_descriptors()[0];
 }
 
-inline void make_column_info_vector(const TupleDescriptor* tuple_desc, std::vector<HdfsScannerContext::ColumnInfo>* columns) {
+inline void make_column_info_vector(const TupleDescriptor* tuple_desc,
+                                    std::vector<HdfsScannerContext::ColumnInfo>* columns) {
     columns->clear();
     for (int i = 0; i < tuple_desc->slots().size(); i++) {
         SlotDescriptor* slot = tuple_desc->slots()[i];
@@ -95,7 +96,6 @@ inline void assert_equal_chunk(const Chunk* expected, const Chunk* actual) {
         ASSERT_EQ(expected_col->debug_string(), actual_col->debug_string());
     }
 }
-
 
 } // namespace parquet
 } // namespace starrocks

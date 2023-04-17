@@ -36,9 +36,9 @@
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
 
-namespace starrocks {
-namespace parquet {
+namespace starrocks::parquet {
 
+// Intermediate data passed between add_column_chunk functions.
 class LevelBuilderContext {
 public:
     LevelBuilderContext(int16_t max_def_level, int16_t max_rep_level, size_t estimated_size = 0)
@@ -83,12 +83,18 @@ struct LevelBuilderResult {
     uint8_t* null_bitset;
 };
 
+// Convert columns of nested type into definition/repetition levels, which are required to write Parquet file.
 class LevelBuilder {
 public:
+    // A callback function that will receive results from caller
     using CallbackFunction = std::function<void(const LevelBuilderResult&)>;
 
     LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr node);
 
+    // Determine rep/def level information for the array.
+    //
+    // The callback will be invoked for each leaf Array that is a descendant of array.  Each leaf array is
+    // processed in a depth first traversal-order.
     void write(const LevelBuilderContext& ctx, const ColumnPtr& col, const CallbackFunction& write_leaf_callback);
 
 private:
@@ -144,5 +150,4 @@ private:
     ::parquet::schema::NodePtr _root;
 };
 
-} // namespace parquet
-} // namespace starrocks
+} // namespace starrocks::parquet

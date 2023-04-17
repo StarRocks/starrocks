@@ -1,6 +1,16 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
-// Created by Letian Jiang on 2023/4/10.
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 #include "formats/parquet/file_writer.h"
 
@@ -9,7 +19,12 @@
 #include <filesystem>
 #include <memory>
 
+#include "column/array_column.h"
 #include "column/chunk.h"
+#include "column/column_helper.h"
+#include "column/map_column.h"
+#include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "common/statusor.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/parquet_test_util/util.h"
@@ -18,11 +33,6 @@
 #include "gutil/casts.h"
 #include "runtime/descriptor_helper.h"
 #include "testutil/assert.h"
-#include "column/array_column.h"
-#include "column/column_helper.h"
-#include "column/map_column.h"
-#include "column/struct_column.h"
-#include "column/nullable_column.h"
 
 namespace starrocks {
 namespace parquet {
@@ -32,9 +42,7 @@ using starrocks::HdfsScannerContext;
 
 class FileWriterTest : public testing::Test {
 public:
-    void SetUp() override {
-        _runtime_state = _pool.add(new RuntimeState(TQueryGlobals()));
-    }
+    void SetUp() override { _runtime_state = _pool.add(new RuntimeState(TQueryGlobals())); }
     void TearDown() override {}
 
 protected:
@@ -42,7 +50,7 @@ protected:
         auto ctx = _pool.add(new HdfsScannerContext());
 
         std::vector<SlotDesc> slot_descs;
-        for (auto& type_desc: type_descs) {
+        for (auto& type_desc : type_descs) {
             auto type_name = type_desc.debug_string();
             slot_descs.push_back({type_name, type_desc});
         }
@@ -86,7 +94,8 @@ protected:
         return schema;
     }
 
-    Status _write_chunk(const ChunkPtr& chunk, const std::vector<TypeDescriptor>& type_descs, const std::shared_ptr<::parquet::schema::GroupNode>& schema) {
+    Status _write_chunk(const ChunkPtr& chunk, const std::vector<TypeDescriptor>& type_descs,
+                        const std::shared_ptr<::parquet::schema::GroupNode>& schema) {
         ASSIGN_OR_ABORT(auto file, _fs.new_writable_file(_file_path));
         auto properties = ParquetBuildHelper::make_properties(ParquetBuilderOptions());
         auto file_writer = std::make_shared<SyncFileWriter>(std::move(file), properties, schema, type_descs);
@@ -125,13 +134,12 @@ protected:
     ObjectPool _pool;
 };
 
-
 TEST_F(FileWriterTest, TestWriteIntegralTypes) {
-    std::vector<TypeDescriptor> type_descs {
-        TypeDescriptor::from_logical_type(TYPE_TINYINT),
-        TypeDescriptor::from_logical_type(TYPE_SMALLINT),
-        TypeDescriptor::from_logical_type(TYPE_INT),
-        TypeDescriptor::from_logical_type(TYPE_BIGINT),
+    std::vector<TypeDescriptor> type_descs{
+            TypeDescriptor::from_logical_type(TYPE_TINYINT),
+            TypeDescriptor::from_logical_type(TYPE_SMALLINT),
+            TypeDescriptor::from_logical_type(TYPE_INT),
+            TypeDescriptor::from_logical_type(TYPE_BIGINT),
     };
 
     auto chunk = std::make_shared<Chunk>();
@@ -186,15 +194,15 @@ TEST_F(FileWriterTest, TestWriteArray) {
     {
         auto elements_data_col = Int32Column::create();
         std::vector<int32_t> nums{1, 2, -99, 3};
-        elements_data_col->append_numbers(nums.data(), sizeof(int32_t)*nums.size());
+        elements_data_col->append_numbers(nums.data(), sizeof(int32_t) * nums.size());
         auto elements_null_col = UInt8Column::create();
         std::vector<uint8_t> nulls{0, 0, 1, 0};
-        elements_null_col->append_numbers(nulls.data(), sizeof(uint8_t)*nulls.size());
+        elements_null_col->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
         auto elements_col = NullableColumn::create(elements_data_col, elements_null_col);
 
         auto offsets_col = UInt32Column::create();
         std::vector<uint32_t> offsets{0, 1, 1, 1, 4};
-        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t)*offsets.size());
+        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
         auto array_col = ArrayColumn::create(elements_col, offsets_col);
 
         std::vector<uint8_t> _nulls{0, 1, 0, 0};
@@ -241,14 +249,14 @@ TEST_F(FileWriterTest, TestWriteStruct) {
 
         auto data_col_b = Int32Column::create();
         std::vector<int32_t> nums_b{1, 2, -99, 3};
-        data_col_b->append_numbers(nums_b.data(), sizeof(int32_t)*nums_b.size());
+        data_col_b->append_numbers(nums_b.data(), sizeof(int32_t) * nums_b.size());
         auto null_col_b = UInt8Column::create();
         null_col_b->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
         auto nullable_col_b = NullableColumn::create(data_col_b, null_col_b);
 
         auto data_col_c = Int64Column::create();
         std::vector<int64_t> nums_c{1, 2, -99, 3};
-        data_col_c->append_numbers(nums_c.data(), sizeof(int64_t)*nums_c.size());
+        data_col_c->append_numbers(nums_c.data(), sizeof(int64_t) * nums_c.size());
         auto null_col_c = UInt8Column::create();
         null_col_c->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
         auto nullable_col_c = NullableColumn::create(data_col_c, null_col_c);
@@ -256,7 +264,7 @@ TEST_F(FileWriterTest, TestWriteStruct) {
         Columns fields{nullable_col_a, nullable_col_b, nullable_col_c};
         auto struct_column = StructColumn::create(fields, type_int_struct.field_names);
         auto null_column = UInt8Column::create();
-        null_column->append_numbers(nulls.data(), sizeof(uint8_t)*nulls.size());
+        null_column->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
         auto nullable_col = NullableColumn::create(struct_column, null_column);
 
         chunk->append_column(nullable_col, chunk->num_columns());
@@ -289,23 +297,23 @@ TEST_F(FileWriterTest, TestWriteMap) {
     {
         auto key_data_col = Int32Column::create();
         std::vector<int32_t> key_nums{1, 2, 3, 4};
-        key_data_col->append_numbers(key_nums.data(), sizeof(int32_t)*key_nums.size());
+        key_data_col->append_numbers(key_nums.data(), sizeof(int32_t) * key_nums.size());
         auto key_null_col = UInt8Column::create();
         std::vector<uint8_t> key_nulls{0, 0, 0, 0};
-        key_null_col->append_numbers(key_nulls.data(), sizeof(uint8_t)*key_nulls.size());
+        key_null_col->append_numbers(key_nulls.data(), sizeof(uint8_t) * key_nulls.size());
         auto key_col = NullableColumn::create(key_data_col, key_null_col);
 
         auto value_data_col = Int32Column::create();
         std::vector<int32_t> value_nums{1, 2, -99, 4};
-        value_data_col->append_numbers(value_nums.data(), sizeof(int32_t)*value_nums.size());
+        value_data_col->append_numbers(value_nums.data(), sizeof(int32_t) * value_nums.size());
         auto value_null_col = UInt8Column::create();
         std::vector<uint8_t> value_nulls{0, 0, 1, 0};
-        value_null_col->append_numbers(value_nulls.data(), sizeof(uint8_t)*value_nulls.size());
+        value_null_col->append_numbers(value_nulls.data(), sizeof(uint8_t) * value_nulls.size());
         auto value_col = NullableColumn::create(value_data_col, value_null_col);
 
         auto offsets_col = UInt32Column::create();
         std::vector<uint32_t> offsets{0, 1, 1, 1, 4};
-        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t)*offsets.size());
+        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
         auto map_col = MapColumn::create(key_col, value_col, offsets_col);
 
         std::vector<uint8_t> _nulls{0, 1, 0, 0};
@@ -343,15 +351,15 @@ TEST_F(FileWriterTest, TestWriteNestedArray) {
     {
         auto int_data_col = Int32Column::create();
         std::vector<int32_t> nums{1, 2, -99, 3, 4, 5, 6};
-        int_data_col->append_numbers(nums.data(), sizeof(int32_t)*nums.size());
+        int_data_col->append_numbers(nums.data(), sizeof(int32_t) * nums.size());
         auto int_null_col = UInt8Column::create();
         std::vector<uint8_t> nulls{0, 0, 1, 0, 0, 0, 0};
-        int_null_col->append_numbers(nulls.data(), sizeof(uint8_t)*nulls.size());
+        int_null_col->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
         auto int_col = NullableColumn::create(int_data_col, int_null_col);
 
         auto offsets_col = UInt32Column::create();
         std::vector<uint32_t> offsets{0, 1, 1, 1, 4, 6, 7};
-        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t)*offsets.size());
+        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
         auto array_data_col = ArrayColumn::create(int_col, offsets_col);
 
         std::vector<uint8_t> _nulls{0, 1, 0, 0, 0, 0};
@@ -361,7 +369,8 @@ TEST_F(FileWriterTest, TestWriteNestedArray) {
 
         auto array_array_offsets_col = UInt32Column::create();
         std::vector<uint32_t> array_array_offsets{0, 4, 6, 6};
-        array_array_offsets_col->append_numbers(array_array_offsets.data(), sizeof(uint32_t)*array_array_offsets.size());
+        array_array_offsets_col->append_numbers(array_array_offsets.data(),
+                                                sizeof(uint32_t) * array_array_offsets.size());
         auto array_array_data_col = ArrayColumn::create(array_col, array_array_offsets_col);
 
         std::vector<uint8_t> outer_nulls{0, 0, 1};

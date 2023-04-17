@@ -39,6 +39,8 @@ namespace starrocks::parquet {
 
 class LevelBuilderResult;
 
+// ColumnChunkWriter wraps parquet::ColumnWriter.
+// The wrapper class provide runtime-polymorphism through type switch.
 class ColumnChunkWriter {
 public:
     ColumnChunkWriter(::parquet::ColumnWriter* column_writer);
@@ -51,4 +53,4 @@ private:
     ::parquet::ColumnWriter* _column_writer;
 };
 
-} // namespace starrocks
+} // namespace starrocks::parquet

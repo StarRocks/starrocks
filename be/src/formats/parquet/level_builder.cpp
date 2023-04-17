@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "formats/parquet/level_builder.h"
+
 #include <parquet/arrow/writer.h>
 
 #include <utility>
@@ -23,11 +25,9 @@
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "exprs/expr.h"
-#include "formats/parquet/level_builder.h"
 #include "gutil/casts.h"
 #include "gutil/endian.h"
 #include "util/defer_op.h"
-
 
 namespace starrocks {
 namespace parquet {
@@ -36,6 +36,7 @@ template <typename Action>
 inline void do_ignore_null(const LevelBuilderContext& ctx, const uint8_t* null_col, const Action& action) {
     for (int i = 0; i < ctx.size(); i++) {
         auto [idx, def_level, rep_level] = ctx.get(i);
+        // ignore nulls entries in parent column and current column
         if (idx == LevelBuilderContext::kNULL || (null_col != nullptr && null_col[idx])) {
             continue;
         }
@@ -144,15 +145,12 @@ Status LevelBuilder::_write_boolean_column_chunk(const LevelBuilderContext& ctx,
     auto rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels(ctx, node, null_col);
 
-    // sizeof(bool) depends on implementation, thus we copy values to ensure correctness
-    // std::vector<bool> may not provide a contiguous section of memory
+    // sizeof(bool) depends on implementation, thus we cast values to ensure correctness
     auto values = new bool[col->size()];
     DeferOp defer([&] { delete[] values; });
 
     int value_offset = 0;
-    do_ignore_null(ctx, null_col, [&](int idx) {
-        values[value_offset++] = static_cast<bool>(data_col[idx]);
-    });
+    do_ignore_null(ctx, null_col, [&](int idx) { values[value_offset++] = static_cast<bool>(data_col[idx]); });
 
     write_leaf_callback(LevelBuilderResult{
             .num_levels = ctx.size(),
@@ -176,12 +174,12 @@ Status LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, con
     auto rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels(ctx, node, null_col);
 
-    // Type aliases of type in StarRocks and physical type in Parquet
     using source_type = RunTimeCppType<lt>;
     using target_type = typename ::parquet::type_traits<pt>::value_type;
 
     if constexpr (std::is_same_v<source_type, target_type>) {
-        // If two types are identical, invoke WriteBatch without copying values
+        // Zero-copy for identical source/target types
+        // If leaf column has null entries, provide a bitset to denote not-null entries.
         write_leaf_callback(LevelBuilderResult{
                 .num_levels = ctx.size(),
                 .def_levels = def_levels->data(),
@@ -191,12 +189,10 @@ Status LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, con
                 .null_bitset = col->has_null() ? _make_null_bitset(col->size(), null_col).data() : nullptr,
         });
     } else {
-        // If two types are different, we have to copy values anyway
+        // If two types are different, we have to cast values anyway
         std::vector<target_type> values;
         values.reserve(col->size());
-        do_ignore_null(ctx, null_col, [&](int idx) {
-            values.push_back(static_cast<target_type>(data_col[idx]));
-        });
+        do_ignore_null(ctx, null_col, [&](int idx) { values.push_back(static_cast<target_type>(data_col[idx])); });
 
         write_leaf_callback(LevelBuilderResult{
                 .num_levels = ctx.size(),
@@ -222,6 +218,8 @@ Status LevelBuilder::_write_decimal128_column_chunk(const LevelBuilderContext& c
     std::vector<unsigned __int128> values;
     values.reserve(ctx.size());
     do_ignore_null(ctx, null_col, [&](int idx) {
+        // unscaled number must be encoded as two's complement using big-endian byte order (the most significant byte
+        // is the zeroth element). See https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#decimal
         auto big_endian_value = BigEndian::FromHost128(data_col[idx]);
         values.push_back(big_endian_value);
     });
@@ -435,7 +433,7 @@ Status LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, 
         }
         if (null_col != nullptr && null_col[idx]) {
             derived_ctx.append(LevelBuilderContext::kNULL, def_level, rep_level);
-            subcol_size++;
+            subcol_size++; // null entry in struct column still occupies a slot in sub-column
             continue;
         }
         derived_ctx.append(subcol_size++, def_level + node->is_optional(), rep_level);
@@ -444,7 +442,8 @@ Status LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, 
     for (size_t i = 0; i < type_desc.children.size(); i++) {
         auto sub_col = struct_col->field_column(type_desc.field_names[i]);
         DCHECK(sub_col->size() == subcol_size);
-        auto ret = _write_column_chunk(derived_ctx, type_desc.children[i], struct_node->field(i), sub_col, write_leaf_callback);
+        auto ret = _write_column_chunk(derived_ctx, type_desc.children[i], struct_node->field(i), sub_col,
+                                       write_leaf_callback);
         if (!ret.ok()) {
             return ret;
         }
@@ -452,6 +451,7 @@ Status LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, 
     return Status::OK();
 }
 
+// Convert byte-addressable bitset into a bit-addressable bitset.
 std::vector<uint8_t> LevelBuilder::_make_null_bitset(size_t n, const uint8_t* nulls) const {
     // TODO(letian-jiang): optimize
     DCHECK(nulls != nullptr);
@@ -464,18 +464,20 @@ std::vector<uint8_t> LevelBuilder::_make_null_bitset(size_t n, const uint8_t* nu
     return bitset;
 }
 
+// Make definition levels int terms of repetition type of primitive node.
+// For required node, use the def_levels in the context from caller.
+// For optional node, increment def_levels of these defined values.
 std::shared_ptr<std::vector<int16_t>> LevelBuilder::_make_def_levels(const LevelBuilderContext& ctx,
                                                                      const ::parquet::schema::NodePtr& node,
                                                                      const uint8_t* nulls) const {
     if (node->is_required()) {
-        // For required node, we use the def_levels in the context from caller
         return ctx._def_levels;
     }
 
-    // For optional node, we should increment def_levels of these defined values
     DCHECK(node->is_optional());
     auto def_levels = std::make_shared<std::vector<int16_t>>();
     def_levels->reserve(ctx.size());
+
     for (auto i = 0; i < ctx.size(); i++) {
         auto [idx, def_level, rep_level] = ctx.get(i);
         if (idx == LevelBuilderContext::kNULL || (nulls != nullptr && nulls[idx])) {

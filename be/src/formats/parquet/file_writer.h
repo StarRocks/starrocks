@@ -31,10 +31,10 @@
 
 #include "column/chunk.h"
 #include "column/nullable_column.h"
+#include "formats/parquet/chunk_writer.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
-#include "formats/parquet/chunk_writer.h"
 
 namespace starrocks::parquet {
 
