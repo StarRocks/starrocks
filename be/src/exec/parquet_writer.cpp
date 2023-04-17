@@ -176,19 +176,19 @@ void RollingAsyncParquetWriter::add_iceberg_commit_info(starrocks::parquet::Asyn
 
     TIcebergColumnStats stats;
     for (auto& i : column_sizes) {
-        stats.columnSizes.insert({i.first, i.second});
+        stats.column_sizes.insert({i.first, i.second});
     }
     for (auto& i : value_counts) {
-        stats.valueCounts.insert({i.first, i.second});
+        stats.value_counts.insert({i.first, i.second});
     }
     for (auto& i : null_value_counts) {
-        stats.nullValueCounts.insert({i.first, i.second});
+        stats.null_value_counts.insert({i.first, i.second});
     }
     for (auto& i : min_values) {
-        stats.lowerBounds.insert({i.first, i.second});
+        stats.lower_bounds.insert({i.first, i.second});
     }
     for (auto& i : max_values) {
-        stats.upperBounds.insert({i.first, i.second});
+        stats.upper_bounds.insert({i.first, i.second});
     }
 
     dataFile.column_stats = stats;

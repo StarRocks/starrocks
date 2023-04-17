@@ -552,6 +552,8 @@ struct TReportExecStatusParams {
   23: optional i64 unselected_rows
 
   24: optional string rejected_record_path
+
+  25: optional list<Types.TSinkCommitInfo> sink_commit_infos
 }
 
 struct TFeResult {
