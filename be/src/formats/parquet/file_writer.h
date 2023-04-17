@@ -34,6 +34,7 @@
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
+#include "formats/parquet/chunk_writer.h"
 
 namespace starrocks::parquet {
 
@@ -88,94 +89,6 @@ private:
     static arrow::Result<::parquet::schema::NodePtr> _make_schema_node(const std::string& name,
                                                                        const TypeDescriptor& type_desc,
                                                                        ::parquet::Repetition::type rep_type);
-};
-
-class ChunkWriter {
-public:
-    ChunkWriter(::parquet::RowGroupWriter* rg_writer, const std::vector<TypeDescriptor>& type_descs,
-                const std::shared_ptr<::parquet::schema::GroupNode>& schema);
-
-    Status write(Chunk* chunk);
-
-    void close();
-
-    int64_t estimated_buffered_bytes() const;
-
-private:
-    class Context {
-    public:
-        Context(int16_t max_def_level, int16_t max_rep_level, size_t estimated_size = 0)
-                : _max_def_level(max_def_level), _max_rep_level(max_rep_level) {
-            _idx2subcol.reserve(estimated_size);
-            _def_levels.reserve(estimated_size);
-            _rep_levels.reserve(estimated_size);
-        }
-
-        void append(int idx, int16_t def_level, int16_t rep_level) {
-            _idx2subcol.push_back(idx);
-            _def_levels.push_back(def_level);
-            _rep_levels.push_back(rep_level);
-        }
-
-        std::tuple<int, int16_t, int16_t> get(int i) const {
-            DCHECK_LT(i, size());
-            return std::make_tuple(_idx2subcol[i], _def_levels[i], _rep_levels[i]);
-        }
-
-        int size() const { return _def_levels.size(); }
-
-        std::string debug_string() const;
-
-    public:
-        const int16_t _max_def_level;
-        const int16_t _max_rep_level;
-        constexpr static int kNULL = -1;
-
-        std::vector<int> _idx2subcol;
-        std::vector<int16_t> _def_levels;
-        std::vector<int16_t> _rep_levels;
-    };
-
-    Status _add_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
-                             const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
-
-    Status _add_boolean_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
-                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
-
-    template <LogicalType lt, ::parquet::Type::type pt>
-    Status _add_int_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
-                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
-
-    Status _add_decimal128_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
-                                        const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
-
-    Status _add_varchar_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
-                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
-
-    Status _add_date_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
-                                  const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
-
-    Status _add_datetime_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
-                                      const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
-
-    Status _add_array_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
-                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
-
-    Status _add_map_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
-                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
-
-    Status _add_struct_column_chunk(const Context& ctx, const TypeDescriptor& type_desc,
-                                    const ::parquet::schema::NodePtr& node, const ColumnPtr& col);
-
-    std::vector<uint8_t> _make_null_bitset(size_t n, const uint8_t* nulls) const;
-
-    void _populate_def_levels(std::vector<int16_t>& def_levels, const Context& ctx, const uint8_t* nulls) const;
-
-    ::parquet::RowGroupWriter* _rg_writer;
-    std::vector<TypeDescriptor> _type_descs;
-    std::shared_ptr<::parquet::schema::GroupNode> _schema;
-    std::vector<int64_t> _estimated_buffered_bytes;
-    int _col_idx;
 };
 
 class FileWriterBase {

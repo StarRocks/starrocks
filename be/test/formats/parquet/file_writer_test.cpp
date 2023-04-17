@@ -18,6 +18,11 @@
 #include "gutil/casts.h"
 #include "runtime/descriptor_helper.h"
 #include "testutil/assert.h"
+#include "column/array_column.h"
+#include "column/column_helper.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
+#include "column/nullable_column.h"
 
 namespace starrocks {
 namespace parquet {
@@ -27,57 +32,18 @@ using starrocks::HdfsScannerContext;
 
 class FileWriterTest : public testing::Test {
 public:
-    void SetUp() override { _runtime_state = _pool.add(new RuntimeState(TQueryGlobals())); }
+    void SetUp() override {
+        _runtime_state = _pool.add(new RuntimeState(TQueryGlobals()));
+    }
     void TearDown() override {}
 
 protected:
-    std::unique_ptr<RandomAccessFile> _create_file(const std::string& file_path);
-
     HdfsScannerContext* _create_scan_context();
-
-    HdfsScannerContext* _create_file1_base_context();
-    HdfsScannerContext* _create_context_for_partition();
-    HdfsScannerContext* _create_context_for_not_exist();
-
-    HdfsScannerContext* _create_file2_base_context();
-    HdfsScannerContext* _create_context_for_min_max();
-    HdfsScannerContext* _create_context_for_filter_file();
-    HdfsScannerContext* _create_context_for_dict_filter();
-    HdfsScannerContext* _create_context_for_other_filter();
-    HdfsScannerContext* _create_context_for_skip_group();
-
-    HdfsScannerContext* _create_file3_base_context();
-    HdfsScannerContext* _create_context_for_multi_filter();
-    HdfsScannerContext* _create_context_for_late_materialization();
-
-    HdfsScannerContext* _create_file4_base_context();
-    HdfsScannerContext* _create_context_for_struct_column();
-    HdfsScannerContext* _create_context_for_upper_pred();
-
-    HdfsScannerContext* _create_file5_base_context();
-    HdfsScannerContext* _create_file6_base_context();
-    HdfsScannerContext* _create_file_map_char_key_context();
-    HdfsScannerContext* _create_file_map_base_context();
-    HdfsScannerContext* _create_file_map_partial_materialize_context();
-
-    void _create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
-                                   std::vector<ExprContext*>* conjunct_ctxs);
-    void _create_string_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
-                                      std::vector<ExprContext*>* conjunct_ctxs);
-
-    static ChunkPtr _create_chunk();
-    static ChunkPtr _create_multi_page_chunk();
-    static ChunkPtr _create_struct_chunk();
-    static ChunkPtr _create_required_array_chunk();
-    static ChunkPtr _create_chunk_for_partition();
-    static ChunkPtr _create_chunk_for_not_exist();
-    static void _append_column_for_chunk(LogicalType column_type, ChunkPtr* chunk);
-
     THdfsScanRange* _create_scan_range(const std::string& file_path, size_t scan_length);
 
-    //    std::unique_ptr<MemoryFileSystem> _fs;
-    std::shared_ptr<RowDescriptor> _row_desc = nullptr;
-    RuntimeState* _runtime_state = nullptr;
+    MemoryFileSystem _fs;
+    std::string _file_path{"/dummy_file.parquet"};
+    RuntimeState* _runtime_state;
     ObjectPool _pool;
 };
 
@@ -100,17 +66,13 @@ THdfsScanRange* FileWriterTest::_create_scan_range(const std::string& file_path,
 }
 
 TEST_F(FileWriterTest, TestWriteIntegralTypes) {
-    MemoryFileSystem fs;
-    const std::string file_path = "/data.parquet";
-    uint64_t file_size{0};
-
     std::vector<LogicalType> integral_types{TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT};
+
     std::vector<TypeDescriptor> type_descs;
     std::vector<std::string> type_names;
     for (auto type : integral_types) {
         auto type_desc = TypeDescriptor::from_logical_type(type);
         auto type_name = type_desc.debug_string();
-
         type_descs.push_back(type_desc);
         type_names.push_back(type_name);
     }
@@ -150,13 +112,12 @@ TEST_F(FileWriterTest, TestWriteIntegralTypes) {
 
     // write chunk
     {
-        ASSIGN_OR_ABORT(auto file, fs.new_writable_file(file_path));
+        ASSIGN_OR_ABORT(auto file, _fs.new_writable_file(_file_path));
         auto file_writer = std::make_shared<SyncFileWriter>(std::move(file), properties, schema, type_descs);
         file_writer->init();
         file_writer->write(chunk.get());
         auto st = file_writer->close();
         ASSERT_TRUE(st.ok());
-        ASSIGN_OR_ABORT(file_size, fs.get_file_size(file_path));
     }
 
     // scanner context
@@ -173,12 +134,14 @@ TEST_F(FileWriterTest, TestWriteIntegralTypes) {
 
         ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
         make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-        ctx->scan_ranges.emplace_back(_create_scan_range(file_path, file_size));
+        ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
+        ctx->scan_ranges.emplace_back(_create_scan_range(_file_path, file_size));
     }
 
-    // read chunk and check identity
+    // read chunk and assert equality
     {
-        ASSIGN_OR_ABORT(auto file, fs.new_random_access_file(file_path));
+        ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_file_path));
+        ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), file_size);
 
         auto st = file_reader->init(ctx);
@@ -192,7 +155,92 @@ TEST_F(FileWriterTest, TestWriteIntegralTypes) {
         }
 
         file_reader->get_next(&read_chunk);
-        assert_identical_chunk(chunk.get(), read_chunk.get());
+        assert_equal_chunk(chunk.get(), read_chunk.get());
+    }
+}
+
+TEST_F(FileWriterTest, TestWriteArray) {
+    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    auto type_int_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    type_int_array.children.push_back(type_int);
+
+    std::vector<TypeDescriptor> type_descs{type_int_array};
+    std::vector<std::string> type_names{type_int_array.debug_string()};
+
+    auto ret = ParquetBuildHelper::make_schema({"array_int"}, {type_int_array});
+    ASSERT_TRUE(ret.ok());
+    auto schema = ret.ValueOrDie();
+    auto properties = ParquetBuildHelper::make_properties(ParquetBuilderOptions());
+
+    // populate chunk to write
+    // [1], NULL, [], [2, NULL, 3]
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto elements_data_col = Int32Column::create();
+        std::vector<int32_t> nums{1, 2, -99, 3};
+        elements_data_col->append_numbers(nums.data(), sizeof(int32_t)*nums.size());
+        auto elements_null_col = UInt8Column::create();
+        std::vector<uint8_t> nulls{0, 0, 1, 0};
+        elements_null_col->append_numbers(nulls.data(), sizeof(uint8_t)*nulls.size());
+        auto elements_col = NullableColumn::create(elements_data_col, elements_null_col);
+
+        auto offsets_col = UInt32Column::create();
+        std::vector<uint32_t> offsets{0, 1, 1, 1, 4};
+        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t)*offsets.size());
+        auto array_col = ArrayColumn::create(elements_col, offsets_col);
+
+        std::vector<uint8_t> _nulls{0, 1, 0, 0};
+        auto null_col = UInt8Column::create();
+        null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
+        auto nullable_col = NullableColumn::create(array_col, null_col);
+
+        chunk->append_column(nullable_col, chunk->num_columns());
+    }
+
+    // write chunk
+    {
+        ASSIGN_OR_ABORT(auto file, _fs.new_writable_file(_file_path));
+        auto file_writer = std::make_shared<SyncFileWriter>(std::move(file), properties, schema, type_descs);
+        file_writer->init();
+        file_writer->write(chunk.get());
+        auto st = file_writer->close();
+        ASSERT_TRUE(st.ok());
+    }
+
+    // scanner context
+    auto ctx = _create_scan_context();
+    {
+        std::vector<SlotDesc> slot_descs;
+        for (auto type : type_descs) {
+            auto type_name = type.debug_string();
+            slot_descs.push_back({type_name, type});
+        }
+        slot_descs.push_back({""});
+
+        ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
+        make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
+        ctx->scan_ranges.emplace_back(_create_scan_range(_file_path, file_size));
+    }
+
+    // read chunk and assert equality
+    {
+        ASSIGN_OR_ABORT(auto file, _fs.new_random_access_file(_file_path));
+        ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
+        auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(), file_size);
+
+        auto st = file_reader->init(ctx);
+        ASSERT_TRUE(st.ok());
+
+        auto read_chunk = std::make_shared<Chunk>();
+
+        for (auto type_desc : type_descs) {
+            auto col = ColumnHelper::create_column(type_desc, true);
+            read_chunk->append_column(col, read_chunk->num_columns());
+        }
+
+        file_reader->get_next(&read_chunk);
+        assert_equal_chunk(chunk.get(), read_chunk.get());
     }
 }
 

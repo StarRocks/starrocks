@@ -79,7 +79,7 @@ inline void make_column_info_vector(const TupleDescriptor* tuple_desc, std::vect
     }
 }
 
-inline void assert_identical_chunk(const Chunk* expected, const Chunk* actual) {
+inline void assert_equal_chunk(const Chunk* expected, const Chunk* actual) {
     if (expected->debug_columns() != actual->debug_columns()) {
         std::cout << expected->debug_columns() << std::endl;
         std::cout << actual->debug_columns() << std::endl;
