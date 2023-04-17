@@ -56,6 +56,7 @@ import com.starrocks.sql.optimizer.rule.implementation.stream.StreamAggregateImp
 import com.starrocks.sql.optimizer.rule.implementation.stream.StreamJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.stream.StreamScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
+import com.starrocks.sql.optimizer.rule.transformation.CboTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.DistributionPruneRule;
@@ -404,6 +405,10 @@ public class RuleSet {
 
     public void addJoinCommutativityWithOutInnerRule() {
         transformRules.add(JoinCommutativityWithoutInnerRule.getInstance());
+    }
+
+    public void addCboTablePruneRule() {
+        transformRules.add(CboTablePruneRule.getInstance());
     }
 
     public void addMultiTableMvRewriteRule() {

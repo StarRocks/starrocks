@@ -147,6 +147,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILLABLE_OPERATOR_MASK = "spillable_operator_mask";
     // spill mode: auto, force
     public static final String SPILL_MODE = "spill_mode";
+    // enable table pruning(RBO) in cardinality-preserving joins
+    public static final String ENABLE_RBO_TABLE_PRUNE = "enable_rbo_table_prune";
+
+    // enable table pruning(CBO) in cardinality-preserving joins
+    public static final String ENABLE_CBO_TABLE_PRUNE = "enable_cbo_table_prune";
+    // if set to true, some of stmt will be forwarded to leader FE to get result
+
     // if set to true, some of stmt will be forwarded to leader FE to get result
     public static final String FORWARD_TO_LEADER = "forward_to_leader";
     public static final String FORWARD_TO_MASTER = "forward_to_master";
@@ -753,6 +760,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = SPILL_ENCODE_LEVEL)
     private int spillEncodeLevel = 7;
 
+    @VarAttr(name = ENABLE_RBO_TABLE_PRUNE)
+    private boolean enableRboTablePrune = false;
+
+    @VarAttr(name = ENABLE_CBO_TABLE_PRUNE)
+    private boolean enableCboTablePrune = false;
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
 
@@ -1453,6 +1465,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSpillMode(String spillMode) {
         this.spillMode = spillMode;
+    }
+
+    public void setEnableRboTablePrune(boolean enableRboTablePrune) {
+        this.enableRboTablePrune = enableRboTablePrune;
+    }
+
+    public void setEnableCboTablePrune(boolean enableCboTablePrune) {
+        this.enableCboTablePrune = enableCboTablePrune;
+    }
+
+    public boolean isEnableRboTablePrune() {
+        return enableRboTablePrune;
+    }
+
+    public boolean isEnableCboTablePrune() {
+        return enableCboTablePrune;
     }
 
     public int getSpillMemTableSize() {

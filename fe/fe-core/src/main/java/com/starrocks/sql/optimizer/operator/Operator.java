@@ -18,6 +18,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
@@ -30,6 +34,8 @@ public abstract class Operator {
     protected final OperatorType opType;
     protected long limit = DEFAULT_LIMIT;
     protected ScalarOperator predicate = null;
+
+    private static long saltGenerator = 0;
     /**
      * Before entering the Cascades search framework,
      * we need to merge LogicalProject and child children into one node
@@ -39,6 +45,10 @@ public abstract class Operator {
     protected Projection projection;
 
     protected RowOutputInfo rowOutputInfo;
+
+    // Add salt make the original equivalent operators nonequivalent to avoid Group
+    // mutual reference in Memo
+    protected long salt = 0;
 
     public Operator(OperatorType opType) {
         this.opType = opType;
@@ -98,6 +108,28 @@ public abstract class Operator {
         this.projection = projection;
     }
 
+    public void addSalt() {
+        if ((this instanceof LogicalJoinOperator) || (this instanceof LogicalScanOperator)) {
+            this.salt = ++saltGenerator;
+        }
+    }
+
+    public void setSalt(long salt) {
+        if ((this instanceof LogicalJoinOperator) ||
+                (this instanceof LogicalScanOperator) ||
+                (this instanceof PhysicalScanOperator) ||
+                (this instanceof PhysicalJoinOperator)) {
+            this.salt = salt;
+        }
+    }
+    public boolean hasSalt() {
+        return salt > 0;
+    }
+
+    public long getSalt() {
+        return salt;
+    }
+
     public RowOutputInfo getRowOutputInfo(List<OptExpression> inputs) {
         if (rowOutputInfo != null) {
             return rowOutputInfo;
@@ -148,12 +180,13 @@ public abstract class Operator {
         Operator operator = (Operator) o;
         return limit == operator.limit && opType == operator.opType &&
                 Objects.equals(predicate, operator.predicate) &&
-                Objects.equals(projection, operator.projection);
+                Objects.equals(projection, operator.projection) &&
+                Objects.equals(salt, operator.salt);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(opType.ordinal(), limit, predicate, projection);
+        return Objects.hash(opType.ordinal(), limit, predicate, projection, salt);
     }
 
     public abstract static class Builder<O extends Operator, B extends Builder> {
@@ -165,6 +198,7 @@ public abstract class Operator {
             builder.limit = operator.limit;
             builder.predicate = operator.predicate;
             builder.projection = operator.projection;
+            builder.salt = operator.salt;
             return (B) this;
         }
 
@@ -202,6 +236,11 @@ public abstract class Operator {
 
         public B setProjection(Projection projection) {
             builder.projection = projection;
+            return (B) this;
+        }
+
+        public B addSalt() {
+            builder.salt = ++saltGenerator;
             return (B) this;
         }
     }

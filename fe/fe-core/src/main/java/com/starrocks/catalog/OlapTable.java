@@ -2347,12 +2347,30 @@ public class OlapTable extends Table {
         tableProperty.clearBinlogAvailableVersion();
     }
 
+    public boolean hasUniqueConstraints() {
+        if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
+            return true;
+        }
+        return tableProperty != null &&
+                tableProperty.getUniqueConstraints() != null &&
+                !tableProperty.getUniqueConstraints().isEmpty();
+    }
+
     @Override
     public List<UniqueConstraint> getUniqueConstraints() {
-        if (tableProperty == null) {
-            return null;
+        List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
+        if (!hasUniqueConstraints()) {
+            return uniqueConstraints;
         }
-        return tableProperty.getUniqueConstraints();
+        if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
+            uniqueConstraints.add(
+                    new UniqueConstraint(null, null, null, getKeyColumns().stream().map(Column::getName).collect(
+                            Collectors.toList())));
+        }
+        if (tableProperty != null && tableProperty.getUniqueConstraints() != null) {
+            uniqueConstraints.addAll(tableProperty.getUniqueConstraints());
+        }
+        return uniqueConstraints;
     }
 
     @Override
@@ -2374,6 +2392,11 @@ public class OlapTable extends Table {
             return null;
         }
         return tableProperty.getForeignKeyConstraints();
+    }
+
+    public boolean hasForeignKeyConstraints() {
+        return tableProperty != null && tableProperty.getForeignKeyConstraints() != null &&
+                !tableProperty.getForeignKeyConstraints().isEmpty();
     }
 
     @Override

@@ -46,13 +46,16 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitRankingWindo
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRankingWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
+import com.starrocks.sql.optimizer.rule.transformation.RBOTablePruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
+import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
+import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.ExtractAggregateColumn;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
@@ -86,6 +89,7 @@ public class Optimizer {
     private OptimizerContext context;
     private final OptimizerConfig optimizerConfig;
 
+    private long updateTableId = -1;
     public Optimizer() {
         this(OptimizerConfig.defaultConfig());
     }
@@ -109,11 +113,16 @@ public class Optimizer {
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
         prepare(connectContext, logicOperatorTree, columnRefFactory);
+        context.setUpdateTableId(updateTableId);
         if (optimizerConfig.isRuleBased()) {
             return optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
         } else {
             return optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
         }
+    }
+
+    public void setUpdateTableId(long updateTableId) {
+        this.updateTableId = updateTableId;
     }
 
     // Optimize by rule will return logical plan.
@@ -237,6 +246,20 @@ public class Optimizer {
         }
     }
 
+    private void pruneTables(OptExpression tree, TaskContext rootTaskContext) {
+        if (rootTaskContext.getOptimizerContext().getSessionVariable().isEnableRboTablePrune()) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+            ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
+            tree = new ReorderJoinRule().rewrite(tree, context);
+            tree = new SeparateProjectRule().rewrite(tree, rootTaskContext);
+            deriveLogicalProperty(tree);
+            tree = new RBOTablePruneRule().rewrite(tree, rootTaskContext);
+            ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+            ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+            context.setEnableLeftRightJoinEquivalenceDerive(true);
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
+        }
+    }
     private OptExpression logicalRuleRewrite(ConnectContext connectContext,
                                              OptExpression tree,
                                              TaskContext rootTaskContext) {
@@ -247,6 +270,9 @@ public class Optimizer {
         SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
         CTEContext cteContext = context.getCteContext();
         CTEUtils.collectCteOperators(tree, context);
+        if (sessionVariable.isEnableRboTablePrune()) {
+            context.setEnableLeftRightJoinEquivalenceDerive(false);
+        }
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INLINE_CTE);
@@ -279,6 +305,8 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoAggRule());
         rootTaskContext.setRequiredColumns(requiredColumns.clone());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+
+        pruneTables(tree, rootTaskContext);
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
@@ -449,8 +477,12 @@ public class Optimizer {
 
     void memoOptimize(ConnectContext connectContext, Memo memo, TaskContext rootTaskContext) {
         OptExpression tree = memo.getRootGroup().extractLogicalTree();
-        // Join reorder
         SessionVariable sessionVariable = connectContext.getSessionVariable();
+        // add CboTablePruneRule
+        if (sessionVariable.isEnableCboTablePrune()) {
+            context.getRuleSet().addCboTablePruneRule();
+        }
+        // Join reorder
         int innerCrossJoinNode = Utils.countJoinNodeSize(tree, JoinOperator.innerCrossJoinSet());
         if (!sessionVariable.isDisableJoinReorder() && innerCrossJoinNode < sessionVariable.getCboMaxReorderNode()) {
             if (innerCrossJoinNode > sessionVariable.getCboMaxReorderNodeUseExhaustive()) {
@@ -543,6 +575,11 @@ public class Optimizer {
                 rootTaskContext);
         result = new ExtractAggregateColumn().rewrite(result, rootTaskContext);
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
+
+        SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
+        if (sessionVariable.isEnableCboTablePrune() || sessionVariable.isEnableRboTablePrune()) {
+            result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
+        }
         result.setPlanCount(planCount);
         return result;
     }
