@@ -2,7 +2,7 @@
 
 ## Description
 
-Generates an empty HLL column to supplement the default values when inserting or importing data.
+Generates an empty HLL column to supplement the default values when inserting or loading data.
 
 ## Syntax
 
@@ -22,7 +22,11 @@ Supplement the default values when inserting data.
 insert into hllDemo(k1,v1) values(10,hll_empty());
 ```
 
+<<<<<<< HEAD
 Supplement the default values when importing data.
+=======
+Supplement the default values when loading data.
+>>>>>>> 9a524ee1d ([Doc] fix lingual errors in hll functions (#21723))
 
 ```plain text
 curl --location-trusted -u root: \
