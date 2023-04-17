@@ -50,6 +50,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -75,6 +76,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.parser.ParsingException;
 import io.trino.sql.tree.AliasedRelation;
@@ -110,6 +112,7 @@ import io.trino.sql.tree.Identifier;
 import io.trino.sql.tree.InListExpression;
 import io.trino.sql.tree.InPredicate;
 import io.trino.sql.tree.Intersect;
+import io.trino.sql.tree.IntervalLiteral;
 import io.trino.sql.tree.IsNotNullPredicate;
 import io.trino.sql.tree.IsNullPredicate;
 import io.trino.sql.tree.Join;
@@ -769,6 +772,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitIntervalLiteral(IntervalLiteral node, ParseTreeContext context) {
+        return new com.starrocks.sql.ast.IntervalLiteral(new com.starrocks.analysis.StringLiteral(node.getValue()),
+                new UnitIdentifier(node.getStartField().toString()));
+    }
+
+    @Override
     protected ParseNode visitCoalesceExpression(CoalesceExpression node, ParseTreeContext context) {
         List<Expr> children = visit(node, context, Expr.class);
         FunctionName fnName = FunctionName.createFnName("coalesce");
@@ -787,6 +796,21 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitArithmeticBinary(ArithmeticBinaryExpression node, ParseTreeContext context) {
         Expr left = (Expr) visit(node.getLeft(), context);
         Expr right = (Expr) visit(node.getRight(), context);
+
+        if (left instanceof com.starrocks.sql.ast.IntervalLiteral) {
+            return new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), right,
+                    ((com.starrocks.sql.ast.IntervalLiteral) left).getValue(),
+                    ((com.starrocks.sql.ast.IntervalLiteral) left).getUnitIdentifier().getDescription(),
+                    true);
+        }
+
+        if (right instanceof com.starrocks.sql.ast.IntervalLiteral) {
+            return new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), left,
+                    ((com.starrocks.sql.ast.IntervalLiteral) right).getValue(),
+                    ((com.starrocks.sql.ast.IntervalLiteral) right).getUnitIdentifier().getDescription(),
+                    false);
+        }
+
         return new ArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), left, right);
     }
 
