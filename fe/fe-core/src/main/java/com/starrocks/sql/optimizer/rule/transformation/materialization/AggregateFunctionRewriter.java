@@ -74,15 +74,19 @@ public class AggregateFunctionRewriter {
         if (aggFuncName.equals(FunctionSet.AVG)) {
             return true;
         }
+        // BITMAP
         if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct()) {
             return true;
         }
         if (aggFuncName.equals(FunctionSet.BITMAP_UNION_COUNT)) {
             return true;
         }
-        if (aggFuncName.equals(FunctionSet.APPROX_COUNT_DISTINCT) || aggFuncName.equals(FunctionSet.NDV)) {
+        // HLL
+        if (aggFuncName.equals(FunctionSet.APPROX_COUNT_DISTINCT) || aggFuncName.equals(FunctionSet.NDV) ||
+                aggFuncName.equals(FunctionSet.HLL_UNION_AGG) || aggFuncName.equals(FunctionSet.HLL_CARDINALITY)) {
             return true;
         }
+        // PERCENTILE
         if (aggFuncName.equals(FunctionSet.PERCENTILE_APPROX)) {
             return true;
         }
@@ -96,7 +100,8 @@ public class AggregateFunctionRewriter {
             return rewriteCountDistinct(aggFunc);
         } else if (aggFuncName.equals(FunctionSet.AVG)) {
             return rewriteAvg(aggFunc);
-        } else if (aggFuncName.equals(FunctionSet.APPROX_COUNT_DISTINCT) || aggFuncName.equals(FunctionSet.NDV)) {
+        } else if (aggFuncName.equals(FunctionSet.APPROX_COUNT_DISTINCT) || aggFuncName.equals(FunctionSet.NDV) ||
+                aggFuncName.equals(FunctionSet.HLL_UNION_AGG) || aggFuncName.equals(FunctionSet.HLL_CARDINALITY)) {
             return rewriteApproxCount(aggFunc);
         } else if (aggFuncName.equals(FunctionSet.PERCENTILE_APPROX)) {
             return rewritePercentile(aggFunc);
@@ -237,10 +242,10 @@ public class AggregateFunctionRewriter {
             newAggFunc = newColRef;
         }
 
-        CallOperator hllUnionAggOp = new CallOperator(FunctionSet.HLL_UNION_AGG,
+        CallOperator hllUnionAggOp = new CallOperator(FunctionSet.HLL_CARDINALITY,
                 aggFunc.getType(),
                 Lists.newArrayList(newAggFunc),
-                Expr.getBuiltinFunction(FunctionSet.HLL_UNION_AGG, new Type[] {Type.HLL},
+                Expr.getBuiltinFunction(FunctionSet.HLL_CARDINALITY, new Type[] {Type.HLL},
                         IS_IDENTICAL));
         return hllUnionAggOp;
     }

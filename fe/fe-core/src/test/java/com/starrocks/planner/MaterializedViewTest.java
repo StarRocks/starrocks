@@ -2135,6 +2135,30 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testCountDistinctToBitmapCount4() {
+        String mv = "select user_id, tag_id from user_tags where user_id > 10;";
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags  where user_id > 10 group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount5() {
+        String mv = "select user_id, tag_id from user_tags;";
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount6() {
+        String mv = "select user_id, count(tag_id) from user_tags group by user_id;";
+        testRewriteFail(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteFail(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+        testRewriteFail(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+    }
+
+    @Test
     public void testBitmapUnionCountToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union_count(to_bitmap(tag_id)) x from user_tags group by user_id;");
@@ -2174,6 +2198,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public void testPercentile2() {
         String mv = "select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;";
         testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id;");
-        // testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
     }
 }
