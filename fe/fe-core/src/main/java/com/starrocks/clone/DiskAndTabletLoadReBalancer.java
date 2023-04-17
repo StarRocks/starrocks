@@ -943,6 +943,19 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         return partitionTablets;
     }
 
+    private Map<Pair<Long, Long>, Double> getPartitionAvgReplicaSize(long beId,
+                                                                     Map<Pair<Long, Long>, Set<Long>> partitionTablets) {
+        Map<Pair<Long, Long>, Double> result = new HashMap<>();
+        for (Map.Entry<Pair<Long, Long>, Set<Long>> entry : partitionTablets.entrySet()) {
+            long totalSize = 0;
+            for (Long tabletId : entry.getValue()) {
+                totalSize += invertedIndex.getReplica(tabletId, beId).getDataSize();
+            }
+            result.put(entry.getKey(), (double) totalSize / (entry.getValue().size() > 0 ? entry.getValue().size() : 1));
+        }
+        return result;
+    }
+
     private int getPartitionTabletNumOnBePath(long dbId, long tableId, long partitionId, long indexId, long beId,
                                               long pathHash) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -1629,16 +1642,21 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                                        int backendCnt,
                                                        boolean sortPartition) {
         Map<Pair<Long, Long>, Set<Long>> partitionTablets = getPartitionTablets(backendId, medium, -1L);
+        Map<Pair<Long, Long>, Double> partitionAvgReplicaSize = getPartitionAvgReplicaSize(backendId, partitionTablets);
         List<Pair<Long, Long>> partitions = new ArrayList<>(partitionTablets.keySet());
         if (sortPartition) {
             partitions.sort((p1, p2) -> {
                 // skew is (tablet cnt on current BE - average tablet cnt on every BE)
-                // sort partitions by skew in desc order
+                // sort partitions by skew in desc order, if skew is same, sort by avgReplicaSize in desc order.
                 int skew1 = partitionTablets.get(p1).size()
                         - partitionReplicaCnt.getOrDefault(p1.first, 0) / backendCnt;
                 int skew2 = partitionTablets.get(p2).size()
                         - partitionReplicaCnt.getOrDefault(p2.first, 0) / backendCnt;
-                return skew2 - skew1;
+                if (skew2 != skew1) {
+                    return skew2 - skew1;
+                } else {
+                    return Double.compare(partitionAvgReplicaSize.get(p2), partitionAvgReplicaSize.get(p1));
+                }
             });
         }
 

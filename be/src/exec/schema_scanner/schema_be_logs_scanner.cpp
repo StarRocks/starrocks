@@ -65,7 +65,7 @@ Status SchemaBeLogsScanner::start(RuntimeState* state) {
             strings::Substitute("grep_log pattern:$0 level:$1 start_ts:$2 end_ts:$3 limit:$4 #result:$5 duration:$6ms",
                                 pattern, level, start_ts, end_ts, limit, _infos.size(), (ts1 - ts0));
     if (st.ok()) {
-        LOG(INFO) << msg;
+        VLOG(3) << msg;
     } else {
         LOG(WARNING) << msg << " error:" << st.get_error_msg();
         // send err info to client as log
