@@ -1141,6 +1141,11 @@ public class SystemInfoService {
         return selectedBackends.get(0).getId();
     }
 
+    public String getBackendHostById(long backendId) {
+        Backend backend = getBackend(backendId);
+        return backend == null ? null : backend.getHost();
+    }
+
     /*
      * Check if the specified disks' capacity has reached the limit.
      * bePathsMap is (BE id -> list of path hash)
