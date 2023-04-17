@@ -260,7 +260,6 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
     // to sure to put it here for updating state.
     // because we want to update state based on raw data.
     int total_cnt = available_pickup_morsel_count();
-    int old = total_cnt;
 
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
@@ -297,9 +296,6 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
         int idx = to_sched[i];
         RETURN_IF_ERROR(_pickup_morsel(state, idx));
     }
-
-    // VLOG_FILE << "[XXX] trigger. id = " << _driver_sequence << ", size = " << size << ", total_cnt = " << old
-    //           << ", running = " << _num_running_io_tasks;
 
     _peak_io_tasks_counter->set(_num_running_io_tasks);
     return Status::OK();
