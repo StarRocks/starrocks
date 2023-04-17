@@ -16,12 +16,13 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
+import com.starrocks.common.Config;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class TaskRunHistory {
     // Thread-Safe history map: QueryId -> TaskRunStatus
@@ -50,8 +51,15 @@ public class TaskRunHistory {
     // Reserve historyTaskRunMap values to keep the last insert at the first.
     public List<TaskRunStatus> getAllHistory() {
         List<TaskRunStatus> historyRunStatus =
-                historyTaskRunMap.values().stream().collect(Collectors.toList());
+                new ArrayList<>(historyTaskRunMap.values());
         Collections.reverse(historyRunStatus);
         return historyRunStatus;
+    }
+
+    public void forceGC() {
+        List<TaskRunStatus> allHistory = getAllHistory();
+        int startIndex = Math.max(0, allHistory.size() - Config.task_runs_max_history_number);
+        allHistory.subList(startIndex, allHistory.size())
+                .forEach(taskRunStatus -> historyTaskRunMap.remove(taskRunStatus.getQueryId()));
     }
 }
