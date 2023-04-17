@@ -233,7 +233,7 @@ bool ConnectorScanOperator::is_running_all_io_tasks() const {
             P.check_all_io_tasks_last_timestamp = now;
         } else if (num_buffered_chunks() > 0) {
             int64_t delta = now - P.check_all_io_tasks_last_timestamp;
-            if (delta > config::connector_io_tasks_check_interval * 1000) {
+            if (delta > config::connector_io_tasks_adjust_interval_ms * 1000) {
                 return false;
             }
         }
@@ -262,7 +262,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     // to avoid frequent adjustment.
     int& io_tasks = P.expected_io_tasks;
     io_tasks = std::max(min_io_tasks, io_tasks);
-    if ((now - P.adjust_io_tasks_last_timestamp) <= config::connector_io_tasks_check_interval * 1000) {
+    if ((now - P.adjust_io_tasks_last_timestamp) <= config::connector_io_tasks_adjust_interval_ms * 1000) {
         return io_tasks;
     }
     P.adjust_io_tasks_last_timestamp = now;
@@ -282,10 +282,9 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
 
     auto do_add_io_tasks = [&]() {
         P.try_add_io_tasks = true;
-        const int smooth = 6;
+        const int smooth = config::connector_io_tasks_adjust_smooth;
         P.expected_speedup_ratio =
                 (io_tasks + config::connector_io_tasks_adjust_step + smooth) * 1.0 / (io_tasks + smooth);
-        // P.expected_speedup_ratio = 1.03;
         io_tasks += config::connector_io_tasks_adjust_step;
     };
     auto do_dec_io_tasks = [&]() {
@@ -299,17 +298,16 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
         // if we don't try add io tasks before,
         // or if we've tried and we get expected speedup ratio.
         do_add_io_tasks();
-    } else if (P.last_cs_pull_chunks == cs_pull_chunks) {
-        // no chunks changed during this time, maybe it's caused by slow io.
+    } else {
         double r = cs_total_io_time * 1.0 / (cs_total_running_time + 1);
-        if (r > 0.8) {
+        if (r > config::connector_io_tasks_slow_io_ratio || cs_total_io_time == 0) {
+            // detect slow device, jump to half of max. and try add more io tasks.
+            io_tasks = std::max(io_tasks, _io_tasks_per_scan_operator / 2);
             do_add_io_tasks();
         } else {
-            // don't do any change.
+            // if speedup ratio is not as expected, we revert.
+            do_dec_io_tasks();
         }
-    } else {
-        // if speedup ratio is not as expected, we revert.
-        do_dec_io_tasks();
     }
 
     io_tasks = std::min(io_tasks, _io_tasks_per_scan_operator);
@@ -318,9 +316,9 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     auto doround = [&](double x) { return round(x * 10000.0) / 10000.0; };
     VLOG_FILE << "[XXX] pick mosrsel. id = " << _driver_sequence << ", cs = " << cs_speed << "(" << cs_pull_chunks
               << "), old = " << P.last_cs_speed << "(" << doround(cs_speed / P.last_cs_speed) << ")"
-              << ", op = " << op_speed << ", proposal = " << io_tasks << ", current = " << _num_running_io_tasks
-              << ", io/total = " << cs_total_io_time << "/" << cs_total_running_time << "("
-              << doround(cs_total_io_time * 1.0 / cs_total_running_time) << ")";
+              << ", op = " << op_speed << ", proposal = " << io_tasks << "(" << P.expected_speedup_ratio
+              << "), current = " << _num_running_io_tasks << ", io/total = " << cs_total_io_time << "/"
+              << cs_total_running_time << "(" << doround(cs_total_io_time * 1.0 / cs_total_running_time) << ")";
 
     P.last_cs_speed = cs_speed;
     P.last_cs_pull_chunks = cs_pull_chunks;
