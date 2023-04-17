@@ -169,7 +169,7 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 Stream Load
 | sink.properties.format|  NO | CSV | String | The file format of data loaded into starrocks. Valid values: **CSV** and **JSON**. Default value: **CSV**. |
 | sink.properties.* | NO | NONE | String | the stream load properties like **'sink.properties.columns' = 'k1, k2, k3'**,details in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md). Since 2.4, the flink-connector-starrocks supports partial updates for Primary Key model. |
 | sink.properties.ignore_json_size | NO |false| String | ignore the batching size (100MB) of json data |
-| sink.properties.timeout | NO |600| String | Timeout for transaction stream load when you use exactly-once sink. A new transaction will begin after a Flink checkpoint is triggered, and be committed when the next checkpoint is triggered, so you should set the value larger than the Flink checkpoint interval, otherwise the Flink job will fail because of transaction timeout .   |
+| sink.properties.timeout | NO |600| String | Timeout for transaction stream load when you use exactly-once sink. Unit: seconds. A new transaction will begin after a Flink checkpoint is triggered, and be committed when the next checkpoint is triggered, so you should set the value larger than the Flink checkpoint interval, otherwise the Flink job will fail because of transaction timeout .   |
 
 ## Flink 与 StarRocks 的数据类型映射关系
 
