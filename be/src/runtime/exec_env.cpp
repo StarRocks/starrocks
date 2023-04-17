@@ -105,6 +105,17 @@ static int64_t calc_max_load_memory(int64_t process_mem_limit) {
     return std::min<int64_t>(max_load_memory_bytes, config::load_process_max_memory_limit_bytes);
 }
 
+int64_t ExecEnv::calc_max_query_memory(int64_t process_mem_limit, int64_t percent) {
+    if (process_mem_limit <= 0) {
+        // -1 means no limit
+        return -1;
+    }
+    if (percent < 0 || percent > 100) {
+        percent = 90;
+    }
+    return process_mem_limit * percent / 100;
+}
+
 static int64_t calc_max_compaction_memory(int64_t process_mem_limit) {
     int64_t limit = config::compaction_max_memory_limit;
     int64_t percent = config::compaction_max_memory_limit_percent;
@@ -411,8 +422,10 @@ Status ExecEnv::init_mem_tracker() {
     }
 
     _process_mem_tracker = regist_tracker(MemTracker::PROCESS, bytes_limit, "process");
+    int64_t query_pool_mem_limit =
+            calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker =
-            regist_tracker(MemTracker::QUERY_POOL, bytes_limit * 0.9, "query_pool", this->process_mem_tracker());
+            regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool", this->process_mem_tracker());
 
     int64_t load_mem_limit = calc_max_load_memory(_process_mem_tracker->limit());
     _load_mem_tracker = regist_tracker(MemTracker::LOAD, load_mem_limit, "load", process_mem_tracker());
