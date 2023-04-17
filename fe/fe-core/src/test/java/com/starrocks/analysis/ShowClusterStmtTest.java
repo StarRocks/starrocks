@@ -15,7 +15,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
@@ -24,16 +23,10 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.ShowClustersStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -58,24 +51,7 @@ public class ShowClusterStmtTest {
     }
 
     @Test
-    public void testNormal(@Mocked StarOSAgent starOSAgent) throws Exception {
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public StarOSAgent getCurrentStarOSAgent() {
-                return starOSAgent;
-            }
-        };
-
-        new Expectations() {
-            {
-                starOSAgent.createWorkerGroup(anyString);
-                result = -1L;
-                minTimes = 0;
-            }
-        };
-
-        AlterWarehouseStmt addClusterStmt = (AlterWarehouseStmt)
-                UtFrameUtils.parseStmtWithNewParser("alter warehouse testWh add cluster", ctx);
+    public void testNormal() throws Exception {
 
         ShowClustersStmt stmt = new ShowClustersStmt("testWh");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);

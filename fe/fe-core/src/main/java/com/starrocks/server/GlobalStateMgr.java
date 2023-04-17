@@ -1059,6 +1059,7 @@ public class GlobalStateMgr {
                     // already upgraded, set auth = null
                     auth = null;
                 }
+                warehouseMgr.init();
                 break;
             }
 
@@ -1140,10 +1141,6 @@ public class GlobalStateMgr {
 
             if (!isDefaultClusterCreated) {
                 initDefaultCluster();
-            }
-
-            if (!warehouseMgr.warehouseExists(WarehouseManager.DEFAULT_WAREHOUSE_NAME)) {
-                initDefaultWarehouse();
             }
 
             // MUST set leader ip before starting checkpoint thread.
@@ -3462,10 +3459,6 @@ public class GlobalStateMgr {
 
     public void initDefaultCluster() {
         localMetastore.initDefaultCluster();
-    }
-
-    public void initDefaultWarehouse() {
-        warehouseMgr.initDefaultWarehouse();
     }
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {

@@ -14,7 +14,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -26,11 +25,6 @@ import com.starrocks.sql.ast.DropWarehouseStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SuspendWarehouseStmt;
-import com.starrocks.warehouse.Warehouse;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -82,7 +76,7 @@ public class WarehouseStmtTest {
     }
 
     @Test
-    public void testCreateWarehouse(@Mocked StarOSAgent starOSAgent) throws Exception {
+    public void testCreateWarehouse() throws Exception {
         String sql = "CREATE WAREHOUSE warehouse_1";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof CreateWarehouseStmt);
@@ -98,79 +92,5 @@ public class WarehouseStmtTest {
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("exists"));
         }
-
-        new MockUp<GlobalStateMgr>() {
-            @Mock
-            public StarOSAgent getCurrentStarOSAgent() {
-                return starOSAgent;
-            }
-        };
-
-        new Expectations() {
-            {
-                starOSAgent.deleteWorkerGroup(anyLong);
-                result = null;
-                minTimes = 0;
-
-                starOSAgent.createWorkerGroup(anyString);
-                result = -1L;
-                minTimes = 0;
-            }
-        };
-
-        // test suspend/resume/alter warehouse
-        String suspendSql = "SUSPEND WAREHOUSE warehouse_1";
-        stmt = AnalyzeTestUtil.analyzeSuccess(suspendSql);
-        Assert.assertTrue(stmt instanceof SuspendWarehouseStmt);
-        DDLStmtExecutor.execute(stmt, connectCtx);
-        Assert.assertEquals(Warehouse.WarehouseState.SUSPENDED,
-                warehouseMgr.getWarehouse("warehouse_1").getState());
-
-        String resumeSql = "RESUME WAREHOUSE warehouse_1";
-        stmt = AnalyzeTestUtil.analyzeSuccess(resumeSql);
-        Assert.assertTrue(stmt instanceof ResumeWarehouseStmt);
-        DDLStmtExecutor.execute(stmt, connectCtx);
-        Assert.assertEquals(Warehouse.WarehouseState.RUNNING,
-                warehouseMgr.getWarehouse("warehouse_1").getState());
-
-        String alterSql = "ALTER WAREHOUSE warehouse_1 set(\"size\"=\"medium\")";
-        stmt = AnalyzeTestUtil.analyzeSuccess(alterSql);
-        Assert.assertTrue(stmt instanceof AlterWarehouseStmt);
-        DDLStmtExecutor.execute(stmt, connectCtx);
-
-    }
-
-    @Test
-    public void testDropWarehouse() throws Exception {
-        // test DROP WAREHOUSE warehouse_name
-        String createSql = "CREATE WAREHOUSE warehouse_1";
-        String dropSql = "DROP WAREHOUSE warehouse_1";
-
-        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        StatementBase createStmtBase = AnalyzeTestUtil.analyzeSuccess(createSql);
-        Assert.assertTrue(createStmtBase instanceof CreateWarehouseStmt);
-        ConnectContext connectCtx = new ConnectContext();
-        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        CreateWarehouseStmt createWarehouseStmt = (CreateWarehouseStmt) createStmtBase;
-        DDLStmtExecutor.execute(createWarehouseStmt, connectCtx);
-        Assert.assertTrue(warehouseMgr.warehouseExists("warehouse_1"));
-
-        StatementBase dropStmtBase = AnalyzeTestUtil.analyzeSuccess(dropSql);
-        Assert.assertTrue(dropStmtBase instanceof DropWarehouseStmt);
-        DropWarehouseStmt dropWarehouseStmt = (DropWarehouseStmt) dropStmtBase;
-        DDLStmtExecutor.execute(dropWarehouseStmt, connectCtx);
-        Assert.assertFalse(warehouseMgr.warehouseExists("warehouse_1"));
-
-        // test DROP WAREHOUSE 'warehouse_name'
-        String dropSql_2 = "DROP WAREHOUSE 'warehouse_1'";
-
-        DDLStmtExecutor.execute(createWarehouseStmt, connectCtx);
-        Assert.assertTrue(warehouseMgr.warehouseExists("warehouse_1"));
-
-        StatementBase dropStmtBase_2 = AnalyzeTestUtil.analyzeSuccess(dropSql_2);
-        Assert.assertTrue(dropStmtBase_2 instanceof DropWarehouseStmt);
-        DropWarehouseStmt dropWarehouseStmt_2 = (DropWarehouseStmt) dropStmtBase;
-        DDLStmtExecutor.execute(dropWarehouseStmt_2, connectCtx);
-        Assert.assertFalse(warehouseMgr.warehouseExists("warehouse_1"));
     }
 }

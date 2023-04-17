@@ -62,8 +62,12 @@ public class WarehouseManager implements Writable {
     public WarehouseManager() {
     }
 
-    public void initDefaultWarehouse() {
-        createWarehouse(DEFAULT_WAREHOUSE_NAME, null);
+    public void init() {
+        // gen a default warehouse
+        Warehouse wh = new LocalWarehouse(0, DEFAULT_WAREHOUSE_NAME);
+        fullNameToWh.put(wh.getFullName(), wh);
+        idToWh.put(wh.getId(), wh);
+        wh.setExist(true);
     }
 
     public Warehouse getWarehouse(String warehouseName) {
@@ -94,6 +98,7 @@ public class WarehouseManager implements Writable {
             idToWh.put(wh.getId(), wh);
             wh.setExist(true);
             GlobalStateMgr.getCurrentState().getEditLog().logCreateWarehouse(wh);
+
             LOG.info("createWarehouse whName = " + warehouseName + ", id = " + id);
         }
     }
