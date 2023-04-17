@@ -847,7 +847,6 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
                                                                     &child_type, kv_columns[i], child_array_start_idx,
                                                                     kv_size[i], &child_chunk_filter, ctx));
         }
-        col_map->remove_duplicated_keys();
         return Status::OK();
     }
 };

@@ -1669,14 +1669,16 @@ TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
     ASSERT_TRUE(status.ok());
     EXPECT_EQ(chunk->num_rows(), 8);
     EXPECT_EQ(chunk->debug_row(0), "[1, {'k1':NULL,'k2':NULL}, {NULL:{'f1':NULL,'f2':NULL}}, {NULL:[1,2]}]");
-    EXPECT_EQ(chunk->debug_row(1), "[2, {'k1':NULL,'k3':NULL,'k4':NULL}, {NULL:{'f1':NULL,'f2':NULL}}, {NULL:[2]}]");
+    EXPECT_EQ(chunk->debug_row(1),
+              "[2, {'k1':NULL,'k3':NULL,'k4':NULL}, {NULL:{'f1':NULL,'f2':NULL},NULL:{'f1':NULL,'f2':NULL}}, "
+              "{NULL:[1],NULL:[2]}]");
     EXPECT_EQ(chunk->debug_row(2),
               "[3, {'k2':NULL,'k3':NULL,'k5':NULL}, {NULL:{'f1':NULL,'f2':NULL,'f3':NULL}}, {NULL:[1,2,3]}]");
     EXPECT_EQ(chunk->debug_row(3), "[4, {'k1':NULL,'k2':NULL,'k3':NULL}, {NULL:{'f2':NULL}}, {NULL:[1]}]");
     EXPECT_EQ(chunk->debug_row(4), "[5, {'k3':NULL}, {NULL:{'f2':NULL}}, {NULL:[NULL]}]");
     EXPECT_EQ(chunk->debug_row(5), "[6, {'k1':NULL}, {NULL:{'f2':NULL}}, {NULL:[1]}]");
     EXPECT_EQ(chunk->debug_row(6), "[7, {'k1':NULL,'k2':NULL}, {NULL:{'f2':NULL}}, {NULL:[1,2,3]}]");
-    EXPECT_EQ(chunk->debug_row(7), "[8, {'k3':NULL}, {NULL:{'f1':NULL,'f2':NULL,'f3':NULL}}, {NULL:[2]}]");
+    EXPECT_EQ(chunk->debug_row(7), "[8, {'k3':NULL}, {NULL:{'f1':NULL,'f2':NULL,'f3':NULL}}, {NULL:[1],NULL:[2]}]");
 }
 
 TEST_F(FileReaderTest, TestReadNotNull) {

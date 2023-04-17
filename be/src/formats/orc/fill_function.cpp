@@ -970,7 +970,6 @@ static void fill_map_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t 
         fn_fill_values(orc_map->elements.get(), values, values_from, values_size, value_type,
                        mapping->get_column_id_or_child_mapping(1).orc_mapping, ctx);
     }
-    col_map->remove_duplicated_keys();
 }
 static void fill_map_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
                                       const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
