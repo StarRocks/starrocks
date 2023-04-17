@@ -284,7 +284,7 @@ public class Config extends ConfigBase {
     public static int task_runs_ttl_second = 24 * 3600;     // 1 day
 
     /**
-     * for task run set expire time
+     * max history task num kept
      */
     @ConfField(mutable = true)
     public static int task_runs_max_history_number = 10000;
