@@ -307,7 +307,7 @@ public class TabletScheduler extends LeaderDaemon {
         // Exclude the VERSION_INCOMPLETE tablet, because they are not added because of relocation.
         streams.forEach(s -> s.filter(t ->
                         (t.getColocateGroupId() != null && t.getTabletStatus() != TabletStatus.VERSION_INCOMPLETE)
-                ).forEach(t -> result.merge(t.getColocateGroupId(), 1L, (a, b) -> a + b))
+                ).forEach(t -> result.merge(t.getColocateGroupId(), 1L, Long::sum))
         );
         return result;
     }

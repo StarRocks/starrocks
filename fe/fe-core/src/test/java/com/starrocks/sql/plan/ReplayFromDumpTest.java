@@ -59,6 +59,7 @@ public class ReplayFromDumpTest {
         UtFrameUtils.createMinStarRocksCluster();
         // Should disable Dynamic Partition in replay dump test
         Config.dynamic_partition_enable = false;
+        Config.tablet_sched_disable_colocate_overall_balance = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
