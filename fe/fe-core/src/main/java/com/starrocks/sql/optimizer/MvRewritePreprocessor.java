@@ -84,6 +84,13 @@ public class MvRewritePreprocessor {
                 LOG.warn("preprocess mv {} failed for query tables:{}", mv.getName(), tableNames, e);
             }
         }
+        // all base table related mvs
+        List<String> relatedMvNames = relatedMvs.stream().map(mv -> mv.getName()).collect(Collectors.toList());
+        // all mvs that match SPJG pattern and can ben used to try mv rewrite
+        List<String> candidateMvNames = context.getCandidateMvs().stream()
+                .map(materializationContext -> materializationContext.getMv().getName()).collect(Collectors.toList());
+        String mvInfo = "relatedMvNames:" + relatedMvNames + ", candidateMvNames:" + candidateMvNames;
+        OptimizerTraceUtil.log(connectContext, mvInfo);
     }
 
     private void preprocessMv(MaterializedView mv, List<Table> queryTables, Set<ColumnRefOperator> originQueryColumns) {
