@@ -44,6 +44,12 @@ public class ReplayFromDumpTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+<<<<<<< HEAD
+=======
+        // Should disable Dynamic Partition in replay dump test
+        Config.dynamic_partition_enable = false;
+        Config.tablet_sched_disable_colocate_overall_balance = true;
+>>>>>>> 4e304cded ([Enhancement] Optimize colocate balance from overall view (#21089))
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
