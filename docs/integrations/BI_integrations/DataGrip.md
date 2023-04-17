@@ -10,8 +10,8 @@ Create a data source in DataGrip. Note that you must select MySQL as the data so
 
 The parameters that you need to configure are described as follows:
 
-- **Host**: the host IP address of your StarRocks cluster.
-- **Port**: the query port of your StarRocks cluster, for example, `9030`.
+- **Host**: the FE host IP address of your StarRocks cluster.
+- **Port**: the FE query port of your StarRocks cluster, for example, `9030`.
 - **Authentication**: the authentication method that you want to use. Select **Username & Password**.
 - **User**: the username that is used to log in to your StarRocks cluster, for example, `admin`.
 - **Password**: the password that is used to log in to your StarRocks cluster.

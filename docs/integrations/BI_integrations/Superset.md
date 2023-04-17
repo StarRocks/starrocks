@@ -6,7 +6,7 @@ Apache Superset supports querying and visualizing both internal data and externa
 
 Make sure that you have finished the following installations:
 
-1. Install the Python client on your Apache Superset server.
+1. Install the Python client for StarRocks on your Apache Superset server.
 
    ```SQL
    pip install starrocks
@@ -35,8 +35,8 @@ Create a database in Apache Superset:
 
   - `User`: the username that is used to log in to your StarRocks cluster, for example, `admin`.
   - `Password`: the password that is used to log in to your StarRocks cluster.
-  - `Host`: the host IP address of your StarRocks cluster.
-  - `Port`: the query port of your StarRocks cluster, for example, `9030`.
+  - `Host`: the FE host IP address of your StarRocks cluster.
+  - `Port`: the FE query port of your StarRocks cluster, for example, `9030`.
   - `Catalog`: the target catalog in your StarRocks cluster. Both internal and external catalogs are supported.
   - `Database`: the target database in your StarRocks cluster. Both internal and external databases are supported.
   
