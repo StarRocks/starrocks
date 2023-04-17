@@ -138,6 +138,8 @@ public:
     ClientCache<FrontendServiceClient>* frontend_client_cache() { return _frontend_client_cache; }
     ClientCache<TFileBrokerServiceClient>* broker_client_cache() { return _broker_client_cache; }
 
+    static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
+
     // using template to simplify client cache management
     template <typename T>
     ClientCache<T>* get_client_cache() {
