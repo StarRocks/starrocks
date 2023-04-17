@@ -62,12 +62,15 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select contains(array[1,2,3], 1)";
         assertPlanContains(sql, "array_contains(ARRAY<tinyint(4)>[1,2,3], 1)");
 
+<<<<<<< HEAD
         sql = "select contains_sequence(c1, array['1','2']) from test_array";
         assertPlanContains(sql, "array_contains_all(2: c1, ARRAY<varchar>['1','2'])");
 
         sql = "select contains_sequence(c1, array['1','2']) from test_array";
         assertPlanContains(sql, "array_contains_all(2: c1, ARRAY<varchar>['1','2'])");
 
+=======
+>>>>>>> 7291f6ae2 ([BugFix] remove function contains_sequence transformer for trino parser (#21733))
         sql = "select slice(array[1,2,3,4], 2, 2)";
         assertPlanContains(sql, "array_slice(ARRAY<tinyint(4)>[1,2,3,4], 2, 2)");
     }
