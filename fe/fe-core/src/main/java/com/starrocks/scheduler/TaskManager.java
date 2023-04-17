@@ -469,9 +469,7 @@ public class TaskManager {
         try {
             Text.writeString(dos, s);
         } catch (IOException ex) {
-            if (ex.getMessage().contains("larger than 1GB")) {
-                retry = true;
-            }
+            retry = true;
         }
         if (retry) {
             int beforeLength = s.length();
