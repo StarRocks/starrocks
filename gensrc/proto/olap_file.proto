@@ -38,6 +38,7 @@ syntax = "proto2";
 package starrocks;
 option java_package = "com.starrocks.proto";
 
+import "binlog.proto";
 import "olap_common.proto";
 import "tablet_schema.proto";
 import "types.proto";
@@ -279,7 +280,7 @@ message TabletMetaPB {
     optional TabletUpdatesPB updates = 50;                        // used for new updatable tablet
     optional bool enable_persistent_index = 51 [default = false]; // used for persistent index in primary index
     optional BinlogConfigPB binlog_config = 52;
-    optional int64 binlog_min_version = 53;
+    optional BinlogLsnPB binlog_min_lsn = 53;
 }
 
 message OLAPIndexHeaderMessage {

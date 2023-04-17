@@ -16,9 +16,14 @@
 
 #include <re2/re2.h>
 
+#include "fmt/format.h"
 #include "fs/fs_util.h"
 
 namespace starrocks {
+
+std::string BinlogLsn::to_string() const {
+    return fmt::format("[version={}, seq_id={}]", version(), seq_id());
+}
 
 std::string BinlogUtil::file_meta_to_string(BinlogFileMetaPB* file_meta) {
     std::stringstream ss;

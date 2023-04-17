@@ -25,13 +25,33 @@ namespace starrocks {
 
 using BinlogFileMetaPBPtr = std::shared_ptr<BinlogFileMetaPB>;
 
+// The log sequence number of the change event which is unique in all ingestion. It's a combination of
+// version(int64_t) and seq_id(int64_t). The version is the publish version of the ingestion to generate
+// the change event, and the seq_id is the sequence number of the change event in the ingestion.
+struct BinlogLsn {
+    uint128_t lsn = 0;
+
+    BinlogLsn(int64_t version, int64_t seq_id) : lsn((((uint128_t)version) << 64) | seq_id) {}
+    BinlogLsn() = default;
+
+    int64_t version() const { return (int64_t)(lsn >> 64); }
+    int64_t seq_id() const { return (int64_t)(lsn & 0xffffffffUL); }
+    bool operator!=(const BinlogLsn& rhs) const { return lsn != rhs.lsn; }
+    bool operator==(const BinlogLsn& rhs) const { return lsn == rhs.lsn; }
+    bool operator<(const BinlogLsn& rhs) const { return lsn < rhs.lsn; }
+    std::string to_string() const;
+    friend std::ostream& operator<<(std::ostream& os, const BinlogLsn& lsn);
+};
+
+inline std::ostream& operator<<(std::ostream& os, const BinlogLsn& lsn) {
+    return os << lsn.to_string();
+}
+
 class BinlogUtil {
 public:
     static std::string binlog_file_path(std::string& binlog_dir, int64_t file_id) {
         return strings::Substitute("$0/$1.binlog", binlog_dir, file_id);
     }
-
-    static int128_t get_lsn(int64_t version, int64_t seq_id) { return (((int128_t)version) << 64) | seq_id; }
 
     static std::string file_meta_to_string(BinlogFileMetaPB* file_meta);
 

@@ -55,7 +55,7 @@ BinlogManager::~BinlogManager() {
     }
 }
 
-Status BinlogManager::init(int64_t min_version, int64_t max_version) {
+Status BinlogManager::init(BinlogLsn min_lsn, std::set<int64_t> versions) {
     std::set<int64_t> binlog_file_ids;
     Status status = BinlogUtil::list_binlog_file_ids(_path, &binlog_file_ids);
     if (!status.ok()) {
@@ -67,9 +67,9 @@ Status BinlogManager::init(int64_t min_version, int64_t max_version) {
         return Status::InternalError(errMsg);
     }
 
-    std::set<int64_t> useless_file_ids;
+    std::list<int64_t> useless_file_ids;
     std::vector<BinlogFileMetaPBPtr> useful_file_meta;
-    // load binlog file metas from the largest file id to the smallest
+    // load binlog file metas from the largest file id to the smallest,
     for (auto it = binlog_file_ids.rbegin(); it != binlog_file_ids.rend(); it++) {
         int64_t file_id = *it;
         std::string file_path = BinlogUtil::binlog_file_path(_path, file_id);
@@ -82,36 +82,36 @@ Status BinlogManager::init(int64_t min_version, int64_t max_version) {
         }
         BinlogFileLoadFilterImpl filter(max_version, max_seq_id, _rowset_fetcher.get());
         StatusOr status_or = BinlogFileReader::load_meta(file_id, file_path, &filter);
-        if (!status_or.ok()) {
-            std::string errMsg = fmt::format(
-                    "Failed to init binlog because load_meta error, tablet {}, "
-                    "file_path: {}, status: {}",
-                    _tablet_id, file_path, status_or.status().to_string());
+        if (!status_or.ok() && !status_or.status().is_not_found()) {
+            std::string errMsg =
+                    fmt::format("Failed to init binlog because load_meta error, tablet {}, file_path: {}, status: {}",
+                                _tablet_id, file_path, status_or.status().to_string());
             LOG(ERROR) << errMsg;
             _init_failure.store(true);
             return Status::InternalError(errMsg);
         }
 
-        // TODO verify the lsn is continuous
-
-        if (status_or.value()->num_pages() > 0) {
-            useful_file_meta.push_back(status_or.value());
-        } else {
-            useless_file_ids.insert(file_id);
+        if (status_or.status().is_not_found()) {
+            useless_file_ids.push_back(file_id);
+            continue;
         }
     }
 
     std::reverse(useful_file_meta.begin(), useful_file_meta.end());
     BinlogBuildResult build_result;
+    // set to the largest file id
     build_result.next_file_id = binlog_file_ids.empty() ? 0 : (*binlog_file_ids.rbegin() + 1);
     build_result.metas = useful_file_meta;
     _apply_build_result(&build_result);
 
-    for (auto it = useless_file_ids.rbegin(); it != useless_file_ids.rend(); it++) {
-        _unused_binlog_file_ids.blocking_put(*it);
+    useless_file_ids.sort();
+    for (auto it : useless_file_ids) {
+        _unused_binlog_file_ids.blocking_put(it);
     }
 
-    LOG(INFO) << "Init binlog manager successfully, load binlog files: " << useful_file_meta.size();
+    // TODO don't print if versions is empty
+    LOG(INFO) << "Init binlog manager successfully, tablet: " << _tablet_id << ", lsn " << min_lsn
+              << ", min version: " << *versions.begin() << ", max version: " << *versions.rbegin();
     return Status::OK();
 }
 
@@ -187,7 +187,7 @@ void BinlogManager::commit_ingestion(int64_t version) {
 void BinlogManager::_apply_build_result(BinlogBuildResult* result) {
     std::unique_lock lock(_meta_lock);
     for (auto& meta : result->metas) {
-        int128_t lsn = BinlogUtil::get_lsn(meta->start_version(), meta->start_seq_id());
+        BinlogLsn lsn(meta->start_version(), meta->start_seq_id());
         auto it = _alive_binlog_files.find(lsn);
         bool override_meta = it != _alive_binlog_files.end();
         if (override_meta) {
@@ -426,7 +426,7 @@ void BinlogManager::unregister_reader(int64_t reader_id) {
 StatusOr<BinlogFileReadHolderPtr> BinlogManager::find_binlog_file(int64_t version, int64_t seq_id) {
     RETURN_IF_ERROR(_check_init_failure());
     std::shared_lock lock(_meta_lock);
-    int128_t lsn = BinlogUtil::get_lsn(version, seq_id);
+    BinlogLsn lsn(version, seq_id);
     // find the first file whose start lsn is greater than the target
     auto upper = _alive_binlog_files.upper_bound(lsn);
     if (upper == _alive_binlog_files.begin()) {

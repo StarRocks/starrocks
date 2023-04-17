@@ -16,7 +16,6 @@ syntax = "proto2";
 
 package starrocks;
 
-import "olap_file.proto";
 import "types.proto";
 
 message FileIdPB {
@@ -125,4 +124,9 @@ message BinlogFileMetaPB {
     optional int64 file_size = 9;
     // rowsets that this binlog file uses
     repeated int64 rowsets = 10;
+}
+
+message BinlogLsnPB {
+    optional int64 version = 1;
+    optional int64 seq_id = 2;
 }

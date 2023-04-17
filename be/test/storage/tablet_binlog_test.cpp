@@ -162,7 +162,7 @@ TEST_F(TabletBinlogTest, test_generate_binlog) {
     std::vector<DupKeyVersionInfo> version_infos;
     ingest_random_binlog(_tablet, 2, 100, &version_infos);
     BinlogManager* binlog_manager = _tablet->binlog_manager();
-    std::map<int128_t, BinlogFilePtr>& lsn_map = binlog_manager->alive_binlog_files();
+    std::map<BinlogLsn, BinlogFilePtr>& lsn_map = binlog_manager->alive_binlog_files();
     std::vector<BinlogFileMetaPBPtr> file_metas;
     for (auto it : lsn_map) {
         file_metas.push_back(it.second->file_meta());
@@ -192,7 +192,7 @@ TEST_F(TabletBinlogTest, test_publish_out_of_order) {
     }
 
     BinlogManager* binlog_manager = _tablet->binlog_manager();
-    std::map<int128_t, BinlogFilePtr>& lsn_map = binlog_manager->alive_binlog_files();
+    std::map<BinlogLsn, BinlogFilePtr>& lsn_map = binlog_manager->alive_binlog_files();
     std::vector<BinlogFileMetaPBPtr> file_metas;
     for (auto it : lsn_map) {
         file_metas.push_back(it.second->file_meta());
@@ -227,7 +227,7 @@ TEST_F(TabletBinlogTest, test_load) {
     }
 
     BinlogManager* binlog_manager = load_tablet->binlog_manager();
-    std::map<int128_t, BinlogFilePtr>& lsn_map = binlog_manager->alive_binlog_files();
+    std::map<BinlogLsn, BinlogFilePtr>& lsn_map = binlog_manager->alive_binlog_files();
     std::vector<BinlogFileMetaPBPtr> file_metas;
     for (auto it : lsn_map) {
         file_metas.push_back(it.second->file_meta());

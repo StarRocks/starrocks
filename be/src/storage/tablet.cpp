@@ -281,25 +281,28 @@ Status Tablet::finish_load_rowsets() {
         return Status::OK();
     }
 
-    int64_t min_version = INT64_MAX;
-    int64_t max_version = 0;
+    // find valid versions
+    BinlogLsn min_lsn = _tablet_meta->get_binlog_min_lsn();
+    std::set<int64_t> valid_versions;
     for (auto& item : _inc_rs_version_map) {
-        int64_t ver = item.first.first;
-        if (ver < _tablet_meta->get_binlog_min_version()) {
+        int64_t version = item.first.first;
+        if (version < min_lsn.version()) {
             continue;
         }
-        min_version = std::min(min_version, ver);
-        max_version = std::max(max_version, ver);
+        valid_versions.insert(version);
     }
 
-    Status status = _binlog_manager->init(min_version, max_version);
+    // TabletMeta#binlog_min_lsn is first set when enable binlog in Tablet#update_binlog_config,
+    // and we don't know the first incremental version for add_inc_rowset, and the data may be
+    // copied to this tablet via full clone, so the min_lsn may be smaller than the actual version
+    int64_t min_valid_version = valid_versions.empty() ? min_lsn.version() : *valid_versions.begin();
+    if (min_valid_version > min_lsn.version()) {
+        min_lsn = BinlogLsn(min_valid_version, 0);
+    }
+
+    Status status = _binlog_manager->init(min_lsn, valid_versions);
     if (!status.ok()) {
-        LOG(WARNING) << "Fail to initialize binlog for tablet " << full_name()
-                     << ", min version: " << min_version << ", max_version: " << max_version
-                     << ", " << status;
-    } else {
-        VLOG(3) << "Success to initialize binlog in finish_load_rowsets, tablet: " << full_name()
-                << ", min version: " << min_version << ", max_version: " << max_version;
+        LOG(WARNING) << "Fail to initialize binlog for tablet " << full_name() << ", " << status;
     }
 
     return status;
@@ -449,14 +452,14 @@ void Tablet::update_binlog_config(const BinlogConfig& new_config) {
         return;
     }
     _tablet_meta->set_binlog_config(new_config);
-    // set minimum version if this will enable binlog
+    // set minimum lsn if this will enable binlog
     if (new_config.binlog_enable && (old_config == nullptr || !old_config->binlog_enable)) {
-        Version max_version = _tablet_meta->max_version();
-        _tablet_meta->set_binlog_min_version(max_version.second + 1);
+        BinlogLsn lsn(_tablet_meta->max_version().second + 1, 0);
+        _tablet_meta->set_binlog_min_lsn(lsn);
     }
 
     LOG(INFO) << "set binlog config of tablet: " << tablet_id() << ", " << new_config.to_string()
-              << ", minimum version: " << _tablet_meta->get_binlog_min_version();
+              << ", minimum version: " << _tablet_meta->get_binlog_min_lsn();
 }
 
 StatusOr<bool> Tablet::_prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version) {
@@ -504,6 +507,28 @@ void Tablet::_commit_binlog(int64_t version) {
 void Tablet::_abort_binlog(const RowsetSharedPtr& rowset, int64_t version) {
     _binlog_manager->delete_ingestion(version);
     rowset->close();
+}
+
+bool Tablet::_check_useless_binlog_and_update_meta(int64_t current_second) {
+    auto config = _tablet_meta->get_binlog_config();
+    if (config == nullptr || !config->binlog_enable) {
+        return false;
+    }
+
+    bool expired_or_overcapacity = _binlog_manager->check_expire_and_capacity(current_second, config->binlog_ttl_second,
+                                                                              config->binlog_max_size);
+    if (!expired_or_overcapacity) {
+        return false;
+    }
+    BinlogRange binlog_range = _binlog_manager->current_binlog_range();
+    BinlogLsn lsn;
+    if (binlog_range.is_empty()) {
+        lsn = {_tablet_meta->max_version().second + 1, 0};
+    } else {
+        lsn = {binlog_range.start_version(), binlog_range.start_seq_id()};
+    }
+    _tablet_meta->set_binlog_min_lsn(lsn);
+    return true;
 }
 
 Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
@@ -594,18 +619,7 @@ void Tablet::delete_expired_inc_rowsets() {
     int64_t now = UnixSeconds();
     std::vector<Version> expired_versions;
     std::unique_lock wrlock(_meta_lock);
-    auto config = _tablet_meta->get_binlog_config();
-    bool binlog_enable = config != nullptr && config->binlog_enable;
-    int64_t old_binlog_min_version = _tablet_meta->get_binlog_min_version();
-    if (binlog_enable) {
-        bool expired_or_overcapacity = _binlog_manager->check_expire_and_capacity(now, config->binlog_ttl_second, config->binlog_max_size);
-        if (expired_or_overcapacity) {
-            BinlogRange binlog_range = _binlog_manager->current_binlog_range();
-            int64_t binlog_min_version = binlog_range.is_empty() ? _tablet_meta->max_version().second + 1 : binlog_range.start_version();
-            _tablet_meta->set_binlog_min_version(binlog_min_version);
-        }
-    }
-
+    bool binlog_meta_changed = _check_useless_binlog_and_update_meta(now);
     for (auto& rs_meta : _tablet_meta->all_inc_rs_metas()) {
         int64_t diff = now - rs_meta->creation_time();
         bool inc_rowset_expired = diff >= config::inc_rowset_expired_sec;
@@ -622,18 +636,19 @@ void Tablet::delete_expired_inc_rowsets() {
         }
     }
 
+    if (!binlog_meta_changed && expired_versions.empty()) {
+        return;
+    }
+
     for (auto& version : expired_versions) {
         _delete_inc_rowset_by_version(version);
         VLOG(3) << "delete expire incremental data. tablet=" << full_name() << ", version=" << version.first;
     }
 
-    if (!expired_versions.empty() || old_binlog_min_version > _tablet_meta->get_binlog_min_version()) {
-        save_meta();
-    }
-
+    save_meta();
     wrlock.unlock();
 
-    if (binlog_enable) {
+    if (binlog_meta_changed) {
         // delete binlog files after the tablet meta is persisted, so that we can recover the
         // binlog file accurately according to the binlog_min_version and inc_rs_metas in
         // the table meta. Otherwise, binlog files may be not found for some versions if the

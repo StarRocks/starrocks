@@ -143,7 +143,7 @@ private:
     std::unordered_map<int64_t, RowsetSharedPtr> _rowsets;
 };
 
-using LsnMap = std::map<int128_t, BinlogFilePtr>;
+using LsnMap = std::map<BinlogLsn, BinlogFilePtr>;
 using RowsetCountMap = std::unordered_map<int64_t, int32_t>;
 
 TEST_F(BinlogManagerTest, test_ingestion_commit) {
@@ -240,7 +240,7 @@ TEST_F(BinlogManagerTest, test_ingestion_commit) {
         int64_t expect_binlog_file_size = 0;
         for (auto it : expect_file_metas) {
             BinlogFileMetaPBPtr meta = it.second;
-            int128_t lsn = BinlogUtil::get_lsn(meta->start_version(), meta->start_seq_id());
+            BinlogLsn lsn(meta->start_version(), meta->start_seq_id());
             ASSERT_EQ(1, lsn_map.count(lsn));
             ASSERT_EQ(meta.get(), lsn_map[lsn]->file_meta().get());
             expect_binlog_file_size += meta->file_size();
@@ -318,7 +318,7 @@ TEST_F(BinlogManagerTest, test_ingestion_abort) {
     int64_t expect_binlog_file_size = 0;
     for (auto it : expect_file_metas) {
         BinlogFileMetaPBPtr meta = it.second;
-        int128_t lsn = BinlogUtil::get_lsn(meta->start_version(), meta->start_seq_id());
+        BinlogLsn lsn(meta->start_version(), meta->start_seq_id());
         ASSERT_EQ(1, lsn_map.count(lsn));
         ASSERT_EQ(meta.get(), lsn_map[lsn]->file_meta().get());
         expect_binlog_file_size += meta->file_size();
@@ -402,7 +402,7 @@ TEST_F(BinlogManagerTest, test_ingestion_delete) {
     int64_t expect_binlog_file_size = 0;
     for (auto it : expect_file_metas) {
         BinlogFileMetaPBPtr meta = it.second;
-        int128_t lsn = BinlogUtil::get_lsn(meta->start_version(), meta->start_seq_id());
+        BinlogLsn lsn(meta->start_version(), meta->start_seq_id());
         ASSERT_EQ(1, lsn_map.count(lsn));
         ASSERT_EQ(meta.get(), lsn_map[lsn]->file_meta().get());
         expect_binlog_file_size += meta->file_size();
@@ -587,7 +587,7 @@ void verify_alive_binlog_files(BinlogManager* binlog_manager, RowsetFetcher* row
     for (int i = first_alive_index; i < binlog_file_infos.size(); i++) {
         auto& file_info = binlog_file_infos[i];
         RowsetPartition& first_rowset = file_info->rowsets.front();
-        int128_t lsn = BinlogUtil::get_lsn(first_rowset.version, first_rowset.start_seq_id);
+        BinlogLsn lsn(first_rowset.version, first_rowset.start_seq_id);
         ASSERT_EQ(1, alive_binlog_files.count(lsn));
         ASSERT_EQ(file_info->file_id, alive_binlog_files[lsn]->file_meta()->id());
         expect_total_binlog_file_size += file_info->file_size;
@@ -925,7 +925,7 @@ TEST_F(BinlogManagerTest, test_init) {
     int64_t expect_total_binlog_file_size = 0;
     int64_t expect_total_rowset_data_size = 0;
     for (auto& meta : expect_metas) {
-        int128_t lsn = BinlogUtil::get_lsn(meta->start_version(), meta->start_seq_id());
+        BinlogLsn lsn(meta->start_version(), meta->start_seq_id());
         ASSERT_EQ(1, alive_binlog_files.count(lsn));
         verify_file_meta(meta.get(), alive_binlog_files[lsn]->file_meta());
         expect_total_binlog_file_size += meta->file_size();

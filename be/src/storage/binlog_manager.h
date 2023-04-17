@@ -191,7 +191,7 @@ public:
 
     ~BinlogManager();
 
-    Status init(int64_t min_version, int64_t max_version);
+    Status init(BinlogLsn min_lsn, std::set<int64_t> versions);
 
     //  The process of an ingestion is as following, and protected by Tablet#_meta_lock to ensure there is
     //  no concurrent ingestion for duplicate key table
@@ -273,7 +273,7 @@ public:
 
     BinlogFileWriter* active_binlog_writer() { return _active_binlog_writer.get(); }
 
-    std::map<int128_t, BinlogFilePtr>& alive_binlog_files() { return _alive_binlog_files; }
+    std::map<BinlogLsn, BinlogFilePtr>& alive_binlog_files() { return _alive_binlog_files; }
 
     std::unordered_map<int64_t, int32_t>& alive_rowset_count_map() { return _alive_rowset_count_map; }
 
@@ -326,7 +326,7 @@ private:
     // LSN(start_version, start_seq_id) of a binlog file to the file meta. A binlog file with a
     // smaller start LSN also has a smaller file id. The file with the biggest start LSN is the
     // meta of _active_binlog_writer if it's not null.
-    std::map<int128_t, BinlogFilePtr> _alive_binlog_files;
+    std::map<BinlogLsn, BinlogFilePtr> _alive_binlog_files;
     // Alive rowsets. Map from rowset id to the number of binlog files using it in _alive_binlog_files
     std::unordered_map<int64_t, int32_t> _alive_rowset_count_map;
     // Disk size for alive binlog files

@@ -276,8 +276,9 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
         set_binlog_config(binlog_config);
     }
 
-    if (tablet_meta_pb.has_binlog_min_version()) {
-        _binlog_min_version = tablet_meta_pb.binlog_min_version();
+    if (tablet_meta_pb.has_binlog_min_lsn()) {
+        auto& lsnPb = tablet_meta_pb.binlog_min_lsn();
+        _binlog_min_lsn = BinlogLsn(lsnPb.version(), lsnPb.seq_id());
     }
 }
 

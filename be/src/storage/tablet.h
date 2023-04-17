@@ -275,6 +275,8 @@ public:
 
     Status support_binlog();
 
+    // This will modify the TabletMeta, and save_meta() will be called outside
+    // to persist it. See run_update_meta_info_task() in agent_task.cpp
     void update_binlog_config(const BinlogConfig& binlog_config);
 
     BinlogManager* binlog_manager() { return _binlog_manager == nullptr ? nullptr : _binlog_manager.get(); }
@@ -317,6 +319,9 @@ private:
     StatusOr<bool> _prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version);
     void _commit_binlog(int64_t version);
     void _abort_binlog(const RowsetSharedPtr& rowset, int64_t version);
+    // check whether there is useless binlog, and update the in-memory TabletMeta to the state after
+    // those binlog is deleted. Return true the meta has been changed, and needs to be persisted
+    bool _check_useless_binlog_and_update_meta(int64_t current_second);
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;
