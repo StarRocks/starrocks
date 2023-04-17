@@ -297,6 +297,7 @@
       + [grouping_id](./sql-reference/sql-functions/aggregate-functions/grouping_id.md)
       + [hll_empty](./sql-reference/sql-functions/aggregate-functions/hll_empty.md)
       + [hll_hash](./sql-reference/sql-functions/aggregate-functions/hll_hash.md)
+      + [hll_raw_agg](./sql-reference/sql-functions/aggregate-functions/hll_raw_agg.md)
       + [hll_union](./sql-reference/sql-functions/aggregate-functions/hll_union.md)
       + [hll_union_agg](./sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)
       + [max](./sql-reference/sql-functions/aggregate-functions/max.md)
