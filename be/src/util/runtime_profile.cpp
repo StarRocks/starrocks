@@ -984,7 +984,7 @@ void RuntimeProfile::print_child_counters(const std::string& prefix, const std::
             DCHECK(iter != counter_map.end());
             auto value = iter->second.first->value();
             auto display_threshold = iter->second.first->display_threshold();
-            if (display_threshold > 0 && value > display_threshold) {
+            if (display_threshold == 0 || (display_threshold > 0 && value > display_threshold)) {
                 stream << prefix << "   - " << iter->first << ": "
                        << PrettyPrinter::print(iter->second.first->value(), iter->second.first->type()) << std::endl;
                 RuntimeProfile::print_child_counters(prefix + "  ", child_counter, counter_map, child_counter_map, s);
