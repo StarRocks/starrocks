@@ -9,7 +9,7 @@ Add a data connection in Hex. Note that you must select MySQL as the connection 
 The parameters that you need to configure are described as follows:
 
 - **Name**: the name of the data connection.
-- **Host & port**: the host IP address and query port of your StarRocks cluster. An example query port is `9030`.
+- **Host & port**: the FE host IP address and FE query port of your StarRocks cluster. An example query port is `9030`.
 - **Database**: the data source that you want to access in your StarRocks cluster. The value of this parameter is in the `<catalog_name>.<database_name>` format.
   - `catalog_name`: the name of the target catalog in your StarRocks cluster. Both internal and external catalogs are supported.
   - `database_name`: the name of the target database in your StarRocks cluster. Both internal and external databases are supported.
