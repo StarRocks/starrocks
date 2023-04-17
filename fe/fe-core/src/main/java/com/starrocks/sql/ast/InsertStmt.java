@@ -168,6 +168,10 @@ public class InsertStmt extends DmlStmt {
         return targetPartitionNames;
     }
 
+    public boolean isSpecifyPartition() {
+        return targetPartitionNames != null;
+    }
+
     public List<String> getTargetColumnNames() {
         return targetColumnNames;
     }
@@ -186,6 +190,10 @@ public class InsertStmt extends DmlStmt {
 
     public void setTargetColumns(List<Column> targetColumns) {
         this.targetColumns = targetColumns;
+    }
+
+    public boolean isStaticPartitionInsert() {
+        return targetPartitionNames != null && targetPartitionNames.isStaticPartitionInsert();
     }
 
     @Override

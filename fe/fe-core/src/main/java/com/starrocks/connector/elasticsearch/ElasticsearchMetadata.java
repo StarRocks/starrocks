@@ -27,6 +27,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
@@ -80,10 +81,12 @@ public class ElasticsearchMetadata
             esTable.setComment("created by external es catalog");
             esTable.syncTableMetaData(esRestClient);
             return esTable;
+        } catch (NoSuchElementException e) {
+            LOG.error("Unknown index {}", tableName);
+            throw new StarRocksConnectorException("Unknown index " + tableName);
         } catch (Exception e) {
             LOG.error("transform to EsTable Error", e);
-            throw new StarRocksConnectorException("transform to EsTable Error");
+            throw new StarRocksConnectorException(e.getMessage());
         }
     }
-
 }

@@ -464,6 +464,7 @@ struct TLoadInfo {
     21: optional i64 num_filtered_rows
     22: optional i64 num_unselected_rows
     23: optional i64 num_sink_rows
+    24: optional string rejected_record_path
 }
 
 // getTableNames returns a list of unqualified table names
@@ -549,6 +550,10 @@ struct TReportExecStatusParams {
   22: optional i64 filtered_rows
 
   23: optional i64 unselected_rows
+
+  24: optional string rejected_record_path
+
+  25: optional list<Types.TSinkCommitInfo> sink_commit_infos
 }
 
 struct TFeResult {
@@ -696,6 +701,7 @@ struct TStreamLoadPutRequest {
     29: optional i32 load_dop
     30: optional bool enable_replicated_storage
     31: optional string merge_condition
+    32: optional i64 log_rejected_record_num
     // only valid when file type is CSV
     50: optional string rowDelimiter
     // only valid when file type is CSV

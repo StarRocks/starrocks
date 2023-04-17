@@ -1,6 +1,6 @@
 # StarRocks version 3.0
 
-## 3.0-rc02
+## 3.0.0-rc02
 
 Release date: April 13, 2023
 

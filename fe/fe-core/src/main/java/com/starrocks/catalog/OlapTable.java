@@ -2371,6 +2371,11 @@ public class OlapTable extends Table {
         return getKeysType() == KeysType.PRIMARY_KEYS;
     }
 
+    @Override
+    public boolean supportInsert() {
+        return true;
+    }
+
     // ------ for lake table and lake materialized view start ------
     public String getStoragePath() {
         throw new SemanticException("getStoragePath is not supported");
