@@ -40,7 +40,7 @@ INSERT INTO test_tbl1 (id) VALUES (1);
 INSERT INTO test_tbl1 (id, number) VALUES (2, DEFAULT);
 
 -- view table data
-mysql > SELECT * FROM test_tbl1;
+mysql > SELECT * FROM test_tbl1 ORDER BY id;
 +------+--------+
 | id   | number |
 +------+--------+
@@ -62,7 +62,7 @@ You can also explicitly specify the values for the `AUTO_INCREMENT` column and i
 INSERT INTO test_tbl1 (id, number) VALUES (3, 100);
 
 -- view table
-mysql > SELECT * FROM test_tbl1;
+mysql > SELECT * FROM test_tbl1 ORDER BY id;
 +------+--------+
 | id   | number |
 +------+--------+
@@ -82,7 +82,7 @@ Moreover, explicitly specifying values does not affect the subsequent values gen
 INSERT INTO test_tbl1 (id) VALUES (4);
 
 -- view table
-mysql > SELECT * FROM test_tbl1;
+mysql > SELECT * FROM test_tbl1 ORDER BY id;
 +------+--------+
 | id   | number |
 +------+--------+
@@ -122,13 +122,13 @@ INSERT INTO test_tbl2 (id) VALUES (3);
 Query the table `test_tbl2`.
 
 ```SQL
-mysql > SELECT * FROM test_tbl2;
+mysql > SELECT * FROM test_tbl2 ORDER BY id;
 +------+--------+
 | id   | number |
 +------+--------+
+|    1 |      1 |
 |    2 |      2 |
 |    3 | 100001 |
-|    1 |      1 |
 +------+--------+
 3 rows in set (0.08 sec)
 ```
@@ -163,15 +163,15 @@ INSERT INTO test_tbl3 VALUES (5, DEFAULT);
 The auto-incremented IDs in the table `test_tbl3` do not monotonically increase, because the two BE nodes cache auto-incremented IDs, [1, 100000] and [100001, 200000], respectively. When data is loaded by using multiple INSERT statements, the data is sent to different BE nodes which allocate auto-incremented IDs independently. Therefore, it cannot be guaranteed that auto-incremented IDs are strictly monotonic.
 
 ```SQL
-mysql > SELECT * FROM test_tbl3;
+mysql > SELECT * FROM test_tbl3 ORDER BY id;
 +------+--------+
 | id   | number |
 +------+--------+
 |    1 |      1 |
-|    5 | 100002 |
 |    2 | 100001 |
-|    4 |      2 |
 |    3 | 200001 |
+|    4 |      2 |
+|    5 | 100002 |
 +------+--------+
 5 rows in set (0.07 sec)
 ```
@@ -209,7 +209,7 @@ You need to specify the primary key during partial updates. Therefore, if the `A
     {'label':'insert_6af28e77-7d2b-11ed-af6e-02424283676b', 'status':'VISIBLE', 'txnId':'152'}
 
     -- Query the table.
-    mysql > SELECT * FROM test_tbl4 ORDER BY name;
+    mysql > SELECT * FROM test_tbl4 ORDER BY id;
     +------+------+------+------+
     | id   | name | job1 | job2 |
     +------+------+------+------+
@@ -218,7 +218,7 @@ You need to specify the primary key during partial updates. Therefore, if the `A
     1 row in set (0.01 sec)
     ```
 
-2. Prepare the CSV file **my_data1.csv** to update table `test_tbl4`. The CSV file includes values for the `AUTO_INCREMENT` column and does not include values for the column `job1`. The primary key of the first row already exists in table `test_tbl4`, while the primary key of the second row does not exist in the table.
+2. Prepare the CSV file **my_data4.csv** to update table `test_tbl4`. The CSV file includes values for the `AUTO_INCREMENT` column and does not include values for the column `job1`. The primary key of the first row already exists in table `test_tbl4`, while the primary key of the second row does not exist in the table.
 
     ```Plaintext
     0,0,99
@@ -232,14 +232,14 @@ You need to specify the primary key during partial updates. Therefore, if the `A
         -H "column_separator:," \
         -H "partial_update:true" \
         -H "columns:id,name,job2" \
-        -T my_data1.csv -XPUT \
+        -T my_data4.csv -XPUT \
         http://<fe_host>:<fe_http_port>/api/example_db/test_tbl4/_stream_load
     ```
 
 4. Query the updated table. The first row of data already exists in table `test_tbl4`, and the value for the column `job1` remains unchanged. The second row of data is newly inserted, and because the default value for the column `job1` is not specified, the partial update framework directly sets the value for this column to `0`.
 
     ```SQL
-    mysql > SELECT * FROM test_tbl4 ORDER BY name;
+    mysql > SELECT * FROM test_tbl4 ORDER BY id;
     +------+------+------+------+
     | id   | name | job1 | job2 |
     +------+------+------+------+
@@ -279,7 +279,7 @@ This feature can be used to build a dictionary table for fastly computing distin
     {'label':'insert_458d9487-80f6-11ed-ae56-aa528ccd0ebf', 'status':'VISIBLE', 'txnId':'94'}
 
     -- Query the table.
-    mysql > SELECT * FROM test_tbl5 ORDER BY name;
+    mysql > SELECT * FROM test_tbl5 ORDER BY id;
     +------+------+------+------+
     | id   | name | job1 | job2 |
     +------+------+------+------+
@@ -288,7 +288,7 @@ This feature can be used to build a dictionary table for fastly computing distin
     1 row in set (0.01 sec)
     ```
 
-2. Prepare a CSV file **my_data2.csv** to update table `test_tbl5`. The CSV file does not contain values for the `AUTO_INCREMENT` column `job1`. The primary key of the first row already exists in the table while the primary keys of the second and third rows do not.
+2. Prepare a CSV file **my_data5.csv** to update table `test_tbl5`. The CSV file does not contain values for the `AUTO_INCREMENT` column `job1`. The primary key of the first row already exists in the table while the primary keys of the second and third rows do not.
 
     ```Plaintext
     0,0,99
@@ -303,14 +303,14 @@ This feature can be used to build a dictionary table for fastly computing distin
         -H "column_separator:," \
         -H "partial_update:true" \
         -H "columns: id,name,job2" \
-        -T my_data2.csv -XPUT \
+        -T my_data5.csv -XPUT \
         http://<fe_host>:<fe_http_port>/api/example_db/test_tbl5/_stream_load
     ```
 
 4. Query the updated table. The first row of data already exists in table `test_tbl5`, so the `AUTO_INCREMENT` column `job1` retains its original value. The second and third rows of data are newly inserted, so StarRocks generate new values for the `AUTO_INCREMENT` column `job1`.
 
     ```SQL
-    mysql > SELECT * FROM test_tbl5 ORDER BY name;
+    mysql > SELECT * FROM test_tbl5 ORDER BY id;
     +------+------+--------+------+
     | id   | name | job1   | job2 |
     +------+------+--------+------+
