@@ -107,6 +107,20 @@ Before starting FEs, add the following configuration items in the FE configurati
     aws_s3_external_id = <external_id>
     ```
 
+- If you use GCP Cloud Storage:
+
+  ```YAML
+  run_mode = shared_data
+  cloud_native_meta_port = <meta_port>
+  cloud_native_storage_type = S3
+  aws_s3_path = <s3_path>
+  aws_s3_region = <region>                   # For example: us-east-1
+  aws_s3_endpoint = <endpoint_url>           # For example: https://storage.googleapis.com
+  aws_s3_access_key = <access_key>
+  aws_s3_secret_key = <secrete_key>
+  ```
+
+
 - If you use MinIO:
 
   ```YAML
