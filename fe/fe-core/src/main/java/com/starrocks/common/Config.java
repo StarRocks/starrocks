@@ -1152,6 +1152,17 @@ public class Config extends ConfigBase {
     public static boolean tablet_sched_disable_colocate_balance = false;
 
     /**
+     * When setting to true, disable the overall balance behavior for colocate groups which treats all the groups
+     * in all databases as a whole and balances the replica distribution between all of them.
+     * See `ColocateBalancer.relocateAndBalanceAllGroups` for more details.
+     * Notice: set `tablet_sched_disable_colocate_balance` to true will disable all the colocate balance behavior,
+     * including this behavior and the per-group balance behavior. This configuration is only to disable the overall
+     * balance behavior.
+     */
+    @ConfField(mutable = true)
+    public static boolean tablet_sched_disable_colocate_overall_balance = false;
+
+    /**
      * If BE is down beyond this time, tablets on that BE of colocate table will be migrated to other available BEs
      */
     @ConfField(mutable = true)
