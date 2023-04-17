@@ -254,8 +254,8 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
         int64_t halt_time = 0;
         if (P.last_chunk_souce_finish_timestamp != 0) {
             halt_time = now - P.last_chunk_souce_finish_timestamp;
-            P.last_chunk_souce_finish_timestamp = 0;
         }
+        P.last_chunk_souce_finish_timestamp = now;
         P.cs_total_halt_time += halt_time;
     }
 
@@ -307,11 +307,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
         io_tasks -= config::connector_io_tasks_adjust_step;
     };
 
-    // chunk source speed can not exceed scan operator speed for a, because there is a limited queue between them.
-    // when scan operator can not consume chunks fast enough, queue will be full, and chunk source will not generate any more.
-    // just by checking `is_buffer_full()` is not enough, because sometimes when we see it, it's not full, but it's almost full.
-    // and I guess size/capacity is not very stable. average speed is more stable.
-    if (balanced_cs_speed > (op_speed * config::connector_io_tasks_slow_op_ratio)) {
+    if (balanced_cs_speed > op_speed) {
         do_dec_io_tasks();
     } else if (!P.try_add_io_tasks || (cs_speed > (P.last_cs_speed * P.expected_speedup_ratio))) {
         // if we don't try add io tasks before,
