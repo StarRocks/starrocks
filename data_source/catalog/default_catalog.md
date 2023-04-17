@@ -21,17 +21,25 @@ StarRocks 2.3 及以上版本提供了 Internal Catalog（内部数据目录）�
     SHOW DATABASES FROM default_catalog;
     ```
 
-3. （可选）执行如下语句切换到指定数据库。有关参数说明和示例，请参见 [USE](/sql-reference/sql-statements/data-definition/USE.md)。
+3. （可选）执行如下语句切换当前会话生效的 Catalog：
+
+    ```SQL
+    SET CATALOG catalog_name;
+    ```
+
+    再指定当前会话的数据库：
 
     ```SQL
     USE db_name;
     ```
 
-    或
+    或者，也可以执行如下语句直接将会话切换到目标 Catalog 下的指定数据库：
 
     ```SQL
     USE default_catalog.db_name;
     ```
+
+    有关参数说明和示例，请参见 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 和 [USE](../../sql-reference/sql-statements/data-definition/USE.md)。
 
 4. 查询内部数据。更多 SELECT 的使用方法，请参见 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md)。
 
