@@ -4,7 +4,7 @@ StarRocks supports access to other data sources by using external tables. Extern
 
 > **NOTICE**
 >
-> Since v3.0, we recommend that you use catalogs to query Hive, Iceberg, and Hudi data.** See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
+> Since v3.0, we recommend that you use catalogs to query Hive, Iceberg, and Hudi data. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
 
 From 2.5 onwards, StarRocks provides the Local Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Local Cache](Block_cache.md)。
 
