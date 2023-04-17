@@ -487,6 +487,7 @@ CONF_mInt64(write_buffer_size, "104857600");
 // NOTICE(cmy): set these default values very large because we don't want to
 // impact the load performace when user upgrading StarRocks.
 // user should set these configs properly if necessary.
+CONF_Int32(query_max_memory_limit_percent, "90");
 CONF_Int64(load_process_max_memory_limit_bytes, "107374182400"); // 100GB
 CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
 CONF_Bool(enable_new_load_on_memory_limit_exceeded, "false");
