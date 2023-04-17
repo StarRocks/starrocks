@@ -214,10 +214,16 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
-        return this;
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (statementBase instanceof  CreateTableStmt) {
+            CreateTableStmt createTableStmt = (CreateTableStmt) statementBase;
+            createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+            return this.withTable(sql);
+        } else if (statementBase instanceof CreateMaterializedViewStatement) {
+            return this.withMaterializedView(sql);
+        } else {
+            throw new AnalysisException("Sql is not supported in withSingleReplicaTable:" + sql);
+        }
     }
 
     public StarRocksAssert withView(String sql) throws Exception {
