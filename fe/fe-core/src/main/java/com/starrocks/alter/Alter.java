@@ -763,7 +763,7 @@ public class Alter {
         SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
         GlobalStateMgr.getCurrentState().getEditLog().logSwapTable(log);
 
-        LOG.info("finish swap table {}-{} with table {}-{}", origTable.getId(), origTblName, newTbl.getId(),
+        LOG.info("finish swap tables {}-{} with table {}-{}", origTable.getId(), origTblName, newTbl.getId(),
                 newTblName);
     }
 
