@@ -96,16 +96,21 @@ public class IcebergStatisticProvider {
                 if (dataFile.recordCount() == 0) {
                     continue;
                 }
+                if (files.contains(dataFile.path().toString())) {
+                    continue;
+                }
+                files.add(dataFile.path().toString());
                 if (icebergFileStats == null) {
                     icebergFileStats = new IcebergFileStats(dataFile.recordCount());
                 } else {
-                    if (files.contains(dataFile.path().toString())) {
-                        continue;
-                    }
-                    files.add(dataFile.path().toString());
                     icebergFileStats.incrementRecordCount(dataFile.recordCount());
                 }
             }
+        }
+
+        // all dataFile.recordCount() == 0
+        if (icebergFileStats == null || icebergFileStats.getRecordCount() == 0) {
+            return new IcebergFileStats(1);
         }
 
         return icebergFileStats;
