@@ -592,10 +592,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
     public LogicalPlan visitView(ViewRelation node, ExpressionMapping context) {
         LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
         OptExprBuilder builder = new OptExprBuilder(
-                logicalPlan.getRoot().getOp(),
-                logicalPlan.getRootBuilder().getInputs(),
-                new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
-        return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation());
+        logicalPlan.getRoot().getOp(),
+        logicalPlan.getRootBuilder().getInputs(),
+        new ExpressionMapping(node.getScope(), logicalPlan.getOutputColumn()));
+        return new LogicalPlan(builder, logicalPlan.getOutputColumn(), logicalPlan.getCorrelation()).toLandingPad();
     }
 
     @Override

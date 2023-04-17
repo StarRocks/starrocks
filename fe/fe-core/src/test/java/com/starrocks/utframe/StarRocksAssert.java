@@ -74,6 +74,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -321,6 +322,14 @@ public class StarRocksAssert {
 
         Assert.assertTrue(statement instanceof ShowResourceGroupStmt);
         return GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup((ShowResourceGroupStmt) statement);
+    }
+
+    public List<List<String>> show(String sql) throws Exception {
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
+        StatementBase stmt = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
+        Assert.assertTrue(stmt instanceof ShowStmt);
+        ShowExecutor showExecutor = new ShowExecutor(ctx, (ShowStmt) stmt);
+        return showExecutor.execute().getResultRows();
     }
 
     private void checkAlterJob() throws InterruptedException {

@@ -2174,15 +2174,27 @@ public class OlapTable extends Table {
     }
 
     public boolean hasUniqueConstraints() {
-        List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
-        return uniqueConstraint != null;
+        if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
+            return true;
+        }
+        return tableProperty != null &&
+                tableProperty.getUniqueConstraints() != null &&
+                !tableProperty.getUniqueConstraints().isEmpty();
     }
 
     public List<UniqueConstraint> getUniqueConstraints() {
-        if (tableProperty == null) {
-            return null;
+        if (!hasUniqueConstraints()) {
+            return Collections.emptyList();
         }
-        return tableProperty.getUniqueConstraints();
+        List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
+        if (keysType == KeysType.UNIQUE_KEYS || keysType == KeysType.PRIMARY_KEYS) {
+            uniqueConstraints.add(new UniqueConstraint(getKeyColumns().stream().map(Column::getName).collect(
+                    Collectors.toList())));
+        }
+        if (tableProperty != null && tableProperty.getUniqueConstraints() != null) {
+            uniqueConstraints.addAll(tableProperty.getUniqueConstraints());
+        }
+        return uniqueConstraints;
     }
 
     public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
@@ -2201,6 +2213,11 @@ public class OlapTable extends Table {
             return null;
         }
         return tableProperty.getForeignKeyConstraints();
+    }
+
+    public boolean hasForeignKeyConstraints() {
+        return tableProperty != null && tableProperty.getForeignKeyConstraints() != null &&
+                !tableProperty.getForeignKeyConstraints().isEmpty();
     }
 
     public void setForeignKeyConstraint(List<ForeignKeyConstraint> foreignKeyConstraints) {

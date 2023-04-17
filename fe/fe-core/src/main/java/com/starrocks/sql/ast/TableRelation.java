@@ -31,7 +31,8 @@ public class TableRelation extends Relation {
 
     public enum TableHint {
         _META_,
-        _BINLOG_
+        _BINLOG_,
+        DROPPABLE,
     }
 
     private final TableName name;
@@ -133,7 +134,7 @@ public class TableRelation extends Relation {
     // For example, if the hint name is not defined, false will be returned.
     public boolean addTableHint(String hintName) {
         try {
-            TableHint hint = TableHint.valueOf(hintName);
+            TableHint hint = TableHint.valueOf(hintName.toUpperCase());
             tableHints.add(hint);
             return true;
         } catch (IllegalArgumentException e) {
@@ -151,6 +152,10 @@ public class TableRelation extends Relation {
 
     public boolean isBinlogQuery() {
         return tableHints.contains(TableHint._BINLOG_) && table.isOlapTable();
+    }
+
+    public boolean isDroppable() {
+        return tableHints.contains(TableHint.DROPPABLE);
     }
 
     @Override
