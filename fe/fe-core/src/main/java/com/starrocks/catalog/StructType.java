@@ -245,6 +245,28 @@ public class StructType extends Type {
     }
 
     @Override
+    public boolean isFullyCompatible(Type other) {
+        if (!other.isStructType()) {
+            return false;
+        }
+
+        if (equals(other)) {
+            return true;
+        }
+
+        StructType t = (StructType) other;
+        if (fields.size() != t.fields.size()) {
+            return false;
+        }
+        for (int i = 0; i < fields.size(); i++) {
+            if (!fields.get(i).getType().isFullyCompatible(t.fields.get(i).getType())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
     public StructType clone() {
         ArrayList<StructField> structFields = new ArrayList<>(fields.size());
         for (StructField field : fields) {
