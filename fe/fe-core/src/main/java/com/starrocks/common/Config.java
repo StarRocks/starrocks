@@ -275,13 +275,19 @@ public class Config extends ConfigBase {
      * for task set expire time
      */
     @ConfField(mutable = true)
-    public static int task_ttl_second = 3 * 24 * 3600;         // 3 day
+    public static int task_ttl_second = 24 * 3600;         // 1 day
 
     /**
      * for task run set expire time
      */
     @ConfField(mutable = true)
-    public static int task_runs_ttl_second = 3 * 24 * 3600;     // 3 day
+    public static int task_runs_ttl_second = 24 * 3600;     // 1 day
+
+    /**
+     * for task run set expire time
+     */
+    @ConfField(mutable = true)
+    public static int task_runs_max_history_number = 10000;
 
     /**
      * The max keep time of some kind of jobs.

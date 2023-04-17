@@ -67,6 +67,8 @@ public class Text implements Writable {
     private static final Logger LOG = LogManager.getLogger(Text.class);
     private static final byte[] EMPTY_BYTES = new byte[0];
 
+    public static final int MAX_BYTES_TO_WRITE = Integer.MAX_VALUE / 2 - 1;
+
     private byte[] bytes;
     private int length;
 
@@ -404,6 +406,10 @@ public class Text implements Writable {
     public static int writeString(DataOutput out, String s) throws IOException {
         ByteBuffer bytes = encode(s);
         int length = bytes.limit();
+        if (length > MAX_BYTES_TO_WRITE) {
+            throw new IOException("Metadata cannot be written to logs larger than 1GB. " +
+                    "Current size: " + length + " bytes.");
+        }
         out.writeInt(length);
         out.write(bytes.array(), 0, length);
         return length;
