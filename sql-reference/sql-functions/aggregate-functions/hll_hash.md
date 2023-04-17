@@ -1,4 +1,4 @@
-# HLL_HASH
+# hll_hash
 
 ## 功能
 
