@@ -116,7 +116,7 @@ public class HiveConnectorInternalMgr {
                     new ThreadFactoryBuilder().setNameFormat("hive-remote-files-refresh-%d").build());
             baseRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                     remoteFileIO,
-                    new ReentrantExecutor(refreshRemoteFileExecutor, remoteFileConf.getPerQueryCacheMaxSize()),
+                    new ReentrantExecutor(refreshRemoteFileExecutor, remoteFileConf.getRefreshMaxThreadNum()),
                     remoteFileConf.getCacheTtlSec(),
                     enableHmsEventsIncrementalSync ? NEVER_REFRESH : remoteFileConf.getCacheRefreshIntervalSec(),
                     remoteFileConf.getCacheMaxSize());
