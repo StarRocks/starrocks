@@ -293,6 +293,7 @@ jobs:
 
       - uses: codecov/codecov-action@v3
         with:
+          override_branch: ${{ github.base_ref }}
           override_commit: ${{ github.event.pull_request.merge_commit_sha }}
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ github.workspace }}/fe/fe-core/target/${{ steps.run_ut.outputs.COV_FILE }}
