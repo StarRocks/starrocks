@@ -26,7 +26,7 @@ CREATE TABLE test_tbl1
 ) 
 PRIMARY KEY (id) 
 DISTRIBUTED BY HASH(id)
-PROPERTIES('replicated_storage' = 'true');
+PROPERTIES("replicated_storage" = "true");
 ```
 
 ### Assign values for `AUTO_INCREMENT` column
@@ -108,7 +108,7 @@ CREATE TABLE test_tbl2
  ) 
 PRIMARY KEY (id) 
 DISTRIBUTED BY HASH(id)
-PROPERTIES('replicated_storage' = 'true');
+PROPERTIES("replicated_storage" = "true");
 ```
 
 Explicitly assign and implicitly specify the values for the `AUTO_INCREMENT` column `number` in the table `test_tbl2`。
@@ -151,7 +151,7 @@ CREATE TABLE test_tbl3
 ) 
 PRIMARY KEY (id)
 DISTRIBUTED BY HASH(id)
-PROPERTIES('replicated_storage' = 'true');
+PROPERTIES("replicated_storage" = "true");
 
 INSERT INTO test_tbl3 VALUES (1, DEFAULT);
 INSERT INTO test_tbl3 VALUES (2, DEFAULT);
@@ -201,7 +201,7 @@ You need to specify the primary key during partial updates. Therefore, if the `A
     ) 
     PRIMARY KEY (id, name)
     DISTRIBUTED BY HASH(id)
-    PROPERTIES('replicated_storage' = 'true');
+    PROPERTIES("replicated_storage" = "true");
 
     -- Prepared data.
     mysql > INSERT INTO test_tbl4 (id, name, job1, job2) VALUES (0, 0, 1, 1);
@@ -271,7 +271,7 @@ This feature can be used to build a dictionary table for fastly computing distin
     )
     PRIMARY KEY (id, name)
     DISTRIBUTED BY HASH(id)
-    PROPERTIES('replicated_storage' = 'true');
+    PROPERTIES("replicated_storage" = "true");
 
     -- Prepare data.
     mysql > INSERT INTO test_tbl5 VALUES (0, 0, -1, -1);
