@@ -17,6 +17,7 @@
 #include <sstream>
 
 #include "column/chunk.h"
+#include "common/config.h"
 #include "common/statusor.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
@@ -240,6 +241,10 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         });
 
         SCOPED_RAW_TIMER(&process_time_ns);
+
+        if (config::exec_sleep_ms > 0) {
+            usleep(config::exec_sleep_ms * 1000);
+        }
 
         for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
             {
