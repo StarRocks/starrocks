@@ -2857,7 +2857,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
                 if (backendsPerBucketSeq.isEmpty()) {
                     List<ColocateTableIndex.GroupId> colocateWithGroupsInOtherDb =
-                            colocateTableIndex.getColocateWithGroupsInOtherDb(groupId, db.getId());
+                            colocateTableIndex.getColocateWithGroupsInOtherDb(groupId);
                     if (!colocateWithGroupsInOtherDb.isEmpty()) {
                         backendsPerBucketSeq =
                                 colocateTableIndex.getBackendsPerBucketSeq(colocateWithGroupsInOtherDb.get(0));
