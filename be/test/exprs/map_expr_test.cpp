@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exprs/array_expr.h"
-
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
 #include <utility>
 
 #include "column/column_helper.h"
+#include "exprs/array_expr.h"
 #include "exprs/mock_vectorized_expr.h"
 #include "testutil/column_test_helper.h"
 #include "testutil/exprs_test_helper.h"
@@ -99,4 +98,4 @@ TEST_F(MapExprTest, test_evaluate) {
     }
 }
 
-}
+} // namespace starrocks
