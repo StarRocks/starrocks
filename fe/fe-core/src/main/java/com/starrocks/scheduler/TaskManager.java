@@ -469,17 +469,17 @@ public class TaskManager {
         try {
             Text.writeString(dos, s);
         } catch (IOException ex) {
-            if (ex.getMessage().contains("larger than 1GBa")) {
+            if (ex.getMessage().contains("larger than 1GB")) {
                 retry = true;
             }
         }
         if (retry) {
-            int beforeSize = s.length();
+            int beforeLength = s.length();
             taskRunManager.getTaskRunHistory().forceGC();
             data.runStatus = showTaskRunStatus(null);
             s = GsonUtils.GSON.toJson(data);
-            LOG.warn("Too much task metadata triggers forced task_run GC, size before GC:{}, size after GC:{}.",
-                    beforeSize, s.length());
+            LOG.warn("Too much task metadata triggers forced task_run GC, " +
+                    "length before GC:{}, length after GC:{}.", beforeLength, s.length());
             Text.writeString(dos, s);
         }
         return checksum;
