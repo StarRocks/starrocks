@@ -51,7 +51,7 @@ Take note of the following points:
 
   - `User`: the username that is used to log in to your StarRocks cluster, for example, `admin`.
   - `Password`: the password that is used to log in to your StarRocks cluster.
-  - `Host`: the host IP address of your StarRocks cluster.
-  - `Port`: the query port of your StarRocks cluster, for example, `9030`.
+  - `Host`: the FE host IP address of your StarRocks cluster.
+  - `Port`: the FE query port of your StarRocks cluster, for example, `9030`.
   - `Catalog`: the target catalog in your StarRocks cluster. Both internal and external catalogs are supported.
   - `Database`: the target database in your StarRocks cluster. Both internal and external databases are supported.
