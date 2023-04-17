@@ -312,6 +312,7 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ github.workspace }}/fe/fe-core/target/${{ steps.run_ut.outputs.COV_FILE }}
           dry_run: false
+          override_pr: 21756
           name: main-fe-ut
           fail_ci_if_error: true
           verbose: true
