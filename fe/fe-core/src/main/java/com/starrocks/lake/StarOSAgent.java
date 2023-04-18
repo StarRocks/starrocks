@@ -393,6 +393,7 @@ public class StarOSAgent {
         prepare();
         try {
             List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId));
+
             Preconditions.checkState(shardInfos.size() == 1);
             return shardInfos.get(0).getReplicaInfoList();
         } catch (StarClientException e) {
@@ -412,8 +413,20 @@ public class StarOSAgent {
                         // get backendId from system info by host & starletPort
                         String workerAddr = workerInfo.getIpPort();
                         String[] pair = workerAddr.split(":");
+<<<<<<< HEAD
                         long backendId = GlobalStateMgr.getCurrentSystemInfo()
                                 .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
+=======
+
+                        long backendId = -1L;
+                        if (Config.only_use_compute_node) {
+                            backendId = GlobalStateMgr.getCurrentSystemInfo().
+                                    getComputeNodeIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
+                        } else {
+                            backendId = GlobalStateMgr.getCurrentSystemInfo()
+                                    .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
+                        }
+>>>>>>> 7247435f6 ([Refactor]Refactor warehouse (#21629))
 
                         if (backendId == -1L) {
                             throw new UserException("Failed to get backend by worker. worker id: " + workerId);
@@ -531,16 +544,5 @@ public class StarOSAgent {
             LOG.warn("Failed to query meta group {} whether stable. error:{}", metaGroupId, e.getMessage());
         }
         return false; // return false if any error happens
-    }
-
-    // Mocked
-    public long createWorkerGroup(String size) throws DdlException {
-        return GlobalStateMgr.getCurrentState().getNextId();
-    }
-
-    public void deleteWorkerGroup(long groupId) throws DdlException {
-    }
-
-    public void modifyWorkerGroup(long groupId, String size) throws DdlException {
     }
 }

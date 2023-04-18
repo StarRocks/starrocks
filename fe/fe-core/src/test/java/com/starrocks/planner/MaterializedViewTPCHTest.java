@@ -75,8 +75,11 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
         runFileUnitTest("materialized-view/tpch/q5");
     }
 
+<<<<<<< HEAD
     @Test
     @Ignore
+=======
+>>>>>>> 7247435f6 ([Refactor]Refactor warehouse (#21629))
     public void testQuery5_1() {
         runFileUnitTest("materialized-view/tpch/q5-1");
     }

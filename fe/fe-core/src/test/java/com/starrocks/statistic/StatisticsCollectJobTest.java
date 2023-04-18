@@ -168,7 +168,15 @@ public class StatisticsCollectJobTest extends PlanTestBase {
         setTableStatistics(tcount, 20000000);
     }
 
+<<<<<<< HEAD
     @Test
+=======
+    @Before
+    public void setUp() {
+        GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
+    }
+
+>>>>>>> 7247435f6 ([Refactor]Refactor warehouse (#21629))
     public void testAnalyzeALLDB() {
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new AnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
@@ -187,7 +195,6 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                 fullStatisticsCollectJob.getColumns().toString()));
     }
 
-    @Test
     public void testAnalyzeDB() {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
@@ -467,6 +474,61 @@ public class StatisticsCollectJobTest extends PlanTestBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testExcludeStatistics() {
+        OlapTable table = (OlapTable) connectContext.getGlobalStateMgr()
+                .getDb("test").getTable("t0_stats_partition");
+
+        Database database = connectContext.getGlobalStateMgr().getDb("test");
+
+        AnalyzeJob job = new AnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE,
+                ImmutableMap.of(),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        List<StatisticsCollectJob> allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
+
+        Assert.assertEquals(6, allJobs.size());
+        Assert.assertTrue(allJobs.stream().anyMatch(j -> table.equals(j.getTable())));
+
+        job = new AnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE,
+                ImmutableMap.of(StatsConstants.STATISTIC_EXCLUDE_PATTERN, ".*"),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
+        Assert.assertEquals(0, allJobs.size());
+
+        job = new AnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE,
+                ImmutableMap.of(StatsConstants.STATISTIC_EXCLUDE_PATTERN, "test/."),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
+        Assert.assertEquals(3, allJobs.size());
+
+        job = new AnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE,
+                ImmutableMap.of(StatsConstants.STATISTIC_EXCLUDE_PATTERN, "test.t0_stats_partition"),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
+        Assert.assertEquals(2, allJobs.size());
+        Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t0_stats_partition")));
+
+        job = new AnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null,
+                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE,
+                ImmutableMap.of(StatsConstants.STATISTIC_EXCLUDE_PATTERN, "(test.t0_stats_partition)|(test.t1_stats)"),
+                StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
+        allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
+        Assert.assertEquals(1, allJobs.size());
+        Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t0_stats_partition")));
+        Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t1_stats")));
+    }
+
+>>>>>>> 7247435f6 ([Refactor]Refactor warehouse (#21629))
     public void testCount() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb("stats");
         OlapTable olapTable = (OlapTable) db.getTable("tcount");

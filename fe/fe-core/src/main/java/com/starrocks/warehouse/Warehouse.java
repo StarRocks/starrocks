@@ -14,50 +14,24 @@
 
 package com.starrocks.warehouse;
 
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
-import com.starrocks.common.proc.DbsProcDir;
-import com.starrocks.common.proc.ExternalDbsProcDir;
-import com.starrocks.common.proc.ProcDirInterface;
-import com.starrocks.common.proc.ProcNodeInterface;
-import com.starrocks.common.proc.ProcResult;
-import com.starrocks.common.util.QueryableReentrantReadWriteLock;
-import com.starrocks.persist.AlterWhClusterOplog;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.server.CatalogMgr;
-import com.starrocks.server.GlobalStateMgr;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
-public class Warehouse implements Writable {
-    private static final Logger LOG = LogManager.getLogger(Warehouse.class);
-
-    public static final ImmutableList<String> CLUSTER_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()
-            .add("ClusterId")
-            .add("Pending")
-            .add("Running")
-            .build();
+public abstract class Warehouse implements Writable {
 
     @SerializedName(value = "name")
-    private String name;
+    protected String name;
     @SerializedName(value = "id")
     private long id;
-
-    private QueryableReentrantReadWriteLock rwLock;
 
     public enum WarehouseState {
         INITIALIZING,
@@ -67,67 +41,13 @@ public class Warehouse implements Writable {
     }
 
     @SerializedName(value = "state")
-    private WarehouseState state = WarehouseState.INITIALIZING;
-
-    // cluster id -> cluster obj
-    @SerializedName(value = "clusters")
-    private Map<Long, Cluster> clusters = new HashMap<>();
-
-    // properties
-    @SerializedName(value = "size")
-    private String size = "S";
-    @SerializedName(value = "minCluster")
-    private int minCluster = 1;
-    @SerializedName(value = "maxCluster")
-    private int maxCluster = 5;
-    // and others ...
+    protected WarehouseState state = WarehouseState.INITIALIZING;
 
     private volatile boolean exist = true;
-
-    private AtomicInteger numPendingSqls;
-
-    private final ClusterProcNode procNode = new ClusterProcNode();
-
-    private void readLock() {
-        this.rwLock.readLock().lock();
-    }
-    private void readUnlock() {
-        this.rwLock.readLock().unlock();
-    }
-
-    private void writeLock() {
-        this.rwLock.writeLock().lock();
-    }
-
-    private void writeUnLock() {
-        this.rwLock.writeLock().unlock();
-    }
 
     public Warehouse(long id, String name) {
         this.id = id;
         this.name = name;
-        this.rwLock = new QueryableReentrantReadWriteLock(true);
-    }
-
-    public Warehouse(long id, String name, Map<String, String> properties) {
-        this(id, name);
-        if (properties != null) {
-            if (properties.get("size") != null) {
-                size = properties.get("size");
-            }
-
-            if (properties.get("min_cluster") != null) {
-                minCluster = Integer.valueOf(properties.get("min_cluster"));
-            }
-
-            if (properties.get("max_cluster") != null) {
-                maxCluster = Integer.valueOf(properties.get("max_cluster"));
-            }
-        }
-    }
-
-    public Warehouse() {
-        this(0, null);
     }
 
     public long getId() {
@@ -145,76 +65,16 @@ public class Warehouse implements Writable {
     public WarehouseState getState() {
         return state;
     }
-    // property setters and getters
-    public void setSize(String size) {
-        this.size = size;
-    }
-    public String getSize() {
-        return size;
-    }
-
-    public void setMinCluster(int minCluster) {
-        this.minCluster = minCluster;
-    }
-
-    public int getMinCluster() {
-        return minCluster;
-    }
-
-    public void setMaxCluster(int maxCluster) {
-        this.maxCluster = maxCluster;
-    }
-
-    public int getMaxCluster() {
-        return maxCluster;
-    }
-
-    // and others...
-
-    public long getTotalRunningSqls() {
-        return -1L;
-    }
-
-    public int getTotalPendingSqls() {
-        return -1;
-    }
-
-    public void setPendingSqls(int val) {
-    }
-
-    public int addAndGetPendingSqls(int delta) {
-        return 1;
-    }
-
-    public void setClusters(Map<Long, Cluster> clusters) {
-        this.clusters = clusters;
-    }
-
-    public Map<Long, Cluster> getClusters() {
-        return clusters;
-    }
 
     public void setExist(boolean exist) {
         this.exist = exist;
     }
 
-    public List<List<String>> getClustersInfo() {
-        return procNode.fetchResult().getRows();
-    }
+    public abstract void getProcNodeData(BaseProcResult result);
 
-    public void suspendSelf(boolean isReplay) throws DdlException {
-        writeLock();
-        try {
-            this.state = WarehouseState.SUSPENDED;
-            if (!isReplay) {
-                releaseComputeNodes();
-            }
-            clusters.clear();
-        } finally {
-            writeUnLock();
-        }
-    }
+    public abstract Map<Long, Cluster> getClusters() throws DdlException;
 
+<<<<<<< HEAD
     public void resumeSelf() throws DdlException {
         writeLock();
         try {
@@ -348,6 +208,9 @@ public class Warehouse implements Writable {
                 String.valueOf(this.getTotalPendingSqls()),
                 String.valueOf(this.getTotalRunningSqls())));
     }
+=======
+    public abstract void setClusters(Map<Long, Cluster> clusters) throws DdlException;
+>>>>>>> 7247435f6 ([Refactor]Refactor warehouse (#21629))
 
     @Override
     public void write(DataOutput out) throws IOException {
@@ -359,40 +222,4 @@ public class Warehouse implements Writable {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, Warehouse.class);
     }
-
-    public class ClusterProcNode implements ProcDirInterface {
-
-        @Override
-        public boolean register(String name, ProcNodeInterface node) {
-            return false;
-        }
-
-        @Override
-        public ProcNodeInterface lookup(String catalogName) throws AnalysisException {
-            if (CatalogMgr.isInternalCatalog(catalogName)) {
-                return new DbsProcDir(GlobalStateMgr.getCurrentState());
-            }
-            return new ExternalDbsProcDir(catalogName);
-        }
-
-        @Override
-        public ProcResult fetchResult() {
-            BaseProcResult result = new BaseProcResult();
-            result.setNames(CLUSTER_PROC_NODE_TITLE_NAMES);
-            readLock();
-            try {
-                for (Map.Entry<Long, Cluster> entry : clusters.entrySet()) {
-                    Cluster cluster = entry.getValue();
-                    if (cluster == null) {
-                        continue;
-                    }
-                    cluster.getProcNodeData(result);
-                }
-            } finally {
-                readUnlock();
-            }
-            return result;
-        }
-    }
-
 }
