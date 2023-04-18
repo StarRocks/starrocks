@@ -94,6 +94,9 @@ public class Group {
     public void addExpression(GroupExpression groupExpression) {
         if (groupExpression.getOp().isLogical()) {
             Preconditions.checkState(!logicalExpressions.contains(groupExpression));
+            if (id == 1154) {
+                System.out.println("here3");
+            }
             logicalExpressions.add(groupExpression);
         } else {
             Preconditions.checkState(!physicalExpressions.contains(groupExpression));
@@ -218,6 +221,9 @@ public class Group {
         other.getPhysicalExpressions().removeAll(physicalExpressions);
         logicalExpressions.addAll(other.getLogicalExpressions());
         physicalExpressions.addAll(other.getPhysicalExpressions());
+        if (other.id == 1154) {
+            System.out.println("here4");
+        }
         other.logicalExpressions.clear();
         other.physicalExpressions.clear();
         for (Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry : other.lowestCostExpressions
@@ -240,6 +246,9 @@ public class Group {
     }
 
     public void removeGroupExpression(GroupExpression groupExpression) {
+        if (id == 1154) {
+            System.out.println("here5");
+        }
         if (groupExpression.getOp().isLogical()) {
             logicalExpressions.remove(groupExpression);
         } else {
