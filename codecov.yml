@@ -6,10 +6,10 @@ coverage:
   status:
     project:
       fe-ut:
-        target: 60%
+        target: 80%
         threshold: 5%
         only_pulls: true
-    patch:
-      fe-ut:
-        target: 80%
-        only_pulls: true
+#    patch:
+#      fe-ut:
+#        target: 80%
+#        only_pulls: true
