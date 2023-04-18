@@ -2194,7 +2194,7 @@ public class Config extends ConfigBase {
      * Default value: false
      */
     @ConfField(mutable = true)
-    public static boolean profile_enable = false;
+    public static boolean enable_profile = false;
 
     /**
      * Enable auto create tablet when creating table and add partition

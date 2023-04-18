@@ -519,7 +519,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // if true, need report to coordinator when plan fragment execute successfully.
     @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
-    private boolean enableProfile = Config.profile_enable;
+    private boolean enableProfile = Config.enable_profile;
 
     // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
