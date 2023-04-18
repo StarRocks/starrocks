@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * A group-expression is the same as an expression except
@@ -31,6 +32,10 @@ import java.util.Set;
  * the number of transformations, storage overhead, and repeated cost estimations.
  */
 public class GroupExpression {
+
+    public static AtomicInteger count = new AtomicInteger(0);
+
+    public int id = count.getAndDecrement();
     // The group this group expression belong to,
     // will set by setGroup method
     private Group group;

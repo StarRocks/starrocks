@@ -54,6 +54,7 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.SqlDigestBuilder;
+import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TMasterOpRequest;
 import com.starrocks.thrift.TMasterOpResult;
@@ -463,6 +464,7 @@ public class ConnectProcessor {
                 handleQuit();
                 break;
             case COM_QUERY:
+                GroupExpression.count.set(0);
                 handleQuery();
                 ctx.setStartTime();
                 break;
