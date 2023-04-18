@@ -15,6 +15,7 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -137,12 +138,8 @@ public class TaskManager {
             long period = TimeUtils.convertTimeUnitValueToSecond(taskSchedule.getPeriod(),
                     taskSchedule.getTimeUnit());
             LocalDateTime startTime = Utils.getDatetimeFromLong(taskSchedule.getStartTime());
-            Duration duration = Duration.between(LocalDateTime.now(), startTime);
-            long initialDelay = duration.getSeconds();
-            // if startTime < now, start scheduling from the next period
-            if (initialDelay < 0) {
-                initialDelay = ((initialDelay % period) + period) % period;
-            }
+            LocalDateTime scheduleTime = LocalDateTime.now();
+            long initialDelay = getInitialDelayTime(period, startTime, scheduleTime);
             // Tasks that run automatically have the lowest priority,
             // but are automatically merged if they are found to be merge-able.
             ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(),
@@ -151,6 +148,19 @@ public class TaskManager {
                             executeTask(task.getName(), option), initialDelay,
                     period, TimeUnit.SECONDS);
             periodFutureMap.put(task.getId(), future);
+        }
+    }
+
+    @VisibleForTesting
+    static long getInitialDelayTime(long period, LocalDateTime startTime,
+                                    LocalDateTime scheduleTime) {
+        Duration duration = Duration.between(scheduleTime, startTime);
+        long initialDelay = duration.getSeconds();
+        // if startTime < now, start scheduling from the next period
+        if (initialDelay < 0) {
+            return ((initialDelay % period) + period) % period;
+        } else {
+            return initialDelay;
         }
     }
 
