@@ -839,16 +839,14 @@ public class ReplayFromDumpTest {
     public void testTPCH11() throws Exception {
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
-        System.out.println(replayPair.second);
-        // check ANTI JOIN cardinality is not 0
-       Assert.assertTrue(replayPair.second, replayPair.second.contains("table: partsupp_mv, rollup: partsupp_mv\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("table: partsupp_mv, rollup: partsupp_mv\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: DictExpr(61: n_name,[<place-holder> = 'GERMANY'])\n" +
                 "     dict_col=n_name"));
-       Assert.assertTrue(replayPair.second, replayPair.second.contains("table: partsupp_mv, rollup: partsupp_mv\n" +
-               "     preAggregation: on\n" +
-               "     Predicates: DictExpr(62: n_name,[<place-holder> = 'GERMANY'])\n" +
-               "     dict_col=n_name"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("table: partsupp_mv, rollup: partsupp_mv\n" +
+                "     preAggregation: on\n" +
+                "     Predicates: DictExpr(62: n_name,[<place-holder> = 'GERMANY'])\n" +
+                "     dict_col=n_name"));
         FeConstants.USE_MOCK_DICT_MANAGER = false;
     }
 }
