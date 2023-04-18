@@ -49,6 +49,7 @@ import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetListItem;
@@ -584,7 +585,10 @@ public class ConnectContext {
     }
 
     public String getCurrentWarehouse() {
-        return currentWarehouse;
+        if (currentWarehouse != null) {
+            return currentWarehouse;
+        }
+        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     }
 
     public void setCurrentWarehouse(String currentWarehouse) {

@@ -393,6 +393,7 @@ public class StarOSAgent {
         prepare();
         try {
             List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Lists.newArrayList(shardId));
+
             Preconditions.checkState(shardInfos.size() == 1);
             return shardInfos.get(0).getReplicaInfoList();
         } catch (StarClientException e) {
@@ -416,7 +417,7 @@ public class StarOSAgent {
                         long backendId = -1L;
                         if (Config.only_use_compute_node) {
                             backendId = GlobalStateMgr.getCurrentSystemInfo().
-                                    getComputeNodeWithStarletPort(pair[0], Integer.parseInt(pair[1]));
+                                    getComputeNodeIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
                         } else {
                             backendId = GlobalStateMgr.getCurrentSystemInfo()
                                     .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
@@ -538,16 +539,5 @@ public class StarOSAgent {
             LOG.warn("Failed to query meta group {} whether stable. error:{}", metaGroupId, e.getMessage());
         }
         return false; // return false if any error happens
-    }
-
-    // Mocked
-    public long createWorkerGroup(String size) throws DdlException {
-        return GlobalStateMgr.getCurrentState().getNextId();
-    }
-
-    public void deleteWorkerGroup(long groupId) throws DdlException {
-    }
-
-    public void modifyWorkerGroup(long groupId, String size) throws DdlException {
     }
 }

@@ -28,12 +28,7 @@ public class ShowWarehousesStmt extends ShowStmt {
             ShowResultSetMetaData.builder()
                     .addColumn(new Column(WH_COL, ScalarType.createVarchar(256)))
                     .addColumn(new Column("State", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Size", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("MinCluster", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("MaxCluster", ScalarType.createVarchar(20)))
                     .addColumn(new Column("ClusterCount", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("TotalPending", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("TotalRunning", ScalarType.createVarchar(20)))
                     .build();
     private final String pattern;
     private Expr where;
