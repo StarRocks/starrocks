@@ -188,7 +188,7 @@ public class DecimalV3FunctionAnalyzer {
 
     public static AggregateFunction rectifyAggregationFunction(AggregateFunction fn, Type argType, Type returnType) {
         if (argType.isDecimalV2() || argType.isDecimalV3()) {
-            if (fn.functionName().equals(FunctionSet.COUNT)) {
+            if (fn.functionName().equals(FunctionSet.COUNT) || fn.functionName().equals(FunctionSet.COUNT_IF)) {
                 // count function return type always bigint
                 returnType = fn.getReturnType();
             } else if (fn.functionName().equals(FunctionSet.AVG)) {

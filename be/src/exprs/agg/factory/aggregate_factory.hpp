@@ -29,6 +29,7 @@
 #include "exprs/agg/bitmap_union_count.h"
 #include "exprs/agg/bitmap_union_int.h"
 #include "exprs/agg/count.h"
+#include "exprs/agg/count_if.h"
 #include "exprs/agg/distinct.h"
 #include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/group_concat.h"
@@ -88,6 +89,9 @@ public:
 
     template <bool IsWindowFunc>
     static AggregateFunctionPtr MakeCountAggregateFunction();
+
+    template <LogicalType LT, bool IsWindowFunc>
+    static AggregateFunctionPtr MakeCountIfAggregateFunction();
 
     template <LogicalType LT>
     static AggregateFunctionPtr MakeCountDistinctAggregateFunction();
@@ -221,6 +225,11 @@ AggregateFunctionPtr AggregateFactory::MakeIntersectCountAggregateFunction() {
 template <bool IsWindowFunc>
 AggregateFunctionPtr AggregateFactory::MakeCountAggregateFunction() {
     return std::make_shared<CountAggregateFunction<IsWindowFunc>>();
+}
+
+template <LogicalType LT, bool IsWindowFunc>
+AggregateFunctionPtr AggregateFactory::MakeCountIfAggregateFunction() {
+    return std::make_shared<CountIfAggregateFunction<LT, IsWindowFunc>>();
 }
 
 template <LogicalType LT>

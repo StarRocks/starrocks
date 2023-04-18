@@ -120,6 +120,14 @@ public class FunctionAnalyzer {
             return;
         }
 
+        if (fnName.getFunction().equals(FunctionSet.COUNT_IF)) {
+            if (functionCallExpr.getChildren().size() != 1) {
+                throw new SemanticException(
+                        "count_if requires one parameters: " + functionCallExpr.toSql(),
+                        functionCallExpr.getPos());
+            }
+        }
+
         if (fnName.getFunction().equals(FunctionSet.GROUP_CONCAT)) {
             if (functionCallExpr.getChildren().size() > 2 || functionCallExpr.getChildren().isEmpty()) {
                 throw new SemanticException(

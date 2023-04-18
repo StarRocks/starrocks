@@ -111,7 +111,7 @@ void AggregatorParams::init() {
         VLOG_ROW << fn.name.function_name << " is arg nullable " << desc.nodes[0].has_nullable_child;
         VLOG_ROW << fn.name.function_name << " is result nullable " << desc.nodes[0].is_nullable;
 
-        if (fn.name.function_name == "count") {
+        if (fn.name.function_name == "count" || fn.name.function_name == "count_if") {
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
             agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), arg_typedescs, false, false};
         } else {
@@ -316,7 +316,21 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
                     !fn.arg_types.empty() && (has_outer_join_child || desc.nodes[0].has_nullable_child);
             auto* func = get_aggregate_function("count", TYPE_BIGINT, TYPE_BIGINT, is_input_nullable);
             _agg_functions[i] = func;
-        } else {
+        }
+        else if(fn.name.function_name == "count_if"){
+            TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
+            TypeDescriptor arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]);
+            bool is_input_nullable =
+                    !fn.arg_types.empty() && (has_outer_join_child || desc.nodes[0].has_nullable_child);
+            auto* func = get_aggregate_function("count_if", arg_type.type, return_type.type, false);
+            if (func == nullptr) {
+                return Status::InternalError(
+                        strings::Substitute("(prepare before)Invalid agg function plan: fn_name: [$0], arg_type.type: [$1], return_type.type: [$2], is_input_nullable: [$3]",
+                                            fn.name.function_name, arg_type.type, return_type.type, is_input_nullable));
+            }
+            _agg_functions[i] = func;
+        }
+        else {
             TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
 
@@ -348,13 +362,19 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
             auto* func = get_aggregate_function(fn.name.function_name, arg_type.type, return_type.type,
                                                 is_input_nullable, fn.binary_type, state->func_version());
+
             if (func == nullptr) {
                 return Status::InternalError(
-                        strings::Substitute("Invalid agg function plan: $0", fn.name.function_name));
+                        strings::Substitute("Invalid agg function plan: fn_name: [$0], arg_type.type: [$1], return_type.type: [$2], is_input_nullable: [$3]",
+                                            fn.name.function_name, arg_type.type, return_type.type, is_input_nullable));
             }
             VLOG_ROW << "get agg function " << func->get_name() << " serde_type " << serde_type << " return_type "
                      << return_type;
             _agg_functions[i] = func;
+
+//            return Status::PublishTimeout(
+//                    strings::Substitute("(purpose) Invalid agg function plan: fn_name: [$0], arg_type.type: [$1], return_type.type: [$2], is_input_nullable: [$3]",
+//                                        fn.name.function_name, arg_type.type, return_type.type, is_input_nullable));
         }
 
         int node_idx = 0;

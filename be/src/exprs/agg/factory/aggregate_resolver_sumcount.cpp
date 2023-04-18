@@ -18,6 +18,7 @@
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/sum.h"
 #include "types/logical_type.h"
+#include "exprs/agg/count_if.h"
 
 namespace starrocks {
 
@@ -69,6 +70,15 @@ struct DistinctDispatcher {
     }
 };
 
+struct CountIfDispatcher {
+    template <LogicalType lt>
+    void operator()(AggregateFuncResolver* resolver) {
+
+        resolver->add_aggregate_mapping_variadic<lt, TYPE_BIGINT, CountIfFunctionState<lt, false>> (
+                "count_if", false, AggregateFactory::MakeCountIfAggregateFunction<lt, false>());
+    }
+};
+
 void AggregateFuncResolver::register_sumcount() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, SumDispatcher(), this);
@@ -80,15 +90,53 @@ void AggregateFuncResolver::register_sumcount() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, StorageSumDispatcher(), this);
     }
+    // count_if
+    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_BOOLEAN, TYPE_BIGINT, false, false),
+                           AggregateFactory::MakeCountIfAggregateFunction<TYPE_BOOLEAN, false>());
+    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_BOOLEAN, TYPE_BIGINT, true, false),
+                           AggregateFactory::MakeCountIfAggregateFunction<TYPE_BOOLEAN, false>());
+
+    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_TINYINT, TYPE_BIGINT, false, false),
+                           AggregateFactory::MakeCountIfAggregateFunction<TYPE_BOOLEAN, false>());
+    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_TINYINT, TYPE_BIGINT, true, false),
+                           AggregateFactory::MakeCountIfAggregateFunction<TYPE_BOOLEAN, false>());
+
+    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_SMALLINT, TYPE_BIGINT, false, false),
+                           AggregateFactory::MakeCountIfAggregateFunction<TYPE_BOOLEAN, false>());
+    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_SMALLINT, TYPE_BIGINT, true, false),
+                           AggregateFactory::MakeCountIfAggregateFunction<TYPE_BOOLEAN, false>());
+
+    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_INT, TYPE_BIGINT, false, false),
+                           AggregateFactory::MakeCountIfAggregateFunction<TYPE_BOOLEAN, false>());
+    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_INT, TYPE_BIGINT, true, false),
+                           AggregateFactory::MakeCountIfAggregateFunction<TYPE_BOOLEAN, false>());
+
+    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_BIGINT, TYPE_BIGINT, false, false),
+                           AggregateFactory::MakeCountIfAggregateFunction<TYPE_BOOLEAN, false>());
+    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_BIGINT, TYPE_BIGINT, true, false),
+                           AggregateFactory::MakeCountIfAggregateFunction<TYPE_BOOLEAN, false>());
+//    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_BIGINT, TYPE_BOOLEAN, false, true),
+//                           AggregateFactory::MakeCountIfAggregateFunction<TYPE_BOOLEAN, true>());
+
 
     _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, false, false),
                            AggregateFactory::MakeCountAggregateFunction<false>());
     _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, true, false),
                            AggregateFactory::MakeCountAggregateFunction<true>());
+
     _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, false, true),
                            AggregateFactory::MakeCountNullableAggregateFunction<false>());
     _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, true, true),
                            AggregateFactory::MakeCountNullableAggregateFunction<true>());
+
+//    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_BIGINT, TYPE_BIGINT, false, false),
+//                           AggregateFactory::MakeCountIfAggregateFunction<false>());
+//    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_BIGINT, TYPE_BIGINT, true, false),
+//                           AggregateFactory::MakeCountIfAggregateFunction<true>());
+//    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_BIGINT, TYPE_BIGINT, false, true),
+//                           AggregateFactory::MakeCountNullableAggregateFunction<false>());
+//    _infos_mapping.emplace(std::make_tuple("count_if", TYPE_BIGINT, TYPE_BIGINT, true, true),
+//                           AggregateFactory::MakeCountNullableAggregateFunction<true>());
 }
 
 void AggregateFuncResolver::register_distinct() {

@@ -22,12 +22,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.*;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
 
 import java.util.ArrayList;
@@ -200,9 +195,23 @@ public class NormalizePredicateRule extends BottomUpScalarOperatorRewriteRule {
         if (FunctionSet.ILIKE.equals(call.getFnName())) {
             return ilikeCall(call);
         }
+//        if (FunctionSet.COUNT_IF.equals(call.getFnName())) {
+//            return countIFCall(call);
+//        }
 
         return call;
     }
+
+//    private static ScalarOperator countIFCall(CallOperator call) {
+//        Function countIfFunc = Expr.getBuiltinFunction(FunctionSet.COUNT_IF, new Type[] {Type.BIGINT}, IS_IDENTICAL);
+//        Function ifFunc = Expr.getBuiltinFunction(FunctionSet.IF, new Type[] {Type.BOOLEAN, Type.BOOLEAN, Type.BOOLEAN}, IS_IDENTICAL);
+//
+//        Preconditions.checkArgument(countIfFunc != null && ifFunc != null && call.getArguments().size() == 1);
+//        CallOperator ifOp = new CallOperator(FunctionSet.IF, Type.BOOLEAN, Lists.newArrayList(call.getChild(0),
+//                ConstantOperator.TRUE, ConstantOperator.FALSE), ifFunc, call.isDistinct());
+//        CallOperator modOp = new CallOperator(FunctionSet.MOD, Type.BIGINT, Lists.newArrayList(ifOp, ConstantOperator.createBigint(3)));
+//        return modOp;
+//    }
 
     private static ScalarOperator ilikeCall(CallOperator call) {
         List<ScalarOperator> newArguments = new ArrayList<>();

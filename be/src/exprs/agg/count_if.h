@@ -17,25 +17,54 @@
 #include "column/nullable_column.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
+#include "column/type_traits.h"
+#include "column/vectorized_fwd.h"
+#include "column/column_viewer.h"
 
 namespace starrocks {
 
-struct AggregateCountWindowFunctionState {
+// AggregateCountWindowFunctionState ->  CountIfWindowFunctionState
+// AggregateCountFunctionState -> CountIfFunctionState
+// CountAggregateFunction -> CountIfAggregateFunction
+// CountNullableAggregateFunction -> CountIfNullableAggregateFunction
+
+struct CountIfWindowFunctionState {
     // The following field are only used in "update_state_removable_cumulatively"
     bool is_frame_init = false;
 };
 
-template <bool IsWindowFunc>
-struct AggregateCountFunctionState
-        : public std::conditional_t<IsWindowFunc, AggregateCountWindowFunctionState, AggregateFunctionEmptyState> {
+template <LogicalType LT, bool IsWindowFunc>
+struct CountIfFunctionState
+        : public std::conditional_t<IsWindowFunc, CountIfWindowFunctionState, AggregateFunctionEmptyState> {
     int64_t count = 0;
+    RunTimeCppType<LT> false_value{};
 };
 
 // count not null column
-template <bool IsWindowFunc>
-class CountAggregateFunction final : public AggregateFunctionBatchHelper<AggregateCountFunctionState<IsWindowFunc>,
-                                                                         CountAggregateFunction<IsWindowFunc>> {
+template <LogicalType LT, bool IsWindowFunc>
+class CountIfAggregateFunction final : public AggregateFunctionBatchHelper<CountIfFunctionState<LT, IsWindowFunc>,
+                                                                           CountIfAggregateFunction<LT, IsWindowFunc>> {
 public:
+    using InputColumnType = RunTimeColumnType<LT>;
+    using  T = RunTimeCppType<LT>;
+
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
+        // 这个是注册时的lt，不是运行时的lt
+//        if (lt_is_boolean<LT> || lt_is_integer<LT>) {
+//                ++this->data(state).count;
+//        }
+        const auto& column = down_cast<const InputColumnType&>(*columns[0]);
+        if (column.is_null(row_num)){
+            return;
+        }
+        if (column.get_data()[row_num] != this->data(state).false_value){
+            ++this->data(state).count;
+            throw std::runtime_error("<update> false_value: [" + std::to_string(this->data(state).false_value)
+                                     + "] actual_value: [" + std::to_string(column.get_data()[row_num]) + "]");
+        }
+    }
+
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr state) const override {
         this->data(state).count = 0;
         if constexpr (IsWindowFunc) {
@@ -43,22 +72,27 @@ public:
         }
     }
 
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
-                size_t row_num) const override {
-        ++this->data(state).count;
-    }
-
     AggStateTableKind agg_state_table_kind(bool is_append_only) const override { return AggStateTableKind::RESULT; }
 
     void retract(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                  size_t row_num) const override {
-        --this->data(state).count;
+
+        const auto& column = down_cast<const InputColumnType&>(*columns[0]);
+        if (column.is_null(row_num)){
+            return;
+        }
+        if (column.get_data()[row_num] != this->data(state).false_value){
+            --this->data(state).count;
+            throw std::runtime_error("<retract> false_value: [" + std::to_string(this->data(state).false_value)
+                                     + "] actual_value: [" + std::to_string(column.get_data()[row_num]) + "]");
+        }
+        //        ColumnPtr& col =
     }
 
-    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
-                                   AggDataPtr __restrict state) const override {
-        this->data(state).count += chunk_size;
-    }
+//    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+//                                   AggDataPtr __restrict state) const override {
+//        this->data(state).count += chunk_size;
+//    }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                               int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
@@ -69,7 +103,9 @@ public:
         if (frame_start >= frame_end) {
             return;
         }
-        this->data(state).count += (frame_end - frame_start);
+        for (size_t i = frame_start; i < frame_end; ++i) {
+            update(ctx, columns, state, i);
+        }
     }
 
     void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -91,6 +127,8 @@ public:
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_numeric());
         const auto* input_column = down_cast<const Int64Column*>(column);
+        throw std::runtime_error("<merge> data(state).count: [" + std::to_string(this->data(state).count)
+                                 + "] input_column->get_data()[row_num]: [" + std::to_string(input_column->get_data()[row_num]) + "]");
         this->data(state).count += input_column->get_data()[row_num];
     }
 
@@ -99,6 +137,7 @@ public:
         DCHECK_GT(end, start);
         auto* column = down_cast<Int64Column*>(dst);
         for (size_t i = start; i < end; ++i) {
+            throw std::runtime_error("<get_values> data(state).count: [" + std::to_string(this->data(state).count)+ "]");
             column->get_data()[i] = this->data(state).count;
         }
     }
@@ -143,14 +182,15 @@ public:
         }
     }
 
-    std::string get_name() const override { return "count"; }
+    std::string get_name() const override { return "count_if"; }
 };
 
+/*
 // count null_able column
 template <bool IsWindowFunc>
-class CountNullableAggregateFunction final
-        : public AggregateFunctionBatchHelper<AggregateCountFunctionState<IsWindowFunc>,
-                                              CountNullableAggregateFunction<IsWindowFunc>> {
+class CountIfNullableAggregateFunction final
+        : public AggregateFunctionBatchHelper<CountIfFunctionState<IsWindowFunc>,
+                                              CountIfNullableAggregateFunction<IsWindowFunc>> {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).count = 0;
@@ -356,5 +396,6 @@ public:
         this->data(state).count -= !columns[0]->is_null(row_num);
     }
 };
+*/
 
 } // namespace starrocks
