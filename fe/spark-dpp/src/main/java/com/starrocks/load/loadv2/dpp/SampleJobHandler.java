@@ -36,7 +36,6 @@ import org.apache.log4j.Logger;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.sql.SparkSession;
 import scala.Tuple2;
-import scala.Tuple3;
 import scala.reflect.ClassTag$;
 
 import java.util.ArrayList;
@@ -56,27 +55,16 @@ public class SampleJobHandler {
 
     private Map<String, Integer> bucketDivideMap;
 
-    private int sampPointPerPartitionHint = 20;
-
-    private Map<String, Tuple3<Integer, Double, Double>> bucketSampleMap;
+    private Map<String, Map<Integer, Integer>> idxSampleMap;
 
     public SampleJobHandler(SparkSession spark,
-                              JavaPairRDD<List<Object>, Object[]> javaPairRDD, Map<String, Integer> bucketDivideMap) {
+                            JavaPairRDD<List<Object>, Object[]> javaPairRDD,
+                            Map<String, Integer> bucketDivideMap,
+                            Map<String, Map<Integer, Integer>> idxSampleMap) {
         this.spark = spark;
         this.javaPairRDD = javaPairRDD;
         this.bucketDivideMap = bucketDivideMap;
-        this.initBucketSampleMap();
-    }
-
-    public void initBucketSampleMap() {
-        bucketSampleMap = new HashMap<>();
-        LOG.info("init sample");
-        for (Map.Entry<String, Integer> entry : bucketDivideMap.entrySet()) {
-            double sampleSize = Math.min((double) sampPointPerPartitionHint * entry.getValue(), 1e6);
-            double sampleSizePerPatition = Math.ceil(3.0 * sampleSize / javaPairRDD.getNumPartitions());
-            bucketSampleMap.put(entry.getKey(), new Tuple3<>(entry.getValue(), sampleSize, sampleSizePerPatition));
-        }
-        LOG.info("sample map: " + bucketSampleMap.toString());
+        this.idxSampleMap = idxSampleMap;
     }
 
     public Map<String, List<List<Object>>> getBoundsMap() {
@@ -87,7 +75,7 @@ public class SampleJobHandler {
     private Map<String, Tuple2<Long, List<Reservoir>>> sketch() {
         Map<String, Tuple2<Long, List<Reservoir>>> sampleMap = new HashMap<>();
         LOG.info("start collecting sample");
-        SampleJob mySampleJob = new SampleJob(bucketSampleMap, javaPairRDD.id());
+        SampleJob mySampleJob = new SampleJob(javaPairRDD.id(), idxSampleMap);
         Object obj = spark.sparkContext().runJob(javaPairRDD.rdd(), mySampleJob, ClassTag$.MODULE$.apply(Map.class));
         if (obj != null) {
             Map<String, Reservoir> reservoirIdxMap = new HashMap<>();
@@ -132,30 +120,22 @@ public class SampleJobHandler {
         return sampleMap;
     }
 
-    private List<List<Object>> determineBounds(double sampleSize, double sampleSizePerPartition,
-                                               double lstPartitions, long numItems, List<Reservoir> reservoirList) {
-        LOG.info("start collecting bounds");
-        double fraction = Math.min(sampleSize / Math.max(numItems, 1L), 1.0);
+    private List<List<Object>> determineBounds(Tuple2<Long, List<Reservoir>> tuple2, double lstPartitions) {
         List<Tuple2<Double, List<Object>>> candidates = new ArrayList<>();
-        reservoirList.forEach(reservoir -> {
-            if (fraction * reservoir.getL() > sampleSizePerPartition) {
-                // imbalanced partition
-                LOG.warn("has imbalanced partition");
-            } else {
-                double weight = ((double) reservoir.getL()) / reservoir.getKeysList().size();
-                reservoir.getKeysList().forEach(starrocksKeys -> {
-                    candidates.add(new Tuple2<>(weight, starrocksKeys.getKeys()));
-                });
-            }
+        tuple2._2.forEach(reservoir -> {
+            double weight = tuple2._1 / reservoir.getKeysList().size();
+            reservoir.getKeysList().forEach(starrocksKeys -> {
+                candidates.add(new Tuple2<>(weight, starrocksKeys.getKeys()));
+            });
         });
-        // TODO resample
+
         BucketComparator bucketComparator = new BucketComparator();
         candidates.sort((Tuple2<Double, List<Object>> o1,
                          Tuple2<Double, List<Object>> o2) -> bucketComparator.compare(o1._2, o2._2));
         List<List<Object>> bounds = new ArrayList<>();
         double partitions = Math.min(lstPartitions, candidates.size());
         // weight
-        double sumWeights = candidates.stream().collect(Collectors.summingDouble(tuple2 -> tuple2._1()));
+        double sumWeights = candidates.stream().collect(Collectors.summingDouble(item -> item._1()));
         double step = sumWeights / partitions;
         double cumWeight = 0.00;
         double target = step;
@@ -178,12 +158,8 @@ public class SampleJobHandler {
 
     private Map<String, List<List<Object>>> getBoundsMap(Map<String, Tuple2<Long, List<Reservoir>>> sketchMap) {
         Map<String, List<List<Object>>> boundsMap = new HashMap<>();
-        int i = 0;
         for (Map.Entry<String, Tuple2<Long, List<Reservoir>>> entry : sketchMap.entrySet()) {
-            List<List<Object>> bounds = determineBounds(bucketSampleMap.get(entry.getKey())._2(),
-                    bucketSampleMap.get(entry.getKey())._3(),
-                    bucketSampleMap.get(entry.getKey())._1(),
-                    entry.getValue()._1, entry.getValue()._2);
+            List<List<Object>> bounds = determineBounds(entry.getValue(), bucketDivideMap.get(entry.getKey()));
             boundsMap.put(entry.getKey(), bounds);
         }
         return boundsMap;

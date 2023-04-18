@@ -120,8 +120,6 @@ public final class SparkDpp implements java.io.Serializable {
     private SerializableConfiguration serializableHadoopConf;
     private DppResult dppResult = new DppResult();
     private Map<Long, Set<String>> tableToBitmapDictColumns = new HashMap<>();
-    private RePartitionJob rePartitionJob;
-    private GetBucketPartitionSizeJobHandler getSizeJobHandler;
     private FileMergeJob fileMergeJob;
     private boolean isResetbucketKeyMap;
     private Map<String, Integer> bucketDivideMap = new HashMap<>();
@@ -1177,7 +1175,7 @@ public final class SparkDpp implements java.io.Serializable {
                 }
                 LOG.info("bucket key map:" + bucketKeyMap.toString());
 
-                // set isResetbucketKeyMap
+                // if it is a DUPLICATE, split the skewed bucketKey to avoid data skew;
                 isResetbucketKeyMap = StarrocksUtils.isResetbucketKeyMap(baseIndex.indexType);
 
                 JavaPairRDD<List<Object>, Object[]> tablePairRDD = null;
@@ -1232,25 +1230,23 @@ public final class SparkDpp implements java.io.Serializable {
                 if (isResetbucketKeyMap) {
                     // reset the bucketKeyMap
                     LOG.info("reset the bucketKeyMap");
-                    getSizeJobHandler = new GetBucketPartitionSizeJobHandler(spark);
-                    getSizeJobHandler.resetBucketKeyMap(tablePairRDD, bucketKeyMap, bucketDivideMap);
-                    /*rePartitionJob = new RePartitionJob(spark);
-                    rePartitionJob.resetBucketKeyMap(bucketKeyMap, bucketDivideMap, fileGroupDataframe,
-                            fileGroupPartitionInfo, partitionKeyIndex, fileGroupPartitionRangeKeys,
-                            keyColumnNames, valueColumnNames, dstTableSchema);*/
+                    GetBucketPartitionSizeJobHandler getSizeJobHandler = new GetBucketPartitionSizeJobHandler(spark);
+                    getSizeJobHandler.resetBucketKeyMap(tablePairRDD, bucketKeyMap);
                     LOG.info("new bucket key map:" + bucketKeyMap.toString());
-                    // use hash or sample
-                    LOG.info("started repartition");
-                    rePartitionJob = new RePartitionJob(spark);
-                    if (StarrocksUtils.needSample(keyColumnNames)) {
+                    bucketDivideMap = getSizeJobHandler.getBucketDivideMap();
+                    LOG.info("bucket divide map:" + bucketDivideMap.toString());
+                    Map<String, Map<Integer, Integer>> idxSampleMap = getSizeJobHandler.getIdxSampleMap();
+                    LOG.info("idx sample map:" + idxSampleMap.toString());
+                    if (idxSampleMap != null && idxSampleMap.size() > 0) {
                         // sample
-                        SampleJobHandler mySampleJobHandler = new SampleJobHandler(spark, tablePairRDD, bucketDivideMap);
+                        SampleJobHandler mySampleJobHandler = new SampleJobHandler(spark, tablePairRDD,
+                                bucketDivideMap, idxSampleMap);
                         Map<String, List<List<Object>>> boundsMap = mySampleJobHandler.getBoundsMap();
+                        LOG.info("started repartition");
+                        RePartitionJob rePartitionJob = new RePartitionJob(spark);
                         tablePairRDD = rePartitionJob.repartitionBySample(boundsMap, tablePairRDD);
-                    } else {
-                        tablePairRDD = rePartitionJob.repartitionByHash(bucketDivideMap, tablePairRDD);
+                        LOG.info("finished repartition");
                     }
-                    LOG.info("finished repartition");
                 }
 
                 processRollupTree(rootNode, tablePairRDD, tableId, baseIndex);

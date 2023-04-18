@@ -33,16 +33,9 @@ package com.starrocks.common;
 
 import org.apache.commons.lang3.StringUtils;
 
-import java.util.List;
-
 public class StarrocksUtils {
 
     public static boolean isResetbucketKeyMap(String indexType) {
         return StringUtils.equalsIgnoreCase(indexType, "DUPLICATE");
-    }
-
-    public static boolean needSample(List<String> keys) {
-        // include sort key
-        return keys.size() > 1;
     }
 }

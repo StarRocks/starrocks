@@ -34,7 +34,6 @@ package com.starrocks.load.loadv2.dpp;
 import org.apache.spark.TaskContext;
 import org.apache.spark.util.random.XORShiftRandom;
 import scala.Tuple2;
-import scala.Tuple3;
 import scala.collection.Iterator;
 import scala.runtime.AbstractFunction1;
 import scala.util.hashing.package$;
@@ -45,16 +44,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Perform reservoir sampling on multiple bucketKeys simultaneously.
+ */
 public class SampleJob extends AbstractFunction1<Iterator<Tuple2<List<Object>, Object[]>>,
         Map<String, Map<Integer, Reservoir>>> implements Serializable {
-
-    private Map<String, Tuple3<Integer, Double, Double>> bucketSampleMap;
-
     private int shift;
 
-    public SampleJob(Map<String, Tuple3<Integer, Double, Double>> bucketSampleMap, int shift) {
-        this.bucketSampleMap = bucketSampleMap;
+    private Map<String, Map<Integer, Integer>> idxSampleMap;
+
+    public SampleJob(int shift, Map<String, Map<Integer, Integer>> idxSampleMap) {
         this.shift = shift;
+        this.idxSampleMap = idxSampleMap;
     }
 
     @Override
@@ -67,13 +68,13 @@ public class SampleJob extends AbstractFunction1<Iterator<Tuple2<List<Object>, O
         while (iter.hasNext()) {
             Tuple2<List<Object>, Object[]> next = iter.next();
             String bucketKey = (String) next._1.get(0);
-            if (!bucketSampleMap.containsKey(bucketKey)) {
+            if (!idxSampleMap.containsKey(bucketKey) || !idxSampleMap.get(bucketKey).containsKey(idx)) {
                 // no sampling
                 continue;
             }
             List<Object> keys = next._1.subList(1, next._1.size());
             // reservoir size
-            double sampleSizePerPatition = bucketSampleMap.get(bucketKey)._3();
+            double sampleSizePerPatition = idxSampleMap.get(bucketKey).get(idx);
             if (sampleMap.containsKey(bucketKey)) {
                 Map<Integer, Reservoir> reservoirMap = sampleMap.get(bucketKey);
                 Map<Integer, Long> idxMap = new HashMap<>();

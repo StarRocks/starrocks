@@ -31,6 +31,7 @@
 
 package com.starrocks.load.loadv2.dpp;
 
+import org.apache.spark.TaskContext;
 import scala.Tuple2;
 import scala.collection.Iterator;
 import scala.runtime.AbstractFunction1;
@@ -40,23 +41,32 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class GetBucketPartitionSizeJob extends AbstractFunction1<Iterator<Tuple2<List<Object>, Object[]>>, Map<String, Long>>
+public class GetBucketPartitionSizeJob
+        extends AbstractFunction1<Iterator<Tuple2<List<Object>, Object[]>>, Map<String, Map<Integer, Long>>>
         implements Serializable {
-
     @Override
-    public Map<String, Long> apply(Iterator<Tuple2<List<Object>, Object[]>> iter) {
-        Map<String, Long> bucketPartitionSizeMap = new HashMap<>();
+    public Map<String, Map<Integer, Long>> apply(Iterator<Tuple2<List<Object>, Object[]>> iter) {
+        Map<String, Map<Integer, Long>> bucketPartitionSizeMap = new HashMap<>();
+        // to obtain the number of rows in a partition_bucket_idx
+        int idx = TaskContext.getPartitionId();
         while (iter.hasNext()) {
             Tuple2<List<Object>, Object[]> next = iter.next();
             String bucketKey = (String) next._1.get(0);
 
             if (bucketPartitionSizeMap.containsKey(bucketKey)) {
-                bucketPartitionSizeMap.put(bucketKey, bucketPartitionSizeMap.get(bucketKey) + 1);
+                Map<Integer, Long> idxMap = bucketPartitionSizeMap.get(bucketKey);
+                if (idxMap.containsKey(idx)) {
+                    idxMap.put(idx, idxMap.get(idx) + 1);
+                } else {
+                    idxMap.put(idx, 1L);
+                }
+                bucketPartitionSizeMap.put(bucketKey, idxMap);
             } else {
-                bucketPartitionSizeMap.put(bucketKey, 1L);
+                Map<Integer, Long> idxMap = new HashMap<>();
+                idxMap.put(idx, 1L);
+                bucketPartitionSizeMap.put(bucketKey, idxMap);
             }
         }
-
         return bucketPartitionSizeMap;
     }
 }
