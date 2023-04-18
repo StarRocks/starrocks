@@ -707,6 +707,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         try {
             if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_DOUBLE_LITERAL)) {
                 return new FloatLiteral(node.getValue());
+            } else if (Double.isInfinite(node.getValue())) {
+                throw new SemanticException("Numeric overflow " + node.getValue());
             } else {
                 BigDecimal decimal = BigDecimal.valueOf(node.getValue());
                 int precision = DecimalLiteral.getRealPrecision(decimal);
