@@ -212,7 +212,7 @@ public class ExpressionAnalyzer {
             node.setType(Type.BOOLEAN);
             for (int i = 0; i < node.getChildren().size(); i++) {
                 Expr child = node.getChild(i);
-                if (child.getType().matchesType(Type.BOOLEAN) || child.getType().isNull()) {
+                if (child.getType().isBoolean() || child.getType().isNull()) {
                     // do nothing
                 } else if (!session.getSessionVariable().isEnableStrictType() && Type.canCastTo(child.getType(), Type.BOOLEAN)) {
                     node.getChildren().set(i, new CastExpr(Type.BOOLEAN, child));

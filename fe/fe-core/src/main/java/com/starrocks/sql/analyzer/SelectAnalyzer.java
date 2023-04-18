@@ -342,7 +342,7 @@ public class SelectAnalyzer {
         AnalyzerUtils.verifyNoGroupingFunctions(predicate, "WHERE");
 
 
-        if (predicate.getType().matchesType(Type.BOOLEAN) || predicate.getType().isNull()) {
+        if (predicate.getType().isBoolean() || predicate.getType().isNull()) {
             // do nothing
         } else if (!session.getSessionVariable().isEnableStrictType() && Type.canCastTo(predicate.getType(), Type.BOOLEAN)) {
             predicate = new CastExpr(Type.BOOLEAN, predicate);
