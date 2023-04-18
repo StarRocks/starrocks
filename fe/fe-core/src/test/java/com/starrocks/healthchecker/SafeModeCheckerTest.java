@@ -40,13 +40,9 @@ import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import mockit.Expectations;
-import mockit.Mocked;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
-import java.util.ArrayList;
-import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 
@@ -78,12 +74,12 @@ public class SafeModeCheckerTest {
 
     @After
     public void tearDown() throws DdlException {
-        be.setAlive(false);
+        GlobalStateMgr.getCurrentState().getClusterInfo().dropBackend(be);
         globalStateMgr.setSafeMode(false);
     }
 
     @Test
-    public void testSafeMode() throws Exception {
+    public void testSafeMode() {
         safeModeChecker.checkInternal();
         assertEquals(true, globalStateMgr.isSafeMode());
     }
