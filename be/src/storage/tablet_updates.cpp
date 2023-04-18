@@ -2030,7 +2030,7 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
                            _tablet.tablet_id(), _error_msg));
     }
     // TODO(cbl): optimize: following code lock _lock twice, should make it just lock once
-    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 60000));
+    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 55000));
     std::lock_guard rl(_lock);
     if (_edit_version_infos.empty()) {
         string msg = Substitute("tablet deleted when get_applied_rowsets tablet:$0", _tablet.tablet_id());
