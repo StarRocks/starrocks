@@ -18,8 +18,8 @@ Take note of the following points:
 
   The parameters in the URL are described as follows:
 
-  - `Host`: the host IP address of your StarRocks cluster.
-  - `Port`: the query port of your StarRocks cluster, for example, `9030`.
+  - `Host`: the FE host IP address of your StarRocks cluster.
+  - `Port`: the FE query port of your StarRocks cluster, for example, `9030`.
   - `Catalog`: the target catalog in your StarRocks cluster. Both internal and external catalogs are supported.
   - `Database`: the target database in your StarRocks cluster. Both internal and external databases are supported.
 - Configure **Username** and **Password**.

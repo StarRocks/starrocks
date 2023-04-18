@@ -41,73 +41,97 @@ Before starting FEs, add the following configuration items in the FE configurati
 | aws_s3_iam_role_arn                 | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
 | aws_s3_external_id                  | The external ID of the AWS account that is used for cross-account access to your S3 bucket. |
 
-- If you use the default authentication credential of AWS SDK to access S3, add the following configuration items:
+- If you use AWS S3
+
+  - If you use the default authentication credential of AWS SDK to access S3, add the following configuration items:
+
+    ```YAML
+    run_mode = shared_data
+    cloud_native_meta_port = <meta_port>
+    cloud_native_storage_type = S3
+    aws_s3_path = <s3_path>
+    aws_s3_region = <region>
+    aws_s3_endpoint = <endpoint_url>
+    aws_s3_use_aws_sdk_default_behavior = true
+    ```
+
+  - If you use IAM user-based credential (Access Key and Secret Key) to access S3, add the following configuration items:
+
+    ```YAML
+    run_mode = shared_data
+    cloud_native_meta_port = <meta_port>
+    cloud_native_storage_type = S3
+    aws_s3_path = <s3_path>
+    aws_s3_region = <region>
+    aws_s3_endpoint = <endpoint_url>
+    aws_s3_access_key = <access_key>
+    aws_s3_secret_key = <secret_key>
+    ```
+
+  - If you use Instance Profile to access S3, add the following configuration items:
+
+    ```YAML
+    run_mode = shared_data
+    cloud_native_meta_port = <meta_port>
+    cloud_native_storage_type = S3
+    aws_s3_path = <s3_path>
+    aws_s3_region = <region>
+    aws_s3_endpoint = <endpoint_url>
+    aws_s3_use_instance_profile = true
+    ```
+
+  - If you use Assumed Role to access S3, add the following configuration items:
+
+    ```YAML
+    run_mode = shared_data
+    cloud_native_meta_port = <meta_port>
+    cloud_native_storage_type = S3
+    aws_s3_path = <s3_path>
+    aws_s3_region = <region>
+    aws_s3_endpoint = <endpoint_url>
+    aws_s3_use_instance_profile = true
+    aws_s3_iam_role_arn = <role_arn>
+    ```
+
+  - If you use Assumed Role to access S3 from an external AWS account, add the following configuration items:
+
+    ```YAML
+    run_mode = shared_data
+    cloud_native_meta_port = <meta_port>
+    cloud_native_storage_type = S3
+    aws_s3_path = <s3_path>
+    aws_s3_region = <region>
+    aws_s3_endpoint = <endpoint_url>
+    aws_s3_use_instance_profile = true
+    aws_s3_iam_role_arn = <role_arn>
+    aws_s3_external_id = <external_id>
+    ```
+
+- If you use GCP Cloud Storage:
 
   ```YAML
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
   aws_s3_path = <s3_path>
-  aws_s3_region = <region>
-  aws_s3_endpoint = <endpoint_url>
-  aws_s3_use_aws_sdk_default_behavior = true
-  ```
-
-- If you use IAM user-based credential (Access Key and Secret Key) to access S3, add the following configuration items:
-
-  ```YAML
-  run_mode = shared_data
-  cloud_native_meta_port = <meta_port>
-  cloud_native_storage_type = S3
-  aws_s3_path = <s3_path>
-  aws_s3_region = <region>
-  aws_s3_endpoint = <endpoint_url>
-  aws_s3_use_aws_sdk_default_behavior = false
-  aws_s3_use_instance_profile = false
+  aws_s3_region = <region>                   # For example: us-east-1
+  aws_s3_endpoint = <endpoint_url>           # For example: https://storage.googleapis.com
   aws_s3_access_key = <access_key>
-  aws_s3_secret_key = <secrete_key>
+  aws_s3_secret_key = <secret_key>
   ```
 
-- If you use Instance Profile to access S3, add the following configuration items:
+
+- If you use MinIO:
 
   ```YAML
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
   aws_s3_path = <s3_path>
-  aws_s3_region = <region>
-  aws_s3_endpoint = <endpoint_url>
-  aws_s3_use_aws_sdk_default_behavior = false
-  aws_s3_use_instance_profile = true
-  ```
-
-- If you use Assumed Role to access S3, add the following configuration items:
-
-  ```YAML
-  run_mode = shared_data
-  cloud_native_meta_port = <meta_port>
-  cloud_native_storage_type = S3
-  aws_s3_path = <s3_path>
-  aws_s3_region = <region>
-  aws_s3_endpoint = <endpoint_url>
-  aws_s3_use_aws_sdk_default_behavior = false
-  aws_s3_use_instance_profile = true
-  aws_s3_iam_role_arn = <role_arn>
-  ```
-
-- If you use Assumed Role to access S3 from an external AWS account, add the following configuration items:
-
-  ```YAML
-  run_mode = shared_data
-  cloud_native_meta_port = <meta_port>
-  cloud_native_storage_type = S3
-  aws_s3_path = <s3_path>
-  aws_s3_region = <region>
-  aws_s3_endpoint = <endpoint_url>
-  aws_s3_use_aws_sdk_default_behavior = false
-  aws_s3_use_instance_profile = true
-  aws_s3_iam_role_arn = <role_arn>
-  aws_s3_external_id = <external_id>
+  aws_s3_region = <region>                   # For example: us-east-1
+  aws_s3_endpoint = <endpoint_url>           # For example: http://172.26.xx.xxx:39000
+  aws_s3_access_key = <access_key>
+  aws_s3_secret_key = <secret_key>
   ```
 
 ### Configure BE nodes for shared-data StarRocks

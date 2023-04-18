@@ -117,11 +117,7 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("contains", 2, "array_contains",
                 ImmutableList.of(Expr.class, Expr.class));
 
-        // 4. contains_sequence -> array_contains_all
-        registerFunctionTransformer("contains_sequence", 2, "array_contains_all",
-                ImmutableList.of(Expr.class, Expr.class));
-
-        // 5. slice -> array_slice
+        // 4. slice -> array_slice
         registerFunctionTransformer("slice", 3, "array_slice",
                 ImmutableList.of(Expr.class, Expr.class, Expr.class));
     }
