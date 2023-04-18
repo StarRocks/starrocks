@@ -57,6 +57,8 @@ public:
         DCHECK_LT(driver_sequence, _chunks_sorter_partitions.size());
         return _chunks_sorter_partitions[driver_sequence].get();
     }
+    int64_t offset() const { return _offset; }
+    int64_t limit() const { return _limit; }
     const std::vector<ExprContext*>& sort_exprs() const { return _sort_exprs; }
     const SortDescs& sort_descs() const { return _sort_desc; }
 
