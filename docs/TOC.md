@@ -76,7 +76,6 @@
   + Integrate with IDE tools
     + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
   + [Integrate with other tools and systems](./integrations/other_integrations/intro.md)
-+ 管理手册
 + Administration
   + Deployment
     + [Deploy a shared-data StarRocks cluster](./administration/deploy_shared_data.md)
