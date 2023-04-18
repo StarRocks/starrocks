@@ -241,7 +241,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
         DeferOp defer2([&]() {
             if (ScanOperator* scan = source_scan_operator()) {
-                scan->after_pull_chunk(process_time_ns);
+                scan->end_pull_chunk(process_time_ns);
             }
         });
 
