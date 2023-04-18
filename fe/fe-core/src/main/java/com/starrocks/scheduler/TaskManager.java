@@ -134,13 +134,14 @@ public class TaskManager {
             if (taskSchedule == null) {
                 continue;
             }
-
+            long period = TimeUtils.convertTimeUnitValueToSecond(taskSchedule.getPeriod(),
+                    taskSchedule.getTimeUnit());
             LocalDateTime startTime = Utils.getDatetimeFromLong(taskSchedule.getStartTime());
             Duration duration = Duration.between(LocalDateTime.now(), startTime);
             long initialDelay = duration.getSeconds();
-            // if startTime < now, start scheduling now
+            // if startTime < now, start scheduling from the next period
             if (initialDelay < 0) {
-                initialDelay = 0;
+                initialDelay = ((initialDelay % period) + period) % period;
             }
             // Tasks that run automatically have the lowest priority,
             // but are automatically merged if they are found to be merge-able.
@@ -148,8 +149,7 @@ public class TaskManager {
                     true, task.getProperties());
             ScheduledFuture<?> future = periodScheduler.scheduleAtFixedRate(() ->
                             executeTask(task.getName(), option), initialDelay,
-                    TimeUtils.convertTimeUnitValueToSecond(taskSchedule.getPeriod(),
-                            taskSchedule.getTimeUnit()), TimeUnit.SECONDS);
+                    period, TimeUnit.SECONDS);
             periodFutureMap.put(task.getId(), future);
         }
     }
