@@ -39,7 +39,9 @@ public:
 
     Status prepare(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
-    bool pending_finish() const override { return _aggregator->has_pending_data(); }
+    bool pending_finish() const override {
+        return _aggregator->has_pending_data() || _aggregator->has_pending_restore();
+    }
 
     void mark_need_spill() override {
         Operator::mark_need_spill();

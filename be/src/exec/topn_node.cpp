@@ -296,7 +296,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
 
     // spill process operator
     if (runtime_state()->enable_spill() && _limit < 0 && !is_partition_topn) {
-        context->interpolate_spill_process(spill_channel_factory, degree_of_parallelism);
+        context->interpolate_spill_process(id(), spill_channel_factory, degree_of_parallelism);
     }
 
     // create context factory

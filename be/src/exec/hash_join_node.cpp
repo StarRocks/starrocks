@@ -466,7 +466,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
 
     if (runtime_state()->enable_spill() &&
         std::is_same_v<HashJoinBuilderFactory, SpillableHashJoinBuildOperatorFactory>) {
-        context->interpolate_spill_process(build_side_spill_channel_factory, num_right_partitions);
+        context->interpolate_spill_process(id(), build_side_spill_channel_factory, num_right_partitions);
     }
 
     auto* pool = context->fragment_context()->runtime_state()->obj_pool();
