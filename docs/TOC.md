@@ -65,8 +65,16 @@
     + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
     + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
 + Integration
-  + [Integrate with StarRocks](./integrations/intro.md)
   + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
+  + Integrate with BI tools
+    + [Hex](./integrations/BI_integrations/Hex.md)
+    + [Querybook](./integrations/BI_integrations/Querybook.md)
+    + [Apache Superset](./integrations/BI_integrations/Superset.md)
+    + [Tableau Desktop](./integrations/BI_integrations/Tableau_Desktop.md)
+  + Integrate with IDE tools
+    + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
+  + [Integrate with other tools and systems](./integrations/other_integrations/intro.md)
++ 管理手册
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
