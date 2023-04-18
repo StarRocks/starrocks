@@ -30,77 +30,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
-        String deptsTable = "" +
-                "CREATE TABLE depts(    \n" +
-                "   deptno INT NOT NULL,\n" +
-                "   name VARCHAR(20)    \n" +
-                ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`deptno`)\n" +
-                "DISTRIBUTED BY HASH(`deptno`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"unique_constraints\" = \"deptno\"\n," +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String locationsTable = "" +
-                "CREATE TABLE locations(\n" +
-                "    locationid INT NOT NULL,\n" +
-                "    state CHAR(2), \n" +
-                "   name VARCHAR(20)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`locationid`)\n" +
-                "DISTRIBUTED BY HASH(`locationid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String ependentsTable = "" +
-                "CREATE TABLE dependents(\n" +
-                "   empid INT NOT NULL,\n" +
-                "   name VARCHAR(20)   \n" +
-                ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String empsTable = "" +
-                "CREATE TABLE emps\n" +
-                "(\n" +
-                "    empid      INT         NOT NULL,\n" +
-                "    deptno     INT         NOT NULL,\n" +
-                "    locationid INT         NOT NULL,\n" +
-                "    commission INT         NOT NULL,\n" +
-                "    name       VARCHAR(20) NOT NULL,\n" +
-                "    salary     DECIMAL(18, 2)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"foreign_key_constraints\" = \"(deptno) REFERENCES depts(deptno)\"," +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-
-        String empsWithBigintTable = "" +
-                "CREATE TABLE emps_bigint\n" +
-                "(\n" +
-                "    empid      BIGINT        NOT NULL,\n" +
-                "    deptno     BIGINT         NOT NULL,\n" +
-                "    locationid BIGINT         NOT NULL,\n" +
-                "    commission BIGINT         NOT NULL,\n" +
-                "    name       VARCHAR(20) NOT NULL,\n" +
-                "    salary     DECIMAL(18, 2)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        starRocksAssert
-                .withTable(deptsTable)
-                .withTable(empsTable)
-                .withTable(locationsTable)
-                .withTable(ependentsTable)
-                .withTable(empsWithBigintTable);
-
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer` (\n" +
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +
@@ -416,26 +345,57 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testMultiOuterJoinQueryComplete() {
-        for (String joinType: outerJoinTypes) {
-            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
-                    "" + joinType + " join locations on emps.locationid = locations.locationid";
-            testRewriteOK(mv, "select count(*) from " +
-                    "emps " + joinType + " join locations on emps.locationid = locations.locationid");
-            testRewriteOK(mv, "select empid as col2, emps.locationid from " +
-                    "emps " + joinType + " join locations on emps.locationid = locations.locationid " +
-                    "and emps.locationid > 10");
-            testRewriteOK(mv, "select count(*) from " +
-                    "emps " + joinType + " join locations on emps.locationid = locations.locationid " +
-                    "and emps.locationid > 10");
-            testRewriteOK(mv, "select empid as col2, locations.locationid from " +
-                    "emps " + joinType + " join locations on emps.locationid = locations.locationid " +
-                    "and locations.locationid > 10");
-            testRewriteFail(mv, "select empid as col2, locations.locationid from " +
-                    "emps inner join locations on emps.locationid = locations.locationid " +
-                    "and locations.locationid > 10");
-        }
+    public void testLeftOuterJoinQueryComplete() {
+        String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                " left join locations on emps.locationid = locations.locationid";
+        testRewriteOK(mv, "select count(*) from " +
+                "emps  left join locations on emps.locationid = locations.locationid");
+        testRewriteOK(mv, "select empid as col2, emps.locationid from " +
+                "emps  left join locations on emps.locationid = locations.locationid " +
+                "where emps.deptno > 10");
+        testRewriteOK(mv, "select count(*) from " +
+                "emps  left join locations on emps.locationid = locations.locationid " +
+                "where emps.deptno > 10");
+        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
+                "emps left join locations on emps.locationid = locations.locationid " +
+                "where emps.locationid > 10");
+        // TODO: Query's left outer join will be converted to Inner Join.
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps left join locations on emps.locationid = locations.locationid " +
+                "where locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and emps.locationid > 10");
     }
+
+    @Test
+    public void testRightOuterJoinQueryComplete() {
+        String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                " right join locations on emps.locationid = locations.locationid";
+        testRewriteOK(mv, "select count(*) from " +
+                "emps  right join locations on emps.locationid = locations.locationid");
+        // TODO: Query's right outer join will be converted to Inner Join.
+        testRewriteFail(mv, "select empid as col2, emps.locationid from " +
+                "emps  right join locations on emps.locationid = locations.locationid " +
+                "where emps.deptno > 10");
+        // TODO: Query's right outer join will be converted to Inner Join.
+        testRewriteFail(mv, "select count(*) from " +
+                "emps  right join locations on emps.locationid = locations.locationid " +
+                "where emps.deptno > 10");
+        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
+                "emps  right join locations on emps.locationid = locations.locationid " +
+                "where locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and emps.locationid > 10");
+    }
+
     @Test
     public void testMultiOuterJoinQueryDelta() {
         for (String joinType: outerJoinTypes) {

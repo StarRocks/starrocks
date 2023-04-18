@@ -1185,8 +1185,6 @@ std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
             _compaction_task = _compaction_context->policy->create_compaction(
                     std::static_pointer_cast<Tablet>(shared_from_this()));
         }
-    }
-    if (_compaction_task && _compaction_task.use_count() == 1) {
         return _compaction_task;
     } else {
         return nullptr;
