@@ -79,6 +79,7 @@ struct ConnectorScanOperatorAdaptiveProcessor {
     // total io time and running time of io tasks.
     std::atomic_int64_t cs_total_io_time = 0;
     std::atomic_int64_t cs_total_running_time = 0;
+    std::atomic_int64_t cs_total_scan_bytes = 0;
 
     // ----------------------
     int64_t last_chunk_souce_finish_timestamp = 0;
@@ -90,6 +91,8 @@ struct ConnectorScanOperatorAdaptiveProcessor {
     bool try_add_io_tasks = false;
     double expected_speedup_ratio = 0;
     double last_cs_speed = 0;
+    int check_slow_io = 0;
+    int64_t last_cs_pull_chunks = 0;
 };
 
 // ==================== ConnectorScanOperator ====================
@@ -289,12 +292,17 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     // `cs_speed` is speed in this single scan operator.
     int64_t cs_pull_chunks = P.cs_pull_chunks.load();
     double cs_speed = cs_pull_chunks * 10000.0 / (P.cs_gen_chunks_time + 1);
-
     // chunk source: total io time and running time.
-    // we can see if this is slow device.
+    // we can see if this is slow device. io_latency in ms unit.
     int64_t cs_total_io_time = P.cs_total_io_time.load();
-    int64_t cs_total_running_time = P.cs_total_running_time.load();
+    double io_latency = cs_total_io_time * 0.000001 / (cs_pull_chunks + 1);
 
+    // adjust routines.
+    auto try_add_io_tasks = [&]() {
+        if (!P.try_add_io_tasks) return true;
+        if (P.last_cs_pull_chunks == cs_pull_chunks) return true;
+        return (cs_speed > (P.last_cs_speed * P.expected_speedup_ratio));
+    };
     auto do_add_io_tasks = [&]() {
         P.try_add_io_tasks = true;
         const int smooth = config::connector_io_tasks_adjust_smooth;
@@ -302,53 +310,80 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
                 (io_tasks + config::connector_io_tasks_adjust_step + smooth) * 1.0 / (io_tasks + smooth);
         io_tasks += config::connector_io_tasks_adjust_step;
     };
-    auto do_dec_io_tasks = [&]() {
+    auto try_sub_io_tasks = [&]() { return ((cs_speed * P.expected_speedup_ratio) < P.last_cs_speed); };
+    auto do_sub_io_tasks = [&]() {
         P.try_add_io_tasks = false;
         io_tasks -= config::connector_io_tasks_adjust_step;
     };
 
-    if (balanced_cs_speed > op_speed) {
-        do_dec_io_tasks();
-    } else if (!P.try_add_io_tasks || (cs_speed > (P.last_cs_speed * P.expected_speedup_ratio))) {
-        // if we don't try add io tasks before,
-        // or if we've tried and we get expected speedup ratio.
-        do_add_io_tasks();
-    } else {
-        double r = cs_total_io_time * 1.0 / (cs_total_running_time + 1);
-        if (r > config::connector_io_tasks_slow_io_ratio || cs_total_io_time == 0) {
-            // detect slow device, jump to half of max. and try add more io tasks.
+    auto check_slow_io = [&]() {
+        if (((P.check_slow_io++) % 8) != 0) return false;
+        if (io_latency >= 100) {
             io_tasks = std::max(io_tasks, _io_tasks_per_scan_operator / 2);
-            do_add_io_tasks();
+        } else if (io_latency >= 50) {
+            io_tasks = std::max(io_tasks, _io_tasks_per_scan_operator / 4);
         } else {
-            // if speedup ratio is not as expected, we revert.
-            do_dec_io_tasks();
-            if ((cs_speed * P.expected_speedup_ratio) < P.last_cs_speed) {
-                do_dec_io_tasks();
-            }
+            return false;
         }
-    }
+        return true;
+    };
 
+    // adjust io tasks according to feedback.
+    auto do_adjustment = [&]() {
+        if (balanced_cs_speed > op_speed) {
+            do_sub_io_tasks();
+            return;
+        }
+
+        if (try_add_io_tasks()) {
+            // if we don't try add io tasks before,
+            // or if we've tried and we get expected speedup ratio.
+            do_add_io_tasks();
+            return;
+        }
+
+        check_slow_io();
+        do_sub_io_tasks();
+        if (try_sub_io_tasks()) {
+            // if speedup ratio is not as expected, we revert.
+            do_sub_io_tasks();
+        }
+    };
+
+    do_adjustment();
     io_tasks = std::min(io_tasks, _io_tasks_per_scan_operator);
     io_tasks = std::max(io_tasks, min_io_tasks);
 
-    auto doround = [&](double x) { return round(x * 10000.0) / 10000.0; };
-    VLOG_FILE << "[XXX] pick mosrsel. id = " << _driver_sequence << ", cs = " << cs_speed << "(" << cs_pull_chunks
-              << "/" << P.cs_gen_chunks_time << "), old = " << P.last_cs_speed << "("
-              << doround(cs_speed / P.last_cs_speed) << ")"
-              << ", op = " << op_speed << "(" << P.op_pull_chunks << "/" << P.op_running_time
-              << "), cs/op = " << doround(balanced_cs_speed / op_speed) << ", proposal = " << io_tasks << "("
-              << P.expected_speedup_ratio << "), current = " << _num_running_io_tasks
-              << ", io/total = " << cs_total_io_time << "/" << cs_total_running_time << "("
-              << doround(cs_total_io_time * 1.0 / cs_total_running_time) << "), halt_time = " << P.cs_total_halt_time
-              << ", buffer_full = " << is_buffer_full();
+    auto build_log = [&]() {
+        auto doround = [&](double x) { return round(x * 100.0) / 100.0; };
+        std::stringstream ss;
+        ss << "[XXX] pick mosrsel. id = " << _driver_sequence;
+        ss << ", cs = " << doround(cs_speed) << "(" << cs_pull_chunks << "/" << P.cs_gen_chunks_time << ")";
+        ss << ", last_cs = " << doround(P.last_cs_speed) << "(" << doround(cs_speed / P.last_cs_speed) << ")";
+        ss << ", op = " << doround(op_speed) << "(" << P.op_pull_chunks << "/" << P.op_running_time << ")";
+
+        ss << ", cs/op = " << doround(balanced_cs_speed) << "/" << doround(op_speed) << "("
+           << doround(balanced_cs_speed / op_speed) << ")";
+
+        ss << ", proposal = " << io_tasks << "(" << doround(P.expected_speedup_ratio)
+           << "), current = " << _num_running_io_tasks;
+
+        ss << ", iolat = " << cs_total_io_time << "/" << cs_pull_chunks << "(" << doround(io_latency) << ")";
+
+        // ss << ", halt_time = " << P.cs_total_halt_time << ", buffer_full = " << is_buffer_full();
+        return ss.str();
+    };
+
+    VLOG_FILE << build_log();
 
     P.last_cs_speed = cs_speed;
+    P.last_cs_pull_chunks = cs_pull_chunks;
     P.op_running_time = moving_exp(P.op_running_time);
     P.op_pull_chunks = moving_exp(P.op_pull_chunks);
     P.cs_pull_chunks = moving_exp(P.cs_pull_chunks.load());
     P.cs_total_io_time = moving_exp(P.cs_total_io_time.load());
     P.cs_total_running_time = moving_exp(P.cs_total_running_time.load());
-
+    P.cs_total_scan_bytes = moving_exp(P.cs_total_scan_bytes.load());
     return io_tasks;
 }
 
@@ -423,9 +458,11 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
 
     int64_t total_time_ns = 0;
     int64_t io_time_ns = 0;
+    int64_t delta_scan_bytes = 0;
     {
         SCOPED_RAW_TIMER(&total_time_ns);
         int64_t prev_io_time_ns = get_io_time_spent();
+        int64_t prev_scan_bytes = get_scan_bytes();
 
         RETURN_IF_ERROR(_open_data_source(state));
         if (state->is_cancelled()) {
@@ -464,6 +501,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         _cpu_time_spent_ns = _data_source->cpu_time_spent();
         _io_time_spent_ns = _data_source->io_time_spent();
         io_time_ns = _io_time_spent_ns - prev_io_time_ns;
+        delta_scan_bytes = _scan_bytes - prev_scan_bytes;
     }
 
     if (_ck_acc.has_output()) {
@@ -471,6 +509,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         P.cs_pull_chunks += 1;
         P.cs_total_running_time += total_time_ns;
         P.cs_total_io_time += io_time_ns;
+        P.cs_total_scan_bytes += delta_scan_bytes;
         _rows_read += (*chunk)->num_rows();
         _chunk_buffer.update_limiter(chunk->get());
         return Status::OK();
