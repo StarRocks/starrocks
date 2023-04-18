@@ -1033,9 +1033,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             }
         }
 
-        String profileContent = ProfileManager.getInstance().pushLoadProfile(profile);
-        LOG.info(profileContent);
-        LOG.debug(profileContent);
+        ProfileManager.getInstance().pushLoadProfile(profile);
         return;
     }
 

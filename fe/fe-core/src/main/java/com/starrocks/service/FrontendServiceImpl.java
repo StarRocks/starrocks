@@ -1157,11 +1157,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             if (task == null || task.getTxnId() == -1) {
                 throw new UserException("Load begin transactonId failed");
             }
-
-            LOG.info(new LogBuilder("Load begin transaction success").
-                    add("transactionId", task.getTxnId()).
-                    add("label", request.getLabel()).
-                    add("streamLoadTaskId", task.getId()));
             return task.getTxnId();
         }
 
@@ -1468,8 +1463,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 streamLoadTask.setCoordinator(coord);
 
                 QeProcessorImpl.INSTANCE.registerQuery(streamLoadInfo.getId(), coord);
-                LOG.info(new LogBuilder("Register stream load query").add("loadId", streamLoadInfo.getId()).
-                        add("streamLoadTaskId", streamLoadTask.getId()));
             }
 
             plan.query_options.setLoad_job_type(TLoadJobType.STREAM_LOAD);
