@@ -80,16 +80,13 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
 }
 
 Status HdfsScannerTest::_init_block_cache(size_t mem_size) {
-#ifdef WITH_BLOCK_CACHE
     BlockCache* cache = BlockCache::instance();
     CacheOptions cache_options;
     cache_options.mem_space_size = mem_size;
     cache_options.block_size = starrocks::config::block_cache_block_size;
     cache_options.checksum = starrocks::config::block_cache_checksum_enable;
+    cache_options.engine = starrocks::config::block_cache_engine;
     return cache->init(cache_options);
-#else
-    return Status::OK();
-#endif
 }
 
 THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uint64_t offset, uint64_t length) {

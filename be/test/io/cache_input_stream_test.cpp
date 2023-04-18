@@ -101,6 +101,7 @@ TEST_F(CacheInputStreamTest, test_aligned_read) {
 
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
     io::CacheInputStream cache_stream(stream, "test_file1", data_size);
+    cache_stream.set_enable_populate_cache(true);
     auto& stats = cache_stream.stats();
 
     // first read from backend
@@ -130,6 +131,7 @@ TEST_F(CacheInputStreamTest, test_random_read) {
 
     std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
     io::CacheInputStream cache_stream(stream, "test_file2", data_size);
+    cache_stream.set_enable_populate_cache(true);
     auto& stats = cache_stream.stats();
 
     // first read from backend
