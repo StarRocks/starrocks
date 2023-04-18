@@ -64,7 +64,7 @@ private:
     lake::CompactResponse* _response;
     ::google::protobuf::Closure* _done;
     Status _status;
-    std::vector<std::unique_ptr<CompactionTaskContext>> _contexs;
+    std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
 };
 
 // Context of a single tablet compaction task.
@@ -186,7 +186,7 @@ private:
     TabletManager* _tablet_mgr;
     Limiter _limiter;
     bthread::Mutex _states_lock;
-    butil::LinkedList<CompactionTaskContext> _contexs;
+    butil::LinkedList<CompactionTaskContext> _contexts;
     int _task_queue_count;
     TaskQueue* _task_queues;
     std::unique_ptr<ThreadPool> _threads;

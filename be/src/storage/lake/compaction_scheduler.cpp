@@ -41,7 +41,7 @@ CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, c
         : _scheduler(scheduler), _mtx(), _request(request), _response(response), _done(done) {
     CHECK(_request != nullptr);
     CHECK(_response != nullptr);
-    _contexs.reserve(request->tablet_ids_size());
+    _contexts.reserve(request->tablet_ids_size());
 }
 
 void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&& context) {
@@ -58,10 +58,10 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
 
     // Keep the context for a while until the RPC request is finished processing so that we can see the detailed
     // and complete progress of the RPC request by calling `CompactionScheduler::list_tasks()`.
-    _contexs.emplace_back(std::move(context));
+    _contexts.emplace_back(std::move(context));
     //                     ^^^^^^^^^^^^^^^^^ Do NOT touch "context" since here, it has been `move`ed.
 
-    if (_contexs.size() == _request->tablet_ids_size()) { // All tasks finished, send RPC response to FE
+    if (_contexts.size() == _request->tablet_ids_size()) { // All tasks finished, send RPC response to FE
         _status.to_protobuf(_response->mutable_status());
         if (_done != nullptr) {
             _done->Run();
@@ -70,8 +70,8 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
         _request = nullptr;
         _response = nullptr;
 
-        _scheduler->remove_states(_contexs);
-        STLClearObject(&_contexs);
+        _scheduler->remove_states(_contexts);
+        STLClearObject(&_contexts);
     }
 }
 
@@ -79,7 +79,7 @@ CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
         : _tablet_mgr(tablet_mgr),
           _limiter(config::compact_threads),
           _states_lock(),
-          _contexs(),
+          _contexts(),
           _task_queue_count(config::compact_threads),
           _task_queues(new TaskQueue[_task_queue_count]) {
     CHECK_GT(_task_queue_count, 0);
@@ -111,7 +111,7 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(), cb);
         {
             std::lock_guard l(_states_lock);
-            _contexs.Append(context.get());
+            _contexts.Append(context.get());
         }
         _task_queues[idx].put(std::move(context));
     }
@@ -119,7 +119,8 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
 
 void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
     std::lock_guard l(_states_lock);
-    for (butil::LinkNode<CompactionTaskContext>* node = _contexs.head(); node != _contexs.end(); node = node->next()) {
+    for (butil::LinkNode<CompactionTaskContext>* node = _contexts.head(); node != _contexts.end();
+         node = node->next()) {
         CompactionTaskContext* context = node->value();
         auto& info = infos->emplace_back();
         info.txn_id = context->txn_id;
@@ -196,7 +197,7 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
         context->skipped.store(true, std::memory_order_relaxed);
         context->progress.update(100);
         VLOG(2) << "Skipped already succeeded compaction task. tablet_id=" << tablet_id << " txn_id=" << txn_id
-                << " _version=" << version;
+                << " version=" << version;
     } else {
         auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id);
         if (task_or.ok()) {
