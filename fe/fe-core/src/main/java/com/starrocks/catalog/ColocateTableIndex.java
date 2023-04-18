@@ -360,20 +360,21 @@ public class ColocateTableIndex implements Writable {
     public int getNumOfTabletsPerBucket(GroupId groupId) {
         List<Long> allTableIds = getAllTableIds(groupId);
         Database db = GlobalStateMgr.getCurrentState().getDb(groupId.dbId);
-        if (!allTableIds.isEmpty() && db != null) {
-            db.readLock();
+        int numOfTablets = 0;
+        if (db != null && !allTableIds.isEmpty()) {
             try {
-                OlapTable tbl = (OlapTable) db.getTable(allTableIds.get(0));
-                if (tbl != null) {
-                    return allTableIds.size() * tbl.getNumberOfPartitions();
-                } else {
-                    return -1;
+                db.readLock();
+                for (long tableId : allTableIds) {
+                    OlapTable tbl = (OlapTable) db.getTable(tableId);
+                    if (tbl != null) {
+                        numOfTablets += tbl.getNumberOfPartitions();
+                    }
                 }
             } finally {
                 db.readUnlock();
             }
         }
-        return -1;
+        return numOfTablets;
     }
 
     public List<List<Long>> getBackendsPerBucketSeq(GroupId groupId) {
@@ -818,14 +819,15 @@ public class ColocateTableIndex implements Writable {
         }
     }
 
-    public List<GroupId> getColocateWithGroupsInOtherDb(GroupId groupId, long dbId) {
+    public List<GroupId> getColocateWithGroupsInOtherDb(GroupId groupId) {
         List<GroupId> results = new ArrayList<>();
         Long grpId = groupId.grpId;
         try {
             readLock();
-            for (GroupId gid : group2Schema.keySet()) {
-                if (gid.dbId != dbId && Objects.equals(gid.grpId, grpId)) {
-                    results.add(gid);
+            for (GroupId otherGroupId : group2Schema.keySet()) {
+                if (!Objects.equals(otherGroupId.dbId, groupId.dbId) &&
+                        Objects.equals(otherGroupId.grpId, grpId)) {
+                    results.add(otherGroupId);
                 }
             }
         } finally {

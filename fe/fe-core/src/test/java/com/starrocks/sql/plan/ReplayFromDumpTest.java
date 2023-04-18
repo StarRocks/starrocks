@@ -3,6 +3,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
@@ -44,6 +45,7 @@ public class ReplayFromDumpTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+        Config.tablet_sched_disable_colocate_overall_balance = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
