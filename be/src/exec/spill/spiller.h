@@ -123,7 +123,11 @@ public:
 
     bool restore_finished() const { return _reader->restore_finished(); }
 
+<<<<<<< HEAD
     bool is_cancel() { return _is_cancel; }
+=======
+    bool is_cancel() const { return _is_cancel; }
+>>>>>>> 7f4de2544 ([BugFix] Fix some cancel problem in spiller (#21414))
 
     void cancel() {
         _is_cancel = true;
