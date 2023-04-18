@@ -28,23 +28,16 @@ import org.junit.Test;
 public class WarehouseTest {
     private static StarRocksAssert starRocksAssert;
     private static ConnectContext connectContext;
-
     @BeforeClass
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
         connectContext = AnalyzeTestUtil.getConnectContext();
-        // create warehouse
-        String createWarehouse = "CREATE WAREHOUSE test";
         starRocksAssert = new StarRocksAssert();
-        starRocksAssert.withWarehouse(createWarehouse);
     }
 
     @Test
     public void testNormal() throws DdlException {
-        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Assert.assertTrue(warehouseMgr.warehouseExists("test"));
-        Assert.assertEquals(1, warehouseMgr.getWarehouse("test").getClusters().size());
-
+        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentWarehouseMgr();
         Assert.assertTrue(warehouseMgr.warehouseExists(WarehouseManager.DEFAULT_WAREHOUSE_NAME));
     }
 }

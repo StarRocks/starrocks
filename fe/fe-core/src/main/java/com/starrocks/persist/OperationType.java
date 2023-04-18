@@ -310,8 +310,6 @@ public class OperationType {
     public static final short OP_ALTER_LOAD_JOB = 11100;
     public static final short OP_ALTER_TABLE_PROPERTIES = 11101;
 
-    // warehouse
-    public static final short OP_CREATE_WH = 11110;
 
     // constraint properties
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;

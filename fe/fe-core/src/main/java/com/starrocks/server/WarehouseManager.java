@@ -14,7 +14,6 @@
 
 package com.starrocks.server;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
@@ -25,16 +24,12 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.warehouse.LocalWarehouse;
 import com.starrocks.warehouse.Warehouse;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -43,8 +38,6 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class WarehouseManager implements Writable {
-    private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
-
     public static final String DEFAULT_WAREHOUSE_NAME = "default_warehouse";
 
     private Map<Long, Warehouse> idToWh = new HashMap<>();
@@ -64,7 +57,7 @@ public class WarehouseManager implements Writable {
 
     public void init() {
         // gen a default warehouse
-        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Warehouse wh = new LocalWarehouse(0, DEFAULT_WAREHOUSE_NAME);
             fullNameToWh.put(wh.getFullName(), wh);
             idToWh.put(wh.getId(), wh);
@@ -84,37 +77,6 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    // these apis need lock protection
-    public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
-        createWarehouse(stmt.getFullWhName(), stmt.getProperties());
-    }
-
-    public void createWarehouse(String warehouseName, Map<String, String> properties) {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(!fullNameToWh.containsKey(warehouseName),
-                    "Warehouse '%s' already exists", warehouseName);
-
-            long id = GlobalStateMgr.getCurrentState().getNextId();
-            Warehouse wh = new LocalWarehouse(id, warehouseName);
-            fullNameToWh.put(wh.getFullName(), wh);
-            idToWh.put(wh.getId(), wh);
-            wh.setExist(true);
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateWarehouse(wh);
-
-            LOG.info("createWarehouse whName = " + warehouseName + ", id = " + id);
-        }
-    }
-
-    public void replayCreateWarehouse(Warehouse warehouse) {
-        String whName = warehouse.getFullName();
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(!fullNameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
-            fullNameToWh.put(whName, warehouse);
-            idToWh.put(warehouse.getId(), warehouse);
-            warehouse.setExist(true);
-        }
-    }
-
     // warehouse meta persistence api
     public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
         checksum ^= fullNameToWh.size();
@@ -123,23 +85,6 @@ public class WarehouseManager implements Writable {
     }
 
     public long loadWarehouses(DataInputStream dis, long checksum) throws IOException, DdlException {
-        int warehouseCount = 0;
-        try {
-            String s = Text.readString(dis);
-            WarehouseManager data = GsonUtils.GSON.fromJson(s, WarehouseManager.class);
-            if (data != null) {
-                if (data.fullNameToWh != null) {
-                    for (Warehouse warehouse : data.fullNameToWh.values()) {
-                        replayCreateWarehouse(warehouse);
-                    }
-                }
-                warehouseCount = data.fullNameToWh.size();
-            }
-            checksum ^= warehouseCount;
-            LOG.info("finished replaying WarehouseMgr from image");
-        } catch (EOFException e) {
-            LOG.info("no WarehouseMgr to replay.");
-        }
         return checksum;
     }
 

@@ -92,7 +92,6 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
@@ -105,7 +104,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -150,12 +148,6 @@ public class EditLog {
                     long id = Long.parseLong(idString);
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
                             .initTransactionId(id + 1);
-                    break;
-                }
-                case OperationType.OP_CREATE_WH: {
-                    Warehouse wh = (Warehouse) journal.getData();
-                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replayCreateWarehouse(wh);
                     break;
                 }
                 case OperationType.OP_SAVE_AUTO_INCREMENT_ID:
@@ -1084,10 +1076,6 @@ public class EditLog {
 
     public void logSaveTransactionId(long transactionId) {
         logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
-    }
-
-    public void logCreateWarehouse(Warehouse warehouse) {
-        logEdit(OperationType.OP_CREATE_WH, warehouse);
     }
 
     public void logSaveAutoIncrementId(AutoIncrementInfo info) {
