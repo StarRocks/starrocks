@@ -482,6 +482,17 @@ public:
     DEFINE_VECTORIZED_FN(url_decode);
     static std::string url_decode_func(const std::string& value);
 
+    /**
+     * A function to compress the data,
+     *
+     * @param: [string_value, string_value]
+     * @paramType: [BinaryColumn, BinaryColumn]
+     * @return: StringColumn
+     */
+    DEFINE_VECTORIZED_FN(compress);
+    static Status compress_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status compress_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
 private:

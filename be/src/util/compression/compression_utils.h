@@ -64,6 +64,8 @@ public:
             return CompressionTypePB::LZO;
         } else if (ext == "zstd" || ext == "zst") {
             return CompressionTypePB::ZSTD;
+        } else if (ext == "zlib") {
+            return CompressionTypePB::ZLIB;
         } else {
             return CompressionTypePB::UNKNOWN_COMPRESSION;
         }

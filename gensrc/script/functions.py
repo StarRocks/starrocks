@@ -323,6 +323,8 @@ vectorized_functions = [
     [30420, 'strcmp', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strcmp'],
     [30421, 'url_encode', 'VARCHAR', ['VARCHAR'], 'StringFunctions::url_encode'],
     [30422, 'url_decode', 'VARCHAR', ['VARCHAR'], 'StringFunctions::url_decode'],
+    [30423, 'compress', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::compress', 'StringFunctions::compress_prepare', 'StringFunctions::compress_close'],
+    [30423, 'compress', 'VARCHAR', ['VARCHAR'], 'StringFunctions::compress', 'StringFunctions::compress_prepare', 'StringFunctions::compress_close'],
 
     [30430, 'translate', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::translate',
      'StringFunctions::translate_prepare', 'StringFunctions::translate_close'],

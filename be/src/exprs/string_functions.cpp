@@ -47,6 +47,8 @@
 #include "runtime/current_thread.h"
 #include "runtime/large_int_value.h"
 #include "storage/olap_define.h"
+#include "util/compression/block_compression.h"
+#include "util/compression/compression_utils.h"
 #include "util/phmap/phmap.h"
 #include "util/raw_container.h"
 #include "util/sm3.h"
@@ -4172,6 +4174,76 @@ StatusOr<ColumnPtr> StringFunctions::url_extract_parameter(starrocks::FunctionCo
     } else {
         return url_extract_parameter_general(columns);
     }
+}
+
+struct CompressState {
+    const BlockCompressionCodec* compress_codec{nullptr};
+    CompressionTypePB compress_type;
+};
+
+Status StringFunctions::compress_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    auto* state = new CompressState();
+    context->set_function_state(scope, state);
+
+    if (context->get_num_args() == 2 && !context->is_notnull_constant_column(1)) {
+        std::stringstream error;
+        error << "Invalid Argument: column(1) is not a constant column";
+        context->set_error(error.str().c_str());
+        return Status::InvalidArgument(error.str());
+    }
+
+    if (context->get_num_args() == 1) {
+        state->compress_type = CompressionTypePB::ZLIB;
+        RETURN_IF_ERROR(get_block_compression_codec(CompressionTypePB::ZLIB, &(state->compress_codec)));
+        return Status::OK();
+    }
+
+    ColumnPtr column = context->get_constant_column(1);
+    auto str = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+    std::string compress_method = str.to_string();
+    std::transform(compress_method.begin(), compress_method.end(), compress_method.begin(),
+                   [](unsigned char c) { return std::tolower(c); });
+    CompressionTypePB compress_type = CompressionUtils::to_compression_pb(compress_method);
+    if (compress_type == CompressionTypePB::UNKNOWN_COMPRESSION) {
+        std::stringstream error;
+        error << "Invalid compress method: " << compress_method;
+        context->set_error(error.str().c_str());
+        return Status::InvalidArgument(error.str());
+    }
+    state->compress_type = compress_type;
+    RETURN_IF_ERROR(get_block_compression_codec(compress_type, &(state->compress_codec)));
+    return Status::OK();
+}
+
+Status StringFunctions::compress_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<CompressState*>(context->get_function_state(scope));
+            delete state;
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> StringFunctions::compress(FunctionContext* context, const starrocks::Columns& columns) {
+    auto* state = reinterpret_cast<CompressState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    raw::RawString compression_scratch;
+    for (int row = 0; row < size; ++row) {
+        if (str_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        const Slice str_slice = str_viewer.value(row);
+        int max_compressed_size = state->compress_codec->max_compressed_len(str_slice.get_size());
+        if (compression_scratch.size() < max_compressed_size) {
+            compression_scratch.resize(max_compressed_size);
+        }
+        Slice compressed_slice{compression_scratch.data(), compression_scratch.size()};
+        RETURN_IF_ERROR(state->compress_codec->compress(str_slice, &compressed_slice));
+        result.append(compressed_slice);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
 }
 
 } // namespace starrocks
