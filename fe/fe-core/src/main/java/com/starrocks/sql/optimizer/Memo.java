@@ -331,6 +331,10 @@ public class Memo {
 
     private void removeGroupInitLogicExpression(Group group) {
         GroupExpression initGroupExpression = group.getFirstLogicalExpression();
+
+        if (initGroupExpression.id == -1188) {
+            System.out.println("here9");
+        }
         groupExpressions.remove(initGroupExpression);
 
         Preconditions.checkState(group.isValidInitState());
