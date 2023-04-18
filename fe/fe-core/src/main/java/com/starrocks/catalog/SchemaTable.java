@@ -731,7 +731,7 @@ public class SchemaTable extends Table {
                                     .column("FINISHED_TASKS", ScalarType.createType(PrimitiveType.BIGINT))
                                     .build()))
                     .put("be_logs", new SchemaTable(
-                            SystemId.BE_THREADS_ID,
+                            SystemId.BE_LOGS_ID,
                             "be_logs",
                             TableType.SCHEMA,
                             builder()
