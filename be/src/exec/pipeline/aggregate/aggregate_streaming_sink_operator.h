@@ -46,6 +46,8 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
+    void mark_need_spill() override;
+
 private:
     // Invoked by push_chunk if current mode is TStreamingPreaggregationMode::FORCE_STREAMING
     Status _push_chunk_by_force_streaming(const ChunkPtr& chunk);
@@ -66,7 +68,7 @@ private:
     AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
     bool _is_finished = false;
-    AggrAutoState _auto_state;
+    AggrAutoState _auto_state{};
     AggrAutoContext _auto_context;
 };
 
