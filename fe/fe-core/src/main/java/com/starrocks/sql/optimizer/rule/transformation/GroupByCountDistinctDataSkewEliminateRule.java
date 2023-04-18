@@ -72,7 +72,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
     }
 
     private ScalarOperator createBucketColumn(ColumnRefOperator distinctColumn, int bucketNum) {
-        CastOperator stringCol = new CastOperator(Type.VARCHAR, distinctColumn, true);
+        CastOperator stringCol = new CastOperator(Type.VARCHAR, distinctColumn);
         Function hashFunc = Expr.getBuiltinFunction(FunctionSet.MURMUR_HASH3_32, new Type[] {Type.VARCHAR},
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         Type type = pickBucketType(bucketNum);
@@ -90,7 +90,7 @@ public class GroupByCountDistinctDataSkewEliminateRule extends TransformationRul
                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         CallOperator modBucketOp =
                 new CallOperator(FunctionSet.MOD, Type.INT, Arrays.asList(callHashFuncOp, bucketConstOp), modFunc);
-        ScalarOperator op = new CastOperator(type, modBucketOp, true);
+        ScalarOperator op = new CastOperator(type, modBucketOp);
         ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
         return rewriter.rewrite(op, Collections.singletonList(new ReduceCastRule()));
     }

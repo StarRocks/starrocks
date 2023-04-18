@@ -133,7 +133,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
                     // but we should cast BIGINT-typed countColRef into DECIMAL(38,0).
                     ScalarType decimal128p38s0 = ScalarType.createDecimalV3NarrowestType(38, 0);
                     multiAvg.getChildren().set(
-                            1, new CastOperator(decimal128p38s0, multiAvg.getChild(1), true));
+                            1, new CastOperator(decimal128p38s0, multiAvg.getChild(1)));
                 } else {
                     multiAvg = (CallOperator) scalarRewriter.rewrite(multiAvg,
                             Lists.newArrayList(new ImplicitCastRule()));

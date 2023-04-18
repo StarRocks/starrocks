@@ -108,7 +108,6 @@ public class ScalarOperatorToExpr {
     public static class FormatterContext {
         private final Map<ColumnRefOperator, Expr> colRefToExpr;
         private final Map<ColumnRefOperator, ScalarOperator> projectOperatorMap;
-        private boolean implicitCast = false;
 
         public FormatterContext(Map<ColumnRefOperator, Expr> variableToSlotRef) {
             this.colRefToExpr = variableToSlotRef;
@@ -119,10 +118,6 @@ public class ScalarOperatorToExpr {
                                 Map<ColumnRefOperator, ScalarOperator> projectOperatorMap) {
             this.colRefToExpr = variableToSlotRef;
             this.projectOperatorMap = projectOperatorMap;
-        }
-
-        public void setImplicitCast(boolean isImplicit) {
-            this.implicitCast = isImplicit;
         }
     }
 
@@ -533,7 +528,6 @@ public class ScalarOperatorToExpr {
         public Expr visitCastOperator(CastOperator operator, FormatterContext context) {
             CastExpr expr =
                     new CastExpr(operator.getType(), buildExpr.build(operator.getChild(0), context));
-            expr.setImplicit(context.implicitCast);
             hackTypeNull(expr);
             return expr;
         }

@@ -1097,13 +1097,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         setChild(childIndex, newChild);
     }
 
-    /**
-     * Returns child expr if this expr is an implicit cast, otherwise returns 'this'.
-     */
-    public Expr ignoreImplicitCast() {
-        return this;
-    }
-
     @Override
     public String toString() {
         return MoreObjects.toStringHelper(this.getClass()).add("id", id).add("type", type).add("sel",
@@ -1140,10 +1133,6 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      * Returns the first child if this Expr is a CastExpr. Otherwise, returns 'this'.
      */
     public Expr unwrapExpr(boolean implicitOnly) {
-        if (this instanceof CastExpr
-                && (!implicitOnly || ((CastExpr) this).isImplicit())) {
-            return children.get(0);
-        }
         return this;
     }
 
@@ -1160,7 +1149,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     public boolean isImplicitCast() {
-        return this instanceof CastExpr && ((CastExpr) this).isImplicit();
+        return false;
     }
 
     public static Function getBuiltinFunction(String name, Type[] argTypes, Function.CompareMode mode) {

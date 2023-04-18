@@ -866,13 +866,7 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitCastExpr(CastExpr cast, Scope context) {
-            Type castType;
-            // If cast expr is implicit, targetTypeDef is null
-            if (cast.isImplicit()) {
-                castType = cast.getType();
-            } else {
-                castType = cast.getTargetTypeDef().getType();
-            }
+            Type castType = cast.getTargetTypeDef().getType();
             if (!Type.canCastTo(cast.getChild(0).getType(), castType)) {
                 throw new SemanticException("Invalid type cast from " + cast.getChild(0).getType().toSql() + " to "
                         + castType.toSql() + " in sql `" +

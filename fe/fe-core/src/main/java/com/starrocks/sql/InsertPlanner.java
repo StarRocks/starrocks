@@ -350,7 +350,7 @@ public class InsertPlanner {
                         targetColumn.getName(), targetColumn.getType(), targetColumn.isAllowNull());
 
                 outputColumns.add(columnRefOperator);
-                columnRefMap.put(columnRefOperator, new CastOperator(targetColumn.getType(), originColRefOp, true));
+                columnRefMap.put(columnRefOperator, new CastOperator(targetColumn.getType(), originColRefOp));
                 continue;
             }
 
@@ -423,7 +423,7 @@ public class InsertPlanner {
                 Column c = fullSchema.get(columnIdx);
                 ColumnRefOperator k = columnRefFactory.create(c.getName(), c.getType(), c.isAllowNull());
                 ScalarOperator castOperator = new CastOperator(fullSchema.get(columnIdx).getType(),
-                        outputColumns.get(columnIdx), true);
+                        outputColumns.get(columnIdx));
                 columnRefMap.put(k, rewriter.rewrite(castOperator, rewriteRules));
                 outputColumns.set(columnIdx, k);
             } else {

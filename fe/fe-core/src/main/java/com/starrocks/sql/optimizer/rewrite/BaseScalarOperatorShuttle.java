@@ -190,7 +190,7 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
         boolean[] update = {false};
         List<ScalarOperator> clonedOperators = visitList(operator.getChildren(), update);
         if (update[0]) {
-            return new CastOperator(operator.getType(), clonedOperators.get(0), operator.isImplicit());
+            return new CastOperator(operator.getType(), clonedOperators.get(0));
         } else {
             return operator;
         }

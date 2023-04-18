@@ -332,7 +332,7 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                     case DECIMAL128:
                         countOperator = new CastOperator(
                                 ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 18, 0),
-                                newAggRef, false);
+                                newAggRef);
                         int precision = ((ScalarType) arg0.getType()).getScalarPrecision();
                         int scale = ((ScalarType) arg0.getType()).getScalarScale();
                         Type constType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, precision, scale);
@@ -340,12 +340,12 @@ public class RewriteSumByAssociativeRule extends TransformationRule {
                                 ConstantOperator.createDecimal(new BigDecimal(arg0.toString()), constType);
                         break;
                     case DOUBLE:
-                        countOperator = new CastOperator(returnType, newAggRef, false);
+                        countOperator = new CastOperator(returnType, newAggRef);
                         constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(Type.DOUBLE) :
                                 ConstantOperator.createDouble(((ConstantOperator) arg0).getDouble());
                         break;
                     case LARGEINT:
-                        countOperator = new CastOperator(returnType, newAggRef, false);
+                        countOperator = new CastOperator(returnType, newAggRef);
                         constOperator = arg0.isConstantNull() ? ConstantOperator.createNull(Type.LARGEINT) :
                                 ConstantOperator.createLargeInt(new BigInteger(arg0.toString()));
                         break;

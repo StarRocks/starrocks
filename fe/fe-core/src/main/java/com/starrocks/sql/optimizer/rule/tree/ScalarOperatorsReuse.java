@@ -187,8 +187,7 @@ public class ScalarOperatorsReuse {
         @Override
         public ScalarOperator visitCastOperator(CastOperator operator, Void context) {
             CastOperator newOperator = new CastOperator(operator.getType(),
-                    operator.getChild(0).accept(this, null),
-                    operator.isImplicit());
+                    operator.getChild(0).accept(this, null));
             return tryRewrite(newOperator);
         }
 

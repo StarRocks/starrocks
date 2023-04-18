@@ -604,7 +604,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                     // There is not need to apply ImplicitCastRule to divide operator of decimal types.
                     // but we should cast BIGINT-typed countColRef into DECIMAL(38,0).
                     ScalarType decimal128p38s0 = ScalarType.createDecimalV3NarrowestType(38, 0);
-                    newAvg.getChildren().set(1, new CastOperator(decimal128p38s0, newAvg.getChild(1), true));
+                    newAvg.getChildren().set(1, new CastOperator(decimal128p38s0, newAvg.getChild(1)));
                 } else {
                     newAvg = (CallOperator) scalarRewriter.rewrite(newAvg, Lists.newArrayList(new ImplicitCastRule()));
                 }

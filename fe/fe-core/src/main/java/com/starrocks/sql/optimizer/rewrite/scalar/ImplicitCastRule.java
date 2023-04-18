@@ -304,6 +304,6 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
     }
 
     private void addCastChild(Type returnType, ScalarOperator node, int index) {
-        node.getChildren().set(index, new CastOperator(returnType, node.getChild(index), true));
+        node.getChildren().set(index, new CastOperator(returnType, node.getChild(index)));
     }
 }

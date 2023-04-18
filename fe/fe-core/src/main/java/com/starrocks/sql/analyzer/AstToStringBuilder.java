@@ -839,10 +839,6 @@ public class AstToStringBuilder {
 
         @Override
         public String visitCastExpr(CastExpr node, Void context) {
-            boolean isImplicit = node.isImplicit();
-            if (isImplicit) {
-                return visit(node.getChild(0));
-            }
             return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
         }
 
