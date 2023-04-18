@@ -83,7 +83,7 @@ jobs:
       - name: merge_commit_sha
         run: |
           set -x
-          merge_commit_sha=`curl -L \                                                                                                                                                         ─╯
+          merge_commit_sha=`curl -L \
           -H "Accept: application/vnd.github+json" \
           -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
           -H "X-GitHub-Api-Version: 2022-11-28" \
