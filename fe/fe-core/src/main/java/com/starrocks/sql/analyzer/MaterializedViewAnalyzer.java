@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -35,7 +36,9 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PrimitiveType;
@@ -104,6 +107,14 @@ import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 
 public class MaterializedViewAnalyzer {
 
+    private static final Set<Table.TableType> SUPPORTED_TABLE_TYPE =
+            ImmutableSet.of(Table.TableType.OLAP,
+                    Table.TableType.HIVE,
+                    Table.TableType.HUDI,
+                    Table.TableType.ICEBERG,
+                    Table.TableType.JDBC,
+                    Table.TableType.MYSQL);
+
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);
     }
@@ -118,12 +129,13 @@ public class MaterializedViewAnalyzer {
         }
 
         private boolean isSupportBasedOnTable(Table table) {
-            return table instanceof OlapTable || table instanceof HiveTable || table instanceof HudiTable ||
-                    table instanceof IcebergTable;
+            return SUPPORTED_TABLE_TYPE.contains(table.getType()) || table instanceof OlapTable;
         }
 
         private boolean isExternalTableFromResource(Table table) {
             if (table instanceof OlapTable) {
+                return false;
+            } else if (table instanceof JDBCTable || table instanceof MysqlTable) {
                 return false;
             } else if (table instanceof HiveTable || table instanceof HudiTable) {
                 HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
@@ -466,8 +478,7 @@ public class MaterializedViewAnalyzer {
                 if (refExpr instanceof FunctionCallExpr || refExpr instanceof SlotRef) {
                     statement.setPartitionRefTableExpr(refExpr);
                 } else {
-                    throw new SemanticException(
-                            "Materialized view partition function must related with column");
+                    throw new SemanticException("Materialized view partition function must related with column");
                 }
             }
         }
@@ -505,7 +516,8 @@ public class MaterializedViewAnalyzer {
             } else if (table.isIcebergTable()) {
                 checkPartitionColumnWithBaseIcebergTable(slotRef, (IcebergTable) table);
             } else {
-                throw new SemanticException("Materialized view do not support base table type : %s", table.getType());
+                throw new SemanticException("Materialized view with partition does not support base table type : %s",
+                        table.getType());
             }
             replaceTableAlias(slotRef, statement, tableNameTableMap);
         }

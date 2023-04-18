@@ -92,6 +92,7 @@ set(EXEC_FILES
     hdfs_scanner_text.cpp
     json_scanner.cpp
     json_parser.cpp
+    avro_scanner.cpp
     project_node.cpp
     dict_decode_node.cpp
     repeat_node.cpp
@@ -127,6 +128,7 @@ set(EXEC_FILES
     schema_scanner/schema_be_logs_scanner.cpp
     schema_scanner/schema_fe_tablet_schedules_scanner.cpp
     schema_scanner/schema_be_compactions_scanner.cpp
+    schema_scanner/schema_be_bvars_scanner.cpp
     schema_scanner/schema_helper.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp

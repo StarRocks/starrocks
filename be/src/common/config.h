@@ -109,12 +109,8 @@ CONF_Int32(push_worker_count_normal_priority, "3");
 // The count of thread to high priority batch load.
 CONF_Int32(push_worker_count_high_priority, "3");
 
-#ifdef BE_TEST
-CONF_Int32(transaction_publish_version_worker_count, "1");
-#else
 // The count of thread to publish version per transaction
-CONF_Int32(transaction_publish_version_worker_count, "8");
-#endif
+CONF_mInt32(transaction_publish_version_worker_count, "0");
 
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
@@ -467,9 +463,10 @@ CONF_mInt64(write_buffer_size, "104857600");
 // NOTICE(cmy): set these default values very large because we don't want to
 // impact the load performace when user upgrading StarRocks.
 // user should set these configs properly if necessary.
+CONF_Int32(query_max_memory_limit_percent, "90");
 CONF_Int64(load_process_max_memory_limit_bytes, "107374182400"); // 100GB
 CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
-CONF_Bool(enable_new_load_on_memory_limit_exceeded, "false");
+CONF_mBool(enable_new_load_on_memory_limit_exceeded, "true");
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
@@ -837,7 +834,7 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
 // spill dirs
-CONF_String(spill_local_storage_dir, "spill");
+CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
 // when spill occurs, whether enable skip synchronous flush
 CONF_mBool(experimental_spill_skip_sync, "true");
 // spill Initial number of partitions

@@ -726,7 +726,7 @@ public class SchemaTable extends Table {
                                     .column("FINISHED_TASKS", ScalarType.createType(PrimitiveType.BIGINT))
                                     .build()))
                     .put("be_logs", new SchemaTable(
-                            SystemId.BE_THREADS_ID,
+                            SystemId.BE_LOGS_ID,
                             "be_logs",
                             TableType.SCHEMA,
                             builder()
@@ -735,6 +735,15 @@ public class SchemaTable extends Table {
                                     .column("TIMESTAMP", ScalarType.createType(PrimitiveType.BIGINT))
                                     .column("TID", ScalarType.createType(PrimitiveType.BIGINT))
                                     .column("LOG", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
+                    .put("be_bvars", new SchemaTable(
+                            SystemId.BE_BVARS_ID,
+                            "be_bvars",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT), false)
+                                    .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN), false)
+                                    .column("DESC", ScalarType.createVarchar(NAME_CHAR_LEN), false)
                                     .build()))
                     .build();
 
@@ -746,7 +755,11 @@ public class SchemaTable extends Table {
         }
 
         public Builder column(String name, ScalarType type) {
-            columns.add(new Column(name, type, false, null, true, null, ""));
+            return column(name, type, true);
+        }
+
+        public Builder column(String name, ScalarType type, boolean nullable) {
+            columns.add(new Column(name, type, false, null, nullable, null, ""));
             return this;
         }
 
@@ -838,7 +851,8 @@ public class SchemaTable extends Table {
         SCH_FE_TABLET_SCHEDULES("FE_TABLET_SCHEDULES", "FE_TABLET_SCHEDULES", TSchemaTableType.SCH_FE_TABLET_SCHEDULES),
         SCH_BE_COMPACTIONS("BE_COMPACTIONS", "BE_COMPACTIONS", TSchemaTableType.SCH_BE_COMPACTIONS),
         SCH_BE_THREADS("BE_THREADS", "BE_THREADS", TSchemaTableType.SCH_BE_THREADS),
-        SCH_BE_LOGS("BE_LOGS", "BE_LOGS", TSchemaTableType.SCH_BE_LOGS);
+        SCH_BE_LOGS("BE_LOGS", "BE_LOGS", TSchemaTableType.SCH_BE_LOGS),
+        SCH_BE_BVARS("BE_BVARS", "BE_BVARS", TSchemaTableType.SCH_BE_BVARS);
 
         private final String description;
         private final String tableName;

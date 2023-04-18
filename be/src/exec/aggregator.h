@@ -226,6 +226,12 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);
 class Aggregator : public pipeline::ContextWithDependency {
 public:
     static constexpr auto MAX_CHUNK_BUFFER_SIZE = 1024;
+#ifdef NDEBUG
+    static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
+#else
+    static constexpr size_t two_level_memory_threshold = 64;
+#endif
+
     Aggregator(AggregatorParamsPtr params);
 
     ~Aggregator() noexcept override {
@@ -261,7 +267,8 @@ public:
     const int64_t hash_map_memory_usage() const { return _hash_map_variant.reserved_memory_usage(mem_pool()); }
     const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
 
-    TStreamingPreaggregationMode::type streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
+    TStreamingPreaggregationMode::type& streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
+    TStreamingPreaggregationMode::type streaming_preaggregation_mode() const { return _streaming_preaggregation_mode; }
     const AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
     const AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
     std::any& it_hash() { return _it_hash; }
@@ -347,13 +354,6 @@ public:
         return _spiller == nullptr || _spiller->spilled_append_rows() == _spiller->restore_read_rows();
     }
 
-#ifdef NDEBUG
-    static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
-    static constexpr size_t streaming_hash_table_size_threshold = 10000000;
-#else
-    static constexpr size_t two_level_memory_threshold = 64;
-    static constexpr size_t streaming_hash_table_size_threshold = 4;
-#endif
     HashTableKeyAllocator _state_allocator;
 
 protected:
@@ -461,7 +461,7 @@ public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map_with_selection(size_t chunk_size);
     void build_hash_map_with_selection_and_allocation(size_t chunk_size, bool agg_group_by_with_limit = false);
-    Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk);
+    Status convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk, bool* use_intermediate_as_output = nullptr);
 
     void build_hash_set(size_t chunk_size);
     void build_hash_set_with_selection(size_t chunk_size);
@@ -562,6 +562,9 @@ public:
     void set_aggr_mode(AggrMode aggr_mode) { _aggr_mode = aggr_mode; }
 
     const AggregatorParamsPtr& aggregator_param() { return _aggregator_param; }
+
+    const TPlanNode& t_node() { return _tnode; }
+    const AggrMode aggr_mode() { return _aggr_mode; }
 
 private:
     const TPlanNode& _tnode;

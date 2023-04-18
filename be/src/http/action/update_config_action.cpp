@@ -41,6 +41,8 @@
 #include <mutex>
 #include <string>
 
+#include "agent/agent_common.h"
+#include "agent/agent_server.h"
 #include "common/configbase.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -98,6 +100,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
 #if defined(USE_STAROS) && !defined(BE_TEST)
             _exec_env->lake_update_manager()->update_primary_index_memory_limit(config::update_memory_limit_percent);
 #endif
+        });
+        _config_callback.emplace("transaction_publish_version_worker_count", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+            thread_pool->update_max_threads(
+                    std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
         });
     });
 
