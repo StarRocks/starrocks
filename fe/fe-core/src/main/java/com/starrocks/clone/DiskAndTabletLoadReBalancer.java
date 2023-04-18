@@ -503,7 +503,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 for (Pair<Long, Long> partitionMVId : hState.sortedPartitions) {
                     List<Long> hPartitionTablets = hState.partitionTablets.get(partitionMVId);
                     List<Long> lPartitionTablets = lState.partitionTablets.computeIfAbsent(partitionMVId,
-                            pmId -> new ArrayList<>());
+                            pmId -> new LinkedList<>());
                     int replicaTotalCnt = partitionReplicaCnt.getOrDefault(partitionMVId.first, 0);
                     int slotOfHighBE = hPartitionTablets.size() - (replicaTotalCnt / beStats.size());
                     int slotOfLowBE = ((replicaTotalCnt + beStats.size() - 1) / beStats.size())
