@@ -29,7 +29,7 @@ namespace pipeline {
 
 class ChunkBufferToken;
 using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
-
+class PipelineDriver;
 class ScanOperator : public SourceOperator {
 public:
     ScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop, ScanNode* scan_node);
@@ -80,7 +80,7 @@ public:
     virtual void begin_pull_chunk(ChunkPtr res) {}
     virtual void begin_driver_process() {}
     virtual void after_pull_chunk(int64_t time) {}
-    virtual void after_driver_process() {}
+    virtual void end_driver_process(PipelineDriver* driver) {}
     virtual bool is_running_all_io_tasks() const;
 
 protected:

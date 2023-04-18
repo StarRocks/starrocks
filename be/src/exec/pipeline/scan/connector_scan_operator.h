@@ -83,7 +83,7 @@ public:
     void begin_pull_chunk(ChunkPtr res) override;
     void begin_driver_process() override;
     void after_pull_chunk(int64_t time) override;
-    void after_driver_process() override;
+    void end_driver_process(PipelineDriver* driver) override;
     bool is_running_all_io_tasks() const override;
 
 public:

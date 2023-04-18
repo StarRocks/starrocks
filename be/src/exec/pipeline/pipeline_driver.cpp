@@ -218,7 +218,12 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     size_t total_rows_moved = 0;
     int64_t time_spent = 0;
     Status return_status = Status::OK();
-    DeferOp defer([&]() { _update_statistics(total_chunks_moved, total_rows_moved, time_spent); });
+    DeferOp defer([&]() {
+        if (ScanOperator* scan = source_scan_operator()) {
+            scan->end_driver_process(this);
+        }
+        _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
+    });
 
     if (ScanOperator* scan = source_scan_operator()) {
         scan->begin_driver_process();
@@ -658,7 +663,6 @@ void PipelineDriver::_update_statistics(size_t total_chunks_moved, size_t total_
     if (ScanOperator* scan = source_scan_operator()) {
         query_ctx()->incr_cur_scan_rows_num(scan->get_last_scan_rows_num());
         query_ctx()->incr_cur_scan_bytes(scan->get_last_scan_bytes());
-        scan->after_driver_process();
     }
 
     // Update cpu cost of this query
