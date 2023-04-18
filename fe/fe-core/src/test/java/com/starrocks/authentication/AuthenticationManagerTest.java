@@ -24,6 +24,7 @@ import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SetDefaultRoleExecutor;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -293,7 +294,7 @@ public class AuthenticationManagerTest {
         DDLStmtExecutor.execute(dropStmt, ctx);
 
         // can't get max connection after all test user are dropped
-        Assert.assertThrows(NullPointerException.class, () -> manager.getMaxConn("test"));
+        Assert.assertThrows(SemanticException.class, () -> manager.getMaxConn("test"));
     }
 
     @Test
