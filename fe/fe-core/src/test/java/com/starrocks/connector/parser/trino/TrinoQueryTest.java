@@ -728,4 +728,30 @@ public class TrinoQueryTest extends TrinoTestBase {
                         "  |  * v1-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
                         "  |  * v2-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"));
     }
+
+    @Test
+    public void testIntervalLiteral() throws Exception {
+        String sql = "select date '2022-01-01' + interval '1' year;";
+        assertPlanContains(sql, "<slot 2> : '2023-01-01 00:00:00'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-01 00:00:00'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02 00:00:00'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02 01:00:00'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour + " +
+                "interval '1' minute;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02 01:01:00'");
+
+        sql = "select date '2022-01-01' + interval '1' year + interval '1' month + interval '1' day + interval '1' hour + " +
+                "interval '1' minute + interval '1' second;";
+        assertPlanContains(sql, "<slot 2> : '2023-02-02 01:01:01'");
+
+        sql = "select interval '1' year + date '2022-01-01';";
+        assertPlanContains(sql, "<slot 2> : '2023-01-01 00:00:00'");
+    }
 }
