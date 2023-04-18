@@ -3922,7 +3922,7 @@ public class LocalMetastore implements ConnectorMetadata {
         TableName dbTbl = tblRef.getName();
 
         // check, and save some info which need to be checked again later
-        Map<String, Partition> origPartitions = Maps.newHashMap();
+        Map<String, Partition> origPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         OlapTable copiedTbl;
         Database db = getDb(dbTbl.getDb());
         if (db == null) {
