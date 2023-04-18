@@ -947,9 +947,15 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     private Type getGenericDataType(GenericDataType dataType) {
         int length = -1;
+        int precision = -1;
+        int scale = -1;
         String typeName = dataType.getName().getValue().toLowerCase();
         if (!dataType.getArguments().isEmpty() && dataType.getArguments().get(0) instanceof NumericParameter) {
             length = Integer.parseInt(((NumericParameter) dataType.getArguments().get(0)).getValue());
+            precision = length;
+            if (dataType.getArguments().size() > 1 && dataType.getArguments().get(1) instanceof NumericParameter) {
+                scale = Integer.parseInt(((NumericParameter) dataType.getArguments().get(1)).getValue());
+            }
         }
         if (typeName.equals("varchar")) {
             ScalarType type = ScalarType.createVarcharType(length);
@@ -963,6 +969,16 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 type.setAssignedStrLenInColDefinition();
             }
             return type;
+        } else if (typeName.equals("decimal")) {
+            if (precision != -1) {
+                if (scale != -1) {
+                    return ScalarType.createUnifiedDecimalType(precision, scale);
+                }
+                return ScalarType.createUnifiedDecimalType(precision, 0);
+            }
+            return ScalarType.createUnifiedDecimalType(38, 0);
+        } else if (typeName.contains("decimal")) {
+            throw new SemanticException("Unknown type: %s", typeName);
         } else {
             // this contains datetime/date/numeric type
             return ScalarType.createType(typeName);
