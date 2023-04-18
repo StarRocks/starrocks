@@ -312,11 +312,10 @@ public class QueryAnalyzer {
                 Field field;
                 if (baseSchema.contains(column)) {
                     field = new Field(column.getName(), column.getType(), tableName,
-                            new SlotRef(tableName, column.getName(), column.getName()), true);
+                            new SlotRef(tableName, column.getName(), column.getName()), true, column.isAllowNull());
                 } else {
                     field = new Field(column.getName(), column.getType(), tableName,
-
-                            new SlotRef(tableName, column.getName(), column.getName()), false);
+                            new SlotRef(tableName, column.getName(), column.getName()), false, column.isAllowNull());
                 }
                 columns.put(field, column);
                 fields.add(field);

@@ -40,6 +40,7 @@ public class Field {
      */
     private final TableName relationAlias;
     private final Expr originExpression;
+    private final boolean isNullable;
 
     // Record tmp match record.
     private final List<Integer> tmpUsedStructFieldPos = new LinkedList<>();
@@ -54,6 +55,16 @@ public class Field {
         this.relationAlias = relationAlias;
         this.originExpression = originExpression;
         this.visible = visible;
+        this.isNullable = false;
+    }
+
+    public Field(String name, Type type, TableName relationAlias, Expr originExpression, boolean visible, boolean isNullable) {
+        this.name = name;
+        this.type = type;
+        this.relationAlias = relationAlias;
+        this.originExpression = originExpression;
+        this.visible = visible;
+        this.isNullable = isNullable;
     }
 
     public String getName() {
@@ -78,6 +89,10 @@ public class Field {
 
     public boolean isVisible() {
         return visible;
+    }
+
+    public boolean isNullable() {
+        return isNullable;
     }
 
     public boolean canResolve(SlotRef expr) {
