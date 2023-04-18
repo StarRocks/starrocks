@@ -121,6 +121,7 @@ public class SystemInfoService {
 
     public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
             throws DdlException {
+
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
             if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
@@ -169,7 +170,6 @@ public class SystemInfoService {
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
         LOG.info("finished to add {} ", newComputeNode);
     }
-
     private void setComputeNodeOwner(ComputeNode computeNode) {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
@@ -508,7 +508,7 @@ public class SystemInfoService {
         return -1L;
     }
 
-    public long getComputeNodeWithStarletPort(String host, int starletPort) {
+    public long getComputeNodeIdWithStarletPort(String host, int starletPort) {
         ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
         for (ComputeNode cn : idToComputeNode.values()) {
             if (cn.getHost().equals(host) && cn.getStarletPort() == starletPort) {
