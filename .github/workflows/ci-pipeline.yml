@@ -321,7 +321,7 @@ jobs:
               exit 1
             fi
             timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-              --cover ${{ github.workspace }}/fe/fe-core/target/result/ --github-token ${{ secrets.GITHUB_TOKEN }} \
+              --cover ${{ github.workspace }}/fe/fe-core/target/result/ --github-token ${{ secrets.PAT }} \
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
             pull_status=$?
             time_count=`expr $time_count + 1`
