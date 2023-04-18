@@ -286,36 +286,16 @@ jobs:
           cd elastic-service && git pull
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}}
 
+      - name: Clean ECI
+        if: always()
+        run: |
+          echo ${{ steps.run_ut.outputs.ECI_ID }}
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+
       - name: Prepare coverage files
         run: |
           cd ${{ github.workspace }}/fe/fe-core
           cp -rf ${{ steps.run_ut.outputs.COV_DIR }} target/
-
-      - name: MERGE_COMMIT_SHA
-        id: merge_commit_sha
-        run: |
-          set -x
-          merge_commit_sha=`curl -L \
-          -H "Accept: application/vnd.github+json" \
-          -H "Authorization:  token ${{ secrets.GITHUB_TOKEN }}" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.number }} 2>/dev/null \
-          | jq .merge_commit_sha`
-          merge_commit_sha=$(echo ${merge_commit_sha//\"})
-          echo "merge_commit_sha=${merge_commit_sha}" >> $GITHUB_OUTPUT
-
-      - name: Upload cov with merge_commit_sha
-        uses: codecov/codecov-action@v3
-        with:
-          override_branch: ${{ github.base_ref }}
-          override_commit: ${{ steps.merge_commit_sha.outputs.merge_commit_sha }}
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ${{ github.workspace }}/fe/fe-core/target/${{ steps.run_ut.outputs.COV_FILE }}
-          dry_run: false
-          override_pr: 21756
-          name: main-fe-ut
-          fail_ci_if_error: true
-          verbose: true
 
       - name: Coverage Report
         uses: codecov/codecov-action@v3
@@ -327,6 +307,34 @@ jobs:
           fail_ci_if_error: false
           verbose: true
 
+      - name: Patch Coverage
+        run: |
+          set -ex
+          rm -rf ./coverchecker
+          ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
+          time_count=0
+          pull_status=1
+          export JAVA_HOME=/var/local/env/jdk1.8.0_202;
+          export PATH=$JAVA_HOME/bin:$PATH;
+          while (( $pull_status != 0 )); do
+            if (( $time_count == 3 )); then
+              exit 1
+            fi
+            timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+              --cover ${{ github.workspace }}/fe/fe-core/target/result/ --github-token ${{ secrets.GITHUB_TOKEN }} \
+              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
+            pull_status=$?
+            time_count=`expr $time_count + 1`
+          done
+
+      - name: Patch Coverage Report
+        uses: mikepenz/action-junit-report@v3
+        with:
+          check_name: 'FE Patch Coverage Report'
+          detailed_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          report_paths: ${{ github.workspace }}/fe/fe-core/target/surefire-reports/*.xml
+
       - name: UT Report
         if: always()
         uses: mikepenz/action-junit-report@v3
@@ -335,12 +343,6 @@ jobs:
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/*.xml
-
-      - name: Clean ECI
-        if: always()
-        run: |
-          echo ${{ steps.run_ut.outputs.ECI_ID }}
-          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
       - name: Upload log
         if: always()
@@ -357,7 +359,6 @@ jobs:
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
-
   build:
     runs-on: self-hosted
     needs: [be-checker, fe-checker, be-ut, fe-ut]
