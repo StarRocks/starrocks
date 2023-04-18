@@ -132,6 +132,18 @@ jobs:
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}}
+#      - name: BASE_COMMIT
+#        id: base_commit
+#        run: |
+#          set -x
+#          base_commit=`curl -L \
+#          -H "Accept: application/vnd.github+json" \
+#          -H "Authorization:  token ${{ secrets.GITHUB_TOKEN }}" \
+#          -H "X-GitHub-Api-Version: 2022-11-28" \
+#          https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.number }} 2>/dev/null \
+#          | jq .base.sha`
+#          base_commit=$(echo ${base_commit//\"})
+#          echo "base_commit=${base_commit}" >> $GITHUB_OUTPUT
 
       - name: Prepare coverage files
         run: |
@@ -143,7 +155,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: ${{ github.workspace }}/fe/fe-core/target/${{ steps.run_ut.outputs.COV_FILE }}
-          override_branch: ${{ github.base_ref }}
+#          override_branch: ${{ github.base_ref }}
           dry_run: false
           name: fe-ut
           fail_ci_if_error: false
@@ -164,13 +176,13 @@ jobs:
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
-      - name: Upload log
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: FE UT LOG
-          path: ${{ steps.run_ut.outputs.RES_LOG }}
-          retention-days: 1
+#      - name: Upload log
+#        if: always()
+#        uses: actions/upload-artifact@v3
+#        with:
+#          name: FE UT LOG
+#          path: ${{ steps.run_ut.outputs.RES_LOG }}
+#          retention-days: 1
 
       - name: Clean ENV
         if: always()
