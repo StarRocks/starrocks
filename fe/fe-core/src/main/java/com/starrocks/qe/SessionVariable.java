@@ -89,6 +89,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String QUERY_TIMEOUT = "query_timeout";
 
+    /* 
+     * When FE does not set the pagecache parameter, we expect a query to follow the pagecache policy of BE.
+     * If pagecache is set by FE, a query whether to use pagecache follows the policy specified by FE.
+     * 
+     * In addition to use_page_cache, is_set_use_page_cache is also introduced here because we can use this 
+     * flag to determine if FE specifies the pagecache policy, thus confirming the parameter when sending 
+     * rpc data to BE.
+     */
+    public static final String IS_SET_USE_PAGE_CACHE = "is_set_use_page_cache";
+    public static final String USE_PAGE_CACHE = "use_page_cache";
+
     public static final String QUERY_DELIVERY_TIMEOUT = "query_delivery_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
@@ -508,6 +519,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // query timeout in second.
     @VariableMgr.VarAttr(name = QUERY_TIMEOUT)
     private int queryTimeoutS = 300;
+
+    @VariableMgr.VarAttr(name = IS_SET_USE_PAGE_CACHE)
+    private boolean isSetUsePageCache = false;
+
+    @VariableMgr.VarAttr(name = USE_PAGE_CACHE)
+    private boolean usePageCache = false;
 
     // Execution of a query contains two phase.
     // 1. Deliver all the fragment instances to BEs.
@@ -1200,6 +1217,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setLoadMemLimit(long loadMemLimit) {
         this.loadMemLimit = loadMemLimit;
+    }
+
+    public void setUsePageCache(boolean usePageCache) {
+        isSetUsePageCache = true;
+        this.usePageCache = usePageCache;
     }
 
     public void setQueryTimeoutS(int queryTimeoutS) {
@@ -2054,6 +2076,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
+        if (isSetUsePageCache) {
+            tResult.setUse_page_cache(usePageCache);
+        }
         return tResult;
     }
 

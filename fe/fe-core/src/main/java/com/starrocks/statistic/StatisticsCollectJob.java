@@ -23,6 +23,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
@@ -103,6 +104,8 @@ public abstract class StatisticsCollectJob {
             LOG.debug("statistics collect sql : {}", sql);
             StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            SessionVariable sessionVariable = context.getSessionVariable();
+            sessionVariable.setUsePageCache(false);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();
