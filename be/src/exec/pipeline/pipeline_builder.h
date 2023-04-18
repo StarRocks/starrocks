@@ -63,7 +63,8 @@ public:
     OpFactories maybe_interpolate_local_shuffle_exchange(RuntimeState* state, OpFactories& pred_operators,
                                                          const PartitionExprsGenerator& self_partition_exprs_generator);
 
-    void interpolate_spill_process(const SpillProcessChannelFactoryPtr& channel_factory, size_t dop);
+    void interpolate_spill_process(size_t plan_node_id, const SpillProcessChannelFactoryPtr& channel_factory,
+                                   size_t dop);
 
     // Uses local exchange to gather the output chunks of multiple predecessor pipelines
     // into a new pipeline, which the successor operator belongs to.
