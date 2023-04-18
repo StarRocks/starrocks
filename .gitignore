@@ -59,6 +59,7 @@ StarRocksLex.tokens
 .project
 .settings/
 .idea/
+.gradle/
 /Default/
 be/cmake-build*
 be/.vscode
