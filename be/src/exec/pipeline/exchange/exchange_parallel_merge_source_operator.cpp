@@ -59,7 +59,6 @@ Status ExchangeParallelMergeSourceOperator::set_finishing(RuntimeState* state) {
 }
 
 StatusOr<ChunkPtr> ExchangeParallelMergeSourceOperator::pull_chunk(RuntimeState* state) {
-    // TODO process limit
     auto chunk = _merger->try_get_next(_driver_sequence);
 
     if (_merger->is_finished()) {
@@ -107,8 +106,8 @@ merge_path::MergePathCascadeMerger* ExchangeParallelMergeSourceOperatorFactory::
         auto chunk_providers = _stream_recvr->create_merge_path_chunk_providers();
         SortDescs sort_descs(_is_asc_order, _nulls_first);
         _merger = std::make_unique<merge_path::MergePathCascadeMerger>(
-                degree_of_parallelism(), _sort_exec_exprs->lhs_ordering_expr_ctxs(), sort_descs, chunk_providers,
-                state->chunk_size());
+                state->chunk_size(), degree_of_parallelism(), _sort_exec_exprs->lhs_ordering_expr_ctxs(), sort_descs,
+                _row_desc.tuple_descriptors()[0], _offset, _limit, chunk_providers);
     }
     return _merger.get();
 }

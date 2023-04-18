@@ -93,8 +93,8 @@ OperatorPtr LocalParallelMergeSortSourceOperatorFactory::create(int32_t degree_o
             });
         }
         _merger = std::make_unique<merge_path::MergePathCascadeMerger>(
-                degree_of_parallelism, sort_context->sort_exprs(), sort_context->sort_descs(), chunk_providers,
-                _state->chunk_size());
+                _state->chunk_size(), degree_of_parallelism, sort_context->sort_exprs(), sort_context->sort_descs(),
+                _tuple_desc, sort_context->offset(), sort_context->limit(), chunk_providers);
     }
 
     return std::make_shared<LocalParallelMergeSortSourceOperator>(this, _id, _plan_node_id, driver_sequence,

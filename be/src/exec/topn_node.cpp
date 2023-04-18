@@ -330,6 +330,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     SourceOperatorFactoryPtr source_operator;
 
     source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), context_factory);
+    if (enable_parallel_merge) {
+        down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())
+                ->set_tuple_desc(_materialized_tuple_desc);
+    }
 
     ops_sink_with_sort.emplace_back(std::move(sink_operator));
     context->add_pipeline(ops_sink_with_sort);
@@ -364,8 +368,8 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     // need_merge = true means gather is needed for multiple streams of data
     // need_merge = false means gather is no longer needed
     bool need_merge = _analytic_partition_exprs.empty();
-    bool enable_parallel_merge =
-            _tnode.sort_node.__isset.enable_parallel_merge && _tnode.sort_node.enable_parallel_merge;
+    bool enable_parallel_merge = !is_partition_topn && need_merge && _tnode.sort_node.__isset.enable_parallel_merge &&
+                                 _tnode.sort_node.enable_parallel_merge;
 
     OpFactories operators_source_with_sort;
 
