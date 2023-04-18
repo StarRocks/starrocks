@@ -405,8 +405,7 @@ Status BinlogFileReader::parse_page_header(RandomAccessFile* read_file, int64_t 
 }
 
 StatusOr<BinlogFileMetaPBPtr> BinlogFileReader::load_meta_by_scan_pages(int64_t file_id, RandomAccessFile* read_file,
-                                                                        int64_t file_size,
-                                                                        BinlogFileDataFilter* filter) {
+                                                                        int64_t file_size, BinlogLsn& maxLsnExclusive) {
     BinlogFileMetaPBPtr file_meta = std::make_shared<BinlogFileMetaPB>();
     file_meta->set_id(file_id);
     file_meta->set_num_pages(0);
@@ -417,7 +416,6 @@ StatusOr<BinlogFileMetaPBPtr> BinlogFileReader::load_meta_by_scan_pages(int64_t 
     if (!status.ok()) {
         VLOG(3) << "Failed to parse binlog file header when loading meta, file path: " << read_file->filename() << ", "
                 << status;
-        // The binlog file can be useless, but failed to delete, so return NotFound
         return Status::NotFound("Failed to parse file header, file path: " + read_file->filename());
     }
 
@@ -433,18 +431,8 @@ StatusOr<BinlogFileMetaPBPtr> BinlogFileReader::load_meta_by_scan_pages(int64_t 
             break;
         }
 
-        if (!filter->is_valid_seq(page_header->version(), page_header->end_seq_id())) {
-            break;
-        }
-
-        bool all_rowset_valid = true;
-        for (auto rowset_id : page_header->rowsets()) {
-            if (!filter->is_valid_rowset(rowset_id)) {
-                all_rowset_valid = false;
-                break;
-            }
-        }
-        if (!all_rowset_valid) {
+        BinlogLsn pageMaxLsn(page_header->version(), page_header->end_seq_id());
+        if (!(pageMaxLsn < maxLsnExclusive)) {
             break;
         }
 
@@ -467,7 +455,7 @@ StatusOr<BinlogFileMetaPBPtr> BinlogFileReader::load_meta_by_scan_pages(int64_t 
     }
 
     if (num_pages == 0) {
-        return Status::NotFound("There is no valid data in binlog file, path: " << read_file->filename());
+        return Status::NotFound("There is no valid data in binlog file, path: " + read_file->filename());
     }
 
     file_meta->set_num_pages(num_pages);
@@ -476,11 +464,14 @@ StatusOr<BinlogFileMetaPBPtr> BinlogFileReader::load_meta_by_scan_pages(int64_t 
         file_meta->add_rowsets(rid);
     }
 
+    VLOG(3) << "Load binlog file meta from scanning pages, file path: " << read_file->filename()
+            << ", meta: " << BinlogUtil::file_meta_to_string(file_meta.get());
+
     return file_meta;
 }
 
 StatusOr<BinlogFileMetaPBPtr> BinlogFileReader::load_meta(int64_t file_id, std::string& file_path,
-                                                          BinlogFileDataFilter* filter) {
+                                                          BinlogLsn& maxLsnExclusive) {
     std::shared_ptr<FileSystem> fs;
     ASSIGN_OR_RETURN(fs, FileSystem::CreateSharedFromString(file_path))
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(file_path))
@@ -491,23 +482,17 @@ StatusOr<BinlogFileMetaPBPtr> BinlogFileReader::load_meta(int64_t file_id, std::
     if (!st.ok()) {
         VLOG(3) << "Failed to parse binlog file footer, file path: " << file_path << ", " << st;
     } else {
-        // verify the file meta from footer is valid
-        if (filter->is_valid_seq(file_meta->end_version(), file_meta->end_seq_id())) {
-            bool all_rowset_valid = true;
-            for (auto rowset_id : file_meta->rowsets()) {
-                if (!filter->is_valid_rowset(rowset_id)) {
-                    all_rowset_valid = false;
-                    break;
-                }
-            }
-            if (all_rowset_valid) {
-                return file_meta;
-            }
+        BinlogLsn fileMaxLsn(file_meta->end_version(), file_meta->end_seq_id());
+        if (fileMaxLsn < maxLsnExclusive) {
+            VLOG(3) << "Load binlog file meta from footer, file path: " << file_path
+                    << ", meta: " << BinlogUtil::file_meta_to_string(file_meta.get());
+            return file_meta;
         }
-        VLOG(3) << "Binlog file footer is not valid, file path: " << file_path;
+        VLOG(3) << "Binlog file footer is not valid, file path: " << file_path
+                << ", maxLsnExclusive: " << maxLsnExclusive << ", fileMaxLsn: " << fileMaxLsn;
     }
 
-    return load_meta_by_scan_pages(file_id, read_file.get(), file_size, filter);
+    return load_meta_by_scan_pages(file_id, read_file.get(), file_size, maxLsnExclusive);
 }
 
 } // namespace starrocks

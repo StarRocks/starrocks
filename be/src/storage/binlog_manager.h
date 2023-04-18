@@ -93,21 +93,6 @@ private:
     Tablet& _tablet;
 };
 
-class BinlogFileLoadFilterImpl : public BinlogFileDataFilter {
-public:
-    BinlogFileLoadFilterImpl(int64_t max_version, int64_t max_seq_id, RowsetFetcher* rowset_fetcher);
-
-    bool is_valid_seq(int64_t version, int64_t seq_id) override;
-
-    bool is_valid_rowset(int64_t rowset_id) override;
-
-private:
-    // less than <_max_version, _max_seq_id>
-    int64_t _max_version;
-    int64_t _max_seq_id;
-    RowsetFetcher* _rowset_fetcher;
-};
-
 class BinlogRange {
 public:
     BinlogRange(int64_t start_version, int64_t start_seq_id, int64_t end_version, int64_t end_seq_id)

@@ -425,25 +425,6 @@ TEST_F(BinlogFileTest, test_random_begin_commit_abort) {
 // TODO add tests for primary key
 TEST_F(BinlogFileTest, test_primary_key) {}
 
-class BinlogFileDataFilterTest : public BinlogFileDataFilter {
-public:
-    BinlogFileDataFilterTest(int64_t max_version, int64_t max_seq_id, std::unordered_set<int64_t>* rowset_ids)
-            : _max_version(max_version), _max_seq_id(max_seq_id), _rowset_ids(rowset_ids) {}
-
-    bool is_valid_seq(int64_t version, int64_t seq_id) override {
-        return version < _max_version || (version == _max_version && seq_id < _max_seq_id);
-    }
-
-    bool is_valid_rowset(int64_t rowset_id) override {
-        return _rowset_ids == nullptr || _rowset_ids->count(rowset_id) > 0;
-    }
-
-private:
-    int64_t _max_version;
-    int64_t _max_seq_id;
-    std::unordered_set<int64_t>* _rowset_ids;
-};
-
 void BinlogFileTest::test_load(bool append_meta) {
     int64_t file_id = 1;
     std::string file_path = BinlogUtil::binlog_file_path(_binlog_file_dir, file_id);
@@ -455,7 +436,6 @@ void BinlogFileTest::test_load(bool append_meta) {
     int32_t num_rows_per_seg = 100;
     std::vector<BinlogFileMetaPBPtr> metas_for_each_page;
     BinlogFileMetaPBPtr file_meta = std::make_shared<BinlogFileMetaPB>();
-    std::unordered_set<int64_t> rowset_ids;
     for (int version = 1; version <= num_version; version++) {
         int64_t timestamp = version * 1000000;
         int64_t rowset_id = version;
@@ -471,7 +451,6 @@ void BinlogFileTest::test_load(bool append_meta) {
         for (int32_t seg_index = 0; seg_index < num_segs_per_version; seg_index++) {
             RowsetSegInfo info(rowset_id, seg_index);
             ASSERT_OK(file_writer->add_insert_range(info, 0, num_rows_per_seg));
-            rowset_ids.insert(rowset_id);
             if (seg_index + 1 < num_segs_per_version) {
                 ASSERT_OK(file_writer->force_flush_page(false));
             } else {
@@ -492,24 +471,10 @@ void BinlogFileTest::test_load(bool append_meta) {
     }
     ASSERT_OK(file_writer->close(append_meta));
 
-    std::unordered_set<int64_t> filter_rowset_ids;
     for (int32_t i = 0; i < metas_for_each_page.size(); i++) {
         auto& meta = metas_for_each_page[i];
-        for (auto rid : meta->rowsets()) {
-            filter_rowset_ids.insert(rid);
-        }
-
-        // filter by rowset id
-        if (i + 1 < metas_for_each_page.size() && meta->end_version() < metas_for_each_page[i + 1]->end_version()) {
-            BinlogFileDataFilterTest filter(INT64_MAX, INT64_MAX, &filter_rowset_ids);
-            auto status_or = BinlogFileReader::load_meta(file_id, file_path, &filter);
-            ASSERT_OK(status_or.status());
-            verify_file_meta(meta.get(), status_or.value());
-        }
-
-        // filter by seq id
-        BinlogFileDataFilterTest filter(meta->end_version(), meta->end_seq_id() + 1, nullptr);
-        auto status_or = BinlogFileReader::load_meta(file_id, file_path, &filter);
+        BinlogLsn maxLsn(meta->end_version(), meta->end_seq_id() + 1);
+        auto status_or = BinlogFileReader::load_meta(file_id, file_path, maxLsn);
         ASSERT_OK(status_or.status());
         verify_file_meta(meta.get(), status_or.value());
     }

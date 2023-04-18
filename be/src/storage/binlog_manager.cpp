@@ -25,18 +25,6 @@ RowsetSharedPtr DupKeyRowsetFetcher::get_rowset(int64_t rowset_id) {
     return _tablet.get_inc_rowset_by_version(Version(rowset_id, rowset_id));
 }
 
-BinlogFileLoadFilterImpl::BinlogFileLoadFilterImpl(int64_t max_version, int64_t max_seq_id,
-                                                   RowsetFetcher* rowset_fetcher)
-        : _max_version(max_version), _max_seq_id(max_seq_id), _rowset_fetcher(rowset_fetcher) {}
-
-bool BinlogFileLoadFilterImpl::is_valid_seq(int64_t version, int64_t seq_id) {
-    return version < _max_version || (version == _max_version && seq_id < _max_seq_id);
-}
-
-bool BinlogFileLoadFilterImpl::is_valid_rowset(int64_t rowset_id) {
-    return _rowset_fetcher == nullptr || _rowset_fetcher->get_rowset(rowset_id) != nullptr;
-}
-
 BinlogManager::BinlogManager(int64_t tablet_id, std::string path, int64_t max_file_size, int32_t max_page_size,
                              CompressionTypePB compression_type, std::shared_ptr<RowsetFetcher> rowset_fetcher)
         : _tablet_id(tablet_id),
@@ -80,8 +68,8 @@ Status BinlogManager::init(BinlogLsn min_lsn, std::set<int64_t> versions) {
             max_version = last_meta->start_version();
             max_seq_id = last_meta->start_seq_id();
         }
-        BinlogFileLoadFilterImpl filter(max_version, max_seq_id, _rowset_fetcher.get());
-        StatusOr status_or = BinlogFileReader::load_meta(file_id, file_path, &filter);
+        BinlogLsn maxLsnExclusive(max_version, max_seq_id);
+        StatusOr status_or = BinlogFileReader::load_meta(file_id, file_path, maxLsnExclusive);
         if (!status_or.ok() && !status_or.status().is_not_found()) {
             std::string errMsg =
                     fmt::format("Failed to init binlog because load_meta error, tablet {}, file_path: {}, status: {}",
