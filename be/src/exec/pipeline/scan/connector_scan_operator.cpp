@@ -93,8 +93,9 @@ struct ConnectorScanOperatorAdaptiveProcessor {
     bool try_add_io_tasks = false;
     double expected_speedup_ratio = 0;
     double last_cs_speed = 0;
-    int check_slow_io = 0;
     int64_t last_cs_pull_chunks = 0;
+    int try_add_io_tasks_fail_count = 0;
+    int check_slow_io = 0;
 };
 
 // ==================== ConnectorScanOperator ====================
@@ -321,22 +322,24 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
                 (io_tasks + config::connector_io_tasks_adjust_step + smooth) * 1.0 / (io_tasks + smooth);
         io_tasks += config::connector_io_tasks_adjust_step;
     };
-    auto try_sub_io_tasks = [&]() { return ((cs_speed * P.expected_speedup_ratio) < P.last_cs_speed); };
     auto do_sub_io_tasks = [&]() {
-        P.try_add_io_tasks = false;
         io_tasks -= config::connector_io_tasks_adjust_step;
+        P.try_add_io_tasks = false;
+        P.try_add_io_tasks_fail_count += 1;
+        if (P.try_add_io_tasks_fail_count >= 4) {
+            P.try_add_io_tasks_fail_count = 0;
+            io_tasks -= config::connector_io_tasks_adjust_step;
+        }
     };
 
     auto check_slow_io = [&]() {
-        if (((P.check_slow_io++) % 8) != 0) return false;
+        if (((P.check_slow_io++) % 8) != 0) return;
         if (io_latency >= 2 * config::connector_io_tasks_slow_io_latency_ms) {
             io_tasks = std::max(io_tasks, _io_tasks_per_scan_operator / 2);
         } else if (io_latency >= config::connector_io_tasks_slow_io_latency_ms) {
             io_tasks = std::max(io_tasks, _io_tasks_per_scan_operator / 4);
         } else {
-            return false;
         }
-        return true;
     };
 
     // adjust io tasks according to feedback.
@@ -355,10 +358,6 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
 
         check_slow_io();
         do_sub_io_tasks();
-        if (try_sub_io_tasks()) {
-            // if speedup ratio is not as expected, we revert.
-            do_sub_io_tasks();
-        }
     };
 
     do_adjustment();
@@ -371,7 +370,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
         ss << "[XXX] pick mosrsel. id = " << _driver_sequence;
         ss << ", cs = " << doround(cs_speed) << "(" << cs_pull_chunks << "/" << P.cs_gen_chunks_time << ")";
         ss << ", last_cs = " << doround(P.last_cs_speed) << "(" << doround(cs_speed / P.last_cs_speed) << ")";
-        ss << ", op = " << doround(op_speed) << "(" << P.op_pull_chunks << "/" << P.op_running_time << ")";
+        ss << ", op = " << doround(op_speed) << "(" << P.op_pull_chunks << "/" << (P.op_running_time / 1000) << ")";
 
         ss << ", cs/op = " << doround(balanced_cs_speed) << "/" << doround(op_speed) << "("
            << doround(balanced_cs_speed / op_speed) << ")";
