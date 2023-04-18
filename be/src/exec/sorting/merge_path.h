@@ -135,7 +135,7 @@ void _is_intersection(const SortDescs& descs, const InputSegment& left, const si
      * @param length The step for this parallelism can forward along merge path.
      */
 void _do_merge_along_merge_path(const SortDescs& descs, const InputSegment& left, size_t& li, const InputSegment& right,
-                                size_t& ri, OutputSegment& dest, size_t start_di, const size_t length);
+                                size_t& ri, OutputSegment& dest, const size_t start_di, const size_t length);
 } // namespace detail
 
 class MergePathCascadeMerger;
@@ -161,7 +161,7 @@ class Node {
 public:
     Node(MergePathCascadeMerger* merger) : _merger(merger) {}
     virtual ~Node() = default;
-    virtual void process_input(int32_t parallel_idx) = 0;
+    virtual void process_input(const int32_t parallel_idx) = 0;
     virtual void process_input_done(){};
     virtual bool is_leaf() { return false; }
 
@@ -210,7 +210,7 @@ public:
     MergeNode(MergePathCascadeMerger* merger, Node* left, Node* right)
             : Node(merger), _left(left), _right(right), _left_buffer({}, 0, 0), _right_buffer({}, 0, 0) {}
 
-    void process_input(int32_t parallel_idx) override;
+    void process_input(const int32_t parallel_idx) override;
     void process_input_done() override;
     bool has_more_output() override;
     bool input_full(Node* child);
@@ -233,7 +233,7 @@ public:
     LeafNode(MergePathCascadeMerger* merger, bool late_materialization)
             : Node(merger), _late_materialization(late_materialization) {}
 
-    void process_input(int32_t parallel_idx) override;
+    void process_input(const int32_t parallel_idx) override;
     bool is_leaf() override { return true; }
     bool has_more_output() override { return !_provider_eos; }
     bool provider_pending() { return has_more_output() && !_provider(true, nullptr, nullptr); }
@@ -241,7 +241,7 @@ public:
     void set_provider(MergePathChunkProvider provider) { _provider = std::move(provider); }
 
 private:
-    ChunkPtr _generate_ordinal(size_t chunk_id, size_t num_rows);
+    ChunkPtr _generate_ordinal(const size_t chunk_id, const size_t num_rows);
 
     const bool _late_materialization;
     MergePathChunkProvider _provider;
@@ -368,12 +368,12 @@ public:
 
     // There may be several parallelism working on the same stage
     // Return true if the current stage's work is done for the particular parallel_idx
-    bool is_current_stage_finished(int32_t parallel_idx);
+    bool is_current_stage_finished(const int32_t parallel_idx);
 
     // All the data are coming from chunk_providers, which passes through ctor.
     // If one of the providers cannot provider new data at the moment, maybe waiting for network,
     // but the provider still alive(not reach eos), then merger will enter to pending stage.
-    bool is_pending(int32_t parallel_idx);
+    bool is_pending(const int32_t parallel_idx);
 
     // Return true if merge process is done
     bool is_finished();
@@ -381,10 +381,10 @@ public:
     // All the merge process are triggered by this method
     ChunkPtr try_get_next(const int32_t parallel_idx);
 
-    void bind_profile(int32_t parallel_idx, RuntimeProfile* profile);
+    void bind_profile(const int32_t parallel_idx, RuntimeProfile* profile);
 
     size_t add_original_chunk(ChunkPtr&& chunk);
-    detail::Metrics& get_metrics(int32_t parallel_idx) { return _metrics[parallel_idx]; }
+    detail::Metrics& get_metrics(const int32_t parallel_idx) { return _metrics[parallel_idx]; }
 
 private:
     bool _is_current_stage_done();
@@ -392,20 +392,20 @@ private:
 
     void _init();
     void _prepare();
-    void _process(int32_t parallel_idx);
-    void _split_chunk(int32_t parallel_idx);
-    void _fetch_chunk(int32_t parallel_idx, ChunkPtr& chunk);
+    void _process(const int32_t parallel_idx);
+    void _split_chunk(const int32_t parallel_idx);
+    void _fetch_chunk(const int32_t parallel_idx, ChunkPtr& chunk);
     void _finishing();
 
     void _init_late_materialization();
-    ChunkPtr _restore_according_to_ordinal(int32_t parallel_idx, const ChunkPtr& chunk);
+    ChunkPtr _restore_according_to_ordinal(const int32_t parallel_idx, const ChunkPtr& chunk);
 
     void _process_limit(ChunkPtr& chunk);
 
     void _find_unfinished_level();
     using Action = std::function<void()>;
     void _finish_current_stage(
-            int32_t parallel_idx, const Action& stage_done_action = []() {});
+            const int32_t parallel_idx, const Action& stage_done_action = []() {});
     bool _has_pending_node();
 
     void _reset_output();
