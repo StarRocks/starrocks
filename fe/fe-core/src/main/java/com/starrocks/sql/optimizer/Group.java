@@ -217,8 +217,14 @@ public class Group {
     }
 
     public void mergeGroup(Group other) {
+        if (other.id == 1154) {
+            System.out.println("here6");
+        }
         other.getLogicalExpressions().removeAll(logicalExpressions);
         other.getPhysicalExpressions().removeAll(physicalExpressions);
+        if (id == 1154) {
+            System.out.println("here7");
+        }
         logicalExpressions.addAll(other.getLogicalExpressions());
         physicalExpressions.addAll(other.getPhysicalExpressions());
         if (other.id == 1154) {

@@ -335,6 +335,9 @@ public class Memo {
 
         Preconditions.checkState(group.isValidInitState());
 
+        if (group.getId() == 1154) {
+            System.out.println("here8");
+        }
         group.getLogicalExpressions().clear();
     }
 
