@@ -136,6 +136,8 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         LOG.debug("statistics collect sql : " + sql);
         StatisticExecutor executor = new StatisticExecutor();
         SessionVariable sessionVariable = context.getSessionVariable();
+        // Full table scan is performed for full statistics collecting. In this case, 
+        // we do not need to use pagecache.
         sessionVariable.setUsePageCache(false);
         List<TStatisticData> dataList = executor.executeStatisticDQL(context, sql);
 
