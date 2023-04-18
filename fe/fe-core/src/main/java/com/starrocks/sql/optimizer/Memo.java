@@ -100,6 +100,9 @@ public class Memo {
             groups.add(targetGroup);
         }
 
+        if (groupExpression.id == -1188) {
+            System.out.println("here1");
+        }
         groupExpressions.put(groupExpression, groupExpression);
 
         targetGroup.addExpression(groupExpression);
@@ -214,6 +217,9 @@ public class Memo {
         for (GroupExpression reinsertExpression : needReinsertedExpressions) {
             // reinsert maybe in groupExpressions because his input was modify
             if (!groupExpressions.containsKey(reinsertExpression)) {
+                if (reinsertExpression.id == -1188) {
+                    System.out.println("here2");
+                }
                 groupExpressions.put(reinsertExpression, reinsertExpression);
                 reinsertExpression.getGroup().addExpression(reinsertExpression);
             } else {
