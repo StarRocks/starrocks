@@ -101,6 +101,33 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testDecimal() throws Exception {
+        String sql = "select cast(tj as decimal32) from tall";
+        analyzeFail(sql, "Unknown type: decimal32");
+
+        sql = "select cast(tj as decimal64) from tall";
+        analyzeFail(sql, "Unknown type: decimal64");
+
+        sql = "select cast(tj as decimal128) from tall";
+        analyzeFail(sql, "Unknown type: decimal128");
+
+        sql = "select cast(tj as decimal) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL128(38,0))");
+
+        sql = "select cast(tj as decimal(10, 2)) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL64(10,2))");
+
+        sql = "select cast(tj as decimal(10)) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL64(10,0))");
+
+        sql = "select cast(tj as decimal(28, 2)) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL128(28,2))");
+
+        sql = "select cast(tj as decimal(28)) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL128(28,0))");
+    }
+
+    @Test
     public void testSelectLiteral() throws Exception {
         String sql = "select date '1998-12-01'";
         assertPlanContains(sql, "<slot 2> : '1998-12-01'");
