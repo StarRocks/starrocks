@@ -2193,7 +2193,7 @@ public class Config extends ConfigBase {
      * Enable check if the cluster is under safe mode or not
      **/
     @ConfField(mutable = true)
-    public static boolean enable_safe_mode_check = true;
+    public static boolean enable_safe_mode_check = false;
 
     /**
      * The safe mode checker thread work interval
