@@ -998,7 +998,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         // For the usage scenarios of flink cdc or routine load,
         // the frequency of stream load maybe very high, resulting in many profiles,
         // but we may only care about the long-duration stream load profile.
-        if (totalTimeMs < Config.stream_load_profile_collect_second * 1000) {
+        if (totalTimeMs < Config.stream_load_profile_collect_millis) {
             return;
         }
 
