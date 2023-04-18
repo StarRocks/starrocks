@@ -22,7 +22,9 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
@@ -163,7 +165,7 @@ public class ReplayFromDumpTest {
         if (sessionVariable != null) {
             queryDumpInfo.setSessionVariable(sessionVariable);
         }
-        queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(3000);
         queryDumpInfo.getSessionVariable().setCboPushDownAggregateMode(-1);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
@@ -847,5 +849,16 @@ public class ReplayFromDumpTest {
         } finally {
             FeConstants.USE_MOCK_DICT_MANAGER = false;
         }
+    }
+
+    @Test
+    public void testPruneCTEProperty() throws Exception {
+        String jsonStr = getDumpInfoFromFile("query_dump/cte_reuse");
+        connectContext.getSessionVariable().disableJoinReorder();
+        Pair<String, ExecPlan> result = UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext,
+                getDumpInfoFromJson(jsonStr));
+        OptExpression expression = result.second.getPhysicalPlan().inputAt(1);
+        Assert.assertEquals(new CTEProperty(1), expression.getLogicalProperty().getUsedCTEs());
+        Assert.assertEquals(4, result.second.getCteProduceFragments().size());
     }
 }
