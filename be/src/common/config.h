@@ -762,7 +762,7 @@ CONF_Int32(connector_io_tasks_min_size, "2");
 CONF_Int32(connector_io_tasks_adjust_interval_ms, "50");
 CONF_Int32(connector_io_tasks_adjust_step, "1");
 CONF_Int32(connector_io_tasks_adjust_smooth, "4");
-CONF_Double(connector_io_tasks_slow_io_ratio, "0.8");
+CONF_Int32(connector_io_tasks_slow_io_latency_ms, "50");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory

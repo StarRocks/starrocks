@@ -318,9 +318,9 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
 
     auto check_slow_io = [&]() {
         if (((P.check_slow_io++) % 8) != 0) return false;
-        if (io_latency >= 100) {
+        if (io_latency >= 2 * config::connector_io_tasks_slow_io_latency_ms) {
             io_tasks = std::max(io_tasks, _io_tasks_per_scan_operator / 2);
-        } else if (io_latency >= 50) {
+        } else if (io_latency >= config::connector_io_tasks_slow_io_latency_ms) {
             io_tasks = std::max(io_tasks, _io_tasks_per_scan_operator / 4);
         } else {
             return false;
