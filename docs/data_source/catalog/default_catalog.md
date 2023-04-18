@@ -34,7 +34,7 @@ StarRocks 2.3 and later provide an internal catalog to manage the internal data 
     USE db_name;
     ```
 
-    OR, you can execute the following statement to go to the destination database in the catalog managed in the current session:
+    Or, you can execute the following statement to go to the destination database in the catalog managed in the current session:
 
     ```SQL
     USE default_catalog.db_name;
