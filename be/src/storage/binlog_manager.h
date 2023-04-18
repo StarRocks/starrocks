@@ -176,7 +176,7 @@ public:
 
     ~BinlogManager();
 
-    Status init(BinlogLsn min_lsn, std::set<int64_t> versions);
+    Status init(BinlogLsn min_lsn, std::list<int64_t> sortedValidVersions);
 
     //  The process of an ingestion is as following, and protected by Tablet#_meta_lock to ensure there is
     //  no concurrent ingestion for duplicate key table

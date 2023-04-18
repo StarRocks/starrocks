@@ -445,6 +445,7 @@ StatusOr<BinlogFileMetaPBPtr> BinlogFileReader::load_meta_by_scan_pages(int64_t 
         file_meta->set_end_version(page_header->version());
         file_meta->set_end_seq_id(page_header->end_seq_id());
         file_meta->set_end_timestamp_in_us(page_header->timestamp_in_us());
+        file_meta->set_version_eof(page_header->end_of_version());
 
         for (auto rowset_id : page_header->rowsets()) {
             rowsets.insert(rowset_id);

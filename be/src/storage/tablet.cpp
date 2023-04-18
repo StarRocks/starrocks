@@ -251,7 +251,7 @@ Status Tablet::load_rowset(const RowsetSharedPtr& rowset) {
         return st;
     }
 
-    if (rowset->version().second < _tablet_meta->get_binlog_min_version()) {
+    if (rowset->version().second < _tablet_meta->get_binlog_min_lsn().version()) {
         return st;
     }
 
@@ -283,19 +283,20 @@ Status Tablet::finish_load_rowsets() {
 
     // find valid versions
     BinlogLsn min_lsn = _tablet_meta->get_binlog_min_lsn();
-    std::set<int64_t> valid_versions;
+    std::list<int64_t> valid_versions;
     for (auto& item : _inc_rs_version_map) {
         int64_t version = item.first.first;
         if (version < min_lsn.version()) {
             continue;
         }
-        valid_versions.insert(version);
+        valid_versions.push_back(version);
     }
+    valid_versions.sort();
 
     // TabletMeta#binlog_min_lsn is first set when enable binlog in Tablet#update_binlog_config,
     // and we don't know the first incremental version for add_inc_rowset, and the data may be
     // copied to this tablet via full clone, so the min_lsn may be smaller than the actual version
-    int64_t min_valid_version = valid_versions.empty() ? min_lsn.version() : *valid_versions.begin();
+    int64_t min_valid_version = valid_versions.empty() ? min_lsn.version() : valid_versions.front();
     if (min_valid_version > min_lsn.version()) {
         min_lsn = BinlogLsn(min_valid_version, 0);
     }

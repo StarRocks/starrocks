@@ -43,7 +43,7 @@ BinlogManager::~BinlogManager() {
     }
 }
 
-Status BinlogManager::init(BinlogLsn min_lsn, std::set<int64_t> versions) {
+Status BinlogManager::init(BinlogLsn min_lsn, std::list<int64_t> sortedValidVersions) {
     std::set<int64_t> binlog_file_ids;
     Status status = BinlogUtil::list_binlog_file_ids(_path, &binlog_file_ids);
     if (!status.ok()) {
@@ -99,7 +99,7 @@ Status BinlogManager::init(BinlogLsn min_lsn, std::set<int64_t> versions) {
 
     // TODO don't print if versions is empty
     LOG(INFO) << "Init binlog manager successfully, tablet: " << _tablet_id << ", lsn " << min_lsn
-              << ", min version: " << *versions.begin() << ", max version: " << *versions.rbegin();
+              << ", min version: " << sortedValidVersions.front() << ", max version: " << sortedValidVersions.back();
     return Status::OK();
 }
 

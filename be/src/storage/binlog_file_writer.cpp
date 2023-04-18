@@ -295,6 +295,7 @@ Status BinlogFileWriter::commit(bool end_of_version) {
     file_meta->set_end_version(version_context->version);
     file_meta->set_end_seq_id(page_context->end_seq_id);
     file_meta->set_end_timestamp_in_us(version_context->change_event_timestamp_in_us);
+    file_meta->set_version_eof(end_of_version);
     file_meta->set_num_pages(file_meta->num_pages() + version_context->num_pages);
     file_meta->set_file_size(_file->size());
     for (auto& rowset_id : version_context->rowsets) {

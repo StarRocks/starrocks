@@ -148,6 +148,7 @@ void BinlogTestBase::verify_file_meta(BinlogFileMetaPB* expect_file_meta,
     ASSERT_EQ(expect_file_meta->end_version(), actual_file_meta->end_version());
     ASSERT_EQ(expect_file_meta->end_seq_id(), actual_file_meta->end_seq_id());
     ASSERT_EQ(expect_file_meta->end_timestamp_in_us(), actual_file_meta->end_timestamp_in_us());
+    ASSERT_EQ(expect_file_meta->version_eof(), actual_file_meta->version_eof());
     ASSERT_EQ(expect_file_meta->num_pages(), actual_file_meta->num_pages());
     ASSERT_EQ(expect_file_meta->file_size(), actual_file_meta->file_size());
 

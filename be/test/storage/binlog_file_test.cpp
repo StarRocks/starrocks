@@ -73,6 +73,7 @@ TEST_F(BinlogFileTest, test_basic_write_read) {
     expect_file_meta.set_end_version(1);
     expect_file_meta.set_end_seq_id(309);
     expect_file_meta.set_end_timestamp_in_us(1);
+    expect_file_meta.set_version_eof(true);
     expect_file_meta.set_num_pages(2);
     expect_file_meta.set_file_size(_fs->get_file_size(file_path).value());
     expect_file_meta.add_rowsets(1);
@@ -94,6 +95,7 @@ TEST_F(BinlogFileTest, test_basic_write_read) {
     expect_file_meta.set_end_version(2);
     expect_file_meta.set_end_seq_id(31);
     expect_file_meta.set_end_timestamp_in_us(2);
+    expect_file_meta.set_version_eof(true);
     expect_file_meta.set_num_pages(3);
     expect_file_meta.set_file_size(_fs->get_file_size(file_path).value());
     expect_file_meta.add_rowsets(2);
@@ -110,6 +112,7 @@ TEST_F(BinlogFileTest, test_basic_write_read) {
     expect_file_meta.set_end_version(3);
     expect_file_meta.set_end_seq_id(-1);
     expect_file_meta.set_end_timestamp_in_us(3);
+    expect_file_meta.set_version_eof(true);
     expect_file_meta.set_num_pages(4);
     expect_file_meta.set_file_size(_fs->get_file_size(file_path).value());
     expect_entries.emplace_back(build_empty_rowset_log_entry(3, 3));
@@ -126,6 +129,7 @@ TEST_F(BinlogFileTest, test_basic_write_read) {
     expect_file_meta.set_end_version(4);
     expect_file_meta.set_end_seq_id(59);
     expect_file_meta.set_end_timestamp_in_us(4);
+    expect_file_meta.set_version_eof(false);
     expect_file_meta.set_num_pages(5);
     expect_file_meta.set_file_size(_fs->get_file_size(file_path).value());
     expect_file_meta.add_rowsets(4);
@@ -199,6 +203,7 @@ TEST_F(BinlogFileTest, test_basic_begin_commit_abort) {
     expect_file_meta.set_end_version(3);
     expect_file_meta.set_end_seq_id(2);
     expect_file_meta.set_end_timestamp_in_us(3);
+    expect_file_meta.set_version_eof(true);
     expect_file_meta.set_num_pages(1);
     expect_file_meta.set_file_size(_fs->get_file_size(file_path).value());
     expect_file_meta.add_rowsets(3);
@@ -235,6 +240,7 @@ TEST_F(BinlogFileTest, test_basic_begin_commit_abort) {
     expect_file_meta.set_end_version(5);
     expect_file_meta.set_end_seq_id(209);
     expect_file_meta.set_end_timestamp_in_us(5);
+    expect_file_meta.set_version_eof(false);
     expect_file_meta.set_num_pages(3);
     expect_file_meta.set_file_size(_fs->get_file_size(file_path).value());
     expect_file_meta.add_rowsets(5);
@@ -451,14 +457,18 @@ void BinlogFileTest::test_load(bool append_meta) {
         for (int32_t seg_index = 0; seg_index < num_segs_per_version; seg_index++) {
             RowsetSegInfo info(rowset_id, seg_index);
             ASSERT_OK(file_writer->add_insert_range(info, 0, num_rows_per_seg));
+            bool version_eof;
             if (seg_index + 1 < num_segs_per_version) {
                 ASSERT_OK(file_writer->force_flush_page(false));
+                version_eof = false;
             } else {
                 ASSERT_OK(file_writer->commit(true));
+                version_eof = true;
             }
             file_meta->set_end_version(version);
             file_meta->set_end_seq_id((seg_index + 1) * num_rows_per_seg - 1);
             file_meta->set_end_timestamp_in_us(timestamp);
+            file_meta->set_version_eof(version_eof);
             file_meta->set_num_pages(file_meta->num_pages() + 1);
             file_meta->set_file_size(_fs->get_file_size(file_path).value());
             std::shared_ptr<BinlogFileMetaPB> meta = std::make_shared<BinlogFileMetaPB>();
