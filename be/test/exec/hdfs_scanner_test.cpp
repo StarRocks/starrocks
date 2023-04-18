@@ -1456,7 +1456,7 @@ TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
     Status status;
 
     {
-        status = _init_block_cache(50 * 1024 * 1024);	// 50MB
+        status = _init_block_cache(50 * 1024 * 1024); // 50MB
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         auto* range = _create_scan_range(small_file, 0, 0);
