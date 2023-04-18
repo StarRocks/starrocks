@@ -32,8 +32,7 @@ public class LocalWarehouse extends Warehouse {
 
     public LocalWarehouse(long id, String name) {
         super(id, name);
-        long clusterId = GlobalStateMgr.getCurrentState().getNextId();
-        cluster = new Cluster(clusterId);
+        cluster = new Cluster(1L);
     }
 
     @Override
