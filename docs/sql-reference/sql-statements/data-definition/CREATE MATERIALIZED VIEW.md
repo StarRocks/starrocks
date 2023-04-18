@@ -88,7 +88,7 @@ If this parameter is not specified, the materialized view adopts no partitioning
 
 **order_by** (optional)
 
-Specify the sort key of materialized view. If you do not specify the sort key, StarRocks chooses some of the prefix columns from SELECT list as the sort keys. This parameter has been supported since StarRocks v3.0.
+Specify the sort key of materialized view. If you do not specify the sort key, StarRocks chooses some of the prefix columns from SELECT columns as the sort keys, for example, in `select a, b, c, d`, sort keys can be `a` and `b`. This parameter has been supported since StarRocks v3.0.
 
 **COMMENT** (optional)
 
@@ -124,8 +124,7 @@ SELECT select_expr[, select_expr ...]
 
   > **CAUTION**
   >
-  > - If the columns in the query statement are not simple columns, new column names must be specified for the materialized view.
-  > - This parameter must contain at least one single column, and all specified columns can only be specified once.
+  > This parameter must contain at least one single column, and all specified columns can only be specified once.
 
 - GROUP BY (optional)
 
@@ -136,7 +135,7 @@ SELECT select_expr[, select_expr ...]
   The ORDER BY column of the query.
 
   - Columns in the ORDER BY clause must be declared in the same order as the columns in `select_expr`.
-  - If this parameter is not specified, the system will automatically supplement the ORDER BY column according to relevant rules. If the materialized view is created with the AGGREGATE KEY model, all GROUP BY columns are automatically used as sort columns. If the materialized view is not created with the AGGREGATE KEY model, the first 36 bytes are automatically used as the ORDER BY columns. If the number of auto-assigned ORDER BY columns is less than 3, the first three columns are used as ORDER BY columns.
+  - If this parameter is not specified, the system will automatically supplement the ORDER BY column according to relevant rules. If the materialized view is the AGGREGATE type, all GROUP BY columns are automatically used as sort keys. If the materialized view is not the AGGREGATE type, the system automatically chooses sort keys based on the prefix columns.
   - If the query statement contains a GROUP BY clause, the ORDER BY columns must be identical to the GROUP BY columns.
 
 ### Correspondence of aggregate functions
