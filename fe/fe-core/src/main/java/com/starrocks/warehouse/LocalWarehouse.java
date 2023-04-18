@@ -51,4 +51,8 @@ public class LocalWarehouse extends Warehouse {
         throw new SemanticException("not implemented");
     }
 
+    @Override
+    public Cluster getAnyAvailableCluster() {
+        return cluster;
+    }
 }

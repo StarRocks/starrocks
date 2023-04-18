@@ -20,16 +20,22 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Cluster implements Writable {
     @SerializedName(value = "id")
     private long id;
     @SerializedName(value = "wgid")
     private long workerGroupId;
+    @SerializedName(value = "computeNodeList")
+    private List<ComputeNode> computeNodeList = new ArrayList<>();
 
     public Cluster(long id) {
         this.id = id;
@@ -55,6 +61,23 @@ public class Cluster implements Writable {
         result.addRow(Lists.newArrayList(String.valueOf(this.getId()),
                 String.valueOf(this.getPendingSqls()),
                 String.valueOf(this.getRunningSqls())));
+    }
+
+    public void addNode(ComputeNode cn, String warehouseName) {
+        computeNodeList.add(cn);
+        cn.setWarehouseName(warehouseName);
+        if (RunMode.allowCreateLakeTable()) {
+            cn.setWorkerGroupId(workerGroupId);
+            // add worker to group
+        }
+    }
+
+    public void dropNode(ComputeNode cn) {
+        computeNodeList.remove(cn);
+        cn.setWarehouseName(null);
+        if (RunMode.allowCreateLakeTable()) {
+            cn.setWorkerGroupId(-1L);
+        }
     }
 
     @Override

@@ -94,6 +94,13 @@ public class ComputeNode implements IComputable, Writable {
     @SerializedName("lastWriteFail")
     private volatile boolean lastWriteFail = false;
 
+    // for shared_data runmode
+    @SerializedName("warehouseName")
+    private String warehouseName;
+
+    @SerializedName("workerGroupId")
+    private long workerGroupId = -1;
+
     private volatile int numRunningQueries = 0;
     private volatile long memLimitBytes = 0;
     private volatile long memUsedBytes = 0;
@@ -135,6 +142,22 @@ public class ComputeNode implements IComputable, Writable {
         this.ownerClusterName = "";
         this.backendState = Backend.BackendState.free.ordinal();
         this.decommissionType = DecommissionType.SystemDecommission.ordinal();
+    }
+
+    public void setWorkerGroupId(long workerGroupId) {
+        this.workerGroupId = workerGroupId;
+    }
+
+    public long getWorkerGroupId() {
+        return workerGroupId;
+    }
+
+    public void setWarehouseName(String warehouseName) {
+        this.warehouseName = warehouseName;
+    }
+
+    public String getWarehouseName() {
+        return warehouseName;
     }
 
     public void setLastWriteFail(boolean lastWriteFail) {
