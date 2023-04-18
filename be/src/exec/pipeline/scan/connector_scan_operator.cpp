@@ -220,7 +220,7 @@ void ConnectorScanOperator::begin_pull_chunk(ChunkPtr res) {
     _adaptive_processor->op_pull_chunks += 1;
 }
 
-void ConnectorScanOperator::after_pull_chunk(int64_t time) {
+void ConnectorScanOperator::end_pull_chunk(int64_t time) {
     _adaptive_processor->op_running_time += time;
 }
 

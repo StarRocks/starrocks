@@ -79,7 +79,7 @@ public:
     virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
     virtual void begin_pull_chunk(ChunkPtr res) {}
     virtual void begin_driver_process() {}
-    virtual void after_pull_chunk(int64_t time) {}
+    virtual void end_pull_chunk(int64_t time) {}
     virtual void end_driver_process(PipelineDriver* driver) {}
     virtual bool is_running_all_io_tasks() const;
 

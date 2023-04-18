@@ -82,7 +82,7 @@ public:
     int available_pickup_morsel_count() override;
     void begin_pull_chunk(ChunkPtr res) override;
     void begin_driver_process() override;
-    void after_pull_chunk(int64_t time) override;
+    void end_pull_chunk(int64_t time) override;
     void end_driver_process(PipelineDriver* driver) override;
     bool is_running_all_io_tasks() const override;
 
