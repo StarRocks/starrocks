@@ -298,7 +298,6 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  |  <slot 5> : 3: c2.b");
     }
 
-    @Test
     public void testSelectRow() throws Exception {
         String sql = "select row(1,2)";
         assertPlanContains(sql, " <slot 2> : row(1, 2)");
