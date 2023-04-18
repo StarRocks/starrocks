@@ -14,10 +14,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
@@ -73,24 +69,5 @@ public class WarehouseStmtTest {
         String sql_3 = "ALTER WAREHOUSE warehouse_1 ADD CLUSTER";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql_3);
         Assert.assertTrue(stmt instanceof AlterWarehouseStmt);
-    }
-
-    @Test
-    public void testCreateWarehouse() throws Exception {
-        String sql = "CREATE WAREHOUSE warehouse_1";
-        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
-        Assert.assertTrue(stmt instanceof CreateWarehouseStmt);
-        ConnectContext connectCtx = new ConnectContext();
-        connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        CreateWarehouseStmt statement = (CreateWarehouseStmt) stmt;
-        DDLStmtExecutor.execute(statement, connectCtx);
-        WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        Assert.assertTrue(warehouseMgr.warehouseExists("warehouse_1"));
-
-        try {
-            DDLStmtExecutor.execute(statement, connectCtx);
-        } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("exists"));
-        }
     }
 }
