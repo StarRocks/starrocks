@@ -14,6 +14,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.meta.LimitExceededException;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -451,7 +452,21 @@ public class TaskManager {
         checksum ^= data.tasks.size();
         data.runStatus = showTaskRunStatus(null);
         String s = GsonUtils.GSON.toJson(data);
-        Text.writeString(dos, s);
+        boolean retry = false;
+        try {
+            Text.writeString(dos, s);
+        } catch (LimitExceededException ex) {
+            retry = true;
+        }
+        if (retry) {
+            int beforeLength = s.length();
+            taskRunManager.getTaskRunHistory().forceGC();
+            data.runStatus = showTaskRunStatus(null);
+            s = GsonUtils.GSON.toJson(data);
+            LOG.warn("Too much task metadata triggers forced task_run GC, " +
+                    "length before GC:{}, length after GC:{}.", beforeLength, s.length());
+            Text.writeString(dos, s);
+        }
         return checksum;
     }
 
