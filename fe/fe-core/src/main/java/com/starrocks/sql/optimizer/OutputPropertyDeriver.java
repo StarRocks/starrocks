@@ -410,6 +410,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         Preconditions.checkState(childrenOutputProperties.size() == 2);
         PhysicalPropertySet output = childrenOutputProperties.get(1).copy();
         CTEProperty cteProperty = childrenOutputProperties.get(1).getCteProperty().removeCTE(node.getCteId());
+        cteProperty.merge(childrenOutputProperties.get(0).getCteProperty());
         output.setCteProperty(cteProperty);
         return output;
     }
