@@ -699,54 +699,52 @@ select count(*) from profile_wos_p7;
   4. 在 $BE_HOME/conf/be.conf 文件增加选项 JAVA_OPTS/JAVA_OPTS_FOR_JDK_9="-Djava.security.krb5.conf=/etc/krb5.conf"，其中 /etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
   5. resource 中的 uri 地址一定要使用域名，并且相应的 hive 和 hdfs 的域名与 ip 的映射都需要配置到 /etc/hosts 中。
 
-#### AWS S3/Tencent Cloud COS支持
+#### AWS S3/Tencent Cloud COS 支持
 
-一. 下载[依赖库](https://cdn-thirdparty.starrocks.com/hive_s3_jar.tar.gz)并添加到 $FE_HOME/lib/ 路径下。
+1. 在 $FE_HOME/conf/core-site.xml 中加入如下配置：
 
-二. 在 $FE_HOME/conf/core-site.xml 中加入如下配置。
+   ~~~xml
+   <configuration>
+      <property>
+         <name>fs.s3a.impl</name>
+        <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
+      </property>
+      <property>
+         <name>fs.AbstractFileSystem.s3a.impl</name>
+         <value>org.apache.hadoop.fs.s3a.S3A</value>
+      </property>
+      <property>
+         <name>fs.s3a.access.key</name>
+         <value>******</value>
+      </property>
+      <property>
+         <name>fs.s3a.secret.key</name>
+         <value>******</value>
+      </property>
+      <property>
+         <name>fs.s3a.endpoint</name>
+         <value>s3.us-west-2.amazonaws.com</value>
+      </property>
+     <property>
+        <name>fs.s3a.connection.maximum</name>
+        <value>500</value>
+      </property>
+   </configuration>
+   ~~~
 
-~~~xml
-<configuration>
-   <property>
-      <name>fs.s3a.impl</name>
-      <value>org.apache.hadoop.fs.s3a.S3AFileSystem</value>
-   </property>
-   <property>
-      <name>fs.AbstractFileSystem.s3a.impl</name>
-      <value>org.apache.hadoop.fs.s3a.S3A</value>
-   </property>
-   <property>
-      <name>fs.s3a.access.key</name>
-      <value>******</value>
-   </property>
-   <property>
-      <name>fs.s3a.secret.key</name>
-      <value>******</value>
-   </property>
-   <property>
-      <name>fs.s3a.endpoint</name>
-      <value>s3.us-west-2.amazonaws.com</value>
-   </property>
-   <property>
-     <name>fs.s3a.connection.maximum</name>
-     <value>500</value>
-   </property>
-</configuration>
-~~~
+   * `fs.s3a.access.key` 指定 aws 的 access key id
+   * `fs.s3a.secret.key` 指定 aws 的 secret access key
+   * `fs.s3a.endpoint` 指定 aws 的区域
+   * `fs.s3a.connection.maximum` 配置最大链接数，如果查询过程中有报错 `Timeout waiting for connection from poll`，可以适当调高该参数
 
-* `fs.s3a.access.key` 指定 aws 的 access key id
-* `fs.s3a.secret.key` 指定 aws 的 secret access key
-* `fs.s3a.endpoint` 指定 aws 的区域
-* `fs.s3a.connection.maximum` 配置最大链接数，如果查询过程中有报错 `Timeout waiting for connection from poll`，可以适当调高该参数
+2. 在 $BE_HOME/conf/be.conf 中加入如下配置。
 
-二. 在 $BE_HOME/conf/be.conf 中加入如下配置。
+   * `object_storage_access_key_id` 与 FE 端 core-site.xml 配置 `fs.s3a.access.key` 相同
+   * `object_storage_secret_access_key` 与 FE 端 core-site.xml 配置 `fs.s3a.secret.key` 相同
+   * `object_storage_endpoint` 与 FE 端 core-site.xml 配置 `fs.s3a.endpoint` 相同
+   * `object_storage_region` 只有腾讯 COS 需要额外添加该配置项。如：ap-beijing****
 
-* `object_storage_access_key_id` 与 FE 端 core-site.xml 配置 `fs.s3a.access.key` 相同
-* `object_storage_secret_access_key` 与 FE 端 core-site.xml 配置 `fs.s3a.secret.key` 相同
-* `object_storage_endpoint` 与 FE 端 core-site.xml 配置 `fs.s3a.endpoint` 相同
-* `object_storage_region` 只有腾讯 COS 需要额外添加该配置项。如：ap-beijing****
-
-三. 重启 FE，BE。
+3. 重启 FE 和 BE。
 
 #### Aliyun OSS 支持
 
