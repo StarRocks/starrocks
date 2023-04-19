@@ -25,6 +25,10 @@ StarRocks 2.3 及以上版本支持 Catalog（数据目录）功能，方便您�
   - **元数据服务**：用于将元数据暴露出来供 StarRocks 的 FE 进行查询规划。
   - **存储系统**：用于存储数据。数据文件以不同的格式存储在分布式文件系统或对象存储系统中。当 FE 将生成的查询计划分发给各个 BE 后，各个 BE 会并行扫描 Hive 存储系统中的目标数据，并执行计算返回查询结果。
 
+## 访问 Catalog
+
+您可以使用 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 切换当前会话里生效的 Catalog，然后通过该 Catalog 查询数据。
+
 ## 查询数据
 
 ### 查询内部数据
