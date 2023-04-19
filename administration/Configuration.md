@@ -367,7 +367,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | max_runnings_transactions_per_txn_map                 | 100         | N/A    | 每个分区内部同时运行的最大事务数量。            |
 | tablet_max_pending_versions                           | 1000        | N/A    | PrimaryKey 表允许 committed 未 apply 的最大版本数。                 |
 | max_hdfs_file_handle                                  | 1000        | N/A    | 最多可以打开的 HDFS 文件句柄数量。                             |
-| parquet_buffer_stream_reserve_size                    | 1048576     | Byte   | Parquet reader在读取时为每个列预留的内存空间。               |
 | be_exit_after_disk_write_hang_second                  | 60          | second | 磁盘挂起后触发 BE 进程退出的等待时间。                       |
 | min_cumulative_compaction_failure_interval_sec       | 30          | second | Cumulative Compaction 失败后的最小重试间隔。                      |
 | size_tiered_level_num                                 | 7           | N/A    | Size-tiered Compaction 策略的 level 数量。每个 level 最多保留一个 rowset，因此稳定状态下最多会有和 level 数相同的 rowset。 |
@@ -392,7 +391,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |drop_tablet_worker_count|3|删除 tablet 的线程数。|
 |push_worker_count_normal_priority|3|导入线程数，处理 NORMAL 优先级任务。|
 |push_worker_count_high_priority|3|导入线程数，处理 HIGH 优先级任务。|
-|transaction_publish_version_worker_count|8|生效版本的线程数。|
+|transaction_publish_version_worker_count|0|生效版本的最大线程数。当该参数被设置为小于或等于 `0` 时，系统默认使用 CPU 核数的一半，以避免因使用固定值而导致在导入并行较高时线程资源不足。自 2.5 版本起，默认值由 `8` 变更为 `0`。|
 |clear_transaction_task_worker_count|1|清理事务的线程数。|
 |alter_tablet_worker_count|3|进行 schema change 的线程数。|
 |clone_worker_count|3|克隆的线程数。|
