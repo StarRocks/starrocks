@@ -8,7 +8,6 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -36,6 +35,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -103,9 +103,17 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private Expr hllDeserialize(byte[] hll) {
-        Function fn = Expr.getBuiltinFunction("hll_deserialize", new Type[] {Type.VARBINARY},
+        String str = new String(hll, StandardCharsets.UTF_8);
+        Function unhex = Expr.getBuiltinFunction("unhex", new Type[] {Type.VARCHAR},
                 Function.CompareMode.IS_IDENTICAL);
-        FunctionCallExpr fe = new FunctionCallExpr("hll_deserialize", Lists.newArrayList(new VarBinaryLiteral(hll)));
+
+        FunctionCallExpr unhexExpr = new FunctionCallExpr("unhex", Lists.newArrayList(new StringLiteral(str)));
+        unhexExpr.setFn(unhex);
+        unhexExpr.setType(unhex.getReturnType());
+
+        Function fn = Expr.getBuiltinFunction("hll_deserialize", new Type[] {Type.VARCHAR},
+                Function.CompareMode.IS_IDENTICAL);
+        FunctionCallExpr fe = new FunctionCallExpr("hll_deserialize", Lists.newArrayList(unhexExpr));
         fe.setFn(fn);
         fe.setType(fn.getReturnType());
         return fe;
@@ -142,7 +150,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             params.add("'" + partitionName + "'");
             params.add(String.valueOf(data.getRowCount()));
             params.add(String.valueOf(data.getDataSize()));
-            params.add("hll_deserialize('mockData')");
+            params.add("hll_deserialize(unhex('mockData'))");
             params.add(String.valueOf(data.getNullCount()));
             params.add("'" + data.getMax() + "'");
             params.add("'" + data.getMin() + "'");
@@ -156,7 +164,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             row.add(new StringLiteral(partitionName)); // partition name, 10 byte
             row.add(new IntLiteral(data.getRowCount(), Type.BIGINT)); // row count, 8 byte
             row.add(new IntLiteral((long) data.getDataSize(), Type.BIGINT)); // data size, 8 byte
-            row.add(hllDeserialize(data.getHll())); // hll, 16 kB
+            row.add(hllDeserialize(data.getHll())); // hll, 32 kB
             row.add(new IntLiteral(data.getNullCount(), Type.BIGINT)); // null count, 8 byte
             row.add(new StringLiteral(data.getMax())); // max, 200 byte
             row.add(new StringLiteral(data.getMin())); // min, 200 byte
@@ -169,8 +177,8 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private void flushInsertStatisticsData(ConnectContext context, boolean force) throws Exception {
-        // about 17kb
-        long bufferSize = 17L * 1024 * rowsBuffer.size();
+        // hll serialize to hex, about 32kb
+        long bufferSize = 33L * 1024 * rowsBuffer.size();
         if (bufferSize < Config.statistics_full_collect_buffer && !force) {
             return;
         }
@@ -263,12 +271,12 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         context.put("tableName", table.getName());
 
         if (!column.getType().canStatistic()) {
-            context.put("hllFunction", "hll_serialize(hll_empty())");
+            context.put("hllFunction", "hex(hll_serialize(hll_empty()))");
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");
             context.put("minFunction", "''");
         } else {
-            context.put("hllFunction", "hll_serialize(IFNULL(hll_raw(" + quoteColumnName + "), hll_empty()))");
+            context.put("hllFunction", "hex(hll_serialize(IFNULL(hll_raw(" + quoteColumnName + "), hll_empty())))");
             context.put("countNullFunction", "COUNT(1) - COUNT(" + quoteColumnName + ")");
             context.put("maxFunction", getMinMaxFunction(column, quoteColumnName, true));
             context.put("minFunction", getMinMaxFunction(column, quoteColumnName, false));
