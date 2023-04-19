@@ -75,6 +75,7 @@
     + [Tableau Desktop](./integrations/BI_integrations/Tableau_Desktop.md)
   + Integrate with IDE tools
     + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
+    + [DBeaver](./integrations/IDE_integrations/DBeaver.md)
   + [Integrate with other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
   + Deployment
