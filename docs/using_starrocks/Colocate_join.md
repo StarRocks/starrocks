@@ -55,9 +55,10 @@ PROPERTIES(
 
 If the specified Group does not exist, StarRocks automatically creates a Group that only contains the current table. If the Group exists, StarRocks checks to see if the current table meets the Colocation Group Schema. If so, it creates the table and adds it to the Group. At the same time, the table creates a partition and a tablet based on the data distribution rules of the existing Group.
 
-The Group belongs to a Database, and the name of the Group is unique within the Database. The full name of the Group is dbId_groupName in the internal storage, but the user only needs the groupName.
-
-The Group belongs to a Database. Even if you specify the same `colocate_with` property when creating tables in different Databases to ensure that these tables are colocated, each Database still contains a separate Group, which can be confirmed by using `show proc "/colocation_group"`. The Group name is unique within a Database. In the internal storage, the full name of the Group is `dbId_groupName`, but you only perceive `groupName`.
+A colocation group belongs to a database. The name of a colocation group is unique within a database. In the internal storage, the full name of the colocation group is `dbId_groupName`, but you only perceive `groupName`.
+> **NOTE**
+>
+> Even if you specify the same `colocate_with` property when creating tables in different databases to ensure that these tables are colocated, each database still contains a separate colocation group, You can quey the information of colocation groups by using `show proc "/colocation_group"`.
 
 ### Delete
 
