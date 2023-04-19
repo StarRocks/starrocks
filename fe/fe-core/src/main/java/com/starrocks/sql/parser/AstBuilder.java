@@ -122,6 +122,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
+import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -163,6 +164,7 @@ import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
+import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -174,6 +176,7 @@ import com.starrocks.sql.ast.DecommissionBackendClause;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropAnalyzeJobStmt;
@@ -196,6 +199,7 @@ import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.DropStatsStmt;
+import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.DropWarehouseStmt;
@@ -337,6 +341,7 @@ import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
 import com.starrocks.sql.ast.ShowStatusStmt;
+import com.starrocks.sql.ast.ShowStorageVolumesStmt;
 import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
@@ -3191,6 +3196,87 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         StringLiteral stringLiteral = (StringLiteral) visit(context.string());
         String script = stringLiteral.getStringValue();
         return new ExecuteScriptStmt(beId, script, createPos(context));
+    }
+
+    // ---------------------------------------- Storage Volume Statement ----------------------------------------------
+    @Override
+    public ParseNode visitCreateStorageVolumeStatement(StarRocksParser.CreateStorageVolumeStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String svName = identifier.getValue();
+
+        Map<String, String> storageParams = new HashMap<>();
+        List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+        for (Property property : propertyList) {
+            storageParams.put(property.getKey(), property.getValue());
+        }
+
+        String storageType = ((Identifier) visit(context.typeDesc().identifier())).getValue();
+
+        List<StarRocksParser.StringContext> locationList = context.storageLocationsDesc().stringList().string();
+        List<String> locations = new ArrayList<>();
+        for (StarRocksParser.StringContext location : locationList) {
+            locations.add(((StringLiteral) visit(location)).getValue());
+        }
+
+        Boolean enabled = true;
+        if (context.enabledDesc() != null) {
+            enabled = Boolean.parseBoolean(context.enabledDesc().booleanValue().getText());
+        }
+
+        return new CreateStorageVolumeStmt(context.IF() != null,
+                svName, storageType, storageParams, locations, enabled,
+                context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
+                createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowStorageVolumesStatement(StarRocksParser.ShowStorageVolumesStatementContext context) {
+        String pattern = null;
+        if (context.pattern != null) {
+            StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
+            pattern = stringLiteral.getValue();
+        }
+
+        return new ShowStorageVolumesStmt(pattern, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterStorageVolumeStatement(StarRocksParser.AlterStorageVolumeStatementContext context) {
+        String svName = ((Identifier) visit(context.identifier())).getValue();
+        NodePosition pos = createPos(context);
+
+        Map<String, String> storageParams = new HashMap<>();
+        if (context.propertyList() != null) {
+            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+            for (Property property : propertyList) {
+                storageParams.put(property.getKey(), property.getValue());
+            }
+        }
+
+        Boolean enabled = null;
+        if (context.enabledDesc() != null) {
+            enabled = Boolean.parseBoolean(context.enabledDesc().booleanValue().getText());
+        }
+
+        String comment = context.modifyCommentClause() != null ?
+                ((StringLiteral) visit(context.modifyCommentClause().string())).getStringValue() : null;
+
+        return new AlterStorageVolumeStmt(svName, storageParams, enabled, context.DEFAULT() != null,
+                comment, pos);
+    }
+
+    @Override
+    public ParseNode visitDropStorageVolumeStatement(StarRocksParser.DropStorageVolumeStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String svName = identifier.getValue();
+        return new DropStorageVolumeStmt(context.IF() != null, svName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDescStorageVolumeStatement(StarRocksParser.DescStorageVolumeStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String svName = identifier.getValue();
+        return new DescStorageVolumeStmt(svName, createPos(context));
     }
 
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------

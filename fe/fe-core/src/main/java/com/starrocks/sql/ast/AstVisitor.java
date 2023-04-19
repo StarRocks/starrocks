@@ -755,6 +755,28 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    // ---------------------------------------- Storage Volume Statement ----------------------------------------------------
+
+    public R visitCreateStorageVolumeStatement(CreateStorageVolumeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowStorageVolumesStatement(ShowStorageVolumesStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
+    public R visitAlterStorageVolumeStatement(AlterStorageVolumeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDropStorageVolumeStatement(DropStorageVolumeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitDescStorageVolumeStatement(DescStorageVolumeStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------
 
     public R visitUnsupportedStatement(UnsupportedStmt statement, C context) {
