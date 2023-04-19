@@ -1968,9 +1968,9 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         // update_column for auto increment column.
         if (_has_auto_increment && _auto_increment_slot_id == desc->id() && column_ptr->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(column_ptr.get());
-            // If _null_expr_in_auto_increment == true, it means that user specify a null value in auto
-            // increment column, we abort the entire chunk and append a single error msg. Because be know
-            // nothing about whether this row is specified by the user as null or setted during planning.
+            // If nullable->has_null() && _null_expr_in_auto_increment == true, it means that user specify a
+            // null value in auto increment column, we abort the entire chunk and append a single error msg.
+            // Because be know nothing about whether this row is specified by the user as null or setted during planning.
             if (nullable->has_null() && _null_expr_in_auto_increment) {
                 std::stringstream ss;
                 ss << "NULL value in auto increment column '" << desc->col_name() << "'";

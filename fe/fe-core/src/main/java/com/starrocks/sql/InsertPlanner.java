@@ -94,7 +94,6 @@ public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
     private boolean shuffleServiceEnable = false;
-    boolean nullExprInAutoIncrement = false;
 
     private static final Logger LOG = LogManager.getLogger(InsertPlanner.class);
 
@@ -196,7 +195,7 @@ public class InsertPlanner {
                 }
                 dataSink = new OlapTableSink(olapTable, olapTuple, insertStmt.getTargetPartitionIds(),
                         canUsePipeline, olapTable.writeQuorum(), olapTable.enableReplicatedStorage(),
-                        nullExprInAutoIncrement, enableAutomaticPartition);
+                        false, enableAutomaticPartition);
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
             } else {
@@ -246,8 +245,9 @@ public class InsertPlanner {
             boolean isAutoIncrement = targetColumn.isAutoIncrement();
             if (insertStatement.getTargetColumnNames() == null) {
                 for (List<Expr> row : values.getRows()) {
-                    if (!nullExprInAutoIncrement && row.get(columnIdx).getType() == Type.NULL) {
-                        nullExprInAutoIncrement = true;
+                    if (isAutoIncrement && row.get(columnIdx).getType() == Type.NULL) {
+                        throw new SemanticException("AUTO_INCREMENT column: " + targetColumn.getName() +
+                                                    " must not be NULL");
                     }
                     if (row.get(columnIdx) instanceof DefaultValueExpr) {
                         if (isAutoIncrement) {
@@ -263,8 +263,9 @@ public class InsertPlanner {
                 int idx = insertStatement.getTargetColumnNames().indexOf(targetColumn.getName().toLowerCase());
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
-                        if (!nullExprInAutoIncrement && row.get(idx).getType() == Type.NULL) {
-                            nullExprInAutoIncrement = true;
+                        if (isAutoIncrement && row.get(idx).getType() == Type.NULL) {
+                            throw new SemanticException("AUTO_INCREMENT column: " + targetColumn.getName() +
+                                                        " must not be NULL");
                         }
                         if (row.get(idx) instanceof DefaultValueExpr) {
                             if (isAutoIncrement) {

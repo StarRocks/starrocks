@@ -292,7 +292,9 @@ public class StreamLoadScanNode extends LoadScanNode {
                     } else if (defaultValueType == Column.DefaultValueType.NULL) {
                         if (column.isAllowNull() || column.isAutoIncrement()) {
                             expr = NullLiteral.create(column.getType());
-                            nullExprInAutoIncrement = false;
+                            if (column.isAutoIncrement()) {
+                                nullExprInAutoIncrement = false;
+                            }
                         } else {
                             throw new AnalysisException("column has no source field, column=" + column.getName());
                         }

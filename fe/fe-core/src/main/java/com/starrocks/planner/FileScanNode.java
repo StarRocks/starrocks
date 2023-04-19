@@ -360,7 +360,9 @@ public class FileScanNode extends LoadScanNode {
                     } else if (defaultValueType == Column.DefaultValueType.NULL) {
                         if (column.isAllowNull() || column.isAutoIncrement()) {
                             expr = NullLiteral.create(column.getType());
-                            nullExprInAutoIncrement = false;
+                            if (column.isAutoIncrement()) {
+                                nullExprInAutoIncrement = false;
+                            }
                         } else {
                             throw new UserException("Unknown slot ref("
                                     + destSlotDesc.getColumn().getName() + ") in source file");
