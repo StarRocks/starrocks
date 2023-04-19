@@ -177,16 +177,7 @@ public class TabletScheduler extends MasterDaemon {
         this.invertedIndex = invertedIndex;
         this.colocateTableIndex = globalStateMgr.getColocateTableIndex();
         this.stat = stat;
-
-        if (TabletBalancerStrategy.isTabletAndDiskStrategy(Config.tablet_balancer_strategy)) {
-            this.rebalancer = new DiskAndTabletLoadReBalancer(infoService, invertedIndex);
-        } else if (TabletBalancerStrategy.isBELoadScoreStrategy(Config.tablet_balancer_strategy)) {
-            this.rebalancer = new BeLoadRebalancer(infoService, invertedIndex);
-        } else {
-            LOG.warn("invalid value of Config.tablet_balancer_strategy {}, use be_load_score strategy",
-                    Config.tablet_balancer_strategy);
-            this.rebalancer = new BeLoadRebalancer(infoService, invertedIndex);
-        }
+        this.rebalancer = new DiskAndTabletLoadReBalancer(infoService, invertedIndex);
     }
 
     public TabletSchedulerStat getStat() {
