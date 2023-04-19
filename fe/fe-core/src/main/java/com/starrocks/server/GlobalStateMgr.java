@@ -1278,7 +1278,7 @@ public class GlobalStateMgr {
             shardDeleter.start();
         }
 
-        if (Config.enable_safe_mode_check) {
+        if (Config.enable_safe_mode) {
             LOG.info("Start safe mode checker!");
             safeModeChecker.start();
         }
