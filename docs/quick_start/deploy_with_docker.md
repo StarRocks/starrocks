@@ -28,8 +28,7 @@ Before deploying StarRocks in Docker, make sure the following requirements are s
 Download a StarRocks Docker image from [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/allin1-ubuntu/tags). You can choose a specific version based on the tag of the image.
 
 ```Bash
-# Replace <image_tag> with the tag of the image that you want to download, for example, `2.5.4`.
-sudo docker pull starrocks/allin1-ubuntu:<image_tag>
+sudo docker pull starrocks/allin1-ubuntu
 ```
 
 ## Step 2: Deploy StarRocks in Docker container
@@ -37,9 +36,8 @@ sudo docker pull starrocks/allin1-ubuntu:<image_tag>
 After the Docker image is downloaded, you can deploy StarRocks by running the following command:
 
 ```Bash
-# Replace <image_tag> with the tag of the image that you downloaded, for example, `2.5.4`.
 sudo docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 \
-    -itd starrocks/allin1-ubuntu:<image_tag>
+    -itd starrocks/allin1-ubuntu
 ```
 
 > **TROUBLESHOOTING**

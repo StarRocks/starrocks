@@ -101,10 +101,36 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testDecimal() throws Exception {
+        String sql = "select cast(tj as decimal32) from tall";
+        analyzeFail(sql, "Unknown type: decimal32");
+
+        sql = "select cast(tj as decimal64) from tall";
+        analyzeFail(sql, "Unknown type: decimal64");
+
+        sql = "select cast(tj as decimal128) from tall";
+        analyzeFail(sql, "Unknown type: decimal128");
+
+        sql = "select cast(tj as decimal) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL128(38,0))");
+
+        sql = "select cast(tj as decimal(10, 2)) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL64(10,2))");
+
+        sql = "select cast(tj as decimal(10)) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL64(10,0))");
+
+        sql = "select cast(tj as decimal(28, 2)) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL128(28,2))");
+
+        sql = "select cast(tj as decimal(28)) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL128(28,0))");
+    }
+
+    @Test
     public void testSelectLiteral() throws Exception {
         String sql = "select date '1998-12-01'";
         assertPlanContains(sql, "<slot 2> : '1998-12-01'");
-        System.out.println(getFragmentPlan(sql));
     }
 
     @Test
@@ -217,7 +243,6 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select array[v1,v2] from t0";
         assertPlanContains(sql, "ARRAY<bigint(20)>[1: v1,2: v2]");
 
-
         sql = "select array[NULL][1] + 1, array[1,2,3][1] + array[array[1,2,3],array[1,1,1]][2][2];";
         assertPlanContains(sql, "1:Project\n" +
                 "  |  <slot 2> : NULL\n" +
@@ -298,7 +323,6 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  |  <slot 5> : 3: c2.b");
     }
 
-    @Test
     public void testSelectRow() throws Exception {
         String sql = "select row(1,2)";
         assertPlanContains(sql, " <slot 2> : row(1, 2)");
@@ -315,7 +339,7 @@ public class TrinoQueryTest extends TrinoTestBase {
         String sql = "select c0, c1[1] from test_map";
         assertPlanContains(sql, "1:Project\n" +
                 "  |  <slot 1> : 1: c0\n" +
-                "  |  <slot 4> : 2: c1[1]");
+                "  |  <slot 5> : 2: c1[1]");
 
         sql = "select c0 from test_map where c1[1] > 10";
         assertPlanContains(sql, "PREDICATES: 2: c1[1] > 10");
@@ -325,16 +349,22 @@ public class TrinoQueryTest extends TrinoTestBase {
                 "  |  output: avg(2: c1[1])");
 
         sql = "select c2[2][1] from test_map";
-        assertPlanContains(sql, "<slot 4> : 3: c2[2][1]");
+        assertPlanContains(sql, "<slot 5> : 3: c2[2][1]");
+
+        sql = "select c3['10'] from test_map";
+        assertPlanContains(sql, "1:Project\n" +
+                "  |  <slot 5> : 4: c3['10']");
+
+        analyzeFail("select c3[\"10\"] from test_map");
     }
 
     @Test
     public void testSelectMapFunction() throws Exception {
         String sql = "select map_keys(c1) from test_map";
-        assertPlanContains(sql, "<slot 4> : map_keys(2: c1)");
+        assertPlanContains(sql, "<slot 5> : map_keys(2: c1)");
 
         sql = "select map_values(c1) from test_map";
-        assertPlanContains(sql, "<slot 4> : map_values(2: c1)");
+        assertPlanContains(sql, "<slot 5> : map_values(2: c1)");
     }
 
     @Test
@@ -603,7 +633,6 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 1> : 1: v1", "output: count(if(CAST(1: v1 AS BOOLEAN), 1, NULL))");
     }
 
-
     @Test
     public void testLimit() throws Exception {
         String sql = "select * from t0 limit 10";
@@ -753,5 +782,32 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select interval '1' year + date '2022-01-01';";
         assertPlanContains(sql, "<slot 2> : '2023-01-01 00:00:00'");
+    }
+
+    @Test
+    public void selectDoubleLiteral() throws Exception {
+        String sql = "select 1.0";
+        assertPlanContains(sql, "<slot 2> : 1.0");
+
+        sql = "select  -1.79E+309;";
+        analyzeFail(sql);
+
+        sql = "select  -1.79E+3;";
+        assertPlanContains(sql, "<slot 2> : -1790.0");
+
+        sql = "select  -1.79E+10;";
+        assertPlanContains(sql, "<slot 2> : -17900000000");
+
+        sql = "select approx_percentile(2.25, -1.79E+309)";
+        analyzeFail(sql);
+
+        sql = "select approx_percentile(2.25, 1.79E-10)";
+        assertPlanContains(sql, "percentile_approx(2.25, 1.79E-10)");
+
+        sql = "select approx_percentile(2.25, 1.79E+10)";
+        assertPlanContains(sql, "percentile_approx(2.25, 1.79E10)");
+
+
+        System.out.println(getFragmentPlan(sql));
     }
 }

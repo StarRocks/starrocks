@@ -15,6 +15,7 @@ This statement requires no privileges for execution. Before you create external 
 
 ```SQL
 CREATE EXTERNAL CATALOG <catalog_name>
+[COMMENT <comment>]
 PROPERTIES ("key"="value", ...)
 ```
 
@@ -23,7 +24,8 @@ PROPERTIES ("key"="value", ...)
 | **Parameter** | **Required** | **Description**                                              |
 | ------------- | ------------ | ------------------------------------------------------------ |
 | catalog_name  | Yes          | The name of the external catalog. The naming conventions are as follows:<ul><li>The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.</li><li>The name cannot exceed 64 characters in length.</li></ul> |
-| PROPERTIES    | Yes          | The properties of an external catalog. Configure properties based on the types of external catalogs. For more information, see [Hive catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../../data_source/catalog/hudi_catalog.md), and [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md). |
+| comment       | No           | The description of the external catalog. |
+| PROPERTIES    | Yes          | The properties of an external catalog. Configure properties based on the types of external catalogs. For more information, see [Hive catalog](../../../data_source/catalog/hive_catalog.md), [Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../../../data_source/catalog/hudi_catalog.md), [Delta Lake catalog](../../../data_source/catalog/deltalake_catalog.md), and [JDBC Catalog](../../../data_source/catalog/jdbc_catalog.md). |
 
 ## Examples
 

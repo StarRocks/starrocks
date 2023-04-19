@@ -105,8 +105,7 @@ public class UpdatePlanner {
                 OlapTable olapTable = (OlapTable) table;
                 DataSink dataSink =
                         new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
-                                olapTable.enableReplicatedStorage(), updateStmt.nullExprInAutoIncrement(),
-                                olapTable.supportedAutomaticPartition());
+                                olapTable.enableReplicatedStorage(), false, olapTable.supportedAutomaticPartition());
                 execPlan.getFragments().get(0).setSink(dataSink);
                 execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             } else if (table instanceof SchemaTable) {

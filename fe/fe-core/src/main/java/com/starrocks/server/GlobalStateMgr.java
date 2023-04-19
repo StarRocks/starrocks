@@ -793,6 +793,10 @@ public class GlobalStateMgr {
         return getCurrentState().getStarOSAgent();
     }
 
+    public static WarehouseManager getCurrentWarehouseMgr() {
+        return getCurrentState().getWarehouseMgr();
+    }
+
     public static HeartbeatMgr getCurrentHeartbeatMgr() {
         return getCurrentState().getHeartbeatMgr();
     }
@@ -1048,6 +1052,7 @@ public class GlobalStateMgr {
                     // already upgraded, set auth = null
                     auth = null;
                 }
+                warehouseMgr.init();
                 break;
             }
 
@@ -1106,6 +1111,7 @@ public class GlobalStateMgr {
         // Set the feType to LEADER before writing edit log, because the feType must be Leader when writing edit log.
         // It will be set to the old type if any error happens in the following procedure
         feType = FrontendNodeType.LEADER;
+
         try {
             // Log meta_version
             int communityMetaVersion = MetaContext.get().getMetaVersion();

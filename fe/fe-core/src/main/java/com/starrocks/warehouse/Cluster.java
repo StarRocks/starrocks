@@ -24,7 +24,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class Cluster implements Writable {
     @SerializedName(value = "id")
@@ -32,23 +31,13 @@ public class Cluster implements Writable {
     @SerializedName(value = "wgid")
     private long workerGroupId;
 
-    // Note: we only record running sqls number and pending sqls in Warehouse and Cluster
-    // We suppose that sql queue tool has nothing to do with  Cluster,
-    // Cluster offers related interfaces and sql queue tool will update counter according to the implementation of sqls.
-    private AtomicInteger numRunningSqls;
+    public Cluster(long id) {
+        this.id = id;
+    }
 
     public Cluster(long id, long workerGroupId) {
         this.id = id;
         this.workerGroupId = workerGroupId;
-    }
-
-    // set the associated worker group id when resizing
-    /*    public void setWorkerGroupId(long id) {
-        this.workerGroupId = id;
-    }*/
-
-    public long getWorkerGroupId() {
-        return workerGroupId;
     }
 
     public long getId() {
@@ -61,12 +50,6 @@ public class Cluster implements Writable {
     public int getPendingSqls() {
         return -1;
     }
-    /*    public int setRunningSqls(int val) {
-        return 1;
-    }
-    public int addAndGetRunningSqls(int delta) {
-        return 1;
-    }*/
 
     public void getProcNodeData(BaseProcResult result) {
         result.addRow(Lists.newArrayList(String.valueOf(this.getId()),
