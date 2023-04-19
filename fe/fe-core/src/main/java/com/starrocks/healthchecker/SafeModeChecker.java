@@ -17,7 +17,7 @@ package com.starrocks.healthchecker;
 import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import org.apache.logging.log4j.LogManager;
@@ -25,7 +25,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public class SafeModeChecker extends LeaderDaemon {
+public class SafeModeChecker extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(SafeModeChecker.class);
 
     public SafeModeChecker() {
