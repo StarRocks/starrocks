@@ -25,8 +25,6 @@
 #include "metrics/metrics.h"
 #endif
 
-#include "common/config.h"
-
 namespace starrocks::io {
 
 inline Status make_error_status(const Aws::S3::S3Error& error) {

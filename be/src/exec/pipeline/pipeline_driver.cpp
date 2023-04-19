@@ -17,7 +17,6 @@
 #include <sstream>
 
 #include "column/chunk.h"
-#include "common/config.h"
 #include "common/statusor.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/scan/olap_scan_operator.h"
