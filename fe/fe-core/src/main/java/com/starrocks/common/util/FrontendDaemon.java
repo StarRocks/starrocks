@@ -39,20 +39,19 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 /*
- * LeaderDaemon is a kind of thread only master FE will start.
- * And it will wait master FE to be ready before running.
+ * FrontendDaemon will wait for FE to be ready before running.
  */
-public class LeaderDaemon extends Daemon {
-    private static final Logger LOG = LogManager.getLogger(LeaderDaemon.class);
+public class FrontendDaemon extends Daemon {
+    private static final Logger LOG = LogManager.getLogger(FrontendDaemon.class);
 
-    public LeaderDaemon() {
+    public FrontendDaemon() {
     }
 
-    public LeaderDaemon(String name) {
+    public FrontendDaemon(String name) {
         super(name);
     }
 
-    public LeaderDaemon(String name, long intervalMs) {
+    public FrontendDaemon(String name, long intervalMs) {
         super(name, intervalMs);
     }
 

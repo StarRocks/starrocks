@@ -37,14 +37,14 @@ package com.starrocks.transaction;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
-public class UpdateDbUsedDataQuotaDaemon extends LeaderDaemon {
+public class UpdateDbUsedDataQuotaDaemon extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(UpdateDbUsedDataQuotaDaemon.class);
 
     public UpdateDbUsedDataQuotaDaemon() {

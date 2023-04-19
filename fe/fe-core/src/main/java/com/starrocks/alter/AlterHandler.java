@@ -42,7 +42,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.qe.ShowResultSet;
@@ -62,7 +62,7 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.locks.ReentrantLock;
 
-public abstract class AlterHandler extends LeaderDaemon {
+public abstract class AlterHandler extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(AlterHandler.class);
 
     // queue of alter job v2

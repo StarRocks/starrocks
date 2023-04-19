@@ -18,7 +18,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -35,7 +35,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class StatisticAutoCollector extends LeaderDaemon {
+public class StatisticAutoCollector extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticAutoCollector.class);
 
     private static final StatisticExecutor STATISTIC_EXECUTOR = new StatisticExecutor();

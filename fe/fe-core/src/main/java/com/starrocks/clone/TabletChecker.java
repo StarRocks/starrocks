@@ -54,7 +54,7 @@ import com.starrocks.clone.TabletScheduler.AddResult;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -72,7 +72,7 @@ import java.util.stream.Collectors;
  * This checker is responsible for checking all unhealthy tablets.
  * It does not responsible for any scheduler of tablet repairing or balance
  */
-public class TabletChecker extends LeaderDaemon {
+public class TabletChecker extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletChecker.class);
 
     private GlobalStateMgr globalStateMgr;

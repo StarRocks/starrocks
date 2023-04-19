@@ -40,7 +40,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.TabletStatRequest;
@@ -68,7 +68,7 @@ import java.util.concurrent.Future;
  * TabletStatMgr is for collecting tablet(replica) statistics from backends.
  * Each FE will collect by itself.
  */
-public class TabletStatMgr extends LeaderDaemon {
+public class TabletStatMgr extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletStatMgr.class);
 
     // for lake table

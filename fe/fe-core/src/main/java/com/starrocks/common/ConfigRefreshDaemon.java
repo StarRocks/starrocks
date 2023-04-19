@@ -14,14 +14,14 @@
 
 package com.starrocks.common;
 
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class ConfigRefreshDaemon extends LeaderDaemon {
+public class ConfigRefreshDaemon extends FrontendDaemon {
     private static final int REFRESH_INTERVAL_MS = 10000;
 
     private final List<ConfigRefreshListener> listeners = new ArrayList<>();

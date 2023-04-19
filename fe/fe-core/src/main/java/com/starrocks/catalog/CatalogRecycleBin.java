@@ -50,7 +50,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.RecoverInfo;
@@ -81,7 +81,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.server.GlobalStateMgr.isCheckpointThread;
 import static java.lang.Math.max;
 
-public class CatalogRecycleBin extends LeaderDaemon implements Writable {
+public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(CatalogRecycleBin.class);
     // erase meta at least after MIN_ERASE_LATENCY milliseconds
     // to avoid erase log ahead of drop log
