@@ -25,10 +25,13 @@ struct HdfsScanStats;
 namespace starrocks::parquet {
 struct ColumnReaderContext {
     Buffer<uint8_t>* filter = nullptr;
-    size_t next_row = 0;
+    // rows to skip before apply filter
     size_t rows_to_skip = 0;
 
-    void advance(size_t num_rows) { next_row += num_rows; }
+    // It's a temporary variable
+    size_t tmp_next_row = 0;
+
+    void advance(size_t num_rows) { tmp_next_row += num_rows; }
 };
 
 struct ColumnReaderOptions {

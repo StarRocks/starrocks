@@ -82,7 +82,7 @@ public:
                 run++;
             }
             if (is_null) {
-                dst->append_nulls(run);
+                DCHECK(dst->append_nulls(run));
             } else {
                 RETURN_IF_ERROR(_cur_decoder->next_batch(run, content_type, dst));
             }

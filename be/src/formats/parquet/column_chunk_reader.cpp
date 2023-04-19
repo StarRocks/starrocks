@@ -92,6 +92,7 @@ Status ColumnChunkReader::skip_page() {
 }
 
 Status ColumnChunkReader::_parse_page_header() {
+    // TODO(Smi) reset _num_values = 0 for each page header load
     DCHECK(_page_parse_state == INITIALIZED || _page_parse_state == PAGE_DATA_PARSED);
     size_t off = _page_reader->get_offset();
     RETURN_IF_ERROR(_page_reader->next_header());

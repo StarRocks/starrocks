@@ -79,7 +79,7 @@ public:
     ~GroupReader() = default;
 
     Status init();
-    Status get_next(ChunkPtr* chunk, size_t* row_count);
+    Status get_next(ChunkPtr* chunk, size_t* num_rows);
     void close();
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset);
     void set_end_offset(int64_t value) { _end_offset = value; }
@@ -123,7 +123,7 @@ private:
     Status _create_column_reader(const GroupReaderParam::Column& column);
     ChunkPtr _create_read_chunk(const std::vector<int>& column_indices);
     // Extract dict filter columns and conjuncts
-    void _process_columns_and_conjunct_ctxs();
+    void _process_lazy_load_columns_and_conjunct_ctxs();
     bool _can_use_as_dict_filter_column(const SlotDescriptor* slot, const SlotIdExprContextsMap& slot_conjunct_ctxs,
                                         const tparquet::ColumnMetaData& column_metadata);
     // Returns true if all of the data pages in the column chunk are dict encoded

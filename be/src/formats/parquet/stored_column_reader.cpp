@@ -90,6 +90,9 @@ public:
     void reset() override;
 
     Status do_read_records(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+        if (!dst->is_nullable()) {
+            return Status::InternalError("Read OptionalStoredColumn required nullable column");
+        }
         if (_need_parse_levels) {
             return _read_records_and_levels(num_records, content_type, dst);
         } else {
@@ -484,12 +487,12 @@ void OptionalStoredColumnReader::_decode_levels(size_t num_levels) {
 }
 
 Status RequiredStoredColumnReader::do_read_records(size_t* num_records, ColumnContentType content_type, Column* dst) {
-    size_t records_read = 0;
-    while (records_read < *num_records) {
+    size_t num_rows_readed = 0;
+    while (num_rows_readed < *num_records) {
         if (_num_values_left_in_cur_page == 0) {
             size_t read_count = 0;
-            auto st = next_page(*num_records - records_read, content_type, &read_count, dst);
-            records_read += read_count;
+            auto st = next_page(*num_records - num_rows_readed, content_type, &read_count, dst);
+            num_rows_readed += read_count;
             if (!st.ok()) {
                 if (st.is_end_of_file()) {
                     break;
@@ -498,17 +501,16 @@ Status RequiredStoredColumnReader::do_read_records(size_t* num_records, ColumnCo
                 }
             }
         }
-
-        size_t records_to_read = std::min(*num_records - records_read, _num_values_left_in_cur_page);
+        size_t records_to_read = std::min(*num_records - num_rows_readed, _num_values_left_in_cur_page);
         if (records_to_read == 0) {
             break;
         }
         RETURN_IF_ERROR(_reader->decode_values(records_to_read, content_type, dst));
-        records_read += records_to_read;
+        num_rows_readed += records_to_read;
         _num_values_left_in_cur_page -= records_to_read;
         update_read_context(records_to_read);
     }
-    *num_records = records_read;
+    *num_records = num_rows_readed;
     return Status::OK();
 }
 
@@ -541,6 +543,7 @@ Status StoredColumnReader::next_page(size_t records_to_read, ColumnContentType c
     }
 
     if (_opts.context->rows_to_skip > 0) {
+        DCHECK(_opts.context->rows_to_skip >= records_to_skip);
         _opts.context->rows_to_skip -= records_to_skip;
     }
     if (_opts.context->filter) {
@@ -625,13 +628,14 @@ bool StoredColumnReader::page_selected(size_t num_values) {
     if (!filter) {
         return true;
     }
-    size_t start_row = _opts.context->next_row;
+    size_t start_row = _opts.context->tmp_next_row;
     int end_row = std::min(start_row + num_values, filter->size()) - 1;
     return SIMD::find_nonzero(*filter, start_row) <= end_row;
 }
 
 void StoredColumnReader::update_read_context(size_t records_read) {
     if (_opts.context->rows_to_skip > 0) {
+        DCHECK(_opts.context->rows_to_skip >= records_read);
         _opts.context->rows_to_skip -= records_read;
     }
     if (_opts.context->filter) {
