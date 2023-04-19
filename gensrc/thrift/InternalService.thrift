@@ -183,6 +183,8 @@ struct TQueryOptions {
 
   67: optional bool enable_pipeline_query_statistic;
 
+  91: optional bool use_page_cache;
+
   102: optional bool enable_collect_table_level_scan_stats;
 }
 
