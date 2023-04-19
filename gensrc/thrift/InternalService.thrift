@@ -190,6 +190,8 @@ struct TQueryOptions {
   88: optional double runtime_filter_early_return_selectivity = 0.05;
 
   90: optional i64 log_rejected_record_num = 0;
+
+  91: optional bool use_page_cache;
 }
 
 
