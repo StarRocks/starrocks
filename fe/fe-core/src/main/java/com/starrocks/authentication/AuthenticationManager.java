@@ -31,6 +31,7 @@ import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.UserIdentity;
@@ -56,8 +57,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class AuthenticationManager {
     private static final Logger LOG = LogManager.getLogger(AuthenticationManager.class);
     private static final String DEFAULT_PLUGIN = PlainPasswordAuthenticationProvider.PLUGIN_NAME;
-
     public static final String ROOT_USER = "root";
+    public static final long DEFAULT_MAX_CONNECTION_FOR_EXTERNAL_USER = 100;
 
     // core data structure
     // user identity -> all the authentication information
@@ -85,10 +86,10 @@ public class AuthenticationManager {
         /**
          * If someone log in from 10.1.1.1 with name "test_user", the matching UserIdentity
          * can be sorted in the below order,
-         *   1. test_user@10.1.1.1
-         *   2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
-         *      If multiple hostnames match the login ip, just return one randomly.
-         *   3. test_user@%, as a fallback.
+         * 1. test_user@10.1.1.1
+         * 2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
+         * If multiple hostnames match the login ip, just return one randomly.
+         * 3. test_user@%, as a fallback.
          */
         private static Integer scoreUserIdentityHost(UserIdentity userIdentity) {
             // ip(1) > hostname(2) > %(3)
@@ -164,7 +165,12 @@ public class AuthenticationManager {
     }
 
     public long getMaxConn(String userName) {
-        return userNameToProperty.get(userName).getMaxConn();
+        UserProperty userProperty = userNameToProperty.get(userName);
+        if (userProperty == null) {
+            throw new SemanticException("Can not find user " + userName);
+        } else {
+            return userNameToProperty.get(userName).getMaxConn();
+        }
     }
 
     public String getDefaultPlugin() {
