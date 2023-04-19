@@ -174,7 +174,6 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
         size_t max_chunks = std::max<size_t>(_limit / (runtime_state()->chunk_size()), 1);
         max_buffer_capacity = std::min(max_buffer_capacity, max_chunks);
     }
-    VLOG_FILE << "[ZZZ] limit = " << _limit << ", max buffer capacity = " << max_buffer_capacity;
 
     size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, _estimated_max_concurrent_chunks());
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
