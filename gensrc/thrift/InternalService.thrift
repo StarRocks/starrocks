@@ -164,11 +164,35 @@ struct TQueryOptions {
 
   60: optional i32 query_delivery_timeout;
 
+<<<<<<< HEAD
   // The following params only exist on 2.2 2.3, to avoid upgrade inconsistency
   //  (if start from a low number, say 80, this id may be used by another param in the new version),
   // start from 1000
   1000: optional i32 parallel_exec_instance_num;
   1001: optional i32 max_parallel_scan_instance_num;
+=======
+  70: optional bool allow_throw_exception = 0;
+
+  71: optional bool hudi_mor_force_jni_reader;
+
+  72: optional i64 rpc_http_min_size;
+
+  // some experimental parameter for spill
+  73: optional i32 spill_mem_table_size;
+  74: optional i32 spill_mem_table_num;
+  75: optional double spill_mem_limit_threshold;
+  76: optional i64 spill_operator_min_bytes;
+  77: optional i64 spill_operator_max_bytes;
+  85: optional TSpillMode spill_mode;
+  
+  86: optional i32 io_tasks_per_scan_operator = 4;
+  87: optional i32 connector_io_tasks_per_scan_operator = 16;
+  88: optional double runtime_filter_early_return_selectivity = 0.05;
+
+  90: optional i64 log_rejected_record_num = 0;
+
+  91: optional bool use_page_cache;
+>>>>>>> b0d0533f3e... [Enhancement] Avoid using page cache when collecting statistics (#21801)
 }
 
 

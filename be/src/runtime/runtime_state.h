@@ -283,6 +283,8 @@ public:
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
 
+    bool use_page_cache();
+
 private:
     Status create_error_log_file();
 
