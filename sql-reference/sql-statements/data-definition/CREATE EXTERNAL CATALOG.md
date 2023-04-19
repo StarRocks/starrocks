@@ -8,6 +8,7 @@
 - [Iceberg catalog](/data_source/catalog/iceberg_catalog.md)：用于查询 Apache Iceberg 集群中的数据。
 - [Hudi catalog](/data_source/catalog/hudi_catalog.md)：用于查询 Apache Hudi 集群中的数据。
 - [Delta Lake catalog](/data_source/catalog/deltalake_catalog.md)：用于查询 Delta Lake 数据。
+- [JDBC catalog](/data_source/catalog/jdbc_catalog.md)：用于查询 JDBC 数据源的数据。
 
 使用该创建语句无权限限制。在创建 External Catalog 前，需要根据数据源的存储系统（如 Amazon S3）、元数据服务（如 Hive metastore）和认证方式（如 Kerberos）在 StarRocks 中做相应的配置。详细信息，请参见以上各个 External Catalog 文档中的「前提条件」小节 。
 

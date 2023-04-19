@@ -11,51 +11,51 @@ StarRocks 2.3 及以上版本提供了 Internal Catalog（内部数据目录）�
    - 如使用 JDBC 连接到 StarRocks，连接时即可通过 `default_catalog.db_name` 的方式指定要连接的数据库。
 2. （可选）通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) 查看数据库：
 
-    ```SQL
-    SHOW DATABASES;
-    ```
+   ```SQL
+   SHOW DATABASES;
+   ```
 
-    或
+   或
 
-    ```SQL
-    SHOW DATABASES FROM default_catalog;
-    ```
+   ```SQL
+   SHOW DATABASES FROM default_catalog;
+   ```
 
 3. （可选）通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 切换当前会话生效的 Catalog：
 
-    ```SQL
-    SET CATALOG <catalog_name>;
-    ```
+   ```SQL
+   SET CATALOG <catalog_name>;
+   ```
 
-    再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定当前会话生效的数据库：
+   再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定当前会话生效的数据库：
 
-    ```SQL
-    USE <db_name>;
-    ```
+   ```SQL
+   USE <db_name>;
+   ```
 
-    或者，也可以通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
+   或者，也可以通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
 
-    ```SQL
-    USE <catalog_name>.<db_name>;
-    ```
+   ```SQL
+   USE <catalog_name>.<db_name>;
+   ```
 
 4. 通过 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md) 查询内部数据：
 
-    ```SQL
-    SELECT * FROM <table_name>;
-    ```
+   ```SQL
+   SELECT * FROM <table_name>;
+   ```
 
-    如在以上步骤中未指定数据库，则可以在查询语句中直接指定。
+   如在以上步骤中未指定数据库，则可以在查询语句中直接指定。
 
-    ```SQL
-    SELECT * FROM <db_name>.<table_name>;
-    ```
+   ```SQL
+   SELECT * FROM <db_name>.<table_name>;
+   ```
 
-    或
+   或
 
-    ```SQL
-    SELECT * FROM default_catalog.<db_name>.<table_name>;
-    ```
+   ```SQL
+   SELECT * FROM default_catalog.<db_name>.<table_name>;
+   ```
 
 ## 示例
 

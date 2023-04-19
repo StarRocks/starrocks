@@ -397,21 +397,21 @@ DROP Catalog hive_catalog_glue;
 
 2. 通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 切换当前会话生效的 Catalog：
 
-    ```SQL
-    SET CATALOG <catalog_name>;
-    ```
+   ```SQL
+   SET CATALOG <catalog_name>;
+   ```
 
-    再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定当前会话生效的数据库：
+   再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定当前会话生效的数据库：
 
-    ```SQL
-    USE <db_name>;
-    ```
+   ```SQL
+   USE <db_name>;
+   ```
 
-    或者，也可以通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
+   或者，也可以通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
 
-    ```SQL
-    USE <catalog_name>.<db_name>;
-    ```
+   ```SQL
+   USE <catalog_name>.<db_name>;
+   ```
 
 3. 通过 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
 
