@@ -22,7 +22,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -34,7 +34,7 @@ import java.util.Map;
 /**
  * It is responsible for loading all StarRocks OLAP external table's meta-data periodically
  */
-public class StarRocksRepository extends LeaderDaemon {
+public class StarRocksRepository extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(StarRocksRepository.class);
 
     private Map<Long, ExternalOlapTable> srTables;

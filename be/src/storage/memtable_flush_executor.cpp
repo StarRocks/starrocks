@@ -67,7 +67,7 @@ public:
             }
 
             // segment doesn't has path means no memtable had flushed, so that reset segment
-            if (!segment->has_path() && !segment->has_delete_path()) {
+            if (!segment->has_path() && !segment->has_delete_path() && !segment->has_update_path()) {
                 segment.reset();
             }
         }

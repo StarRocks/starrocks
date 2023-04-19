@@ -67,6 +67,7 @@ import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TLoadJobType;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
@@ -241,12 +242,20 @@ public class BrokerLoadJob extends BulkLoadJob {
                 }
 
                 String mergeCondition = (brokerDesc == null) ? "" : brokerDesc.getMergeConditionStr();
+                TPartialUpdateMode mode = TPartialUpdateMode.UNKNOWN_MODE;
+                if (partialUpdateMode.equals("column")) {
+                    mode = TPartialUpdateMode.COLUMN_MODE;
+                } else if (partialUpdateMode.equals("auto")) {
+                    mode = TPartialUpdateMode.AUTO_MODE;
+                } else if (partialUpdateMode.equals("row")) {
+                    mode = TPartialUpdateMode.ROW_MODE;
+                }
                 // Generate loading task and init the plan of task
                 LoadLoadingTask task = new LoadLoadingTask(db, table, brokerDesc,
                         brokerFileGroups, getDeadlineMs(), loadMemLimit,
                         strictMode, transactionId, this, timezone, timeoutSecond,
                         createTimestamp, partialUpdate, mergeCondition, sessionVariables,
-                        context,  TLoadJobType.BROKER, priority, originStmt);
+                        context,  TLoadJobType.BROKER, priority, originStmt, mode);
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
                 task.init(loadId, attachment.getFileStatusByTable(aggKey), attachment.getFileNumByTable(aggKey));

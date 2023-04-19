@@ -239,6 +239,7 @@ struct OlapReaderStatistics {
 
     int64_t get_rowsets_ns = 0;
     int64_t get_delvec_ns = 0;
+    int64_t get_delta_column_group_ns = 0;
     int64_t segment_init_ns = 0;
 
     int64_t segment_stats_filtered = 0;
@@ -269,6 +270,7 @@ struct OlapReaderStatistics {
 };
 
 typedef uint32_t ColumnId;
+typedef int32_t ColumnUID;
 // Column unique id set
 typedef std::set<uint32_t> UniqueIdSet;
 // Column unique Id -> column id map

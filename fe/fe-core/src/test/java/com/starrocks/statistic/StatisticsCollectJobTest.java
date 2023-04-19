@@ -181,6 +181,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
     }
 
+    @Test
     public void testAnalyzeALLDB() {
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new AnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
@@ -199,6 +200,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 fullStatisticsCollectJob.getColumns().toString()));
     }
 
+    @Test
     public void testAnalyzeDB() {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
@@ -523,7 +525,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t0_stats_partition")));
         Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t1_stats")));
     }
-
+    
+    @Test
     public void testCount() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb("stats");
         OlapTable olapTable = (OlapTable) db.getTable("tcount");

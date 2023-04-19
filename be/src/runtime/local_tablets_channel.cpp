@@ -498,6 +498,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
             options.replica_state = Peer;
         }
         options.merge_condition = params.merge_condition();
+        options.partial_update_mode = params.partial_update_mode();
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         if (res.status().ok()) {

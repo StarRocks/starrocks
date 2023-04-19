@@ -24,6 +24,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -45,6 +46,15 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
 public class UpdateAnalyzer {
+
+    private static boolean checkIfUsePartialUpdate(int updateColumnCnt, int tableColumnCnt) {
+        if (updateColumnCnt <= 3 && updateColumnCnt < tableColumnCnt * 0.3) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
     public static void analyze(UpdateStmt updateStmt, ConnectContext session) {
         TableName tableName = updateStmt.getTableName();
         MetaUtils.normalizationTableName(session, tableName);
@@ -61,9 +71,6 @@ public class UpdateAnalyzer {
         if (!table.supportsUpdate()) {
             throw unsupportedException("table " + table.getName() + " does not support update");
         }
-        if (updateStmt.getWherePredicate() == null) {
-            throw new SemanticException("must specify where clause to prevent full table update");
-        }
 
         List<ColumnAssignment> assignmentList = updateStmt.getAssignments();
         Map<String, ColumnAssignment> assignmentByColName = assignmentList.stream().collect(
@@ -73,7 +80,23 @@ public class UpdateAnalyzer {
                 throw new SemanticException("table '%s' do not existing column '%s'", tableName.getTbl(), colName);
             }
         }
+
+        if (updateStmt.getWherePredicate() == null) {
+            if (checkIfUsePartialUpdate(assignmentList.size(), table.getBaseSchema().size())) {
+                // use partial update if:
+                // 1. Columns updated are less than 4
+                // 2. The proportion of columns updated is less than 30%
+                // 3. No where predicate in update stmt
+                updateStmt.setUsePartialUpdate();
+            } else {
+                throw new SemanticException("must specify where clause to prevent full table update");
+            }
+        }
+
         SelectList selectList = new SelectList();
+        List<Column> assignColumnList = Lists.newArrayList();
+        boolean nullExprInAutoIncrement = false;
+        Column autoIncrementColumn = null;
         for (Column col : table.getBaseSchema()) {
             SelectListItem item;
             ColumnAssignment assign = assignmentByColName.get(col.getName().toLowerCase());
@@ -82,20 +105,36 @@ public class UpdateAnalyzer {
                     throw new SemanticException("primary key column cannot be updated: " + col.getName());
                 }
 
+                if (col.isAutoIncrement()) {
+                    autoIncrementColumn = col;
+                }
+
+                if (col.isAutoIncrement() && assign.getExpr().getType() == Type.NULL) {
+                    nullExprInAutoIncrement = true;
+                    break;
+                }
+
                 if (assign.getExpr() instanceof DefaultValueExpr) {
                     if (!col.isAutoIncrement()) {
                         assign.setExpr(TypeManager.addCastExpr(new StringLiteral(col.calculatedDefaultValue()), col.getType()));
                     } else {
-                        updateStmt.setNullExprInAutoIncrement(false);
                         assign.setExpr(TypeManager.addCastExpr(new NullLiteral(), col.getType()));
                     }
                 }
 
                 item = new SelectListItem(assign.getExpr(), col.getName());
-            } else {
+                selectList.addItem(item);
+                assignColumnList.add(col);
+            } else if (!updateStmt.usePartialUpdate() || col.isKey()) {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
+                selectList.addItem(item);
+                assignColumnList.add(col);
             }
-            selectList.addItem(item);
+        }
+
+        if (autoIncrementColumn != null && nullExprInAutoIncrement) {
+            throw new SemanticException("AUTO_INCREMENT column: " + autoIncrementColumn.getName() +
+                                        " must not be NULL");
         }
 
         Relation relation = new TableRelation(tableName);
@@ -117,11 +156,14 @@ public class UpdateAnalyzer {
         updateStmt.setQueryStatement(queryStatement);
 
         List<Expr> outputExpression = queryStatement.getQueryRelation().getOutputExpression();
-        Preconditions.checkState(outputExpression.size() == table.getBaseSchema().size());
+        Preconditions.checkState(outputExpression.size() == assignColumnList.size());
+        if (!updateStmt.usePartialUpdate()) {
+            Preconditions.checkState(table.getBaseSchema().size() == assignColumnList.size());   
+        }
         List<Expr> castOutputExpressions = Lists.newArrayList();
-        for (int i = 0; i < table.getBaseSchema().size(); ++i) {
+        for (int i = 0; i < assignColumnList.size(); ++i) {
             Expr e = outputExpression.get(i);
-            Column c = table.getBaseSchema().get(i);
+            Column c = assignColumnList.get(i);
             castOutputExpressions.add(TypeManager.addCastExpr(e, c.getType()));
         }
         ((SelectRelation) queryStatement.getQueryRelation()).setOutputExpr(castOutputExpressions);

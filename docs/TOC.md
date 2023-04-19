@@ -66,6 +66,7 @@
   + Computing the Number of Distinct Values
     + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
     + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
+  + [Sorted streaming aggregate](./using_starrocks/sorted_aggregate.md)
 + Integration
   + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
   + Integrate with BI tools
@@ -75,6 +76,7 @@
     + [Tableau Desktop](./integrations/BI_integrations/Tableau_Desktop.md)
   + Integrate with IDE tools
     + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
+    + [DBeaver](./integrations/IDE_integrations/DBeaver.md)
   + [Integrate with other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
   + Deployment
@@ -181,8 +183,8 @@
       + [CANCEL BACKUP](./sql-reference/sql-statements/data-definition/CANCEL%20BACKUP.md)
       + [CANCEL RESTORE](./sql-reference/sql-statements/data-definition/CANCEL%20RESTORE.md)
       + [CREATE ANALYZE](./sql-reference/sql-statements/data-definition/CREATE%20ANALYZE.md)
-      + [CREATE EXTERNAL CATALOG](./sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md)
       + [CREATE DATABASE](./sql-reference/sql-statements/data-definition/CREATE%20DATABASE.md)
+      + [CREATE EXTERNAL CATALOG](./sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md)
       + [CREATE INDEX](./sql-reference/sql-statements/data-definition/CREATE%20INDEX.md)
       + [CREATE MATERIALIZED VIEW](./sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md)
       + [CREATE REPOSITORY](./sql-reference/sql-statements/data-definition/CREATE%20REPOSITORY.md)

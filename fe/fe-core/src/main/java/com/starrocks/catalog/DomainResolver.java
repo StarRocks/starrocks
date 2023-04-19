@@ -38,7 +38,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.authentication.AuthenticationManager;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.mysql.privilege.Auth;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -57,7 +57,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * DomainResolver resolve the domain name saved in user property to list of IPs,
  * and refresh password entries in user priv table, periodically.
  */
-public class DomainResolver extends LeaderDaemon {
+public class DomainResolver extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(DomainResolver.class);
     // this is only available in BAIDU, for resolving BNS
     private static final String BNS_RESOLVER_TOOLS_PATH = "/usr/bin/get_instance_by_service";

@@ -404,6 +404,7 @@ private:
     bool _need_gen_rollup = false;
     int _tuple_desc_id = -1;
     std::string _merge_condition;
+    TPartialUpdateMode::type _partial_update_mode;
 
     // this is tuple descriptor of destination OLAP table
     TupleDescriptor* _output_tuple_desc = nullptr;
