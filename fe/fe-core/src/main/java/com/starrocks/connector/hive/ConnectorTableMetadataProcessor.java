@@ -22,7 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
@@ -37,7 +37,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
-public class ConnectorTableMetadataProcessor extends LeaderDaemon {
+public class ConnectorTableMetadataProcessor extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(ConnectorTableMetadataProcessor.class);
 
     private final Set<BaseTableInfo> registeredTableInfos = Sets.newConcurrentHashSet();

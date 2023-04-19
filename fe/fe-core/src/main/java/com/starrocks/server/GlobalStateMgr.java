@@ -122,7 +122,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.QueryableReentrantLock;
@@ -350,9 +350,9 @@ public class GlobalStateMgr {
     private DeleteHandler deleteHandler;
     private UpdateDbUsedDataQuotaDaemon updateDbUsedDataQuotaDaemon;
 
-    private LeaderDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
-    private LeaderDaemon txnTimeoutChecker; // To abort timeout txns
-    private LeaderDaemon taskCleaner;   // To clean expire Task/TaskRun
+    private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
+    private FrontendDaemon txnTimeoutChecker; // To abort timeout txns
+    private FrontendDaemon taskCleaner;   // To clean expire Task/TaskRun
     private JournalWriter journalWriter; // leader only: write journal log
     private Daemon replayer;
     private Daemon timePrinter;
@@ -1163,7 +1163,7 @@ public class GlobalStateMgr {
             // start all daemon threads that only running on MASTER FE
             startLeaderOnlyDaemonThreads();
             // start other daemon threads that should run on all FEs
-            startNonLeaderDaemonThreads();
+            startAllNodeTypeDaemonThreads();
             insertOverwriteJobManager.cancelRunningJobs();
 
             MetricRepo.init();
@@ -1271,8 +1271,8 @@ public class GlobalStateMgr {
         }
     }
 
-    // start threads that should running on all FE
-    private void startNonLeaderDaemonThreads() {
+    // start threads that should run on all FE
+    private void startAllNodeTypeDaemonThreads() {
         tabletStatMgr.start();
         // load and export job label cleaner thread
         labelCleaner.start();
@@ -1314,7 +1314,7 @@ public class GlobalStateMgr {
             replayer.start();
         }
 
-        startNonLeaderDaemonThreads();
+        startAllNodeTypeDaemonThreads();
 
         MetricRepo.init();
 
@@ -1807,7 +1807,7 @@ public class GlobalStateMgr {
     }
 
     public void createLabelCleaner() {
-        labelCleaner = new LeaderDaemon("LoadLabelCleaner", Config.label_clean_interval_second * 1000L) {
+        labelCleaner = new FrontendDaemon("LoadLabelCleaner", Config.label_clean_interval_second * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
                 clearExpiredJobs();
@@ -1816,7 +1816,7 @@ public class GlobalStateMgr {
     }
 
     public void createTaskCleaner() {
-        taskCleaner = new LeaderDaemon("TaskCleaner", Config.task_check_interval_second * 1000L) {
+        taskCleaner = new FrontendDaemon("TaskCleaner", Config.task_check_interval_second * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
                 doTaskBackgroundJob();
@@ -1825,7 +1825,7 @@ public class GlobalStateMgr {
     }
 
     public void createTxnTimeoutChecker() {
-        txnTimeoutChecker = new LeaderDaemon("txnTimeoutChecker", Config.transaction_clean_interval_second) {
+        txnTimeoutChecker = new FrontendDaemon("txnTimeoutChecker", Config.transaction_clean_interval_second) {
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
@@ -2062,7 +2062,7 @@ public class GlobalStateMgr {
 
     public void createTimePrinter() {
         // time printer will write timestamp edit log every 10 seconds
-        timePrinter = new LeaderDaemon("timePrinter", 10 * 1000L) {
+        timePrinter = new FrontendDaemon("timePrinter", 10 * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
                 Timestamp stamp = new Timestamp();
