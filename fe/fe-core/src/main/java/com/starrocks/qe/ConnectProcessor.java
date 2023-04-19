@@ -623,6 +623,9 @@ public class ConnectProcessor {
             if (queryOptions.isSetIs_report_success()) {
                 ctx.getSessionVariable().setReportSuccess(queryOptions.isIs_report_success());
             }
+            if (queryOptions.isSetUse_page_cache()) {
+                ctx.getSessionVariable().setUsePageCache(queryOptions.isUse_page_cache());
+            }
         } else {
             // for compatibility, all following variables are moved to TQueryOptions.
             if (request.isSetExecMemLimit()) {

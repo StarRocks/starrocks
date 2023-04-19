@@ -131,6 +131,7 @@ public class MasterOpExecutor {
         queryOptions.setParallel_exec_instance_num(ctx.getSessionVariable().getParallelExecInstanceNum());
         queryOptions.setMax_parallel_scan_instance_num(ctx.getSessionVariable().getMaxParallelScanInstanceNum());
         queryOptions.setIs_report_success(ctx.getSessionVariable().isReportSucc());
+        queryOptions.setUse_page_cache(ctx.getSessionVariable().getUsePageCache());
         params.setQuery_options(queryOptions);
 
         params.setQueryId(UUIDUtil.toTUniqueId(ctx.getQueryId()));

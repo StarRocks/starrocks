@@ -164,6 +164,8 @@ struct TQueryOptions {
 
   60: optional i32 query_delivery_timeout;
 
+  91: optional bool use_page_cache;
+
   // The following params only exist on 2.2 2.3, to avoid upgrade inconsistency
   //  (if start from a low number, say 80, this id may be used by another param in the new version),
   // start from 1000

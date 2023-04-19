@@ -23,6 +23,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.RowBatch;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -236,6 +237,10 @@ public class StatisticExecutor {
             LOG.debug("Collect statistic SQL: {}", sql);
 
             ConnectContext context = StatisticUtils.buildConnectContext();
+            SessionVariable sessionVariable = context.getSessionVariable();
+            // Full table scan is performed for full statistics collecting. In this case, 
+            // we do not need to use pagecache.
+            sessionVariable.setUsePageCache(false);
             StatementBase parsedStmt = parseSQL(sql, context);
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             executor.execute();
