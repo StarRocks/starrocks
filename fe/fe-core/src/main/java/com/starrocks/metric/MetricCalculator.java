@@ -37,6 +37,7 @@ package com.starrocks.metric;
 import com.starrocks.common.Config;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
+import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -145,5 +146,7 @@ public class MetricCalculator extends TimerTask {
         if (Config.enable_routine_load_lag_metrics)  {
             MetricRepo.updateRoutineLoadProcessMetrics();
         }
+
+        MetricRepo.GAUGE_SAFE_MODE.setValue(GlobalStateMgr.getCurrentState().isSafeMode() ? 1 : 0);
     }
 }

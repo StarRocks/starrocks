@@ -1228,6 +1228,12 @@ public class DatabaseTransactionMgr {
         abortTransaction(transactionId, reason, null);
     }
 
+    public void abortAllRunningTransaction() throws UserException {
+        for (Map.Entry<Long, TransactionState> entry : idToRunningTransactionState.entrySet()) {
+            abortTransaction(entry.getKey(), "The cluster is under safe mode!", null);
+        }
+    }
+
     public void abortTransaction(long transactionId, String reason, TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         abortTransaction(transactionId, true, reason, txnCommitAttachment, Lists.newArrayList());
