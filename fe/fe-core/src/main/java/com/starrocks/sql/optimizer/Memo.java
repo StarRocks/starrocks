@@ -101,6 +101,10 @@ public class Memo {
         }
 
         if (groupExpression.id == -1188) {
+            LOG.error("add 1188, hashCode={}, op.hashCode={}, inputs.hashCode={}, opClass={}",
+                    groupExpression.hashCode(),
+                    groupExpression.getOp().hashCode(), groupExpression.getInputs().hashCode(),
+                    groupExpression.getOp().getClass().getSimpleName());
             System.out.println("here1");
         }
         groupExpressions.put(groupExpression, groupExpression);
@@ -333,6 +337,10 @@ public class Memo {
         GroupExpression initGroupExpression = group.getFirstLogicalExpression();
 
         if (initGroupExpression.id == -1188) {
+            LOG.error("remove 1188, hashCode={}, op.hashCode={}, inputs.hashCode={}, opClass={}",
+                    initGroupExpression.hashCode(),
+                    initGroupExpression.getOp().hashCode(), initGroupExpression.getInputs().hashCode(),
+                    initGroupExpression.getOp().getClass().getSimpleName());
             System.out.println("here9");
         }
         groupExpressions.remove(initGroupExpression);
