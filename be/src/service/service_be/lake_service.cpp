@@ -1,10 +1,23 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include "service/service_be/lake_service.h"
 
 #include <brpc/controller.h>
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
 #include <butil/time.h> // NOLINT
-#include <bvar/bvar.h>
 
 #include "agent/agent_server.h"
 #include "common/config.h"
@@ -13,7 +26,7 @@
 #include "gutil/macros.h"
 #include "runtime/exec_env.h"
 #include "runtime/lake_snapshot_loader.h"
-#include "storage/lake/compaction_policy.h"
+#include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
 #include "util/countdown_latch.h"
@@ -21,9 +34,6 @@
 #include "util/threadpool.h"
 
 namespace starrocks {
-
-bvar::Adder<int> g_lake_running_compactions("lake_running_compactions");
-bvar::Adder<int> g_lake_pending_compactions("lake_pending_compactions");
 
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
@@ -214,89 +224,6 @@ void LakeServiceImpl::delete_tablet(::google::protobuf::RpcController* controlle
     }
 
     latch.wait();
-}
-
-void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
-                              const ::starrocks::lake::CompactRequest* request,
-                              ::starrocks::lake::CompactResponse* response, ::google::protobuf::Closure* done) {
-    brpc::ClosureGuard guard(done);
-    auto cntl = static_cast<brpc::Controller*>(controller);
-
-    if (request->tablet_ids_size() == 0) {
-        cntl->SetFailed("missing tablet_ids");
-        return;
-    }
-    if (!request->has_txn_id()) {
-        cntl->SetFailed("missing txn_id");
-        return;
-    }
-    if (!request->has_version()) {
-        cntl->SetFailed("missing version");
-        return;
-    }
-
-    auto start_time = butil::gettimeofday_ms();
-    auto thread_pool = _compact_thread_pool.get();
-    auto latch = BThreadCountDownLatch(request->tablet_ids_size());
-    bthread::Mutex response_mtx;
-    lake::CompactionTask::Stats gstats;
-
-    for (auto tablet_id : request->tablet_ids()) {
-        auto task = [&, tablet_id]() {
-            DeferOp defer([&]() { latch.count_down(); });
-            auto t1 = butil::gettimeofday_ms();
-            auto res = _env->lake_tablet_manager()->compact(tablet_id, request->version(), request->txn_id());
-            if (!res.ok()) {
-                LOG(ERROR) << "Fail to create compaction task for tablet " << tablet_id << ": " << res.status();
-                std::lock_guard l(response_mtx);
-                response->add_failed_tablets(tablet_id);
-                return;
-            }
-
-            lake::CompactionTaskPtr task = std::move(res).value();
-            lake::CompactionTask::Stats stats;
-            auto st = task->execute(&stats);
-            auto t2 = butil::gettimeofday_ms();
-            if (!st.ok()) {
-                LOG(ERROR) << "Fail to compact tablet " << tablet_id << ". version=" << request->version()
-                           << " txn_id=" << request->txn_id() << " cost=" << (t2 - t1) << " : " << st;
-                std::lock_guard l(response_mtx);
-                response->add_failed_tablets(tablet_id);
-            } else {
-                gstats.merge(stats);
-                VLOG(3) << "Compacted tablet " << tablet_id << ". version=" << request->version()
-                        << " txn_id=" << request->txn_id() << " cost=" << (t2 - t1) << " stats=" << stats;
-            }
-        };
-
-        auto task_wrapper = [&, f = std::move(task)]() {
-            g_lake_running_compactions << 1;
-            g_lake_pending_compactions << -1;
-
-            f();
-
-            g_lake_running_compactions << -1;
-        };
-
-        g_lake_pending_compactions << 1;
-        if (auto st = thread_pool->submit_func(std::move(task_wrapper)); !st.ok()) {
-            g_lake_pending_compactions << -1;
-            LOG(WARNING) << "Fail to submit compaction task. tablet_id=" << tablet_id << " txn_id=" << request->txn_id()
-                         << ": " << st;
-            cntl->SetFailed(st.get_error_msg());
-            latch.count_down();
-        }
-    }
-
-    latch.wait();
-    auto end_time = butil::gettimeofday_ms();
-
-    std::lock_guard l(response_mtx);
-    response->set_execution_time(end_time - start_time);
-    response->set_num_input_bytes(gstats.input_bytes.load(std::memory_order_relaxed));
-    response->set_num_input_rows(gstats.input_rows.load(std::memory_order_relaxed));
-    response->set_num_output_bytes(gstats.output_bytes.load(std::memory_order_relaxed));
-    response->set_num_output_rows(gstats.output_rows.load(std::memory_order_relaxed));
 }
 
 void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
@@ -607,6 +534,28 @@ void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* contr
         latch.count_down();
     }
     latch.wait();
+}
+
+void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
+                              const ::starrocks::lake::CompactRequest* request,
+                              ::starrocks::lake::CompactResponse* response, ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    auto cntl = static_cast<brpc::Controller*>(controller);
+
+    if (request->tablet_ids_size() == 0) {
+        cntl->SetFailed("missing tablet_ids");
+        return;
+    }
+    if (!request->has_txn_id()) {
+        cntl->SetFailed("missing txn_id");
+        return;
+    }
+    if (!request->has_version()) {
+        cntl->SetFailed("missing version");
+        return;
+    }
+
+    _env->lake_tablet_manager()->compaction_scheduler()->compact(controller, request, response, guard.release());
 }
 
 } // namespace starrocks

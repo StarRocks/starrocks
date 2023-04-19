@@ -18,6 +18,7 @@ package starrocks.lake;
 option java_package = "com.starrocks.proto";
 
 import "types.proto";
+import "status.proto";
 
 option cc_generic_services = true;
 
@@ -66,6 +67,7 @@ message CompactResponse {
     optional int64 num_input_rows = 4;
     optional int64 num_output_bytes = 5;
     optional int64 num_output_rows = 6;
+    optional StatusPB status = 7;
 }
 
 message DropTableRequest {

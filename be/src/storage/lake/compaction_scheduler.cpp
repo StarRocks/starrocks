@@ -1,0 +1,248 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#include "storage/lake/compaction_scheduler.h"
+
+#include <brpc/controller.h>
+#include <bthread/bthread.h>
+#include <bthread/condition_variable.h>
+#include <butil/time.h> // NOLINT
+
+#include <chrono>
+#include <thread>
+
+#include "common/status.h"
+#include "gutil/macros.h"
+#include "gutil/stl_util.h"
+#include "runtime/exec_env.h"
+#include "service/service_be/lake_service.h"
+#include "storage/lake/compaction_task.h"
+#include "storage/lake/tablet.h"
+#include "storage/lake/tablet_manager.h"
+#include "util/threadpool.h"
+
+namespace starrocks::lake {
+
+CompactionTaskCallback::~CompactionTaskCallback() = default;
+
+CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, const lake::CompactRequest* request,
+                                               lake::CompactResponse* response, ::google::protobuf::Closure* done)
+        : _scheduler(scheduler), _mtx(), _request(request), _response(response), _done(done) {
+    CHECK(_request != nullptr);
+    CHECK(_response != nullptr);
+    _contexts.reserve(request->tablet_ids_size());
+}
+
+void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&& context) {
+    std::lock_guard l(_mtx);
+
+    if (!context->status.ok()) {
+        // Add failed tablet for upgrade compatibility: older version FE relies on the failed tablet to determine
+        // whether the job is successful.
+        _response->add_failed_tablets(context->tablet_id);
+    }
+
+    DCHECK(_request != nullptr);
+    _status.update(context->status);
+
+    // Keep the context for a while until the RPC request is finished processing so that we can see the detailed
+    // and complete progress of the RPC request by calling `CompactionScheduler::list_tasks()`.
+    _contexts.emplace_back(std::move(context));
+    //                     ^^^^^^^^^^^^^^^^^ Do NOT touch "context" since here, it has been `move`ed.
+
+    if (_contexts.size() == _request->tablet_ids_size()) { // All tasks finished, send RPC response to FE
+        _status.to_protobuf(_response->mutable_status());
+        if (_done != nullptr) {
+            _done->Run();
+            _done = nullptr;
+        }
+        _request = nullptr;
+        _response = nullptr;
+
+        _scheduler->remove_states(_contexts);
+        STLClearObject(&_contexts);
+    }
+}
+
+CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
+        : _tablet_mgr(tablet_mgr),
+          _limiter(config::compact_threads),
+          _states_lock(),
+          _contexts(),
+          _task_queue_count(config::compact_threads),
+          _task_queues(new TaskQueue[_task_queue_count]) {
+    CHECK_GT(_task_queue_count, 0);
+    ThreadPoolBuilder("clound_native_compact")
+            .set_min_threads(_task_queue_count)
+            .set_max_threads(_task_queue_count)
+            .set_max_queue_size(_task_queue_count)
+            .build(&_threads);
+
+    for (int i = 0; i < _task_queue_count; i++) {
+        CHECK(_threads->submit_func([this, id = i]() { this->thread_task(id); }).ok());
+    }
+}
+
+CompactionScheduler::~CompactionScheduler() {
+    _stopped.store(true, std::memory_order_relaxed);
+    _threads->wait();
+    delete[] _task_queues;
+}
+
+void CompactionScheduler::compact(::google::protobuf::RpcController* controller, const CompactRequest* request,
+                                  CompactResponse* response, ::google::protobuf::Closure* done) {
+    // By default, all the tablet compaction tasks with the same txn id will be executed in the same
+    // thread to avoid blocking other transactions, but if there are idle threads, they will steal
+    // tasks from busy threads to execute.
+    auto idx = choose_task_queue_by_txn_id(request->txn_id());
+    auto cb = std::make_shared<CompactionTaskCallback>(this, request, response, done);
+    for (auto tablet_id : request->tablet_ids()) {
+        auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(), cb);
+        {
+            std::lock_guard l(_states_lock);
+            _contexts.Append(context.get());
+        }
+        _task_queues[idx].put(std::move(context));
+    }
+}
+
+void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
+    std::lock_guard l(_states_lock);
+    for (butil::LinkNode<CompactionTaskContext>* node = _contexts.head(); node != _contexts.end();
+         node = node->next()) {
+        CompactionTaskContext* context = node->value();
+        auto& info = infos->emplace_back();
+        info.txn_id = context->txn_id;
+        info.tablet_id = context->tablet_id;
+        info.version = context->version;
+        info.skipped = context->skipped.load(std::memory_order_relaxed);
+        info.runs = context->runs.load(std::memory_order_relaxed);
+        info.start_time = context->start_time.load(std::memory_order_relaxed);
+        info.progress = context->progress.value();
+        // Load "finish_time" with memory_order_acquire and check its value before reading the "status" to avoid
+        // the race condition between this thread and the `CompactionScheduler::thread_task` threads.
+        info.finish_time = context->finish_time.load(std::memory_order_acquire);
+        if (info.finish_time > 0) {
+            info.status = context->status;
+        }
+    }
+}
+
+void CompactionScheduler::remove_states(const std::vector<std::unique_ptr<CompactionTaskContext>>& states) {
+    std::lock_guard l(_states_lock);
+    for (auto& context : states) {
+        context->RemoveFromList();
+    }
+}
+
+void CompactionScheduler::steal_task(int start_index, std::unique_ptr<CompactionTaskContext>* context) {
+    for (int i = 0; i < _task_queue_count; i++) {
+        if (_task_queues[(start_index + i) % _task_queue_count].try_get(context)) {
+            return;
+        }
+    }
+    DCHECK(*context == nullptr);
+}
+
+void CompactionScheduler::thread_task(int id) {
+    while (!_stopped.load(std::memory_order_acquire)) {
+        if (!_limiter.acquire()) {
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+            continue;
+        }
+
+        CompactionContextPtr context;
+        if (!_task_queues[id].try_get(&context)) {
+            steal_task(id + 1, &context);
+        }
+
+        if (context != nullptr) {
+            auto st = do_compaction(std::move(context));
+            if (st.is_mem_limit_exceeded()) {
+                _limiter.memory_limit_exceeded();
+            } else {
+                _limiter.no_memory_limit_exceeded();
+            }
+        } else {
+            _limiter.no_memory_limit_exceeded();
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        }
+    }
+}
+
+Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext> context) {
+    const auto start_time = ::time(nullptr);
+    const auto tablet_id = context->tablet_id;
+    const auto txn_id = context->txn_id;
+    const auto version = context->version;
+
+    if (context->start_time.load(std::memory_order_relaxed) == 0) {
+        context->start_time.store(start_time, std::memory_order_relaxed);
+    }
+    const auto runs = context->runs.fetch_add(1, std::memory_order_relaxed);
+
+    auto status = Status::OK();
+    if (config::lake_compaction_check_txn_log_first && runs == 0 && txn_log_exists(tablet_id, txn_id)) {
+        context->skipped.store(true, std::memory_order_relaxed);
+        context->progress.update(100);
+        VLOG(2) << "Skipped already succeeded compaction task. tablet_id=" << tablet_id << " txn_id=" << txn_id
+                << " version=" << version;
+    } else {
+        auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id);
+        if (task_or.ok()) {
+            status.update(task_or.value()->execute(&context->progress));
+        } else {
+            status.update(task_or.status());
+        }
+    }
+
+    auto finish_time = std::max<int64_t>(::time(nullptr), start_time);
+    auto cost = finish_time - start_time;
+
+    // Task failure due to memory limitations allows for retries. more threads allow for more retries.
+    if (status.is_mem_limit_exceeded() && context->runs.load(std::memory_order_relaxed) < _task_queue_count + 1) {
+        VLOG(3) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
+                << " txn_id=" << txn_id << " cost=" << cost;
+        context->progress.update(0);
+        auto idx = choose_task_queue_by_txn_id(context->txn_id);
+        // re-schedule the compaction task
+        _task_queues[idx].put(std::move(context));
+    } else {
+        VLOG_IF(3, status.ok()) << "Compacted tablet " << tablet_id << ". version=" << version << " txn_id=" << txn_id
+                                << " cost=" << cost;
+
+        LOG_IF(ERROR, !status.ok()) << "Fail to compact tablet " << tablet_id << ". version=" << version
+                                    << " txn_id=" << txn_id << " cost=" << cost << " : " << status;
+
+        context->status = status;
+
+        // Here we update "finish_time" after "status" and use "memory_order_release" to prevent concurrent read&write
+        // on "status", other threads should read "finish_time" with "memory_order_acquire" and check whether its value
+        // is greater than zero before reading "status".
+        context->finish_time.store(finish_time, std::memory_order_release);
+
+        auto cb = context->callback;
+        cb->finish_task(std::move(context));
+    }
+
+    return status;
+}
+
+bool CompactionScheduler::txn_log_exists(int64_t tablet_id, int64_t txn_id) const {
+    auto txn_log = _tablet_mgr->txn_log_location(tablet_id, txn_id);
+    auto fs_or = FileSystem::CreateSharedFromString(txn_log);
+    return fs_or.ok() && fs_or.value()->path_exists(txn_log).ok();
+}
+
+} // namespace starrocks::lake

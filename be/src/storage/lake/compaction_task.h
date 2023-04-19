@@ -23,33 +23,19 @@ namespace starrocks::lake {
 
 class CompactionTask {
 public:
-    struct Stats {
-        std::atomic<int64_t> input_bytes{0};
-        std::atomic<int64_t> input_rows{0};
-        std::atomic<int64_t> output_bytes{0};
-        std::atomic<int64_t> output_rows{0};
+    class Progress {
+    public:
+        int value() const { return _value.load(std::memory_order_acquire); }
 
-        void merge(const Stats& stats2);
+        void update(int value) { _value.store(value, std::memory_order_release); }
+
+    private:
+        std::atomic<int> _value{0};
     };
 
     virtual ~CompactionTask() = default;
 
-    virtual Status execute(Stats* stats) = 0;
+    virtual Status execute(Progress* stats) = 0;
 };
-
-inline void CompactionTask::Stats::merge(const CompactionTask::Stats& stats2) {
-    input_bytes.fetch_add(stats2.input_bytes, std::memory_order_relaxed);
-    input_rows.fetch_add(stats2.input_rows, std::memory_order_relaxed);
-    output_bytes.fetch_add(stats2.output_bytes, std::memory_order_relaxed);
-    output_rows.fetch_add(stats2.output_rows, std::memory_order_relaxed);
-}
-
-inline std::ostream& operator<<(std::ostream& os, const CompactionTask::Stats& stats) {
-    os << "Stats{input_bytes=" << stats.input_bytes.load(std::memory_order_relaxed)
-       << " input_rows=" << stats.input_rows.load(std::memory_order_relaxed)
-       << " output_bytes=" << stats.output_bytes.load(std::memory_order_relaxed)
-       << " output_rows=" << stats.output_rows.load(std::memory_order_relaxed) << "}";
-    return os;
-}
 
 } // namespace starrocks::lake

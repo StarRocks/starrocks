@@ -28,6 +28,7 @@
 #include "storage/lake/txn_log.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "util/countdown_latch.h"
 
 namespace starrocks {
 
@@ -94,7 +95,6 @@ public:
 
 protected:
     constexpr static const char* const kRootLocation = "./lake_service_test";
-
     LakeServiceImpl _lake_service;
     int64_t _tablet_id;
     lake::TabletManager* _tablet_mgr;
@@ -390,6 +390,14 @@ TEST_F(LakeServiceTest, test_delete_tablet_dir_not_exit) {
 
 // NOLINTNEXTLINE
 TEST_F(LakeServiceTest, test_compact) {
+    auto compact = [this](::google::protobuf::RpcController* cntl, const lake::CompactRequest* request,
+                          lake::CompactResponse* response) {
+        CountDownLatch latch(1);
+        auto cb = ::google::protobuf::NewCallback(&latch, &CountDownLatch::count_down);
+        _lake_service.compact(cntl, request, response, cb);
+        latch.wait();
+    };
+
     auto txn_id = next_id();
     // missing tablet_ids
     {
@@ -399,7 +407,7 @@ TEST_F(LakeServiceTest, test_compact) {
         // request.add_tablet_ids(_tablet_id);
         request.set_txn_id(txn_id);
         request.set_version(1);
-        _lake_service.compact(&cntl, &request, &response, nullptr);
+        compact(&cntl, &request, &response);
         ASSERT_TRUE(cntl.Failed());
         ASSERT_EQ("missing tablet_ids", cntl.ErrorText());
     }
@@ -411,7 +419,7 @@ TEST_F(LakeServiceTest, test_compact) {
         request.add_tablet_ids(_tablet_id);
         //request.set_txn_id(txn_id);
         request.set_version(1);
-        _lake_service.compact(&cntl, &request, &response, nullptr);
+        compact(&cntl, &request, &response);
         ASSERT_TRUE(cntl.Failed());
         ASSERT_EQ("missing txn_id", cntl.ErrorText());
     }
@@ -423,7 +431,7 @@ TEST_F(LakeServiceTest, test_compact) {
         request.add_tablet_ids(_tablet_id);
         request.set_txn_id(txn_id);
         //request.set_version(1);
-        _lake_service.compact(&cntl, &request, &response, nullptr);
+        compact(&cntl, &request, &response);
         ASSERT_TRUE(cntl.Failed());
         ASSERT_EQ("missing version", cntl.ErrorText());
     }
@@ -435,7 +443,7 @@ TEST_F(LakeServiceTest, test_compact) {
         request.add_tablet_ids(_tablet_id + 1);
         request.set_txn_id(txn_id);
         request.set_version(1);
-        _lake_service.compact(&cntl, &request, &response, nullptr);
+        compact(&cntl, &request, &response);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(1, response.failed_tablets_size());
         ASSERT_EQ(_tablet_id + 1, response.failed_tablets(0));
@@ -448,7 +456,7 @@ TEST_F(LakeServiceTest, test_compact) {
         request.add_tablet_ids(_tablet_id);
         request.set_txn_id(txn_id);
         request.set_version(1);
-        _lake_service.compact(&cntl, &request, &response, nullptr);
+        compact(&cntl, &request, &response);
         ASSERT_FALSE(cntl.Failed());
         ASSERT_EQ(0, response.failed_tablets_size());
     }

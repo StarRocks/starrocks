@@ -29,6 +29,7 @@
 #include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
 #include "storage/lake/compaction_policy.h"
+#include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/gc.h"
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/join_path.h"
@@ -54,6 +55,7 @@ static StatusOr<double> publish(Tablet* tablet, int64_t base_version, int64_t ne
 TabletManager::TabletManager(LocationProvider* location_provider, UpdateManager* update_mgr, int64_t cache_capacity)
         : _location_provider(location_provider),
           _metacache(new_lru_cache(cache_capacity)),
+          _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
           _update_mgr(update_mgr),
           _gc_checker_tid(INVALID_BTHREAD) {
     _update_mgr->set_tablet_mgr(this);
