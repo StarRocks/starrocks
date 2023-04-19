@@ -1751,7 +1751,8 @@ public class MvRewriteOptimizationTest {
         String plan10 = getFragmentPlan(query10);
         PlanTestBase.assertContains(plan10, "partial_mv_6", "UNION", "TABLE: test_base_part\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     partitions=2/6\n" +
+                "     PREDICATES: (10: c3 >= 2000) OR (10: c3 IS NULL)\n" +
+                "     partitions=3/6\n" +
                 "     rollup: test_base_part");
 
         String query12 = "select c1, c3, c2 from test_base_part where c3 < 2000";
@@ -1945,8 +1946,8 @@ public class MvRewriteOptimizationTest {
 
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv", "UNION",
-                "PARTITION PREDICATES: (22: l_shipdate < '1998-01-01') OR (22: l_shipdate >= '1998-01-06')");
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv", "UNION", "PARTITION PREDICATES: ((22: l_shipdate < '1998-01-01')" +
+                " OR (22: l_shipdate >= '1998-01-06')) OR (22: l_shipdate IS NULL)");
         dropMv("test", "hive_parttbl_mv");
 
         createAndRefreshMv("test", "hive_parttbl_mv_2",
@@ -1971,8 +1972,8 @@ public class MvRewriteOptimizationTest {
                 ImmutableList.of("l_shipdate=1998-01-02"));
         plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_2", "l_orderkey > 100", "lineitem_par",
-                "PARTITION PREDICATES: 23: l_shipdate >= '1998-01-02', (23: l_shipdate < '1998-01-03') OR " +
-                        "(23: l_shipdate >= '1998-01-06')",
+                "PARTITION PREDICATES: ((23: l_shipdate >= '1998-01-02') AND ((23: l_shipdate < '1998-01-03')" +
+                        " OR (23: l_shipdate >= '1998-01-06'))) OR (23: l_shipdate IS NULL)",
                 "NON-PARTITION PREDICATES: 21: l_orderkey > 100");
 
         dropMv("test", "hive_parttbl_mv_2");
@@ -1993,8 +1994,8 @@ public class MvRewriteOptimizationTest {
                         "where l_shipdate > '1998-01-02';");
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "hive_parttbl_mv_3", "partitions=3/6", "lineitem_par",
-                "partitions=2/6");
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_3", "partitions=3/6", "lineitem_par");
+        PlanTestBase.assertNotContains(plan, "partitions=2/6");
         dropMv("test", "hive_parttbl_mv_3");
 
         createAndRefreshMv("test", "hive_parttbl_mv_4",
@@ -2013,8 +2014,8 @@ public class MvRewriteOptimizationTest {
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_4", "partitions=1/6", "lineitem_par",
-                "NON-PARTITION PREDICATES: ((22: l_shipdate >= '1998-01-02') OR (20: l_orderkey != 100)) OR " +
-                        "(22: l_shipdate < '1998-01-01')");
+                "NON-PARTITION PREDICATES: (((22: l_shipdate >= '1998-01-02') OR (20: l_orderkey != 100))" +
+                        " OR (22: l_shipdate < '1998-01-01')) OR (22: l_shipdate IS NULL)");
         dropMv("test", "hive_parttbl_mv_4");
 
         createAndRefreshMv("test", "hive_parttbl_mv_5",
@@ -2043,9 +2044,16 @@ public class MvRewriteOptimizationTest {
 
         query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` ";
         plan = getFragmentPlan(query);
+<<<<<<< HEAD
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_5", "partitions=35/36", "orders",
                 "PARTITION PREDICATES: (15: o_orderdate < '1991-01-01') OR (15: o_orderdate >= '1991-02-01'), " +
                         "(15: o_orderdate < '1991-03-01') OR (15: o_orderdate >= '1993-12-31')");
+=======
+        PlanTestBase.assertContains(plan, "hive_parttbl_mv_5", "orders",
+                "PARTITION PREDICATES: (((15: o_orderdate < '1991-01-01') OR (15: o_orderdate >= '1991-02-01')) AND" +
+                        " ((15: o_orderdate < '1991-03-01') OR (15: o_orderdate >= '1993-12-31')))" +
+                        " OR (15: o_orderdate IS NULL)");
+>>>>>>> 224b4d219 ([BugFix] Fix null partition value missed bug after mv union rewrite (#21322))
 
         // TODO(Ken Huang): This should support query rewrite
         query = "SELECT `o_orderkey`, `o_orderstatus`, `o_orderdate`  FROM `hive0`.`partitioned_db`.`orders` " +
@@ -2358,5 +2366,67 @@ public class MvRewriteOptimizationTest {
                 "     TABLE: test_all_type\n" +
                 "     PREAGGREGATION: ON");
         dropMv("test", "forbid_mv_1");
+    }
+
+    @Test
+    public void testNullPartitionRewriteWithLoad() throws Exception {
+        {
+            cluster.runSql("test", "insert into test_base_part values(1, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(100, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(200, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(1000, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(2000, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(2500, 1, 2, 3)");
+
+            createAndRefreshMv("test", "partial_mv_12", "CREATE MATERIALIZED VIEW `partial_mv_12`\n" +
+                    "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                    "PARTITION BY (`c3`)\n" +
+                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
+                    "REFRESH MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"storage_medium\" = \"HDD\"\n" +
+                    ")\n" +
+                    "AS SELECT `c1`, `c3`, sum(`c4`) AS `total`\n" +
+                    "FROM `test_base_part`\n" +
+                    "WHERE `c3` is null\n" +
+                    "GROUP BY `c3`, `c1`;");
+
+            String query = "select c1, c3, sum(c4) from test_base_part group by c1, c3;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "partial_mv_12", "PREDICATES: 10: c3 IS NOT NULL");
+            starRocksAssert.dropMaterializedView("partial_mv_12");
+        }
+
+        {
+            cluster.runSql("test", "insert into test_base_part values(1, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(100, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(200, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(1000, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(2000, 1, 2, 3)");
+            cluster.runSql("test", "insert into test_base_part values(2500, 1, 2, 3)");
+
+            createAndRefreshMv("test", "partial_mv_13", "CREATE MATERIALIZED VIEW `partial_mv_13`\n" +
+                    "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                    "PARTITION BY (`c3`)\n" +
+                    "DISTRIBUTED BY HASH(`c1`) BUCKETS 6\n" +
+                    "REFRESH MANUAL\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"storage_medium\" = \"HDD\"\n" +
+                    ")\n" +
+                    "AS SELECT `c1`, `c3`, sum(`c4`) AS `total`\n" +
+                    "FROM `test_base_part`\n" +
+                    "WHERE `c3` is null\n" +
+                    "GROUP BY `c3`, `c1`;");
+
+            // test update for null partition
+            cluster.runSql("test", "insert into test_base_part partition(p1) values(null, 1, null, 3)");
+
+            String query = "select c1, c3, sum(c4) from test_base_part group by c1, c3;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "partial_mv_13");
+            starRocksAssert.dropMaterializedView("partial_mv_13");
+        }
     }
 }
