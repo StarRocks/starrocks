@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.MaterializedView;
@@ -1157,6 +1158,12 @@ public class MvRewriteOptimizationTest {
         createAndRefreshMv("test", "agg_mv_6", "create materialized view agg_mv_6" +
                 " distributed by hash(`empid`) as select empid, abs(empid) as abs_empid, avg(salary) as total" +
                 " from emps group by empid");
+
+        MaterializedView mv = getMv("test", "agg_mv_6");
+        Column idColumn = mv.getColumn("empid");
+        Assert.assertFalse(idColumn.isAllowNull());
+        Column totalColumn = mv.getColumn("total");
+        Assert.assertTrue(totalColumn.isAllowNull());
 
         String query13 = "select empid, abs(empid), avg(salary) from emps group by empid";
         String plan13 = getFragmentPlan(query13);

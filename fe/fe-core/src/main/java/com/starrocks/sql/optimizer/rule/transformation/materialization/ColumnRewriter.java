@@ -120,6 +120,13 @@ public class ColumnRewriter {
         private boolean enableEquivalenceClassesRewrite;
         private boolean useQueryEquivalenceClasses;
 
+        public ColumnWriterBuilder() {
+            this.enableRelationRewrite = false;
+            this.viewToQuery = false;
+            this.enableEquivalenceClassesRewrite = false;
+            this.useQueryEquivalenceClasses = false;
+        }
+
         ColumnWriterBuilder withRewriteContext(RewriteContext rewriteContext) {
             this.rewriteContext = rewriteContext;
             return this;
