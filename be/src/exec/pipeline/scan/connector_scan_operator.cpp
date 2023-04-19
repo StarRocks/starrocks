@@ -41,7 +41,7 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
         }
         VLOG_FILE << "[XXXX] io mem limiter. avail_count=" << avail_count << ", max_count=" << max_count
                   << ", running_chunk_source_count=" << running_chunk_source_count << ", mem_limit=" << mem_limit
-                  << ", estimated_mem_usage_per_chunk_source=" << estimated_mem_usage_per_chunk_source
+                  << ", estimated_mem_usage_per_chunk_source=" << int64_t(estimated_mem_usage_per_chunk_source)
                   << ", dop=" << dop;
         return avail_count;
     }
@@ -58,7 +58,7 @@ ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode*
     if (query_options.__isset.connector_io_tasks_use_query_mem_ratio) {
         mem_ratio = query_options.connector_io_tasks_use_query_mem_ratio;
     }
-    int64_t mem_limit = int64_t(runtime_state()->query_mem_tracker_ptr()->limit() * mem_ratio);
+    int64_t mem_limit = int64_t(state->query_mem_tracker_ptr()->limit() * mem_ratio);
     _io_tasks_mem_limiter->mem_limit = mem_limit;
     _io_tasks_mem_limiter->dop = dop;
 }
