@@ -256,10 +256,6 @@ public class GsonUtils {
                     .registerSubtype(ResourceGroupPEntryObject.class,
                             ResourceGroupPEntryObject.class.getSimpleName());
 
-    private static final RuntimeTypeAdapterFactory<SecurityIntegration> SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY =
-            RuntimeTypeAdapterFactory.of(SecurityIntegration.class, "clazz")
-                    .registerSubtype(LDAPSecurityIntegration.class, LDAPSecurityIntegration.class.getSimpleName());
-
     private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
             .of(Warehouse.class, "clazz")
             .registerSubtype(LocalWarehouse.class, LocalWarehouse.class.getSimpleName());
@@ -320,7 +316,6 @@ public class GsonUtils {
             .registerTypeAdapterFactory(TABLE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY)
-            .registerTypeAdapterFactory(SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(WAREHOUSE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
