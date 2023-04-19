@@ -58,7 +58,9 @@ If the specified Group does not exist, StarRocks automatically creates a Group t
 A Colocation Group belongs to a database. The name of a Colocation Group is unique within a database. In the internal storage, the full name of the Colocation Group is `dbId_groupName`, but you only perceive `groupName`.
 > **NOTE**
 >
-> If multiple tables from different databases use the same Colocation Group in the `colocate_with` property in the CREATE TABLE statements to ensure that these tables are colocated with each other, the Colocation Group does not only exist in just one database. Each database contains the Colocation Group. You can query the information of Colocation Groups by using `show proc "/colocation_group"`.
+> If multiple tables from different databases use the same Colocation Group in the `colocate_with` property in the CREATE TABLE statements to ensure that these tables are colocated with each other, the Colocation Group does not only exist in just one database. Each database contains the Colocation Group. You can query the information of  by using .
+
+Even though you specify the same Colocation Group to associate tables from different databases for Colocate Join, the Colocation Group exists in each of these databases. You can run `show proc "/colocation_group"` to check the Colocation Groups in different databases.
 
 ### Delete
 
