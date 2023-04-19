@@ -13,6 +13,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -77,13 +78,9 @@ public class StatisticExecutor {
         String sql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, analyzeType);
         LOG.debug("Expire statistic SQL: {}", sql);
 
-        StatementBase parsedStmt;
-        try {
-            parsedStmt = SqlParser.parseFirstStatement(sql, statsConnectCtx.getSessionVariable().getSqlMode());
-            StmtExecutor executor = new StmtExecutor(statsConnectCtx, parsedStmt);
-            executor.execute();
-        } catch (Exception e) {
-            LOG.warn("Execute statistic table expire fail.", e);
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute statistic table expire fail.");
         }
     }
 
@@ -98,13 +95,9 @@ public class StatisticExecutor {
 
     public void dropHistogram(ConnectContext statsConnectCtx, Long tableId, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildDropHistogramSQL(tableId, columnNames);
-        StatementBase parsedStmt;
-        try {
-            parsedStmt = SqlParser.parseFirstStatement(sql, statsConnectCtx.getSessionVariable().getSqlMode());
-            StmtExecutor executor = new StmtExecutor(statsConnectCtx, parsedStmt);
-            executor.execute();
-        } catch (Exception e) {
-            LOG.warn("Execute statistic table expire fail.", e);
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute statistic table expire fail.");
         }
     }
 
@@ -237,6 +230,21 @@ public class StatisticExecutor {
             } catch (TException e) {
                 throw new SemanticException(e.getMessage());
             }
+        }
+    }
+
+    private boolean executeDML(ConnectContext context, String sql) {
+        StatementBase parsedStmt;
+        try {
+            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            context.setExecutor(executor);
+            context.setQueryId(UUIDUtil.genUUID());
+            executor.execute();
+            return true;
+        } catch (Exception e) {
+            LOG.warn("Execute statistic DML " + sql + " fail.", e);
+            return false;
         }
     }
 }
