@@ -30,8 +30,6 @@ public class UpdateStmt extends DmlStmt {
     private Table table;
     private QueryStatement queryStatement;
 
-    private boolean nullExprInAutoIncrement;
-
     public UpdateStmt(TableName tableName, List<ColumnAssignment> assignments, List<Relation> fromRelations,
                       Expr wherePredicate, List<CTERelation> commonTableExpressions) {
         this.tableName = tableName;
@@ -39,20 +37,11 @@ public class UpdateStmt extends DmlStmt {
         this.fromRelations = fromRelations;
         this.wherePredicate = wherePredicate;
         this.commonTableExpressions = commonTableExpressions;
-        this.nullExprInAutoIncrement = true;
     }
 
     @Override
     public TableName getTableName() {
         return tableName;
-    }
-
-    public void setNullExprInAutoIncrement(boolean nullExprInAutoIncrement) {
-        this.nullExprInAutoIncrement = nullExprInAutoIncrement;
-    }
-
-    public boolean nullExprInAutoIncrement() {
-        return nullExprInAutoIncrement;
     }
 
     public List<ColumnAssignment> getAssignments() {

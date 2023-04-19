@@ -163,3 +163,25 @@ function: wait_alter_table_finish()
 
 DROP TABLE t;
 DROP DATABASE test_schema_change_auto_increment;
+
+-- name: test_table_with_null
+CREATE DATABASE test_table_with_null;
+USE test_table_with_null;
+
+SET enable_insert_strict = false;
+ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "false");
+
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NULL, job2 BIGINT NULL) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+
+INSERT INTO t (id, name, job1, job2) VALUES (1,DEFAULT,NULL,2);
+SELECT * FROM t;
+
+INSERT INTO t (id, name, job1, job2) VALUES (1,NULL,NULL,2);
+INSERT INTO t VALUES (1,NULL,NULL,2);
+
+UPDATE t SET name = NULL where id = 1;
+
+SELECT * FROM t;
+
+DROP TABLE t;
+DROP DATABASE test_table_with_null;
