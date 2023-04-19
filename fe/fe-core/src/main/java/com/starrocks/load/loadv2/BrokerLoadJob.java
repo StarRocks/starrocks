@@ -66,6 +66,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
@@ -96,6 +97,11 @@ public class BrokerLoadJob extends BulkLoadJob {
     public BrokerLoadJob() {
         super();
         this.jobType = EtlJobType.BROKER;
+    }
+
+    // for ut
+    public void setConnectContext(ConnectContext context) {
+        this.context = context;
     }
 
     public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, OriginStatement originStmt, ConnectContext context)
@@ -238,6 +244,18 @@ public class BrokerLoadJob extends BulkLoadJob {
                             .build());
                     throw new MetaNotFoundException("Failed to divide job into loading task when table "
                             + tableId + " not found");
+                }
+
+                if (context == null) {
+                    context = new ConnectContext();
+                    context.setDatabase(db.getFullName());
+                    if (sessionVariables.get(CURRENT_QUALIFIED_USER_KEY) != null) {
+                        context.setQualifiedUser(sessionVariables.get(CURRENT_QUALIFIED_USER_KEY));
+                        context.setCurrentUserIdentity(UserIdentity.fromString(sessionVariables.get(CURRENT_USER_IDENT_KEY)));
+                        context.setCurrentRoleIds(UserIdentity.fromString(sessionVariables.get(CURRENT_USER_IDENT_KEY)));
+                    } else {
+                        throw new DdlException("Failed to divide job into loading task when user is null");
+                    }
                 }
 
                 String mergeCondition = (brokerDesc == null) ? "" : brokerDesc.getMergeConditionStr();
