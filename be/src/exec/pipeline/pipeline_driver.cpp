@@ -247,10 +247,6 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
 
         SCOPED_RAW_TIMER(&process_time_ns);
 
-        if (config::exec_sleep_ms > 0) {
-            usleep(config::exec_sleep_ms * 1000);
-        }
-
         for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
             {
                 SCOPED_RAW_TIMER(&time_spent);

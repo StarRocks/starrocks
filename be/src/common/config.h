@@ -756,8 +756,6 @@ CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 CONF_Int32(io_tasks_per_scan_operator, "4");
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
-CONF_Int32(io_sleep_ms, "0");
-CONF_Int32(exec_sleep_ms, "0");
 CONF_Int32(connector_io_tasks_min_size, "2");
 CONF_Int32(connector_io_tasks_adjust_interval_ms, "50");
 CONF_Int32(connector_io_tasks_adjust_step, "1");

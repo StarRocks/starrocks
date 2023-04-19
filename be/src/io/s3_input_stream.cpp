@@ -48,10 +48,6 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
     request.SetKey(_object);
     request.SetRange(std::move(range));
 
-    if (config::io_sleep_ms > 0) {
-        usleep(config::io_sleep_ms * 1000);
-    }
-
     Aws::S3::Model::GetObjectOutcome outcome = _s3client->GetObject(request);
     if (outcome.IsSuccess()) {
         Aws::IOStream& body = outcome.GetResult().GetBody();
