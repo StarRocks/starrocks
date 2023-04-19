@@ -413,7 +413,7 @@ public class LoadPlanner {
             // 4. Olap table sink
             OlapTable olapTable = (OlapTable) destTable;
             boolean enableAutomaticPartition;
-            if (fileGroups.stream().anyMatch(BrokerFileGroup::isSpecifyPartition)) {
+            if (fileGroups != null && fileGroups.stream().anyMatch(BrokerFileGroup::isSpecifyPartition)) {
                 enableAutomaticPartition = false;
             } else {
                 enableAutomaticPartition = olapTable.supportedAutomaticPartition();
