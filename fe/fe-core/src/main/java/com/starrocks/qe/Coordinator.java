@@ -1578,7 +1578,8 @@ public class Coordinator {
                 return true;
             }
 
-            if (ThriftServer.getExecutor().getPoolSize() >= Config.thrift_server_max_worker_threads) {
+            if (ThriftServer.getExecutor() != null
+                    && ThriftServer.getExecutor().getPoolSize() >= Config.thrift_server_max_worker_threads) {
                 thriftServerHighLoad = true;
             }
 
