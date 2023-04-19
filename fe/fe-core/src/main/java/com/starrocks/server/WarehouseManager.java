@@ -26,10 +26,13 @@ import com.starrocks.common.proc.ProcResult;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.warehouse.LocalWarehouse;
 import com.starrocks.warehouse.Warehouse;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -38,6 +41,8 @@ import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class WarehouseManager implements Writable {
+    private static final Logger LOG = LogManager.getLogger(WarehouseManager.class);
+
     public static final String DEFAULT_WAREHOUSE_NAME = "default_warehouse";
 
     private Map<Long, Warehouse> idToWh = new HashMap<>();
@@ -85,6 +90,21 @@ public class WarehouseManager implements Writable {
     }
 
     public long loadWarehouses(DataInputStream dis, long checksum) throws IOException, DdlException {
+        int warehouseCount = 0;
+        try {
+            String s = Text.readString(dis);
+            WarehouseManager data = GsonUtils.GSON.fromJson(s, WarehouseManager.class);
+            if (data != null) {
+                if (data.fullNameToWh != null) {
+                    // Do nothing
+                }
+                warehouseCount = data.fullNameToWh.size();
+            }
+            checksum ^= warehouseCount;
+            LOG.info("finished replaying WarehouseMgr from image");
+        } catch (EOFException e) {
+            LOG.info("no WarehouseMgr to replay.");
+        }
         return checksum;
     }
 
