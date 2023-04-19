@@ -26,17 +26,47 @@ namespace starrocks::pipeline {
 
 // ==================== ConnectorScanOperatorFactory ====================
 
-ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop,
-                                                           ChunkBufferLimiterPtr buffer_limiter)
+struct ConnectorScanOperatorIOTasksMemLimiter {
+    size_t dop = 0;
+    int64_t mem_limit = 0;
+    int64_t running_chunk_source_count = 0;
+    double estimated_mem_usage_per_chunk_source = 0;
+
+    int available_chunk_source_count() const {
+        int64_t max_count = mem_limit / estimated_mem_usage_per_chunk_source;
+        int64_t avail_count = (max_count - running_chunk_source_count) / dop;
+        avail_count = std::max<int64_t>(avail_count, 0);
+        if (avail_count == 0 && running_chunk_source_count == 0) {
+            avail_count = 1;
+        }
+        VLOG_FILE << "[XXXX] io mem limiter. avail_count=" << avail_count << ", max_count=" << max_count
+                  << ", running_chunk_source_count=" << running_chunk_source_count << ", mem_limit=" << mem_limit
+                  << ", estimated_mem_usage_per_chunk_source=" << estimated_mem_usage_per_chunk_source
+                  << ", dop=" << dop;
+        return avail_count;
+    }
+};
+
+ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, RuntimeState* state,
+                                                           size_t dop, ChunkBufferLimiterPtr buffer_limiter)
         : ScanOperatorFactory(id, scan_node),
           _chunk_buffer(scan_node->is_shared_scan_enabled() ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect,
-                        dop, std::move(buffer_limiter)) {}
+                        dop, std::move(buffer_limiter)) {
+    const TQueryOptions& query_options = state->query_options();
+    _io_tasks_mem_limiter = state->obj_pool()->add(new ConnectorScanOperatorIOTasksMemLimiter());
+    double mem_ratio = config::connector_io_tasks_use_query_mem_ratio;
+    if (query_options.__isset.connector_io_tasks_use_query_mem_ratio) {
+        mem_ratio = query_options.connector_io_tasks_use_query_mem_ratio;
+    }
+    int64_t mem_limit = int64_t(runtime_state()->query_mem_tracker_ptr()->limit() * mem_ratio);
+    _io_tasks_mem_limiter->mem_limit = mem_limit;
+    _io_tasks_mem_limiter->dop = dop;
+}
 
 Status ConnectorScanOperatorFactory::do_prepare(RuntimeState* state) {
     const auto& conjunct_ctxs = _scan_node->conjunct_ctxs();
     RETURN_IF_ERROR(Expr::prepare(conjunct_ctxs, state));
     RETURN_IF_ERROR(Expr::open(conjunct_ctxs, state));
-
     return Status::OK();
 }
 
@@ -53,6 +83,10 @@ const std::vector<ExprContext*>& ConnectorScanOperatorFactory::partition_exprs()
     auto* connector_scan_node = down_cast<ConnectorScanNode*>(_scan_node);
     auto* provider = connector_scan_node->data_source_provider();
     return provider->partition_exprs();
+}
+
+void ConnectorScanOperatorFactory::set_estimated_mem_usage_per_chunk_source(int64_t value) {
+    _io_tasks_mem_limiter->estimated_mem_usage_per_chunk_source = value;
 }
 
 // ===============================================================
@@ -265,14 +299,17 @@ bool ConnectorScanOperator::is_running_all_io_tasks() const {
     }
     return ret;
 }
-
 int ConnectorScanOperator::available_pickup_morsel_count() {
     if (!_enable_adaptive_io_tasks) return _io_tasks_per_scan_operator;
 
     ConnectorScanOperatorAdaptiveProcessor& P = *_adaptive_processor;
-    const int min_io_tasks = config::connector_io_tasks_min_size;
-    int64_t now = GetCurrentTimeMicros();
+    int min_io_tasks = config::connector_io_tasks_min_size;
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
+    const int max_io_tasks = L->available_chunk_source_count();
+    min_io_tasks = std::min(min_io_tasks, max_io_tasks);
 
+    int64_t now = GetCurrentTimeMicros();
     if (_num_running_io_tasks == 0) {
         // if there is no running io tasks, and we record the last chunk source finish time
         // then we can know how long there is no chunk source running at all.
@@ -364,6 +401,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     };
 
     do_adjustment();
+    io_tasks = std::min(io_tasks, max_io_tasks);
     io_tasks = std::min(io_tasks, _io_tasks_per_scan_operator);
     io_tasks = std::max(io_tasks, min_io_tasks);
 
@@ -416,7 +454,6 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
     _data_source->update_has_any_predicate();
-    _op = down_cast<ConnectorScanOperator*>(op);
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {
@@ -436,10 +473,19 @@ const std::string ConnectorChunkSource::get_custom_coredump_msg() const {
     return _data_source->get_custom_coredump_msg();
 }
 
+ConnectorScanOperatorIOTasksMemLimiter* ConnectorChunkSource::_get_io_tasks_mem_limiter() const {
+    ConnectorScanOperator* op = down_cast<ConnectorScanOperator*>(_scan_op);
+    ConnectorScanOperatorFactory* f = down_cast<ConnectorScanOperatorFactory*>(op->get_factory());
+    return f->_io_tasks_mem_limiter;
+}
+
 void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
     _closed = true;
     _data_source->close(state);
+
+    ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
+    limiter->running_chunk_source_count -= 1;
 }
 
 Status ConnectorChunkSource::_open_data_source(RuntimeState* state) {
@@ -455,13 +501,17 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state) {
     }
     _opened = true;
 
+    ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
+    limiter->running_chunk_source_count += 1;
+
     return Status::OK();
 }
 
 Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    ConnectorScanOperatorAdaptiveProcessor& P = *(_op->_adaptive_processor);
+    ConnectorScanOperator* op = down_cast<ConnectorScanOperator*>(_scan_op);
+    ConnectorScanOperatorAdaptiveProcessor& P = *(op->_adaptive_processor);
 
-    DeferOp op([&]() { P.last_chunk_souce_finish_timestamp = GetCurrentTimeMicros(); });
+    DeferOp defer_op([&]() { P.last_chunk_souce_finish_timestamp = GetCurrentTimeMicros(); });
 
     int64_t total_time_ns = 0;
     int64_t delta_io_time_ns = 0;

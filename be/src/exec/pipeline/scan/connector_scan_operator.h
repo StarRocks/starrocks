@@ -27,6 +27,8 @@ class ScanNode;
 
 namespace pipeline {
 
+class ConnectorScanOperatorIOTasksMemLimiter;
+
 class ConnectorScanOperatorFactory : public ScanOperatorFactory {
 public:
     using ActiveInputKey = std::pair<int32_t, int32_t>;
@@ -34,7 +36,8 @@ public:
             ActiveInputKey, typename phmap::Hash<ActiveInputKey>, typename phmap::EqualTo<ActiveInputKey>,
             typename std::allocator<ActiveInputKey>, NUM_LOCK_SHARD_LOG, std::mutex, true>;
 
-    ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, size_t dop, ChunkBufferLimiterPtr buffer_limiter);
+    ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, RuntimeState* state, size_t dop,
+                                 ChunkBufferLimiterPtr buffer_limiter);
 
     ~ConnectorScanOperatorFactory() override = default;
 
@@ -46,11 +49,15 @@ public:
 
     TPartitionType::type partition_type() const override { return TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED; }
     const std::vector<ExprContext*>& partition_exprs() const override;
+    void set_estimated_mem_usage_per_chunk_source(int64_t mem_usage);
 
 private:
     // TODO: refactor the OlapScanContext, move them into the context
     BalancedChunkBuffer _chunk_buffer;
     ActiveInputSet _active_inputs;
+
+public:
+    ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter;
 };
 
 class ConnectorScanOperatorAdaptiveProcessor;
@@ -114,6 +121,8 @@ private:
 
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
+    ConnectorScanOperatorIOTasksMemLimiter* _get_io_tasks_mem_limiter() const;
+
     const int64_t _limit; // -1: no limit
     const std::vector<ExprContext*>& _runtime_in_filters;
     const RuntimeFilterProbeCollector* _runtime_bloom_filters;
@@ -127,7 +136,6 @@ private:
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
-    ConnectorScanOperator* _op = nullptr;
 };
 
 } // namespace pipeline
