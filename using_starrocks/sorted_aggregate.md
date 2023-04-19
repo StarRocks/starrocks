@@ -2,8 +2,6 @@
 
 数据库常见的聚合方法有 Hash 聚合和排序聚合。
 
-Hash 聚合通过数据集的哈希值匹配来获取关联数据。Hash 聚合适合小表和大表之间做 Join 而且 Join 结果集记录较多的情况。
-
 从 2.5 版本开始，StarRocks 支持了有限的排序聚合 (Sorted streaming aggregate)。
 
 ## 原理
@@ -21,7 +19,7 @@ set enable_sort_aggregate=true;
 ## 使用限制
 
 - GROUP BY 里的 key 需要是做好排序的:
-  比如排序列是 `k1,k2,k3`，那么:
+  比如表的排序列是 `k1,k2,k3`，那么:
   - `GROUP BY k1` 和 `GROUP BY k1, k2` 是可以的。
   - `GROUP BY k1, k3` 是不能保证排序的，所以 Sorted streaming aggregate 无法生效。
 - 选择的分区只能是一个分区 (因为不同分区中同一个 key 可能分布在不同机器上)。
@@ -30,17 +28,19 @@ set enable_sort_aggregate=true;
   - 如果根据 `k1` 进行分桶，支持 `GROUP BY k1`，`GROUP BY k1, k2`，`GROUP BY k1,k2,k3`。
   - 如果根据 `k1,k2` 进行分桶，支持 `GROUP BY k1,k2`，`GROUP BY k1,k2,k3`。
   - 对于不符合条件的查询 plan，即使开启了 `enable_sort_aggregate`，sorted streaming aggregate 也无法生效。
-- 必须是一阶段聚合（即 AGG 节点下面只连接一个 scan node）。
+- 必须是一阶段聚合（即 AGG 节点下面只连接一个 Scan node）。
 
 ## 使用示例
 
 1. 建表并插入数据。
 
     ```SQL
-    CREATE TABLE `test_sorted_streaming_agg_basic` (
-    `id_int` int(11) NOT NULL COMMENT "",
-    `id_string` varchar(100) NOT NULL COMMENT ""
-    ) ENGINE=OLAP 
+    CREATE TABLE `test_sorted_streaming_agg_basic`
+    (
+        `id_int` int(11) NOT NULL COMMENT "",
+        `id_string` varchar(100) NOT NULL COMMENT ""
+    )
+    ENGINE=OLAP 
     DUPLICATE KEY(`id_int`)
     COMMENT "OLAP"
     DISTRIBUTED BY HASH(`id_int`) BUCKETS 10 
@@ -60,7 +60,8 @@ set enable_sort_aggregate=true;
     ```SQL
     set enable_sort_aggregate = true;
 
-    explain costs select id_int, max(id_string) from test_sorted_streaming_agg_basic
+    explain costs select id_int, max(id_string)
+    from test_sorted_streaming_agg_basic
     group by id_int;
     ```
 
