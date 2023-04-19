@@ -39,10 +39,10 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
         if (avail_count == 0 && running_chunk_source_count == 0) {
             avail_count = 1;
         }
-        VLOG_FILE << "[XXXX] io mem limiter. avail_count=" << avail_count << ", max_count=" << max_count
-                  << ", running_chunk_source_count=" << running_chunk_source_count << ", mem_limit=" << mem_limit
-                  << ", estimated_mem_usage_per_chunk_source=" << int64_t(estimated_mem_usage_per_chunk_source)
-                  << ", dop=" << dop;
+        VLOG_FILE << "[XXXX] io mem limiter. max_count=" << max_count << "(" << mem_limit << "/"
+                  << int64_t(estimated_mem_usage_per_chunk_source) << ")"
+                  << ", running_chunk_source_count = " << running_chunk_source_count << ", dop=" << dop
+                  << ", avail_count = " << avail_count;
         return avail_count;
     }
 };
