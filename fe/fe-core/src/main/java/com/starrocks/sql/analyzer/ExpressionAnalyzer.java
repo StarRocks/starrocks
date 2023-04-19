@@ -311,6 +311,9 @@ public class ExpressionAnalyzer {
             ResolvedField resolvedField = scope.resolveField(node);
             node.setType(resolvedField.getField().getType());
             node.setTblName(resolvedField.getField().getRelationAlias());
+            // help to get nullable info in Analyzer phase
+            // now it is used in creating mv to decide nullable of fields
+            node.setNullable(resolvedField.getField().isNullable());
 
             if (node.getType().isStructType()) {
                 // If SlotRef is a struct type, it needs special treatment, reset SlotRef's col, label name.
