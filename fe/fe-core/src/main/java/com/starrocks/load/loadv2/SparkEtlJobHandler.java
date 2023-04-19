@@ -217,7 +217,7 @@ public class SparkEtlJobHandler {
     public void killYarnApplication(String appId, long loadJobId, SparkResource resource)
             throws UserException {
         if (!resource.isYarnMaster()) {
-           return;
+            return;
         }
         if (Strings.isNullOrEmpty(appId)) {
             LOG.warn("app id is null, kill yarn application fail");
