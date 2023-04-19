@@ -216,10 +216,10 @@ public class SparkEtlJobHandler {
 
     public void killYarnApplication(SparkLoadAppHandle handle, long loadJobId, SparkResource resource)
             throws UserException {
-        if (!resource.isYarnMaster()) {
+        if (resource == null || !resource.isYarnMaster()) {
             return;
         }
-        if (Strings.isNullOrEmpty(handle.getAppId())) {
+        if (handle == null || Strings.isNullOrEmpty(handle.getAppId())) {
             LOG.warn("yarn application kill failed, app id is empty");
             return;
         }
@@ -342,7 +342,7 @@ public class SparkEtlJobHandler {
                     return;
                 }
             } else {
-                if (Strings.isNullOrEmpty(handle.getAppId())) {
+                if (handle != null && Strings.isNullOrEmpty(handle.getAppId())) {
                     handle.setAppId(appId);
                 }
             }
