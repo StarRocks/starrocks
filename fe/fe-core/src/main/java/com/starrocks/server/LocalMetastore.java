@@ -2857,7 +2857,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
                 if (backendsPerBucketSeq.isEmpty()) {
                     List<ColocateTableIndex.GroupId> colocateWithGroupsInOtherDb =
-                            colocateTableIndex.getColocateWithGroupsInOtherDb(groupId, db.getId());
+                            colocateTableIndex.getColocateWithGroupsInOtherDb(groupId);
                     if (!colocateWithGroupsInOtherDb.isEmpty()) {
                         backendsPerBucketSeq =
                                 colocateTableIndex.getBackendsPerBucketSeq(colocateWithGroupsInOtherDb.get(0));
@@ -4645,7 +4645,7 @@ public class LocalMetastore implements ConnectorMetadata {
         TableName dbTbl = tblRef.getName();
 
         // check, and save some info which need to be checked again later
-        Map<String, Partition> origPartitions = Maps.newHashMap();
+        Map<String, Partition> origPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         OlapTable copiedTbl;
         Database db = getDb(dbTbl.getDb());
         if (db == null) {
