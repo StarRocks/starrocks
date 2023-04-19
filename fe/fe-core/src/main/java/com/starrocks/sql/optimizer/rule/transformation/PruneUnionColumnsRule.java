@@ -5,8 +5,10 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalSetOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -27,7 +29,7 @@ public class PruneUnionColumnsRule extends TransformationRule {
         ColumnRefSet requiredOutputColumns = context.getTaskContext().getRequiredColumns();
 
         LogicalSetOperator lso = (LogicalSetOperator) input.getOp();
-        List<ColumnRefOperator> outputs = lso.getOutputColumnRefOp();
+        List<ColumnRefOperator> outputs = new ArrayList<>(lso.getOutputColumnRefOp());
 
         List<List<ColumnRefOperator>> childOutputsAfterPruned = new ArrayList<>();
         for (int childIdx = 0; childIdx < input.arity(); ++childIdx) {
@@ -73,6 +75,10 @@ public class PruneUnionColumnsRule extends TransformationRule {
             lso.getChildOutputColumns().set(childIdx, childOutputsAfterPruned.get(childIdx));
         }
 
-        return Collections.emptyList();
+        Operator newUnion = new LogicalUnionOperator.Builder()
+                .withOperator((LogicalUnionOperator) lso)
+                .setOutputColumnRefOp(outputs)
+                .build();
+        return Collections.singletonList(OptExpression.create(newUnion, input.getInputs()));
     }
 }
