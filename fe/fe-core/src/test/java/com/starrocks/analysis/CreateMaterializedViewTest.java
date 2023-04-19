@@ -2697,6 +2697,18 @@ public class CreateMaterializedViewTest {
             starRocksAssert.dropMaterializedView("mv_nullable");
         }
 
+        {
+            starRocksAssert.withMaterializedView("create materialized view mv_nullable" +
+                    " distributed by hash(`empid`) as" +
+                    " select empid, d.deptno, d.name" +
+                    " from emps e full outer join depts d on e.deptno = d.deptno");
+            MaterializedView mv = getMv("test", "mv_nullable");
+            Assert.assertTrue(mv.getColumn("empid").isAllowNull());
+            Assert.assertTrue(mv.getColumn("deptno").isAllowNull());
+            Assert.assertTrue(mv.getColumn("name").isAllowNull());
+            starRocksAssert.dropMaterializedView("mv_nullable");
+        }
+
         starRocksAssert.dropTable("emps");
         starRocksAssert.dropTable("depts");
     }
