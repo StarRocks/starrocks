@@ -24,6 +24,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -74,6 +75,8 @@ public class UpdateAnalyzer {
             }
         }
         SelectList selectList = new SelectList();
+        boolean nullExprInAutoIncrement = false;
+        Column autoIncrementColumn = null;
         for (Column col : table.getBaseSchema()) {
             SelectListItem item;
             ColumnAssignment assign = assignmentByColName.get(col.getName().toLowerCase());
@@ -82,11 +85,19 @@ public class UpdateAnalyzer {
                     throw new SemanticException("primary key column cannot be updated: " + col.getName());
                 }
 
+                if (col.isAutoIncrement()) {
+                    autoIncrementColumn = col;
+                }
+
+                if (col.isAutoIncrement() && assign.getExpr().getType() == Type.NULL) {
+                    nullExprInAutoIncrement = true;
+                    break;
+                }
+
                 if (assign.getExpr() instanceof DefaultValueExpr) {
                     if (!col.isAutoIncrement()) {
                         assign.setExpr(TypeManager.addCastExpr(new StringLiteral(col.calculatedDefaultValue()), col.getType()));
                     } else {
-                        updateStmt.setNullExprInAutoIncrement(false);
                         assign.setExpr(TypeManager.addCastExpr(new NullLiteral(), col.getType()));
                     }
                 }
@@ -96,6 +107,11 @@ public class UpdateAnalyzer {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
             }
             selectList.addItem(item);
+        }
+
+        if (autoIncrementColumn != null && nullExprInAutoIncrement) {
+            throw new SemanticException("AUTO_INCREMENT column: " + autoIncrementColumn.getName() +
+                                        " must not be NULL");
         }
 
         Relation relation = new TableRelation(tableName);

@@ -1804,7 +1804,16 @@ int64_t TabletUpdates::get_compaction_score() {
         }
         if (_apply_version_idx + 2 < _edit_version_infos.size() || _pending_commits.size() >= 2) {
             // has too many pending tasks, skip compaction
-            return -1;
+            size_t version_count = _edit_version_infos.back()->rowsets.size() + _pending_commits.size();
+            if (version_count > config::tablet_max_versions) {
+                LOG(INFO) << strings::Substitute(
+                        "Try to do compaction because of too many versions. tablet_id:$0 "
+                        "version_count:$1 limit:$2 applied_version_idx:$3 edit_version_infos:$4 pending:$5",
+                        _tablet.tablet_id(), version_count, config::tablet_max_versions, _apply_version_idx,
+                        _edit_version_infos.size(), _pending_commits.size());
+            } else {
+                return -1;
+            }
         }
         for (size_t i = _apply_version_idx + 1; i < _edit_version_infos.size(); i++) {
             if (_edit_version_infos[i]->compaction) {
@@ -2491,6 +2500,8 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
     }
 
     // disable compaction temporarily when tablet just loaded
+    int64_t prev_last_compaction_time_ms = _last_compaction_time_ms;
+    DeferOp op([&] { _last_compaction_time_ms = prev_last_compaction_time_ms; });
     _last_compaction_time_ms = UnixMillis();
 
     // 1. construct new rowsets
@@ -2643,6 +2654,8 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     }
 
     // disable compaction temporarily when tablet just loaded
+    int64_t prev_last_compaction_time_ms = _last_compaction_time_ms;
+    DeferOp op([&] { _last_compaction_time_ms = prev_last_compaction_time_ms; });
     _last_compaction_time_ms = UnixMillis();
 
     auto kv_store = _tablet.data_dir()->get_meta();
@@ -2869,6 +2882,8 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     std::unique_ptr<MemPool> mem_pool(new MemPool());
 
     // disable compaction temporarily when tablet just loaded
+    int64_t prev_last_compaction_time_ms = _last_compaction_time_ms;
+    DeferOp op([&] { _last_compaction_time_ms = prev_last_compaction_time_ms; });
     _last_compaction_time_ms = UnixMillis();
 
     auto kv_store = _tablet.data_dir()->get_meta();
@@ -3222,6 +3237,8 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
                                     _tablet.tablet_id(), _error_msg));
     }
     // disable compaction temporarily when doing load_snapshot
+    int64_t prev_last_compaction_time_ms = _last_compaction_time_ms;
+    DeferOp op([&] { _last_compaction_time_ms = prev_last_compaction_time_ms; });
     _last_compaction_time_ms = UnixMillis();
 
     // A utility function used to ensure that segment files have been placed under the
