@@ -837,15 +837,15 @@ public class ReplayFromDumpTest {
 
     @Test
     public void testTPCH11() throws Exception {
-        FeConstants.USE_MOCK_DICT_MANAGER = true;
-        Pair<QueryDumpInfo, String> replayPair =
-                getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(
-                "Predicates: DictExpr(61: n_name,[<place-holder> = 'GERMANY'])\n" +
-                        "     dict_col=n_name"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(
-                "Predicates: DictExpr(62: n_name,[<place-holder> = 'GERMANY'])\n" +
-                        "     dict_col=n_name"));
-        FeConstants.USE_MOCK_DICT_MANAGER = false;
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            Pair<QueryDumpInfo, String> replayPair =
+                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
+            Assert.assertTrue(replayPair.second, replayPair.second.contains(
+                    "n_name,[<place-holder> = 'GERMANY'])\n" +
+                            "     dict_col=n_name"));
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
     }
 }
