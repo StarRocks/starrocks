@@ -65,8 +65,10 @@
     + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
     + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
 + Integration
-  + [Integrate with StarRocks](./integrations/intro.md)
   + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
+  + Integrate with BI tools
+    + [Apache Superset](./integrations/superset_support.md)
+  + [Integrate with other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)

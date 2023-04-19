@@ -33,7 +33,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
@@ -488,9 +488,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             for (int round = 1; round <= 2; round++) {
                 PARTITION:
                 for (Pair<Long, Long> partitionMVId : hState.sortedPartitions) {
-                    Set<Long> hPartitionTablets = hState.partitionTablets.get(partitionMVId);
-                    Set<Long> lPartitionTablets = lState.partitionTablets.computeIfAbsent(partitionMVId,
-                            pmId -> new HashSet<>());
+                    List<Long> hPartitionTablets = hState.partitionTablets.get(partitionMVId);
+                    List<Long> lPartitionTablets = lState.partitionTablets.computeIfAbsent(partitionMVId,
+                            pmId -> new LinkedList<>());
                     int replicaTotalCnt = partitionReplicaCnt.getOrDefault(partitionMVId.first, 0);
                     int slotOfHighBE = hPartitionTablets.size() - (replicaTotalCnt / beStats.size());
                     int slotOfLowBE = ((replicaTotalCnt + beStats.size() - 1) / beStats.size())
@@ -1629,6 +1629,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                                        int backendCnt,
                                                        boolean sortPartition) {
         Map<Pair<Long, Long>, Set<Long>> partitionTablets = getPartitionTablets(backendId, medium, -1L);
+        Map<Pair<Long, Long>, List<Long>> partitionTabletList = new HashMap<>();
+        for (Map.Entry<Pair<Long, Long>, Set<Long>> entry : partitionTablets.entrySet()) {
+            partitionTabletList.put(entry.getKey(), new LinkedList<>(entry.getValue()));
+        }
         Map<Pair<Long, Long>, Double> partitionAvgReplicaSize = getPartitionAvgReplicaSize(backendId, partitionTablets);
         List<Pair<Long, Long>> partitions = new ArrayList<>(partitionTablets.keySet());
         if (sortPartition) {
@@ -1645,13 +1649,25 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     return Double.compare(partitionAvgReplicaSize.get(p2), partitionAvgReplicaSize.get(p1));
                 }
             });
+
+            for (List<Long> tabletList : partitionTabletList.values()) {
+                if (tabletList.size() <= 1) {
+                    continue;
+                }
+                tabletList.sort((t1, t2) -> {
+                    Replica replica1 = invertedIndex.getReplica(t1, backendId);
+                    Replica replica2 = invertedIndex.getReplica(t2, backendId);
+                    return Long.compare(replica2 == null ? 0L : replica2.getDataSize(),
+                            replica1 == null ? 0L : replica1.getDataSize());
+                });
+            }
         }
 
         BackendBalanceState backendBalanceState = new BackendBalanceState(backendId,
                 backendLoadStatistic,
                 invertedIndex,
                 medium,
-                partitionTablets,
+                partitionTabletList,
                 partitions);
         backendBalanceState.init();
         return backendBalanceState;
@@ -1776,7 +1792,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         List<Pair<Long, Long>> sortedPartitions;
         TabletInvertedIndex tabletInvertedIndex;
         // <partitionId, mvId> => tablets in that partition
-        Map<Pair<Long, Long>, Set<Long>> partitionTablets;
+        // tablets is sorted by data size in desc order for the BE in high load group
+        Map<Pair<Long, Long>, List<Long>> partitionTablets;
         // total data used capacity
         long usedCapacity;
         // pathHash => usedCapacity
@@ -1793,7 +1810,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             BackendLoadStatistic statistic,
                             TabletInvertedIndex tabletInvertedIndex,
                             TStorageMedium medium,
-                            Map<Pair<Long, Long>, Set<Long>> partitionTablets,
+                            Map<Pair<Long, Long>, List<Long>> partitionTablets,
                             List<Pair<Long, Long>> partitions) {
             this.backendId = backendId;
             this.statistic = statistic;
@@ -1847,7 +1864,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         }
 
         // used for high load group
-        public List<Long> getTabletsInHighLoadPath(Set<Long> tablets) {
+        public List<Long> getTabletsInHighLoadPath(List<Long> tablets) {
             double avgUsedPercent = pathUsedCapacity.values().stream().mapToLong(Long::longValue).sum()
                     / (double) statistic.getTotalCapacityB(medium);
             // find the last high load index, we only choose tablet in the high load paths
