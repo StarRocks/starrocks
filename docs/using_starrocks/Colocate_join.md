@@ -40,7 +40,7 @@ The consistent data distribution and mapping guarantee that the data rows with t
 When creating a table, you can specify the attribute `"colocate_with" = "group_name"` in PROPERTIES to indicate that the table is a Colocate Join table and belongs to a specified Colocation Group.
 > **NOTE**
 >
-> From version 2.5.4, Colocate Join can be performed on tables from different databases. You only need to specify the same `colocate_with` property when tables are created.
+> From version 2.5.4, Colocate Join can be performed on tables from different databases. You only need to specify the same `colocate_with` property when you create tables.
 
 For example:
 
