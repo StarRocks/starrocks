@@ -96,6 +96,7 @@ struct ConnectorScanOperatorAdaptiveProcessor {
     int64_t last_cs_pull_chunks = 0;
     int try_add_io_tasks_fail_count = 0;
     int check_slow_io = 0;
+    int32_t slow_io_latency_ms = config::connector_io_tasks_adjust_interval_ms;
 };
 
 // ==================== ConnectorScanOperator ====================
@@ -115,6 +116,9 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
     _unique_metrics->add_info_string("AdaptiveIOTasks", _enable_adaptive_io_tasks ? "True" : "False");
     _adaptive_processor = state->obj_pool()->add(new ConnectorScanOperatorAdaptiveProcessor());
     _adaptive_processor->op_start_time = GetCurrentTimeMicros();
+    if (options.__isset.connector_io_tasks_slow_io_latency_ms) {
+        _adaptive_processor->slow_io_latency_ms = options.connector_io_tasks_slow_io_latency_ms;
+    }
     return Status::OK();
 }
 
@@ -334,9 +338,9 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
 
     auto check_slow_io = [&]() {
         if (((P.check_slow_io++) % 8) != 0) return;
-        if (io_latency >= 2 * config::connector_io_tasks_slow_io_latency_ms) {
+        if (io_latency >= 2 * P.slow_io_latency_ms) {
             io_tasks = std::max(io_tasks, _io_tasks_per_scan_operator / 2);
-        } else if (io_latency >= config::connector_io_tasks_slow_io_latency_ms) {
+        } else if (io_latency >= P.slow_io_latency_ms) {
             io_tasks = std::max(io_tasks, _io_tasks_per_scan_operator / 4);
         } else {
         }
@@ -349,15 +353,14 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
             return;
         }
 
+        check_slow_io();
         if (try_add_io_tasks()) {
             // if we don't try add io tasks before,
             // or if we've tried and we get expected speedup ratio.
             do_add_io_tasks();
-            return;
+        } else {
+            do_sub_io_tasks();
         }
-
-        check_slow_io();
-        do_sub_io_tasks();
     };
 
     do_adjustment();

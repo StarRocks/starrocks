@@ -189,6 +189,7 @@ struct TQueryOptions {
   87: optional i32 connector_io_tasks_per_scan_operator = 16;
   88: optional double runtime_filter_early_return_selectivity = 0.05;
   89: optional bool enable_connector_adaptive_io_tasks = true;
+  90: optional i32 connector_io_tasks_slow_io_latency_ms = 50;
 }
 
 
