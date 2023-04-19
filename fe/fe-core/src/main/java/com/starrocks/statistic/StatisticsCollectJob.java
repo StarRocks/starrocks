@@ -9,6 +9,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
@@ -89,6 +90,11 @@ public abstract class StatisticsCollectJob {
             LOG.debug("statistics collect sql : " + sql);
             StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            SessionVariable sessionVariable = context.getSessionVariable();
+            // Statistics collecting is not user-specific, which means response latency is not that important.
+            // Normally, if the page cache is enabled, the page cache must be full. Page cache is used for query 
+            // acceleration, then page cache is better filled with the user's data. 
+            sessionVariable.setUsePageCache(false);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();

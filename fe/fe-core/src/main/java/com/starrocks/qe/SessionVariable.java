@@ -77,6 +77,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String QUERY_TIMEOUT = "query_timeout";
 
+    /* 
+     * When FE does not set the pagecache parameter, we expect a query to follow the pagecache policy of BE.
+     * If pagecache is set by FE, a query whether to use pagecache follows the policy specified by FE.
+     */
+    public static final String USE_PAGE_CACHE = "use_page_cache";
+
     public static final String QUERY_DELIVERY_TIMEOUT = "query_delivery_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
@@ -442,6 +448,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // query timeout in second.
     @VariableMgr.VarAttr(name = QUERY_TIMEOUT)
     private int queryTimeoutS = 300;
+
+    @VariableMgr.VarAttr(name = USE_PAGE_CACHE)
+    private boolean usePageCache = true;
 
     // Execution of a query contains two phase.
     // 1. Deliver all the fragment instances to BEs.
@@ -1045,6 +1054,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setLoadMemLimit(long loadMemLimit) {
         this.loadMemLimit = loadMemLimit;
+    }
+
+    public void setUsePageCache(boolean usePageCache) {
+        this.usePageCache = usePageCache;
     }
 
     public void setQueryTimeoutS(int queryTimeoutS) {
@@ -1715,6 +1728,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setUse_scan_block_cache(useScanBlockCache);
         tResult.setEnable_populate_block_cache(enablePopulateBlockCache);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
+<<<<<<< HEAD
+=======
+        tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
+        tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
+        tResult.setUse_page_cache(usePageCache);
+>>>>>>> b0d0533f3 ([Enhancement] Avoid using page cache when collecting statistics (#21801))
         return tResult;
     }
 
