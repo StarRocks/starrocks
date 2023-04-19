@@ -9,19 +9,20 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
 public abstract class LogicalSetOperator extends LogicalOperator {
-    protected List<ColumnRefOperator> outputColumnRefOp;
-    protected List<List<ColumnRefOperator>> childOutputColumns;
+    protected final List<ColumnRefOperator> outputColumnRefOp;
+    protected final List<List<ColumnRefOperator>> childOutputColumns;
 
     public LogicalSetOperator(OperatorType type, List<ColumnRefOperator> result,
                               List<List<ColumnRefOperator>> childOutputColumns,
                               long limit,
                               Projection projection) {
         super(type, limit, null, projection);
-        this.outputColumnRefOp = result;
+        this.outputColumnRefOp = Collections.unmodifiableList(result);
         this.childOutputColumns = childOutputColumns;
     }
 
