@@ -371,6 +371,18 @@ Status HdfsFileSystem::iterate_dir2(const std::string& dir, const std::function<
         } else {
             dir_size = dir.size() + 1;
         }
+
+        const std::string local_fs("file:/");
+        if (dir.compare(0, local_fs.length(), local_fs) == 0) {
+            std::string mName(fileinfo[i].mName);
+            std::size_t found = mName.rfind("/");
+            if (found == std::string::npos) {
+                return Status::InvalidArgument("parse path fail {}"_format(dir));
+            }
+
+            dir_size = found + 1;
+        }
+
         std::string_view name(fileinfo[i].mName + dir_size);
         DirEntry entry{.name = name,
                        .mtime = fileinfo[i].mLastMod,
