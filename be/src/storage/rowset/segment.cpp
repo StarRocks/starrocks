@@ -374,4 +374,9 @@ Status Segment::new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** it
     return Status::OK();
 }
 
+StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg) {
+    return Segment::open(_fs, dcg.column_file(), 0, TabletSchema::create_with_uid(*_tablet_schema, dcg.column_ids()),
+                         nullptr);
+}
+
 } // namespace starrocks

@@ -125,6 +125,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected boolean strictMode = false; // default is false
     protected String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     protected boolean partialUpdate = false;
+    protected String partialUpdateMode = "row";
     protected int priority = LoadPriority.NORMAL_VALUE;
     protected long logRejectedRecordNum = 0;
     // reuse deleteFlag as partialUpdate
@@ -317,6 +318,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             }
             if (properties.containsKey(LoadStmt.PARTIAL_UPDATE)) {
                 partialUpdate = Boolean.valueOf(properties.get(LoadStmt.PARTIAL_UPDATE));
+            }
+            if (properties.containsKey(LoadStmt.PARTIAL_UPDATE_MODE)) {
+                partialUpdateMode = properties.get(LoadStmt.PARTIAL_UPDATE_MODE);
             }
 
             if (properties.containsKey(LoadStmt.LOAD_MEM_LIMIT)) {

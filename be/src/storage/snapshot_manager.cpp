@@ -599,6 +599,9 @@ Status SnapshotManager::make_snapshot_on_tablet_meta(SnapshotTypePB snapshot_typ
                 DelVector* delvec = &snapshot_meta.delete_vectors()[new_segment_id];
                 RETURN_IF_ERROR(TabletMetaManager::get_del_vector(meta_store, tablet->tablet_id(), old_segment_id,
                                                                   snapshot_version, delvec, &dummy /*latest_version*/));
+                DeltaColumnGroupList* dcg = &snapshot_meta.delta_column_groups()[new_segment_id];
+                RETURN_IF_ERROR(TabletMetaManager::get_delta_column_group(meta_store, tablet->tablet_id(),
+                                                                          old_segment_id, snapshot_version, dcg));
             }
             rowset_meta_pb.set_rowset_seg_id(new_rsid);
             new_rsid += std::max<uint32_t>(rowset_meta_pb.num_segments(), 1);
@@ -658,6 +661,11 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
         for (int del_id = 0; del_id < rowset_meta_pb.num_delete_files(); del_id++) {
             auto old_path = Rowset::segment_del_file_path(clone_dir, old_rowset_id, del_id);
             auto new_path = Rowset::segment_del_file_path(clone_dir, new_rowset_id, del_id);
+            RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
+        }
+        for (int upt_id = 0; upt_id < rowset_meta_pb.num_update_files(); upt_id++) {
+            auto old_path = Rowset::segment_upt_file_path(clone_dir, old_rowset_id, upt_id);
+            auto new_path = Rowset::segment_upt_file_path(clone_dir, new_rowset_id, upt_id);
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
         }
         rowset_meta_pb.set_rowset_id(new_rowset_id.to_string());

@@ -49,9 +49,10 @@ public class AnalyzeUpdateTest {
         analyzeFail("update tprimary set pk = 2 where pk = 1",
                 "primary key column cannot be updated:");
 
-        analyzeFail("update tprimary set v1 = 'aaa'",
+        analyzeFail("update tprimary set v1 = 'aaa', v2 = 100",
                 "must specify where clause to prevent full table update");
-
+                
+        analyzeSuccess("update tprimary set v1 = 'aaa'");
         analyzeSuccess("update tprimary set v1 = 'aaa' where pk = 1");
         analyzeSuccess("update tprimary set v2 = v2 + 1 where pk = 1");
         analyzeSuccess("update tprimary set v1 = 'aaa', v2 = v2 + 1 where pk = 1");

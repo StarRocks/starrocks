@@ -36,6 +36,7 @@ static unique_ptr<Schema> create_key_schema(const vector<LogicalType>& types) {
         auto fd = new Field(i, name, types[i], false);
         fd->set_is_key(true);
         fd->set_aggregate_method(STORAGE_AGGREGATE_NONE);
+        fd->set_uid(i);
         fields.emplace_back(fd);
         sort_key_idxes[i] = i;
     }

@@ -279,18 +279,20 @@ Status Rowset::remove() {
 
 Status Rowset::_remove_delta_column_group_files(std::shared_ptr<FileSystem> fs) {
     if (num_segments() > 0) {
-        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_rowset_meta->tablet_id());
-        if (tablet == nullptr) {
-            // when tablet not exist, skip this step
-            LOG(WARNING) << "remove delta column group, and tablet not exist, tid: " << _rowset_meta->tablet_id();
+        std::filesystem::path schema_hash_path(_rowset_path);
+        std::filesystem::path data_dir_path = schema_hash_path.parent_path().parent_path().parent_path().parent_path();
+        std::string data_dir_string = data_dir_path.string();
+        DataDir* data_dir = StorageEngine::instance()->get_store(data_dir_string);
+        if (data_dir == nullptr) {
+            LOG(ERROR) << "DataDir not found! rowset_path: " << _rowset_path << ", dir_path: " << data_dir_string;
             return Status::OK();
         }
         // 1. remove dcg files
         for (int i = 0; i < num_segments(); i++) {
             DeltaColumnGroupList list;
-            RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
-                    tablet->data_dir()->get_meta(), _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id() + i, 0,
-                    INT64_MAX, &list));
+            RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(data_dir->get_meta(), _rowset_meta->tablet_id(),
+                                                                       _rowset_meta->get_rowset_seg_id() + i, 0,
+                                                                       INT64_MAX, &list));
             for (const auto& dcg : list) {
                 auto st = fs->delete_file(dcg->column_file());
                 if (st.ok() || st.is_not_found()) {
@@ -301,9 +303,8 @@ Status Rowset::_remove_delta_column_group_files(std::shared_ptr<FileSystem> fs) 
             }
         }
         // 2. remove dcg from rocksdb
-        RETURN_IF_ERROR(
-                TabletMetaManager::delete_delta_column_group(tablet->data_dir()->get_meta(), _rowset_meta->tablet_id(),
-                                                             _rowset_meta->get_rowset_seg_id(), num_segments()));
+        RETURN_IF_ERROR(TabletMetaManager::delete_delta_column_group(
+                data_dir->get_meta(), _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id(), num_segments()));
     }
     return Status::OK();
 }
@@ -342,18 +343,20 @@ Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id) {
 
 Status Rowset::_link_delta_column_group_files(const std::string& dir, RowsetId new_rowset_id) {
     if (num_segments() > 0) {
-        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_rowset_meta->tablet_id());
-        if (tablet == nullptr) {
-            // when tablet not exist, skip this step
-            LOG(WARNING) << "link delta column group, and tablet not exist, tid: " << _rowset_meta->tablet_id();
+        std::filesystem::path schema_hash_path(_rowset_path);
+        std::filesystem::path data_dir_path = schema_hash_path.parent_path().parent_path().parent_path().parent_path();
+        std::string data_dir_string = data_dir_path.string();
+        DataDir* data_dir = StorageEngine::instance()->get_store(data_dir_string);
+        if (data_dir == nullptr) {
+            LOG(ERROR) << "DataDir not found! rowset_path: " << _rowset_path << ", dir_path: " << data_dir_string;
             return Status::OK();
         }
         // link dcg files
         for (int i = 0; i < num_segments(); i++) {
             DeltaColumnGroupList list;
-            RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(
-                    tablet->data_dir()->get_meta(), _rowset_meta->tablet_id(), _rowset_meta->get_rowset_seg_id() + i, 0,
-                    INT64_MAX, &list));
+            RETURN_IF_ERROR(TabletMetaManager::scan_delta_column_group(data_dir->get_meta(), _rowset_meta->tablet_id(),
+                                                                       _rowset_meta->get_rowset_seg_id() + i, 0,
+                                                                       INT64_MAX, &list));
             for (const auto& dcg : list) {
                 std::string src_file_path = dcg->column_file();
                 std::string dst_link_path = delta_column_group_path(dir, new_rowset_id, i, dcg->version());
@@ -493,6 +496,7 @@ Status Rowset::get_segment_iterators(const Schema& schema, const RowsetReadOptio
         seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
         seg_options.version = options.version;
         seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(options.meta);
+        seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(options.meta);
     }
     seg_options.rowid_range_option = options.rowid_range_option;
     seg_options.short_key_ranges = options.short_key_ranges;
@@ -567,6 +571,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
     seg_options.rowset_id = rowset_meta()->get_rowset_seg_id();
     seg_options.version = version;
     seg_options.delvec_loader = std::make_shared<LocalDelvecLoader>(meta);
+    seg_options.dcg_loader = std::make_shared<LocalDeltaColumnGroupLoader>(meta);
 
     std::vector<ChunkIteratorPtr> seg_iterators(num_segments());
     TabletSegmentId tsid;

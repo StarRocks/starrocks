@@ -44,12 +44,13 @@ RowsetColumnUpdateState::~RowsetColumnUpdateState() {
     }
 }
 
-Status RowsetColumnUpdateState::load(Tablet* tablet, Rowset* rowset) {
+Status RowsetColumnUpdateState::load(Tablet* tablet, Rowset* rowset, MemTracker* update_mem_tracker) {
     if (UNLIKELY(!_status.ok())) {
         return _status;
     }
     std::call_once(_load_once_flag, [&] {
         _tablet_id = tablet->tablet_id();
+        _check_if_preload_column_mode_update_data(rowset, update_mem_tracker);
         _status = _do_load(tablet, rowset);
         if (!_status.ok()) {
             LOG(WARNING) << "load RowsetColumnUpdateState error: " << _status << " tablet:" << _tablet_id << " stack:\n"
@@ -60,6 +61,17 @@ Status RowsetColumnUpdateState::load(Tablet* tablet, Rowset* rowset) {
         }
     });
     return _status;
+}
+
+// check if we have memory to preload update data
+void RowsetColumnUpdateState::_check_if_preload_column_mode_update_data(Rowset* rowset,
+                                                                        MemTracker* update_mem_tracker) {
+    if (update_mem_tracker->limit_exceeded() ||
+        update_mem_tracker->consumption() + rowset->total_update_row_size() >= update_mem_tracker->limit()) {
+        _enable_preload_column_mode_update_data = false;
+    } else {
+        _enable_preload_column_mode_update_data = true;
+    }
 }
 
 Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx) {
@@ -498,14 +510,14 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, const P
     cost_str << " [generate delta column group] " << watch.elapsed_time();
     watch.reset();
     cost_str << strings::Substitute(
-            "seek_source_segment(ms):$0 read_column_from_update(ms):$1 avg_merge_column_time(ms):$2 "
+            " seek_source_segment(ms):$0 read_column_from_update(ms):$1 avg_merge_column_time(ms):$2 "
             "avg_finalize_dcg_time(ms):$3 ",
             total_seek_source_segment_time, total_read_column_from_update_time, total_merge_column_time,
             total_finalize_dcg_time);
     cost_str << strings::Substitute("rss_cnt:$0 update_cnt:$1 column_cnt:$2", rss_rowid_to_update_rowid.size(),
                                     _partial_update_states.size(), update_column_ids.size());
 
-    LOG(INFO) << "RowsetColumnUpdateState finalize cost: " << cost_str.str();
+    LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << " finalize cost:" << cost_str.str();
     _finalize_finished = true;
     return Status::OK();
 }

@@ -86,7 +86,7 @@ public:
     // load primary key column and update data of this rowset.
     // |tablet| : current tablet
     // |rowset| : the rowset that we want to handle it to generate delta column group
-    Status load(Tablet* tablet, Rowset* rowset);
+    Status load(Tablet* tablet, Rowset* rowset, MemTracker* update_mem_tracker);
 
     // Generate delta columns by partial update states and rowset,
     // And distribute partial update column data to different `.col` files
@@ -144,6 +144,8 @@ private:
                                    std::vector<ChunkIteratorPtr>& update_iterators, std::vector<uint32_t>& rowids,
                                    Chunk* result_chunk);
 
+    void _check_if_preload_column_mode_update_data(Rowset* rowset, MemTracker* update_mem_tracker);
+
 private:
     int64_t _tablet_id = 0;
     std::once_flag _load_once_flag;
@@ -166,8 +168,8 @@ private:
     bool _finalize_finished = false;
     std::map<uint32_t, DeltaColumnGroupPtr> _rssid_to_delta_column_group;
 
-    // will be set by loading paramters
-    bool _enable_preload_column_mode_update_data = true;
+    // if need to pre load update data from rowset
+    bool _enable_preload_column_mode_update_data = false;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const RowsetColumnUpdateState& o) {

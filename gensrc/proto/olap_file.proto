@@ -88,6 +88,7 @@ enum PartialUpdateMode {
     UNKNOWN_MODE = 0;
     ROW_MODE = 1;
     COLUMN_MODE = 2;
+    AUTO_MODE = 3;
 }
 message RowsetTxnMetaPB {
     repeated uint32 partial_update_column_ids = 1;
@@ -100,7 +101,7 @@ message RowsetTxnMetaPB {
 
     optional int32 auto_increment_partial_update_column_id = 5;
     // recode partial update mode
-    optional PartialUpdateMode partial_update_mode = 6 [default = ROW_MODE];
+    optional PartialUpdateMode partial_update_mode = 6;
 }
 
 message RowsetMetaPB {
@@ -160,6 +161,8 @@ message RowsetMetaPB {
     repeated uint32 delfile_idxes = 56;
     // number of update files
     optional uint32 num_update_files = 57;
+    // total partial update row size
+    optional int64 total_update_row_size = 58;
 }
 
 enum DataFileType {

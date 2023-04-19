@@ -60,6 +60,7 @@ Status HorizontalUpdateRowsetWriter::add_chunk(const Chunk& chunk) {
             std::lock_guard<std::mutex> l(_lock);
             _num_rows_upt += _update_file_writer->num_rows_written();
             _num_uptfile++;
+            _total_update_row_size += static_cast<int64_t>(chunk.bytes_usage());
         }
         ASSIGN_OR_RETURN(_update_file_writer, _create_update_file_writer());
     }
@@ -83,11 +84,13 @@ Status HorizontalUpdateRowsetWriter::flush_chunk(const Chunk& chunk, SegmentPB* 
         seg_info->set_update_id(_num_uptfile);
         seg_info->set_update_data_size(segment_size);
         seg_info->set_update_path((*segment_writer)->segment_path());
+        seg_info->set_update_row_size(static_cast<int64_t>(chunk.bytes_usage()));
     }
     {
         std::lock_guard<std::mutex> l(_lock);
         _num_rows_upt += chunk.num_rows();
         _num_uptfile++;
+        _total_update_row_size += static_cast<int64_t>(chunk.bytes_usage());
     }
     (*segment_writer).reset();
     return Status::OK();

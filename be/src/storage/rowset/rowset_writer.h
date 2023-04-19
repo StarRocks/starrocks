@@ -191,6 +191,7 @@ protected:
     int64_t _total_data_size = 0;
     int64_t _total_index_size = 0;
     int64_t _num_rows_upt = 0;
+    int64_t _total_update_row_size = 0;
 
     bool _is_pending = false;
     bool _already_built = false;

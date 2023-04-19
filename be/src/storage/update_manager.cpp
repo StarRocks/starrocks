@@ -384,7 +384,7 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
     if (rowset->is_column_mode_partial_update()) {
         auto state_entry = _update_column_state_cache.get_or_create(
                 strings::Substitute("$0_$1", tablet->tablet_id(), rowset_unique_id));
-        st = state_entry->value().load(tablet, rowset);
+        st = state_entry->value().load(tablet, rowset, _update_mem_tracker);
         state_entry->update_expire_time(MonotonicMillis() + _cache_expire_ms);
         _update_column_state_cache.update_object_size(state_entry, state_entry->value().memory_usage());
         if (st.ok()) {

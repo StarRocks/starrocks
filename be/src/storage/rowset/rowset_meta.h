@@ -92,6 +92,8 @@ public:
 
     int64_t total_row_size() { return _rowset_meta_pb->total_row_size(); }
 
+    int64_t total_update_row_size() { return _rowset_meta_pb->total_update_row_size(); }
+
     size_t total_disk_size() const { return _rowset_meta_pb->total_disk_size(); }
 
     size_t data_disk_size() const { return _rowset_meta_pb->data_disk_size(); }
@@ -117,13 +119,8 @@ public:
         return &_rowset_meta_pb->txn_meta().partial_rowset_footers(segment_id);
     }
 
-    bool is_column_mode_partial_update() const {
-        if (_rowset_meta_pb->has_txn_meta() &&
-            _rowset_meta_pb->txn_meta().partial_update_mode() == PartialUpdateMode::COLUMN_MODE) {
-            return true;
-        }
-        return false;
-    }
+    // for determining whether the rowset is in column partial update is whether it contains the .upt files
+    bool is_column_mode_partial_update() const { return _rowset_meta_pb->num_update_files() > 0; }
 
     void clear_txn_meta() { _rowset_meta_pb->clear_txn_meta(); }
 

@@ -71,6 +71,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
@@ -100,6 +101,7 @@ public class LoadingTaskPlanner {
     private final int parallelInstanceNum;
     private final long startTime;
     private String mergeConditionStr;
+    private TPartialUpdateMode partialUpdateMode;
 
     // Something useful
     // ConnectContext here is just a dummy object to avoid some NPE problem, like ctx.getDatabase()
@@ -123,7 +125,8 @@ public class LoadingTaskPlanner {
     public LoadingTaskPlanner(Long loadJobId, long txnId, long dbId, OlapTable table,
             BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
             boolean strictMode, String timezone, long timeoutS,
-            long startTime, boolean partialUpdate, Map<String, String> sessionVariables, String mergeConditionStr) {
+            long startTime, boolean partialUpdate, Map<String, String> sessionVariables, String mergeConditionStr, 
+            TPartialUpdateMode partialUpdateMode) {
         this.loadJobId = loadJobId;
         this.txnId = txnId;
         this.dbId = dbId;
@@ -138,6 +141,7 @@ public class LoadingTaskPlanner {
         this.parallelInstanceNum = Config.load_parallel_instance_num;
         this.startTime = startTime;
         this.sessionVariables = sessionVariables;
+        this.partialUpdateMode = partialUpdateMode;
     }
 
     public void setConnectContext(ConnectContext context) {
@@ -240,6 +244,7 @@ public class LoadingTaskPlanner {
                 checkNullExprInAutoIncrement(), enableAutomaticPartition);
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         Load.checkMergeCondition(mergeConditionStr, table, false);
+        olapTableSink.setPartialUpdateMode(partialUpdateMode);
         olapTableSink.complete(mergeConditionStr);
 
         // 3. Plan fragment
@@ -321,6 +326,7 @@ public class LoadingTaskPlanner {
                 checkNullExprInAutoIncrement(), enableAutomaticPartition);
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         Load.checkMergeCondition(mergeConditionStr, table, false);
+        olapTableSink.setPartialUpdateMode(partialUpdateMode);
         olapTableSink.complete(mergeConditionStr);
 
         // 6. Sink plan fragment

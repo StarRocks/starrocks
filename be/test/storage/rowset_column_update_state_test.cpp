@@ -44,7 +44,7 @@ class RowsetColumnUpdateStateTest : public ::testing::Test {
 public:
     void SetUp() override {
         _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
-        _metadata_mem_tracker = std::make_unique<MemTracker>();
+        _update_tracker = std::make_unique<MemTracker>();
     }
 
     void TearDown() override {
@@ -160,7 +160,7 @@ public:
 protected:
     TabletSharedPtr _tablet;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
-    std::unique_ptr<MemTracker> _metadata_mem_tracker;
+    std::unique_ptr<MemTracker> _update_tracker;
 };
 
 static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& schema) {
@@ -241,7 +241,7 @@ TEST_F(RowsetColumnUpdateStateTest, prepare_partial_update_states) {
         RowsetSharedPtr partial_rowset = create_partial_rowset(_tablet, keys, column_indexes, partial_schema);
         // check data of write column
         RowsetColumnUpdateState state;
-        state.load(_tablet.get(), partial_rowset.get());
+        state.load(_tablet.get(), partial_rowset.get(), _update_tracker.get());
         const std::vector<ColumnPartialUpdateState>& parital_update_states = state.parital_update_states();
         ASSERT_EQ(parital_update_states.size(), 1);
         ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
@@ -261,7 +261,7 @@ TEST_F(RowsetColumnUpdateStateTest, prepare_partial_update_states) {
         RowsetSharedPtr partial_rowset = create_partial_rowset(_tablet, keys_no_exist, column_indexes, partial_schema);
         // check data of write column
         RowsetColumnUpdateState state;
-        state.load(_tablet.get(), partial_rowset.get());
+        state.load(_tablet.get(), partial_rowset.get(), _update_tracker.get());
         const std::vector<ColumnPartialUpdateState>& parital_update_states = state.parital_update_states();
         ASSERT_EQ(parital_update_states.size(), 1);
         ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);

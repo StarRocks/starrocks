@@ -63,7 +63,7 @@ struct DeltaWriterOptions {
     std::string merge_condition;
     ReplicaState replica_state;
     bool miss_auto_increment_column = false;
-    PartialUpdateMode partial_update_mode = PartialUpdateMode::ROW_MODE;
+    PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
 };
 
 enum State {
