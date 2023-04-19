@@ -216,24 +216,27 @@ public class SparkEtlJobHandler {
 
     public void killYarnApplication(String appId, long loadJobId, SparkResource resource)
             throws UserException {
-        if (resource.isYarnMaster()) {
-            if (!Strings.isNullOrEmpty(appId)) {
-                // prepare yarn config
-                String configDir = resource.prepareYarnConfig();
-                // yarn client path
-                String yarnClient = resource.getYarnClientPath();
-                // command: yarn --config configDir application -kill appId
-                String yarnKillCmd = String.format(YARN_KILL_CMD, yarnClient, configDir, appId);
-                LOG.info(yarnKillCmd);
-                String[] envp = {"LC_ALL=" + Config.locale, "JAVA_HOME=" + System.getProperty("java.home")};
-                CommandResult result = Util.executeCommand(yarnKillCmd, envp, EXEC_CMD_TIMEOUT_MS);
-                LOG.info("yarn application -kill {}, output: {}", appId, result.getStdout());
-                if (result.getReturnCode() != 0) {
-                    String stderr = result.getStderr();
-                    LOG.warn("yarn application kill failed. app id: {}, load job id: {}, msg: {}", appId, loadJobId,
-                            stderr);
-                }
-            }
+        if (!resource.isYarnMaster()) {
+           return;
+        }
+        if (Strings.isNullOrEmpty(appId)) {
+            LOG.warn("app id is null, kill yarn application fail");
+            return;
+        }
+        // prepare yarn config
+        String configDir = resource.prepareYarnConfig();
+        // yarn client path
+        String yarnClient = resource.getYarnClientPath();
+        // command: yarn --config configDir application -kill appId
+        String yarnKillCmd = String.format(YARN_KILL_CMD, yarnClient, configDir, appId);
+        LOG.info(yarnKillCmd);
+        String[] envp = {"LC_ALL=" + Config.locale, "JAVA_HOME=" + System.getProperty("java.home")};
+        CommandResult result = Util.executeCommand(yarnKillCmd, envp, EXEC_CMD_TIMEOUT_MS);
+        LOG.info("yarn application -kill {}, output: {}", appId, result.getStdout());
+        if (result.getReturnCode() != 0) {
+            String stderr = result.getStderr();
+            LOG.warn("yarn application kill failed. app id: {}, load job id: {}, msg: {}", appId, loadJobId,
+                    stderr);
         }
     }
 
