@@ -407,19 +407,31 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
 
 ## Query an Iceberg table
 
-1. Use the following syntax to view the databases in your Iceberg cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) to view the databases in your Iceberg cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. Use the following syntax to connect to your target Iceberg database:
+2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to switch to the destination catalog in the current session:
 
-   ```SQL
-   USE <catalog_name>.<database_name>
-   ```
+    ```SQL
+    SET CATALOG <catalog_name>;
+    ```
 
-3. Use the following syntax to query the Iceberg table:
+    Then, use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify the active database in the current session:
+
+    ```SQL
+    USE <db_name>;
+    ```
+
+    Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly go to the active database in the destination catalog:
+
+    ```SQL
+    USE <catalog_name>.<db_name>;
+    ```
+
+3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database.
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
