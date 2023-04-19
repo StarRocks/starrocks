@@ -53,19 +53,19 @@ public class PartitionNames implements ParseNode, Writable {
 
     /**
      * partition_names is ["p1=1/p2=2", "p1=5/p2=6"] in the hive or spark. The concept isn't the same as the partition_names
-     * in current StarRocks. So we use partitionKeys to denote the names of partition columns,
-     * and partitionValues to denote their corresponding values.
+     * in current StarRocks. So we use partitionColNames to denote the names of partition columns,
+     * and partitionColValues to denote their corresponding values.
      *
      * Static partition insert hive/iceberg/hudi table
      * for example:
      *         create external target_external_table (c1 int, c2 int, p1 int, p2 int) partition by (p1, p2);
      *         insert into target_external_table partition(p1=1, p2=2) select a1, a2 from source_table;
      *
-     * The PartitionKeys is ["p1", "p2"]
-     * The PartitionValues is [expr(1), expr(2)]
+     * The partitionColNames is ["p1", "p2"]
+     * The partitionColValues is [expr(1), expr(2)]
      */
-    private final List<String> partitionKeys;
-    private final List<Expr> partitionValues;
+    private final List<String> partitionColNames;
+    private final List<Expr> partitionColValues;
 
     private final NodePosition pos;
 
@@ -77,20 +77,20 @@ public class PartitionNames implements ParseNode, Writable {
         this(isTemp, partitionNames, new ArrayList<>(), new ArrayList<>(), pos);
     }
 
-    public PartitionNames(boolean isTemp, List<String> partitionNames, List<String> partitionKeys,
-                          List<Expr> partitionValues, NodePosition pos) {
+    public PartitionNames(boolean isTemp, List<String> partitionNames, List<String> partitionColNames,
+                          List<Expr> partitionColValues, NodePosition pos) {
         this.pos = pos;
         this.partitionNames = partitionNames;
-        this.partitionKeys = partitionKeys;
-        this.partitionValues = partitionValues;
+        this.partitionColNames = partitionColNames;
+        this.partitionColValues = partitionColValues;
         this.isTemp = isTemp;
     }
 
     public PartitionNames(PartitionNames other) {
         this.pos = other.pos;
         this.partitionNames = Lists.newArrayList(other.partitionNames);
-        this.partitionKeys = Lists.newArrayList(other.partitionKeys);
-        this.partitionValues = Lists.newArrayList(other.partitionValues);
+        this.partitionColNames = Lists.newArrayList(other.partitionColNames);
+        this.partitionColValues = Lists.newArrayList(other.partitionColValues);
         this.isTemp = other.isTemp;
     }
 
@@ -98,12 +98,12 @@ public class PartitionNames implements ParseNode, Writable {
         return partitionNames;
     }
 
-    public List<String> getPartitionKeys() {
-        return partitionKeys;
+    public List<String> getPartitionColNames() {
+        return partitionColNames;
     }
 
-    public List<Expr> getPartitionValues() {
-        return partitionValues;
+    public List<Expr> getPartitionColValues() {
+        return partitionColValues;
     }
 
     public boolean isTemp() {
@@ -115,8 +115,8 @@ public class PartitionNames implements ParseNode, Writable {
         return pos;
     }
 
-    public boolean isStaticPartitionInsert() {
-        return !partitionValues.isEmpty();
+    public boolean isStaticKeyPartitionInsert() {
+        return !partitionColValues.isEmpty();
     }
 
     @Override
