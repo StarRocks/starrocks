@@ -515,8 +515,8 @@ vectorized_functions = [
     [80020, 'hll_hash', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_hash'],
     [80030, 'hll_empty', 'HLL', [], 'HyperloglogFunctions::hll_empty'],
 
-    [80040, 'hll_serialize', 'VARBINARY', ['HLL'], 'HyperloglogFunctions::hll_serialize'],
-    [80041, 'hll_deserialize', 'HLL', ['VARBINARY'], 'HyperloglogFunctions::hll_deserialize'],
+    [80040, 'hll_serialize', 'VARCHAR', ['HLL'], 'HyperloglogFunctions::hll_serialize'],
+    [80041, 'hll_deserialize', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_deserialize'],
 
     # bitmap function
     [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap', False],
