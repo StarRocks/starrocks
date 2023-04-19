@@ -2638,5 +2638,52 @@ public class CreateMaterializedViewTest {
         testMVColumnAlias("(char_length(c_1_9)) + '$'");
         testMVColumnAlias("c_1_9 + c_1_10");
     }
+
+    private Table getTable(String dbName, String mvName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Table table = db.getTable(mvName);
+        Assert.assertNotNull(table);
+        return table;
+    }
+
+    private MaterializedView getMv(String dbName, String mvName) {
+        Table table = getTable(dbName, mvName);
+        Assert.assertTrue(table instanceof MaterializedView);
+        MaterializedView mv = (MaterializedView) table;
+        return mv;
+    }
+
+    @Test
+    public void testMvNullable() throws Exception {
+        starRocksAssert.withTable("create table emps (\n" +
+                "    empid int not null,\n" +
+                "    deptno int not null,\n" +
+                "    name varchar(25) not null,\n" +
+                "    salary double\n" +
+                ")\n" +
+                "distributed by hash(`empid`) buckets 10\n" +
+                "properties (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");")
+                .withTable("create table depts (\n" +
+                        "    deptno int not null,\n" +
+                        "    name varchar(25) not null\n" +
+                        ")\n" +
+                        "distributed by hash(`deptno`) buckets 10\n" +
+                        "properties (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");");
+        starRocksAssert.withMaterializedView("create materialized view mv_nullable" +
+                " distributed by hash(`empid`) as" +
+                " select empid, d.deptno, d.name" +
+                " from emps e left outer join depts d on e.deptno = d.deptno");
+        MaterializedView mv = getMv("test", "mv_nullable");
+        Assert.assertFalse(mv.getColumn("empid").isAllowNull());
+        Assert.assertTrue(mv.getColumn("deptno").isAllowNull());
+        Assert.assertTrue(mv.getColumn("name").isAllowNull());
+        starRocksAssert.dropMaterializedView("mv_nullable");
+        starRocksAssert.dropTable("emps");
+        starRocksAssert.dropTable("depts");
+    }
 }
 

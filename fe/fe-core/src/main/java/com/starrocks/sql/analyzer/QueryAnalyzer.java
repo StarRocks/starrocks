@@ -441,6 +441,24 @@ public class QueryAnalyzer {
                 scope = new Scope(RelationId.of(join), leftScope.getRelationFields());
             } else if (join.getJoinOp().isRightSemiAntiJoin()) {
                 scope = new Scope(RelationId.of(join), rightScope.getRelationFields());
+            } else if (join.getJoinOp().isLeftOuterJoin()) {
+                List<Field> rightFields = new ArrayList<>();
+                for (Field field : rightScope.getRelationFields().getAllFields()) {
+                    Field newField = new Field(field);
+                    newField.setNullable(true);
+                    rightFields.add(newField);
+                }
+                scope = new Scope(RelationId.of(join),
+                        leftScope.getRelationFields().joinWith(new RelationFields(rightFields)));
+            } else if (join.getJoinOp().isLeftOuterJoin()) {
+                List<Field> leftFields = new ArrayList<>();
+                for (Field field : leftScope.getRelationFields().getAllFields()) {
+                    Field newField = new Field(field);
+                    newField.setNullable(true);
+                    leftFields.add(newField);
+                }
+                scope = new Scope(RelationId.of(join),
+                        new RelationFields(leftFields).joinWith(rightScope.getRelationFields()));
             } else {
                 scope = new Scope(RelationId.of(join),
                         leftScope.getRelationFields().joinWith(rightScope.getRelationFields()));

@@ -47,8 +47,6 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.SlotDescriptor;
-import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
