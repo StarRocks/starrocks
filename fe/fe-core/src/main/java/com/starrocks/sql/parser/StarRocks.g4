@@ -216,6 +216,15 @@ statement
     | revokePrivilegeStatement
     | showGrantsStatement
     | createSecurityIntegrationStatement
+    | alterSecurityIntegrationStatement
+    | dropSecurityIntegrationStatement
+    | showSecurityIntegrationStatement
+    | showCreateSecurityIntegrationStatement
+    | createRoleMappingStatement
+    | alterRoleMappingStatement
+    | dropRoleMappingStatement
+    | showRoleMappingStatement
+    | refreshRoleMappingStatement
 
     // Security Policy
     | createMaskingPolicyStatement
@@ -1344,6 +1353,42 @@ createSecurityIntegrationStatement
     : CREATE SECURITY INTEGRATION identifier properties
     ;
 
+alterSecurityIntegrationStatement
+    : ALTER SECURITY INTEGRATION identifier SET propertyList
+    ;
+
+dropSecurityIntegrationStatement
+    : DROP SECURITY INTEGRATION identifier
+    ;
+
+showSecurityIntegrationStatement
+    : SHOW SECURITY INTEGRATIONS
+    ;
+
+showCreateSecurityIntegrationStatement
+    : SHOW CREATE SECURITY INTEGRATION identifier
+    ;
+
+createRoleMappingStatement
+    : CREATE ROLE MAPPING identifier properties
+    ;
+
+alterRoleMappingStatement
+    : ALTER ROLE MAPPING identifier SET propertyList
+    ;
+
+dropRoleMappingStatement
+    : DROP ROLE MAPPING identifier
+    ;
+
+showRoleMappingStatement
+    : SHOW ROLE MAPPINGS
+    ;
+
+refreshRoleMappingStatement
+    : REFRESH ALL ROLE MAPPINGS
+    ;
+
 authOption
     : IDENTIFIED BY PASSWORD? string                                                                    #authWithoutPlugin
     | IDENTIFIED WITH identifierOrString ((BY | AS) string)?                                            #authWithPlugin
@@ -2329,7 +2374,7 @@ nonReserved
     | FUNCTIONS
     | GLOBAL | GRANTS
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOST | HOUR | HUB
-    | IDENTIFIED | IMAGE | IMPERSONATE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTERMEDIATE
+    | IDENTIFIED | IMAGE | IMPERSONATE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL | LOW_PRIORITY | LOCK
