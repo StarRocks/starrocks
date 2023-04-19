@@ -339,7 +339,7 @@ public class GsonUtils {
 
     /*
      * The exclusion strategy of GSON serialization.
-     * Any fields without "@SerializedName" annotation with be ignore with
+     * Any fields without "@SerializedName" annotation with be ignored with
      * serializing and deserializing.
      */
     public static class HiddenAnnotationExclusionStrategy implements ExclusionStrategy {
