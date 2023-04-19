@@ -131,7 +131,7 @@ PROPERTIES (
 );
 ~~~
 
-The followint table describes the parameters.
+The following table describes the parameters.
 
 | **Parameter**        | **Required** | **Default value** | **Description**                                              |
 | -------------------- | ------------ | ----------------- | ------------------------------------------------------------ |
