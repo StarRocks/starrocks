@@ -927,7 +927,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableConnectorAdaptiveIoTasks = true;
 
     @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS, flag = VariableMgr.INVISIBLE)
-    private int connectorIotasksSlowIoLatency = 50;
+    private int connectorIoTasksSlowIoLatency = 50;
 
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateBlockCache = true;
@@ -2076,6 +2076,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
         tResult.setUse_page_cache(usePageCache);
+
+        tResult.setEnable_connector_adaptive_io_tasks(enableConnectorAdaptiveIoTasks);
+        tResult.setConnector_io_tasks_slow_io_latency_ms(connectorIoTasksSlowIoLatency);
         return tResult;
     }
 
