@@ -2190,6 +2190,18 @@ public class Config extends ConfigBase {
     public static long binlog_max_size = Long.MAX_VALUE; // no limit
 
     /**
+     * Enable check if the cluster is under safe mode or not
+     **/
+    @ConfField(mutable = true)
+    public static boolean enable_safe_mode = false;
+
+    /**
+     * The safe mode checker thread work interval
+     */
+    @ConfField(mutable = true)
+    public static long safe_mode_checker_interval_sec = 5;
+
+    /**
      * Enable auto create tablet when creating table and add partition
      **/
     @ConfField(mutable = true)
