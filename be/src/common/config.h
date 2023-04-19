@@ -827,7 +827,11 @@ CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");
 
-CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache=128M}");
+// PK table's tabletmeta object size may got very large(lot's of edit versions), so it may not fit into block cache
+// that may impact BE load dir time when restart. here we change num_shard_bits to 0 to disable block cache sharding,
+// so large tabletmeta object can fit in block cache. After we optimize PK table's tabletmeta object size, we can
+// revert this config change.
+CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={capacity=256M;num_shard_bits=0}}");
 
 CONF_mInt64(txn_info_history_size, "20000");
 
