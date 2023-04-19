@@ -396,7 +396,7 @@ BE static parameters are as follows.
 | drop_tablet_worker_count | 3 | N/A | The number of threads used to drop a tablet. |
 | push_worker_count_normal_priority | 3 | N/A | The number of threads used to handle a load task with NORMAL priority. |
 | push_worker_count_high_priority | 3 | N/A | The number of threads used to handle a load task with HIGH priority. |
-| transaction_publish_version_worker_count | 0 | N/A | The max number of threads used to publish a version. When it's value is less than or equal to 0, it will default to half of the number of cores.  |
+| transaction_publish_version_worker_count | 0 | N/A | The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses half of the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.  |
 | clear_transaction_task_worker_count | 1 | N/A | The number of threads used for clearing transaction. |
 | alter_tablet_worker_count | 3 | N/A | The number of threads used for schema change. |
 | clone_worker_count | 3 | N/A | The number of threads used for clone. |
