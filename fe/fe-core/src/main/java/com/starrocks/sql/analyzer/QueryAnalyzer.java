@@ -450,7 +450,7 @@ public class QueryAnalyzer {
                 }
                 scope = new Scope(RelationId.of(join),
                         leftScope.getRelationFields().joinWith(new RelationFields(rightFields)));
-            } else if (join.getJoinOp().isLeftOuterJoin()) {
+            } else if (join.getJoinOp().isRightOuterJoin()) {
                 List<Field> leftFields = new ArrayList<>();
                 for (Field field : leftScope.getRelationFields().getAllFields()) {
                     Field newField = new Field(field);
