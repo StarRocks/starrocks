@@ -20,13 +20,26 @@ StarRocks 2.5 版本中，异步物化视图支持查询改写、嵌套物化视
 ## 语法
 
 ```SQL
-CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
-[distribution_desc]
-[REFRESH refresh_moment refresh_scheme_desc]
-[partition_expression]
+CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
+-- distribution_desc
+[DISTRIBUTED BY HASH(<bucket_key>) [BUCKETS <bucket_number>]]
+-- refresh_desc
+[REFRESH 
+-- refresh_moment
+    [IMMEDIATE | DEFERRED]
+-- refresh_scheme
+    [ASYNC | ASYNC (START <start_time>) EVERY INTERVAL <refresh_interval> | MANUAL]
+]
+-- partition_expression
+[PARTITION BY 
+    {<date_column> | date_trunc(fmt, <date_column>)}
+]
+-- order_by_expression
+[ORDER BY (<sort_key>)]
 [COMMENT ""]
 [PROPERTIES ("key"="value", ...)]
-AS (query)
+AS 
+<query_statement>
 ```
 
 ## 参数
@@ -42,7 +55,54 @@ AS (query)
 >
 > 同一张基表可以创建多个物化视图，但同一数据库内的物化视图名称不可重复。
 
-**query**（必填）
+**distribution_desc**（建立异步物化视图时为**必填**）
+
+物化视图的分桶方式，形如 `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`。
+
+**refresh_moment**（选填）
+
+物化视图的刷新时刻。默认值：`IMMEDIATE`。有效值：
+
+- `IMMEDIATE`：物化视图创建成功后立即刷新。
+- `DEFERRED`：物化视图创建成功后不进行刷新。您可以通过手动调用或创建定时任务触发刷新。
+
+**refresh_scheme**（选填）
+
+物化视图的刷新方式。该参数支持如下值：
+
+- `ASYNC`：异步的刷新方式。如需设置为定时刷新，您需要指定刷新开始时间和刷新间隔 `START('yyyy-MM-dd hh:mm:ss') EVERY (interval n day/hour/minute/second)`。刷新间隔仅支持：`DAY`、`HOUR`、`MINUTE` 以及 `SECOND`。如不指定刷新间隔，物化视图将采用导入触发刷新方式。
+- `MANUAL`：手动的刷新方式。
+
+如果不指定该参数，则默认使用 MANUAL 方式。
+
+**partition_expression**（选填）
+
+物化视图的分区表达式。目前仅支持在创建物化视图时使用一个分区表达式。该参数支持如下值：
+
+- 列：形如 `PARTITION BY dt`，表示按照 `dt` 列进行分区。
+- date_trunc 函数：形如 PARTITION BY date_trunc("MONTH", 'dt')，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。
+- 如不指定该参数，则默认物化视图为无分区。
+
+**order_by_expression**（选填）
+
+物化视图的排序键。如不指定该参数，StarRocks 从 SELECT 列中选择部分前缀作为排序键，例如：`select a, b, c, d` 中, 排序列可能为 `a` 和 `b`。此参数自 StarRocks 3.0 起支持。
+
+**COMMENT**（选填）
+
+物化视图的注释。
+
+**PROPERTIES**（选填）
+
+物化视图的属性。
+
+- `replication_num`：创建物化视图副本数量。
+- `storage_medium`：存储介质类型。
+- `partition_ttl_number`：需要保留的最近的物化视图分区数量。分区数量超过该值后，过期分区将被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_check_interval_seconds` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。默认值：`-1`。当值为 `-1` 时，将保留物化视图所有分区。
+- `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。默认值：`-1`。当值为 `-1` 时，将不会拆分刷新任务。
+- `excluded_trigger_tables`：在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
+- `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并从最近分区开始刷新 N 个分区。如果分区数不足 N，则刷新所有已存在的分区。如果您的动态分区物化视图中存在预创建的未来时段动态分区，StarRocks 会优先刷新这些未来时段的分区，然后刷新已有的分区。因此设定此参数时请确保已为预创建的未来时段动态分区保留余量。
+
+**query_statement**（必填）
 
 创建物化视图的查询语句，其结果即为物化视图中的数据。语法如下：
 
@@ -61,63 +121,19 @@ SELECT select_expr[, select_expr ...]
 
   > **注意**
   >
-  > - 如果查询语句中的列不是简单列，则必须在物化视图中指定新列名。
-  > - 该参数至少需包含一个单列，且所有涉及到的列，均只能出现一次。
+  > 该参数至少需包含一个单列，且所有涉及到的列，均只能出现一次。
 
 - GROUP BY（选填）
 
-  物化视图的分组列。如不指定该参数，则默认不对数据进行分组。
+  构建物化视图查询语句的分组列。如不指定该参数，则默认不对数据进行分组。
 
 - ORDER BY（选填）
 
-  物化视图的排序列。
+  构建物化视图查询语句的排序列。
 
   - 排序列的声明顺序必须和 `select_expr` 中列声明顺序一致。
-  - 如果不指定排序列，则系统根据规则自动补充排序列。如果物化视图是聚合类型，则所有的分组列自动补充为排序列。如果物化视图是非聚合类型，则前 36 个字节自动补充为排序列。如果自动补充的排序个数小于 3 个，则前三个作为排序列。
+  - 如果不指定排序列，则系统根据规则自动补充排序列。如果物化视图是聚合类型，则所有的分组列自动补充为排序列。如果物化视图是非聚合类型，则系统根据前缀列自动选择排序列。
   - 如果查询语句中包含分组列，则排序列必须和分组列一致。
-
-**distribution_desc**（建立异步物化视图时为**必填**）
-
-物化视图的分桶方式，形如 `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`。
-
-**refresh_moment**（选填）
-
-物化视图的刷新时刻。默认值：`IMMEDIATE`。有效值：
-
-- `IMMEDIATE`：物化视图创建成功后立即刷新。
-- `DEFERRED`：物化视图创建成功后不进行刷新。您可以通过手动调用或创建定时任务触发刷新。
-
-**refresh_scheme_desc**（选填）
-
-物化视图的刷新方式。该参数支持如下值：
-
-- `ASYNC`：异步的刷新方式。如需设置为定时刷新，您需要指定刷新开始时间和刷新间隔 `START('yyyy-MM-dd hh:mm:ss') EVERY (interval n day/hour/minute/second)`。刷新间隔仅支持：`DAY`、`HOUR`、`MINUTE` 以及 `SECOND`。如不指定刷新间隔，物化视图将采用导入触发刷新方式。
-- `MANUAL`：手动的刷新方式。
-
-如果不指定该参数，则默认使用 MANUAL 方式。
-
-**partition_expression**（选填）
-
-物化视图的分区表达式。目前仅支持在创建物化视图时使用一个分区表达式。该参数支持如下值：
-
-- 列：形如 `PARTITION BY dt`，表示按照 `dt` 列进行分区。
-- date_trunc 函数：形如 PARTITION BY date_trunc("MONTH", 'dt')，表示将 `dt` 列截断至以月为单位进行分区。date_trunc 函数支持截断的单位包括 `YEAR`、`MONTH`、`DAY`、`HOUR` 以及 `MINUTE`。
-- 如不指定该参数，则默认物化视图为无分区。
-
-**COMMENT**（选填）
-
-物化视图的注释。
-
-**PROPERTIES**（选填）
-
-物化视图的属性。
-
-- `replication_num`：创建物化视图副本数量。
-- `storage_medium`：存储介质类型。
-- `partition_ttl_number`：需要保留的最近的物化视图分区数量。分区数量超过该值后，过期分区将被删除。StarRocks 将根据 FE 配置项 `dynamic_partition_check_interval_seconds` 中的时间间隔定期检查物化视图分区，并自动删除过期分区。默认值：`-1`。当值为 `-1` 时，将保留物化视图所有分区。
-- `partition_refresh_number`：单次刷新中，最多刷新的分区数量。如果需要刷新的分区数量超过该值，StarRocks 将拆分这次刷新任务，并分批完成。仅当前一批分区刷新成功时，StarRocks 会继续刷新下一批分区，直至所有分区刷新完成。如果其中有分区刷新失败，将不会产生后续的刷新任务。默认值：`-1`。当值为 `-1` 时，将不会拆分刷新任务。
-- `excluded_trigger_tables`：在此项属性中列出的基表，其数据产生变化时不会触发对应物化视图自动刷新。该参数仅针对导入触发式刷新，通常需要与属性 `auto_refresh_partitions_limit` 搭配使用。形式：`[db_name.]table_name`。默认值为空字符串。当值为空字符串时，任意的基表数据变化都将触发对应物化视图刷新。
-- `auto_refresh_partitions_limit`：当触发物化视图刷新时，需要刷新的最近的物化视图分区数量。您可以通过该属性限制刷新的范围，降低刷新代价，但因为仅有部分分区刷新，有可能导致物化视图数据与基表无法保持一致。默认值：`-1`。当参数值为 `-1` 时，StarRocks 将刷新所有分区。当参数值为正整数 N 时，StarRocks 会将已存在的分区按时间先后排序，并从最近分区开始刷新 N 个分区。如果分区数不足 N，则刷新所有已存在的分区。如果您的动态分区物化视图中存在预创建的未来时段动态分区，StarRocks 会优先刷新这些未来时段的分区，然后刷新已有的分区。因此设定此参数时请确保已为预创建的未来时段动态分区保留余量。
 
 ### 聚合函数匹配关系
 
