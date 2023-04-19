@@ -137,6 +137,11 @@ public class GlobalTransactionMgr implements Writable {
             throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
         }
 
+        if (GlobalStateMgr.getCurrentState().isSafeMode()) {
+            throw new AnalysisException(String.format("The cluster is under safe" +
+                    " mode state, all load jobs are rejected."));
+        }
+
         switch (sourceType) {
             case BACKEND_STREAMING:
                 checkValidTimeoutSecond(timeoutSecond, Config.max_stream_load_timeout_second,
@@ -284,6 +289,11 @@ public class GlobalTransactionMgr implements Writable {
 
         if (Config.disable_load_job) {
             throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
+        }
+
+        if (GlobalStateMgr.getCurrentState().isSafeMode()) {
+            throw new AnalysisException(String.format("The cluster is under safe mode state," +
+                    " all load jobs are rejected."));
         }
 
         switch (sourceType) {
@@ -459,6 +469,12 @@ public class GlobalTransactionMgr implements Writable {
             return false;
         }
         return waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS);
+    }
+
+    public void abortAllRunningTransactions() throws UserException {
+        for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
+            entry.getValue().abortAllRunningTransaction();
+        }
     }
 
     public void abortTransaction(long dbId, long transactionId, String reason) throws UserException {
