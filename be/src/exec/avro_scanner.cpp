@@ -276,7 +276,6 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
         }
         data = reinterpret_cast<uint8_t*>(_parser_buf->ptr);
         length = _parser_buf->remaining();
-        DeferOp op([&] { avro_value_decref(&avro_value); });
         serdes_schema_t* schema;
         serdes_err_t err =
                 serdes_deserialize_avro(_serdes, &avro_value, &schema, data, length, _err_buf, sizeof(_err_buf));
@@ -287,6 +286,7 @@ Status AvroScanner::_parse_avro(Chunk* chunk, const std::shared_ptr<SequentialFi
             _state->append_error_msg_to_file("", err_msg);
             return Status::InternalError("serdes deserialize avro failed");
         }
+        DeferOp op([&] { avro_value_decref(&avro_value); });
 #endif
         size_t chunk_row_num = chunk->num_rows();
         Status st = Status::OK();
