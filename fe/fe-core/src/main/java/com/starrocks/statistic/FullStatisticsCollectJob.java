@@ -21,7 +21,6 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.VarBinaryLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -36,6 +35,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InsertStmt;
@@ -43,11 +43,13 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.thrift.TStatisticData;
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -57,7 +59,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
     private static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT
-            ", '$columnName'" + // VARCHAR
+            ", '$columnNameStr'" + // VARCHAR
             ", cast(COUNT(1) as BIGINT)" + // BIGINT
             ", cast($dataSize as BIGINT)" + // BIGINT
             ", $hllFunction" + // VARBINARY
@@ -111,9 +113,17 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private Expr hllDeserialize(byte[] hll) {
-        Function fn = Expr.getBuiltinFunction("hll_deserialize", new Type[] {Type.VARBINARY},
+        String str = new String(hll, StandardCharsets.UTF_8);
+        Function unhex = Expr.getBuiltinFunction("unhex", new Type[] {Type.VARCHAR},
                 Function.CompareMode.IS_IDENTICAL);
-        FunctionCallExpr fe = new FunctionCallExpr("hll_deserialize", Lists.newArrayList(new VarBinaryLiteral(hll)));
+
+        FunctionCallExpr unhexExpr = new FunctionCallExpr("unhex", Lists.newArrayList(new StringLiteral(str)));
+        unhexExpr.setFn(unhex);
+        unhexExpr.setType(unhex.getReturnType());
+
+        Function fn = Expr.getBuiltinFunction("hll_deserialize", new Type[] {Type.VARCHAR},
+                Function.CompareMode.IS_IDENTICAL);
+        FunctionCallExpr fe = new FunctionCallExpr("hll_deserialize", Lists.newArrayList(unhexExpr));
         fe.setFn(fn);
         fe.setType(fn.getReturnType());
         return fe;
@@ -133,24 +143,28 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
         LOG.debug("statistics collect sql : " + sql);
         StatisticExecutor executor = new StatisticExecutor();
+        SessionVariable sessionVariable = context.getSessionVariable();
+        // Full table scan is performed for full statistics collecting. In this case, 
+        // we do not need to use pagecache.
+        sessionVariable.setUsePageCache(false);
         List<TStatisticData> dataList = executor.executeStatisticDQL(context, sql);
 
-        String tableName = db.getOriginName() + "." + table.getName();
+        String tableName = StringEscapeUtils.escapeSql(db.getOriginName() + "." + table.getName());
         for (TStatisticData data : dataList) {
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
 
-            String partitionName = table.getPartition(data.getPartitionId()).getName();
+            String partitionName = StringEscapeUtils.escapeSql(table.getPartition(data.getPartitionId()).getName());
 
             params.add(String.valueOf(table.getId()));
             params.add(String.valueOf(data.getPartitionId()));
-            params.add("'" + data.getColumnName() + "'");
+            params.add("'" + StringEscapeUtils.escapeSql(data.getColumnName()) + "'");
             params.add(String.valueOf(db.getId()));
             params.add("'" + tableName + "'");
             params.add("'" + partitionName + "'");
             params.add(String.valueOf(data.getRowCount()));
             params.add(String.valueOf(data.getDataSize()));
-            params.add("hll_deserialize('mockData')");
+            params.add("hll_deserialize(unhex('mockData'))");
             params.add(String.valueOf(data.getNullCount()));
             params.add("'" + data.getMax() + "'");
             params.add("'" + data.getMin() + "'");
@@ -164,7 +178,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             row.add(new StringLiteral(partitionName)); // partition name, 10 byte
             row.add(new IntLiteral(data.getRowCount(), Type.BIGINT)); // row count, 8 byte
             row.add(new IntLiteral((long) data.getDataSize(), Type.BIGINT)); // data size, 8 byte
-            row.add(hllDeserialize(data.getHll())); // hll, 16 kB
+            row.add(hllDeserialize(data.getHll())); // hll, 32 kB
             row.add(new IntLiteral(data.getNullCount(), Type.BIGINT)); // null count, 8 byte
             row.add(new StringLiteral(data.getMax())); // max, 200 byte
             row.add(new StringLiteral(data.getMin())); // min, 200 byte
@@ -177,8 +191,8 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private void flushInsertStatisticsData(ConnectContext context, boolean force) throws Exception {
-        // about 17kb
-        long bufferSize = 17L * 1024 * rowsBuffer.size();
+        // hll serialize to hex, about 32kb
+        long bufferSize = 33L * 1024 * rowsBuffer.size();
         if (bufferSize < Config.statistics_full_collect_buffer && !force) {
             return;
         }
@@ -239,9 +253,6 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         for (Long partitionId : partitionIdList) {
             Partition partition = table.getPartition(partitionId);
             for (String columnName : columns) {
-                if (columnName.contains("'")) {
-                    continue;
-                }
                 totalQuerySQL.add(buildBatchCollectFullStatisticSQL(table, partition, columnName));
             }
         }
@@ -262,24 +273,27 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         VelocityContext context = new VelocityContext();
         Column column = table.getColumn(columnName);
 
+        String columnNameStr = StringEscapeUtils.escapeSql(columnName);
+        String quoteColumnName = StatisticUtils.quoting(columnName);
+
         context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
         context.put("partitionId", partition.getId());
-        context.put("columnName", columnName);
+        context.put("columnNameStr", columnNameStr);
         context.put("dataSize", getDataSize(column));
         context.put("partitionName", partition.getName());
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());
 
         if (!column.getType().canStatistic()) {
-            context.put("hllFunction", "hll_serialize(hll_empty())");
+            context.put("hllFunction", "hex(hll_serialize(hll_empty()))");
             context.put("countNullFunction", "0");
             context.put("maxFunction", "''");
             context.put("minFunction", "''");
         } else {
-            context.put("hllFunction", "hll_serialize(IFNULL(hll_raw(`" + columnName + "`), hll_empty()))");
-            context.put("countNullFunction", "COUNT(1) - COUNT(`" + columnName + "`)");
-            context.put("maxFunction", getMinMaxFunction(column, StatisticUtils.quoting(columnName), true));
-            context.put("minFunction", getMinMaxFunction(column, StatisticUtils.quoting(columnName), false));
+            context.put("hllFunction", "hex(hll_serialize(IFNULL(hll_raw(" + quoteColumnName + "), hll_empty())))");
+            context.put("countNullFunction", "COUNT(1) - COUNT(" + quoteColumnName + ")");
+            context.put("maxFunction", getMinMaxFunction(column, quoteColumnName, true));
+            context.put("minFunction", getMinMaxFunction(column, quoteColumnName, false));
         }
 
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));

@@ -427,8 +427,8 @@ public class CTASAnalyzerTest {
         ctasStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         columnDefs = ctasStmt.getCreateTableStmt().getColumnDefs();
-        Assert.assertTrue(columnDefs.get(0).isAllowNull());
-        Assert.assertTrue(columnDefs.get(1).isAllowNull());
+        Assert.assertFalse(columnDefs.get(0).isAllowNull());
+        Assert.assertFalse(columnDefs.get(1).isAllowNull());
         Assert.assertTrue(columnDefs.get(2).isAllowNull());
     }
 }

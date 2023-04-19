@@ -58,6 +58,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -93,6 +94,7 @@ public class LoadLoadingTask extends LoadTask {
     private final Map<String, String> sessionVariables;
     private final TLoadJobType loadJobType;
     private String mergeConditionStr;
+    private TPartialUpdateMode partialUpdateMode;
 
     private LoadingTaskPlanner planner;
     private ConnectContext context;
@@ -105,7 +107,8 @@ public class LoadLoadingTask extends LoadTask {
             long txnId, LoadTaskCallback callback, String timezone,
             long timeoutS, long createTimestamp, boolean partialUpdate, String mergeConditionStr,
             Map<String, String> sessionVariables,
-            ConnectContext context, TLoadJobType loadJobType, int priority, OriginStatement originStmt) {
+            ConnectContext context, TLoadJobType loadJobType, int priority, OriginStatement originStmt, 
+            TPartialUpdateMode partialUpdateMode) {
         super(callback, TaskType.LOADING, priority);
         this.db = db;
         this.table = table;
@@ -126,13 +129,15 @@ public class LoadLoadingTask extends LoadTask {
         this.context = context;
         this.loadJobType = loadJobType;
         this.originStmt = originStmt;
+        this.partialUpdateMode = partialUpdateMode;
     }
 
     public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
         this.loadId = loadId;
         if (!Config.enable_pipeline_load) {
             planner = new LoadingTaskPlanner(callback.getCallbackId(), txnId, db.getId(), table, brokerDesc, fileGroups,
-                    strictMode, timezone, timeoutS, createTimestamp, partialUpdate, sessionVariables, mergeConditionStr);
+                    strictMode, timezone, timeoutS, createTimestamp, partialUpdate, sessionVariables, mergeConditionStr,
+                    partialUpdateMode);
             planner.setConnectContext(context);
             planner.plan(loadId, fileStatusList, fileNum);
         } else {

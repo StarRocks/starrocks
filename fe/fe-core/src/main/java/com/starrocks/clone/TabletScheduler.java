@@ -64,7 +64,7 @@ import com.starrocks.clone.TabletSchedCtx.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -105,7 +105,7 @@ import java.util.stream.Stream;
  * Case 2:
  * A new Backend is added to the cluster. Replicas should be transfer to that host to balance the cluster load.
  */
-public class TabletScheduler extends LeaderDaemon {
+public class TabletScheduler extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletScheduler.class);
 
     // handle at most BATCH_NUM tablets in one loop

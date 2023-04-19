@@ -44,7 +44,7 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.routineload.RoutineLoadJob.JobState;
@@ -73,7 +73,7 @@ import java.util.concurrent.TimeUnit;
  * <p>
  * The scheduler will be blocked in step3 till the queue receive a new task
  */
-public class RoutineLoadTaskScheduler extends LeaderDaemon {
+public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private static final Logger LOG = LogManager.getLogger(RoutineLoadTaskScheduler.class);
 

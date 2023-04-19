@@ -104,13 +104,9 @@ public class StatisticExecutor {
         String sql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, analyzeType);
         LOG.debug("Expire statistic SQL: {}", sql);
 
-        StatementBase parsedStmt;
-        try {
-            parsedStmt = SqlParser.parseFirstStatement(sql, statsConnectCtx.getSessionVariable().getSqlMode());
-            StmtExecutor executor = new StmtExecutor(statsConnectCtx, parsedStmt);
-            executor.execute();
-        } catch (Exception e) {
-            LOG.warn("Execute statistic table expire fail.", e);
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute statistic table expire fail.");
         }
     }
 
@@ -125,13 +121,9 @@ public class StatisticExecutor {
 
     public void dropHistogram(ConnectContext statsConnectCtx, Long tableId, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildDropHistogramSQL(tableId, columnNames);
-        StatementBase parsedStmt;
-        try {
-            parsedStmt = SqlParser.parseFirstStatement(sql, statsConnectCtx.getSessionVariable().getSqlMode());
-            StmtExecutor executor = new StmtExecutor(statsConnectCtx, parsedStmt);
-            executor.execute();
-        } catch (Exception e) {
-            LOG.warn("Execute statistic table expire fail.", e);
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute statistic table expire fail.");
         }
     }
 
@@ -280,10 +272,25 @@ public class StatisticExecutor {
         context.setQueryId(UUIDUtil.genUUID());
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
-            throw new SemanticException("Statistics query fail | Error Message [{}] | {} | SQL [{}]",
+            throw new SemanticException("Statistics query fail | Error Message [%s] | {} | SQL [%s]",
                     context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
         } else {
             return sqlResult.first;
+        }
+    }
+
+    private boolean executeDML(ConnectContext context, String sql) {
+        StatementBase parsedStmt;
+        try {
+            parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            context.setExecutor(executor);
+            context.setQueryId(UUIDUtil.genUUID());
+            executor.execute();
+            return true;
+        } catch (Exception e) {
+            LOG.warn("Execute statistic DML " + sql + " fail.", e);
+            return false;
         }
     }
 }

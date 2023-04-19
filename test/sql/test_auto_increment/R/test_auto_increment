@@ -69,6 +69,51 @@ DROP TABLE t;
 DROP DATABASE test_create_table_normal_auto_increment;
 -- result:
 -- !result
+-- name: test_table_with_null
+CREATE DATABASE test_table_with_null;
+-- result:
+-- !result
+USE test_table_with_null;
+-- result:
+-- !result
+SET enable_insert_strict = false;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("empty_load_as_error" = "false");
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL AUTO_INCREMENT, job1 BIGINT NULL, job2 BIGINT NULL) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage"="true");
+-- result:
+-- !result
+INSERT INTO t (id, name, job1, job2) VALUES (1,DEFAULT,NULL,2);
+-- result:
+-- !result
+SELECT * FROM t;
+-- result:
+1	1	None	2
+-- !result
+INSERT INTO t (id, name, job1, job2) VALUES (1,NULL,NULL,2);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: AUTO_INCREMENT column: name must not be NULL.')
+-- !result
+INSERT INTO t VALUES (1,NULL,NULL,2);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: AUTO_INCREMENT column: name must not be NULL.')
+-- !result
+UPDATE t SET name = NULL where id = 1;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: AUTO_INCREMENT column: name must not be NULL.')
+-- !result
+SELECT * FROM t;
+-- result:
+1	1	None	2
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+DROP DATABASE test_table_with_null;
+-- result:
+-- !result
 -- name: test_update
 CREATE DATABASE test_update_auto_increment;
 -- result:

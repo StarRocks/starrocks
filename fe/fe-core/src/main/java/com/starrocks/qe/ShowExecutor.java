@@ -202,13 +202,13 @@ import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.transaction.GlobalTransactionMgr;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -600,14 +600,18 @@ public class ShowExecutor {
             // task_id
             resultRow.add(String.valueOf(taskStatus.getTaskId()));
             // task_name
-            resultRow.add(taskStatus.getTaskName());
+            resultRow.add(Strings.nullToEmpty(taskStatus.getTaskName()));
             // last_refresh_start_time
             resultRow.add(String.valueOf(TimeUtils.longToTimeString(taskStatus.getCreateTime())));
             // last_refresh_finished_time
             resultRow.add(String.valueOf(TimeUtils.longToTimeString(taskStatus.getFinishTime())));
             // last_refresh_duration(s)
-            resultRow.add(DebugUtil.DECIMAL_FORMAT_SCALE_3
-                    .format((taskStatus.getFinishTime() - taskStatus.getCreateTime()) / 1000D));
+            if (taskStatus.getFinishTime() > taskStatus.getCreateTime()) {
+                resultRow.add(DebugUtil.DECIMAL_FORMAT_SCALE_3
+                        .format((taskStatus.getFinishTime() - taskStatus.getCreateTime()) / 1000D));
+            } else {
+                resultRow.add("0.000");
+            }
             // last_refresh_state
             resultRow.add(String.valueOf(taskStatus.getState()));
 
@@ -615,22 +619,19 @@ public class ShowExecutor {
             // force refresh
             resultRow.add(extraMessage.isForceRefresh() ? "true" : "false");
             // last_refresh partition start
-            resultRow.add(extraMessage.getPartitionStart());
+            resultRow.add(Strings.nullToEmpty(extraMessage.getPartitionStart()));
             // last_refresh partition end
-            resultRow.add(extraMessage.getPartitionEnd());
+            resultRow.add(Strings.nullToEmpty(extraMessage.getPartitionEnd()));
             // last_refresh base table refresh map
-            resultRow.add(extraMessage.getBasePartitionsToRefreshMapString());
+            resultRow.add(Strings.nullToEmpty(extraMessage.getBasePartitionsToRefreshMapString()));
             // last_refresh mv partitions
-            resultRow.add(extraMessage.getMvPartitionsToRefreshString());
-
+            resultRow.add(Strings.nullToEmpty(extraMessage.getMvPartitionsToRefreshString()));
             // last_refresh_code
             resultRow.add(String.valueOf(taskStatus.getErrorCode()));
             // last_refresh_reason
-            resultRow.add(taskStatus.getErrorMessage());
+            resultRow.add(Strings.nullToEmpty(taskStatus.getErrorMessage()));
         } else {
-            for (int i = 0; i < 13; i++) {
-                resultRow.add("");
-            }
+            resultRow.addAll(Collections.nCopies(13, ""));
         }
     }
 
@@ -2462,14 +2463,7 @@ public class ShowExecutor {
 
     // show cluster statement
     private void handleShowClusters() {
-        ShowClustersStmt showStmt = (ShowClustersStmt) stmt;
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
-        Warehouse warehouse = warehouseMgr.getWarehouse(showStmt.getWarehouseName());
-        List<List<String>> rowSet = warehouse.getClustersInfo().stream()
-                .sorted(Comparator.comparing(o -> o.get(0))).collect(Collectors.toList());
 
-        resultSet = new ShowResultSet(showStmt.getMetaData(), rowSet);
     }
 
     private List<List<String>> doPredicate(ShowStmt showStmt,

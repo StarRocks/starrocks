@@ -48,7 +48,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.scheduler.Constants;
@@ -76,7 +76,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import javax.validation.constraints.NotNull;
 
-public class PublishVersionDaemon extends LeaderDaemon {
+public class PublishVersionDaemon extends FrontendDaemon {
 
     private static final Logger LOG = LogManager.getLogger(PublishVersionDaemon.class);
 

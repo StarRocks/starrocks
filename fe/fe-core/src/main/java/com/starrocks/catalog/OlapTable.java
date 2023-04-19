@@ -300,8 +300,15 @@ public class OlapTable extends Table {
             olapTable.partitionInfo = this.partitionInfo;
         }
         olapTable.defaultDistributionInfo = this.defaultDistributionInfo;
-        olapTable.idToPartition = Maps.newHashMap(this.idToPartition);
-        olapTable.nameToPartition = Maps.newHashMap(this.nameToPartition);
+        Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
+        Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
+            Partition copiedPartition = kv.getValue().shallowCopy();
+            idToPartitions.put(kv.getKey(), copiedPartition);
+            nameToPartitions.put(kv.getValue().getName(), copiedPartition);
+        }
+        olapTable.idToPartition = idToPartitions;
+        olapTable.nameToPartition = nameToPartitions;
         olapTable.baseIndexId = this.baseIndexId;
         if (this.tableProperty != null) {
             olapTable.tableProperty = this.tableProperty.copy();
@@ -1219,7 +1226,7 @@ public class OlapTable extends Table {
         return rowCount;
     }
 
-    public int getSignature(int signatureVersion, List<String> partNames) {
+    public int getSignature(int signatureVersion, List<String> partNames, boolean isRestore) {
         Adler32 adler32 = new Adler32();
         adler32.update(signatureVersion);
 
@@ -1239,8 +1246,12 @@ public class OlapTable extends Table {
             LOG.debug("signature. index name: {}", indexName);
             MaterializedIndexMeta indexMeta = indexIdToMeta.get(indexId);
             // schema hash
-            adler32.update(indexMeta.getSchemaHash());
-            LOG.debug("signature. index schema hash: {}", indexMeta.getSchemaHash());
+            // schema hash will change after finish schema change. It is make no sense
+            // that check the schema hash here when doing restore
+            if (!isRestore) {
+                adler32.update(indexMeta.getSchemaHash());
+                LOG.debug("signature. index schema hash: {}", indexMeta.getSchemaHash());
+            }
             // short key column count
             adler32.update(indexMeta.getShortKeyColumnCount());
             LOG.debug("signature. index short key: {}", indexMeta.getShortKeyColumnCount());

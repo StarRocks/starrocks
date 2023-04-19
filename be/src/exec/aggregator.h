@@ -240,6 +240,12 @@ AggregatorParamsPtr convert_to_aggregator_params(const TPlanNode& tnode);
 class Aggregator : public pipeline::ContextWithDependency {
 public:
     static constexpr auto MAX_CHUNK_BUFFER_SIZE = 1024;
+#ifdef NDEBUG
+    static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
+#else
+    static constexpr size_t two_level_memory_threshold = 64;
+#endif
+
     Aggregator(AggregatorParamsPtr params);
 
     ~Aggregator() noexcept override {
@@ -276,7 +282,8 @@ public:
     const int64_t hash_map_memory_usage() const { return _hash_map_variant.reserved_memory_usage(mem_pool()); }
     const int64_t hash_set_memory_usage() const { return _hash_set_variant.reserved_memory_usage(mem_pool()); }
 
-    TStreamingPreaggregationMode::type streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
+    TStreamingPreaggregationMode::type& streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
+    TStreamingPreaggregationMode::type streaming_preaggregation_mode() const { return _streaming_preaggregation_mode; }
     const AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
     const AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
     std::any& it_hash() { return _it_hash; }
@@ -362,13 +369,6 @@ public:
         return _spiller == nullptr || _spiller->spilled_append_rows() == _spiller->restore_read_rows();
     }
 
-#ifdef NDEBUG
-    static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
-    static constexpr size_t streaming_hash_table_size_threshold = 10000000;
-#else
-    static constexpr size_t two_level_memory_threshold = 64;
-    static constexpr size_t streaming_hash_table_size_threshold = 4;
-#endif
     HashTableKeyAllocator _state_allocator;
 
 protected:

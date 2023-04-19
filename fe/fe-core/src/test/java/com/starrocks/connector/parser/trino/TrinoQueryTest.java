@@ -101,6 +101,33 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testDecimal() throws Exception {
+        String sql = "select cast(tj as decimal32) from tall";
+        analyzeFail(sql, "Unknown type: decimal32");
+
+        sql = "select cast(tj as decimal64) from tall";
+        analyzeFail(sql, "Unknown type: decimal64");
+
+        sql = "select cast(tj as decimal128) from tall";
+        analyzeFail(sql, "Unknown type: decimal128");
+
+        sql = "select cast(tj as decimal) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL128(38,0))");
+
+        sql = "select cast(tj as decimal(10, 2)) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL64(10,2))");
+
+        sql = "select cast(tj as decimal(10)) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL64(10,0))");
+
+        sql = "select cast(tj as decimal(28, 2)) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL128(28,2))");
+
+        sql = "select cast(tj as decimal(28)) from tall";
+        assertPlanContains(sql, "<slot 11> : CAST(10: tj AS DECIMAL128(28,0))");
+    }
+
+    @Test
     public void testSelectLiteral() throws Exception {
         String sql = "select date '1998-12-01'";
         assertPlanContains(sql, "<slot 2> : '1998-12-01'");
@@ -215,7 +242,6 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select array[v1,v2] from t0";
         assertPlanContains(sql, "[1: v1,2: v2]");
-
 
         sql = "select array[NULL][1] + 1, array[1,2,3][1] + array[array[1,2,3],array[1,1,1]][2][2];";
         assertPlanContains(sql, "1:Project\n" +
@@ -607,7 +633,6 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 1> : 1: v1", "output: count(if(CAST(1: v1 AS BOOLEAN), 1, NULL))");
     }
 
-
     @Test
     public void testLimit() throws Exception {
         String sql = "select * from t0 limit 10";
@@ -757,5 +782,32 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select interval '1' year + date '2022-01-01';";
         assertPlanContains(sql, "<slot 2> : '2023-01-01 00:00:00'");
+    }
+
+    @Test
+    public void selectDoubleLiteral() throws Exception {
+        String sql = "select 1.0";
+        assertPlanContains(sql, "<slot 2> : 1.0");
+
+        sql = "select  -1.79E+309;";
+        analyzeFail(sql);
+
+        sql = "select  -1.79E+3;";
+        assertPlanContains(sql, "<slot 2> : -1790.0");
+
+        sql = "select  -1.79E+10;";
+        assertPlanContains(sql, "<slot 2> : -17900000000");
+
+        sql = "select approx_percentile(2.25, -1.79E+309)";
+        analyzeFail(sql);
+
+        sql = "select approx_percentile(2.25, 1.79E-10)";
+        assertPlanContains(sql, "percentile_approx(2.25, 1.79E-10)");
+
+        sql = "select approx_percentile(2.25, 1.79E+10)";
+        assertPlanContains(sql, "percentile_approx(2.25, 1.79E10)");
+
+
+        System.out.println(getFragmentPlan(sql));
     }
 }

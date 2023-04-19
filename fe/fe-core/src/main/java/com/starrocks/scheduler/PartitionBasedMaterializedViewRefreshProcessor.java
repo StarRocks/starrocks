@@ -819,7 +819,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                         Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
                         Column partitionColumn = partitionTableAndColumn.second;
                         // For Non-partition based base table, it's not necessary to check the partition changed.
-                        if (!snapshotTable.containColumn(partitionColumn.getName())) {
+                        if (!snapshotTable.equals(partitionTableAndColumn.first)
+                                || !snapshotTable.containColumn(partitionColumn.getName())) {
                             continue;
                         }
 
@@ -849,7 +850,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                         Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
                         Column partitionColumn = partitionTableAndColumn.second;
                         // For Non-partition based base table, it's not necessary to check the partition changed.
-                        if (!snapShotIcebergTable.containColumn(partitionColumn.getName())) {
+                        if (!snapshotTable.equals(partitionTableAndColumn.first)
+                                || !snapShotIcebergTable.containColumn(partitionColumn.getName())) {
                             continue;
                         }
 

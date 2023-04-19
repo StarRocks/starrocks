@@ -101,6 +101,7 @@ public class LoadStmt extends DdlStmt {
     public static final String CASE_SENSITIVE = "case_sensitive";
     public static final String LOG_REJECTED_RECORD_NUM = "log_rejected_record_num";
 
+    public static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
 
     // for load data from Baidu Object Store(BOS)
     public static final String BOS_ENDPOINT = "bos_endpoint";
@@ -140,6 +141,7 @@ public class LoadStmt extends DdlStmt {
             .add(PRIORITY)
             .add(CASE_SENSITIVE)
             .add(LOG_REJECTED_RECORD_NUM)
+            .add(PARTIAL_UPDATE_MODE)
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions, BrokerDesc brokerDesc,
