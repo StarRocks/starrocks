@@ -127,9 +127,14 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     // we will not call agg object finalize method in scan node,
     // to avoid the unnecessary SerDe and improve query performance
     _params.need_agg_finalize = _need_agg_finalize;
+<<<<<<< HEAD:be/src/exec/vectorized/tablet_scanner.cpp
     _params.use_page_cache = !config::disable_storage_page_cache;
 
     PredicateParser parser(_tablet->tablet_schema());
+=======
+    _params.use_page_cache = _runtime_state->use_page_cache();
+    auto parser = _pool.add(new PredicateParser(_tablet->tablet_schema()));
+>>>>>>> b0d0533f3 ([Enhancement] Avoid using page cache when collecting statistics (#21801)):be/src/exec/tablet_scanner.cpp
     std::vector<PredicatePtr> preds;
     RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(&parser, &preds));
 
