@@ -1501,7 +1501,16 @@ public class StmtExecutor {
             }
         } catch (Throwable t) {
             // if any throwable being thrown during insert operation, first we should abort this txn
-            LOG.warn("handle insert stmt fail: {}", label, t);
+            String failedSql = "";
+            if (originStmt != null && originStmt.originStmt != null) {
+                failedSql = originStmt.originStmt;
+            }
+            LOG.warn("failed to handle stmt [{}] label: {}", failedSql, label, t);
+            String errMsg = t.getMessage();
+            if (errMsg == null) {
+                errMsg = "A problem occurred while executing the [ " + failedSql + "] statement with label:" + label;
+            }
+
             try {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
@@ -1509,12 +1518,17 @@ public class StmtExecutor {
                             externalTable.getSourceTableDbId(), transactionId,
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
-                            t.getMessage() == null ? "Unknown reason" : t.getMessage());
+                            errMsg);
                 } else {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(), transactionId,
+<<<<<<< HEAD
                             t.getMessage() == null ? "Unknown reason" : t.getMessage(),
                             TabletFailInfo.fromThrift(coord.getFailInfos()));
+=======
+                            errMsg,
+                            coord == null ? Lists.newArrayList() : TabletFailInfo.fromThrift(coord.getFailInfos()));
+>>>>>>> 91ef97fc8 (Add association for NPE error information (#21919))
                 }
             } catch (Exception abortTxnException) {
                 // just print a log if abort txn failed. This failure do not need to pass to user.
@@ -1523,7 +1537,7 @@ public class StmtExecutor {
             }
 
             // if not using old load usage pattern, error will be returned directly to user
-            StringBuilder sb = new StringBuilder(t.getMessage() == null ? "Unknown reason" : t.getMessage());
+            StringBuilder sb = new StringBuilder(errMsg);
             if (coord != null && !Strings.isNullOrEmpty(coord.getTrackingUrl())) {
                 sb.append(". url: ").append(coord.getTrackingUrl());
             }
