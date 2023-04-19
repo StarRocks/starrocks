@@ -97,6 +97,9 @@ public class WarehouseManager implements Writable {
             if (data != null) {
                 if (data.fullNameToWh != null) {
                     // Do nothing
+                    if (data.fullNameToWh.containsKey(DEFAULT_WAREHOUSE_NAME)) {
+                        this.fullNameToWh.put(DEFAULT_WAREHOUSE_NAME, fullNameToWh.get(DEFAULT_WAREHOUSE_NAME));
+                    }
                 }
                 warehouseCount = data.fullNameToWh.size();
             }
