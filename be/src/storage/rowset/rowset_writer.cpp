@@ -150,6 +150,7 @@ StatusOr<RowsetSharedPtr> RowsetWriter::build() {
         }
         _rowset_meta_pb->set_num_delete_files(_num_delfile);
         _rowset_meta_pb->set_num_update_files(_num_uptfile);
+        _rowset_meta_pb->set_total_update_row_size(_total_update_row_size);
         if (_num_segment <= 1) {
             _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
         }
@@ -315,10 +316,10 @@ Status RowsetWriter::_flush_update_file(const SegmentPB& segment_pb, butil::IOBu
     auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
 
     butil::IOBuf segment_data;
-    int64_t remaining_bytes = data.cutn(&segment_data, segment_pb.data_size());
-    if (remaining_bytes != segment_pb.data_size()) {
+    int64_t remaining_bytes = data.cutn(&segment_data, segment_pb.update_data_size());
+    if (remaining_bytes != segment_pb.update_data_size()) {
         return Status::InternalError(fmt::format("update segment {} file size {} not equal attachment size {}", path,
-                                                 remaining_bytes, segment_pb.data_size()));
+                                                 remaining_bytes, segment_pb.update_data_size()));
     }
     while (remaining_bytes > 0) {
         auto written_bytes = segment_data.cut_into_writer(writer.get(), remaining_bytes);
@@ -329,8 +330,8 @@ Status RowsetWriter::_flush_update_file(const SegmentPB& segment_pb, butil::IOBu
     }
     if (remaining_bytes != 0) {
         return Status::InternalError(fmt::format("update segment {} write size {} not equal expected size {}",
-                                                 wfile->filename(), segment_pb.data_size() - remaining_bytes,
-                                                 segment_pb.data_size()));
+                                                 wfile->filename(), segment_pb.update_data_size() - remaining_bytes,
+                                                 segment_pb.update_data_size()));
     }
     if (config::sync_tablet_meta) {
         RETURN_IF_ERROR(wfile->sync());
@@ -342,17 +343,19 @@ Status RowsetWriter::_flush_update_file(const SegmentPB& segment_pb, butil::IOBu
         std::lock_guard<std::mutex> l(_lock);
         _num_uptfile++;
         _num_rows_upt += segment_pb.update_num_rows();
+        _total_update_row_size += segment_pb.update_row_size();
     }
 
-    VLOG(2) << "Flush update segment to " << path << " size " << segment_pb.data_size();
+    VLOG(2) << "Flush update segment to " << path << " size " << segment_pb.update_data_size();
 
     return Status::OK();
 }
 
 Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
-    if (data.size() != segment_pb.data_size() + segment_pb.delete_data_size()) {
-        return Status::InternalError(fmt::format("segment size {} + delete file size {} not equal attachment size {}",
-                                                 segment_pb.data_size(), segment_pb.delete_data_size(), data.size()));
+    if (data.size() != segment_pb.data_size() + segment_pb.delete_data_size() + segment_pb.update_data_size()) {
+        return Status::InternalError(fmt::format(
+                "segment size {} + delete file size {} + update file size {} not equal attachment size {}",
+                segment_pb.data_size(), segment_pb.delete_data_size(), segment_pb.update_data_size(), data.size()));
     }
 
     if (segment_pb.has_path()) {

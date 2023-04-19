@@ -511,6 +511,7 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
 
     _get_rowsets_timer = ADD_TIMER(_scan_profile, "GetRowsets");
     _get_delvec_timer = ADD_TIMER(_scan_profile, "GetDelVec");
+    _get_delta_column_group_timer = ADD_TIMER(_scan_profile, "GetDeltaColumnGroup");
 
     /// SegmentInit
     _seg_init_timer = ADD_TIMER(_scan_profile, "SegmentInit");

@@ -126,8 +126,12 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     seg_options.stats = &stats;
 
     Schema vec_schema;
-    vec_schema.append(std::make_shared<Field>(0, "c1", TYPE_INT, -1, -1, false));
-    vec_schema.append(std::make_shared<Field>(1, "c2", TYPE_VARCHAR, -1, -1, false));
+    auto f0 = std::make_shared<Field>(0, "c1", TYPE_INT, -1, -1, false);
+    f0->set_uid(0);
+    auto f1 = std::make_shared<Field>(1, "c2", TYPE_VARCHAR, -1, -1, false);
+    f1->set_uid(1);
+    vec_schema.append(f0);
+    vec_schema.append(f1);
 
     ObjectPool pool;
     SegmentReadOptions seg_opts;
@@ -257,8 +261,12 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     ASSERT_FALSE(scalar_iter->all_page_dict_encoded());
 
     Schema vec_schema;
-    vec_schema.append(std::make_shared<Field>(0, "c1", TYPE_INT, -1, -1, false));
-    vec_schema.append(std::make_shared<Field>(1, "c2", TYPE_VARCHAR, -1, -1, false));
+    auto f0 = std::make_shared<Field>(0, "c1", TYPE_INT, -1, -1, false);
+    f0->set_uid(0);
+    auto f1 = std::make_shared<Field>(1, "c2", TYPE_VARCHAR, -1, -1, false);
+    f1->set_uid(1);
+    vec_schema.append(f0);
+    vec_schema.append(f1);
 
     ObjectPool pool;
     SegmentReadOptions seg_opts;
