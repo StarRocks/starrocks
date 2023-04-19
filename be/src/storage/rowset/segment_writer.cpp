@@ -315,11 +315,7 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
                 size_t keys = _tablet_schema->num_short_key_columns();
                 SeekTuple tuple(*chunk.schema(), chunk.get(i).datums());
                 std::string encoded_key;
-                if (!_tablet_schema->sort_key_idxes().empty()) {
-                    encoded_key = tuple.short_key_encode(keys, _tablet_schema->sort_key_idxes(), 0);
-                } else {
-                    encoded_key = tuple.short_key_encode(keys, 0);
-                }
+                encoded_key = tuple.short_key_encode(keys, _tablet_schema->sort_key_idxes(), 0);
                 RETURN_IF_ERROR(_index_builder->add_item(encoded_key));
             }
             ++_num_rows_written;
