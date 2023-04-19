@@ -22,7 +22,7 @@ PROPERTIES ("key"="value", ...)
 
 For more information, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md).
 
-### 参数说明
+### Parameters
 
 #### `catalog_name`
 
@@ -39,14 +39,14 @@ The description of the JDBC catalog. This parameter is optional.
 
 The properties of the JDBC Catalog. `PROPERTIES` must include the following parameters:
 
-| **参数**     | **说明**                                                     |
-| ------------ | ------------------------------------------------------------ |
-| type         | the type of the resource. Set the value to `jdbc`.           |
-| user         | the username that is used to connect to the target database. |
-| password     | the password that is used to connect to the target database. |
-| jdbc_uri     | the URI that the JDBC driver uses to connect to the target database. For MySQL, the URI is in the `"jdbc:mysql://ip:port"` format. For PostgreSQL, the URI is in the `"jdbc:postgresql://ip:port/db_name"` format. For more information, visit the official websites of [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html) and [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html). |
-| driver_url   | the download URL of the JDBC driver JAR package. An HTTP URL or file URL is supported, for example, `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` and `file:///home/disk1/postgresql-42.3.3.jar`.<br>**NOTE**<br>You can also put the JDBC driver to any same path on the FE and BE nodes and set `driver_url` to that path, which must be in the `file://<path>/to/the/dirver` format. |
-| driver_class | the class name of the JDBC driver. The JDBC driver class names of common database engines are as follows:<ul><li>MySQL: com.mysql.jdbc.Driver (MySQL v5.x and earlier) and com.mysql.cj.jdbc.Driver (MySQL v6.x and later)</li><li>PostgreSQL: org.postgresql.Driver</li></ul> |
+| **Parameter**     | **Description**                                                     |
+| ----------------- | ------------------------------------------------------------ |
+| type              | the type of the resource. Set the value to `jdbc`.           |
+| user              | the username that is used to connect to the target database. |
+| password          | the password that is used to connect to the target database. |
+| jdbc_uri          | the URI that the JDBC driver uses to connect to the target database. For MySQL, the URI is in the `"jdbc:mysql://ip:port"` format. For PostgreSQL, the URI is in the `"jdbc:postgresql://ip:port/db_name"` format. For more information, visit the official websites of [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html) and [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html). |
+| driver_url        | the download URL of the JDBC driver JAR package. An HTTP URL or file URL is supported, for example, `https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` and `file:///home/disk1/postgresql-42.3.3.jar`.<br>**NOTE**<br>You can also put the JDBC driver to any same path on the FE and BE nodes and set `driver_url` to that path, which must be in the `file://<path>/to/the/dirver` format. |
+| driver_class      | the class name of the JDBC driver. The JDBC driver class names of common database engines are as follows:<ul><li>MySQL: com.mysql.jdbc.Driver (MySQL v5.x and earlier) and com.mysql.cj.jdbc.Driver (MySQL v6.x and later)</li><li>PostgreSQL: org.postgresql.Driver</li></ul> |
 
 > **NOTE**
 >
@@ -124,13 +124,13 @@ DROP Catalog jdbc0;
     USE <db_name>;
     ```
 
-    Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly go to the active database in the destination catalog:
+    Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly specify the active database in the destination catalog:
 
     ```SQL
     USE <catalog_name>.<db_name>;
     ```
 
-3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database.
+3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT * FROM <table_name>;

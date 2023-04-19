@@ -427,13 +427,13 @@ You can use one of the following syntaxes to view the schema of an Iceberg table
     USE <db_name>;
     ```
 
-    Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly go to the active database in the destination catalog:
+    Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly specify the active database in the destination catalog:
 
     ```SQL
     USE <catalog_name>.<db_name>;
     ```
 
-3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database.
+3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
