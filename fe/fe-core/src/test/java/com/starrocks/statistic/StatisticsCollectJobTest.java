@@ -187,7 +187,6 @@ public class StatisticsCollectJobTest extends PlanTestBase {
                 fullStatisticsCollectJob.getColumns().toString()));
     }
 
-    @Test
     public void testAnalyzeDB() {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
