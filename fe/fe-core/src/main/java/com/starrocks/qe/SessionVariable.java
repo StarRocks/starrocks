@@ -232,6 +232,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String STATISTIC_COLLECT_PARALLEL = "statistic_collect_parallel";
 
+    public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
+
     // Limitations
     // mem limit can't smaller than bufferpool's default page size
     public static final int MIN_EXEC_MEM_LIMIT = 2097152;
@@ -593,6 +595,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
     private int statisticCollectParallelism = 1;
+
+    @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
+    private boolean enableStrictType = false;
 
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
@@ -1060,6 +1065,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableOptimizerTraceLog() {
         return enableOptimizerTraceLog;
+    }
+
+    public boolean isEnableStrictType() {
+        return enableStrictType;
+    }
+
+    public void setEnableStrictType(boolean val) {
+        this.enableStrictType = val;
     }
 
     // Serialize to thrift object
