@@ -38,6 +38,9 @@ The consistent data distribution and mapping guarantee that the data rows with t
 ### Table creation
 
 When creating a table, you can specify the attribute `"colocate_with" = "group_name"` in PROPERTIES to indicate that the table is a Colocate Join table and belongs to a specified Colocation Group.
+> **NOTE**
+>
+> From version 2.5.4, Colocate Join can be performed on tables from different databases. You only need to specify the same `colocate_with` property when tables are created.
 
 For example:
 
@@ -53,6 +56,8 @@ PROPERTIES(
 If the specified Group does not exist, StarRocks automatically creates a Group that only contains the current table. If the Group exists, StarRocks checks to see if the current table meets the Colocation Group Schema. If so, it creates the table and adds it to the Group. At the same time, the table creates a partition and a tablet based on the data distribution rules of the existing Group.
 
 The Group belongs to a Database, and the name of the Group is unique within the Database. The full name of the Group is dbId_groupName in the internal storage, but the user only needs the groupName.
+
+The Group belongs to a Database. Even if you specify the same `colocate_with` property when creating tables in different Databases to ensure that these tables are colocated, each Database still contains a separate Group, which can be confirmed by using `show proc "/colocation_group"`. The Group name is unique within a Database. In the internal storage, the full name of the Group is `dbId_groupName`, but you only perceive `groupName`.
 
 ### Delete
 
