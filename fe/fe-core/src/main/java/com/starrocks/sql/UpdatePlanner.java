@@ -105,8 +105,16 @@ public class UpdatePlanner {
                 OlapTable olapTable = (OlapTable) table;
                 DataSink dataSink =
                         new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
+<<<<<<< HEAD
                                 olapTable.enableReplicatedStorage(), updateStmt.nullExprInAutoIncrement(),
                                 olapTable.supportedAutomaticPartition());
+=======
+                                olapTable.enableReplicatedStorage(), false, olapTable.supportedAutomaticPartition());
+                if (updateStmt.usePartialUpdate()) {
+                    // using column mode partial update in UPDATE stmt
+                    ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_MODE);
+                }
+>>>>>>> 295123083 ([BugFix] AUTO_INCREMENT insert/load error when table has nullable column (#21877))
                 execPlan.getFragments().get(0).setSink(dataSink);
                 execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             } else if (table instanceof SchemaTable) {

@@ -30,7 +30,11 @@ public class UpdateStmt extends DmlStmt {
     private Table table;
     private QueryStatement queryStatement;
 
+<<<<<<< HEAD
     private boolean nullExprInAutoIncrement;
+=======
+    private boolean usePartialUpdate;
+>>>>>>> 295123083 ([BugFix] AUTO_INCREMENT insert/load error when table has nullable column (#21877))
 
     public UpdateStmt(TableName tableName, List<ColumnAssignment> assignments, List<Relation> fromRelations,
                       Expr wherePredicate, List<CTERelation> commonTableExpressions) {
@@ -39,20 +43,24 @@ public class UpdateStmt extends DmlStmt {
         this.fromRelations = fromRelations;
         this.wherePredicate = wherePredicate;
         this.commonTableExpressions = commonTableExpressions;
+<<<<<<< HEAD
         this.nullExprInAutoIncrement = true;
+=======
+        this.assignmentColumns = Sets.newHashSet();
+        for (ColumnAssignment each : assignments) {
+            this.assignmentColumns.add(each.getColumn());
+        }
+        this.usePartialUpdate = false;
+    }
+
+    public boolean isAssignmentColumn(String colName) {
+        return assignmentColumns.contains(colName);
+>>>>>>> 295123083 ([BugFix] AUTO_INCREMENT insert/load error when table has nullable column (#21877))
     }
 
     @Override
     public TableName getTableName() {
         return tableName;
-    }
-
-    public void setNullExprInAutoIncrement(boolean nullExprInAutoIncrement) {
-        this.nullExprInAutoIncrement = nullExprInAutoIncrement;
-    }
-
-    public boolean nullExprInAutoIncrement() {
-        return nullExprInAutoIncrement;
     }
 
     public List<ColumnAssignment> getAssignments() {
