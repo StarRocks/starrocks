@@ -185,7 +185,7 @@ public class AnalyzeStmtTest {
                         "cast(max(cast(max as bigint(20))) as string), " +
                         "cast(min(cast(min as bigint(20))) as string) " +
                         "FROM column_statistics WHERE table_id = 10004 and column_name = \"v2\" " +
-                        "GROUP BY db_id, table_id, column_name;",
+                        "GROUP BY db_id, table_id, column_name",
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(10002L, 10004L, Lists.newArrayList(v1, v2)));
 
         Assert.assertEquals("SELECT cast(1 as INT), update_time, db_id, table_id, column_name, row_count, " +
