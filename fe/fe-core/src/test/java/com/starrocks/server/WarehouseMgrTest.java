@@ -15,21 +15,12 @@
 
 package com.starrocks.server;
 
-import com.starrocks.common.DdlException;
-import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.After;
 import org.junit.BeforeClass;
-import org.junit.Test;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.HashMap;
 
 public class WarehouseMgrTest {
     private static StarRocksAssert starRocksAssert;
@@ -45,22 +36,5 @@ public class WarehouseMgrTest {
     public void tearDownCreate() throws Exception {
         File file = new File(fileName);
         file.delete();
-    }
-
-
-    @Test
-    public void testLoadWarehouse() throws IOException, DdlException {
-        WarehouseManager warehouseMgr = GlobalStateMgr.getServingState().getWarehouseMgr();
-        File file = new File(fileName);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-        warehouseMgr.saveWarehouses(out, 0);
-
-        out.flush();
-        out.close();
-
-        Deencapsulation.setField(warehouseMgr, "fullNameToWh", new HashMap<>());
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-        warehouseMgr.loadWarehouses(in, 0);
     }
 }

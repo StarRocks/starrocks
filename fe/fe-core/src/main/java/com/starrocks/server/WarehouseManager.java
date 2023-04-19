@@ -17,7 +17,6 @@ package com.starrocks.server;
 import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
@@ -27,9 +26,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.warehouse.LocalWarehouse;
 import com.starrocks.warehouse.Warehouse;
 
-import java.io.DataInputStream;
 import java.io.DataOutput;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
@@ -75,17 +72,6 @@ public class WarehouseManager implements Writable {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return fullNameToWh.containsKey(warehouseName);
         }
-    }
-
-    // warehouse meta persistence api
-    public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
-        checksum ^= fullNameToWh.size();
-        write(out);
-        return checksum;
-    }
-
-    public long loadWarehouses(DataInputStream dis, long checksum) throws IOException, DdlException {
-        return checksum;
     }
 
     public List<List<String>> getWarehousesInfo() {

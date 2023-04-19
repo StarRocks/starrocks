@@ -1394,8 +1394,6 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             globalFunctionMgr.loadGlobalFunctions(dis, checksum);
             loadRBACPrivilege(dis);
-            checksum = warehouseMgr.loadWarehouses(dis, checksum);
-            remoteChecksum = dis.readLong();
             checksum = localMetastore.loadAutoIncrementId(dis, checksum);
             remoteChecksum = dis.readLong();
             // ** NOTICE **: always add new code at the end
@@ -1721,8 +1719,6 @@ public class GlobalStateMgr {
             dos.writeLong(checksum);
             globalFunctionMgr.saveGlobalFunctions(dos, checksum);
             saveRBACPrivilege(dos);
-            checksum = warehouseMgr.saveWarehouses(dos, checksum);
-            dos.writeLong(checksum);
             checksum = localMetastore.saveAutoIncrementId(dos, checksum);
             dos.writeLong(checksum);
             // ** NOTICE **: always add new code at the end
