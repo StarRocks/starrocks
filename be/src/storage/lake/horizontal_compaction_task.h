@@ -41,7 +41,7 @@ public:
 
     ~HorizontalCompactionTask() override;
 
-    Status execute(Stats* stats) override;
+    Status execute(Progress* progress) override;
 
 private:
     int64_t _txn_id;
