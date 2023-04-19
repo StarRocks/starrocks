@@ -230,6 +230,16 @@ void RuntimeState::get_unreported_errors(std::vector<std::string>* new_errors) {
     }
 }
 
+bool RuntimeState::use_page_cache() {
+    if (config::disable_storage_page_cache) {
+        return false;
+    }
+    if (_query_options.__isset.use_page_cache) {
+        return _query_options.use_page_cache;
+    }
+    return true;
+}
+
 Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size,
                                             const std::string* msg) {
     DCHECK_GE(failed_allocation_size, 0);
