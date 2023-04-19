@@ -858,28 +858,28 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitCreateWarehouseStatement(CreateWarehouseStmt stmt, ConnectContext context) {
-            throw new RuntimeException(new DdlException("unsupported statement: " + stmt));
+            throw new RuntimeException(new DdlException("unsupported statement"));
         }
 
         @Override
         public ShowResultSet visitAlterWarehouseStatement(AlterWarehouseStmt stmt, ConnectContext context) {
-            throw new RuntimeException(new DdlException("unsupported statement: " + stmt));
+            throw new RuntimeException(new DdlException("unsupported statement"));
         }
 
         @Override
         public ShowResultSet visitSuspendWarehouseStatement(SuspendWarehouseStmt stmt, ConnectContext context) {
-            throw new RuntimeException(new DdlException("unsupported statement: " + stmt));
+            throw new RuntimeException(new DdlException("unsupported statement"));
         }
 
         @Override
         public ShowResultSet visitResumeWarehouseStatement(ResumeWarehouseStmt stmt, ConnectContext context) {
-            throw new RuntimeException(new DdlException("unsupported statement: " + stmt));
+            throw new RuntimeException(new DdlException("unsupported statement"));
         }
 
 
         @Override
         public ShowResultSet visitDropWarehouseStatement(DropWarehouseStmt stmt, ConnectContext context) {
-            throw new RuntimeException(new DdlException("unsupported statement: " + stmt));
+            throw new RuntimeException(new DdlException("unsupported statement"));
         }
 
         @Override
