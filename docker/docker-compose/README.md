@@ -1,3 +1,5 @@
+<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=c615c99c-0f73-4a8b-af76-1e7ab83b90b5" />
+
 # Docker Compose for StarRocks
 
 This directory contains the Docker Compose YAML files for the StarRocks deployment.
