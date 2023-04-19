@@ -81,7 +81,6 @@ import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.common.util.LogBuilder;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.UnauthorizedException;
 import com.starrocks.http.rest.TransactionResult;

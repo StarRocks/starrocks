@@ -204,7 +204,7 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
     }
 
     private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws UserException {
-        label =
+        String label =
                 Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id), txnId);
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)

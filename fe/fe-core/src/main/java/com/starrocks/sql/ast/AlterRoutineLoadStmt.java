@@ -56,6 +56,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             .add(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
+            .add(LoadStmt.ENABLE_PROFILE)
             .build();
 
     private LabelName labelName;

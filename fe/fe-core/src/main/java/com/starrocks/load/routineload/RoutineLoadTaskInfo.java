@@ -99,8 +99,6 @@ public abstract class RoutineLoadTaskInfo {
     // record task schedule info
     protected String msg;
 
-    protected String label;
-
     protected StreamLoadTask streamLoadTask = null;
 
     public RoutineLoadTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs,
