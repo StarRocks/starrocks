@@ -73,6 +73,8 @@ PROPERTIES
 )
 ```
 
+For more information, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md).
+
 ### Parameters
 
 #### `catalog_name`

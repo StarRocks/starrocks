@@ -20,7 +20,7 @@ CREATE EXTERNAL CATALOG <catalog_name>
 PROPERTIES ("key"="value", ...)
 ```
 
-For more information, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md)。
+For more information, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md).
 
 ### 参数说明
 
