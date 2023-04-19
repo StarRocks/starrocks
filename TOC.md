@@ -80,6 +80,7 @@
     + [Tableau Desktop](/integrations/BI_integrations/Tableau_Desktop.md)
   + 集成 IDE 工具
     + [DataGrip](/integrations/IDE_integrations/DataGrip.md)
+    + [DBeaver](/integrations/IDE_integrations/DBeaver.md)
   + [其他集成](/integrations/other_integrations/intro.md)
 + 管理手册
   + 部署集群

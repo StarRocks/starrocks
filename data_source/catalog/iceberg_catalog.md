@@ -70,6 +70,8 @@ PROPERTIES
 )
 ```
 
+参见 [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md)。
+
 ### 参数说明
 
 #### `catalog_name`
@@ -398,19 +400,31 @@ DROP Catalog iceberg_catalog_glue;
 
 ## 查询 Iceberg 表数据
 
-1. 使用如下语法查看指定 Catalog 所属的 Iceberg 集群中的数据库：
+1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) 查看指定 Catalog 所属的 Iceberg 集群中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. 使用如下语法连接到目标 Iceberg 数据库：
+2. 通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 切换当前会话生效的 Catalog：
 
-   ```SQL
-   USE <catalog_name>.<database_name>
-   ```
+    ```SQL
+    SET CATALOG <catalog_name>;
+    ```
 
-3. 使用如下语法查询 Iceberg 表的数据：
+    再 通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定当前会话生效的数据库：
+
+    ```SQL
+    USE <db_name>;
+    ```
+
+    或者，也可以通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
+
+    ```SQL
+    USE <catalog_name>.<db_name>;
+    ```
+
+3. 通过 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10

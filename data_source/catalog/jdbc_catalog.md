@@ -1,6 +1,6 @@
 # 【公测中】JDBC catalog
 
-JDBC Catalog 是一种 External Catalog。通过 JDBC Catalog，您不需要执行数据导入就可以直接查询通过 JDBC 访问的数据源里的数据。
+JDBC Catalog 是一种 External Catalog。通过 JDBC Catalog，您不需要执行数据导入就可以直接查询 JDBC 数据源里的数据。
 
 此外，您还可以基于 JDBC Catalog ，结合 [INSERT INTO](/sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。StarRocks 从 3.0 版本开始支持 JDBC Catalog。
 
@@ -12,17 +12,53 @@ JDBC Catalog 是一种 External Catalog。通过 JDBC Catalog，您不需要执�
 
 ## 创建 JDBC Catalog
 
-使用 [CREATE EXTERNAL CATALOG](/sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md) 创建 JDBC Catalog。
+### 语法
+
+```SQL
+CREATE EXTERNAL CATALOG <catalog_name>
+[COMMENT <comment>]
+PROPERTIES ("key"="value", ...)
+```
+
+参见 [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md)。
+
+### 参数说明
+
+#### `catalog_name`
+
+JDBC Catalog 的名称。命名规则如下：
+
+- 可以包含字母、数字 0 到 9 和下划线 (_)，并且必须以字母开头。
+- 长度不能超过 64 个字符。
+
+#### `comment`
+
+JDBC Catalog 的描述。此参数为可选。
+
+#### PROPERTIES
+
+JDBC Catalog 的属性，包含如下必填配置项：
+
+| **参数**     | **说明**                                                     |
+| ------------ | ------------------------------------------------------------ |
+| type         | 资源类型，固定取值为 `jdbc`。                                |
+| user         | 目标数据库登录用户名。                                       |
+| password     | 目标数据库用户登录密码。                                     |
+| jdbc_uri     | JDBC 驱动程序连接目标数据库的 URI。如果使用 MySQL，格式为：`"jdbc:mysql://ip:port"`。如果使用 PostgreSQL，格式为 `"jdbc:postgresql://ip:port/db_name"`。参见 [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html) 和 [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html) 官网文档。 |
+| driver_url   | 用于下载 JDBC 驱动程序 JAR 包的 URL。支持使用 HTTP 协议或者 file 协议，例如`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` 和 `file:///home/disk1/postgresql-42.3.3.jar`。<br>**说明**<br>您也可以把 JDBC 驱动程序部署在 FE 或 BE 所在节点上任意相同路径下，然后把 `driver_url` 设置为该路径，格式为 `file://<path>/to/the/dirver`。 |
+| driver_class | JDBC 驱动程序的类名称。以下是常见数据库引擎支持的 JDBC 驱动程序类名称：<ul><li>MySQL：com.mysql.jdbc.Driver（MySQL 5.x 及之前版本）、com.mysql.cj.jdbc.Driver（MySQL 6.x 及之后版本）</li><li>PostgreSQL: org.postgresql.Driver</li></ul> |
 
 > **说明**
 >
 > FE 会在创建 JDBC Catalog 时去获取 JDBC 驱动程序，BE 会在第一次执行查询时去获取驱动程序。获取驱动程序的耗时跟网络条件相关。
 
+### 创建示例
+
 以下示例创建了两个 JDBC Catalog：`jdbc0` 和 `jdbc1`。
 
 ```SQL
 CREATE EXTERNAL CATALOG jdbc0
-properties
+PROPERTIES
 (
     "type"="jdbc",
     "user"="postgres",
@@ -33,7 +69,7 @@ properties
 );
 
 CREATE EXTERNAL CATALOG jdbc1
-properties
+PROPERTIES
 (
     "type"="jdbc",
     "user"="root",
@@ -43,33 +79,6 @@ properties
     "driver_class"="com.mysql.cj.jdbc.Driver"
 );
 ```
-
-`properties` 包含如下必填配置项：
-
-- `type`：资源类型，固定取值为 `jdbc`。
-
-- `user`：目标数据库登录用户名。
-
-- `password`：目标数据库用户登录密码。
-
-- `jdbc_uri`：JDBC 驱动程序连接目标数据库的 URI。如果使用 MySQL，格式为：`"jdbc:mysql://ip:port"`。如果使用 PostgreSQL，格式为 `"jdbc:postgresql://ip:port/db_name"`。参见 [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html) 和 [PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html) 官网文档。
-
-  > **说明**
-  >
-  > 您也可以把 JDBC 驱动程序部署在 FE 或 BE 所在节点上，然后把 `jdbc_uri` 设置为 JDBC 驱动程序安装文件所在的位置。
-
-- `driver_url`：用于下载 JDBC 驱动程序 JAR 包的 URL。支持使用 HTTP 协议或者 file 协议，例如`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar` 和 `file:///home/disk1/postgresql-42.3.3.jar`。
-
-  > **说明**
-  >
-  > 您可以将 JDBC 驱动程序 JAR 包放在 FE 节点和 BE 节点上相同的路径下。
-
-- `driver_class`：JDBC 驱动程序的类名称。
-
-  以下是常见数据库引擎支持的 JDBC 驱动程序类名称：
-
-  - MySQL：**com.mysql.jdbc.Driver**（MySQL 5.x 及之前版本）、**com.mysql.cj.jdbc.Driver**（MySQL 6.x 及之后版本）
-  - PostgreSQL: **org.postgresql.Driver**
 
 ## 查看 JDBC Catalog
 
@@ -97,26 +106,32 @@ DROP Catalog jdbc0;
 
 ## 查询 JDBC Catalog 中的表数据
 
-1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) 查询 JDBC Catalog 中的所有数据库。
-
-   例如，通过如下命令查询 JDBC Catalog `jdbc0` 中的所有数据库：
+1. 通过 [SHOW DATABASES](/sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) 查看指定 Catalog 所属的集群中的数据库：
 
    ```SQL
-   SHOW DATABASES from jdbc0;
+   SHOW DATABASES from <catalog_name>;
    ```
 
-2. 进入 JDBC Catalog 中的目标数据库。
+2. 通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) 切换当前会话生效的 Catalog：
 
-   例如，通过如下命令进入目标数据库 `database0`：
+    ```SQL
+    SET CATALOG <catalog_name>;
+    ```
+
+    再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定当前会话生效的数据库：
+
+    ```SQL
+    USE <db_name>;
+    ```
+
+    或者，也可以通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Catalog 下的指定数据库：
+
+    ```SQL
+    USE <catalog_name>.<db_name>;
+    ```
+
+3. 通过 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
-   USE jdbc0.database0;
-   ```
-
-3. 通过 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表。
-
-   例如，通过如下命令查询表 `table0` 的数据：
-
-   ```SQL
-   SELECT * FROM table0;
+   SELECT * FROM <table_name>;
    ```
