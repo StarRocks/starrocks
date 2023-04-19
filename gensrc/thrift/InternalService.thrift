@@ -172,6 +172,7 @@ struct TQueryOptions {
 
   67: optional bool enable_pipeline_query_statistic = false;
 
+  91: optional bool use_page_cache;
 
   102: optional bool enable_collect_table_level_scan_stats;
   // The following params only exist on 2.2 2.3, to avoid upgrade inconsistency
