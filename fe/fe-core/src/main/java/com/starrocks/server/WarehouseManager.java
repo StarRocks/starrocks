@@ -77,40 +77,6 @@ public class WarehouseManager implements Writable {
         }
     }
 
-<<<<<<< HEAD
-=======
-    // these apis need lock protection
-    public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
-        createWarehouse(stmt.getFullWhName(), stmt.getProperties());
-    }
-
-    public void createWarehouse(String warehouseName, Map<String, String> properties) {
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(!fullNameToWh.containsKey(warehouseName),
-                    "Warehouse '%s' already exists", warehouseName);
-
-            long id = GlobalStateMgr.getCurrentState().getNextId();
-            Warehouse wh = new LocalWarehouse(id, warehouseName);
-            fullNameToWh.put(wh.getFullName(), wh);
-            idToWh.put(wh.getId(), wh);
-            wh.setExist(true);
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateWarehouse(wh);
-
-            LOG.info("createWarehouse whName = " + warehouseName + ", id = " + id);
-        }
-    }
-
-    public void replayCreateWarehouse(Warehouse warehouse) {
-        String whName = warehouse.getFullName();
-        try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(!fullNameToWh.containsKey(whName), "Warehouse '%s' already exists", whName);
-            fullNameToWh.put(whName, warehouse);
-            idToWh.put(warehouse.getId(), warehouse);
-            warehouse.setExist(true);
-        }
-    }
-
->>>>>>> 7a4be94b8a (update code)
     // warehouse meta persistence api
     public long saveWarehouses(DataOutputStream out, long checksum) throws IOException {
         checksum ^= fullNameToWh.size();
