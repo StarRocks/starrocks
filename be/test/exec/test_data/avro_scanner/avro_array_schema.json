@@ -1,0 +1,14 @@
+{
+    "type": "record",
+    "name": "nest",
+    "fields" : [
+        {"name": "booleantype", "type" : "boolean"},
+        {"name": "longtype", "type": "long"},
+        {"name": "doubletype", "type": "double"},
+        {"name": "arraytype", "type": {
+            "type": "array",
+            "items": "long",
+            "defalut": []
+        }}
+    ]
+}

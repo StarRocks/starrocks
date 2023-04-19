@@ -23,9 +23,12 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
+import com.starrocks.thrift.TIcebergColumnStats;
+import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergSchema;
 import com.starrocks.thrift.TIcebergSchemaField;
 import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
@@ -36,6 +39,7 @@ import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -193,6 +197,35 @@ public class IcebergApiConverter {
             tIcebergSchemaField.setChildren(children);
         }
         return tIcebergSchemaField;
+    }
+
+    public static Metrics buildDataFileMetrics(TIcebergDataFile dataFile) {
+        Map<Integer, Long> columnSizes = new HashMap<>();
+        Map<Integer, Long> valueCounts = new HashMap<>();
+        Map<Integer, Long> nullValueCounts = new HashMap<>();
+        Map<Integer, ByteBuffer> lowerBounds = new HashMap<>();
+        Map<Integer, ByteBuffer> upperBounds = new HashMap<>();
+        if (dataFile.isSetColumn_stats()) {
+            TIcebergColumnStats stats = dataFile.column_stats;
+            if (stats.isSetColumn_sizes()) {
+                columnSizes = stats.column_sizes;
+            }
+            if (stats.isSetValue_counts()) {
+                valueCounts = stats.value_counts;
+            }
+            if (stats.isSetNull_value_counts()) {
+                nullValueCounts = stats.null_value_counts;
+            }
+            if (stats.isSetLower_bounds()) {
+                lowerBounds = stats.lower_bounds;
+            }
+            if (stats.isSetUpper_bounds()) {
+                upperBounds = stats.upper_bounds;
+            }
+        }
+
+        return new Metrics(dataFile.record_count, columnSizes, valueCounts,
+                nullValueCounts, null, lowerBounds, upperBounds);
     }
 
     public static Map<String, String> rebuildCreateTableProperties(Map<String, String> createProperties) {

@@ -69,6 +69,10 @@ public interface IcebergCatalog {
         throw new StarRocksConnectorException("This catalog doesn't support creating tables");
     }
 
+    default boolean dropTable(TableIdentifier identifier, boolean purge) {
+        throw new StarRocksConnectorException("This catalog doesn't support dropping tables");
+    }
+
     default String defaultTableLocation(String dbName, String tblName) {
         return "";
     }

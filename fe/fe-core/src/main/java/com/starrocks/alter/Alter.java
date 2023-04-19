@@ -91,6 +91,7 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -127,16 +128,20 @@ public class Alter {
     private AlterHandler materializedViewHandler;
     private SystemHandler clusterHandler;
 
+    private CompactionHandler compactionHandler;
+
     public Alter() {
         schemaChangeHandler = new SchemaChangeHandler();
         materializedViewHandler = new MaterializedViewHandler();
         clusterHandler = new SystemHandler();
+        compactionHandler = new CompactionHandler();
     }
 
     public void start() {
         schemaChangeHandler.start();
         materializedViewHandler.start();
         clusterHandler.start();
+        compactionHandler = new CompactionHandler();
     }
 
     public void processCreateMaterializedView(CreateMaterializedViewStmt stmt)
@@ -630,6 +635,8 @@ public class Alter {
                 processAlterComment(db, olapTable, alterClauses);
             } else if (currentAlterOps.contains(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC)) {
                 needProcessOutsideDatabaseLock = true;
+            } else if (currentAlterOps.contains(AlterOpType.COMPACT)) {
+                needProcessOutsideDatabaseLock = true;
             } else {
                 throw new DdlException("Invalid alter operations: " + currentAlterOps);
             }
@@ -716,6 +723,10 @@ public class Alter {
                 } else {
                     throw new DdlException("Invalid alter operation: " + alterClause.getOpType());
                 }
+            } else if (alterClause instanceof CompactionClause) {
+                String s = (((CompactionClause) alterClause).isBaseCompaction() ? "base" : "cumulative")
+                        + " compact " + tableName + " partitions: " + ((CompactionClause) alterClause).getPartitionNames();
+                compactionHandler.process(alterClauses, db, olapTable);
             }
         }
 

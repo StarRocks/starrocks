@@ -172,6 +172,7 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
 }
 
 void SpillableHashJoinBuildOperator::mark_need_spill() {
+    HashJoinBuildOperator::mark_need_spill();
     if (!_is_finished) {
         _join_builder->set_spill_strategy(spill::SpillStrategy::SPILL_ALL);
     }

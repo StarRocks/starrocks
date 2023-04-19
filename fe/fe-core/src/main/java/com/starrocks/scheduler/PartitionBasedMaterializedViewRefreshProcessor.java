@@ -336,11 +336,17 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         // should write this to log at one time
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> changedTablePartitionInfos =
                 getSourceTablePartitionInfos(execPlan);
+
+        Table partitionTable = null;
+        if (mvContext.hasNextBatchPartition()) {
+            Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
+            partitionTable = partitionTableAndColumn.first;
+        }
         // update version map of materialized view
         for (Map.Entry<Long, Map<String, MaterializedView.BasePartitionInfo>> tableEntry
                 : changedTablePartitionInfos.entrySet()) {
             Long tableId = tableEntry.getKey();
-            if (mvContext.hasNextBatchPartition() && tableId != materializedView.getId()) {
+            if (partitionTable != null && tableId != partitionTable.getId()) {
                 continue;
             }
             if (!currentVersionMap.containsKey(tableId)) {
@@ -372,11 +378,17 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         // should write this to log at one time
         Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> changedTablePartitionInfos =
                 getSourceTableInfoPartitionInfos(execPlan);
+
+        BaseTableInfo partitionTableInfo = null;
+        if (mvContext.hasNextBatchPartition()) {
+            Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
+            partitionTableInfo = snapshotBaseTables.get(partitionTableAndColumn.first.getId()).first;
+        }
         // update version map of materialized view
         for (Map.Entry<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> tableEntry
                 : changedTablePartitionInfos.entrySet()) {
             BaseTableInfo baseTableInfo = tableEntry.getKey();
-            if (mvContext.hasNextBatchPartition() && baseTableInfo.getTableId() != materializedView.getId()) {
+            if (partitionTableInfo != null && !partitionTableInfo.equals(baseTableInfo)) {
                 continue;
             }
             if (!currentVersionMap.containsKey(baseTableInfo)) {

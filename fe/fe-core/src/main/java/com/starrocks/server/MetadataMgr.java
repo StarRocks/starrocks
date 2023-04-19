@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.thrift.TSinkCommitInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -116,34 +117,6 @@ public class MetadataMgr {
         return ImmutableList.copyOf(dbNames.build());
     }
 
-    public List<String> listTableNames(String catalogName, String dbName) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        ImmutableSet.Builder<String> tableNames = ImmutableSet.builder();
-        if (connectorMetadata.isPresent()) {
-            try {
-                connectorMetadata.get().listTableNames(dbName).forEach(tableNames::add);
-            } catch (Exception e) {
-                LOG.error("Failed to listTableNames on [{}.{}]", catalogName, dbName, e);
-                throw e;
-            }
-        }
-        return ImmutableList.copyOf(tableNames.build());
-    }
-
-    public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
-        if (connectorMetadata.isPresent()) {
-            try {
-                connectorMetadata.get().listPartitionNames(dbName, tableName).forEach(partitionNames::add);
-            } catch (Exception e) {
-                LOG.error("Failed to listPartitionNames on [{}.{}]", catalogName, dbName, e);
-                throw e;
-            }
-        }
-        return ImmutableList.copyOf(partitionNames.build());
-    }
-
     public void createDb(String catalogName, String dbName, Map<String, String> properties)
             throws DdlException, AlreadyExistsException {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
@@ -169,7 +142,22 @@ public class MetadataMgr {
         return db;
     }
 
-    public boolean createTable(String catalogName, CreateTableStmt stmt) throws DdlException {
+    public List<String> listTableNames(String catalogName, String dbName) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        ImmutableSet.Builder<String> tableNames = ImmutableSet.builder();
+        if (connectorMetadata.isPresent()) {
+            try {
+                connectorMetadata.get().listTableNames(dbName).forEach(tableNames::add);
+            } catch (Exception e) {
+                LOG.error("Failed to listTableNames on [{}.{}]", catalogName, dbName, e);
+                throw e;
+            }
+        }
+        return ImmutableList.copyOf(tableNames.build());
+    }
+
+    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+        String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
 
         if (connectorMetadata.isPresent()) {
@@ -195,6 +183,28 @@ public class MetadataMgr {
         }
     }
 
+    public void dropTable(String catalogName, String dbName, String tblName) {
+        TableName tableName = new TableName(catalogName, dbName, tblName);
+        DropTableStmt dropTableStmt = new DropTableStmt(false, tableName, false);
+        dropTable(dropTableStmt);
+    }
+
+    public void dropTable(DropTableStmt stmt) {
+        String catalogName = stmt.getCatalogName();
+        String dbName = stmt.getDbName();
+        String tableName = stmt.getTableName();
+
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> {
+            try {
+                metadata.dropTable(stmt);
+            } catch (DdlException e) {
+                LOG.error("Failed to drop table {}.{}.{}", catalogName, dbName, tableName, e);
+                throw new StarRocksConnectorException("Failed to drop table {}.{}.{}", catalogName, dbName, tableName);
+            }
+        });
+    }
+
     public Table getTable(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         Table connectorTable = connectorMetadata.map(metadata -> metadata.getTable(dbName, tblName)).orElse(null);
@@ -203,6 +213,20 @@ public class MetadataMgr {
             connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
         }
         return connectorTable;
+    }
+
+    public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        ImmutableSet.Builder<String> partitionNames = ImmutableSet.builder();
+        if (connectorMetadata.isPresent()) {
+            try {
+                connectorMetadata.get().listPartitionNames(dbName, tableName).forEach(partitionNames::add);
+            } catch (Exception e) {
+                LOG.error("Failed to listPartitionNames on [{}.{}]", catalogName, dbName, e);
+                throw e;
+            }
+        }
+        return ImmutableList.copyOf(partitionNames.build());
     }
 
     public Statistics getTableStatistics(OptimizerContext session,
@@ -249,24 +273,22 @@ public class MetadataMgr {
         return partitions.build();
     }
 
-    public void dropTable(String catalogName, String dbName, String tblName) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        connectorMetadata.ifPresent(metadata -> {
-            TableName tableName = new TableName(catalogName, dbName, tblName);
-            DropTableStmt dropTableStmt = new DropTableStmt(false, tableName, false);
-            try {
-                metadata.dropTable(dropTableStmt);
-            } catch (DdlException e) {
-                LOG.error("Failed to drop table {}.{}.{}", catalogName, dbName, tblName, e);
-                throw new StarRocksConnectorException("Failed to drop table {}.{}.{}", catalogName, dbName, tblName);
-            }
-        });
-    }
-
     public void refreshTable(String catalogName, String srDbName, Table table,
                              List<String> partitionNames, boolean onlyCachedPartitions) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         connectorMetadata.ifPresent(metadata -> metadata.refreshTable(srDbName, table, partitionNames, onlyCachedPartitions));
+    }
+
+    public void finishSink(String catalogName, String dbName, String tableName, List<TSinkCommitInfo> sinkCommitInfos) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> {
+            try {
+                metadata.finishSink(dbName, tableName, sinkCommitInfos);
+            } catch (StarRocksConnectorException e) {
+                LOG.error("table sink commit failed", e);
+                throw new StarRocksConnectorException(e.getMessage());
+            }
+        });
     }
 
     private class QueryMetadatas {

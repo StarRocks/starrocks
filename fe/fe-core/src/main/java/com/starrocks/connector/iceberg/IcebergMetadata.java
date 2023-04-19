@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
@@ -26,6 +27,7 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -33,6 +35,7 @@ import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -40,10 +43,18 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.thrift.TIcebergDataFile;
+import com.starrocks.thrift.TSinkCommitInfo;
+import org.apache.iceberg.AppendFiles;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.CombinedScanTask;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.Metrics;
+import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.TableScan;
@@ -53,13 +64,16 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.io.CloseableIterable;
+import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -152,6 +166,12 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         transaction.commitTransaction();
         return true;
+    }
+
+    @Override
+    public void dropTable(DropTableStmt stmt) {
+        TableIdentifier identifier = TableIdentifier.of(stmt.getDbName(), stmt.getTableName());
+        icebergCatalog.dropTable(identifier, true);
     }
 
     @Override
@@ -297,8 +317,176 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void finishSink(String dbName, String tableName, List<TSinkCommitInfo> commitInfos) {
+        boolean isOverwrite = false;
+        if (!commitInfos.isEmpty()) {
+            TSinkCommitInfo sinkCommitInfo = commitInfos.get(0);
+            if (sinkCommitInfo.isSetIs_overwrite()) {
+                isOverwrite = sinkCommitInfo.is_overwrite;
+            }
+        }
+
+        List<TIcebergDataFile> dataFiles = commitInfos.stream()
+                .map(TSinkCommitInfo::getIceberg_data_file).collect(Collectors.toList());
+
+        IcebergTable table = (IcebergTable) getTable(dbName, tableName);
+        org.apache.iceberg.Table nativeTbl = table.getNativeTable();
+        Transaction transaction = nativeTbl.newTransaction();
+        BatchWrite batchWrite = getBatchWrite(transaction, isOverwrite);
+
+        PartitionSpec partitionSpec = nativeTbl.spec();
+        for (TIcebergDataFile dataFile : dataFiles) {
+            Metrics metrics = IcebergApiConverter.buildDataFileMetrics(dataFile);
+            DataFiles.Builder builder =
+                    DataFiles.builder(partitionSpec)
+                            .withMetrics(metrics)
+                            .withPath(dataFile.path)
+                            .withFormat(dataFile.format)
+                            .withRecordCount(dataFile.record_count)
+                            .withFileSizeInBytes(dataFile.file_size_in_bytes)
+                            .withSplitOffsets(dataFile.split_offsets);
+
+            if (partitionSpec.isPartitioned()) {
+                String relativePartitionLocation = getIcebergRelativePartitionPath(
+                        nativeTbl.location(), dataFile.partition_path);
+
+                PartitionData partitionData = partitionDataFromPath(
+                        relativePartitionLocation, partitionSpec);
+                builder.withPartition(partitionData);
+            }
+            batchWrite.addFile(builder.build());
+        }
+        batchWrite.commit();
+        transaction.commitTransaction();
+    }
+
+    public BatchWrite getBatchWrite(Transaction transaction, boolean isOverwrite) {
+        return isOverwrite ? new DynamicOverwrite(transaction) : new Append(transaction);
+    }
+
+    public static PartitionData partitionDataFromPath(String relativePartitionPath, PartitionSpec spec) {
+        PartitionData data = new PartitionData(spec.fields().size());
+        String[] partitions = relativePartitionPath.split("/", -1);
+        List<PartitionField> partitionFields = spec.fields();
+
+        for (int i = 0; i < partitions.length; i++) {
+            PartitionField field = partitionFields.get(i);
+            String[] parts = partitions[i].split("=", 2);
+            Preconditions.checkArgument(parts.length == 2 && parts[0] != null &&
+                    field.name().equals(parts[0]), "Invalid partition: %s", partitions[i]);
+
+            org.apache.iceberg.types.Type sourceType = spec.partitionType().fields().get(i).type();
+            data.set(i, Conversions.fromPartitionString(sourceType, parts[1]));
+        }
+        return data;
+    }
+
+    public static String getIcebergRelativePartitionPath(String tableLocation, String partitionLocation) {
+        tableLocation = tableLocation.endsWith("/") ? tableLocation.substring(0, tableLocation.length() - 1) : tableLocation;
+        String tableLocationWithData = tableLocation + "/data/";
+        String path = PartitionUtil.getSuffixName(tableLocationWithData, partitionLocation);
+        if (path.startsWith("/")) {
+            path = path.substring(1);
+        }
+        if (path.endsWith("/")) {
+            path = path.substring(0, path.length() - 1);
+        }
+
+        return path;
+    }
+
+    @Override
     public void clear() {
         tasks.clear();
         tables.clear();
+    }
+
+    private interface BatchWrite {
+        void addFile(DataFile file);
+        void commit();
+    }
+
+    private static class Append implements BatchWrite {
+        private final AppendFiles append;
+
+        public Append(Transaction txn) {
+            append = txn.newAppend();
+        }
+
+        @Override
+        public void addFile(DataFile file) {
+            append.appendFile(file);
+        }
+
+        @Override
+        public void commit() {
+            append.commit();
+        }
+    }
+
+    private static class DynamicOverwrite implements BatchWrite {
+        private final ReplacePartitions replace;
+
+        public DynamicOverwrite(Transaction txn) {
+            replace = txn.newReplacePartitions();
+        }
+
+        @Override
+        public void addFile(DataFile file) {
+            replace.addFile(file);
+        }
+
+        @Override
+        public void commit() {
+            replace.commit();
+        }
+    }
+
+    public static class PartitionData implements StructLike {
+        private final Object[] values;
+
+        private PartitionData(int size) {
+            this.values = new Object[size];
+        }
+
+        @Override
+        public int size() {
+            return values.length;
+        }
+
+        @Override
+        public <T> T get(int pos, Class<T> javaClass) {
+            return javaClass.cast(values[pos]);
+        }
+
+        @Override
+        public <T> void set(int pos, T value) {
+            if (value instanceof ByteBuffer) {
+                ByteBuffer buffer = (ByteBuffer) value;
+                byte[] bytes = new byte[buffer.remaining()];
+                buffer.duplicate().get(bytes);
+                values[pos] = bytes;
+            } else {
+                values[pos] = value;
+            }
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (other == null || getClass() != other.getClass()) {
+                return false;
+            }
+
+            PartitionData that = (PartitionData) other;
+            return Arrays.equals(values, that.values);
+        }
+
+        @Override
+        public int hashCode() {
+            return Arrays.hashCode(values);
+        }
     }
 }

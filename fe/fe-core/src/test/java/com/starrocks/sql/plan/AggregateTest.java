@@ -926,34 +926,6 @@ public class AggregateTest extends PlanTestBase {
         FeConstants.runningUnitTest = false;
     }
 
-    public void testWindowFunnelWithInvalidModeWindow() throws Exception {
-        FeConstants.runningUnitTest = true;
-        expectedException.expect(SemanticException.class);
-        expectedException.expectMessage("mode argument's range must be [0-7]");
-        String sql =
-                "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 8, [L_PARTKEY = 1]) from lineitem_partition_colocate" +
-                        " group by L_ORDERKEY;";
-        try {
-            getFragmentPlan(sql);
-        } finally {
-            FeConstants.runningUnitTest = false;
-        }
-    }
-
-    @Test
-    public void testWindowFunnelWithNonDecimalWindow() throws Exception {
-        FeConstants.runningUnitTest = true;
-        expectedException.expect(SemanticException.class);
-        expectedException.expectMessage("window argument must be numerical type");
-        String sql = "select L_ORDERKEY,window_funnel('varchar', L_SHIPDATE, 3, [L_PARTKEY = 1]) " +
-                "from lineitem_partition_colocate group by L_ORDERKEY;";
-        try {
-            getFragmentPlan(sql);
-        } finally {
-            FeConstants.runningUnitTest = false;
-        }
-    }
-
     @Test
     public void testLocalAggregateWithMultiStage() throws Exception {
         FeConstants.runningUnitTest = true;
@@ -2285,5 +2257,20 @@ public class AggregateTest extends PlanTestBase {
                 "  2:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(4: expr)");
         connectContext.getSessionVariable().setNewPlanerAggStage(oldValue);
+    }
+
+    @Test
+    public void testDistinctConst() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "SELECT DISTINCT 16 col0 FROM t0 AS cor0 LEFT JOIN t1 AS cor1 ON NULL IS NULL";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "6:Project\n" +
+                "  |  <slot 7> : 16\n" +
+                "  |  limit: 1");
+        sql = "SELECT DISTINCT 61 AS col0 FROM t0 AS cor0 LEFT JOIN t1 AS cor1 ON NOT NULL IS NOT NULL, t0 AS cor2;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "11:Project\n" +
+                "  |  <slot 10> : 61\n" +
+                "  |  limit: 1");
     }
 }

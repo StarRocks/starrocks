@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.apache.iceberg.BaseMetastoreCatalog;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.CatalogProperties;
@@ -44,6 +45,8 @@ import org.apache.iceberg.TableOperations;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.hadoop.Configurable;
 import org.apache.iceberg.hadoop.HadoopFileIO;
 import org.apache.iceberg.io.FileIO;
@@ -52,6 +55,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
+import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -297,8 +301,62 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
     }
 
     @Override
-    public boolean dropTable(TableIdentifier tableIdentifier, boolean b) {
-        throw new UnsupportedOperationException("Not implemented");
+    public boolean dropTable(TableIdentifier identifier, boolean purge) {
+        if (!isValidIdentifier(identifier)) {
+            return false;
+        }
+
+        String database = identifier.namespace().level(0);
+
+        TableOperations ops = newTableOps(identifier);
+        TableMetadata lastMetadata = null;
+        if (purge) {
+            try {
+                lastMetadata = ops.current();
+            } catch (NotFoundException e) {
+                LOG.warn("Failed to load table metadata for table: {}, continuing drop without purge", identifier, e);
+            }
+        }
+
+        try {
+            clients.run(
+                    client -> {
+                        client.dropTable(
+                                database,
+                                identifier.name(),
+                                false /* do not delete data */,
+                                false /* throw NoSuchObjectException if the table doesn't exist */);
+                        return null;
+                    });
+
+            if (purge && lastMetadata != null) {
+                CatalogUtil.dropTableData(ops.io(), lastMetadata);
+            }
+
+            deleteTableDirectory(ops.current().location());
+            LOG.info("Dropped table: {}", identifier);
+            return true;
+        } catch (NoSuchTableException | NoSuchObjectException e) {
+            LOG.info("Skipping drop, table does not exist: {}", identifier, e);
+            return false;
+        } catch (TException e) {
+            throw new StarRocksConnectorException("Failed to drop " + identifier, e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new StarRocksConnectorException("Interrupted in call to dropTable", e);
+        }
+    }
+
+    private void deleteTableDirectory(String tableLocation) {
+        Path path = new Path(tableLocation);
+        URI uri = path.toUri();
+        try {
+            FileSystem fileSystem = FileSystem.get(uri, new Configuration());
+            fileSystem.delete(path, true);
+        } catch (IOException e) {
+            LOG.error("Failed to delete directory {}", tableLocation, e);
+            throw new StarRocksConnectorException("Failed to delete directory %s. msg: %s", tableLocation, e.getMessage());
+        }
     }
 
     @Override

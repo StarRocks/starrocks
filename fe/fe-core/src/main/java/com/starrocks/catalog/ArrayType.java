@@ -85,6 +85,20 @@ public class ArrayType extends Type {
     }
 
     @Override
+    public boolean isFullyCompatible(Type other) {
+        if (!other.isArrayType()) {
+            return false;
+        }
+
+        if (equals(other)) {
+            return true;
+        }
+
+        ArrayType t = (ArrayType) other;
+        return itemType.isFullyCompatible(t.getItemType());
+    }
+
+    @Override
     protected String prettyPrint(int lpad) {
         String leftPadding = Strings.repeat(" ", lpad);
         if (!itemType.isStructType()) {

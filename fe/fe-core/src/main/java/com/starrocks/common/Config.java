@@ -46,7 +46,7 @@ public class Config extends ConfigBase {
 
     /**
      * sys_log_dir:
-     * This specifies FE log dir. FE will produces 2 log files:
+     * This specifies FE log dir. FE will produce 2 kinds of log files:
      * fe.log:      all logs of FE process.
      * fe.warn.log  all WARNING and ERROR log of FE process.
      * <p>
@@ -54,7 +54,7 @@ public class Config extends ConfigBase {
      * INFO, WARNING, ERROR, FATAL
      * <p>
      * sys_log_roll_num:
-     * Maximal FE log files to be kept within an sys_log_roll_interval.
+     * Maximal FE log files to be kept within a sys_log_roll_interval.
      * default is 10, which means there will be at most 10 log files in a day
      * <p>
      * sys_log_verbose_modules:
@@ -108,7 +108,7 @@ public class Config extends ConfigBase {
      * Slow query contains all queries which cost exceed *qe_slow_log_ms*
      * <p>
      * qe_slow_log_ms:
-     * If the response time of a query exceed this threshold, it will be recored in audit log as slow_query.
+     * If the response time of a query exceed this threshold, it will be recorded in audit log as slow_query.
      * <p>
      * audit_log_roll_interval:
      * DAY:  log suffix is yyyyMMdd
@@ -147,7 +147,7 @@ public class Config extends ConfigBase {
      * Dump log fe.dump.log contains all dump information which query has Exception
      * <p>
      * dump_log_roll_num:
-     * Maximal FE log files to be kept within an dump_log_roll_interval.
+     * Maximal FE log files to be kept within a dump_log_roll_interval.
      * <p>
      * dump_log_modules:
      * Dump information for an abnormal query.
@@ -187,10 +187,10 @@ public class Config extends ConfigBase {
      * These thresholds are defined by the user.
      * <p>
      * big_query_log_roll_num:
-     * Maximal FE log files to be kept within an big_query_log_roll_interval.
+     * Maximal FE log files to be kept within a big_query_log_roll_interval.
      * <p>
      * big_query_log_modules:
-     * Informations for all big queries.
+     * Information for all big queries.
      * <p>
      * big_query_log_roll_interval:
      * DAY:  log suffix is yyyyMMdd
@@ -275,13 +275,19 @@ public class Config extends ConfigBase {
      * for task set expire time
      */
     @ConfField(mutable = true)
-    public static int task_ttl_second = 3 * 24 * 3600;         // 3 day
+    public static int task_ttl_second = 24 * 3600;         // 1 day
 
     /**
      * for task run set expire time
      */
     @ConfField(mutable = true)
-    public static int task_runs_ttl_second = 3 * 24 * 3600;     // 3 day
+    public static int task_runs_ttl_second = 24 * 3600;     // 1 day
+
+    /**
+     * max history task num kept
+     */
+    @ConfField(mutable = true)
+    public static int task_runs_max_history_number = 10000;
 
     /**
      * The max keep time of some kind of jobs.
@@ -299,7 +305,7 @@ public class Config extends ConfigBase {
 
     // Configurations for meta data durability
     /**
-     * StarRocks meta data will be saved here.
+     * StarRocks metadata will be saved here.
      * The storage of this dir is highly recommended as to be:
      * 1. High write performance (SSD)
      * 2. Safe (RAID)
@@ -358,12 +364,12 @@ public class Config extends ConfigBase {
     /**
      * expire seconds for unused file system manager
      */
-    @ConfField(mutable = true)
-    public static int hdfs_file_sytem_expire_seconds = 300;
+    @ConfField(mutable = true, aliases = {"hdfs_file_sytem_expire_seconds"})
+    public static int hdfs_file_system_expire_seconds = 300;
 
     /**
      * Non-master FE will stop offering service
-     * if meta data delay gap exceeds *meta_delay_toleration_second*
+     * if metadata delay gap exceeds *meta_delay_toleration_second*
      */
     @ConfField(mutable = true)
     public static int meta_delay_toleration_second = 300;    // 5 min
@@ -372,7 +378,8 @@ public class Config extends ConfigBase {
      * Leader FE sync policy of bdbje.
      * If you only deploy one Follower FE, set this to 'SYNC'. If you deploy more than 3 Follower FE,
      * you can set this and the following 'replica_sync_policy' to WRITE_NO_SYNC.
-     * more info, see: http://docs.oracle.com/cd/E17277_02/html/java/com/sleepycat/je/Durability.SyncPolicy.html
+     * more info, see:
+     * <a href="http://docs.oracle.com/cd/E17277_02/html/java/com/sleepycat/je/Durability.SyncPolicy.html">SyncPolicy</a>
      */
     @ConfField
     public static String master_sync_policy = "SYNC"; // SYNC, NO_SYNC, WRITE_NO_SYNC
@@ -385,7 +392,8 @@ public class Config extends ConfigBase {
 
     /**
      * Replica ack policy of bdbje.
-     * more info, see: http://docs.oracle.com/cd/E17277_02/html/java/com/sleepycat/je/Durability.ReplicaAckPolicy.html
+     * more info, see:
+     * <a href="http://docs.oracle.com/cd/E17277_02/html/java/com/sleepycat/je/Durability.ReplicaAckPolicy.html">ReplicaAckPolicy</a>
      */
     @ConfField
     public static String replica_ack_policy = "SIMPLE_MAJORITY"; // ALL, NONE, SIMPLE_MAJORITY
@@ -502,9 +510,9 @@ public class Config extends ConfigBase {
     public static long agent_task_resend_wait_time_ms = 5000;
 
     /**
-     * If true, FE will reset bdbje replication group(that is, to remove all electable nodes info)
+     * If true, FE will reset bdbje replication group(that is, to remove all electable nodes' info)
      * and is supposed to start as Leader.
-     * If all the electable nodes can not start, we can copy the meta data
+     * If all the electable nodes can not start, we can copy the metadata
      * to another node and set this config to true to try to restart the FE.
      */
     @ConfField
@@ -517,7 +525,7 @@ public class Config extends ConfigBase {
     public static boolean start_with_incomplete_meta = false;
 
     /**
-     * If true, non-leader FE will ignore the meta data delay gap between Leader FE and its self,
+     * If true, non-leader FE will ignore the metadata delay gap between Leader FE and its self,
      * even if the metadata delay gap exceeds *meta_delay_toleration_second*.
      * Non-leader FE will still offer read service.
      * <p>
@@ -554,7 +562,7 @@ public class Config extends ConfigBase {
 
     /**
      * The backlog_num for netty http server
-     * When you enlarge this backlog_num, you should ensure it's value larger than
+     * When you enlarge this backlog_num, you should ensure its value larger than
      * the linux /proc/sys/net/core/somaxconn config
      */
     @ConfField
@@ -591,7 +599,7 @@ public class Config extends ConfigBase {
 
     /**
      * The backlog_num for thrift server
-     * When you enlarge this backlog_num, you should ensure it's value larger than
+     * When you enlarge this backlog_num, you should ensure its value larger than
      * the linux /proc/sys/net/core/somaxconn config
      */
     @ConfField
@@ -634,7 +642,7 @@ public class Config extends ConfigBase {
 
     /**
      * The backlog_num for mysql nio server
-     * When you enlarge this backlog_num, you should ensure it's value larger than
+     * When you enlarge this backlog_num, you should ensure its value larger than
      * the linux /proc/sys/net/core/somaxconn config
      */
     @ConfField
@@ -670,7 +678,7 @@ public class Config extends ConfigBase {
     /**
      * node(FE or BE) will be considered belonging to the same StarRocks cluster if they have same cluster id.
      * Cluster id is usually a random integer generated when master FE start at first time.
-     * You can also sepecify one.
+     * You can also specify one.
      */
     @ConfField
     public static int cluster_id = -1;
@@ -692,7 +700,7 @@ public class Config extends ConfigBase {
     // Configurations for load, clone, create table, alter table etc. We will rarely change them
     /**
      * Maximal waiting time for creating a single replica.
-     * eg.
+     * e.g.
      * if you create a table with #m tablets and #n replicas for each tablet,
      * the create table request will run at most (m * n * tablet_create_timeout_second) before timeout.
      */
@@ -859,7 +867,7 @@ public class Config extends ConfigBase {
     public static int desired_max_waiting_jobs = 100;
 
     /**
-     * maximun concurrent running txn num including prepare, commit txns under a single db
+     * maximum concurrent running txn num including prepare, commit txns under a single db
      * txn manager will reject coming txns
      */
     @ConfField(mutable = true)
@@ -1053,7 +1061,7 @@ public class Config extends ConfigBase {
 
     // Configurations for backup and restore
     /**
-     * Plugins' path for BACKUP and RESTORE operations. Currently deprecated.
+     * Plugins' path for BACKUP and RESTORE operations. Currently, deprecated.
      */
     @Deprecated
     @ConfField
@@ -1150,7 +1158,18 @@ public class Config extends ConfigBase {
     public static boolean tablet_sched_disable_colocate_balance = false;
 
     /**
-     * If BE is down beyond this time, tablets on that BE of colcoate table will be migrated to other available BEs
+     * When setting to true, disable the overall balance behavior for colocate groups which treats all the groups
+     * in all databases as a whole and balances the replica distribution between all of them.
+     * See `ColocateBalancer.relocateAndBalanceAllGroups` for more details.
+     * Notice: set `tablet_sched_disable_colocate_balance` to true will disable all the colocate balance behavior,
+     * including this behavior and the per-group balance behavior. This configuration is only to disable the overall
+     * balance behavior.
+     */
+    @ConfField(mutable = true)
+    public static boolean tablet_sched_disable_colocate_overall_balance = false;
+
+    /**
+     * If BE is down beyond this time, tablets on that BE of colocate table will be migrated to other available BEs
      */
     @ConfField(mutable = true)
     public static long tablet_sched_colocate_be_down_tolerate_time_s = 12L * 3600L;
@@ -1342,6 +1361,24 @@ public class Config extends ConfigBase {
     public static boolean enable_starrocks_external_table_auth_check = true;
 
     /**
+     * The authentication_chain configuration specifies the sequence of security integrations
+     * that will be used to authenticate a user. Each security integration in the chain will be
+     * tried in the order they are defined until one of them successfully authenticates the user.
+     * The configuration should specify a list of names of the security integrations
+     * that will be used in the chain.
+     * <p>
+     * For example, if user specifies the value with {"ldap", "native"}, SR will first try to authenticate
+     * a user whose authentication info may exist in a ldap server, if failed, SR will continue trying to
+     * authenticate the user to check whether it's a native user in SR, i.e. it's created by SR and
+     * its authentication info is stored in SR metadata.
+     * <p>
+     * For more information about security integration, you can refer to
+     * {@link com.starrocks.authentication.SecurityIntegration}
+     */
+    @ConfField(mutable = true)
+    public static String[] authentication_chain = {AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
+
+    /**
      * ldap server host for authentication_ldap_simple
      */
     @ConfField(mutable = true)
@@ -1360,7 +1397,7 @@ public class Config extends ConfigBase {
     public static String authentication_ldap_simple_bind_base_dn = "";
 
     /**
-     * the name of the attribute that specifies user names in LDAP directory entries for authentication_ldap_simple
+     * the name of the attribute that specifies usernames in LDAP directory entries for authentication_ldap_simple
      */
     @ConfField(mutable = true)
     public static String authentication_ldap_simple_user_search_attr = "uid";
@@ -1590,7 +1627,7 @@ public class Config extends ConfigBase {
 
     /**
      * This will limit the max recursion depth of hash distribution pruner.
-     * eg: where a in (5 elements) and b in (4 elements) and c in (3 elements) and d in (2 elements).
+     * eg: where `a` in (5 elements) and `b` in (4 elements) and `c` in (3 elements) and `d` in (2 elements).
      * a/b/c/d are distribution columns, so the recursion depth will be 5 * 4 * 3 * 2 = 120, larger than 100,
      * So that distribution pruner will not work and just return all buckets.
      * <p>
@@ -2003,11 +2040,11 @@ public class Config extends ConfigBase {
     public static boolean empty_load_as_error = true;
 
     /**
-     * after wait quorom_publish_wait_time_ms, will do quorum publish
+     * after wait quorum_publish_wait_time_ms, will do quorum publish
      * In order to avoid unnecessary CLONE, we increase the timeout as much as possible
      */
-    @ConfField(mutable = true)
-    public static int quorom_publish_wait_time_ms = 5000;
+    @ConfField(mutable = true, aliases = {"quorom_publish_wait_time_ms"})
+    public static int quorum_publish_wait_time_ms = 5000;
 
     /**
      * FE journal queue size
@@ -2017,7 +2054,7 @@ public class Config extends ConfigBase {
     public static int metadata_journal_queue_size = 1000;
 
     /**
-     * The maxium size(key+value) of journal entity to write as a batch
+     * The maximum size(key+value) of journal entity to write as a batch
      * Increase this configuration if journal queue is always full
      * TODO: set default value
      **/
@@ -2025,7 +2062,7 @@ public class Config extends ConfigBase {
     public static int metadata_journal_max_batch_size_mb = 10;
 
     /**
-     * The maxium number of journal entity to write as a batch
+     * The maximum number of journal entity to write as a batch
      * Increase this configuration if journal queue is always full
      * TODO: set default value
      **/
@@ -2072,7 +2109,7 @@ public class Config extends ConfigBase {
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
-     * e.g 495501,495503
+     * e.g. 495501,495503
      */
     @ConfField(mutable = true)
     public static String metadata_journal_skip_bad_journal_ids = "";
@@ -2173,10 +2210,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long max_per_node_grep_log_limit = 500000;
 
-
     /**
      * only use compute node, test for multi-warehouse
      */
     @ConfField(mutable = true)
     public static boolean only_use_compute_node = false;
+
+    @ConfField
+    public static boolean enable_execute_script_on_frontend = true;
 }

@@ -242,6 +242,12 @@ struct RunTimeTypeTraits<TYPE_MAP> {
     using ColumnType = MapColumn;
 };
 
+template <>
+struct RunTimeTypeTraits<TYPE_ARRAY> {
+    using CppType = DatumArray;
+    using ColumnType = ArrayColumn;
+};
+
 template <LogicalType Type>
 using RunTimeCppType = typename RunTimeTypeTraits<Type>::CppType;
 

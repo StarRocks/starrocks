@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
@@ -22,6 +23,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
+import groovy.lang.Binding;
+import groovy.lang.GroovyShell;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -33,6 +36,32 @@ public class ExecuteScriptExecutor {
     private static final Logger LOG = LogManager.getLogger(ExecuteScriptExecutor.class);
 
     public static void execute(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
+        if (stmt.isFrontendScript()) {
+            executeFrontendScript(stmt, ctx);
+        } else {
+            executeBackendScript(stmt, ctx);
+        }
+    }
+
+    private static void executeFrontendScript(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
+        if (!Config.enable_execute_script_on_frontend) {
+            throw new UserException("execute script on frontend is disabled");
+        }
+        try {
+            StringBuilder sb = new StringBuilder();
+            Binding binding = new Binding();
+            binding.setVariable("LOG", LOG);
+            binding.setVariable("out", sb);
+            binding.setVariable("globalState", GlobalStateMgr.getCurrentState());
+            GroovyShell shell = new GroovyShell(binding);
+            shell.evaluate(stmt.getScript());
+            ctx.getState().setOk(0, 0, sb.toString());
+        } catch (Exception e) {
+            throw new UserException("execute script failed: " + e.getMessage());
+        }
+    }
+
+    private static void executeBackendScript(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
         Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(stmt.getBeId());
         if (be == null) {
             throw new UserException("node not found: " + stmt.getBeId());

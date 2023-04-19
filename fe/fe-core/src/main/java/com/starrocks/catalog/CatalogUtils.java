@@ -28,6 +28,9 @@ import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -99,65 +102,135 @@ public class CatalogUtils {
         }
     }
 
-    public static void checkPartitionValuesExistForReplaceListPartition(ListPartitionInfo listPartitionInfo,
-                                                                        Partition partition)
-            throws DdlException {
-        try {
-            List<Long> partitionIds = listPartitionInfo.getPartitionIds(false);
-            Map<Long, List<LiteralExpr>> literalExprValues = listPartitionInfo.getLiteralExprValues();
-            Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = listPartitionInfo.getMultiLiteralExprValues();
-
-            List<LiteralExpr> literalExprs = listPartitionInfo.getLiteralExprValues().get(partition.getId());
-            List<List<LiteralExpr>> multiLiteral = listPartitionInfo.getMultiLiteralExprValues().get(partition.getId());
-            if (!literalExprValues.isEmpty()) {
-                listPartitionInfo.setBatchLiteralExprValues(listPartitionInfo.getIdToValues());
-                List<LiteralExpr> allLiteralExprValues = Lists.newArrayList();
-                literalExprValues.forEach((k, v) -> {
-                    if (partitionIds.contains(k)) {
-                        allLiteralExprValues.addAll(v);
-                    }
-                });
-                if (literalExprs != null) {
-                    for (LiteralExpr item : literalExprs) {
-                        for (LiteralExpr value : allLiteralExprValues) {
-                            if (item.getStringValue().equals(value.getStringValue())) {
-                                throw new DdlException("Duplicate partition value %s");
-                            }
-                        }
-                    }
+    private static void getLiteralByPartitionMap(ListPartitionInfo listPartitionInfo,
+                                                 List<Partition> partitionList,
+                                                 Set<LiteralExpr> simpleSet,
+                                                 Set<Object> simpleValueSet,
+                                                 Set<List<LiteralExpr>> multiSet,
+                                                 Set<List<Object>> multiValueSet) {
+        Map<Long, List<LiteralExpr>> listMap = listPartitionInfo.getLiteralExprValues();
+        Map<Long, List<List<LiteralExpr>>> multiListMap = listPartitionInfo.getMultiLiteralExprValues();
+        for (Partition partition : partitionList) {
+            if (!listMap.isEmpty()) {
+                List<LiteralExpr> currentPartitionValueList = listMap.get(partition.getId());
+                simpleSet.addAll(currentPartitionValueList);
+                for (LiteralExpr literalExpr : currentPartitionValueList) {
+                    simpleValueSet.add(literalExpr.getRealObjectValue());
                 }
-            } else if (!multiLiteralExprValues.isEmpty()) {
-                listPartitionInfo.setBatchMultiLiteralExprValues(listPartitionInfo.getIdToMultiValues());
-                List<List<LiteralExpr>> allMultiLiteralExprValues = Lists.newArrayList();
-                listPartitionInfo.getMultiLiteralExprValues().forEach((k, v) -> {
-                    if (partitionIds.contains(k)) {
-                        allMultiLiteralExprValues.addAll(v);
+                continue;
+            }
+            if (!multiListMap.isEmpty()) {
+                List<List<LiteralExpr>> currentMultiplePartitionValueList = multiListMap.get(partition.getId());
+                multiSet.addAll(currentMultiplePartitionValueList);
+                for (List<LiteralExpr> list : currentMultiplePartitionValueList) {
+                    List<Object> valueList = new ArrayList<>();
+                    for (LiteralExpr literalExpr : list) {
+                        valueList.add(literalExpr.getRealObjectValue());
                     }
-                });
-
-                int partitionColSize = listPartitionInfo.getPartitionColumns().size();
-                for (List<LiteralExpr> itemExpr : multiLiteral) {
-                    for (List<LiteralExpr> valueExpr : allMultiLiteralExprValues) {
-                        int duplicatedSize = 0;
-                        for (int i = 0; i < itemExpr.size(); i++) {
-                            String itemValue = itemExpr.get(i).getStringValue();
-                            String value = valueExpr.get(i).getStringValue();
-                            if (value.equals(itemValue)) {
-                                duplicatedSize++;
-                            }
-                        }
-                        if (duplicatedSize == partitionColSize) {
-                            List<String> msg = itemExpr.stream()
-                                    .map(value -> ("\"" + value.getStringValue() + "\""))
-                                    .collect(Collectors.toList());
-                            throw new DdlException("Duplicate values " +
-                                    "(" + String.join(",", msg) + ") ");
-                        }
-                    }
+                    multiValueSet.add(valueList);
                 }
             }
-        } catch (AnalysisException e) {
-            throw new DdlException(e.getMessage());
+        }
+    }
+
+    public static void checkTempPartitionStrictMatch(List<Partition> partitionList,
+                                                     List<Partition> tempPartitionList,
+                                                     ListPartitionInfo listPartitionInfo) throws DdlException {
+        Set<LiteralExpr> simpleSet = new HashSet<>();
+        Set<List<LiteralExpr>> multiSet = new HashSet<>();
+        Set<Object> simpleValueSet = new HashSet<>();
+        Set<List<Object>> multiValueSet = new HashSet<>();
+        getLiteralByPartitionMap(listPartitionInfo, partitionList, simpleSet, simpleValueSet, multiSet, multiValueSet);
+
+        Set<LiteralExpr> tempSimpleSet = new HashSet<>();
+        Set<List<LiteralExpr>> tempMultiSet = new HashSet<>();
+        Set<Object> tempSimpleValueSet = new HashSet<>();
+        Set<List<Object>> tempMultiValueSet = new HashSet<>();
+        getLiteralByPartitionMap(listPartitionInfo, tempPartitionList, tempSimpleSet,
+                tempSimpleValueSet, tempMultiSet, tempMultiValueSet);
+
+        if (!simpleSet.isEmpty() && !tempSimpleSet.isEmpty()) {
+            if (!simpleSet.equals(tempSimpleSet)) {
+                throw new DdlException("2 list partitions are not strictly matched, "
+                        + simpleValueSet + " vs " + tempSimpleValueSet);
+            }
+        }
+
+        if (!multiSet.isEmpty() && !tempMultiSet.isEmpty()) {
+            if (!multiSet.equals(tempMultiSet)) {
+                throw new DdlException("2 list partitions are not strictly matched, "
+                        + multiValueSet + " vs " + tempMultiValueSet);
+            }
+        }
+    }
+
+    public static void checkTempPartitionConflict(List<Partition> partitionList,
+                                               List<Partition> tempPartitionList,
+                                               ListPartitionInfo listPartitionInfo) throws DdlException {
+        Map<Long, List<LiteralExpr>> listMap = listPartitionInfo.getLiteralExprValues();
+        Map<Long, List<List<LiteralExpr>>> multiListMap = listPartitionInfo.getMultiLiteralExprValues();
+        Map<Long, List<LiteralExpr>> newListMap = new HashMap<>(listMap);
+        Map<Long, List<List<LiteralExpr>>> newMultiListMap = new HashMap<>(multiListMap);
+
+        // Filter the partition that needs to be replaced
+        partitionList.forEach(partition -> {
+            newListMap.remove(partition.getId());
+            newMultiListMap.remove(partition.getId());
+        });
+
+        // Filter out temporary partitions
+        Set<Object> tempSet = new HashSet<>();
+        Set<List<Object>> tempMultiSet = new HashSet<>();
+        for (Partition partition : tempPartitionList) {
+            if (!listMap.isEmpty()) {
+                listMap.get(partition.getId()).forEach(item -> {
+                    tempSet.add(item.getRealObjectValue());
+                });
+                newListMap.remove(partition.getId());
+            }
+            if (!multiListMap.isEmpty()) {
+                multiListMap.get(partition.getId()).forEach(itemList -> {
+                    List<Object> cur = new ArrayList<>();
+                    itemList.forEach(item -> {
+                        cur.add(item.getRealObjectValue());
+                    });
+                    tempMultiSet.add(cur);
+                });
+                newMultiListMap.remove(partition.getId());
+            }
+        }
+
+        // Check whether the remaining partition overlaps with the temporary partition
+        if (!tempSet.isEmpty() && !newListMap.isEmpty()) {
+            List<Object> newList = new ArrayList<>();
+            for (List<LiteralExpr> baseList : newListMap.values()) {
+                baseList.forEach(item -> {
+                    newList.add(item.getRealObjectValue());
+                });
+            }
+            for (Object tempSingle : tempSet) {
+                if (newList.contains(tempSingle)) {
+                    throw new DdlException("Range: " + tempSingle + " conflicts with existing range");
+                }
+            }
+        }
+
+        if (!tempMultiSet.isEmpty() && !newMultiListMap.isEmpty()) {
+            List<List<Object>> newMultiList = new ArrayList<>();
+            for (List<List<LiteralExpr>> baseMultiList : newMultiListMap.values()) {
+                baseMultiList.forEach(itemList -> {
+                    List<Object> objectList = new ArrayList<>();
+                    itemList.forEach(item -> {
+                        objectList.add(item.getRealObjectValue());
+                    });
+                    newMultiList.add(objectList);
+                });
+            }
+            for (List<Object> tempMulti : tempMultiSet) {
+                if (newMultiList.contains(tempMulti)) {
+                    throw new DdlException("Range: " + tempMulti + " conflicts with existing range");
+                }
+            }
         }
     }
 
@@ -181,7 +254,7 @@ public class CatalogUtils {
                 for (LiteralExpr item : singleItemListPartitionDesc.getLiteralExprValues()) {
                     for (LiteralExpr value : allLiteralExprValues) {
                         if (item.getStringValue().equals(value.getStringValue())) {
-                            throw new DdlException("Duplicate partition value %s");
+                            throw new DdlException("Duplicate partition value " + item.getStringValue());
                         }
                     }
                 }

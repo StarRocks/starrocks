@@ -40,7 +40,7 @@ public:
 
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-private:
+protected:
     // It is used to perform aggregation algorithms shared by
     // AggregateBlockingSinkOperator. It is
     // - prepared at SinkOperator::prepare(),

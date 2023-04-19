@@ -232,6 +232,7 @@ public class StreamLoadPlanner {
         queryOptions.setQuery_type(TQueryType.LOAD);
         queryOptions.setQuery_timeout(streamLoadInfo.getTimeout());
         queryOptions.setLoad_transmission_compression_type(streamLoadInfo.getTransmisionCompressionType());
+        queryOptions.setLog_rejected_record_num(streamLoadInfo.getLogRejectedRecordNum());
 
         // Disable load_dop for LakeTable temporary, because BE's `LakeTabletsChannel` does not support
         // parallel send from a single sender.

@@ -125,7 +125,7 @@ public class LdapSecurity {
         return false;
     }
 
-    //trim prefix and suffix of target from src
+    // trim prefix and suffix of target from src
     private static String trim(String src, String target) {
         if (src != null && target != null) {
             if (src.startsWith(target)) {

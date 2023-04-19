@@ -22,17 +22,25 @@ StarRocks 2.3 and later provide an internal catalog to manage the internal data 
       SHOW DATABASES FROM catalog_name;
       ```
 
-3. (Optional) Execute the following statement to go to the destination database.
+3. (Optional) Execute the following statement to go to the catalog managed in the current session:
 
-      ```SQL
-      USE db_name;
-      ```
+    ```SQL
+    SET CATALOG catalog_name;
+    ```
 
-      Or
+    Then, execute the following statement to specify the destination database that you want to manage in the current session:
 
-      ```SQL
-      USE default_catalog.db_name；
-      ```
+    ```SQL
+    USE db_name;
+    ```
+
+    Or, you can execute the following statement to go to the destination database in the catalog managed in the current session:
+
+    ```SQL
+    USE default_catalog.db_name;
+    ```
+
+    For detailed parameters and examples of the preceding statements, see [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) and [USE](../../sql-reference/sql-statements/data-definition/USE.md).
 
 4. Query internal data. For more usages of the SELECT statement, see [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md).
 

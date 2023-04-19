@@ -187,7 +187,9 @@ public class RoutineLoadDataSourceProperties implements ParseNode {
         // check custom properties
         CreateRoutineLoadStmt.analyzeKafkaCustomProperties(properties, customKafkaProperties);
 
-        confluentSchemaRegistryUrl = properties.get(CreateRoutineLoadStmt.CONFLUENT_SCHEMA_REGISTRY_URL);
+        if (properties.containsKey(CreateRoutineLoadStmt.CONFLUENT_SCHEMA_REGISTRY_URL)) {
+            confluentSchemaRegistryUrl = properties.get(CreateRoutineLoadStmt.CONFLUENT_SCHEMA_REGISTRY_URL);
+        }
     }
 
     private void checkPulsarProperties() throws AnalysisException {

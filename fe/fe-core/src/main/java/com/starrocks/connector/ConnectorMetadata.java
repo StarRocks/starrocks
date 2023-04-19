@@ -48,6 +48,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.thrift.TSinkCommitInfo;
 
 import java.util.HashMap;
 import java.util.List;
@@ -176,6 +177,11 @@ public interface ConnectorMetadata {
     }
 
     default void dropTable(DropTableStmt stmt) throws DdlException {
+        throw new StarRocksConnectorException("This connector doesn't support dropping tables");
+    }
+
+    default void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
+        throw new StarRocksConnectorException("This connector doesn't support sink");
     }
 
     default void alterTable(AlterTableStmt stmt) throws UserException {

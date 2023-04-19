@@ -78,7 +78,9 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                 ctx->fail_infos = std::move(executor->runtime_state()->tablet_fail_infos());
                 Status status = executor->status();
                 if (status.ok()) {
-                    ctx->number_total_rows = executor->runtime_state()->num_rows_load_from_source();
+                    ctx->number_total_rows = executor->runtime_state()->num_rows_load_sink() +
+                                             executor->runtime_state()->num_rows_load_filtered() +
+                                             executor->runtime_state()->num_rows_load_unselected();
                     ctx->number_loaded_rows = executor->runtime_state()->num_rows_load_sink();
                     ctx->number_filtered_rows = executor->runtime_state()->num_rows_load_filtered();
                     ctx->number_unselected_rows = executor->runtime_state()->num_rows_load_unselected();
@@ -122,6 +124,11 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
 
                 if (!executor->runtime_state()->get_error_log_file_path().empty()) {
                     ctx->error_url = to_load_error_http_path(executor->runtime_state()->get_error_log_file_path());
+                }
+
+                if (!executor->runtime_state()->get_rejected_record_file_path().empty()) {
+                    ctx->rejected_record_path = fmt::format("{}:{}", BackendOptions::get_localBackend().host,
+                                                            executor->runtime_state()->get_rejected_record_file_path());
                 }
 
                 if (ctx->unref()) {

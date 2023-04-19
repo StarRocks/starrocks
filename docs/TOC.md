@@ -10,7 +10,7 @@
 + Quick Start
   + Deploy
     + [Deploy StarRocks in Linux](./quick_start/Deploy.md)
-    + [Deploy StarRocks in Docker](./quick_start/deploy_in_docker.md)
+    + [Deploy StarRocks with Docker](./quick_start/deploy_with_docker.md)
   + [Create a table](./quick_start/Create_table.md)
   + [Load and query data](./quick_start/Import_and_query.md)
 + Table Design
@@ -67,13 +67,19 @@
     + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
     + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
 + Integration
-  + [Integrate with StarRocks](./integrations/intro.md)
   + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
+  + Integrate with BI tools
+    + [Hex](./integrations/BI_integrations/Hex.md)
+    + [Querybook](./integrations/BI_integrations/Querybook.md)
+    + [Apache Superset](./integrations/BI_integrations/Superset.md)
+    + [Tableau Desktop](./integrations/BI_integrations/Tableau_Desktop.md)
+  + Integrate with IDE tools
+    + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
+  + [Integrate with other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
   + Deployment
     + [Deploy a shared-data StarRocks cluster](./administration/deploy_shared_data.md)
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
-    + [Deploy StarRocks in Docker](./quick_start/deploy_in_docker.md)
     + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/sr_operator.md)
     + [Deploy CN](./administration/deploy_cn.md)
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
@@ -240,7 +246,7 @@
       + [SHOW DYNAMIC PARTITION TABLES](./sql-reference/sql-statements/data-manipulation/SHOW%20DYNAMIC%20PARTITION%20TABLES.md)
       + [SHOW EXPORT](./sql-reference/sql-statements/data-manipulation/SHOW%20EXPORT.md)
       + [SHOW LOAD](./sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md)
-      + [SHOW MATERIALIZED VIEW](./sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md)
+      + [SHOW MATERIALIZED VIEWS](./sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md)
       + [SHOW PARTITIONS](./sql-reference/sql-statements/data-manipulation/SHOW%20PARTITIONS.md)
       + [SHOW PROPERTY](./sql-reference/sql-statements/data-manipulation/SHOW%20PROPERTY.md)
       + [SHOW REPOSITORIES](./sql-reference/sql-statements/data-manipulation/SHOW%20REPOSITORIES.md)
@@ -254,6 +260,7 @@
       + [SPARK LOAD](./sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)
       + [STOP ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)
       + [STREAM LOAD](./sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)
+      + [SUBMIT TASK](./sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md)
       + [UPDATE](./sql-reference/sql-statements/data-manipulation/UPDATE.md)
     + Auxiliary Commands
       + [DESC](./sql-reference/sql-statements/Utility/DESCRIBE.md)
@@ -297,6 +304,7 @@
       + [grouping_id](./sql-reference/sql-functions/aggregate-functions/grouping_id.md)
       + [hll_empty](./sql-reference/sql-functions/aggregate-functions/hll_empty.md)
       + [hll_hash](./sql-reference/sql-functions/aggregate-functions/hll_hash.md)
+      + [hll_raw_agg](./sql-reference/sql-functions/aggregate-functions/hll_raw_agg.md)
       + [hll_union](./sql-reference/sql-functions/aggregate-functions/hll_union.md)
       + [hll_union_agg](./sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)
       + [max](./sql-reference/sql-functions/aggregate-functions/max.md)
@@ -306,6 +314,7 @@
       + [multi_distinct_count](./sql-reference/sql-functions/aggregate-functions/multi_distinct_count.md)
       + [percentile_approx](./sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
       + [percentile_cont](./sql-reference/sql-functions/aggregate-functions/percentile_cont.md)
+      + [percentile_disc](./sql-reference/sql-functions/aggregate-functions/percentile_disc.md)
       + [retention](./sql-reference/sql-functions/aggregate-functions/retention.md)
       + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
       + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
@@ -431,6 +440,7 @@
       + [months_sub](./sql-reference/sql-functions/date-time-functions/months_sub.md)
       + [next_day](./sql-reference/sql-functions/date-time-functions/next_day.md)
       + [now](./sql-reference/sql-functions/date-time-functions/now.md)
+      + [previous_day](./sql-reference/sql-functions/date-time-functions/previous_day.md)
       + [quarter](./sql-reference/sql-functions/date-time-functions/quarter.md)
       + [second](./sql-reference/sql-functions/date-time-functions/second.md)
       + [seconds_add](./sql-reference/sql-functions/date-time-functions/seconds_add.md)
@@ -595,6 +605,9 @@
       + [hll_cardinality](/sql-reference/sql-functions/scalar-functions/hll_cardinality.md)
     + Struct Functions
       + [row](/sql-reference/sql-functions/struct-functions/row.md)
+    + Binary Functions
+      + [to_binary](/sql-reference/sql-functions/binary-functions/to_binary.md)
+      + [from_binary](/sql-reference/sql-functions/binary-functions/from_binary.md)
     + Utility Functions
       + [current_role](./sql-reference/sql-functions/utility-functions/current_role.md)
       + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)

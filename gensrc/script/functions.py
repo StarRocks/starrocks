@@ -312,6 +312,19 @@ vectorized_functions = [
      'StringFunctions::parse_url_prepare', 'StringFunctions::parse_url_close'],
     [30420, 'strcmp', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strcmp'],
 
+    # Binary Functions
+    # to_binary
+    [30600, 'to_binary', 'VARBINARY', ['VARCHAR', 'VARCHAR'], 'BinaryFunctions::to_binary',
+     'BinaryFunctions::to_binary_prepare', 'BinaryFunctions::to_binary_close'],
+    [30601, 'to_binary', 'VARBINARY', ['VARCHAR'], 'BinaryFunctions::to_binary',
+     'BinaryFunctions::to_binary_prepare', 'BinaryFunctions::to_binary_close'],
+    # from_binary
+    [30602, 'from_binary', 'VARCHAR', ['VARBINARY', 'VARCHAR'], 'BinaryFunctions::from_binary',
+     'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
+    [30603, 'from_binary', 'VARCHAR', ['VARBINARY'], 'BinaryFunctions::from_binary',
+     'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
+
+
     # 50xxx: timestamp functions
     [50008, 'year', 'SMALLINT', ['DATE'], 'TimeFunctions::yearV3'],
     [50009, 'year', 'SMALLINT', ['DATETIME'], 'TimeFunctions::yearV2'],
@@ -422,8 +435,8 @@ vectorized_functions = [
     [50371, 'date_slice', 'DATE', ['DATE', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
     [50372, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
     [50373, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
-
-    [50400, 'next_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::next_day'],
+    [50400, 'next_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::next_day', 'TimeFunctions::next_day_prepare', 'TimeFunctions::next_day_close'],
+    [50401, 'previous_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::previous_day', 'TimeFunctions::previous_day_prepare', 'TimeFunctions::previous_day_close'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
@@ -619,6 +632,7 @@ vectorized_functions = [
     [120150, "md5sum", "VARCHAR", ["VARCHAR", "..."], "EncryptionFunctions::md5sum", False],
     [120151, "md5sum_numeric", "LARGEINT", ["VARCHAR", "..."], "EncryptionFunctions::md5sum_numeric", False],
     [120160, "sha2", "VARCHAR", ["VARCHAR", "INT"], "EncryptionFunctions::sha2", "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close", False],
+    [120161, "to_base64", "VARCHAR", ["VARBINARY"], "EncryptionFunctions::to_base64", False],
 
       # geo function
     [120000, "ST_Point", "VARCHAR", ["DOUBLE", "DOUBLE"], "GeoFunctions::st_point", False],
@@ -926,5 +940,5 @@ vectorized_functions = [
     [170005, 'map_filter', 'ANY_MAP',  ['ANY_MAP', 'ARRAY_BOOLEAN'], 'MapFunctions::map_filter'],
 
     # struct functions
-    [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
+    # [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
 ]

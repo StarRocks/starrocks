@@ -86,6 +86,10 @@ template <>
 struct ArrowTypeIdToCppTypeStruct<ArrowTypeId::MAP, guard::Guard> {
     using type = const uint8_t*;
 };
+template <>
+struct ArrowTypeIdToCppTypeStruct<ArrowTypeId::LIST, guard::Guard> {
+    using type = const uint8_t*;
+};
 
 template <ArrowTypeId AT>
 using ArrowTypeIdToCppType = typename ArrowTypeIdToCppTypeStruct<AT>::type;

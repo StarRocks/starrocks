@@ -301,6 +301,7 @@ public abstract class BaseAction implements IAction {
     protected void checkActionOnSystem(UserIdentity currentUser, PrivilegeType... systemActions)
             throws UnauthorizedException {
         for (PrivilegeType systemAction : systemActions) {
+            // TODO(yiming): set role ids for ephemeral user
             if (!PrivilegeActions.checkSystemAction(currentUser, null, systemAction)) {
                 throw new UnauthorizedException("Access denied; you need (at least one of) the "
                         + systemAction.name() + " privilege(s) for this operation");

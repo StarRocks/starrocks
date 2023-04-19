@@ -36,6 +36,7 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.InsertStmt;
@@ -43,6 +44,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.thrift.TStatisticData;
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -57,7 +59,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
     private static final String BATCH_FULL_STATISTIC_TEMPLATE = "SELECT cast($version as INT)" +
             ", cast($partitionId as BIGINT)" + // BIGINT
-            ", '$columnName'" + // VARCHAR
+            ", '$columnNameStr'" + // VARCHAR
             ", cast(COUNT(1) as BIGINT)" + // BIGINT
             ", cast($dataSize as BIGINT)" + // BIGINT
             ", $hllFunction" + // VARBINARY
@@ -133,18 +135,22 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     public void collectStatisticSync(String sql, ConnectContext context) throws Exception {
         LOG.debug("statistics collect sql : " + sql);
         StatisticExecutor executor = new StatisticExecutor();
+        SessionVariable sessionVariable = context.getSessionVariable();
+        // Full table scan is performed for full statistics collecting. In this case, 
+        // we do not need to use pagecache.
+        sessionVariable.setUsePageCache(false);
         List<TStatisticData> dataList = executor.executeStatisticDQL(context, sql);
 
-        String tableName = db.getOriginName() + "." + table.getName();
+        String tableName = StringEscapeUtils.escapeSql(db.getOriginName() + "." + table.getName());
         for (TStatisticData data : dataList) {
             List<String> params = Lists.newArrayList();
             List<Expr> row = Lists.newArrayList();
 
-            String partitionName = table.getPartition(data.getPartitionId()).getName();
+            String partitionName = StringEscapeUtils.escapeSql(table.getPartition(data.getPartitionId()).getName());
 
             params.add(String.valueOf(table.getId()));
             params.add(String.valueOf(data.getPartitionId()));
-            params.add("'" + data.getColumnName() + "'");
+            params.add("'" + StringEscapeUtils.escapeSql(data.getColumnName()) + "'");
             params.add(String.valueOf(db.getId()));
             params.add("'" + tableName + "'");
             params.add("'" + partitionName + "'");
@@ -259,9 +265,12 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         VelocityContext context = new VelocityContext();
         Column column = table.getColumn(columnName);
 
+        String columnNameStr = StringEscapeUtils.escapeSql(columnName);
+        String quoteColumnName = StatisticUtils.quoting(columnName);
+
         context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
         context.put("partitionId", partition.getId());
-        context.put("columnName", columnName);
+        context.put("columnNameStr", columnNameStr);
         context.put("dataSize", getDataSize(column));
         context.put("partitionName", partition.getName());
         context.put("dbName", db.getOriginName());
@@ -273,10 +282,10 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             context.put("maxFunction", "''");
             context.put("minFunction", "''");
         } else {
-            context.put("hllFunction", "hll_serialize(IFNULL(hll_raw(`" + columnName + "`), hll_empty()))");
-            context.put("countNullFunction", "COUNT(1) - COUNT(`" + columnName + "`)");
-            context.put("maxFunction", getMinMaxFunction(column, StatisticUtils.quoting(columnName), true));
-            context.put("minFunction", getMinMaxFunction(column, StatisticUtils.quoting(columnName), false));
+            context.put("hllFunction", "hll_serialize(IFNULL(hll_raw(" + quoteColumnName + "), hll_empty()))");
+            context.put("countNullFunction", "COUNT(1) - COUNT(" + quoteColumnName + ")");
+            context.put("maxFunction", getMinMaxFunction(column, quoteColumnName, true));
+            context.put("minFunction", getMinMaxFunction(column, quoteColumnName, false));
         }
 
         builder.append(build(context, BATCH_FULL_STATISTIC_TEMPLATE));

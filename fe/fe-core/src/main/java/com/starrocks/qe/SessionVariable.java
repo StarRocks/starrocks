@@ -89,6 +89,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String QUERY_TIMEOUT = "query_timeout";
 
+    /* 
+     * When FE does not set the pagecache parameter, we expect a query to follow the pagecache policy of BE.
+     * If pagecache is set by FE, a query whether to use pagecache follows the policy specified by FE.
+     */
+    public static final String USE_PAGE_CACHE = "use_page_cache";
+
     public static final String QUERY_DELIVERY_TIMEOUT = "query_delivery_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
@@ -173,6 +179,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
     public static final String ENABLE_INCREMENTAL_REFRESH_MV = "enable_incremental_mv";
+
+    public static final String LOG_REJECTED_RECORD_NUM = "log_rejected_record_num";
 
     /**
      * Whether to allow the generation of one-phase local aggregation with the local shuffle operator
@@ -457,6 +465,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PREFER_COMPUTE_NODE)
     private boolean preferComputeNode = false;
 
+    @VariableMgr.VarAttr(name = LOG_REJECTED_RECORD_NUM)
+    private long logRejectedRecordNum = 0;
+
     /**
      * If enable this variable (only take effect for pipeline), it will deliver fragment instances
      * to BE in batch and concurrently.
@@ -505,6 +516,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // query timeout in second.
     @VariableMgr.VarAttr(name = QUERY_TIMEOUT)
     private int queryTimeoutS = 300;
+
+    @VariableMgr.VarAttr(name = USE_PAGE_CACHE)
+    private boolean usePageCache = true;
 
     // Execution of a query contains two phase.
     // 1. Deliver all the fragment instances to BEs.
@@ -1205,6 +1219,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.loadMemLimit = loadMemLimit;
     }
 
+    public void setUsePageCache(boolean usePageCache) {
+        this.usePageCache = usePageCache;
+    }
+
     public void setQueryTimeoutS(int queryTimeoutS) {
         this.queryTimeoutS = queryTimeoutS;
     }
@@ -1507,6 +1525,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableIncrementalRefreshMv(boolean enable) {
         this.enableIncrementalRefreshMV = enable;
+    }
+
+    public long getLogRejectedRecordNum() {
+        return logRejectedRecordNum;
+    }
+
+    public void setLogRejectedRecordNum(long logRejectedRecordNum) {
+        this.logRejectedRecordNum = logRejectedRecordNum;
     }
 
     public boolean isEnablePipelineEngine() {
@@ -2049,9 +2075,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
-        tResult.setEnable_connector_adaptive_io_tasks(enableConnectorAdaptiveIoTasks);        
-        tResult.setConnector_io_tasks_slow_io_latency_ms(connectorIotasksSlowIoLatency);
-
+        tResult.setUse_page_cache(usePageCache);
         return tResult;
     }
 

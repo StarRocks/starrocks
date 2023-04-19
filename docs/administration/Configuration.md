@@ -139,7 +139,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | tablet_create_timeout_second                  | s    | 1                      | The timeout duration for creating a tablet, in seconds.       |
 | tablet_delete_timeout_second                  | s    | 2                      | The timeout duration for deleting a tablet, in seconds.      |
 | check_consistency_default_timeout_second      | s    | 600                    | The timeout duration for a replica consistency check. You can set this parameter based on the size of your tablet. |
-| tablet_sched_slot_num_per_path                | -    | 2                      | The maximum number of tablet-related tasks that can run concurrently in a BE storage directory. The alias is `schedule_slot_num_per_path`. |
+| tablet_sched_slot_num_per_path                | -    | 8                      | The maximum number of tablet-related tasks that can run concurrently in a BE storage directory. The alias is `schedule_slot_num_per_path`. From v2.5 onwards, the default value of this parameter is changed from `4` to `8`.|
 | tablet_sched_max_scheduling_tablets           | -    | 2000                   | The maximum number of tablets that can be scheduled at the same time. If the value is exceeded, tablet balancing and repair checks will be skipped. |
 | tablet_sched_disable_balance                  | -    | FALSE                  | Whether to disable tablet balancing. `TRUE` indicates that tablet balancing is disabled. `FALSE` indicates that tablet balancing is enabled. The alias is `disable_balance`. |
 | tablet_sched_disable_colocate_balance         | -    | FALSE                  | Whether to disable replica balancing for Colocate Table. `TRUE` indicates replica balancing is disabled. `FALSE` indicates replica balancing is enabled. The alias is `disable_colocate_balance`. |
@@ -396,7 +396,7 @@ BE static parameters are as follows.
 | drop_tablet_worker_count | 3 | N/A | The number of threads used to drop a tablet. |
 | push_worker_count_normal_priority | 3 | N/A | The number of threads used to handle a load task with NORMAL priority. |
 | push_worker_count_high_priority | 3 | N/A | The number of threads used to handle a load task with HIGH priority. |
-| transaction_publish_version_worker_count | 8 | N/A | The number of threads used to publish a version. |
+| transaction_publish_version_worker_count | 0 | N/A | The max number of threads used to publish a version. When it's value is less than or equal to 0, it will default to half of the number of cores.  |
 | clear_transaction_task_worker_count | 1 | N/A | The number of threads used for clearing transaction. |
 | alter_tablet_worker_count | 3 | N/A | The number of threads used for schema change. |
 | clone_worker_count | 3 | N/A | The number of threads used for clone. |

@@ -56,6 +56,8 @@ private:
 
         Status _fill_buffer() override;
 
+        const std::string& filename();
+
     private:
         std::shared_ptr<SequentialFile> _file;
         ScannerCounter* _counter = nullptr;

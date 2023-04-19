@@ -95,9 +95,12 @@ public class MysqlProto {
                 }
             }
 
-            context.setAuthDataSalt(randomString);
+
             context.setCurrentUserIdentity(currentUser);
-            context.setCurrentRoleIds(currentUser);
+            if (!currentUser.isEphemeral()) {
+                context.setCurrentRoleIds(currentUser);
+                context.setAuthDataSalt(randomString);
+            }
             context.setQualifiedUser(user);
             return true;
         }
