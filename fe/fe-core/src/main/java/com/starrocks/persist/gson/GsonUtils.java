@@ -124,6 +124,8 @@ import com.starrocks.system.BackendHbResponse;
 import com.starrocks.system.BrokerHbResponse;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.system.HeartbeatResponse;
+import com.starrocks.warehouse.LocalWarehouse;
+import com.starrocks.warehouse.Warehouse;
 
 import java.io.IOException;
 import java.lang.reflect.Method;
@@ -254,6 +256,11 @@ public class GsonUtils {
                     .registerSubtype(ResourceGroupPEntryObject.class,
                             ResourceGroupPEntryObject.class.getSimpleName());
 
+    private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
+            .of(Warehouse.class, "clazz")
+            .registerSubtype(LocalWarehouse.class, LocalWarehouse.class.getSimpleName());
+
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -309,6 +316,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(TABLE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(WAREHOUSE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)
