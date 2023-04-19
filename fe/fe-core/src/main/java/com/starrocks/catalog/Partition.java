@@ -144,6 +144,22 @@ public class Partition extends MetaObject implements Writable {
         this.shardGroupId = shardGroupId;
     }
 
+    public Partition shallowCopy() {
+        Partition partition = new Partition();
+        partition.id = this.id;
+        partition.name = this.name;
+        partition.state = this.state;
+        partition.baseIndex = this.baseIndex;
+        partition.idToVisibleRollupIndex = Maps.newHashMap(this.idToVisibleRollupIndex);
+        partition.idToShadowIndex = Maps.newHashMap(this.idToShadowIndex);
+        partition.visibleVersion = this.visibleVersion;
+        partition.visibleVersionTime = this.visibleVersionTime;
+        partition.nextVersion = this.nextVersion;
+        partition.distributionInfo = this.distributionInfo;
+        partition.shardGroupId = this.shardGroupId;
+        return partition;
+    }
+
     public void setIdForRestore(long id) {
         this.id = id;
     }

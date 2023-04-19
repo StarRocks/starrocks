@@ -300,8 +300,15 @@ public class OlapTable extends Table {
             olapTable.partitionInfo = this.partitionInfo;
         }
         olapTable.defaultDistributionInfo = this.defaultDistributionInfo;
-        olapTable.idToPartition = Maps.newHashMap(this.idToPartition);
-        olapTable.nameToPartition = Maps.newHashMap(this.nameToPartition);
+        Map<Long, Partition> idToPartitions = new HashMap<>(this.idToPartition.size());
+        Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        for (Map.Entry<Long, Partition> kv : this.idToPartition.entrySet()) {
+            Partition copiedPartition = kv.getValue().shallowCopy();
+            idToPartitions.put(kv.getKey(), copiedPartition);
+            nameToPartitions.put(kv.getValue().getName(), copiedPartition);
+        }
+        olapTable.idToPartition = idToPartitions;
+        olapTable.nameToPartition = nameToPartitions;
         olapTable.baseIndexId = this.baseIndexId;
         if (this.tableProperty != null) {
             olapTable.tableProperty = this.tableProperty.copy();
