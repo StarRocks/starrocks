@@ -502,7 +502,7 @@ CONF_mInt32(max_consumer_num_per_group, "3");
 CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
 
 // The size of thread pool for routine load task.
-// this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
+// this should be larger than FE config 'max_routine_load_task_num_per_be' (default 5).
 CONF_Int32(routine_load_thread_pool_size, "10");
 
 // kafka reqeust timeout
