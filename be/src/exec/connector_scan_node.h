@@ -67,7 +67,6 @@ private:
     void _close_pending_scanners();
     void _push_pending_scanner(ConnectorScanner* scanner);
     ConnectorScanner* _pop_pending_scanner();
-    void _adjust_io_tasks_per_scan_operator(RuntimeState* state);
 
     // non-pipeline fields.
     std::vector<TScanRangeParams> _scan_ranges;
