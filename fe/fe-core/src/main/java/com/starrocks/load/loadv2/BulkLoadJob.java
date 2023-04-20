@@ -83,12 +83,10 @@ public abstract class BulkLoadJob extends LoadJob {
     protected Map<String, String> sessionVariables = Maps.newHashMap();
 
     protected static final String PRIORITY_SESSION_VARIABLE_KEY = "priority.session.variable.key";
-<<<<<<< HEAD
-=======
-    public static final String LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY = "log.rejected.record.num.session.variable.key";
+
     public static final String CURRENT_USER_IDENT_KEY = "current.user.ident.key";
     public static final String CURRENT_QUALIFIED_USER_KEY = "current.qualified.user.key";
->>>>>>> 642d559a5 ([BugFix] Fix broker load retry fail since connect context is null (#21918))
+
 
     // only for log replay
     public BulkLoadJob() {
