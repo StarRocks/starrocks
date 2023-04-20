@@ -69,17 +69,7 @@
 + 外部系统集成
   + [配置 AWS 认证方式](/integrations/authenticate_to_aws_resources.md)
   + BI 集成
-<<<<<<< HEAD
     + [Apache Superset](/integrations/superset_support.md)
-=======
-    + [Hex](/integrations/BI_integrations/Hex.md)
-    + [Querybook](/integrations/BI_integrations/Querybook.md)
-    + [Apache Superset](/integrations/BI_integrations/Superset.md)
-    + [Tableau Desktop](/integrations/BI_integrations/Tableau_Desktop.md)
-  + IDE 集成
-    + [DataGrip](/integrations/IDE_integrations/DataGrip.md)
-    + [DBeaver](/integrations/IDE_integrations/DBeaver.md)
->>>>>>> a8366196 ([Doc] update s3-compatible storage description (#5102))
   + [其他集成](/integrations/other_integrations/intro.md)
 + 管理手册
   + 部署集群
