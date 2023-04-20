@@ -382,7 +382,7 @@ If the Engine type is olap, you can specify a column to adopt bloom filter index
 
 The following limits apply when you use bloom filter index:
 
-- You can create bloom filter indexes for all columns of a Duplicate Key or Primary Key table. For an Aggregate Key or Unique Key table, you can only create bloom filter indexes for key columns.
+- You can create bloom filter indexes for all columns of a Duplicate Key or Primary Key table. For an Aggregate table or Unique Key table, you can only create bloom filter indexes for key columns.
 - TINYINT, FLOAT, DOUBLE, and DECIMAL columns do not support creating bloom filter indexes.
 - Bloom filter indexes can only improve the performance of queries that contain the `in` and `=` operators, such as `Select xxx from table where x in {}` and `Select xxx from table where column = xxx`. More discrete values in this column will result in more precise queries.
 
@@ -445,7 +445,11 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 
 ## Examples
 
+<<<<<<< HEAD
 ### Create an Aggregate Key table that uses Hash bucketing and column-based storage
+=======
+### Create an Aggregate table that uses Hash bucketing and columnar storage
+>>>>>>> 6c59f51ef3 (split data model and update related proper names)
 
 ```SQL
 CREATE TABLE example_db.table_hash
@@ -462,7 +466,7 @@ DISTRIBUTED BY HASH(k1) BUCKETS 10
 PROPERTIES ("storage_type"="column");
 ```
 
-### Create an Aggregate Key table and set the storage medium and cooldown time
+### Create an Aggregate table and set the storage medium and cooldown time
 
 ```SQL
 CREATE TABLE example_db.table_hash
