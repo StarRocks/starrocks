@@ -20,8 +20,16 @@
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 
 namespace starrocks::pipeline {
+Status SpillableAggregateBlockingSourceOperator::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(AggregateBlockingSourceOperator::prepare(state));
+    RETURN_IF_ERROR(_stream_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+    RETURN_IF_ERROR(_stream_aggregator->open(state));
+    return Status::OK();
+}
+
 void SpillableAggregateBlockingSourceOperator::close(RuntimeState* state) {
     AggregateBlockingSourceOperator::close(state);
+    _stream_aggregator->close(state);
 }
 
 bool SpillableAggregateBlockingSourceOperator::has_output() const {
@@ -77,14 +85,6 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::pull_chunk(RuntimeS
 
 StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk(RuntimeState* state) {
     DCHECK(_accumulator.need_input());
-
-    // first time, lazy init
-    if (!_stream_aggregator_inited) {
-        RETURN_IF_ERROR(_stream_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
-        RETURN_IF_ERROR(_stream_aggregator->open(state));
-        _stream_aggregator_inited = true;
-    }
-
     ChunkPtr res;
 
     if (!_aggregator->is_spilled_eos()) {

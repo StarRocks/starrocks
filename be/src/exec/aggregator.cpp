@@ -494,6 +494,30 @@ Status Aggregator::_reset_state(RuntimeState* state) {
     return Status::OK();
 }
 
+Status Aggregator::spill_aggregate_data(RuntimeState* state, std::function<StatusOr<ChunkPtr>()> chunk_provider) {
+    auto io_executor = this->spill_channel()->io_executor();
+    auto spiller = this->spiller();
+    auto spill_channel = this->spill_channel();
+
+    while (!spiller->is_full()) {
+        auto chunk_with_st = chunk_provider();
+        if (chunk_with_st.ok()) {
+            if (!chunk_with_st.value()->is_empty()) {
+                RETURN_IF_ERROR(spiller->spill(state, chunk_with_st.value(), *io_executor,
+                                               spill::MemTrackerGuard(tls_mem_tracker)));
+            }
+        } else if (chunk_with_st.status().is_end_of_file()) {
+            return Status::OK();
+        } else {
+            return chunk_with_st.status();
+        }
+    }
+
+    spill_channel->add_spill_task(std::move(chunk_provider));
+
+    return Status::OK();
+}
+
 void Aggregator::close(RuntimeState* state) {
     if (_is_closed) {
         return;
