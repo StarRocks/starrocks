@@ -532,10 +532,10 @@ private:
             break;                                                                                                  \
         case MemTracker::RESOURCE_GROUP:                                                                            \
             /* TODO: make default_wg configuable. */                                                                \
-            if (label() == "default_wg") {                                                                          \
+            if (tracker->label() == "default_wg") {                                                                 \
                 str << "Mem usage has exceed the limit of query pool";                                              \
             } else {                                                                                                \
-                str << "Mem usage has exceed the limit of the resource group [" << label() << "]. "                 \
+                str << "Mem usage has exceed the limit of the resource group [" << tracker->label() << "]. "        \
                     << "You can change the limit by modify [mem_limit] of this group";                              \
             }                                                                                                       \
             break;                                                                                                  \
