@@ -260,6 +260,103 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
 
+<<<<<<< HEAD
+=======
+    public static final String INTERPOLATE_PASSTHROUGH = "interpolate_passthrough";
+
+    public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
+
+    public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
+    public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
+
+    public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
+
+    public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
+    public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
+    public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
+    public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
+    public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
+
+    public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
+    public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
+    public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
+    public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
+
+    // We assume that for PRIMARY_KEYS and UNIQUE_KEYS, the latest partitions are hot partitions that are updated
+    // frequently, so it should not be cached in query cache since its disruptive cache invalidation.
+    public static final String QUERY_CACHE_HOT_PARTITION_NUM = "query_cache_hot_partition_num";
+
+    public static final String QUERY_CACHE_AGG_CARDINALITY_LIMIT = "query_cache_agg_cardinality_limit";
+    public static final String TRANSMISSION_ENCODE_LEVEL = "transmission_encode_level";
+    public static final String RPC_HTTP_MIN_SIZE = "rpc_http_min_size";
+
+    public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
+    public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
+
+    public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
+            "enable_rule_based_materialized_view_rewrite";
+
+    public static final String ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE =
+            "enable_materialized_view_view_delta_rewrite";
+
+    public static final String ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE =
+            "enable_materialized_view_single_table_view_delta_rewrite";
+    public static final String ANALYZE_FOR_MV = "analyze_mv";
+
+    public static final String ENABLE_BIG_QUERY_LOG = "enable_big_query_log";
+    public static final String BIG_QUERY_LOG_CPU_SECOND_THRESHOLD = "big_query_log_cpu_second_threshold";
+    public static final String BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD = "big_query_log_scan_bytes_threshold";
+    public static final String BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD = "big_query_log_scan_rows_threshold";
+
+    public static final String SQL_DIALECT = "sql_dialect";
+
+    public static final String ENABLE_OUTER_JOIN_REORDER = "enable_outer_join_reorder";
+
+    public static final String CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE = "cbo_reorder_threshold_use_exhaustive";
+    public static final String ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE = "enable_rewrite_sum_by_associative_rule";
+    public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
+
+    public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
+    public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
+
+    public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
+
+    // These parameters are experimental. They may be removed in the future
+    public static final String SPILL_MEM_TABLE_SIZE = "spill_mem_table_size";
+    public static final String SPILL_MEM_TABLE_NUM = "spill_mem_table_num";
+    public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
+    public static final String SPILL_OPERATOR_MIN_BYTES = "spill_operator_min_bytes";
+    public static final String SPILL_OPERATOR_MAX_BYTES = "spill_operator_max_bytes";
+
+    // full_sort_max_buffered_{rows,bytes} are thresholds that limits input size of partial_sort
+    // in full sort.
+    public static final String FULL_SORT_MAX_BUFFERED_ROWS = "full_sort_max_buffered_rows";
+
+    public static final String FULL_SORT_MAX_BUFFERED_BYTES = "full_sort_max_buffered_bytes";
+
+    // Used by full sort inorder to permute only order-by columns in cascading merging phase, after
+    // that, non-order-by output columns are permuted according to the ordinal column.
+    public static final String FULL_SORT_LATE_MATERIALIZATION = "full_sort_late_materialization";
+
+    // For group-by-count-distinct query like select a, count(distinct b) from t group by a, if group-by column a
+    // is low-cardinality while count-distinct column b is high-cardinality, there exists a performance bottleneck
+    // if column a is a0 for the majority rows, since the data is shuffle by only column a, so one PipelineDriver will
+    // tackle with the majority portion of data that can not scale to multi-machines or multi-cores. so we add a
+    // bucket column produced from evaluation of expression hash(b)%num_buckets to the partition-by column of shuffle
+    // ExchangeNode to make the computation scale-out to multi-machines/multi-cores.
+    // Here: count_distinct_column_buckets means the num_buckets and enable_distinct_column_bucketization is switch to
+    // control on/off of this bucketization optimization.
+    public static final String DISTINCT_COLUMN_BUCKETS = "count_distinct_column_buckets";
+    public static final String ENABLE_DISTINCT_COLUMN_BUCKETIZATION = "enable_distinct_column_bucketization";
+    public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
+
+    public static final String SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
+
+    public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
+
+
+>>>>>>> 39693a0fc ([Enhancement] support implicit cast to boolean in predicate (#21870))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -648,6 +745,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableShowAllVariables(boolean enableShowAllVariables) {
         this.enableShowAllVariables = enableShowAllVariables;
     }
+
+    @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
+    private boolean enableStrictType = false;
 
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
@@ -1139,6 +1239,226 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return loadTransmissionCompressionType;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isInterpolatePassthrough() {
+        return interpolatePassthrough;
+    }
+
+    public void setInterpolatePassthrough(boolean value) {
+        this.interpolatePassthrough = value;
+    }
+
+    public int getParseTokensLimit() {
+        return parseTokensLimit;
+    }
+
+    public void setParseTokensLimit(int parseTokensLimit) {
+        this.parseTokensLimit = parseTokensLimit;
+    }
+
+    public boolean isEnableQueryCache() {
+        return isEnablePipelineEngine() && enableQueryCache;
+    }
+
+    public long getQueryCacheEntryMaxBytes() {
+        return queryCacheEntryMaxBytes;
+    }
+
+    public long getQueryCacheEntryMaxRows() {
+        return queryCacheEntryMaxRows;
+    }
+
+    public void setQueryCacheHotPartitionNum(int n) {
+        queryCacheHotPartitionNum = n;
+    }
+
+    public int getQueryCacheHotPartitionNum() {
+        return queryCacheHotPartitionNum;
+    }
+
+    public void setQueryCacheAggCardinalityLimit(long limit) {
+        this.queryCacheAggCardinalityLimit = limit;
+    }
+
+    public long getQueryCacheAggCardinalityLimit() {
+        return queryCacheAggCardinalityLimit;
+    }
+
+    public void setEnableQueryCache(boolean on) {
+        enableQueryCache = on;
+    }
+
+    public boolean isQueryCacheForcePopulate() {
+        return queryCacheForcePopulate;
+    }
+
+    public int getNestedMvRewriteMaxLevel() {
+        return nestedMvRewriteMaxLevel;
+    }
+
+    public boolean isEnableMaterializedViewRewrite() {
+        return enableMaterializedViewRewrite;
+    }
+
+    public void setEnableMaterializedViewRewrite(boolean enableMaterializedViewRewrite) {
+        this.enableMaterializedViewRewrite = enableMaterializedViewRewrite;
+    }
+
+    public boolean isEnableMaterializedViewUnionRewrite() {
+        return enableMaterializedViewUnionRewrite;
+    }
+
+    public void setEnableMaterializedViewUnionRewrite(boolean enableMaterializedViewUnionRewrite) {
+        this.enableMaterializedViewUnionRewrite = enableMaterializedViewUnionRewrite;
+    }
+
+    // 1 means the mvs directly based on base table
+    public void setNestedMvRewriteMaxLevel(int nestedMvRewriteMaxLevel) {
+        if (nestedMvRewriteMaxLevel <= 0) {
+            nestedMvRewriteMaxLevel = 1;
+        }
+        this.nestedMvRewriteMaxLevel = nestedMvRewriteMaxLevel;
+    }
+
+    public boolean isEnableRuleBasedMaterializedViewRewrite() {
+        return enableRuleBasedMaterializedViewRewrite;
+    }
+
+    public void setEnableRuleBasedMaterializedViewRewrite(boolean enableRuleBasedMaterializedViewRewrite) {
+        this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
+    }
+
+    public boolean isEnableMaterializedViewViewDeltaRewrite() {
+        return enableMaterializedViewViewDeltaRewrite;
+    }
+
+    public void setEnableMaterializedViewViewDeltaRewrite(boolean enableMaterializedViewViewDeltaRewrite) {
+        this.enableMaterializedViewViewDeltaRewrite = enableMaterializedViewViewDeltaRewrite;
+    }
+
+    public boolean isEnableMaterializedViewSingleTableViewDeltaRewrite() {
+        return enableMaterializedViewSingleTableViewDeltaRewrite;
+    }
+
+    public void setEnableMaterializedViewSingleTableViewDeltaRewrite(
+            boolean enableMaterializedViewSingleTableViewDeltaRewrite) {
+        this.enableMaterializedViewSingleTableViewDeltaRewrite = enableMaterializedViewSingleTableViewDeltaRewrite;
+    }
+
+    public String getAnalyzeForMV() {
+        return analyzeTypeForMV;
+    }
+
+    public boolean isEnableBigQueryLog() {
+        return enableBigQueryLog;
+    }
+
+    public void setEnableBigQueryLog(boolean enableBigQueryLog) {
+        this.enableBigQueryLog = enableBigQueryLog;
+    }
+
+    public long getBigQueryLogCPUSecondThreshold() {
+        return this.bigQueryLogCPUSecondThreshold;
+    }
+
+    public void setBigQueryLogCpuSecondThreshold(long bigQueryLogCPUSecondThreshold) {
+        this.bigQueryLogCPUSecondThreshold = bigQueryLogCPUSecondThreshold;
+    }
+
+    public long getBigQueryLogScanBytesThreshold() {
+        return bigQueryLogScanBytesThreshold;
+    }
+
+    public void setBigQueryLogScanBytesThreshold(long bigQueryLogScanBytesThreshold) {
+        this.bigQueryLogScanBytesThreshold = bigQueryLogScanBytesThreshold;
+    }
+
+    public long getBigQueryLogScanRowsThreshold() {
+        return bigQueryLogScanRowsThreshold;
+    }
+
+    public void setBigQueryLogScanRowsThreshold(long bigQueryLogScanRowsThreshold) {
+        this.bigQueryLogScanRowsThreshold = bigQueryLogScanRowsThreshold;
+    }
+
+    public String getSqlDialect() {
+        return this.sqlDialect;
+    }
+
+    public void setSqlDialect(String dialect) {
+        this.sqlDialect = dialect;
+    }
+
+    public boolean isEnableOuterJoinReorder() {
+        return enableOuterJoinReorder;
+    }
+
+    public void setEnableOuterJoinReorder(boolean enableOuterJoinReorder) {
+        this.enableOuterJoinReorder = enableOuterJoinReorder;
+    }
+
+    public int getCboReorderThresholdUseExhaustive() {
+        return cboReorderThresholdUseExhaustive;
+    }
+
+    public void setCboReorderThresholdUseExhaustive(int cboReorderThresholdUseExhaustive) {
+        this.cboReorderThresholdUseExhaustive = cboReorderThresholdUseExhaustive;
+    }
+
+    public void setEnableRewriteSumByAssociativeRule(boolean enableRewriteSumByAssociativeRule) {
+        this.enableRewriteSumByAssociativeRule = enableRewriteSumByAssociativeRule;
+    }
+
+    public boolean isEnableRewriteSumByAssociativeRule() {
+        return this.enableRewriteSumByAssociativeRule;
+    }
+
+    public void setEnableRewriteSimpleAggToMetaScan(boolean enableRewriteSimpleAggToMetaScan) {
+        this.enableRewriteSimpleAggToMetaScan = enableRewriteSimpleAggToMetaScan;
+    }
+
+    public boolean isEnableRewriteSimpleAggToMetaScan() {
+        return this.enableRewriteSimpleAggToMetaScan;
+    }
+
+    public boolean getEnablePruneComplexTypes() {
+        return this.enablePruneComplexTypes;
+    }
+
+    public void setEnablePruneComplexTypes(boolean enablePruneComplexTypes) {
+        this.enablePruneComplexTypes = enablePruneComplexTypes;
+    }
+
+    public int getRangePrunerPredicateMaxLen() {
+        return rangePrunerPredicateMaxLen;
+    }
+
+    public void setRangePrunerPredicateMaxLen(int rangePrunerPredicateMaxLen) {
+        this.rangePrunerPredicateMaxLen = rangePrunerPredicateMaxLen;
+    }
+
+    public String getDefaultTableCompression() {
+        return defaultTableCompressionAlgorithm;
+    }
+
+    public void setDefaultTableCompression(String compression) {
+        this.defaultTableCompressionAlgorithm = compression;
+    }
+
+    public boolean getHDFSBackendSelectorScanRangeShuffle() {
+        return hdfsBackendSelectorScanRangeShuffle;
+    }
+
+    public boolean isEnableStrictType() {
+        return enableStrictType;
+    }
+
+    public void setEnableStrictType(boolean val) {
+        this.enableStrictType = val;
+    }
+
+>>>>>>> 39693a0fc ([Enhancement] support implicit cast to boolean in predicate (#21870))
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
