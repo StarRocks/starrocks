@@ -117,8 +117,18 @@ public:
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(auto l, _children[0]->evaluate_checked(context, ptr));
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
-        auto lhs_arr = std::static_pointer_cast<ArrayColumn>(l);
-        auto rhs_arr = std::static_pointer_cast<ArrayColumn>(r);
+
+        if (l->only_null() || r->only_null()) {
+            return ColumnHelper::create_const_null_column(l->size());
+        }
+
+        const ColumnPtr& data1 = FunctionHelper::get_data_column_of_nullable(l);
+        const ColumnPtr& data2 = FunctionHelper::get_data_column_of_nullable(r);
+
+        DCHECK(data1->is_array());
+        DCHECK(data2->is_array());
+        auto lhs_arr = std::static_pointer_cast<ArrayColumn>(data1);
+        auto rhs_arr = std::static_pointer_cast<ArrayColumn>(data2);
 
         ColumnBuilder<TYPE_BOOLEAN> builder(ptr->num_rows());
         std::vector<int8_t> cmp_result;
@@ -127,7 +137,14 @@ public:
         // Convert the compare result (-1, 0, 1) to the predicate result (true/false)
         _comparator.eval(cmp_result, &builder);
 
-        return builder.build(ColumnHelper::is_all_const(ptr->columns()));
+        ColumnPtr data_result = builder.build(ColumnHelper::is_all_const(ptr->columns()));
+
+        if (l->has_null() || r->has_null()) {
+            NullColumnPtr null_flags = FunctionHelper::union_nullable_column(l, r);
+            return FunctionHelper::merge_column_and_null_column(std::move(data_result), std::move(null_flags));
+        } else {
+            return data_result;
+        }
     }
 
 private:
