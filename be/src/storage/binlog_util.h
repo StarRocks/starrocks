@@ -39,6 +39,7 @@ struct BinlogLsn {
     bool operator!=(const BinlogLsn& rhs) const { return lsn != rhs.lsn; }
     bool operator==(const BinlogLsn& rhs) const { return lsn == rhs.lsn; }
     bool operator<(const BinlogLsn& rhs) const { return lsn < rhs.lsn; }
+    bool operator<=(const BinlogLsn& rhs) const { return lsn <= rhs.lsn; }
     std::string to_string() const;
     friend std::ostream& operator<<(std::ostream& os, const BinlogLsn& lsn);
 };
@@ -57,7 +58,7 @@ public:
 
     static bool get_file_id_from_name(const std::string& file_name, int64_t* file_id);
 
-    static Status list_binlog_file_ids(std::string& binlog_dir, std::set<int64_t>* binlog_file_ids);
+    static Status list_binlog_file_ids(std::string& binlog_dir, std::list<int64_t>* binlog_file_ids);
 };
 
 } // namespace starrocks

@@ -53,14 +53,14 @@ bool BinlogUtil::get_file_id_from_name(const std::string& file_name, int64_t* fi
     return true;
 }
 
-Status BinlogUtil::list_binlog_file_ids(std::string& binlog_dir, std::set<int64_t>* binlog_file_ids) {
+Status BinlogUtil::list_binlog_file_ids(std::string& binlog_dir, std::list<int64_t>* binlog_file_ids) {
     std::set<std::string> file_names;
     RETURN_IF_ERROR(fs::list_dirs_files(binlog_dir, nullptr, &file_names));
     int64_t file_id;
     for (auto& name : file_names) {
         bool ret = get_file_id_from_name(name, &file_id);
         if (ret) {
-            binlog_file_ids->emplace(file_id);
+            binlog_file_ids->push_back(file_id);
         }
     }
     return Status::OK();
