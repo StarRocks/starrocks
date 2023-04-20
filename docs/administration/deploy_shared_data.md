@@ -45,7 +45,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
   - If you use the default authentication credential of AWS SDK to access S3, add the following configuration items:
 
-    ```YAML
+    ```Plain
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -57,7 +57,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
   - If you use IAM user-based credential (Access Key and Secret Key) to access S3, add the following configuration items:
 
-    ```YAML
+    ```Plain
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -70,7 +70,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
   - If you use Instance Profile to access S3, add the following configuration items:
 
-    ```YAML
+    ```Plain
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -82,7 +82,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
   - If you use Assumed Role to access S3, add the following configuration items:
 
-    ```YAML
+    ```Plain
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -95,7 +95,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
   - If you use Assumed Role to access S3 from an external AWS account, add the following configuration items:
 
-    ```YAML
+    ```Plain
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -109,13 +109,18 @@ Before starting FEs, add the following configuration items in the FE configurati
 
 - If you use GCP Cloud Storage:
 
-  ```YAML
+  ```Plain
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
   aws_s3_path = <s3_path>
-  aws_s3_region = <region>                   # For example: us-east-1
-  aws_s3_endpoint = <endpoint_url>           # For example: https://storage.googleapis.com
+
+  # For example: us-east-1
+  aws_s3_region = <region>
+
+  # For example: https://storage.googleapis.com
+  aws_s3_endpoint = <endpoint_url>
+
   aws_s3_access_key = <access_key>
   aws_s3_secret_key = <secret_key>
   ```
@@ -123,13 +128,18 @@ Before starting FEs, add the following configuration items in the FE configurati
 
 - If you use MinIO:
 
-  ```YAML
+  ```Plain
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
   aws_s3_path = <s3_path>
-  aws_s3_region = <region>                   # For example: us-east-1
-  aws_s3_endpoint = <endpoint_url>           # For example: http://172.26.xx.xxx:39000
+
+  # For example: us-east-1
+  aws_s3_region = <region>
+
+  # For example: http://172.26.xx.xxx:39000
+  aws_s3_endpoint = <endpoint_url>
+  
   aws_s3_access_key = <access_key>
   aws_s3_secret_key = <secret_key>
   ```
@@ -138,7 +148,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
 **Before starting BEs**, add the following configuration items in the BE configuration file **be.conf**:
 
-```YAML
+```Plain
 starlet_port = <starlet_port>
 storage_root_path = <storage_root_path>
 ```
