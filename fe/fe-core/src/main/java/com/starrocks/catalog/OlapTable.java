@@ -435,6 +435,15 @@ public class OlapTable extends Table {
         return indexNameToId.containsKey(indexName);
     }
 
+    public boolean hasMaterializedColumn() {
+        for (Column column : getFullSchema()) {
+            if (column.isMaterializedColumn()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType) {
         setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
@@ -1772,6 +1781,25 @@ public class OlapTable extends Table {
     @Override
     public List<Column> getBaseSchema() {
         return getSchemaByIndexId(baseIndexId);
+    }
+
+    public List<Column> getBaseSchemaWithoutMaterializedColumn() {
+        if (!hasMaterializedColumn()) {
+            return getSchemaByIndexId(baseIndexId);
+        }
+
+        List<Column> schema = Lists.newArrayList(getBaseSchema());
+        
+        while (schema.size() > 0) {
+            // check last column is whether materiazlied column or not
+            if (schema.get(schema.size() - 1).isMaterializedColumn()) {
+                schema.remove(schema.size() - 1);
+            } else {
+                break;
+            }
+        }
+
+        return schema;
     }
 
     public Column getBaseColumn(String columnName) {

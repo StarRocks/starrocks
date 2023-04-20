@@ -116,6 +116,12 @@ struct TAlterTabletReq {
     3: required TCreateTabletReq new_tablet_req
 }
 
+struct TAlterTabletMaterializedColumnReq {
+    1: optional InternalService.TQueryGlobals query_globals
+    2: optional InternalService.TQueryOptions query_options
+    3: optional map<i32, Exprs.TExpr> mc_exprs
+}
+
 // This v2 request will replace the old TAlterTabletReq.
 // TAlterTabletReq should be deprecated after new alter job process merged.
 struct TAlterTabletReqV2 {
@@ -128,6 +134,7 @@ struct TAlterTabletReqV2 {
     7: optional list<TAlterMaterializedViewParam> materialized_view_params
     8: optional TTabletType tablet_type
     9: optional i64 txn_id
+    10: optional TAlterTabletMaterializedColumnReq materialized_column_req
 }
 
 struct TAlterMaterializedViewParam {

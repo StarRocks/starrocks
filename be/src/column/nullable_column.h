@@ -271,6 +271,13 @@ public:
         std::swap(_has_null, r._has_null);
     }
 
+    void swap_by_data_column(ColumnPtr& src) {
+        reset_column();
+        _data_column.swap(src);
+        null_column_data().insert(null_column_data().end(), _data_column->size(), 0);
+        update_has_null();
+    }
+
     void reset_column() override {
         Column::reset_column();
         _data_column->reset_column();

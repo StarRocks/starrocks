@@ -94,8 +94,14 @@ public interface ParserErrorMsg {
     @BaseMessage("Sql to be add black list is empty")
     String emptySql();
 
-    @BaseMessage("Column ''{0}'' can not be AUTO_INCREMENT when {1} COLUMN.")
+    @BaseMessage("Column ''{0}'' can not be AUTO_INCREMENT when {1} COLUMN")
     String autoIncrementForbid(String a0, String a1);
+
+    @BaseMessage("Column ''{0}'' can not be MATERIALIZED COLUMN when {1}")
+    String materializedColumnForbid(String a0, String a1);
+
+    @BaseMessage("{0} can not be set when {1}")
+    String materializedColumnLimit(String a0, String a1);
 
     @BaseMessage("No tables used")
     String noTableUsed();
@@ -120,6 +126,15 @@ public interface ParserErrorMsg {
 
     @BaseMessage("Invalid map format, which should be key:value")
     String invalidMapFormat();
+
+    @BaseMessage("{0} must be nullable column")
+    String foundNotNull(String a0);
+
+    @BaseMessage("{0} has no default values")
+    String hasDefaultValue(String a0);
+
+    @BaseMessage("{0} can not be KEY")
+    String isKey(String a0);
 
     // --------- error in analyzing phase ---------
     @BaseMessage("Invalid {0} id format ''{1}''")

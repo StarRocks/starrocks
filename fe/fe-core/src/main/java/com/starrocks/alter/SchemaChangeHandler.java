@@ -45,6 +45,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -136,7 +137,7 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void processAddColumn(AddColumnClause alterClause, OlapTable olapTable,
-                                  Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
+                             Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         Column column = alterClause.getColumn();
         ColumnPosition columnPos = alterClause.getColPos();
         String targetIndexName = alterClause.getRollupName();
@@ -154,6 +155,7 @@ public class SchemaChangeHandler extends AlterHandler {
         Set<String> newColNameSet = Sets.newHashSet(column.getName());
         addColumnInternal(olapTable, column, columnPos, targetIndexId, baseIndexId,
                 indexSchemaMap, newColNameSet);
+
     }
 
     private void processAddColumns(AddColumnsClause alterClause, OlapTable olapTable,
@@ -272,7 +274,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
     // User can modify column type and column position
     private void processModifyColumn(ModifyColumnClause alterClause, OlapTable olapTable,
-                                     Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
+                                Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         Column modColumn = alterClause.getColumn();
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             if (olapTable.getBaseColumn(modColumn.getName()).isKey()) {
@@ -314,6 +316,21 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             if (!modColumn.isKey()) {
                 modColumn.setAggregationType(AggregateType.NONE, true);
+            }
+        }
+
+        if (modColumn.materializedColumnExpr() == null && olapTable.hasMaterializedColumn()) {
+            for (Column column : olapTable.getFullSchema()) {
+                if (!column.isMaterializedColumn()) {
+                    continue;
+                }
+                List<SlotRef> slots = column.getMaterializedColumnRef();
+                for (SlotRef slot : slots) {
+                    if (slot.getColumnName().equals(modColumn.getName())) {
+                        throw new DdlException("Do not support modify column: " + modColumn.getName() +
+                                               ", because it associates with the materialized column");
+                    }
+                }
             }
         }
 
@@ -387,6 +404,44 @@ public class SchemaChangeHandler extends AlterHandler {
     
         // retain old column name
         modColumn.setName(oriColumn.getName());
+
+        if (!oriColumn.isMaterializedColumn() && modColumn.isMaterializedColumn()) {
+            throw new DdlException("Can not modify a non-materialized column to a materialized column");
+        }
+
+        if (oriColumn.isMaterializedColumn() && !modColumn.isMaterializedColumn()) {
+            throw new DdlException("Can not modify a materialized column to a non-materialized column");
+        }
+
+        if (oriColumn.isMaterializedColumn() && GlobalStateMgr.getCurrentState().getIdToDb() != null) {
+            Database db = null;
+            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
+                db = entry.getValue();
+                if (db.getTable(olapTable.getId()) != null) {
+                    break;
+                }
+            }
+
+            List<Table> tbls = db.getTables();
+            for (Table tbl : tbls) {
+                Map<Long, MaterializedIndexMeta> metaMap = olapTable.getIndexIdToMeta();
+
+                for (Map.Entry<Long, MaterializedIndexMeta> entry : metaMap.entrySet()) {
+                    Long id = entry.getKey();
+                    if (id == olapTable.getBaseIndexId()) {
+                        continue;
+                    }
+                    MaterializedIndexMeta meta = entry.getValue();
+                    List<Column> schema = meta.getSchema();
+    
+                    for (Column rollupCol : schema) {
+                        if (rollupCol.getName().equals(oriColumn.getName())) {
+                            throw new DdlException("Can not modify a materialized column, because there are MVs ref to it");
+                        }
+                    }
+                }
+            }
+        }
 
         // handle the move operation in 'indexForFindingColumn' if has
         if (hasColPos) {
@@ -482,6 +537,7 @@ public class SchemaChangeHandler extends AlterHandler {
              */
             modColumn.setName(SHADOW_NAME_PRFIX + modColumn.getName());
         }
+
     }
 
     private void processReorderColumn(ReorderColumnsClause alterClause, OlapTable olapTable,

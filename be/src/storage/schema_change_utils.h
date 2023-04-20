@@ -15,6 +15,7 @@
 #pragma once
 
 #include "common/statusor.h"
+#include "exprs/expr.h"
 #include "storage/column_mapping.h"
 #include "storage/convert_helper.h"
 #include "storage/tablet_meta.h"
@@ -42,11 +43,21 @@ public:
 
     const std::vector<ColumnId>& get_selected_column_indexes() const { return _selected_column_indexes; }
 
+    ObjectPool* get_object_pool() { return &_obj_pool; }
+
+    RuntimeState* get_runtime_state() { return _state; }
+
+    std::unordered_map<int, ExprContext*>* get_mc_exprs() { return &_mc_exprs; }
+
     bool change_chunk(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const TabletMetaSharedPtr& base_tablet_meta,
                       const TabletMetaSharedPtr& new_tablet_meta, MemPool* mem_pool);
 
     bool change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, const Schema& base_schema, const Schema& new_schema,
                          MemPool* mem_pool);
+
+    Status fill_materialized_columns(ChunkPtr& new_chunk);
+
+    void init_runtime_state(TQueryOptions query_options, TQueryGlobals query_globals);
 
 private:
     const MaterializeTypeConverter* get_materialize_type_converter(const std::string& materialized_function,
@@ -56,6 +67,10 @@ private:
     SchemaMapping _schema_mapping;
 
     std::vector<ColumnId> _selected_column_indexes;
+
+    ObjectPool _obj_pool;
+    RuntimeState* _state = nullptr;
+    std::unordered_map<int, ExprContext*> _mc_exprs;
 
     DISALLOW_COPY(ChunkChanger);
 };
@@ -68,7 +83,7 @@ public:
     static Status parse_request(const TabletSchema& base_schema, const TabletSchema& new_schema,
                                 ChunkChanger* chunk_changer,
                                 const MaterializedViewParamMap& materialized_view_param_map, bool has_delete_predicates,
-                                bool* sc_sorting, bool* sc_directly);
+                                bool* sc_sorting, bool* sc_directly, std::unordered_set<int>* materialized_column_idxs);
 
 private:
     // default_value for new column is needed

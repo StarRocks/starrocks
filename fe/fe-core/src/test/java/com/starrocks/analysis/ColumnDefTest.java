@@ -119,7 +119,7 @@ public class ColumnDefTest {
     public void testAutoIncrement() throws AnalysisException {
         {
             ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", false, null, Boolean.FALSE, DefaultValueDef.NOT_SET,
-                    Boolean.TRUE, "");
+                    Boolean.TRUE, null, "");
             column.analyze(true);
 
             Assert.assertEquals("`col` bigint(20) NOT NULL AUTO_INCREMENT COMMENT \"\"", column.toString());
@@ -130,7 +130,7 @@ public class ColumnDefTest {
         }
         {
             ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", false, null, Boolean.FALSE, DefaultValueDef.NOT_SET,
-                    null, "");
+                    null, null, "");
             column.analyze(true);
 
             Assert.assertEquals("`col` bigint(20) NOT NULL COMMENT \"\"", column.toString());
@@ -141,7 +141,7 @@ public class ColumnDefTest {
         }
         {
             ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", true, null, Boolean.FALSE, DefaultValueDef.NOT_SET,
-                    Boolean.TRUE, "");
+                    Boolean.TRUE, null, "");
             column.analyze(true);
 
             Assert.assertEquals("`col` bigint(20) NOT NULL AUTO_INCREMENT COMMENT \"\"", column.toString());
@@ -152,7 +152,7 @@ public class ColumnDefTest {
         }
         {
             ColumnDef column = new ColumnDef("col", BigIntCol, "utf8", true, null, Boolean.FALSE, DefaultValueDef.NOT_SET,
-                    null, "");
+                    null, null, "");
             column.analyze(true);
 
             Assert.assertEquals("`col` bigint(20) NOT NULL COMMENT \"\"", column.toString());

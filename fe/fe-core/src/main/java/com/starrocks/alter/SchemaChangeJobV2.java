@@ -43,6 +43,12 @@ import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.google.common.collect.Table.Cell;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Index;
@@ -71,7 +77,13 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SelectAnalyzer.RewriteAliasVisitor;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -79,6 +91,10 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
+import com.starrocks.thrift.TExpr;
+import com.starrocks.thrift.TQueryGlobals;
+import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -90,7 +106,10 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -491,6 +510,116 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     MaterializedIndex shadowIdx = entry.getValue();
 
                     long originIdxId = indexIdMap.get(shadowIdxId);
+
+                    boolean hasNewMaterializedColumn = false;
+                    List<Column> diffMaterializedColumnSchema = Lists.newArrayList();
+                    if (originIdxId == tbl.getBaseIndexId()) {
+                        List<String> originSchema = tbl.getSchemaByIndexId(originIdxId).stream().map(col ->
+                                                        new String(col.getName())).collect(Collectors.toList());
+                        List<String> newSchema = tbl.getSchemaByIndexId(shadowIdxId).stream().map(col ->
+                                                    new String(col.getName())).collect(Collectors.toList());
+
+                        if (originSchema.size() != 0 && newSchema.size() != 0) {
+                            for (String colNameInNewSchema : newSchema) {
+                                if (!originSchema.contains(colNameInNewSchema) &&
+                                        tbl.getColumn(colNameInNewSchema).isMaterializedColumn()) {
+                                    diffMaterializedColumnSchema.add(tbl.getColumn(colNameInNewSchema));
+                                }
+                            }
+                        }
+
+                        if (diffMaterializedColumnSchema.size() != 0) {
+                            hasNewMaterializedColumn = true;
+                        }
+                    }
+                    Map<Integer, TExpr> mcExprs = new HashMap<>();
+                    TAlterTabletMaterializedColumnReq materializedColumnReq = new TAlterTabletMaterializedColumnReq();
+                    if (hasNewMaterializedColumn) {
+                        DescriptorTable descTbl = new DescriptorTable();
+                        TupleDescriptor tupleDesc = descTbl.createTupleDescriptor();
+                        Map<String, SlotDescriptor> slotDescByName = new HashMap<>();
+
+                        /*
+                          * The expression substitution is needed here, because all slotRefs in 
+                          * MaterializedColumnExpr are still is unAnalyzed. slotRefs get isAnalyzed == true
+                          * if it is init by SlotDescriptor. The slot information will be used by be to indentify
+                          * the column location in a chunk.
+                        */
+                        for (Column col : tbl.getFullSchema()) {
+                            SlotDescriptor slotDesc = descTbl.addSlotDescriptor(tupleDesc);
+                            slotDesc.setType(col.getType());
+                            slotDesc.setColumn(new Column(col));
+                            slotDesc.setIsMaterialized(true);
+                            slotDesc.setIsNullable(col.isAllowNull());
+
+                            slotDescByName.put(col.getName(), slotDesc);
+                        }
+
+                        for (Column materializedColumn : diffMaterializedColumnSchema) {
+                            Column column = materializedColumn;
+                            Expr expr = column.materializedColumnExpr();
+                            List<Expr> outputExprs = Lists.newArrayList();
+
+                            for (Column col : tbl.getBaseSchema()) {
+                                SlotDescriptor slotDesc = slotDescByName.get(col.getName());
+
+                                if (slotDesc == null) {
+                                    throw new AlterCancelException("Expression for materialized column can not find " +
+                                                                   "the ref column");
+                                }
+
+                                SlotRef slotRef = new SlotRef(slotDesc);
+                                slotRef.setColumnName(col.getName());
+                                outputExprs.add(slotRef);
+                            }
+
+                            TableName tableName = new TableName(db.getFullName(), tbl.getName());
+
+                            // sourceScope must be set null tableName for its Field in RelationFields
+                            // because we hope slotRef can not be resolved in sourceScope but can be
+                            // resolved in outputScope to force to replace the node using outputExprs.
+                            Scope sourceScope = new Scope(RelationId.anonymous(), 
+                                                    new RelationFields(tbl.getBaseSchema().stream().map(col ->
+                                                        new Field(col.getName(), col.getType(), null, null))
+                                                            .collect(Collectors.toList())));
+
+                            Scope outputScope = new Scope(RelationId.anonymous(), 
+                                                    new RelationFields(tbl.getBaseSchema().stream().map(col ->
+                                                        new Field(col.getName(), col.getType(), tableName, null))
+                                                            .collect(Collectors.toList())));
+
+                            RewriteAliasVisitor visitor =
+                                                new RewriteAliasVisitor(sourceScope, outputScope,
+                                                    outputExprs, ConnectContext.get());
+
+                            Expr materializedColumnExpr = expr.accept(visitor, null);
+
+                            materializedColumnExpr = Expr.analyzeAndCastFold(materializedColumnExpr);
+
+                            int columnIndex = -1;
+                            if (column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) ||
+                                    column.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+                                String originName = Column.removeNamePrefix(column.getName());
+                                columnIndex = tbl.getFullSchema().indexOf(tbl.getColumn(originName));
+                            } else {
+                                columnIndex = tbl.getFullSchema().indexOf(column);
+                            }
+
+                            mcExprs.put(columnIndex, materializedColumnExpr.treeToThrift());
+                        }
+                        // we need this thing, otherwise some expr evalution will fail in BE
+                        TQueryGlobals queryGlobals = new TQueryGlobals();
+                        SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+                        queryGlobals.setNow_string(dateFormat.format(new Date()));
+                        queryGlobals.setTimestamp_ms(new Date().getTime());
+                        queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
+
+                        TQueryOptions queryOptions = new TQueryOptions();
+
+                        materializedColumnReq.setQuery_globals(queryGlobals);
+                        materializedColumnReq.setQuery_options(queryOptions);
+                        materializedColumnReq.setMc_exprs(mcExprs);
+                    }
                     int shadowSchemaHash = indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash;
                     int originSchemaHash = tbl.getSchemaHashByIndexId(indexIdMap.get(shadowIdxId));
 
@@ -501,7 +630,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             AlterReplicaTask rollupTask = AlterReplicaTask.alterLocalTablet(
                                     shadowReplica.getBackendId(), dbId, tableId, partitionId,
                                     shadowIdxId, shadowTabletId, originTabletId, shadowReplica.getId(),
-                                    shadowSchemaHash, originSchemaHash, visibleVersion, jobId);
+                                    shadowSchemaHash, originSchemaHash, visibleVersion, jobId, materializedColumnReq);
                             schemaChangeBatchTask.addTask(rollupTask);
                         }
                     }

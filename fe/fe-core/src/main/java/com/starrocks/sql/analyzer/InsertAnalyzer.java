@@ -165,15 +165,25 @@ public class InsertAnalyzer {
         List<Column> targetColumns;
         Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         if (insertStmt.getTargetColumnNames() == null) {
-            targetColumns = new ArrayList<>(table.getBaseSchema());
-            mentionedColumns =
-                    table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+            if (table instanceof OlapTable) {
+                targetColumns = new ArrayList<>(((OlapTable) table).getBaseSchemaWithoutMaterializedColumn());
+                mentionedColumns =
+                        ((OlapTable) table).getBaseSchemaWithoutMaterializedColumn().stream()
+                            .map(Column::getName).collect(Collectors.toSet());
+            } else {
+                targetColumns = new ArrayList<>(table.getBaseSchema());
+                mentionedColumns =
+                        table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+            }
         } else {
             targetColumns = new ArrayList<>();
             for (String colName : insertStmt.getTargetColumnNames()) {
                 Column column = table.getColumn(colName);
                 if (column == null) {
                     throw new SemanticException("Unknown column '%s' in '%s'", colName, table.getName());
+                }
+                if (column.isMaterializedColumn()) {
+                    throw new SemanticException("materialized column '%s' can not be specified", colName);
                 }
                 if (!mentionedColumns.add(colName)) {
                     throw new SemanticException("Column '%s' specified twice", colName);
@@ -185,9 +195,14 @@ public class InsertAnalyzer {
         for (Column column : table.getBaseSchema()) {
             Column.DefaultValueType defaultValueType = column.getDefaultValueType();
             if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() &&
-                    !column.isAutoIncrement() && !mentionedColumns.contains(column.getName())) {
-                throw new SemanticException("'%s' must be explicitly mentioned in column permutation",
-                        column.getName());
+                    !column.isAutoIncrement() && !column.isMaterializedColumn() &&
+                    !mentionedColumns.contains(column.getName())) {
+                String msg = "";
+                for (String s : mentionedColumns) {
+                    msg = msg + " " + s + " ";
+                }
+                throw new SemanticException("'%s' must be explicitly mentioned in column permutation: %s",
+                        column.getName(), msg);
             }
         }
 

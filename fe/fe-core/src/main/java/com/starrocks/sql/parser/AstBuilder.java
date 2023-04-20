@@ -883,10 +883,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         new FunctionCallExpr(functionName, new ArrayList<>()));
             }
         }
+        final StarRocksParser.MaterializedColumnDescContext materializedColumnDescContext =
+                                                            context.materializedColumnDesc();
+        Expr expr = null;
+        if (materializedColumnDescContext != null) {
+            if (isAllowNull != null && isAllowNull == false) {
+                throw new ParsingException(PARSER_ERROR_MSG.foundNotNull("Materialized Column"));
+            }
+            if (isKey) {
+                throw new ParsingException(PARSER_ERROR_MSG.isKey("Materialized Column"));
+            }
+
+            expr = (Expr) visit(materializedColumnDescContext.expression());
+        }
         String comment = context.comment() == null ? "" :
                 ((StringLiteral) visit(context.comment().string())).getStringValue();
         return new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef,
-                isAutoIncrement, comment, createPos(context));
+                isAutoIncrement, expr, comment, createPos(context));
     }
 
     @Override
@@ -3359,8 +3372,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.rollupName != null) {
             rollupName = getIdentifierName(context.rollupName);
         }
-        return new AddColumnClause(columnDef, columnPosition, rollupName, getProperties(context.properties()),
-                createPos(context));
+        Map<String, String> properties = new HashMap<>();;
+        properties = getProperties(context.properties());
+
+        if (columnDef.isMaterializedColumn()) {
+            if (rollupName != null) {
+                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("rollupName", "ADD MATERIALIZED COLUMN"),
+                    columnDef.getPos());
+            }
+
+            if (columnPosition != null) {
+                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("columnPosition", "ADD MATERIALIZED COLUMN"),
+                    columnDef.getPos());
+            }
+
+            if (properties.size() != 0) {
+                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("properties", "ADD MATERIALIZED COLUMN"),
+                    columnDef.getPos());
+            }
+        }
+
+        return new AddColumnClause(columnDef, columnPosition, rollupName, properties, createPos(context));
     }
 
     @Override
@@ -3369,6 +3401,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         for (ColumnDef columnDef : columnDefs) {
             if (columnDef.isAutoIncrement()) {
                 throw new ParsingException(PARSER_ERROR_MSG.autoIncrementForbid(columnDef.getName(), "ADD"),
+                        columnDef.getPos());
+            }
+            if (columnDef.isMaterializedColumn()) {
+                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnForbid(columnDef.getName(), "ADD COLUMNS"),
                         columnDef.getPos());
             }
         }
@@ -3407,6 +3443,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String rollupName = null;
         if (context.rollupName != null) {
             rollupName = getIdentifierName(context.rollupName);
+        }
+        if (columnDef.isMaterializedColumn()) {
+            if (rollupName != null) {
+                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("rollupName",
+                    "MODIFY MATERIALIZED COLUMN"), columnDef.getPos());
+            }
+
+            if (columnPosition != null) {
+                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("columnPosition",
+                    "MODIFY MATERIALIZED COLUMN"), columnDef.getPos());
+            }
         }
         return new ModifyColumnClause(columnDef, columnPosition, rollupName, getProperties(context.properties()),
                 createPos(context));
