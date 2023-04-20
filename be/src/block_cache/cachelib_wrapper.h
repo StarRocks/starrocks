@@ -33,14 +33,14 @@
 
 namespace starrocks {
 
-class FbCacheLib : public KvCache {
+class CacheLibWrapper : public KvCache {
 public:
     using Cache = facebook::cachelib::LruAllocator;
     using PoolId = facebook::cachelib::PoolId;
     using ReadHandle = facebook::cachelib::LruAllocator::ReadHandle;
 
-    FbCacheLib() = default;
-    ~FbCacheLib() override = default;
+    CacheLibWrapper() = default;
+    ~CacheLibWrapper() override = default;
 
     Status init(const CacheOptions& options) override;
 
