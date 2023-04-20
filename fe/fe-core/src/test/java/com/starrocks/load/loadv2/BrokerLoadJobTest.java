@@ -40,6 +40,7 @@ import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
@@ -350,6 +351,7 @@ public class BrokerLoadJobTest {
                                           @Mocked LoadingTaskPlanner loadingTaskPlanner) {
         Config.enable_pipeline_load = false;
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        brokerLoadJob.setConnectContext(new ConnectContext());
         Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
         long taskId = 1L;
         long tableId1 = 1L;
