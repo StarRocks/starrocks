@@ -209,11 +209,11 @@ Example:
 
 ```Plain
 mysql> SHOW PROC "/dbs/xxxxx";
-+---------+-------------+----------+---------------------+--------------+--------------+------+--------------------------+--------------+---------------+------------------------------+
-| TableId | TableName   | IndexNum | PartitionColumnName | PartitionNum | State        | Type | LastConsistencyCheckTime | ReplicaCount | PartitionType | StoragePath                  |
-+---------+-------------+----------+---------------------+--------------+--------------+------+--------------------------+--------------+---------------+------------------------------+
-| 12003   | detail_demo | 1        | NULL                | 1            | CLOUD_NATIVE | LAKE | NULL                     | 8            | UNPARTITIONED | s3://xxxxxxxxxxxxxx/1/12003/ |
-+---------+-------------+----------+---------------------+--------------+--------------+------+--------------------------+--------------+---------------+------------------------------+
++---------+-------------+----------+---------------------+--------------+--------+--------------+--------------------------+--------------+---------------+------------------------------+
+| TableId | TableName   | IndexNum | PartitionColumnName | PartitionNum | State  | Type         | LastConsistencyCheckTime | ReplicaCount | PartitionType | StoragePath                  |
++---------+-------------+----------+---------------------+--------------+--------+--------------+--------------------------+--------------+---------------+------------------------------+
+| 12003   | detail_demo | 1        | NULL                | 1            | NORMAL | CLOUD_NATIVE | NULL                     | 8            | UNPARTITIONED | s3://xxxxxxxxxxxxxx/1/12003/ |
++---------+-------------+----------+---------------------+--------------+--------+--------------+--------------------------+--------------+---------------+------------------------------+
 ```
 
 The `Type` of a table in shared-data StarRocks cluster is `CLOUD_NATIVE`. In the field `StoragePath`, StarRocks returns the object storage directory where the table is stored.
