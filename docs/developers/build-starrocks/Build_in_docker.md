@@ -2,15 +2,17 @@
 
 ## Image
 
-The dev environment image was named as `dev-env`, and was a CentOS7 based image, since branch-2.5, Ubuntu-22.04 is recommended over CentOS7 distribution, the image is renamed to `dev-env-ubuntu` accordingly.
+The dev environment image was named as `dev-env-xxx`.
+If you use Ubuntu, you can download `dev-env-ubuntu`; if you use a Centos7, you can download `dev-env-centos`
+StarRocks support `linux/amd64` and `linux/arm64` two architectures.
+The docker daemon automatically pull specific architecture based image.
+
 
 | branch-name      | image-name                          |
 | ---------------- | ----------------------------------- |
 | main             | starrocks/dev-env-ubuntu:latest     |
 | branch-3.0       | starrocks/dev-env-ubuntu:3.0-latest |
 | branch-2.5       | starrocks/dev-env-ubuntu:2.5-latest |
-| branch-2.4       | starrocks/dev-env:branch-2.4        |
-| branch-2.3       | starrocks/dev-env:branch-2.3        |
 
 ## Download the image
 
