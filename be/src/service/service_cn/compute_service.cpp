@@ -23,4 +23,8 @@ ComputeService::ComputeService(ExecEnv* exec_env)
 
 ComputeService::~ComputeService() = default;
 
+void ComputeService::submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) {
+    _agent_server->submit_tasks(return_value, tasks);
+}
+
 } // namespace starrocks

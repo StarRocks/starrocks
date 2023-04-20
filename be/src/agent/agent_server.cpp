@@ -141,6 +141,7 @@ void AgentServer::Impl::init_or_die() {
                 LOG(WARNING) << "std exception when remove dpp download path. path=" << path.path;
             }
         }
+    }
 
 #define BUILD_DYNAMIC_TASK_THREAD_POOL(name, min_threads, max_threads, queue_size, pool) \
     do {                                                                                 \
@@ -152,6 +153,32 @@ void AgentServer::Impl::init_or_die() {
         CHECK(st.ok()) << st;                                                            \
     } while (false)
 
+    BUILD_DYNAMIC_TASK_THREAD_POOL("create_tablet", config::create_tablet_worker_count,
+                                   config::create_tablet_worker_count, std::numeric_limits<int>::max(),
+                                   _thread_pool_create_tablet);
+
+#ifndef BE_TEST
+
+    // Currently FE can have at most num_of_storage_path * schedule_slot_num_per_path(default 2) clone tasks
+    // scheduled simultaneously, but previously we have only 3 clone worker threads by default,
+    // so this is to keep the dop of clone task handling in sync with FE.
+    //
+    // TODO(shangyiming): using dynamic thread pool to handle task directly instead of using TaskThreadPool
+    // Currently, the task submission and processing logic is deeply coupled with TaskThreadPool, change that will
+    // need to modify many interfaces. So for now we still use TaskThreadPool to submit clone tasks, but with
+    // only a single worker thread, then we use dynamic thread pool to handle the task concurrently in clone task
+    // callback, so that we can match the dop of FE clone task scheduling.
+    // TODO: only for test, need to debug later
+    BUILD_DYNAMIC_TASK_THREAD_POOL(
+            "clone", MIN_CLONE_TASK_THREADS_IN_POOL,
+            /*_exec_env->store_paths().size() * config::parallel_clone_task_per_path */ MIN_CLONE_TASK_THREADS_IN_POOL,
+            DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
+#endif
+
+    BUILD_DYNAMIC_TASK_THREAD_POOL("drop", config::drop_tablet_worker_count, config::drop_tablet_worker_count,
+                                   std::numeric_limits<int>::max(), _thread_pool_drop);
+
+    if (!_is_compute_node) {
 // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
 // But it seems that there's no limit for the number of tablets of a partition.
 // Since a large queue size brings a little overhead, a big one is chosen here.
@@ -169,13 +196,6 @@ void AgentServer::Impl::init_or_die() {
                                        max_publish_version_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
                                        _thread_pool_publish_version);
 #endif
-
-        BUILD_DYNAMIC_TASK_THREAD_POOL("drop", config::drop_tablet_worker_count, config::drop_tablet_worker_count,
-                                       std::numeric_limits<int>::max(), _thread_pool_drop);
-
-        BUILD_DYNAMIC_TASK_THREAD_POOL("create_tablet", config::create_tablet_worker_count,
-                                       config::create_tablet_worker_count, std::numeric_limits<int>::max(),
-                                       _thread_pool_create_tablet);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("alter_tablet", config::alter_tablet_worker_count,
                                        config::alter_tablet_worker_count, std::numeric_limits<int>::max(),
@@ -218,21 +238,6 @@ void AgentServer::Impl::init_or_die() {
         BUILD_DYNAMIC_TASK_THREAD_POOL("drop_auto_increment_map_dir", 1, 1, std::numeric_limits<int>::max(),
                                        _thread_pool_drop_auto_increment_map);
 
-#ifndef BE_TEST
-        // Currently FE can have at most num_of_storage_path * schedule_slot_num_per_path(default 2) clone tasks
-        // scheduled simultaneously, but previously we have only 3 clone worker threads by default,
-        // so this is to keep the dop of clone task handling in sync with FE.
-        //
-        // TODO(shangyiming): using dynamic thread pool to handle task directly instead of using TaskThreadPool
-        // Currently, the task submission and processing logic is deeply coupled with TaskThreadPool, change that will
-        // need to modify many interfaces. So for now we still use TaskThreadPool to submit clone tasks, but with
-        // only a single worker thread, then we use dynamic thread pool to handle the task concurrently in clone task
-        // callback, so that we can match the dop of FE clone task scheduling.
-        BUILD_DYNAMIC_TASK_THREAD_POOL("clone", MIN_CLONE_TASK_THREADS_IN_POOL,
-                                       _exec_env->store_paths().size() * config::parallel_clone_task_per_path,
-                                       DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
-#endif
-
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
 #ifndef BE_TEST
@@ -260,10 +265,14 @@ void AgentServer::Impl::init_or_die() {
 }
 
 void AgentServer::Impl::stop() {
+    _thread_pool_create_tablet->shutdown();
+    _thread_pool_drop->shutdown();
+
+#ifndef BE_TEST
+    _thread_pool_clone->shutdown();
+
     if (!_is_compute_node) {
         _thread_pool_publish_version->shutdown();
-        _thread_pool_drop->shutdown();
-        _thread_pool_create_tablet->shutdown();
         _thread_pool_alter_tablet->shutdown();
         _thread_pool_clear_transaction->shutdown();
         _thread_pool_storage_medium_migrate->shutdown();
@@ -277,8 +286,6 @@ void AgentServer::Impl::stop() {
         _thread_pool_update_tablet_meta_info->shutdown();
         _thread_pool_drop_auto_increment_map->shutdown();
 
-#ifndef BE_TEST
-        _thread_pool_clone->shutdown();
 #define STOP_POOL(type, pool_name) pool_name->stop();
 #else
 #define STOP_POOL(type, pool_name)

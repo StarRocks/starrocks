@@ -27,6 +27,8 @@ public:
 
     ~ComputeService() override;
 
+    void submit_tasks(TAgentResult& return_value, const std::vector<TAgentTaskRequest>& tasks) override;
+
 private:
     AgentServer* _agent_server;
 };
