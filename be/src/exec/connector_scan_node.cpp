@@ -121,18 +121,21 @@ ConnectorScanNode::~ConnectorScanNode() {
 Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
     RETURN_IF_ERROR(_data_source_provider->init(_pool, state));
+
+    const TQueryOptions& query_options = state->query_options();
+    double mem_ratio = config::connector_scan_use_query_mem_ratio;
+    if (query_options.__isset.connector_scan_use_query_mem_ratio) {
+        mem_ratio = query_options.connector_scan_use_query_mem_ratio;
+    }
+    _mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * mem_ratio;
+    _io_tasks_per_scan_operator = config::connector_io_tasks_per_scan_operator;
+    if (query_options.__isset.connector_io_tasks_per_scan_operator) {
+        _io_tasks_per_scan_operator = query_options.connector_io_tasks_per_scan_operator;
+    }
+
     _estimate_scan_row_bytes();
-    _adjust_io_tasks_per_scan_operator(state);
     _estimate_mem_usage_per_chunk_source();
     return Status::OK();
-}
-
-void ConnectorScanNode::_adjust_io_tasks_per_scan_operator(RuntimeState* state) {
-    const TQueryOptions& options = state->query_options();
-    _io_tasks_per_scan_operator = config::connector_io_tasks_per_scan_operator;
-    if (options.__isset.connector_io_tasks_per_scan_operator) {
-        _io_tasks_per_scan_operator = options.connector_io_tasks_per_scan_operator;
-    }
 }
 
 void ConnectorScanNode::_estimate_scan_row_bytes() {
@@ -159,8 +162,8 @@ int ConnectorScanNode::_estimated_max_concurrent_chunks() const {
     size_t row_mem_usage = _estimated_scan_row_bytes;
     size_t chunk_mem_usage = row_mem_usage * runtime_state()->chunk_size();
     DCHECK_GT(chunk_mem_usage, 0);
-    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
-    int concurrency = std::max<int>(mem_limit / chunk_mem_usage, 1);
+    // give half of the memory to the chunk buffer
+    int concurrency = std::max<int>(_mem_limit / 2 / chunk_mem_usage, 1);
     return concurrency;
 }
 
@@ -169,7 +172,6 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
     std::shared_ptr<pipeline::ConnectorScanOperatorFactory> scan_op = nullptr;
     bool stream_data_source = _data_source_provider->stream_data_source();
     bool is_stream_pipeline = context->is_stream_pipeline();
-    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
 
     // port from olap scan node. to control chunk buffer usage, we can control memory consumption to avoid OOM.
     size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
@@ -180,7 +182,7 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
     size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, _estimated_max_concurrent_chunks());
 
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
-            max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
+            max_buffer_capacity, default_buffer_capacity, _mem_limit, runtime_state()->chunk_size());
     scan_op = !stream_data_source
                       ? std::make_shared<pipeline::ConnectorScanOperatorFactory>(
                                 context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter))
@@ -189,6 +191,8 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
                                 is_stream_pipeline);
 
     scan_op->set_estimated_mem_usage_per_chunk_source(_estimated_mem_usage_per_chunk_source);
+    scan_op->set_scan_mem_limit(_mem_limit);
+
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
 

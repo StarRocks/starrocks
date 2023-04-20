@@ -67,7 +67,6 @@ private:
     void _close_pending_scanners();
     void _push_pending_scanner(ConnectorScanner* scanner);
     ConnectorScanner* _pop_pending_scanner();
-    void _adjust_io_tasks_per_scan_operator(RuntimeState* state);
 
     // non-pipeline fields.
     std::vector<TScanRangeParams> _scan_ranges;
@@ -123,6 +122,7 @@ private:
     void _estimate_scan_row_bytes();
     void _estimate_mem_usage_per_chunk_source();
     int _estimated_max_concurrent_chunks() const;
+    int64_t _mem_limit = 0;
     size_t _estimated_scan_row_bytes = 0;
     size_t _estimated_mem_usage_per_chunk_source = 0;
 };

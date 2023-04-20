@@ -71,14 +71,7 @@ ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode*
         : ScanOperatorFactory(id, scan_node),
           _chunk_buffer(scan_node->is_shared_scan_enabled() ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect,
                         dop, std::move(buffer_limiter)) {
-    const TQueryOptions& query_options = state->query_options();
     _io_tasks_mem_limiter = state->obj_pool()->add(new ConnectorScanOperatorIOTasksMemLimiter());
-    double mem_ratio = config::connector_io_tasks_use_query_mem_ratio;
-    if (query_options.__isset.connector_io_tasks_use_query_mem_ratio) {
-        mem_ratio = query_options.connector_io_tasks_use_query_mem_ratio;
-    }
-    int64_t mem_limit = int64_t(state->query_mem_tracker_ptr()->limit() * mem_ratio);
-    _io_tasks_mem_limiter->mem_limit = mem_limit;
     _io_tasks_mem_limiter->dop = dop;
 }
 
@@ -106,6 +99,10 @@ const std::vector<ExprContext*>& ConnectorScanOperatorFactory::partition_exprs()
 
 void ConnectorScanOperatorFactory::set_estimated_mem_usage_per_chunk_source(int64_t value) {
     _io_tasks_mem_limiter->estimated_mem_usage_per_chunk_source = value;
+}
+
+void ConnectorScanOperatorFactory::set_scan_mem_limit(int64_t value) {
+    _io_tasks_mem_limiter->mem_limit = value;
 }
 
 // ===============================================================
@@ -352,7 +349,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     io_tasks = std::max(min_io_tasks, io_tasks);
     io_tasks = std::min(max_io_tasks, io_tasks);
     if ((now - P.adjust_io_tasks_last_timestamp) <= config::connector_io_tasks_adjust_interval_ms * 1000) {
-        VLOG_FILE << "[XXX]. pickup morsel. cached count = " << io_tasks;
+        VLOG_FILE << "[XXXX]. pickup morsel. cached count = " << io_tasks;
         return io_tasks;
     }
     P.adjust_io_tasks_last_timestamp = now;
@@ -435,7 +432,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     auto build_log = [&]() {
         auto doround = [&](double x) { return round(x * 100.0) / 100.0; };
         std::stringstream ss;
-        ss << "[XXX] pick mosrsel. id = " << _driver_sequence;
+        ss << "[XXXX] pick mosrsel. id = " << _driver_sequence;
         ss << ", cs = " << doround(cs_speed) << "(" << cs_pull_chunks << "/" << P.cs_gen_chunks_time << ")";
         ss << ", last_cs = " << doround(P.last_cs_speed) << "(" << doround(cs_speed / P.last_cs_speed) << ")";
         ss << ", op = " << doround(op_speed) << "(" << P.op_pull_chunks << "/" << (P.op_running_time / 1000) << ")";
