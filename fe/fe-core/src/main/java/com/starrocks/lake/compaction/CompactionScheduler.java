@@ -434,41 +434,23 @@ public class CompactionScheduler extends Daemon {
             q = new CircularFifoQueue<>(size);
         }
 
-        int size() {
-            synchronized (this) {
-                return q.size();
+        synchronized void changeMaxSize(int newMaxSize) {
+            if (newMaxSize == q.maxSize()) {
+                return;
             }
+            CircularFifoQueue<E> newQ = new CircularFifoQueue<>(newMaxSize);
+            for (E e : q) {
+                newQ.offer(e);
+            }
+            q = newQ;
         }
 
-        int maxSize() {
-            synchronized (this) {
-                return q.maxSize();
-            }
+        synchronized void offer(E e) {
+            q.offer(e);
         }
 
-        void changeMaxSize(int newMaxSize) {
-            synchronized (this) {
-                if (newMaxSize == q.maxSize()) {
-                    return;
-                }
-                CircularFifoQueue<E> newQ = new CircularFifoQueue<>(newMaxSize);
-                for (E e : q) {
-                    newQ.offer(e);
-                }
-                q = newQ;
-            }
-        }
-
-        void offer(E e) {
-            synchronized (this) {
-                q.offer(e);
-            }
-        }
-
-        void forEach(Consumer<? super E> consumer) {
-            synchronized (this) {
-                q.forEach(consumer);
-            }
+        synchronized void forEach(Consumer<? super E> consumer) {
+            q.forEach(consumer);
         }
     }
 }
