@@ -47,6 +47,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Objects;
 
 public class BoolLiteral extends LiteralExpr {
     private boolean value;
@@ -174,7 +175,7 @@ public class BoolLiteral extends LiteralExpr {
 
     @Override
     public int hashCode() {
-        return 31 * super.hashCode() + Boolean.hashCode(value);
+        return Objects.hash(super.hashCode(), value);
     }
 
     @Override
