@@ -70,7 +70,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     private final List<Long> partitionIdList;
 
     private final List<String> sqlBuffer = Lists.newArrayList();
-    private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
+    private final List<ArrayList<Expr>> rowsBuffer = Lists.newArrayList();
 
     public FullStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columns,
                                     StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
@@ -147,7 +147,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         String tableName = StringEscapeUtils.escapeSql(db.getOriginName() + "." + table.getName());
         for (TStatisticData data : dataList) {
             List<String> params = Lists.newArrayList();
-            List<Expr> row = Lists.newArrayList();
+            ArrayList<Expr> row = Lists.newArrayList();
 
             String partitionName = StringEscapeUtils.escapeSql(table.getPartition(data.getPartitionId()).getName());
 
@@ -188,7 +188,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     private void flushInsertStatisticsData(ConnectContext context, boolean force) throws Exception {
         // hll serialize to hex, about 32kb
         long bufferSize = 33L * 1024 * rowsBuffer.size();
-        if (bufferSize < Config.statistics_full_collect_buffer && !force) {
+        if (bufferSize < Config.statistic_full_collect_buffer && !force) {
             return;
         }
         if (rowsBuffer.isEmpty()) {
