@@ -121,7 +121,7 @@ Assume that in Flink you create a table that consists of three columns, which ar
 
 ## Data type mapping between StarRocks and Flink
 
-The following data type mapping is valid only for Flink reading data from StarRocks. For the data type mapping used for Flink writing data into StarRocks, see [Continuously load data from Apache Flink®](https://docs.starrocks.io/en-us/latest/loading/Flink-connector-starrocks).
+The following data type mapping is valid only for Flink reading data from StarRocks. For the data type mapping used for Flink writing data into StarRocks, see [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md).
 
 | StarRocks  | Flink     |
 | ---------- | --------- |

@@ -2,7 +2,7 @@
 
 Contributing to StarRocks is cordially welcome from everyone. Contributing to StarRocks is not limited to contributing code. Below, we list different approaches to contributing to our community.
 
-| Report a bug                        | You can [file an issue](https://github.com/StarRocks/starrocks/issues/new/choose) to report a bug with StarRocks. You can also click `Feedback` in the upper-right corner of the page you are reading in the [Documentation Center](https://docs.starrocks.io/en-us/latest/introduction/StarRocks_intro) to report a bug. |
+| Report a bug                        | You can [file an issue](https://github.com/StarRocks/starrocks/issues/new/choose) to report a bug with StarRocks. You can also click `Feedback` in the upper-right corner of the page you are reading in the Documentation Site to report a bug. |
 | ----------------------------------- | ------------------------------------------------------------ |
 | **Contribute code**                 | You can contribute your code by fixing a bug or implementing a feature. |
 | **Contribute test case**            | You can contribute your test cases.                          |
