@@ -22,14 +22,11 @@ import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 /**
  * DeriveStatsTask derives any stats needed for costing a GroupExpression.
  */
 public class DeriveStatsTask extends OptimizerTask {
-    private static final Logger LOG = LogManager.getLogger(DeriveStatsTask.class);
     private final GroupExpression groupExpression;
 
     public DeriveStatsTask(TaskContext context, GroupExpression expression) {
@@ -71,7 +68,6 @@ public class DeriveStatsTask extends OptimizerTask {
                 LogicalOlapScanOperator scan = groupExpression.getOp().cast();
                 if (scan.getTable().isMaterializedView()) {
                     MaterializedView mv = (MaterializedView) scan.getTable();
-                    LOG.info("set statistics for mv: {}", mv.getName());
                     groupExpression.getGroup().setMvStatistics(mv.getId(), expressionContext.getStatistics());
                 }
             }

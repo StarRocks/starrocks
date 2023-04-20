@@ -21,8 +21,6 @@ import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
@@ -38,7 +36,6 @@ import java.util.Map;
  * either an {@link GroupExpression} or a {@link OptExpression}
  */
 public class ExpressionContext {
-    private static final Logger LOG = LogManager.getLogger(ExpressionContext.class);
 
     private OptExpression expression;
     private GroupExpression groupExpression;
@@ -133,7 +130,6 @@ public class ExpressionContext {
             Table table = scan.getTable();
             if (table.isMaterializedView()) {
                 statisticsForMv = groupMvStatistics.get(table.getId());
-                LOG.info("get statistics for mv: {}", table.getName());
             }
         }
         return statisticsForMv != null ? statisticsForMv : statistics;
