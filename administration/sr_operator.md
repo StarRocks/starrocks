@@ -295,3 +295,9 @@ Kubernetes 还支持使用 `behavior`，根据业务场景定制扩缩容行为�
       target:
         averageUtilization: 60
   ```
+
+## 常见问题
+
+- **问题描述**：执行 `kubectl apply -f xxx` 部署定制资源 StarRocksCluster 时，报错 `The CustomResourceDefinition "starrocksclusters.starrocks.com" is invalid: metadata.annotations: Too long: must have at most 262144 bytes`。
+- **原因分析**：因为每次使用 `kubectl apply -f xxx` 创建或者更新资源时，都会添加一个名为 kubectl.kubernetes.io/last-applied-configuration 的 metadata 注解。该 metadata 注解为 JSON 格式，注解值包含了用来创建对象的配置文件的内容。`kubectl apply -f xxx` 适用于大部分情况，但在极少数情况下，例如定制资源的配置文件过大，则可能会导致 metadata 注解的大小超出上限。
+- **解决措施**：如果您是第一次部署定制资源 StarRocksCluster，则建议您使用 `kubectl create -f xxx`。如果环境中已经部署定制资源，您需要更新定制资源的配置，则建议您使用 `kubectl replace -f xxx`。
