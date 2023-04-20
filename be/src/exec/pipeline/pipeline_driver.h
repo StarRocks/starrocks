@@ -17,6 +17,7 @@
 #include <gutil/bits.h>
 
 #include <atomic>
+#include <chrono>
 
 #include "common/statusor.h"
 #include "exec/pipeline/fragment_context.h"
@@ -64,10 +65,15 @@ enum DriverState : uint32_t {
     // pending io task's completion.
     PENDING_FINISH = 9,
     EPOCH_PENDING_FINISH = 10,
-    EPOCH_FINISH = 11
+    EPOCH_FINISH = 11,
+    // In some cases, the output of SourceOperator::has_output may change frequently, it's better to wait
+    // in the working thread other than moving the driver frequently between ready queue and pending queue, which
+    // will lead to drastic performance deduction (the "ScheduleTime" in profile will be super high).
+    // We can enable this optimization by overriding SourceOperator::is_mutable to return true.
+    MUTABLE_WAITING = 12
 };
 
-static inline std::string ds_to_string(DriverState ds) {
+[[maybe_unused]] static inline std::string ds_to_string(DriverState ds) {
     switch (ds) {
     case NOT_READY:
         return "NOT_READY";
@@ -93,6 +99,8 @@ static inline std::string ds_to_string(DriverState ds) {
         return "EPOCH_PENDING_FINISH";
     case EPOCH_FINISH:
         return "EPOCH_FINISH";
+    case MUTABLE_WAITING:
+        return "MUTABLE_WAITING";
     }
     DCHECK(false);
     return "UNKNOWN_STATE";
@@ -115,6 +123,16 @@ public:
     void update_last_time_spent(int64_t time_spent) {
         this->last_time_spent = time_spent;
         this->accumulated_time_spent += time_spent;
+        this->accumulated_mutable_time_spent += time_spent;
+    }
+    void clean_mutable_infos() {
+        this->accumulated_mutable_time_spent = 0;
+        this->enter_mutable_queue_timestamp = 0;
+    }
+    void update_enter_mutable_queue_timestamp() {
+        enter_mutable_queue_timestamp = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                std::chrono::steady_clock::now().time_since_epoch())
+                                                .count();
     }
     void update_last_chunks_moved(int64_t chunks_moved) {
         this->last_chunks_moved = chunks_moved;
@@ -124,10 +142,15 @@ public:
     void update_accumulated_rows_moved(int64_t rows_moved) { this->accumulated_rows_moved += rows_moved; }
     void increment_schedule_times() { this->schedule_times += 1; }
 
+    int64_t get_accumulated_mutable_time_spent() { return accumulated_mutable_time_spent; }
+    int64_t get_mutable_queue_time_spent() {
+        const auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                 std::chrono::steady_clock::now().time_since_epoch())
+                                 .count();
+        return now - enter_mutable_queue_timestamp;
+    }
     int64_t get_schedule_times() { return schedule_times; }
-
     int64_t get_schedule_effective_times() { return schedule_effective_times; }
-
     int64_t get_rows_per_chunk() {
         if (accumulated_chunks_moved > 0) {
             return accumulated_rows_moved / accumulated_chunks_moved;
@@ -135,9 +158,7 @@ public:
             return 0;
         }
     }
-
     int64_t get_accumulated_chunks_moved() { return accumulated_chunks_moved; }
-
     int64_t get_accumulated_time_spent() const { return accumulated_time_spent; }
 
 private:
@@ -145,7 +166,9 @@ private:
     int64_t schedule_effective_times{0};
     int64_t last_time_spent{0};
     int64_t last_chunks_moved{0};
+    int64_t enter_mutable_queue_timestamp{0};
     int64_t accumulated_time_spent{0};
+    int64_t accumulated_mutable_time_spent{0};
     int64_t accumulated_chunks_moved{0};
     int64_t accumulated_rows_moved{0};
 };
@@ -484,6 +507,7 @@ protected:
     RuntimeProfile::Counter* _schedule_counter = nullptr;
     RuntimeProfile::Counter* _yield_by_time_limit_counter = nullptr;
     RuntimeProfile::Counter* _yield_by_preempt_counter = nullptr;
+    RuntimeProfile::Counter* _yield_by_mutable_wait_counter = nullptr;
     RuntimeProfile::Counter* _block_by_precondition_counter = nullptr;
     RuntimeProfile::Counter* _block_by_output_full_counter = nullptr;
     RuntimeProfile::Counter* _block_by_input_empty_counter = nullptr;

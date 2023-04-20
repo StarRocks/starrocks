@@ -340,7 +340,7 @@ ChunkUniquePtr SortedRun::clone_slice() const {
     }
 }
 
-ChunkPtr SortedRun::steal_chunk(size_t size, size_t skipped_rows) {
+std::pair<ChunkPtr, Columns> SortedRun::steal_chunk(bool steal_orderby, size_t size, size_t skipped_rows) {
     if (empty()) {
         return {};
     }
@@ -354,23 +354,50 @@ ChunkPtr SortedRun::steal_chunk(size_t size, size_t skipped_rows) {
     size_t reserved_rows = num_rows() - skipped_rows;
 
     if (size >= reserved_rows) {
-        ChunkPtr res;
+        ChunkPtr res_chunk;
+        Columns res_orderby;
         if (skipped_rows == 0 && range.first == 0 && range.second == chunk->num_rows()) {
             // No others reference this chunk
-            res = chunk;
+            res_chunk = chunk;
+
+            if (steal_orderby) {
+                res_orderby = std::move(orderby);
+            }
         } else {
-            res = chunk->clone_empty(reserved_rows);
-            res->append(*chunk, range.first + skipped_rows, reserved_rows);
+            res_chunk = chunk->clone_empty(reserved_rows);
+            res_chunk->append(*chunk, range.first + skipped_rows, reserved_rows);
+
+            if (steal_orderby) {
+                for (auto& column : orderby) {
+                    auto copy = column->clone_empty();
+                    copy->reserve(reserved_rows);
+                    copy->append(*column, range.first + skipped_rows, reserved_rows);
+                    res_orderby.push_back(std::move(copy));
+                }
+            }
         }
         range.first = range.second = 0;
         chunk.reset();
-        return res;
+        orderby.clear();
+        return std::make_pair(std::move(res_chunk), std::move(res_orderby));
     } else {
         size_t required_rows = std::min(size, reserved_rows);
-        ChunkPtr res = chunk->clone_empty(required_rows);
-        res->append(*chunk, range.first + skipped_rows, required_rows);
+        ChunkPtr res_chunk = chunk->clone_empty(required_rows);
+        Columns res_orderby;
+        res_chunk->append(*chunk, range.first + skipped_rows, required_rows);
+
+        if (steal_orderby) {
+            for (auto& column : orderby) {
+                auto copy = column->clone_empty();
+                copy->reserve(reserved_rows);
+                copy->append(*column, range.first + skipped_rows, required_rows);
+                res_orderby.push_back(std::move(copy));
+            }
+        }
+
         range.first += skipped_rows + required_rows;
-        return res;
+
+        return std::make_pair(std::move(res_chunk), std::move(res_orderby));
     }
 }
 

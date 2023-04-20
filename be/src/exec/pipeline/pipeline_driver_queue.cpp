@@ -80,11 +80,11 @@ void QuerySharedDriverQueue::put_back_from_executor(const DriverRawPtr driver) {
     put_back(driver);
 }
 
-StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
+StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(const bool block) {
     // -1 means no candidates; else has candidate.
     int queue_idx = -1;
     double target_accu_time = 0;
-    DriverRawPtr driver_ptr;
+    DriverRawPtr driver_ptr = nullptr;
 
     {
         std::unique_lock<std::mutex> lock(_global_mutex);
@@ -108,13 +108,19 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take() {
             if (queue_idx >= 0) {
                 break;
             }
+            if (!block) {
+                break;
+            }
             _cv.wait(lock);
         }
-        // record queue's index to accumulate time for it.
-        driver_ptr = _queues[queue_idx].take();
-        driver_ptr->set_in_ready_queue(false);
 
-        --_num_drivers;
+        if (queue_idx >= 0) {
+            // record queue's index to accumulate time for it.
+            driver_ptr = _queues[queue_idx].take(false);
+            driver_ptr->set_in_ready_queue(false);
+
+            --_num_drivers;
+        }
     }
 
     // next pipeline driver to execute.
@@ -173,8 +179,9 @@ void SubQuerySharedDriverQueue::cancel(const DriverRawPtr driver) {
     }
 }
 
-DriverRawPtr SubQuerySharedDriverQueue::take() {
+DriverRawPtr SubQuerySharedDriverQueue::take(const bool block) {
     DCHECK(!empty());
+    DCHECK(!block);
     if (!pending_cancel_queue.empty()) {
         DriverRawPtr driver = pending_cancel_queue.front();
         pending_cancel_queue.pop();
@@ -231,7 +238,7 @@ void WorkGroupDriverQueue::put_back_from_executor(const DriverRawPtr driver) {
     _put_back<true>(driver);
 }
 
-StatusOr<DriverRawPtr> WorkGroupDriverQueue::take() {
+StatusOr<DriverRawPtr> WorkGroupDriverQueue::take(const bool block) {
     std::unique_lock<std::mutex> lock(_global_mutex);
 
     workgroup::WorkGroupDriverSchedEntity* wg_entity = nullptr;
@@ -243,6 +250,9 @@ StatusOr<DriverRawPtr> WorkGroupDriverQueue::take() {
         _update_bandwidth_control_period();
 
         if (_wg_entities.empty()) {
+            if (!block) {
+                return nullptr;
+            }
             _cv.wait(lock);
         } else if (wg_entity = _take_next_wg(); wg_entity == nullptr) {
             int64_t cur_ns = MonotonicNanos();
@@ -262,9 +272,11 @@ StatusOr<DriverRawPtr> WorkGroupDriverQueue::take() {
         _dequeue_workgroup(wg_entity);
     }
 
-    --_num_drivers;
-
-    return wg_entity->queue()->take();
+    auto maybe_driver = wg_entity->queue()->take(block);
+    if (maybe_driver.ok() && maybe_driver.value() != nullptr) {
+        --_num_drivers;
+    }
+    return maybe_driver;
 }
 
 void WorkGroupDriverQueue::cancel(DriverRawPtr driver) {
