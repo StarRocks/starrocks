@@ -215,7 +215,6 @@ void ConnectorScanOperator::begin_driver_process() {
     if (_adaptive_processor->last_driver_output_full_timestamp != 0) {
         int64_t now = GetCurrentTimeMicros();
         int64_t wait = (now - _adaptive_processor->last_driver_output_full_timestamp) * 1000;
-        VLOG_FILE << "[XXXX]. id = " << _driver_sequence << ", wait at output full state = " << wait;
         _adaptive_processor->op_running_time += wait;
         _adaptive_processor->last_driver_output_full_timestamp = 0;
     }
@@ -370,7 +369,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     auto build_log = [&]() {
         auto doround = [&](double x) { return round(x * 100.0) / 100.0; };
         std::stringstream ss;
-        ss << "[XXX] pick mosrsel. id = " << _driver_sequence;
+        ss << "available_pickup_morsel_count. id = " << _driver_sequence;
         ss << ", cs = " << doround(cs_speed) << "(" << cs_pull_chunks << "/" << P.cs_gen_chunks_time << ")";
         ss << ", last_cs = " << doround(P.last_cs_speed) << "(" << doround(cs_speed / P.last_cs_speed) << ")";
         ss << ", op = " << doround(op_speed) << "(" << P.op_pull_chunks << "/" << (P.op_running_time / 1000) << ")";
