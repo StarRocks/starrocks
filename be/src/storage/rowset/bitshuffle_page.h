@@ -239,7 +239,7 @@ private:
 template <LogicalType Type>
 class BitShufflePageDecoder final : public PageDecoder {
 public:
-    BitShufflePageDecoder(Slice data, const PageDecoderOptions& options) : _data(data), _options(options) {}
+    BitShufflePageDecoder(Slice data) : _data(data) {}
 
     Status init() override {
         CHECK(!_parsed);
@@ -368,7 +368,6 @@ private:
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
 
     Slice _data;
-    PageDecoderOptions _options;
     uint32_t _num_elements{0};
     size_t _compressed_size{0};
     size_t _num_element_after_padding{0};
