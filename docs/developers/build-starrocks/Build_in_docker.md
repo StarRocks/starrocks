@@ -2,11 +2,9 @@
 
 ## Image
 
-The dev environment image was named as `dev-env-xxx`.
-If you use Ubuntu, you can download `dev-env-ubuntu`; if you use a Centos7, you can download `dev-env-centos`
-StarRocks support `linux/amd64` and `linux/arm64` two architectures.
-The docker daemon automatically pull specific architecture based image.
+The name of dev environment images are of the form `dev-env-xxx`.If you use Ubuntu, you can download the image initiated with `dev-env-ubuntu`, or if you use Centos7, you can download the image initiated with `dev-env-centos`.
 
+StarRocks support both AMD64-based Linux and ARM64-based linux. The Docker daemon automatically pull the corresponding image based on the CPU you use.
 
 | branch-name      | image-name                          |
 | ---------------- | ----------------------------------- |
