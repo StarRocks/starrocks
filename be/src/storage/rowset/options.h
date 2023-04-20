@@ -51,12 +51,6 @@ public:
     uint32_t dict_page_size = DEFAULT_PAGE_SIZE;
 };
 
-class PageDecoderOptions {
-public:
-    PageHandle* page_handle = nullptr;
-    bool enable_direct_copy = false;
-};
-
 class IndexReadOptions {
 public:
     FileSystem* fs = nullptr;
