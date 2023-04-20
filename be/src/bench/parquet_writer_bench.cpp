@@ -16,27 +16,21 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include <filesystem>
 #include <memory>
 #include <random>
 
 #include "bench.h"
 #include "column/chunk.h"
-#include "column/column_helper.h"
 #include "common/statusor.h"
 #include "exprs/runtime_filter.h"
 #include "exprs/runtime_filter_bank.h"
-#include "formats/parquet/file_reader.h"
 #include "formats/parquet/file_writer.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
-#include "fs/fs_memory.h"
 #include "fs/fs_posix.h"
-#include "gutil/casts.h"
 #include "runtime/descriptor_helper.h"
 #include "simd/simd.h"
 #include "testutil/assert.h"
-#include "types/logical_type.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -90,8 +84,7 @@ inline std::shared_ptr<::parquet::schema::GroupNode> make_schema() {
 }
 
 inline std::shared_ptr<arrow::Schema> make_arrow_schema() {
-    std::shared_ptr<arrow::Schema> schema = arrow::schema(
-            {arrow::field("int", arrow::int32())});
+    std::shared_ptr<arrow::Schema> schema = arrow::schema({arrow::field("int", arrow::int32())});
     return schema;
 }
 

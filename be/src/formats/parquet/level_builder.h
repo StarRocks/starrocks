@@ -42,7 +42,9 @@ namespace starrocks::parquet {
 // Immutable and thread-safe.
 class LevelBuilderContext {
 public:
-    LevelBuilderContext(size_t num_levels, std::shared_ptr<std::vector<int16_t>> def_levels = nullptr, int16_t max_def_level = 0, std::shared_ptr<std::vector<int16_t>> rep_levels = nullptr, int16_t max_rep_level = 0)
+    LevelBuilderContext(size_t num_levels, std::shared_ptr<std::vector<int16_t>> def_levels = nullptr,
+                        int16_t max_def_level = 0, std::shared_ptr<std::vector<int16_t>> rep_levels = nullptr,
+                        int16_t max_rep_level = 0)
             : _max_def_level(max_def_level),
               _max_rep_level(max_rep_level),
               _def_levels(std::move(def_levels)),
@@ -122,8 +124,8 @@ private:
                                      const CallbackFunction& write_leaf_callback);
 
     Status _write_array_column_chunkV2(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                     const CallbackFunction& write_leaf_callback);
+                                       const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                       const CallbackFunction& write_leaf_callback);
 
     Status _write_map_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                    const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
@@ -136,8 +138,8 @@ private:
     std::vector<uint8_t> _make_null_bitset(size_t n, const uint8_t* nulls) const;
 
     std::shared_ptr<std::vector<int16_t>> _make_def_levelsV2(const LevelBuilderContext& ctx,
-                                                           const ::parquet::schema::NodePtr& node,
-                                                           const uint8_t* nulls) const;
+                                                             const ::parquet::schema::NodePtr& node,
+                                                             const uint8_t* nulls) const;
 
     std::shared_ptr<std::vector<int16_t>> _make_def_levelsV3(const LevelBuilderContext& ctx,
                                                              const ::parquet::schema::NodePtr& node,
