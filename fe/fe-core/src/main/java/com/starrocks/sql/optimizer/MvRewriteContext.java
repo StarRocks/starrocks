@@ -42,17 +42,21 @@ public class MvRewriteContext {
     // used to prune partitions and buckets of scan mv operator after rewrite
     private ScalarOperator mvPruneConjunct;
 
+    private final List<ScalarOperator> onPredicates;
+
     public MvRewriteContext(
             MaterializationContext materializationContext,
             List<Table> queryTables,
             OptExpression queryExpression,
             ReplaceColumnRefRewriter queryColumnRefRewriter,
-            PredicateSplit queryPredicateSplit) {
+            PredicateSplit queryPredicateSplit,
+            List<ScalarOperator> onPredicates) {
         this.materializationContext = materializationContext;
         this.queryTables = queryTables;
         this.queryExpression = queryExpression;
         this.queryColumnRefRewriter = queryColumnRefRewriter;
         this.queryPredicateSplit = queryPredicateSplit;
+        this.onPredicates = onPredicates;
     }
 
     public MaterializationContext getMaterializationContext() {
@@ -96,5 +100,9 @@ public class MvRewriteContext {
 
     public void setMvPruneConjunct(ScalarOperator mvPruneConjunct) {
         this.mvPruneConjunct = mvPruneConjunct;
+    }
+
+    public List<ScalarOperator> getOnPredicates() {
+        return onPredicates;
     }
 }
