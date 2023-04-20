@@ -403,9 +403,9 @@ StarRocks 访问存储系统的认证配置。
 >
 > 使用 Broker Load 从华为云 OBS 导入数据时，需要先下载[依赖库](https://github.com/huaweicloud/obsa-hdfs/releases/download/v45/hadoop-huaweicloud-2.8.3-hw-45.jar)添加到 **$BROKER_HOME/lib/** 路径下并重启 Broker。
 
-#### S3 兼容存储
+#### 其他兼容 S3 协议的对象存储
 
-如果存储系统为 S3 兼容存储（如 MinIO），请按如下配置 `StorageCredentialParams`：
+如果存储系统为其他兼容 S3 协议的对象存储（如 MinIO），请按如下配置 `StorageCredentialParams`：
 
 ```SQL
 "aws.s3.enable_ssl" = "<true | false>",
