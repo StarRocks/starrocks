@@ -2,9 +2,9 @@
 
 ## Table Creation
 
-### Data Model Selection
+### Table Type Selection
 
-StarRocks supports three kinds of data model: AGGREGATE KEY, UNIQUE KEY, and DUPLICATE KEY. All three are sorted by KEY.
+StarRocks supports three table types: AGGREGATE KEY, UNIQUE KEY, and DUPLICATE KEY. All three are sorted by KEY.
 
 * AGGREGATE KEY: When the AGGREGATE KEY is the same, the old and new records are aggregated. The currently supported aggregate functions are SUM, MIN, MAX, REPLACE. Aggregate  model can aggregate data in advance, which is suitable for reporting and multi-dimensional analyses.
 
@@ -143,7 +143,7 @@ StarRocks stores data in an ordered manner and builds a sparse index with  block
 
 ### Inverted Index
 
-StarRocks adopts Bitmap Indexing technology to support inverted indexes that can be applied to all columns of the duplicate data model and the key column of the aggregate and unique data models. Bitmap Index is suitable for columns with a small value range, such as gender, city, and province. As the range expands, the bitmap index expands in parallel.
+StarRocks adopts Bitmap Indexing technology to support inverted indexes that can be applied to all columns of the Duplicate Key table and the key column of the Aggregate table and Unique Key table. Bitmap Index is suitable for columns with a small value range, such as gender, city, and province. As the range expands, the bitmap index expands in parallel.
 
 ### Materialized view (rollup)
 
