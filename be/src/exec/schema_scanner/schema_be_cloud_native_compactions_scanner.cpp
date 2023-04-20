@@ -40,7 +40,7 @@ SchemaScanner::ColumnDesc SchemaBeCloudNativeCompactionsScanner::_s_columns[] = 
         {"START_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"FINISH_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
         {"PROGRESS", TYPE_INT, sizeof(int32_t), false},
-        {"Status", TYPE_VARCHAR, sizeof(StringValue), false}};
+        {"STATUS", TYPE_VARCHAR, sizeof(StringValue), false}};
 
 SchemaBeCloudNativeCompactionsScanner::SchemaBeCloudNativeCompactionsScanner()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
