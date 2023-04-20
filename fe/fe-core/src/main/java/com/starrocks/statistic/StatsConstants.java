@@ -29,6 +29,7 @@ public class StatsConstants {
     //Statistics collection threshold
     public static final String STATISTIC_AUTO_COLLECT_RATIO = "statistic_auto_collect_ratio";
     public static final String STATISTIC_SAMPLE_COLLECT_ROWS = "statistic_sample_collect_rows";
+    public static final String STATISTIC_EXCLUDE_PATTERN = "statistic_exclude_pattern";
 
     //Histogram Statistics properties
     public static final String HISTOGRAM_BUCKET_NUM = "histogram_bucket_num";
