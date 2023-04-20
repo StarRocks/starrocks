@@ -1328,3 +1328,14 @@ PROPERTIES (
 "compression" = "LZ4"
 );
 -- !result
+
+-- name: test_without_property
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) PARTITION BY date_trunc('month', event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 1;
+-- result:
+-- !result
+insert into ss values('2021-01-01', 1);
+-- result:
+-- !result
+select * from ss;
+-- result:
+2021-01-01	1
