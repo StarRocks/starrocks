@@ -120,7 +120,6 @@ Before starting FEs, add the following configuration items in the FE configurati
   aws_s3_secret_key = <secret_key>
   ```
 
-
 - If you use MinIO:
 
   ```YAML
