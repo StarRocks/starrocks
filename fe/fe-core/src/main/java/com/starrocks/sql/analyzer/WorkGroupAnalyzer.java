@@ -48,7 +48,7 @@ public class WorkGroupAnalyzer {
                 String key = ((SlotRef) lhs).getColumnName();
                 String value = ((StringLiteral) rhs).getValue();
                 if (key.equalsIgnoreCase(WorkGroup.USER)) {
-                    if (!WorkGroupClassifier.UseRolePattern.matcher(value).matches()) {
+                    if (!WorkGroupClassifier.USER_PATTERN.matcher(value).matches()) {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", WorkGroup.USER,
                                         eqPred.toSql()));
