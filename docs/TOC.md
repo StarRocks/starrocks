@@ -15,7 +15,12 @@
   + [Load and query data](./quick_start/Import_and_query.md)
 + Table Design
   + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
-  + [Table types](./table_design/Data_model.md)
+  + Table types
+    + [Table types](./table_design/table_types/table_types.md)
+    + [Duplicate key table](./table_design/table_types/duplicate_key_table.md)
+    + [Aggragete table](./table_design/table_types/aggregate_table.md)
+    + [Unique key table](./table_design/table_types/unique_key_table.md)
+    + [Primary key table](./table_design/table_types/primary_key_table.md)
   + Data distribution
     + [Data distribution](./table_design/Data_distribution.md)
     + [Dynamic partitioning](./table_design/dynamic_partitioning.md)
