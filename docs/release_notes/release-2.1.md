@@ -13,7 +13,7 @@ Release date: September 6, 2022
 
 The following bugs are fixed:
 
-- An error may occur and BEs may crash when you query ARRAY columns (calculated by using the REPLACE_IF_NOT_NULL function) from a table using the Aggregate Key model. [#10144](https://github.com/StarRocks/starrocks/issues/10144)
+- An error may occur and BEs may crash when you query ARRAY columns (calculated by using the REPLACE_IF_NOT_NULL function) from a table using the Aggregate table. [#10144](https://github.com/StarRocks/starrocks/issues/10144)
 - The query result is incorrect if more than one IFNULL() function is nested in the query. [#5028](https://github.com/StarRocks/starrocks/issues/5028) [#10486](https://github.com/StarRocks/starrocks/pull/10486)
 - After a dynamic partition is truncated, the number of tablets in the partition changes from the value configured by dynamic partitioning to the default value. [#10435](https://github.com/StarRocks/starrocks/issues/10435)
 - If the Kafka cluster is stopped when you use Routine Load to load data into StarRocks, deadlocks may occur, affecting query performance. [#8947](https://github.com/StarRocks/starrocks/issues/8947)

@@ -13,8 +13,13 @@ The storage space used by HLL is determined by the distinct values in the hash v
 In actual business scenarios, data volume and data distribution affect the memory usage of queries and the accuracy of the approximate result. You need to consider these two factors:
 
 - Data volume: HLL returns an approximate value. A larger data volume results in a more accurate result. A smaller data volume results in larger deviation.
+<<<<<<< HEAD
 - Data distribution: In the case of large data volume and high-cardinality dimension column for GROUP BY, data computation will use more memory. HLL is not recommended in this situation. It is recommended when you perform no-group-by count distinct or GROUP BY on low-cardinality dimension columns.
 - Query granularity: If you query data at a large query granularity, we recommend you use the Aggregate Key table or materialized view to pre-aggregate data to reduce data volume.
+=======
+- Data distribution：In the case of large data volume and high-cardinality dimension column for GROUP BY，data computation will use more memory. HLL is not recommended in this situation. It is recommended when you perform no-group-by count distinct or GROUP BY on low-cardinality dimension columns.
+- Query granularity: If you query data at a large query granularity, we recommend you use the Aggregate table or materialized view to pre-aggregate data to reduce data volume.
+>>>>>>> fad09c2fc6 (split data model and update related proper names)
 
 For details about using HLL, see [Use HLL for approximate count distinct](../../../using_starrocks/Using_HLL.md) and [HLL](../data-definition/HLL.md).
 
