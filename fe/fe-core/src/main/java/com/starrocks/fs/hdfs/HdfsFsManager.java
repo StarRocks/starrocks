@@ -1241,15 +1241,15 @@ public class HdfsFsManager {
 
         boolean srcAuthorityNull = (srcPathUri.getAuthority() == null);
         boolean destAuthorityNull = (destPathUri.getAuthority() == null);
-        if (!srcAuthorityNull || !destAuthorityNull) {
-            if (!srcAuthorityNull && !destAuthorityNull && 
-                    !srcPathUri.getAuthority().trim().equals(destPathUri.getAuthority().trim())) {
-                throw new UserException(
-                    "only allow rename in same file system");
-            } else {
-                throw new UserException("Different authority info between srcPath: " + srcPath +
-                                        " and destPath: " + destPath);
-            }
+        if (srcAuthorityNull != destAuthorityNull) {
+            throw new UserException("Different authority info between srcPath: " + srcPath +
+                                    " and destPath: " + destPath);
+        }
+        if (!srcAuthorityNull && !destAuthorityNull &&
+                !srcPathUri.getAuthority().trim().equals(destPathUri.getAuthority().trim())) {
+            throw new UserException(
+                "only allow rename in same file system");
+
         }
 
         HdfsFs fileSystem = getFileSystem(srcPath, loadProperties, null);
