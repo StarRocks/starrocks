@@ -217,7 +217,17 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
     size_t total_rows_moved = 0;
     int64_t time_spent = 0;
     Status return_status = Status::OK();
-    DeferOp defer([&]() { _update_statistics(total_chunks_moved, total_rows_moved, time_spent); });
+    DeferOp defer([&]() {
+        if (ScanOperator* scan = source_scan_operator()) {
+            scan->end_driver_process(this);
+        }
+        _update_statistics(total_chunks_moved, total_rows_moved, time_spent);
+    });
+
+    if (ScanOperator* scan = source_scan_operator()) {
+        scan->begin_driver_process();
+    }
+
     while (true) {
         RETURN_IF_LIMIT_EXCEEDED(runtime_state, "Pipeline");
 
@@ -225,6 +235,17 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
         bool should_yield = false;
         size_t num_operators = _operators.size();
         size_t new_first_unfinished = _first_unfinished;
+
+        int64_t process_time_ns = 0;
+
+        DeferOp defer2([&]() {
+            if (ScanOperator* scan = source_scan_operator()) {
+                scan->end_pull_chunk(process_time_ns);
+            }
+        });
+
+        SCOPED_RAW_TIMER(&process_time_ns);
+
         for (size_t i = _first_unfinished; i < num_operators - 1; ++i) {
             {
                 SCOPED_RAW_TIMER(&time_spent);

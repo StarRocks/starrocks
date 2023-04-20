@@ -53,6 +53,7 @@ private:
     ActiveInputSet _active_inputs;
 };
 
+class ConnectorScanOperatorAdaptiveProcessor;
 class ConnectorScanOperator : public ScanOperator {
 public:
     ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
@@ -77,6 +78,17 @@ public:
     ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
+
+    int available_pickup_morsel_count() override;
+    void begin_pull_chunk(ChunkPtr res) override;
+    void begin_driver_process() override;
+    void end_pull_chunk(int64_t time) override;
+    void end_driver_process(PipelineDriver* driver) override;
+    bool is_running_all_io_tasks() const override;
+
+public:
+    mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
+    bool _enable_adaptive_io_tasks = true;
 };
 
 class ConnectorChunkSource : public ChunkSource {
@@ -115,6 +127,7 @@ private:
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
+    ConnectorScanOperator* _op = nullptr;
 };
 
 } // namespace pipeline

@@ -1014,8 +1014,6 @@ public class CoordinatorPreprocessor {
     void computeScanRangeAssignment() throws Exception {
         SessionVariable sv = connectContext.getSessionVariable();
 
-
-
         // set scan ranges/locations for scan nodes
         for (ScanNode scanNode : scanNodes) {
             // the parameters of getScanRangeLocations may ignore, It dosn't take effect
