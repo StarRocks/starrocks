@@ -151,6 +151,7 @@ if [ "${USE_STAROS}" == "ON"  ]; then
               -DUSE_STAROS=${USE_STAROS} -DWITH_GCOV=${WITH_GCOV} \
               -DWITH_CACHELIB=${WITH_CACHELIB} \
               -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
+              -DSTARCACHE_SKIP_INSTALL=ON \
               -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
               -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
               -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
@@ -165,6 +166,7 @@ else
               -DWITH_GCOV=${WITH_GCOV} \
               -DWITH_CACHELIB=${WITH_CACHELIB} \
               -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
+              -DSTARCACHE_SKIP_INSTALL=ON \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 fi
 ${BUILD_SYSTEM} -j${PARALLEL}
