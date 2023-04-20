@@ -216,7 +216,7 @@ mysql> SHOW PROC "/dbs/xxxxx";
 +---------+-------------+----------+---------------------+--------------+--------+------+--------------------------+--------------+---------------+------------------------------+
 ```
 
-The `Type` of a table in shared-data StarRocks cluster is `LAKE`. In the field `StoragePath`, StarRocks returns the object storage directory where the table is stored.
+The `Type` of a table in shared-data StarRocks cluster is `CLOUD_NATIVE`. In the field `StoragePath`, StarRocks returns the object storage directory where the table is stored.
 
 ### Load data into a shared-data StarRocks cluster
 
