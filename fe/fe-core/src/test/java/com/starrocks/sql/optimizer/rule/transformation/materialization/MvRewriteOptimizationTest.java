@@ -1397,28 +1397,54 @@ public class MvRewriteOptimizationTest {
     public void testUnionRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
 
-        Table emps = getTable("test", "emps");
-        PlanTestBase.setTableStatistics((OlapTable) emps, 1000000);
-        Table depts = getTable("test", "depts");
-        PlanTestBase.setTableStatistics((OlapTable) depts, 1000000);
+        starRocksAssert.withTable("create table emps2 (\n" +
+                "    empid int not null,\n" +
+                "    deptno int not null,\n" +
+                "    name varchar(25) not null,\n" +
+                "    salary double\n" +
+                ")\n" +
+                "distributed by hash(`empid`) buckets 10\n" +
+                "properties (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");")
+                .withTable("create table depts2 (\n" +
+                        "    deptno int not null,\n" +
+                        "    name varchar(25) not null\n" +
+                        ")\n" +
+                        "distributed by hash(`deptno`) buckets 10\n" +
+                        "properties (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");");
+
+        cluster.runSql("test", "insert into emps2 values(1, 1, \"emp_name1\", 100);");
+        cluster.runSql("test", "insert into emps2 values(2, 1, \"emp_name1\", 120);");
+        cluster.runSql("test", "insert into emps2 values(3, 1, \"emp_name1\", 150);");
+        cluster.runSql("test", "insert into depts2 values(1, \"dept_name1\")");
+        cluster.runSql("test", "insert into depts2 values(2, \"dept_name2\")");
+        cluster.runSql("test", "insert into depts2 values(3, \"dept_name3\")");
+
+        Table emps2 = getTable("test", "emps2");
+        PlanTestBase.setTableStatistics((OlapTable) emps2, 1000000);
+        Table depts2 = getTable("test", "depts2");
+        PlanTestBase.setTableStatistics((OlapTable) depts2, 1000000);
 
         // single table union
         createAndRefreshMv("test", "union_mv_1", "create materialized view union_mv_1" +
-                " distributed by hash(empid)  as select empid, deptno, name, salary from emps where empid < 3");
+                " distributed by hash(empid)  as select empid, deptno, name, salary from emps2 where empid < 3");
         MaterializedView mv1 = getMv("test", "union_mv_1");
         PlanTestBase.setTableStatistics(mv1, 10);
-        String query1 = "select empid, deptno, name, salary from emps where empid < 5";
+        String query1 = "select empid, deptno, name, salary from emps2 where empid < 5";
         String plan1 = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan1, "0:UNION\n" +
                 "  |  \n" +
                 "  |----5:EXCHANGE");
         PlanTestBase.assertContains(plan1, "  3:OlapScanNode\n" +
                 "     TABLE: union_mv_1");
-        PlanTestBase.assertContains(plan1, "TABLE: emps\n" +
+        PlanTestBase.assertContains(plan1, "TABLE: emps2\n" +
                         "     PREAGGREGATION: ON\n",
                 "empid < 5,", "empid > 2");
 
-        String query7 = "select deptno, empid from emps where empid < 5";
+        String query7 = "select deptno, empid from emps2 where empid < 5";
         String plan7 = getFragmentPlan(query7);
         PlanTestBase.assertContains(plan7, "union_mv_1");
         OptExpression optExpression7 = getOptimizedPlan(query7, connectContext);
@@ -1433,33 +1459,78 @@ public class MvRewriteOptimizationTest {
         createAndRefreshMv("test", "join_union_mv_1", "create materialized view join_union_mv_1" +
                 " distributed by hash(empid)" +
                 " as" +
-                " select emps.empid, emps.salary, depts.deptno, depts.name" +
-                " from emps join depts using (deptno) where depts.deptno < 100");
+                " select emps2.empid, emps2.salary, depts2.deptno, depts2.name" +
+                " from emps2 join depts2 using (deptno) where depts2.deptno < 100");
         MaterializedView mv2 = getMv("test", "join_union_mv_1");
         PlanTestBase.setTableStatistics(mv2, 1);
-        String query2 = "select emps.empid, emps.salary, depts.deptno, depts.name" +
-                " from emps join depts using (deptno) where depts.deptno < 120";
-        getFragmentPlan(query2);
+        String query2 = "select emps2.empid, emps2.salary, depts2.deptno, depts2.name" +
+                " from emps2 join depts2 using (deptno) where depts2.deptno < 120";
+        String plan2 = getFragmentPlan(query2);
+        PlanTestBase.assertContains(plan2, "join_union_mv_1");
         dropMv("test", "join_union_mv_1");
 
+        starRocksAssert.withTable("CREATE TABLE `test_all_type2` (\n" +
+                "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
+                "  `t1b` smallint(6) NULL COMMENT \"\",\n" +
+                "  `t1c` int(11) NULL COMMENT \"\",\n" +
+                "  `t1d` bigint(20) NULL COMMENT \"\",\n" +
+                "  `t1e` float NULL COMMENT \"\",\n" +
+                "  `t1f` double NULL COMMENT \"\",\n" +
+                "  `t1g` bigint(20) NULL COMMENT \"\",\n" +
+                "  `id_datetime` datetime NULL COMMENT \"\",\n" +
+                "  `id_date` date NULL COMMENT \"\", \n" +
+                "  `id_decimal` decimal(10,2) NULL COMMENT \"\" \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`t1a`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE `t02` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL COMMENT \"\",\n" +
+                "  `v3` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
+        cluster.runSql("test", "insert into t02 values(1, 2, 3)");
+        cluster.runSql("test", "insert into test_all_type2 values(" +
+                "\"value1\", 1, 2, 3, 4.0, 5.0, 6, \"2022-11-11 10:00:01\", \"2022-11-11\", 10.12)");
+
+        Table t0Table = getTable("test", "t02");
+        PlanTestBase.setTableStatistics((OlapTable) t0Table, 1000000);
+        Table testAllTypeTable = getTable("test", "test_all_type2");
+        PlanTestBase.setTableStatistics((OlapTable) testAllTypeTable, 1000000);
         // aggregate querys
         createAndRefreshMv("test", "join_agg_union_mv_1", "create materialized view join_agg_union_mv_1" +
                 " distributed by hash(v1)" +
                 " as " +
-                " SELECT t0.v1 as v1, test_all_type.t1d," +
-                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
-                " from t0 join test_all_type" +
-                " on t0.v1 = test_all_type.t1d" +
-                " where t0.v1 < 100" +
-                " group by v1, test_all_type.t1d");
+                " SELECT t02.v1 as v1, test_all_type2.t1d," +
+                " sum(test_all_type2.t1c) as total_sum, count(test_all_type2.t1c) as total_num" +
+                " from t02 join test_all_type2" +
+                " on t02.v1 = test_all_type2.t1d" +
+                " where t02.v1 < 100" +
+                " group by v1, test_all_type2.t1d");
+        MaterializedView mv3 = getMv("test", "join_agg_union_mv_1");
+        PlanTestBase.setTableStatistics(mv3, 1);
 
-        String query3 = " SELECT t0.v1 as v1, test_all_type.t1d," +
-                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
-                " from t0 join test_all_type" +
-                " on t0.v1 = test_all_type.t1d" +
-                " where t0.v1 < 120" +
-                " group by v1, test_all_type.t1d";
-        getFragmentPlan(query3);
+        String query3 = " SELECT t02.v1 as v1, test_all_type2.t1d," +
+                " sum(test_all_type2.t1c) as total_sum, count(test_all_type2.t1c) as total_num" +
+                " from t02 join test_all_type2" +
+                " on t02.v1 = test_all_type2.t1d" +
+                " where t02.v1 < 120" +
+                " group by v1, test_all_type2.t1d";
+        String plan3 = getFragmentPlan(query3);
+        PlanTestBase.assertContains(plan3, "join_agg_union_mv_1");
         dropMv("test", "join_agg_union_mv_1");
 
         cluster.runSql("test", "insert into test_base_part values(1, 1, 2, 3)");
