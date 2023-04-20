@@ -101,6 +101,15 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testNullifExpression() throws Exception {
+        String sql = "select nullif(1, 2)";
+        assertPlanContains(sql, "<slot 2> : nullif(1, 2)");
+
+        sql = "select nullif(v1, v2) from t0";
+        assertPlanContains(sql, "<slot 4> : nullif(1: v1, 2: v2)");
+    }
+
+    @Test
     public void testDecimal() throws Exception {
         String sql = "select cast(tj as decimal32) from tall";
         analyzeFail(sql, "Unknown type: decimal32");

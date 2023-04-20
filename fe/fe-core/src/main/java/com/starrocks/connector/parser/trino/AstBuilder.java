@@ -125,6 +125,7 @@ import io.trino.sql.tree.LogicalExpression;
 import io.trino.sql.tree.LongLiteral;
 import io.trino.sql.tree.Node;
 import io.trino.sql.tree.NotExpression;
+import io.trino.sql.tree.NullIfExpression;
 import io.trino.sql.tree.NumericParameter;
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.QuerySpecification;
@@ -910,6 +911,12 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         return new CaseExpr((Expr) visit(node.getOperand(), context),
                 visit(node.getWhenClauses(), context, CaseWhenClause.class),
                 (Expr) processOptional(node.getDefaultValue(), context));
+    }
+
+    @Override
+    protected ParseNode visitNullIfExpression(NullIfExpression node, ParseTreeContext context) {
+        List<Expr> arguments = visit(ImmutableList.of(node.getFirst(), node.getSecond()), context, Expr.class);
+        return new FunctionCallExpr("nullif", arguments);
     }
 
     @Override
