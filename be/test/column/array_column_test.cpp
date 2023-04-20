@@ -1007,10 +1007,10 @@ PARALLEL_TEST(ArrayColumnTest, test_assign) {
     // assign
     column->assign(4, 0);
     ASSERT_EQ(4, column->size());
-    ASSERT_EQ("[1,2,3]", column->debug_item(0));
-    ASSERT_EQ("[1,2,3]", column->debug_item(1));
-    ASSERT_EQ("[1,2,3]", column->debug_item(2));
-    ASSERT_EQ("[1,2,3]", column->debug_item(3));
+    ASSERT_EQ("[1, 2, 3]", column->debug_item(0));
+    ASSERT_EQ("[1, 2, 3]", column->debug_item(1));
+    ASSERT_EQ("[1, 2, 3]", column->debug_item(2));
+    ASSERT_EQ("[1, 2, 3]", column->debug_item(3));
 
     /// test assign [null]
     elements = Int32Column::create();
