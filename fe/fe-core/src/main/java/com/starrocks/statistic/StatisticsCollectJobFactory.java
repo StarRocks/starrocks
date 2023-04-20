@@ -10,14 +10,12 @@ import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import org.apache.commons.lang3.StringUtils;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class StatisticsCollectJobFactory {
@@ -94,16 +92,6 @@ public class StatisticsCollectJobFactory {
 
         if (StatisticUtils.isEmptyTable(table)) {
             return;
-        }
-
-        // check job exclude db.table
-        String regex = job.getProperties().getOrDefault(StatsConstants.STATISTIC_EXCLUDE_PATTERN, null);
-        if (StringUtils.isNotBlank(regex)) {
-            Pattern checkRegex = Pattern.compile(regex);
-            String name = db.getFullName() + "." + table.getName();
-            if (checkRegex.matcher(name).find()) {
-                return;
-            }
         }
 
         BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
