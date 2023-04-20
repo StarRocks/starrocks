@@ -479,17 +479,26 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitCompoundPredicate(CompoundPredicate node, Scope scope) {
+            node.setType(Type.BOOLEAN);
             for (int i = 0; i < node.getChildren().size(); i++) {
+<<<<<<< HEAD
                 Type type = node.getChild(i).getType();
                 if (!type.isBoolean() && !type.isNull()) {
                     throw new SemanticException("Operand '%s' part of predicate " +
                             "'%s' should return type 'BOOLEAN' but returns type '%s'.",
                             AstToStringBuilder.toString(node), AstToStringBuilder.toString(node.getChild(i)),
                             type.toSql());
+=======
+                Expr child = node.getChild(i);
+                if (child.getType().isBoolean() || child.getType().isNull()) {
+                    // do nothing
+                } else if (!session.getSessionVariable().isEnableStrictType() && Type.canCastTo(child.getType(), Type.BOOLEAN)) {
+                    node.getChildren().set(i, new CastExpr(Type.BOOLEAN, child));
+                } else {
+                    throw new SemanticException(child.toSql() + " can not be converted to boolean type.");
+>>>>>>> 39693a0fc ([Enhancement] support implicit cast to boolean in predicate (#21870))
                 }
             }
-
-            node.setType(Type.BOOLEAN);
             return null;
         }
 
