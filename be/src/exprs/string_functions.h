@@ -490,8 +490,6 @@ public:
      * @return: StringColumn
      */
     DEFINE_VECTORIZED_FN(compress);
-    static Status compress_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
-    static Status compress_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
