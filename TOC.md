@@ -73,12 +73,12 @@
   + [Sorted streaming aggregate](/using_starrocks/sorted_aggregate.md)
 + 外部系统集成
   + [配置 AWS 认证方式](/integrations/authenticate_to_aws_resources.md)
-  + 集成 BI 工具
+  + BI 集成
     + [Hex](/integrations/BI_integrations/Hex.md)
     + [Querybook](/integrations/BI_integrations/Querybook.md)
     + [Apache Superset](/integrations/BI_integrations/Superset.md)
     + [Tableau Desktop](/integrations/BI_integrations/Tableau_Desktop.md)
-  + 集成 IDE 工具
+  + IDE 集成
     + [DataGrip](/integrations/IDE_integrations/DataGrip.md)
     + [DBeaver](/integrations/IDE_integrations/DBeaver.md)
   + [其他集成](/integrations/other_integrations/intro.md)
