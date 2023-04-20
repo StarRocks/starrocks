@@ -2,7 +2,7 @@
 
 ## Background
 
-There are usually two ways to conduct  accurate de-duplication analysis in StarRocks.
+There are usually two ways to conduct accurate de-duplication analysis in StarRocks.
 
 * Detail-based de-duplication: This is  a traditional count distinct approach that is able to retain detailed data for flexible analysis. However,  it consumes huge computational and storage resources and is not friendly enough to support scenarios involving large-scale datasets and query latency-sensitive de-duplication.
 * Precomputation-based de-duplication: This approach is also recommended by StarRocks. In some scenarios, users only want to get the results after de-duplication and care less about detailed data. Such a scenario can be analyzed by precomputation, which is essentially using space for time and resonates with the core idea of the MOLAP aggregation model. It is to calculate in the  process of data import, reducing the storage cost and the cost of on-site calculation during query. You can further reduce the size of datasets for on-site computation  by shrinking RollUp dimension.
