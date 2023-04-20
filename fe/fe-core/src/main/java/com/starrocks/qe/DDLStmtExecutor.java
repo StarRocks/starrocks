@@ -802,6 +802,37 @@ public class DDLStmtExecutor {
             return null;
         }
 
+<<<<<<< HEAD
+=======
+        // warehouse
+
+        @Override
+        public ShowResultSet visitCreateWarehouseStatement(CreateWarehouseStmt stmt, ConnectContext context) {
+            throw new RuntimeException(new DdlException("unsupported statement"));
+        }
+
+        @Override
+        public ShowResultSet visitAlterWarehouseStatement(AlterWarehouseStmt stmt, ConnectContext context) {
+            throw new RuntimeException(new DdlException("unsupported statement"));
+        }
+
+        @Override
+        public ShowResultSet visitSuspendWarehouseStatement(SuspendWarehouseStmt stmt, ConnectContext context) {
+            throw new RuntimeException(new DdlException("unsupported statement"));
+        }
+
+        @Override
+        public ShowResultSet visitResumeWarehouseStatement(ResumeWarehouseStmt stmt, ConnectContext context) {
+            throw new RuntimeException(new DdlException("unsupported statement"));
+        }
+
+
+        @Override
+        public ShowResultSet visitDropWarehouseStatement(DropWarehouseStmt stmt, ConnectContext context) {
+            throw new RuntimeException(new DdlException("unsupported statement"));
+        }
+
+>>>>>>> f48e7e65e ([BugFix]Forbid operate warehouse (#21947))
         @Override
         public ShowResultSet visitSubmitTaskStatement(SubmitTaskStmt stmt, ConnectContext context) {
             try {
@@ -810,7 +841,6 @@ public class DDLStmtExecutor {
                 throw new RuntimeException(e);
             }
         }
-
     }
 
 }
