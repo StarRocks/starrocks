@@ -427,7 +427,7 @@ CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL, job1 BIGINT NOT NULL
 -- !result
 ALTER TABLE t ADD COLUMN newcol BIGINT AUTO_INCREMENT;
 -- result:
-E: (1064, "Getting syntax error from line 1, column 25 to line 1, column 39. Detail message: Column 'newcol' can not be AUTO_INCREMENT when ADD COLUMN..")
+E: (1064, "Getting syntax error from line 1, column 25 to line 1, column 39. Detail message: Column 'newcol' can not be AUTO_INCREMENT when ADD COLUMN.")
 -- !result
 ALTER TABLE t MODIFY COLUMN job2 BIGINT;
 -- result:
@@ -435,7 +435,7 @@ E: (1064, "Unexpected exception: Can't not modify a AUTO_INCREMENT column")
 -- !result
 ALTER TABLE t MODIFY COLUMN job2 BIGINT AUTO_INCREMENT;
 -- result:
-E: (1064, "Getting syntax error from line 1, column 28 to line 1, column 40. Detail message: Column 'job2' can not be AUTO_INCREMENT when MODIFY COLUMN..")
+E: (1064, "Getting syntax error from line 1, column 28 to line 1, column 40. Detail message: Column 'job2' can not be AUTO_INCREMENT when MODIFY COLUMN.")
 -- !result
 ALTER TABLE t DROP COLUMN job2;
 -- result:
