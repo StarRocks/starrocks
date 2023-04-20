@@ -73,6 +73,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
+import com.starrocks.catalog.MysqlSchemaDb;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -351,21 +352,23 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public long saveDb(DataOutputStream dos, long checksum) throws IOException {
-        int dbCount = idToDb.size() - 1;
+        // Don't write information_schema db meta
+        Map<Long, Database> idToDbNormal = idToDb.entrySet().stream()
+                .filter(entry -> entry.getKey() > NEXT_ID_INIT_VALUE)
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        int dbCount = idToDbNormal.size();
+
         checksum ^= dbCount;
         dos.writeInt(dbCount);
-        for (Map.Entry<Long, Database> entry : idToDb.entrySet()) {
+        for (Map.Entry<Long, Database> entry : idToDbNormal.entrySet()) {
             Database db = entry.getValue();
             String dbName = db.getFullName();
-            // Don't write information_schema db meta
-            if (!InfoSchemaDb.isInfoSchemaDb(dbName)) {
-                checksum ^= entry.getKey();
-                db.readLock();
-                try {
-                    db.write(dos);
-                } finally {
-                    db.readUnlock();
-                }
+            checksum ^= entry.getKey();
+            db.readLock();
+            try {
+                db.write(dos);
+            } finally {
+                db.readUnlock();
             }
         }
         return checksum;
@@ -2389,7 +2392,8 @@ public class LocalMetastore implements ConnectorMetadata {
             // Then we reassemble the origin cluster name with lower case db name,
             // and finally get information_schema db from the name map.
             String dbName = ClusterNamespace.getNameFromFullName(name);
-            if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
+            if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
+                    dbName.equalsIgnoreCase(MysqlSchemaDb.DATABASE_NAME)) {
                 return fullNameToDb.get(dbName.toLowerCase());
             }
         }
@@ -3794,7 +3798,8 @@ public class LocalMetastore implements ConnectorMetadata {
         // create info schema db
         final InfoSchemaDb infoDb = new InfoSchemaDb();
         unprotectCreateDb(infoDb);
-
+        final MysqlSchemaDb mysqlSchemaDb = new MysqlSchemaDb();
+        unprotectCreateDb(mysqlSchemaDb);
         // only need to create default cluster once.
         stateMgr.setIsDefaultClusterCreated(true);
     }
@@ -3831,12 +3836,25 @@ public class LocalMetastore implements ConnectorMetadata {
                 String errMsg = "InfoSchemaDb id shouldn't larger than 10000, please restart your FE server";
                 // Every time we construct the InfoSchemaDb, which id will increment.
                 // When InfoSchemaDb id larger than 10000 and put it to idToDb,
-                // which may be overwrite the normal db meta in idToDb,
+                // which may be overwritten the normal db meta in idToDb,
                 // so we ensure InfoSchemaDb id less than 10000.
                 Preconditions.checkState(db.getId() < NEXT_ID_INIT_VALUE, errMsg);
                 idToDb.put(db.getId(), db);
                 fullNameToDb.put(db.getFullName(), db);
                 cluster.addDb(dbName, db.getId());
+
+                String mysqlSchemaDbName = MysqlSchemaDb.getFullInfoSchemaDbName();
+                MysqlSchemaDb mysqlSchemaDb;
+                if (getFullNameToDb().containsKey(mysqlSchemaDbName)) {
+                    LOG.warn("Since the the database of mysql already exists, " +
+                            "the system will not automatically create the database of mysql for metabase.");
+                } else {
+                    mysqlSchemaDb = new MysqlSchemaDb();
+                    Preconditions.checkState(mysqlSchemaDb.getId() < NEXT_ID_INIT_VALUE, errMsg);
+                    idToDb.put(mysqlSchemaDb.getId(), mysqlSchemaDb);
+                    fullNameToDb.put(mysqlSchemaDb.getFullName(), mysqlSchemaDb);
+                    cluster.addDb(mysqlSchemaDbName, mysqlSchemaDb.getId());
+                }
                 defaultCluster = cluster;
             }
         }

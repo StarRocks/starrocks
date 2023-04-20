@@ -925,7 +925,8 @@ public class Database extends MetaObject implements Writable {
     }
 
     public boolean isInfoSchemaDb() {
-        return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME);
+        return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
+                fullQualifiedName.equalsIgnoreCase(MysqlSchemaDb.DATABASE_NAME);
     }
 
     // the invoker should hold db's writeLock

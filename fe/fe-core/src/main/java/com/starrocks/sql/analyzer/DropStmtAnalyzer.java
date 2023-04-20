@@ -21,11 +21,13 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MysqlSchemaDb;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.SystemId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -124,6 +126,11 @@ public class DropStmtAnalyzer {
             String dbName = statement.getDbName();
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, context.getQualifiedUser(), dbName);
+            } else if (dbName.equalsIgnoreCase(MysqlSchemaDb.DATABASE_NAME)) {
+                Database db = GlobalStateMgr.getCurrentState().getDb(MysqlSchemaDb.DATABASE_NAME.toLowerCase());
+                if (db.getId() == SystemId.MYSQL_SCHEMA_DB_ID) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, context.getQualifiedUser(), dbName);
+                }
             }
             return null;
         }

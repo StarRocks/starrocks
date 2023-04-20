@@ -752,6 +752,67 @@ public class SchemaTable extends Table {
                                     .build()))
                     .build();
 
+    public static Map<String, Table> MYSQL_TABLE_MAP =
+            ImmutableMap
+                    .<String, Table>builder()
+                    .put("user", new SchemaTable(
+                            SystemId.USER_ID,
+                            "user",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("Host", ScalarType.createVarchar(255))
+                                    .column("User", ScalarType.createVarchar(32))
+                                    .column("Select_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Insert_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Update_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Delete_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Create_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Drop_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Reload_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Shutdown_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Process_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("File_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Grant_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("References_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Index_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Alter_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Show_db_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Super_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Create_tmp_table_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Lock_tables_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Execute_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Repl_slave_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Repl_client_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Create_view_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Show_view_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Create_routine_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Alter_routine_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Create_user_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Event_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Trigger_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Create_tablespace_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("ssl_type", ScalarType.createVarcharType(10))
+                                    .column("ssl_cipher", ScalarType.createDefaultString())
+                                    .column("x509_issuer", ScalarType.createDefaultString())
+                                    .column("x509_subject", ScalarType.createDefaultString())
+                                    .column("max_questions", ScalarType.createType(PrimitiveType.INT))
+                                    .column("max_updates", ScalarType.createType(PrimitiveType.INT))
+                                    .column("max_connections", ScalarType.createType(PrimitiveType.INT))
+                                    .column("max_user_connections", ScalarType.createType(PrimitiveType.INT))
+                                    .column("plugin", ScalarType.createVarcharType(64))
+                                    .column("authentication_string", ScalarType.createDefaultString())
+                                    .column("password_expired", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("password_last_changed", ScalarType.createType(PrimitiveType.DATETIME))
+                                    .column("password_lifetime", ScalarType.createType(PrimitiveType.SMALLINT))
+                                    .column("account_locked", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Create_role_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Drop_role_priv", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("Password_reuse_history", ScalarType.createType(PrimitiveType.SMALLINT))
+                                    .column("Password_reuse_time", ScalarType.createType(PrimitiveType.SMALLINT))
+                                    .column("Password_require_current", ScalarType.createType(PrimitiveType.BOOLEAN))
+                                    .column("User_attributes", ScalarType.createVarcharType(512))
+                                    .build()))
+                    .build();
     public static class Builder {
         List<Column> columns;
 
@@ -776,9 +837,16 @@ public class SchemaTable extends Table {
     @Override
     public TTableDescriptor toThrift(List<ReferencedPartitionInfo> partitions) {
         TSchemaTable tSchemaTable = new TSchemaTable(SchemaTableType.getThriftType(this.name));
-        TTableDescriptor tTableDescriptor =
-                new TTableDescriptor(getId(), TTableType.SCHEMA_TABLE,
-                        TABLE_MAP.get(this.name).getBaseSchema().size(), 0, this.name, "");
+        TTableDescriptor tTableDescriptor;
+        if (TABLE_MAP.get(this.name) != null) {
+            tTableDescriptor = new TTableDescriptor(getId(), TTableType.SCHEMA_TABLE,
+                            TABLE_MAP.get(this.name).getBaseSchema().size(), 0, this.name, "");
+        } else if (MYSQL_TABLE_MAP.get(this.name) != null) {
+            tTableDescriptor = new TTableDescriptor(getId(), TTableType.SCHEMA_TABLE,
+                            MYSQL_TABLE_MAP.get(this.name).getBaseSchema().size(), 0, this.name, "");
+        } else {
+            throw new RuntimeException("");
+        }
         tTableDescriptor.setSchemaTable(tSchemaTable);
         return tTableDescriptor;
     }
@@ -857,7 +925,8 @@ public class SchemaTable extends Table {
         SCH_BE_COMPACTIONS("BE_COMPACTIONS", "BE_COMPACTIONS", TSchemaTableType.SCH_BE_COMPACTIONS),
         SCH_BE_THREADS("BE_THREADS", "BE_THREADS", TSchemaTableType.SCH_BE_THREADS),
         SCH_BE_LOGS("BE_LOGS", "BE_LOGS", TSchemaTableType.SCH_BE_LOGS),
-        SCH_BE_BVARS("BE_BVARS", "BE_BVARS", TSchemaTableType.SCH_BE_BVARS);
+        SCH_BE_BVARS("BE_BVARS", "BE_BVARS", TSchemaTableType.SCH_BE_BVARS),
+        SCH_USER("USER", "USER", TSchemaTableType.SCH_USER);
 
         private final String description;
         private final String tableName;

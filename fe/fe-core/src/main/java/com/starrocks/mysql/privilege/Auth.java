@@ -47,6 +47,7 @@ import com.starrocks.analysis.TablePattern;
 import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.InfoSchemaDb;
+import com.starrocks.catalog.MysqlSchemaDb;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -704,6 +705,15 @@ public class Auth implements Writable {
                     LOG.warn("should not happen", e);
                 }
                 grantInternal(userIdent, null /* role */, tblPattern, PrivBitSet.of(Privilege.SELECT_PRIV),
+                        false /* err on non exist */, true /* is replay */);
+                // grant read privs to database information_schema
+                TablePattern tblPatternMysql = new TablePattern(MysqlSchemaDb.DATABASE_NAME, "*");
+                try {
+                    tblPatternMysql.analyze();
+                } catch (AnalysisException e) {
+                    LOG.warn("should not happen", e);
+                }
+                grantInternal(userIdent, null /* role */, tblPatternMysql, PrivBitSet.of(Privilege.SELECT_PRIV),
                         false /* err on non exist */, true /* is replay */);
             }
 

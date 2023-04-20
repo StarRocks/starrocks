@@ -36,6 +36,7 @@ package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.catalog.InfoSchemaDb;
+import com.starrocks.catalog.MysqlSchemaDb;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
@@ -83,7 +84,8 @@ public class DbPrivEntry extends PrivEntry {
     private static PatternMatcher createDbPatternMatcher(String db) throws AnalysisException {
         // the database 'information_schema''s name is case insensibility.
         boolean dbCaseSensibility = CaseSensibility.DATABASE.getCaseSensibility();
-        if (ClusterNamespace.getNameFromFullName(db).equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
+        if (ClusterNamespace.getNameFromFullName(db).equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
+                ClusterNamespace.getNameFromFullName(db).equalsIgnoreCase(MysqlSchemaDb.DATABASE_NAME)) {
             dbCaseSensibility = false;
         }
 

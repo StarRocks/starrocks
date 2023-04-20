@@ -38,6 +38,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.InfoSchemaDb;
+import com.starrocks.catalog.MysqlSchemaDb;
+import com.starrocks.common.SystemId;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.LinkDbInfo;
@@ -177,21 +179,27 @@ public class Cluster implements Writable {
         if (dbNames.contains(InfoSchemaDb.DATABASE_NAME)) {
             dbCount--;
         }
+        if (dbNames.contains(MysqlSchemaDb.DATABASE_NAME) &&
+                dbNameToIDs.get(MysqlSchemaDb.DATABASE_NAME).equals(SystemId.MYSQL_SCHEMA_DB_ID)) {
+            dbCount--;
+        }
 
         out.writeInt(dbCount);
         // don't persist InfoSchemaDb meta
         for (String name : dbNames) {
-            if (!name.equals(InfoSchemaDb.DATABASE_NAME)) {
-                Text.writeString(out, ClusterNamespace.getFullName(name));
-            } else {
+            if (name.equals(InfoSchemaDb.DATABASE_NAME)) {
                 dbIds.remove(dbNameToIDs.get(name));
+            } else if (name.equals(MysqlSchemaDb.DATABASE_NAME) &&
+                    dbNameToIDs.get(MysqlSchemaDb.DATABASE_NAME).equals(SystemId.MYSQL_SCHEMA_DB_ID)) {
+                dbIds.remove(dbNameToIDs.get(name));
+            } else {
+                Text.writeString(out, ClusterNamespace.getFullName(name));
             }
         }
 
-        String errMsg = String.format("%d vs %d, fatal error, Write cluster meta failed!",
-                dbNames.size(), dbIds.size() + 1);
+        String errMsg = String.format("%d vs %d, fatal error, Write cluster meta failed!", dbCount, dbIds.size());
         // ensure we have removed InfoSchemaDb id
-        Preconditions.checkState(dbNames.size() == dbIds.size() + 1, errMsg);
+        Preconditions.checkState(dbCount == dbIds.size(), errMsg);
 
         out.writeInt(dbCount);
         for (long id : dbIds) {

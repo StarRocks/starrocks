@@ -98,6 +98,6 @@ public class InfoSchemaDb extends Database {
         if (dbName == null) {
             return false;
         }
-        return DATABASE_NAME.equalsIgnoreCase(dbName);
+        return DATABASE_NAME.equalsIgnoreCase(dbName) || MysqlSchemaDb.DATABASE_NAME.equalsIgnoreCase(dbName);
     }
 }
