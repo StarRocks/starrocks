@@ -251,9 +251,9 @@ Release date: July 29, 2022
 
 ### New Features
 
-- The Primary Key model supports complete DELETE WHERE syntax. For more information, see [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md#delete-and-primary-key-model).
+- The Primary Key table supports complete DELETE WHERE syntax. For more information, see [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md#delete-and-primary-key-model).
 
-- The Primary Key model supports persistent primary key indexes. You can choose to persist the primary key index on disk rather than in memory, significantly reducing memory usage. For more information, see [Primary Key model](../table_design/Data_model.md#how-to-use-it-3).
+- The Primary Key table supports persistent primary key indexes. You can choose to persist the primary key index on disk rather than in memory, significantly reducing memory usage. For more information, see [Primary Key table](../table_design/Table_types.md#primary-key-table).
 - Global dictionary can be updated during real-time data ingestion，optimizing query performance and delivering 2X query performance for string data.
 - The CREATE TABLE AS SELECT statement can be executed asynchronously. For more information, see [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20AS%20SELECT.md).
 - Support the following resource group-related features:

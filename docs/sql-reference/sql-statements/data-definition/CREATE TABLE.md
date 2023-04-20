@@ -73,7 +73,7 @@ If specified, it is value column. The aggregation types supported are as follows
 
 This aggregation type applies ONLY to the aggregation model whose key_desc type is AGGREGATE KEY.
 
-**NULL | NOT NULL**: Whether the column is allowed to be `NULL`. By default, `NULL` is specified for all columns in a table that uses the Duplicate Key, Aggregate Key, or Unique Key model. In a table that uses the Primary Key model, by default, value columns are specified with `NULL`, whereas key columns are specified with `NOT NULL`. If `NULL` values are included in the raw data, present them with `\N`. StarRocks treats `\N` as `NULL` during data loading.
+**NULL | NOT NULL**: Whether the column is allowed to be `NULL`. By default, `NULL` is specified for all columns in a table that uses the Duplicate Key, Aggregate Key, or Unique Key table. In a table that uses the Primary Key table, by default, value columns are specified with `NULL`, whereas key columns are specified with `NOT NULL`. If `NULL` values are included in the raw data, present them with `\N`. StarRocks treats `\N` as `NULL` during data loading.
 
 **DEFAULT "default_value"**: the default value of a column. When you load data into StarRocks, if the source field mapped onto the column is empty, StarRocks automatically fills the default value in the column. You can specify a default value in one of the following ways:
 
@@ -297,7 +297,7 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 
 ### ORDER BY
 
-Since version 3.0, the primary key and sort key are decoupled in the Primary Key model. The sort key is specified by the `ORDER BY` keyword and can be the permutation and combination of any columns.
+Since version 3.0, the primary key and sort key are decoupled in the Primary Key table. The sort key is specified by the `ORDER BY` keyword and can be the permutation and combination of any columns.
 
 > **NOTICE**
 >
