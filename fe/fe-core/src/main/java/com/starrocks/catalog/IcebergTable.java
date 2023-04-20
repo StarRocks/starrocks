@@ -38,12 +38,15 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionField;
+import org.apache.iceberg.SortField;
+import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -133,6 +136,24 @@ public class IcebergTable extends Table {
     public List<Integer> partitionColumnIndexes() {
         List<Column> partitionCols = getPartitionColumns();
         return partitionCols.stream().map(col -> fullSchema.indexOf(col)).collect(Collectors.toList());
+    }
+
+    public List<Integer> getSortKeyIndexes() {
+        List<Integer> indexes = new ArrayList<>();
+        org.apache.iceberg.Table nativeTable = getNativeTable();
+        List<Types.NestedField> fields = nativeTable.schema().asStruct().fields();
+        List<Integer> sortFieldSourceIds = nativeTable.sortOrder().fields().stream()
+                .map(SortField::sourceId)
+                .collect(Collectors.toList());
+
+        for (int i = 0; i < fields.size(); i++) {
+            Types.NestedField field = fields.get(i);
+            if (sortFieldSourceIds.contains(field.fieldId())) {
+                indexes.add(i);
+            }
+        }
+
+        return indexes;
     }
 
     public boolean isUnPartitioned() {
