@@ -410,6 +410,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
 
+    public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
+
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1102,6 +1105,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableShowAllVariables(boolean enableShowAllVariables) {
         this.enableShowAllVariables = enableShowAllVariables;
     }
+
+    @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
+    private boolean enableStrictType = false;
 
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
@@ -1981,6 +1987,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getHDFSBackendSelectorScanRangeShuffle() {
         return hdfsBackendSelectorScanRangeShuffle;
+    }
+
+    public boolean isEnableStrictType() {
+        return enableStrictType;
+    }
+
+    public void setEnableStrictType(boolean val) {
+        this.enableStrictType = val;
     }
 
     // Serialize to thrift object
