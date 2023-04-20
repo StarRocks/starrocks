@@ -15,6 +15,8 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.KeysDesc;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -28,6 +30,7 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -430,5 +433,58 @@ public class CTASAnalyzerTest {
         Assert.assertFalse(columnDefs.get(0).isAllowNull());
         Assert.assertFalse(columnDefs.get(1).isAllowNull());
         Assert.assertTrue(columnDefs.get(2).isAllowNull());
+    }
+
+    @Test
+    public void testCtasWithNullale() throws Exception {
+        {
+            String createSql = "create table emps (\n" +
+                    "    empid int null,\n" +
+                    "    deptno int null,\n" +
+                    "    name varchar(25) null,\n" +
+                    "    salary double\n" +
+                    ")\n" +
+                    "distributed by hash(`empid`) buckets 10\n" +
+                    "properties (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+            starRocksAssert.withTable(createSql);
+            String ctas = "create table ttt as" +
+                    " select empid,sum(salary),max(salary),min(length(name)),cast(avg(name) as int)" +
+                    " from emps group by 1 order by 1;";
+            CreateTableAsSelectStmt ctasStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctas, starRocksAssert.getCtx());
+            QueryStatement queryStatement = ctasStmt.getQueryStatement();
+            Assert.assertEquals(5, queryStatement.getQueryRelation().getOutputExpression().size());
+            Assert.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof SlotRef);
+            SlotRef col1 = (SlotRef) queryStatement.getQueryRelation().getOutputExpression().get(0);
+            Assert.assertTrue(col1.isNullable());
+            starRocksAssert.dropTable("emps");
+        }
+
+        {
+            String createSql = "create table emps (\n" +
+                    "    empid int not null,\n" +
+                    "    deptno int null,\n" +
+                    "    name varchar(25) null,\n" +
+                    "    salary double\n" +
+                    ")\n" +
+                    "distributed by hash(`empid`) buckets 10\n" +
+                    "properties (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+            starRocksAssert.withTable(createSql);
+            String ctas = "create table ttt as" +
+                    " select empid,sum(salary),max(salary),min(length(name)),cast(avg(name) as int)" +
+                    " from emps group by 1 order by 1;";
+            CreateTableAsSelectStmt ctasStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctas, starRocksAssert.getCtx());
+            QueryStatement queryStatement = ctasStmt.getQueryStatement();
+            Assert.assertEquals(5, queryStatement.getQueryRelation().getOutputExpression().size());
+            Assert.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof SlotRef);
+            SlotRef col1 = (SlotRef) queryStatement.getQueryRelation().getOutputExpression().get(0);
+            Assert.assertFalse(col1.isNullable());
+            starRocksAssert.dropTable("emps");
+        }
     }
 }
