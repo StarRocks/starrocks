@@ -349,6 +349,8 @@ public:
 
     auto& io_executor() { return *spill_channel()->io_executor(); }
 
+    Status spill_aggregate_data(RuntimeState* state, std::function<StatusOr<ChunkPtr>()> chunk_provider);
+
     bool has_pending_data() const { return _spiller != nullptr && _spiller->has_pending_data(); }
     bool has_pending_restore() const { return _spiller != nullptr && !_spiller->restore_finished(); }
     bool is_spilled_eos() const {
