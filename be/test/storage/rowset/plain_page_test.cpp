@@ -91,8 +91,7 @@ public:
         page_builder.get_last_value(&last_value);
         ASSERT_EQ(src[size - 1], last_value);
 
-        PageDecoderOptions decoder_options;
-        PageDecoderType page_decoder(s.slice(), decoder_options);
+        PageDecoderType page_decoder(s.slice());
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
 
@@ -158,8 +157,7 @@ public:
         size = page_builder.add(reinterpret_cast<const uint8_t*>(src), size);
         OwnedSlice s = page_builder.finish()->build();
 
-        PageDecoderOptions decoder_options;
-        PageDecoderType page_decoder(s.slice(), decoder_options);
+        PageDecoderType page_decoder(s.slice());
         Status status = page_decoder.init();
 
         ASSERT_TRUE(status.ok());

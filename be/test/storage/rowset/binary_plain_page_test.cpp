@@ -81,8 +81,7 @@ public:
         page_builder.get_last_value(&last_value);
         ASSERT_EQ(slices[count - 1], last_value);
 
-        PageDecoderOptions decoder_options;
-        PageDecoderType page_decoder(owned_slice.slice(), decoder_options);
+        PageDecoderType page_decoder(owned_slice.slice());
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
 

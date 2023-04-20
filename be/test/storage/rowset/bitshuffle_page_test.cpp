@@ -95,8 +95,7 @@ public:
         Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
-        PageDecoderOptions decoder_options;
-        PageDecoderType page_decoder(encoded_data, decoder_options);
+        PageDecoderType page_decoder(encoded_data);
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, page_decoder.current_index());
@@ -156,8 +155,7 @@ public:
             ASSERT_TRUE(st.ok());
 
             // read whole the page
-            PageDecoderOptions decoder_options;
-            PageDecoderType page_decoder(encoded_data, decoder_options);
+            PageDecoderType page_decoder(encoded_data);
             Status status = page_decoder.init();
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
@@ -178,8 +176,7 @@ public:
 
         {
             // read half of the page
-            PageDecoderOptions decoder_options;
-            PageDecoderType page_decoder(encoded_data, decoder_options);
+            PageDecoderType page_decoder(encoded_data);
             Status status = page_decoder.init();
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
@@ -200,8 +197,7 @@ public:
 
         {
             // read range data of page
-            PageDecoderOptions decoder_options;
-            PageDecoderType page_decoder(encoded_data, decoder_options);
+            PageDecoderType page_decoder(encoded_data);
             Status status = page_decoder.init();
             ASSERT_TRUE(status.ok());
             ASSERT_EQ(0, page_decoder.current_index());
@@ -255,8 +251,7 @@ public:
         Status st = StoragePageDecoder::decode_page(&footer, 0, starrocks::BIT_SHUFFLE, &page, &encoded_data);
         ASSERT_TRUE(st.ok());
 
-        PageDecoderOptions decoder_options;
-        PageDecoderType page_decoder(encoded_data, decoder_options);
+        PageDecoderType page_decoder(encoded_data);
         Status status = page_decoder.init();
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, page_decoder.current_index());
