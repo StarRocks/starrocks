@@ -102,7 +102,7 @@ public class TablePEntryObject implements PEntryObject {
         String dbUUID;
         String tblUUID;
 
-        if (tokens.get(0).equals("*")) {
+        if (Objects.equals(tokens.get(0), "*")) {
             dbUUID = PrivilegeBuiltinConstants.ALL_DATABASES_UUID;
             tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
         } else {
@@ -112,7 +112,7 @@ public class TablePEntryObject implements PEntryObject {
             }
             dbUUID = database.getUUID();
 
-            if (tokens.get(1).equals("*")) {
+            if (Objects.equals(tokens.get(1), "*")) {
                 tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
             } else {
                 Table table = mgr.getMetadataMgr().getTable(catalogName, database.getOriginName(), tokens.get(1));

@@ -80,7 +80,7 @@ public class DbPEntryObject implements PEntryObject {
             catalogId = catalog.getId();
         }
 
-        if (tokens.get(0).equals("*")) {
+        if (Objects.equals(tokens.get(0), "*")) {
             return new DbPEntryObject(catalogId, PrivilegeBuiltinConstants.ALL_DATABASES_UUID);
         }
 
