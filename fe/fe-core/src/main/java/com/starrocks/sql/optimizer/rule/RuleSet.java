@@ -371,6 +371,7 @@ public class RuleSet {
                 AggregateJoinRule.getInstance(),
                 OnlyJoinRule.getInstance()
         ));
+
     }
 
     public RuleSet() {

@@ -137,6 +137,7 @@ private:
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
+    ConnectorScanOperator* _op = nullptr;
 };
 
 } // namespace pipeline

@@ -349,7 +349,6 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     io_tasks = std::max(min_io_tasks, io_tasks);
     io_tasks = std::min(max_io_tasks, io_tasks);
     if ((now - P.adjust_io_tasks_last_timestamp) <= config::connector_io_tasks_adjust_interval_ms * 1000) {
-        VLOG_FILE << "[XXXX]. pickup morsel. cached count = " << io_tasks;
         return io_tasks;
     }
     P.adjust_io_tasks_last_timestamp = now;
@@ -432,7 +431,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     auto build_log = [&]() {
         auto doround = [&](double x) { return round(x * 100.0) / 100.0; };
         std::stringstream ss;
-        ss << "[XXXX] pick mosrsel. id = " << _driver_sequence;
+        ss << "available_pickup_morsel_count. id = " << _driver_sequence;
         ss << ", cs = " << doround(cs_speed) << "(" << cs_pull_chunks << "/" << P.cs_gen_chunks_time << ")";
         ss << ", last_cs = " << doround(P.last_cs_speed) << "(" << doround(cs_speed / P.last_cs_speed) << ")";
         ss << ", op = " << doround(op_speed) << "(" << P.op_pull_chunks << "/" << (P.op_running_time / 1000) << ")";
@@ -478,6 +477,7 @@ ConnectorChunkSource::ConnectorChunkSource(ScanOperator* op, RuntimeProfile* run
     _data_source->set_read_limit(_limit);
     _data_source->set_runtime_profile(runtime_profile);
     _data_source->update_has_any_predicate();
+    _op = down_cast<ConnectorScanOperator*>(op);
 }
 
 ConnectorChunkSource::~ConnectorChunkSource() {

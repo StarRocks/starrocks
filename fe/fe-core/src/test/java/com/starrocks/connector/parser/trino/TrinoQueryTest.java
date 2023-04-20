@@ -101,6 +101,15 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testNullifExpression() throws Exception {
+        String sql = "select nullif(1, 2)";
+        assertPlanContains(sql, "<slot 2> : nullif(1, 2)");
+
+        sql = "select nullif(v1, v2) from t0";
+        assertPlanContains(sql, "<slot 4> : nullif(1: v1, 2: v2)");
+    }
+
+    @Test
     public void testDecimal() throws Exception {
         String sql = "select cast(tj as decimal32) from tall";
         analyzeFail(sql, "Unknown type: decimal32");
@@ -806,8 +815,32 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select approx_percentile(2.25, 1.79E+10)";
         assertPlanContains(sql, "percentile_approx(2.25, 1.79E10)");
+    }
 
+    @Test
+    public void testTrim() throws Exception {
+        String sql = "select trim(' abc ');";
+        assertPlanContains(sql, "<slot 2> : trim(' abc ')");
 
-        System.out.println(getFragmentPlan(sql));
+        sql = "select trim('!' from '!foo!');";
+        assertPlanContains(sql, "<slot 2> : trim('!foo!', '!')");
+
+        sql = "select trim(leading from '  abcd');";
+        assertPlanContains(sql, "<slot 2> : ltrim('  abcd')");
+
+        sql = "select trim(leading 'a' from '  abcd');";
+        assertPlanContains(sql, "<slot 2> : ltrim('  abcd', 'a')");
+
+        sql = "select trim(both '$' FROM '$var$');";
+        assertPlanContains(sql, "<slot 2> : trim('$var$', '$')");
+
+        sql = "select trim(both from '  abcd');";
+        assertPlanContains(sql, "<slot 2> : trim('  abcd')");
+
+        sql = "select trim(trailing 'ER' from upper('worker'));";
+        assertPlanContains(sql, "<slot 2> : rtrim(upper('worker'), 'ER')");
+
+        sql = "select trim(trailing from '  abcd');";
+        assertPlanContains(sql, "<slot 2> : rtrim('  abcd')");
     }
 }
