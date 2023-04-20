@@ -557,10 +557,21 @@ Status LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, 
 
 // Convert byte-addressable bitset into a bit-addressable bitset.
 std::vector<uint8_t> LevelBuilder::_make_null_bitset(size_t n, const uint8_t* nulls) const {
-    // TODO(letian-jiang): optimize
     DCHECK(nulls != nullptr);
     std::vector<uint8_t> bitset((n + 7) / 8);
-    for (size_t i = 0; i < n; i++) {
+    size_t start = 0;
+
+#ifndef __AVX2__
+    constexpr size_t kBatchSize = /*width of AVX registers*/ 256 / 8;
+    while (start + kBatchSize < n) {
+        __m256i null_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(nulls + start));
+        uint32_t mask = _mm256_testz_si256(null_vec, _mm256_set1_epi8(0x01));
+        memcpy(bitset.data() + kBatchSize / sizeof(uint8_t), &mask, sizeof(uint32_t));
+        start += kBatchSize;
+    }
+#endif
+
+    for (size_t i = start; i < n; i++) {
         if (!nulls[i]) {
             bitset[i / 8] |= 1 << (i % 8);
         }
