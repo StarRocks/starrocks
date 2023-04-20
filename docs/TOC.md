@@ -15,7 +15,7 @@
   + [Load and query data](./quick_start/Import_and_query.md)
 + Table Design
   + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
-  + [Data models](./table_design/Data_model.md)
+  + [Table types](./table_design/Data_model.md)
   + Data distribution
     + [Data distribution](./table_design/Data_distribution.md)
     + [Automatic partitioning](./table_design/automatic_partitioning.md)
