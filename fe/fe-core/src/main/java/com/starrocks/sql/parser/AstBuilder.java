@@ -4097,8 +4097,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitPartitionNames(StarRocksParser.PartitionNamesContext context) {
-        if (context.listPartition() != null) {
-            return visit(context.listPartition());
+        if (context.keyPartitions() != null) {
+            return visit(context.keyPartitions());
         }
 
         List<Identifier> identifierList = visit(context.identifier(), Identifier.class);
@@ -4108,17 +4108,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitListPartitions(StarRocksParser.ListPartitionsContext context) {
-        List<String> partitionKeys = Lists.newArrayList();
-        List<Expr> partitionValues = Lists.newArrayList();
-        for (StarRocksParser.PartitionPairContext pair : context.partitionPair()) {
-            Identifier partitionName = (Identifier) visit(pair.key);
-            Expr partitionValue = (Expr) visit(pair.value);
-            partitionKeys.add(partitionName.getValue());
-            partitionValues.add(partitionValue);
+    public ParseNode visitKeyPartitionList(StarRocksParser.KeyPartitionListContext context) {
+        List<String> partitionColNames = Lists.newArrayList();
+        List<Expr> partitionColValues = Lists.newArrayList();
+        for (StarRocksParser.KeyPartitionContext pair : context.keyPartition()) {
+            Identifier partitionName = (Identifier) visit(pair.partitionColName);
+            Expr partitionValue = (Expr) visit(pair.partitionColValue);
+            partitionColNames.add(partitionName.getValue());
+            partitionColValues.add(partitionValue);
         }
 
-        return new PartitionNames(false, new ArrayList<>(), partitionKeys, partitionValues, NodePosition.ZERO);
+        return new PartitionNames(false, new ArrayList<>(), partitionColNames, partitionColValues, NodePosition.ZERO);
     }
 
     @Override

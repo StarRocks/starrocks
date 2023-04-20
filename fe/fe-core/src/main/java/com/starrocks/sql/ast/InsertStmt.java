@@ -21,6 +21,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -192,8 +193,12 @@ public class InsertStmt extends DmlStmt {
         this.targetColumns = targetColumns;
     }
 
-    public boolean isStaticPartitionInsert() {
-        return targetPartitionNames != null && targetPartitionNames.isStaticPartitionInsert();
+    public boolean isSpecifyKeyPartition() {
+        return targetTable != null && targetTable instanceof IcebergTable && isStaticKeyPartitionInsert();
+    }
+
+    public boolean isStaticKeyPartitionInsert() {
+        return targetPartitionNames != null && targetPartitionNames.isStaticKeyPartitionInsert();
     }
 
     @Override

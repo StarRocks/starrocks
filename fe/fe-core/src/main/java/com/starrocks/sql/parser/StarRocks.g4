@@ -1820,11 +1820,11 @@ columnAliases
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
     | TEMPORARY? (PARTITION | PARTITIONS) identifier
-    | listPartition
+    | keyPartitions
     ;
 
-listPartition
-    : PARTITION '(' partitionPair (',' partitionPair)* ')'                              #listPartitions
+keyPartitions
+    : PARTITION '(' keyPartition (',' keyPartition)* ')'                              #keyPartitionList
     ;
 
 tabletList
@@ -2152,8 +2152,8 @@ partitionValueList
     : '(' partitionValue (',' partitionValue)* ')'
     ;
 
-partitionPair
-    : key=identifier '=' value=literalExpression
+keyPartition
+    : partitionColName=identifier '=' partitionColValue=literalExpression
     ;
 
 partitionValue
