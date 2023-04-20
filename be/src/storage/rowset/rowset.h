@@ -366,7 +366,7 @@ private:
 
     Status _remove_delta_column_group_files(std::shared_ptr<FileSystem> fs);
 
-    Status _link_delta_column_group_files(const std::string& dir, RowsetId new_rowset_id);
+    Status _link_delta_column_group_files(const std::string& dir);
 
     std::vector<SegmentSharedPtr> _segments;
 };

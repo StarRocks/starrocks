@@ -294,7 +294,7 @@ Status Rowset::_remove_delta_column_group_files(std::shared_ptr<FileSystem> fs) 
                                                                        _rowset_meta->get_rowset_seg_id() + i, 0,
                                                                        INT64_MAX, &list));
             for (const auto& dcg : list) {
-                auto st = fs->delete_file(dcg->column_file());
+                auto st = fs->delete_file(dcg->column_file(_rowset_path));
                 if (st.ok() || st.is_not_found()) {
                     VLOG(1) << "Deleting delta column group's file: " << dcg->debug_string() << " st: " << st;
                 } else {
@@ -337,11 +337,11 @@ Status Rowset::link_files_to(const std::string& dir, RowsetId new_rowset_id) {
             VLOG(1) << "success to link " << src_file_path << " to " << dst_link_path;
         }
     }
-    RETURN_IF_ERROR(_link_delta_column_group_files(dir, new_rowset_id));
+    RETURN_IF_ERROR(_link_delta_column_group_files(dir));
     return Status::OK();
 }
 
-Status Rowset::_link_delta_column_group_files(const std::string& dir, RowsetId new_rowset_id) {
+Status Rowset::_link_delta_column_group_files(const std::string& dir) {
     if (num_segments() > 0) {
         std::filesystem::path schema_hash_path(_rowset_path);
         std::filesystem::path data_dir_path = schema_hash_path.parent_path().parent_path().parent_path().parent_path();
@@ -358,8 +358,8 @@ Status Rowset::_link_delta_column_group_files(const std::string& dir, RowsetId n
                                                                        _rowset_meta->get_rowset_seg_id() + i, 0,
                                                                        INT64_MAX, &list));
             for (const auto& dcg : list) {
-                std::string src_file_path = dcg->column_file();
-                std::string dst_link_path = delta_column_group_path(dir, new_rowset_id, i, dcg->version());
+                std::string src_file_path = dcg->column_file(_rowset_path);
+                std::string dst_link_path = dcg->column_file(dir);
                 if (link(src_file_path.c_str(), dst_link_path.c_str()) != 0) {
                     PLOG(WARNING) << "Fail to link " << src_file_path << " to " << dst_link_path;
                     return Status::RuntimeError(fmt::format("Fail to link segment update file, src: {}, dst {}",

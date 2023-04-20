@@ -2690,10 +2690,6 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
             if (!st.ok()) {
                 return st;
             }
-            // rename column file in delta column group
-            for (auto& dcg : new_rowset_info.dcgs[j]) {
-                dcg->rename_column_file(_tablet.schema_hash_path(), rid, j);
-            }
         }
         next_rowset_id += std::max(1U, (uint32_t)new_rowset_info.num_segments);
         total_bytes += rowset_meta_pb.total_disk_size();
@@ -3547,6 +3543,14 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
             CHECK_FAIL(TabletMetaManager::put_del_vector(data_store, &wb, tablet_id, id, delvec));
         }
         for (const auto& [rssid, dcglist] : snapshot_meta.delta_column_groups()) {
+            for (const auto& dcg : dcglist) {
+                const std::string dcg_file = dcg->column_file(_tablet.schema_hash_path());
+                auto st = FileSystem::Default()->path_exists(dcg_file);
+                if (!st.ok()) {
+                    return Status::InternalError("delta column file: " + dcg_file +
+                                                 " does not exist: " + st.to_string());
+                }
+            }
             auto id = rssid + _next_rowset_id;
             CHECK_FAIL(TabletMetaManager::put_delta_column_group(data_store, &wb, tablet_id, id, dcglist));
         }

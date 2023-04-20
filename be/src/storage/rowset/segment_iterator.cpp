@@ -429,14 +429,15 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_itera
     for (const auto& dcg : dcgs) {
         int idx = dcg->get_column_idx(ucid);
         if (idx >= 0) {
-            if (_dcg_segments.count(dcg->column_file()) == 0) {
+            std::string column_file = dcg->column_file(parent_name(_segment->file_name()));
+            if (_dcg_segments.count(column_file) == 0) {
                 ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg));
-                _dcg_segments[dcg->column_file()] = dcg_segment;
+                _dcg_segments[column_file] = dcg_segment;
             }
             if (filename != nullptr) {
-                *filename = dcg->column_file();
+                *filename = column_file;
             }
-            return _dcg_segments[dcg->column_file()]->new_column_iterator(idx);
+            return _dcg_segments[column_file]->new_column_iterator(idx);
         }
     }
     return nullptr;
