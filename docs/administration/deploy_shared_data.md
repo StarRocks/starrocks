@@ -161,7 +161,7 @@ The usage of shared-data StarRocks clusters is also similar to that of a classic
 After connecting to your shared-data StarRocks cluster, create a database and then table in the database. Currently, shared-data StarRocks clusters support the following table types:
 
 - Duplicate Key table
-- Aggregate Key table
+- Aggregate table
 - Unique Key table
 
 > **NOTE**
