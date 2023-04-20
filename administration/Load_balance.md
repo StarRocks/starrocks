@@ -11,7 +11,7 @@
 如果您使用 MySQL JDBC Connector 连接 StarRocks，可以通过 JDBC 的自动重试机制进行重试和负载均衡。
 
 ```sql
-jdbc:mysql://[host:port],[host:port].../[database][?propertyName1][=propertyValue1][&propertyName2][=propertyValue2]...
+jdbc:mysql:loadbalance://[host1][:port],[host2][:port][,[host3][:port]]...[/[database]][?propertyName1=propertyValue1[&propertyName2=propertyValue2]...]
 ```
 
 ## 通过 ProxySQL 均衡负载
