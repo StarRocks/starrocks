@@ -29,20 +29,7 @@
 #include "gutil/endian.h"
 #include "util/defer_op.h"
 
-namespace starrocks {
-namespace parquet {
-
-template <typename Action>
-inline void do_ignore_null(const LevelBuilderContext& ctx, const uint8_t* null_col, const Action& action) {
-    for (int i = 0; i < ctx.size(); i++) {
-        auto [idx, def_level, rep_level] = ctx.get(i);
-        // ignore nulls entries in parent column and current column
-        if (idx == LevelBuilderContext::kNULL || (null_col != nullptr && null_col[idx])) {
-            continue;
-        }
-        action(idx);
-    }
-}
+namespace starrocks::parquet {
 
 inline uint8_t* get_raw_null_column(const ColumnPtr& col) {
     if (!col->has_null()) {
@@ -121,7 +108,7 @@ Status LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const T
         return _write_varchar_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
     }
     case TYPE_ARRAY: {
-        return _write_array_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
+        return _write_array_column_chunkV2(ctx, type_desc, node, col, write_leaf_callback);
     }
     case TYPE_MAP: {
         return _write_map_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
@@ -143,17 +130,21 @@ Status LevelBuilder::_write_boolean_column_chunk(const LevelBuilderContext& ctx,
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
-    auto def_levels = _make_def_levels(ctx, node, null_col);
+    auto def_levels = _make_def_levelsV3(ctx, node, null_col);
 
     // sizeof(bool) depends on implementation, thus we cast values to ensure correctness
     auto values = new bool[col->size()];
     DeferOp defer([&] { delete[] values; });
 
-    int value_offset = 0;
-    do_ignore_null(ctx, null_col, [&](int idx) { values[value_offset++] = static_cast<bool>(data_col[idx]); });
+    int offset = 0;
+    for (size_t i = 0; i < col->size(); i++) {
+        if (null_col != nullptr && null_col[i] == 0) {
+            values[offset++] = static_cast<bool>(data_col[i]);
+        }
+    }
 
     write_leaf_callback(LevelBuilderResult{
-            .num_levels = ctx.size(),
+            .num_levels = ctx.num_levels(),
             .def_levels = def_levels->data(),
             .rep_levels = rep_levels->data(),
             .values = reinterpret_cast<uint8_t*>(values),
@@ -172,7 +163,7 @@ Status LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, con
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
-    auto def_levels = _make_def_levels(ctx, node, null_col);
+    auto def_levels = _make_def_levelsV3(ctx, node, null_col);
 
     using source_type = RunTimeCppType<lt>;
     using target_type = typename ::parquet::type_traits<pt>::value_type;
@@ -181,9 +172,9 @@ Status LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, con
         // Zero-copy for identical source/target types
         // If leaf column has null entries, provide a bitset to denote not-null entries.
         write_leaf_callback(LevelBuilderResult{
-                .num_levels = ctx.size(),
-                .def_levels = def_levels->data(),
-                .rep_levels = rep_levels->data(),
+                .num_levels = ctx.num_levels(),
+                .def_levels = def_levels ? def_levels->data() : nullptr,
+                .rep_levels = rep_levels ? rep_levels->data() : nullptr,
                 .values = reinterpret_cast<uint8_t*>(data_col),
                 // Make bitset to denote not-null values
                 .null_bitset = col->has_null() ? _make_null_bitset(col->size(), null_col).data() : nullptr,
@@ -192,12 +183,16 @@ Status LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, con
         // If two types are different, we have to cast values anyway
         std::vector<target_type> values;
         values.reserve(col->size());
-        do_ignore_null(ctx, null_col, [&](int idx) { values.push_back(static_cast<target_type>(data_col[idx])); });
+        for (size_t i = 0; i < col->size(); i++) {
+            if (null_col == nullptr || null_col[i] == 0) {
+                values.push_back(static_cast<target_type>(data_col[i]));
+            }
+        }
 
         write_leaf_callback(LevelBuilderResult{
-                .num_levels = ctx.size(),
-                .def_levels = def_levels->data(),
-                .rep_levels = rep_levels->data(),
+                .num_levels = ctx.num_levels(),
+                .def_levels = def_levels ? def_levels->data() : nullptr,
+                .rep_levels = rep_levels ? rep_levels->data() : nullptr,
                 .values = reinterpret_cast<uint8_t*>(values.data()),
                 .null_bitset = nullptr,
         });
@@ -213,16 +208,18 @@ Status LevelBuilder::_write_decimal128_column_chunk(const LevelBuilderContext& c
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
-    auto def_levels = _make_def_levels(ctx, node, null_col);
+    auto def_levels = _make_def_levelsV3(ctx, node, null_col);
 
     std::vector<unsigned __int128> values;
-    values.reserve(ctx.size());
-    do_ignore_null(ctx, null_col, [&](int idx) {
-        // unscaled number must be encoded as two's complement using big-endian byte order (the most significant byte
-        // is the zeroth element). See https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#decimal
-        auto big_endian_value = BigEndian::FromHost128(data_col[idx]);
-        values.push_back(big_endian_value);
-    });
+    values.reserve(col->size());
+    for (size_t i = 0; i < col->size(); i++) {
+        if (null_col == nullptr || null_col[i] == 0) {
+            // unscaled number must be encoded as two's complement using big-endian byte order (the most significant byte
+            // is the zeroth element). See https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#decimal
+            auto big_endian_value = BigEndian::FromHost128(data_col[i]);
+            values.push_back(big_endian_value);
+        }
+    }
 
     std::vector<::parquet::FixedLenByteArray> flba_values;
     flba_values.reserve(values.size());
@@ -232,9 +229,9 @@ Status LevelBuilder::_write_decimal128_column_chunk(const LevelBuilderContext& c
     }
 
     write_leaf_callback(LevelBuilderResult{
-            .num_levels = ctx.size(),
-            .def_levels = def_levels->data(),
-            .rep_levels = rep_levels->data(),
+            .num_levels = ctx.num_levels(),
+            .def_levels = def_levels ? def_levels->data() : nullptr,
+            .rep_levels = rep_levels ? rep_levels->data() : nullptr,
             .values = reinterpret_cast<uint8_t*>(values.data()),
             .null_bitset = nullptr,
     });
@@ -250,21 +247,23 @@ Status LevelBuilder::_write_date_column_chunk(const LevelBuilderContext& ctx, co
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
-    auto def_levels = _make_def_levels(ctx, node, null_col);
+    auto def_levels = _make_def_levelsV3(ctx, node, null_col);
 
     std::vector<int32_t> values;
-    values.reserve(ctx.size());
+    values.reserve(col->size());
 
     auto unix_epoch_date = DateValue::create(1970, 1, 1);
-    do_ignore_null(ctx, null_col, [&](int idx) {
-        int32_t unix_days = data_col[idx]._julian - unix_epoch_date._julian;
-        values.push_back(unix_days);
-    });
+    for (size_t i = 0; i < col->size(); i++) {
+        if (null_col == nullptr || null_col[i] == 0) {
+            int32_t unix_days = data_col[i]._julian - unix_epoch_date._julian;
+            values.push_back(unix_days);
+        }
+    }
 
     write_leaf_callback(LevelBuilderResult{
-            .num_levels = ctx.size(),
-            .def_levels = def_levels->data(),
-            .rep_levels = rep_levels->data(),
+            .num_levels = ctx.num_levels(),
+            .def_levels = def_levels ? def_levels->data() : nullptr,
+            .rep_levels = rep_levels ? rep_levels->data() : nullptr,
             .values = reinterpret_cast<uint8_t*>(values.data()),
             .null_bitset = nullptr,
     });
@@ -280,19 +279,21 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
-    auto def_levels = _make_def_levels(ctx, node, null_col);
+    auto def_levels = _make_def_levelsV3(ctx, node, null_col);
 
     std::vector<int64_t> values;
-    values.reserve(ctx.size());
-    do_ignore_null(ctx, null_col, [&](int idx) {
-        int64_t milliseconds = data_col[idx].to_unix_second() * 1000;
-        values.push_back(milliseconds);
-    });
+    values.reserve(col->size());
+    for (size_t i = 0; i < col->size(); i++) {
+        if (null_col == nullptr || null_col[i] == 0) {
+            int64_t milliseconds = data_col[i].to_unix_second() * 1000;
+            values.push_back(milliseconds);
+        }
+    }
 
     write_leaf_callback(LevelBuilderResult{
-            .num_levels = ctx.size(),
-            .def_levels = def_levels->data(),
-            .rep_levels = rep_levels->data(),
+            .num_levels = ctx.num_levels(),
+            .def_levels = def_levels ? def_levels->data() : nullptr,
+            .rep_levels = rep_levels ? rep_levels->data() : nullptr,
             .values = reinterpret_cast<uint8_t*>(values.data()),
             .null_bitset = nullptr,
     });
@@ -310,20 +311,22 @@ Status LevelBuilder::_write_varchar_column_chunk(const LevelBuilderContext& ctx,
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
-    auto def_levels = _make_def_levels(ctx, node, null_col);
+    auto def_levels = _make_def_levelsV3(ctx, node, null_col);
 
     std::vector<::parquet::ByteArray> values;
-    values.reserve(ctx.size());
-    do_ignore_null(ctx, null_col, [&](int idx) {
-        auto len = static_cast<uint32_t>(vo[idx + 1] - vo[idx]);
-        auto ptr = reinterpret_cast<const uint8_t*>(vb.data() + vo[idx]);
-        values.emplace_back(len, ptr);
-    });
+    values.reserve(col->size());
+    for (size_t i = 0; i < col->size(); i++) {
+        if (null_col == nullptr || null_col[i] == 0) {
+            auto len = static_cast<uint32_t>(vo[i + 1] - vo[i]);
+            auto ptr = reinterpret_cast<const uint8_t*>(vb.data() + vo[i]);
+            values.emplace_back(len, ptr);
+        }
+    }
 
     write_leaf_callback(LevelBuilderResult{
-            .num_levels = ctx.size(),
-            .def_levels = def_levels->data(),
-            .rep_levels = rep_levels->data(),
+            .num_levels = ctx.num_levels(),
+            .def_levels = def_levels ? def_levels->data() : nullptr,
+            .rep_levels = rep_levels ? rep_levels->data() : nullptr,
             .values = reinterpret_cast<uint8_t*>(values.data()),
             .null_bitset = nullptr,
     });
@@ -342,28 +345,113 @@ Status LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, c
     const auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto& elements = array_col->elements_column();
     const auto& offsets = array_col->offsets_column()->get_data();
-    LevelBuilderContext derived_ctx(ctx._max_def_level + node->is_optional() + 1, ctx._max_rep_level + 1,
-                                    ctx.size() + elements->size());
 
-    int subcol_size = 0;
-    for (auto i = 0; i < ctx.size(); i++) {
-        auto [idx, def_level, rep_level] = ctx.get(i);
-        if (idx == LevelBuilderContext::kNULL || (null_col != nullptr && null_col[idx])) {
-            derived_ctx.append(LevelBuilderContext::kNULL, def_level, rep_level);
+    auto def_levels = std::make_shared<std::vector<int16_t>>();
+    auto rep_levels = std::make_shared<std::vector<int16_t>>();
+
+    int offset = 0;
+    for (auto i = 0; i < ctx.num_levels(); i++) {
+        auto def_level = ctx._def_levels ? ctx._def_levels->at(i) : 0;
+        auto rep_level = ctx._rep_levels ? ctx._rep_levels->at(i) : 0;
+        if (def_level < ctx._max_def_level) {
+            def_levels->push_back(def_level);
+            rep_levels->push_back(rep_level);
             continue;
         }
-        auto array_size = offsets[idx + 1] - offsets[idx];
+
+        if (null_col != nullptr && null_col[offset]) {
+            def_levels->push_back(def_level);
+            rep_levels->push_back(rep_level);
+
+            offset++;
+            continue;
+        }
+
+        auto array_size = offsets[offset + 1] - offsets[offset];
         if (array_size == 0) {
-            derived_ctx.append(LevelBuilderContext::kNULL, def_level + node->is_optional(), rep_level);
-            continue;
+            def_levels->push_back(def_level + node->is_optional());
+            rep_levels->push_back(rep_level);
+        } else {
+            def_levels->push_back(def_level + node->is_optional() + 1);
+            rep_levels->push_back(rep_level);
+            for (auto j = 1; j < array_size; j++) {
+                def_levels->push_back(def_level + node->is_optional() + 1);
+                rep_levels->push_back(ctx._max_rep_level + 1);
+            }
         }
-        derived_ctx.append(subcol_size++, def_level + node->is_optional() + 1, rep_level);
-        for (auto offset = 1; offset < array_size; offset++) {
-            derived_ctx.append(subcol_size++, def_level + node->is_optional() + 1, derived_ctx._max_rep_level);
-        }
+        offset++;
     }
 
-    DCHECK(elements->size() == subcol_size);
+    LevelBuilderContext derived_ctx(def_levels->size(), def_levels, ctx._max_def_level + node->is_optional() + 1,
+                                    rep_levels, ctx._max_rep_level + 1);
+
+    DCHECK(elements->size() == offset);
+    return _write_column_chunk(derived_ctx, type_desc.children[0], inner_node, elements, write_leaf_callback);
+}
+
+Status LevelBuilder::_write_array_column_chunkV2(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                                 const CallbackFunction& write_leaf_callback) {
+    DCHECK(type_desc.type == TYPE_ARRAY);
+    auto outer_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
+    auto mid_node = std::static_pointer_cast<::parquet::schema::GroupNode>(outer_node->field(0));
+    auto inner_node = mid_node->field(0);
+
+    const auto null_col = get_raw_null_column(col);
+    const auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
+    const auto& elements = array_col->elements_column();
+    const auto& offsets = array_col->offsets_column()->get_data();
+
+    size_t num_levels_upper_bound = ctx.num_levels() + elements->size();
+    auto def_levels = std::make_shared<std::vector<int16_t>>(num_levels_upper_bound,
+                                                             ctx._max_def_level + node->is_optional() + 1);
+    auto rep_levels = std::make_shared<std::vector<int16_t>>(num_levels_upper_bound, ctx._max_rep_level + 1);
+
+    size_t num_levels = 0; // pointer to def/rep levels
+    int offset = 0;        // pointer to current column
+    for (auto i = 0; i < ctx.num_levels(); i++) {
+        auto def_level = ctx._def_levels ? (*ctx._def_levels)[i] : 0;
+        auto rep_level = ctx._rep_levels ? (*ctx._rep_levels)[i] : 0;
+
+        if (def_level < ctx._max_def_level) {
+            (*def_levels)[num_levels] = def_level;
+            (*rep_levels)[num_levels] = rep_level;
+
+            num_levels++;
+            continue;
+        }
+
+        if (null_col != nullptr && null_col[offset]) {
+            (*def_levels)[num_levels] = def_level;
+            (*rep_levels)[num_levels] = rep_level;
+
+            num_levels++;
+            offset++;
+            continue;
+        }
+
+        auto array_size = offsets[offset + 1] - offsets[offset];
+        if (array_size == 0) {
+            (*def_levels)[num_levels] = def_level + node->is_optional();
+            (*rep_levels)[num_levels] = rep_level;
+
+            num_levels++;
+            offset++;
+            continue;
+        }
+
+        (*rep_levels)[num_levels] = rep_level;
+        num_levels += array_size;
+        offset++;
+    }
+
+    DCHECK(col->size() == offset);
+
+    def_levels->resize(num_levels);
+    rep_levels->resize(num_levels);
+    LevelBuilderContext derived_ctx(def_levels->size(), def_levels, ctx._max_def_level + node->is_optional() + 1,
+                                    rep_levels, ctx._max_rep_level + 1);
+
     return _write_column_chunk(derived_ctx, type_desc.children[0], inner_node, elements, write_leaf_callback);
 }
 
@@ -382,29 +470,56 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
     const auto& values = map_col->values_column();
     const auto& offsets = map_col->offsets_column()->get_data();
 
-    LevelBuilderContext derived_ctx(ctx._max_def_level + node->is_optional(), ctx._max_rep_level + 1,
-                                    ctx.size() + offsets.size());
+    size_t num_levels_upper_bound = ctx.num_levels() + keys->size();
+    auto def_levels = std::make_shared<std::vector<int16_t>>(num_levels_upper_bound,
+                                                             ctx._max_def_level + node->is_optional() + 1);
+    auto rep_levels = std::make_shared<std::vector<int16_t>>(num_levels_upper_bound, ctx._max_rep_level + 1);
 
-    int subcol_size = 0;
-    for (auto i = 0; i < ctx.size(); i++) {
-        auto [idx, def_level, rep_level] = ctx.get(i);
-        if (idx == LevelBuilderContext::kNULL || (null_col != nullptr && null_col[idx])) {
-            derived_ctx.append(LevelBuilderContext::kNULL, def_level, rep_level);
+    size_t num_levels = 0; // pointer to def/rep levels
+    int offset = 0;        // pointer to current column
+    for (auto i = 0; i < ctx.num_levels(); i++) {
+        auto def_level = ctx._def_levels ? (*ctx._def_levels)[i] : 0;
+        auto rep_level = ctx._rep_levels ? (*ctx._rep_levels)[i] : 0;
+
+        if (def_level < ctx._max_def_level) {
+            (*def_levels)[num_levels] = def_level;
+            (*rep_levels)[num_levels] = rep_level;
+
+            num_levels++;
             continue;
         }
-        auto map_size = offsets[idx + 1] - offsets[idx];
-        if (map_size == 0) {
-            derived_ctx.append(LevelBuilderContext::kNULL, def_level + outer_node->is_optional(), rep_level);
+
+        if (null_col != nullptr && null_col[offset]) {
+            (*def_levels)[num_levels] = def_level;
+            (*rep_levels)[num_levels] = rep_level;
+
+            num_levels++;
+            offset++;
             continue;
         }
-        derived_ctx.append(subcol_size++, def_level + outer_node->is_optional() + 1, rep_level);
-        for (auto offset = 1; offset < map_size; offset++) {
-            derived_ctx.append(subcol_size++, def_level + outer_node->is_optional() + 1, derived_ctx._max_rep_level);
+
+        auto array_size = offsets[offset + 1] - offsets[offset];
+        if (array_size == 0) {
+            (*def_levels)[num_levels] = def_level + node->is_optional();
+            (*rep_levels)[num_levels] = rep_level;
+
+            num_levels++;
+            offset++;
+            continue;
         }
+
+        (*rep_levels)[num_levels] = rep_level;
+        num_levels += array_size;
+        offset++;
     }
 
-    DCHECK(keys->size() == subcol_size);
-    DCHECK(values->size() == subcol_size);
+    DCHECK(col->size() == offset);
+
+    def_levels->resize(num_levels);
+    rep_levels->resize(num_levels);
+    LevelBuilderContext derived_ctx(def_levels->size(), def_levels, ctx._max_def_level + node->is_optional() + 1,
+                                    rep_levels, ctx._max_rep_level + 1);
+
     auto ret = _write_column_chunk(derived_ctx, type_desc.children[0], key_node, keys, write_leaf_callback);
     if (!ret.ok()) {
         return ret;
@@ -421,27 +536,16 @@ Status LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, 
     const auto null_col = get_raw_null_column(col);
     const auto data_col = ColumnHelper::get_data_column(col.get());
     const auto struct_col = down_cast<StructColumn*>(data_col);
-    LevelBuilderContext derived_ctx(ctx._max_def_level + node->is_optional(), ctx._max_rep_level,
-                                    ctx.size() + data_col->size());
 
-    int subcol_size = 0;
-    for (auto i = 0; i < ctx.size(); i++) {
-        auto [idx, def_level, rep_level] = ctx.get(i);
-        if (idx == LevelBuilderContext::kNULL) {
-            derived_ctx.append(LevelBuilderContext::kNULL, def_level, rep_level);
-            continue;
-        }
-        if (null_col != nullptr && null_col[idx]) {
-            derived_ctx.append(LevelBuilderContext::kNULL, def_level, rep_level);
-            subcol_size++; // null entry in struct column still occupies a slot in sub-column
-            continue;
-        }
-        derived_ctx.append(subcol_size++, def_level + node->is_optional(), rep_level);
-    }
+    // Use the rep_levels in the context from caller since node is primitive.
+    auto rep_levels = ctx._rep_levels;
+    auto def_levels = _make_def_levelsV3(ctx, node, null_col);
+
+    LevelBuilderContext derived_ctx(def_levels->size(), def_levels, ctx._max_def_level + node->is_optional(),
+                                    rep_levels, ctx._max_rep_level);
 
     for (size_t i = 0; i < type_desc.children.size(); i++) {
         auto sub_col = struct_col->field_column(type_desc.field_names[i]);
-        DCHECK(sub_col->size() == subcol_size);
         auto ret = _write_column_chunk(derived_ctx, type_desc.children[i], struct_node->field(i), sub_col,
                                        write_leaf_callback);
         if (!ret.ok()) {
@@ -467,27 +571,75 @@ std::vector<uint8_t> LevelBuilder::_make_null_bitset(size_t n, const uint8_t* nu
 // Make definition levels int terms of repetition type of primitive node.
 // For required node, use the def_levels in the context from caller.
 // For optional node, increment def_levels of these defined values.
-std::shared_ptr<std::vector<int16_t>> LevelBuilder::_make_def_levels(const LevelBuilderContext& ctx,
-                                                                     const ::parquet::schema::NodePtr& node,
-                                                                     const uint8_t* nulls) const {
+std::shared_ptr<std::vector<int16_t>> LevelBuilder::_make_def_levelsV2(const LevelBuilderContext& ctx,
+                                                                       const ::parquet::schema::NodePtr& node,
+                                                                       const uint8_t* nulls) const {
+    DCHECK(node->is_primitive());
     if (node->is_required()) {
         return ctx._def_levels;
     }
 
-    DCHECK(node->is_optional());
     auto def_levels = std::make_shared<std::vector<int16_t>>();
-    def_levels->reserve(ctx.size());
+    def_levels->reserve(ctx.num_levels());
 
-    for (auto i = 0; i < ctx.size(); i++) {
-        auto [idx, def_level, rep_level] = ctx.get(i);
-        if (idx == LevelBuilderContext::kNULL || (nulls != nullptr && nulls[idx])) {
-            def_levels->push_back(def_level);
+    int offset = 0;
+    for (auto i = 0; i < ctx.num_levels(); i++) {
+        int level = ctx._def_levels ? ctx._def_levels->at(i) : 0;
+        if (level < ctx._max_def_level) {
+            def_levels->push_back(level);
             continue;
         }
-        def_levels->push_back(def_level + 1);
+
+        // increment def_level for non-null entry
+        if (nulls == nullptr || nulls[offset] == 0) {
+            level++;
+        }
+
+        def_levels->push_back(level);
+        offset++;
     }
     return def_levels;
 }
 
-} // namespace parquet
-} // namespace starrocks
+std::shared_ptr<std::vector<int16_t>> LevelBuilder::_make_def_levelsV3(const LevelBuilderContext& ctx,
+                                                                       const ::parquet::schema::NodePtr& node,
+                                                                       const uint8_t* nulls) const {
+    if (node->is_required()) {
+        return ctx._def_levels;
+    }
+
+    if (ctx._def_levels == nullptr) {
+        auto def_levels = std::make_shared<std::vector<int16_t>>(ctx.num_levels(), 1); // assume not-null first
+        if (nulls == nullptr) {
+            // column has no null
+            return def_levels;
+        }
+
+        // nulls.size() == ctx.num_levels()
+        for (size_t i = 0; i < ctx.num_levels(); i++) {
+            // decrement def_levels for null entries
+            if (nulls[i] != 0) {
+                def_levels->at(i)--;
+            }
+        }
+
+        return def_levels;
+    }
+
+    DCHECK(ctx._def_levels != nullptr);
+    auto def_levels = std::make_shared<std::vector<int16_t>>(*ctx._def_levels);
+
+    int offset = 0;
+    for (auto& level : *def_levels) {
+        if (level == ctx._max_def_level) {
+            if (nulls == nullptr || nulls[offset] == 0) {
+                // increment def_level for non-null entry
+                level++;
+            }
+            offset++;
+        }
+    }
+    return def_levels;
+}
+
+} // namespace starrocks::parquet

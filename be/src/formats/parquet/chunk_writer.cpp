@@ -38,10 +38,7 @@ ChunkWriter::ChunkWriter(::parquet::RowGroupWriter* rg_writer, const std::vector
 }
 
 Status ChunkWriter::write(Chunk* chunk) {
-    LevelBuilderContext ctx(0, 0, chunk->num_rows());
-    for (int i = 0; i < chunk->num_rows(); i++) {
-        ctx.append(i, 0, 0);
-    }
+    LevelBuilderContext ctx(chunk->num_rows());
 
     // Writes out all leaf parquet columns to the RowGroupWriter. Each leaf column is written fully before
     // the next column is written. Columns are written in DFS order.

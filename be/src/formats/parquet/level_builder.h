@@ -39,40 +39,30 @@
 namespace starrocks::parquet {
 
 // Intermediate data passed between add_column_chunk functions.
+// Immutable and thread-safe.
 class LevelBuilderContext {
 public:
-    LevelBuilderContext(int16_t max_def_level, int16_t max_rep_level, size_t estimated_size = 0)
+    LevelBuilderContext(size_t num_levels, std::shared_ptr<std::vector<int16_t>> def_levels = nullptr, int16_t max_def_level = 0, std::shared_ptr<std::vector<int16_t>> rep_levels = nullptr, int16_t max_rep_level = 0)
             : _max_def_level(max_def_level),
               _max_rep_level(max_rep_level),
-              _idx2subcol(std::make_shared<std::vector<int>>()),
-              _def_levels(std::make_shared<std::vector<int16_t>>()),
-              _rep_levels(std::make_shared<std::vector<int16_t>>()) {
-        _idx2subcol->reserve(estimated_size);
-        _def_levels->reserve(estimated_size);
-        _rep_levels->reserve(estimated_size);
+              _def_levels(std::move(def_levels)),
+              _rep_levels(std::move(rep_levels)),
+              _num_levels(num_levels) {
+        DCHECK(_max_def_level == 0 || _def_levels != nullptr);
+        DCHECK(_max_rep_level == 0 || _rep_levels != nullptr);
+        DCHECK(_max_def_level == 0 || _num_levels == _def_levels->size());
+        DCHECK(_max_rep_level == 0 || _num_levels == _rep_levels->size());
     }
 
-    void append(int idx, int16_t def_level, int16_t rep_level) {
-        _idx2subcol->push_back(idx);
-        _def_levels->push_back(def_level);
-        _rep_levels->push_back(rep_level);
-    }
-
-    std::tuple<int, int16_t, int16_t> get(int i) const {
-        DCHECK_LT(i, size());
-        return std::make_tuple(_idx2subcol->at(i), _def_levels->at(i), _rep_levels->at(i));
-    }
-
-    int size() const { return _def_levels->size(); }
+    int num_levels() const { return _num_levels; }
 
 public:
     const int16_t _max_def_level;
     const int16_t _max_rep_level;
-    constexpr static int kNULL = -1;
 
-    std::shared_ptr<std::vector<int>> _idx2subcol;
-    std::shared_ptr<std::vector<int16_t>> _def_levels;
-    std::shared_ptr<std::vector<int16_t>> _rep_levels;
+    const std::shared_ptr<std::vector<int16_t>> _def_levels;
+    const std::shared_ptr<std::vector<int16_t>> _rep_levels;
+    const size_t _num_levels;
 };
 
 struct LevelBuilderResult {
@@ -131,6 +121,10 @@ private:
                                      const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                      const CallbackFunction& write_leaf_callback);
 
+    Status _write_array_column_chunkV2(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                     const CallbackFunction& write_leaf_callback);
+
     Status _write_map_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                    const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                    const CallbackFunction& write_leaf_callback);
@@ -141,9 +135,13 @@ private:
 
     std::vector<uint8_t> _make_null_bitset(size_t n, const uint8_t* nulls) const;
 
-    std::shared_ptr<std::vector<int16_t>> _make_def_levels(const LevelBuilderContext& ctx,
+    std::shared_ptr<std::vector<int16_t>> _make_def_levelsV2(const LevelBuilderContext& ctx,
                                                            const ::parquet::schema::NodePtr& node,
                                                            const uint8_t* nulls) const;
+
+    std::shared_ptr<std::vector<int16_t>> _make_def_levelsV3(const LevelBuilderContext& ctx,
+                                                             const ::parquet::schema::NodePtr& node,
+                                                             const uint8_t* nulls) const;
 
 private:
     TypeDescriptor _type_desc;
