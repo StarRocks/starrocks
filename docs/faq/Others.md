@@ -57,7 +57,7 @@ ALTER DATABASE example_db SET DATA QUOTA 10T;
 
 ## Does StarRocks support updating particular fields in a table by executing the UPSERT statement?
 
-StarRocks 2.2 and later support updating specific fields in a table by using the Primary Key table. StarRocks 1.9 and later support updating all fields in a table by using the Primary Key table. For more information, see [Primary key table](../table_design/Data_model.md#primary-key-model) in StarRocks 2.2.
+StarRocks 2.2 and later support updating specific fields in a table by using the Primary Key table. StarRocks 1.9 and later support updating all fields in a table by using the Primary Key table. For more information, see [Primary key table](../table_design/Table_types.md#primary-key-table) in StarRocks 2.2.
 
 ## How to swap the data between two tables or two partitions?
 
