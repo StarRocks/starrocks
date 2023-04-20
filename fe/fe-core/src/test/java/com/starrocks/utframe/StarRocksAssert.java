@@ -157,6 +157,22 @@ public class StarRocksAssert {
         return this;
     }
 
+<<<<<<< HEAD
+=======
+    public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (statementBase instanceof  CreateTableStmt) {
+            CreateTableStmt createTableStmt = (CreateTableStmt) statementBase;
+            createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+            return this.withTable(sql);
+        } else if (statementBase instanceof CreateMaterializedViewStatement) {
+            return this.withMaterializedView(sql, true);
+        } else {
+            throw new AnalysisException("Sql is not supported in withSingleReplicaTable:" + sql);
+        }
+    }
+
+>>>>>>> 84b5e43be ([BugFix] Avoid repeating add encoded dict column in OlapTableSanNode (#21774))
     public StarRocksAssert withView(String sql) throws Exception {
         CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().createView(createTableStmt);
@@ -193,14 +209,24 @@ public class StarRocksAssert {
 
     // Add materialized view to the schema
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
+        return withMaterializedView(sql, false);
+    }
+
+    public StarRocksAssert withMaterializedView(String sql, boolean isOnlySingleReplica) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (stmt instanceof CreateMaterializedViewStmt) {
             CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
+            if (isOnlySingleReplica) {
+                createMaterializedViewStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+            }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
         } else {
             Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
             CreateMaterializedViewStatement createMaterializedViewStatement =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            if (isOnlySingleReplica) {
+                createMaterializedViewStatement.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+            }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
         }
         checkAlterJob();
