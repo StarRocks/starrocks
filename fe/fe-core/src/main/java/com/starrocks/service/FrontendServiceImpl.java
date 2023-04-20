@@ -580,6 +580,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
         List<Task> taskList = taskManager.showTasks(null);
+        LOG.debug("task list: " + taskList);
 
         for (Task task : taskList) {
             if (globalStateMgr.isUsingNewPrivilege()) {
@@ -624,6 +625,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
         List<TaskRunStatus> taskRunList = taskManager.showTaskRunStatus(null);
+        LOG.debug("task run status list: " + taskRunList);
 
         for (TaskRunStatus status : taskRunList) {
             if (globalStateMgr.isUsingNewPrivilege()) {
