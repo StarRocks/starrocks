@@ -1194,7 +1194,7 @@ public class PlanFragmentBuilder {
             }
 
             // set a per node log scan limit to prevent BE/CN OOM
-            if (scanNode.getLimit() > 0) {
+            if (scanNode.getLimit() > 0 && predicates.isEmpty()) {
                 scanNode.setLogLimit(Math.min(scanNode.getLimit(), Config.max_per_node_grep_log_limit));
             } else {
                 scanNode.setLogLimit(Config.max_per_node_grep_log_limit);
