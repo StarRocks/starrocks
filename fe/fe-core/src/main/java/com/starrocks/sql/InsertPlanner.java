@@ -23,6 +23,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
@@ -126,14 +127,17 @@ public class InsertPlanner {
             optExprBuilder = fillKeyPartitionsColumn(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
         }
 
-        //5. Fill in the shadow column
+        //5. Fill in the materialized columns
+        optExprBuilder = fillMaterializedColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
+
+        //6. Fill in the shadow column
         optExprBuilder = fillShadowColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
 
-        //6. Cast output columns type to target type
+        //7. Cast output columns type to target type
         optExprBuilder =
                 castOutputColumnsTypeToTargetColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
 
-        //7. Optimize logical plan and build physical plan
+        //8. Optimize logical plan and build physical plan
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
@@ -252,12 +256,16 @@ public class InsertPlanner {
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
         ValuesRelation values = (ValuesRelation) insertStatement.getQueryStatement().getQueryRelation();
         RelationFields fields = insertStatement.getQueryStatement().getQueryRelation().getRelationFields();
+
         for (int columnIdx = 0; columnIdx < insertStatement.getTargetTable().getBaseSchema().size(); ++columnIdx) {
             if (needToSkip(insertStatement, columnIdx)) {
                 continue;
             }
 
             Column targetColumn = fullSchema.get(columnIdx);
+            if (targetColumn.isMaterializedColumn()) {
+                continue;
+            }
             boolean isAutoIncrement = targetColumn.isAutoIncrement();
             if (insertStatement.getTargetColumnNames() == null) {
                 for (List<Expr> row : values.getRows()) {
@@ -309,6 +317,9 @@ public class InsertPlanner {
             }
 
             Column targetColumn = baseSchema.get(columnIdx);
+            if (targetColumn.isMaterializedColumn()) {
+                continue;
+            }
             if (insertStatement.getTargetColumnNames() == null) {
                 outputColumns.add(logicalPlan.getOutputColumn().get(columnIdx));
                 columnRefMap.put(logicalPlan.getOutputColumn().get(columnIdx),
@@ -348,6 +359,59 @@ public class InsertPlanner {
         return logicalPlan.getRootBuilder().withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
 
+    private OptExprBuilder fillMaterializedColumns(ColumnRefFactory columnRefFactory, InsertStmt insertStatement,
+                                                   List<ColumnRefOperator> outputColumns, OptExprBuilder root,
+                                                   ConnectContext session) {
+        List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
+        Set<Column> baseSchema = Sets.newHashSet(insertStatement.getTargetTable().getBaseSchema());
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+
+        for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
+            Column targetColumn = fullSchema.get(columnIdx);
+
+            if (targetColumn.isMaterializedColumn()) {
+                // If fe restart and Insert INTO is executed, the re-analyze is needed.
+                Expr expr = targetColumn.materializedColumnExpr();
+                ExpressionAnalyzer.analyzeExpression(expr,
+                    new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
+                        insertStatement.getTargetTable().getBaseSchema().stream().map(col -> new Field(col.getName(),
+                                col.getType(), insertStatement.getTableName(), null))
+                            .collect(Collectors.toList()))), session);
+
+                List<SlotRef> slots = new ArrayList<>();
+                expr.collect(SlotRef.class, slots);
+
+                ExpressionMapping expressionMapping =
+                        new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
+                                Lists.newArrayList());
+
+                for (SlotRef slot : slots) {
+                    String originName = slot.getColumnName();
+
+                    Optional<Column> optOriginColumn = fullSchema.stream()
+                            .filter(c -> c.nameEquals(originName, false)).findFirst();
+                    Column originColumn = optOriginColumn.get();
+                    ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
+
+                    expressionMapping.put(slot, originColRefOp);
+                }
+
+                ScalarOperator scalarOperator =
+                        SqlToScalarOperatorTranslator.translate(expr, expressionMapping, columnRefFactory);
+
+                ColumnRefOperator columnRefOperator =
+                        columnRefFactory.create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+                outputColumns.add(columnRefOperator);
+                columnRefMap.put(columnRefOperator, scalarOperator);
+            } else if (baseSchema.contains(fullSchema.get(columnIdx))) {
+                ColumnRefOperator columnRefOperator = outputColumns.get(columnIdx);
+                columnRefMap.put(columnRefOperator, columnRefOperator);
+            }
+        }
+
+        return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
     private OptExprBuilder fillShadowColumns(ColumnRefFactory columnRefFactory, InsertStmt insertStatement,
                                              List<ColumnRefOperator> outputColumns, OptExprBuilder root,
                                              ConnectContext session) {
@@ -360,6 +424,10 @@ public class InsertPlanner {
 
             if (targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX) ||
                     targetColumn.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
+                if (targetColumn.isMaterializedColumn()) {
+                    continue;
+                }
+
                 String originName = Column.removeNamePrefix(targetColumn.getName());
                 Optional<Column> optOriginColumn = fullSchema.stream()
                         .filter(c -> c.nameEquals(originName, false)).findFirst();

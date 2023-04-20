@@ -254,6 +254,19 @@ public class AnalyzeTestUtil {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+
+        starRocksAssert.withTable("CREATE TABLE `tmc` (\n" +
+                "  `id`  bigint NULL COMMENT \"\",\n" +
+                "  `name`  bigint NULL COMMENT \"\",\n" +
+                "  `mc` bigint NULL AS (id + name) COMMENT \"\" \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`id`)\n" +
+                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
     }
 
     public static String getDbName() {
