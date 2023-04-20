@@ -815,8 +815,32 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select approx_percentile(2.25, 1.79E+10)";
         assertPlanContains(sql, "percentile_approx(2.25, 1.79E10)");
+    }
 
+    @Test
+    public void testTrim() throws Exception {
+        String sql = "select trim(' abc ');";
+        assertPlanContains(sql, "<slot 2> : trim(' abc ')");
 
-        System.out.println(getFragmentPlan(sql));
+        sql = "select trim('!' from '!foo!');";
+        assertPlanContains(sql, "<slot 2> : trim('!foo!', '!')");
+
+        sql = "select trim(leading from '  abcd');";
+        assertPlanContains(sql, "<slot 2> : ltrim('  abcd')");
+
+        sql = "select trim(leading 'a' from '  abcd');";
+        assertPlanContains(sql, "<slot 2> : ltrim('  abcd', 'a')");
+
+        sql = "select trim(both '$' FROM '$var$');";
+        assertPlanContains(sql, "<slot 2> : trim('$var$', '$')");
+
+        sql = "select trim(both from '  abcd');";
+        assertPlanContains(sql, "<slot 2> : trim('  abcd')");
+
+        sql = "select trim(trailing 'ER' from upper('worker'));";
+        assertPlanContains(sql, "<slot 2> : rtrim(upper('worker'), 'ER')");
+
+        sql = "select trim(trailing from '  abcd');";
+        assertPlanContains(sql, "<slot 2> : rtrim('  abcd')");
     }
 }
