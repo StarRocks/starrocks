@@ -120,6 +120,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
   # For example: https://storage.googleapis.com
   aws_s3_endpoint = <endpoint_url>
+
   aws_s3_access_key = <access_key>
   aws_s3_secret_key = <secret_key>
   ```
@@ -138,6 +139,7 @@ Before starting FEs, add the following configuration items in the FE configurati
 
   # For example: http://172.26.xx.xxx:39000
   aws_s3_endpoint = <endpoint_url>
+  
   aws_s3_access_key = <access_key>
   aws_s3_secret_key = <secret_key>
   ```
