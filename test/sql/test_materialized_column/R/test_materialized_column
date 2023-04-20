@@ -49,7 +49,7 @@ SHOW CREATE TABLE t;
 t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
   `array_data` ARRAY<int(11)> NOT NULL COMMENT "",
-  `mc` double NULL AS array_avg(`test_create_table`.`t`.`array_data`) COMMENT ""
+  `mc` double NULL AS array_avg(array_data) COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`id`)
 COMMENT "OLAP"
@@ -316,87 +316,6 @@ DROP TABLE t;
 DROP DATABASE test_materialized_column_alter_table_with_concurrent_insert;
 -- result:
 -- !result
--- name: test_normal_column_schema_change
-CREATE DATABASE test_normal_column_schema_change;
--- result:
--- !result
-USE test_normal_column_schema_change;
--- result:
--- !result
-CREATE TABLE t ( id BIGINT NOT NULL, name BIGINT NOT NULL, job INT NOT NULL, mc INT AS (job) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
--- result:
--- !result
-ALTER TABLE t ADD COLUMN newcol INT DEFAULT "0" AFTER mc;
--- result:
-E: (1064, 'Getting analyzing error. Detail message: Can not add column after Materialized Column.')
--- !result
-ALTER TABLE t MODIFY COLUMN job BIGINT;
--- result:
-E: (1064, 'Unexpected exception: Do not support modify column: job, because it associates with the materialized column')
--- !result
-ALTER TABLE t DROP COLUMN job;
--- result:
-E: (1064, 'Getting analyzing error. Detail message: Column: job can not be dropped, because expression of Materialized Column: mc will refer to it.')
--- !result
-ALTER TABLE t MODIFY COLUMN name BIGINT AFTER mc;
--- result:
-E: (1064, 'Getting analyzing error. Detail message: Can not modify column after Materialized Column.')
--- !result
-ALTER TABLE t ADD COLUMN newcol INT DEFAULT "0";
--- result:
--- !result
-function: wait_alter_table_finish()
--- result:
-None
--- !result
-SHOW CREATE TABLE t;
--- result:
-t	CREATE TABLE `t` (
-  `id` bigint(20) NOT NULL COMMENT "",
-  `name` bigint(20) NOT NULL COMMENT "",
-  `job` int(11) NOT NULL COMMENT "",
-  `newcol` int(11) NULL DEFAULT "0" COMMENT "",
-  `mc` int(11) NULL AS `test_normal_column_schema_change`.`t`.`job` COMMENT ""
-) ENGINE=OLAP 
-PRIMARY KEY(`id`)
-COMMENT "OLAP"
-DISTRIBUTED BY HASH(`id`) BUCKETS 7 
-PROPERTIES (
-"replication_num" = "1",
-"in_memory" = "false",
-"storage_format" = "DEFAULT",
-"enable_persistent_index" = "false",
-"replicated_storage" = "true",
-"compression" = "LZ4"
-);
--- !result
-ALTER TABLE t DROP COLUMN mc;
--- result:
--- !result
-function: wait_alter_table_finish()
--- result:
-None
--- !result
-ALTER TABLE t MODIFY COLUMN job BIGINT;
--- result:
--- !result
-function: wait_alter_table_finish()
--- result:
-None
--- !result
-ALTER TABLE t DROP COLUMN job;
--- result:
--- !result
-function: wait_alter_table_finish()
--- result:
-None
--- !result
-DROP TABLE t;
--- result:
--- !result
-DROP DATABASE test_normal_column_schema_change;
--- result:
--- !result
 -- name: test_materialized_column_schema_change
 CREATE DATABASE test_materialized_column_schema_change;
 -- result:
@@ -518,5 +437,86 @@ DROP TABLE t;
 -- result:
 -- !result
 DROP DATABASE test_materialized_column_schema_change;
+-- result:
+-- !result
+-- name: test_normal_column_schema_change
+CREATE DATABASE test_normal_column_schema_change;
+-- result:
+-- !result
+USE test_normal_column_schema_change;
+-- result:
+-- !result
+CREATE TABLE t ( id BIGINT NOT NULL, name BIGINT NOT NULL, job INT NOT NULL, mc INT AS (job) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+-- result:
+-- !result
+ALTER TABLE t ADD COLUMN newcol INT DEFAULT "0" AFTER mc;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Can not add column after Materialized Column.')
+-- !result
+ALTER TABLE t MODIFY COLUMN job BIGINT;
+-- result:
+E: (1064, 'Unexpected exception: Do not support modify column: job, because it associates with the materialized column')
+-- !result
+ALTER TABLE t DROP COLUMN job;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Column: job can not be dropped, because expression of Materialized Column: mc will refer to it.')
+-- !result
+ALTER TABLE t MODIFY COLUMN name BIGINT AFTER mc;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Can not modify column after Materialized Column.')
+-- !result
+ALTER TABLE t ADD COLUMN newcol INT DEFAULT "0";
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SHOW CREATE TABLE t;
+-- result:
+t	CREATE TABLE `t` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `name` bigint(20) NOT NULL COMMENT "",
+  `job` int(11) NOT NULL COMMENT "",
+  `newcol` int(11) NULL DEFAULT "0" COMMENT "",
+  `mc` int(11) NULL AS job COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`id`) BUCKETS 7 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- !result
+ALTER TABLE t DROP COLUMN mc;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t MODIFY COLUMN job BIGINT;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+ALTER TABLE t DROP COLUMN job;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+DROP TABLE t;
+-- result:
+-- !result
+DROP DATABASE test_normal_column_schema_change;
 -- result:
 -- !result

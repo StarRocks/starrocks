@@ -447,6 +447,9 @@ public class Column implements Writable {
     }
 
     public Expr materializedColumnExpr() {
+        if (materializedColumnExpr == null) {
+            return null;
+        }
         return materializedColumnExpr.clone();
     }
 
