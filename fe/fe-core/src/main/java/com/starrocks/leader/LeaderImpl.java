@@ -61,12 +61,14 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
@@ -862,6 +864,7 @@ public class LeaderImpl {
             tableMeta = new TTableMeta();
             tableMeta.setTable_id(table.getId());
             tableMeta.setTable_name(tableName);
+            tableMeta.setTable_type(TableType.serialize(table.getType()));
             tableMeta.setDb_id(db.getId());
             tableMeta.setDb_name(dbName);
             tableMeta.setCluster_id(GlobalStateMgr.getCurrentState().getClusterId());
@@ -1012,37 +1015,75 @@ public class LeaderImpl {
                     indexMeta.setSchema_meta(schemaMeta);
                     // fill in tablet info
                     for (Tablet tablet : index.getTablets()) {
-                        LocalTablet localTablet = (LocalTablet) tablet;
                         TTabletMeta tTabletMeta = new TTabletMeta();
-                        tTabletMeta.setTablet_id(tablet.getId());
-                        tTabletMeta.setChecked_version(localTablet.getCheckedVersion());
-                        tTabletMeta.setConsistent(localTablet.isConsistent());
-                        TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tablet.getId());
-                        tTabletMeta.setDb_id(tabletMeta.getDbId());
-                        tTabletMeta.setTable_id(tabletMeta.getTableId());
-                        tTabletMeta.setPartition_id(tabletMeta.getPartitionId());
-                        tTabletMeta.setIndex_id(tabletMeta.getIndexId());
-                        tTabletMeta.setStorage_medium(tabletMeta.getStorageMedium());
-                        tTabletMeta.setOld_schema_hash(tabletMeta.getOldSchemaHash());
-                        tTabletMeta.setNew_schema_hash(tabletMeta.getNewSchemaHash());
-                        // fill replica info
-                        for (Replica replica : localTablet.getImmutableReplicas()) {
-                            TReplicaMeta replicaMeta = new TReplicaMeta();
-                            replicaMeta.setReplica_id(replica.getId());
-                            replicaMeta.setBackend_id(replica.getBackendId());
-                            replicaMeta.setSchema_hash(replica.getSchemaHash());
-                            replicaMeta.setVersion(replica.getVersion());
-                            replicaMeta.setData_size(replica.getDataSize());
-                            replicaMeta.setRow_count(replica.getRowCount());
-                            replicaMeta.setState(replica.getState().name());
-                            replicaMeta.setLast_failed_version(replica.getLastFailedVersion());
-                            replicaMeta.setLast_failed_time(replica.getLastFailedTimestamp());
-                            replicaMeta.setLast_success_version(replica.getLastSuccessVersion());
-                            replicaMeta.setVersion_count(replica.getVersionCount());
-                            replicaMeta.setPath_hash(replica.getPathHash());
-                            replicaMeta.setBad(replica.isBad());
-                            // TODO(wulei) fill backend info
-                            tTabletMeta.addToReplicas(replicaMeta);
+                        if (tablet instanceof LocalTablet) {
+                            LocalTablet localTablet = (LocalTablet) tablet;
+                            tTabletMeta.setTablet_id(tablet.getId());
+                            tTabletMeta.setChecked_version(localTablet.getCheckedVersion());
+                            tTabletMeta.setConsistent(localTablet.isConsistent());
+                            TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tablet.getId());
+                            tTabletMeta.setDb_id(tabletMeta.getDbId());
+                            tTabletMeta.setTable_id(tabletMeta.getTableId());
+                            tTabletMeta.setPartition_id(tabletMeta.getPartitionId());
+                            tTabletMeta.setIndex_id(tabletMeta.getIndexId());
+                            tTabletMeta.setStorage_medium(tabletMeta.getStorageMedium());
+                            tTabletMeta.setOld_schema_hash(tabletMeta.getOldSchemaHash());
+                            tTabletMeta.setNew_schema_hash(tabletMeta.getNewSchemaHash());
+                            // fill replica info
+                            for (Replica replica : localTablet.getImmutableReplicas()) {
+                                TReplicaMeta replicaMeta = new TReplicaMeta();
+                                replicaMeta.setReplica_id(replica.getId());
+                                replicaMeta.setBackend_id(replica.getBackendId());
+                                replicaMeta.setSchema_hash(replica.getSchemaHash());
+                                replicaMeta.setVersion(replica.getVersion());
+                                replicaMeta.setData_size(replica.getDataSize());
+                                replicaMeta.setRow_count(replica.getRowCount());
+                                replicaMeta.setState(replica.getState().name());
+                                replicaMeta.setLast_failed_version(replica.getLastFailedVersion());
+                                replicaMeta.setLast_failed_time(replica.getLastFailedTimestamp());
+                                replicaMeta.setLast_success_version(replica.getLastSuccessVersion());
+                                replicaMeta.setVersion_count(replica.getVersionCount());
+                                replicaMeta.setPath_hash(replica.getPathHash());
+                                replicaMeta.setBad(replica.isBad());
+                                // TODO(wulei) fill backend info
+                                tTabletMeta.addToReplicas(replicaMeta);
+                            }
+                        } else if (tablet instanceof LakeTablet) {
+                            LakeTablet lakeTablet = (LakeTablet) tablet;
+                            tTabletMeta.setTablet_id(tablet.getId());
+                            tTabletMeta.setChecked_version(0);
+                            tTabletMeta.setConsistent(true);
+                            TabletMeta tabletMeta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tablet.getId());
+                            tTabletMeta.setDb_id(tabletMeta.getDbId());
+                            tTabletMeta.setTable_id(tabletMeta.getTableId());
+                            tTabletMeta.setPartition_id(tabletMeta.getPartitionId());
+                            tTabletMeta.setIndex_id(tabletMeta.getIndexId());
+                            tTabletMeta.setStorage_medium(tabletMeta.getStorageMedium());
+                            tTabletMeta.setOld_schema_hash(tabletMeta.getOldSchemaHash());
+                            tTabletMeta.setNew_schema_hash(tabletMeta.getNewSchemaHash());
+                            // fill replica info
+                            List<Replica> replicas = new ArrayList<Replica>();
+                            lakeTablet.getQueryableReplicas(replicas, null, 0, -1, 0);
+                            for (Replica replica : replicas) {
+                                TReplicaMeta replicaMeta = new TReplicaMeta();
+                                replicaMeta.setReplica_id(replica.getId());
+                                replicaMeta.setBackend_id(replica.getBackendId());
+                                replicaMeta.setSchema_hash(replica.getSchemaHash());
+                                replicaMeta.setVersion(replica.getVersion());
+                                replicaMeta.setData_size(replica.getDataSize());
+                                replicaMeta.setRow_count(replica.getRowCount());
+                                replicaMeta.setState(replica.getState().name());
+                                replicaMeta.setLast_failed_version(replica.getLastFailedVersion());
+                                replicaMeta.setLast_failed_time(replica.getLastFailedTimestamp());
+                                replicaMeta.setLast_success_version(replica.getLastSuccessVersion());
+                                replicaMeta.setVersion_count(replica.getVersionCount());
+                                replicaMeta.setPath_hash(replica.getPathHash());
+                                replicaMeta.setBad(replica.isBad());
+                                // TODO(wulei) fill backend info
+                                tTabletMeta.addToReplicas(replicaMeta);
+                            }
+                        } else {
+                            throw new NotImplementedException(tablet.getClass().getName() + " is not implemented");
                         }
                         indexMeta.addToTablets(tTabletMeta);
                     }

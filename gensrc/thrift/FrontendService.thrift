@@ -1041,6 +1041,7 @@ struct TTableMeta {
     15: optional list<TIndexInfo> index_infos
     16: optional string colocate_group
     17: optional list<string> bloomfilter_columns
+    18: optional string table_type;
 }
 
 struct TGetTableMetaResponse {

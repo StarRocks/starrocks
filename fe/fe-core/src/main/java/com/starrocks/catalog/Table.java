@@ -252,6 +252,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.OLAP;
     }
 
+    public boolean isOlapExternalTable() {
+        return type == TableType.OLAP_EXTERNAL;
+    }
+
     public boolean isOlapMaterializedView() {
         return type == TableType.MATERIALIZED_VIEW;
     }
