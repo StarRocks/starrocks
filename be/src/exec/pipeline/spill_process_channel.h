@@ -75,6 +75,12 @@ public:
         return _spill_tasks.put(std::move(task));
     }
 
+    bool add_last_task(SpillProcessTask&& task) {
+        _is_working = true;
+        set_finishing();
+        return _spill_tasks.put(std::move(task));
+    }
+
     bool acquire_spill_task() { return _spill_tasks.blocking_get(&_current_task); }
 
     bool has_spill_task() { return !_spill_tasks.empty(); }

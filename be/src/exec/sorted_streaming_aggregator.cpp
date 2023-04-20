@@ -484,7 +484,7 @@ Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, siz
                                                           const std::vector<uint8_t>& selector,
                                                           Columns& agg_group_by_columns) {
     SCOPED_TIMER(_agg_stat->agg_append_timer);
-    if (_cmp_vector[0] != 0 && _last_state) {
+    if (_cmp_vector[0] != 0 && !_last_columns.empty() && !_last_columns.back()->empty()) {
         for (size_t i = 0; i < agg_group_by_columns.size(); ++i) {
             agg_group_by_columns[i]->append(*_last_columns[i], 0, 1);
         }
