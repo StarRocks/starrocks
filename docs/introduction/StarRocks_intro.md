@@ -33,7 +33,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPartItem>
 
 - [Understand table design](../table_design/StarRocks_table_design.md)
-- [Table types](../table_design/Table_types.md)
+- [Table types](../table_design/table_types/table_types.md)
 - [Data distribution](../table_design/Data_distribution.md)
 - [Sort keys and prefix indexes](../table_design/Sort_key.md)
 
