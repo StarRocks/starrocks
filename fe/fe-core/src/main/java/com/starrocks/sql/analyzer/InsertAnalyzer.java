@@ -125,24 +125,24 @@ public class InsertAnalyzer {
             }
         }
 
-        if (table instanceof IcebergTable && insertStmt.isStaticPartitionInsert()) {
+        if (table instanceof IcebergTable && insertStmt.isStaticKeyPartitionInsert()) {
             IcebergTable icebergTable = (IcebergTable) table;
-            List<String> partitionKeys = targetPartitionNames.getPartitionKeys();
-            List<Expr> partitionValues = targetPartitionNames.getPartitionValues();
+            List<String> partitionColNames = targetPartitionNames.getPartitionColNames();
+            List<Expr> partitionColValues = targetPartitionNames.getPartitionColValues();
             List<String> tablePartitionColumnNames = icebergTable.getPartitionColumnNames();
 
-            Preconditions.checkState(partitionKeys.size() == partitionValues.size(),
-                    "Partition keys size must be equal to the partition values size. %d vs %d",
-                    partitionKeys.size(), partitionValues.size());
+            Preconditions.checkState(partitionColNames.size() == partitionColValues.size(),
+                    "Partition column names size must be equal to the partition column values size. %d vs %d",
+                    partitionColNames.size(), partitionColValues.size());
 
-            if (tablePartitionColumnNames.size() != partitionKeys.size()) {
+            if (tablePartitionColumnNames.size() != partitionColNames.size()) {
                 throw new SemanticException("Must include all partition column names");
             }
 
-            for (int i = 0; i < partitionKeys.size(); i++) {
-                String actualName = partitionKeys.get(i);
+            for (int i = 0; i < partitionColNames.size(); i++) {
+                String actualName = partitionColNames.get(i);
                 String expectedName = tablePartitionColumnNames.get(i);
-                Expr partitionValue = partitionValues.get(i);
+                Expr partitionValue = partitionColValues.get(i);
                 if (!actualName.equalsIgnoreCase(expectedName)) {
                     throw new SemanticException("Expected: %s, but actual: %s", expectedName, actualName);
                 }
@@ -192,7 +192,7 @@ public class InsertAnalyzer {
         }
 
         int mentionedColumnSize = mentionedColumns.size();
-        if (table instanceof IcebergTable && insertStmt.isStaticPartitionInsert()) {
+        if (table instanceof IcebergTable && insertStmt.isStaticKeyPartitionInsert()) {
             // full column size = mentioned column size + partition column size for static partition insert
             mentionedColumnSize -= table.getPartitionColumnNames().size();
         }

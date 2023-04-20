@@ -168,14 +168,13 @@ Status PageIO::read_and_decompress_page(const PageReadOptions& opts, PageHandle*
     {
         SCOPED_RAW_TIMER(&opts.stats->io_ns);
         if (opts.read_file->is_cache_hit()) {
-            SCOPED_RAW_TIMER(&opts.stats->io_ns_from_local_disk);
             RETURN_IF_ERROR(opts.read_file->read_at_fully(opts.page_pointer.offset, page_slice.data, page_slice.size));
-            opts.stats->compressed_bytes_from_local_disk += page_size;
             ++opts.stats->pages_from_local_disk;
         } else {
             RETURN_IF_ERROR(opts.read_file->read_at_fully(opts.page_pointer.offset, page_slice.data, page_slice.size));
         }
-        opts.stats->compressed_bytes_read += page_size;
+        opts.stats->compressed_bytes_read_request += page_size;
+        ++opts.stats->io_count_request;
     }
 
     if (opts.verify_checksum) {
