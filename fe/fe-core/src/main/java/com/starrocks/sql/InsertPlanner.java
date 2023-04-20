@@ -20,17 +20,21 @@ import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
+import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
@@ -100,6 +104,7 @@ public class InsertPlanner {
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
+        Table targetTable = insertStmt.getTargetTable();
 
         //1. Process the literal value of the insert values type and cast it into the type of the target table
         if (queryRelation instanceof ValuesRelation) {
@@ -110,26 +115,30 @@ public class InsertPlanner {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan;
         try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("Transform")) {
-            logicalPlan = new RelationTransformer(columnRefFactory, session).transform(
-                    insertStmt.getQueryStatement().getQueryRelation());
+            logicalPlan = new RelationTransformer(columnRefFactory, session).transform(queryRelation);
         }
 
         //3. Fill in the default value and NULL
         OptExprBuilder optExprBuilder = fillDefaultValue(logicalPlan, columnRefFactory, insertStmt, outputColumns);
 
-        //4. Fill in the shadow column
+        //4. Fill key partition columns constant value for data lake format table (hive/iceberg/hudi/delta_lake)
+        if (insertStmt.isSpecifyKeyPartition()) {
+            optExprBuilder = fillKeyPartitionsColumn(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
+        }
+
+        //5. Fill in the shadow column
         optExprBuilder = fillShadowColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder, session);
 
-        //5. Cast output columns type to target type
+        //6. Cast output columns type to target type
         optExprBuilder =
                 castOutputColumnsTypeToTargetColumns(columnRefFactory, insertStmt, outputColumns, optExprBuilder);
 
-        //6. Optimize logical plan and build physical plan
+        //7. Optimize logical plan and build physical plan
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
-        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable());
+        boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(targetTable);
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
         try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("InsertPlanner")) {
@@ -153,9 +162,9 @@ public class InsertPlanner {
                         columnRefFactory);
             }
 
-            //7. Build fragment exec plan
+            //8. Build fragment exec plan
             boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
-                    || insertStmt.getTargetTable() instanceof MysqlTable);
+                    || targetTable instanceof MysqlTable);
             ExecPlan execPlan;
             try (PlannerProfile.ScopedTimer ignore3 = PlannerProfile.getScopedTimer("PlanBuilder")) {
                 execPlan = PlanFragmentBuilder.createPhysicalPlan(
@@ -164,12 +173,12 @@ public class InsertPlanner {
             }
 
             DescriptorTable descriptorTable = execPlan.getDescTbl();
-            TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
+            TupleDescriptor tupleDesc = descriptorTable.createTupleDescriptor();
 
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-            long tableId = insertStmt.getTargetTable().getId();
-            for (Column column : insertStmt.getTargetTable().getFullSchema()) {
-                SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
+            long tableId = targetTable.getId();
+            for (Column column : targetTable.getFullSchema()) {
+                SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(tupleDesc);
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setType(column.getType());
                 slotDescriptor.setColumn(column);
@@ -181,11 +190,11 @@ public class InsertPlanner {
                             columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
                 }
             }
-            olapTuple.computeMemLayout();
+            tupleDesc.computeMemLayout();
 
             DataSink dataSink;
-            if (insertStmt.getTargetTable() instanceof OlapTable) {
-                OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
+            if (targetTable instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) targetTable;
 
                 boolean enableAutomaticPartition;
                 if (!insertStmt.isOverwrite() && insertStmt.isSpecifyPartition()) {
@@ -193,16 +202,19 @@ public class InsertPlanner {
                 } else {
                     enableAutomaticPartition = olapTable.supportedAutomaticPartition();
                 }
-                dataSink = new OlapTableSink(olapTable, olapTuple, insertStmt.getTargetPartitionIds(),
+                dataSink = new OlapTableSink(olapTable, tupleDesc, insertStmt.getTargetPartitionIds(),
                         canUsePipeline, olapTable.writeQuorum(), olapTable.enableReplicatedStorage(),
                         false, enableAutomaticPartition);
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
-                dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
+                dataSink = new MysqlTableSink((MysqlTable) targetTable);
+            } else if (targetTable instanceof IcebergTable) {
+                descriptorTable.addReferencedTable(targetTable);
+                dataSink = new IcebergTableSink((IcebergTable) targetTable, tupleDesc, insertStmt.isSpecifyKeyPartition());
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
 
-            if (canUsePipeline && insertStmt.getTargetTable() instanceof OlapTable) {
+            if (canUsePipeline && targetTable instanceof OlapTable) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
                 if (shuffleServiceEnable) {
                     // For shuffle insert into, we only support tablet sink dop = 1
@@ -241,6 +253,10 @@ public class InsertPlanner {
         ValuesRelation values = (ValuesRelation) insertStatement.getQueryStatement().getQueryRelation();
         RelationFields fields = insertStatement.getQueryStatement().getQueryRelation().getRelationFields();
         for (int columnIdx = 0; columnIdx < insertStatement.getTargetTable().getBaseSchema().size(); ++columnIdx) {
+            if (needToSkip(insertStatement, columnIdx)) {
+                continue;
+            }
+
             Column targetColumn = fullSchema.get(columnIdx);
             boolean isAutoIncrement = targetColumn.isAutoIncrement();
             if (insertStatement.getTargetColumnNames() == null) {
@@ -288,6 +304,10 @@ public class InsertPlanner {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
         for (int columnIdx = 0; columnIdx < baseSchema.size(); ++columnIdx) {
+            if (needToSkip(insertStatement, columnIdx)) {
+                continue;
+            }
+
             Column targetColumn = baseSchema.get(columnIdx);
             if (insertStatement.getTargetColumnNames() == null) {
                 outputColumns.add(logicalPlan.getOutputColumn().get(columnIdx));
@@ -488,5 +508,34 @@ public class InsertPlanner {
         shuffleServiceEnable = true;
 
         return new PhysicalPropertySet(property);
+    }
+
+    private OptExprBuilder fillKeyPartitionsColumn(ColumnRefFactory columnRefFactory,
+                                                   InsertStmt insertStatement, List<ColumnRefOperator> outputColumns,
+                                                   OptExprBuilder root) {
+        Table targetTable = insertStatement.getTargetTable();
+        LogicalProjectOperator projectOperator = (LogicalProjectOperator) root.getRoot().getOp();
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = projectOperator.getColumnRefMap();
+        List<Expr> partitionColValues = insertStatement.getTargetPartitionNames().getPartitionColValues();
+        List<String> partitionColNames = targetTable.getPartitionColumnNames();
+        List<Column> partitionColumns = partitionColNames.stream()
+                .map(targetTable::getColumn).collect(Collectors.toList());
+
+        for (int i = 0; i < partitionColumns.size(); i++) {
+            Column column = partitionColumns.get(i);
+            LiteralExpr expr = (LiteralExpr) partitionColValues.get(i);
+            ScalarOperator scalarOperator = ConstantOperator.createObject(expr.getRealObjectValue(), column.getType());
+            ColumnRefOperator col = columnRefFactory
+                    .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+            outputColumns.add(col);
+            columnRefMap.put(col, scalarOperator);
+        }
+        return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
+    private boolean needToSkip(InsertStmt stmt, int columnIdx) {
+        Table targetTable = stmt.getTargetTable();
+        return stmt.isSpecifyKeyPartition() &&
+                ((IcebergTable) targetTable).partitionColumnIndexes().contains(columnIdx);
     }
 }
