@@ -170,4 +170,12 @@ StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
     return std::string_view((const char*)buf, count);
 }
 
+int64_t SharedBufferedInputStream::estimated_mem_usage() const {
+    int64_t mem_usage = 0;
+    for (const auto& [_, sb] : _map) {
+        mem_usage += sb.size;
+    }
+    return mem_usage;
+}
+
 } // namespace starrocks::io

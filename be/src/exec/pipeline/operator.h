@@ -229,7 +229,7 @@ public:
     void set_revocable_mem_bytes(size_t bytes) { _revocable_mem_bytes = bytes; }
     int32_t get_driver_sequence() const { return _driver_sequence; }
     OperatorFactory* get_factory() const { return _factory; }
-    
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;

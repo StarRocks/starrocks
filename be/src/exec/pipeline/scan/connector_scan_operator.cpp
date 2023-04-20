@@ -27,12 +27,17 @@ namespace starrocks::pipeline {
 // ==================== ConnectorScanOperatorFactory ====================
 
 struct ConnectorScanOperatorIOTasksMemLimiter {
+    mutable std::shared_mutex lock;
+
     size_t dop = 0;
     int64_t mem_limit = 0;
     int64_t running_chunk_source_count = 0;
+    int64_t estimated_mem_usage_update_count = 0;
     double estimated_mem_usage_per_chunk_source = 0;
 
     int available_chunk_source_count() const {
+        std::shared_lock<std::shared_mutex> L(lock);
+
         int64_t max_count = mem_limit / estimated_mem_usage_per_chunk_source;
         int64_t avail_count = (max_count - running_chunk_source_count) / dop;
         avail_count = std::max<int64_t>(avail_count, 0);
@@ -44,6 +49,20 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
                   << ", running_chunk_source_count = " << running_chunk_source_count << ", dop=" << dop
                   << ", avail_count = " << avail_count;
         return avail_count;
+    }
+
+    void update_running_chunk_source_count(int delta) {
+        std::unique_lock<std::shared_mutex> L(lock);
+        running_chunk_source_count += delta;
+    }
+
+    void update_estimated_mem_usage_per_chunk_source(int64_t value) {
+        if (value == 0) return;
+
+        std::unique_lock<std::shared_mutex> L(lock);
+        double total = estimated_mem_usage_per_chunk_source * estimated_mem_usage_update_count + value;
+        estimated_mem_usage_update_count += 1;
+        estimated_mem_usage_per_chunk_source = total / estimated_mem_usage_update_count;
     }
 };
 
@@ -102,6 +121,7 @@ struct ConnectorScanOperatorAdaptiveProcessor {
     int64_t op_start_time = 0;
     // how many chunks been pulled by this operator.
     int64_t op_pull_chunks = 0;
+    int64_t op_pull_rows = 0;
     // how long this op in running state.
     int64_t op_running_time = 0;
 
@@ -246,6 +266,7 @@ void ConnectorScanOperator::begin_driver_process() {
     _adaptive_processor->in_driver_process = true;
     _unpluging = true;
 
+    VLOG_FILE << "[XXXX]. begin_driver_process. id = " << _driver_sequence;
     if (_adaptive_processor->last_driver_output_full_timestamp != 0) {
         int64_t now = GetCurrentTimeMicros();
         int64_t wait = (now - _adaptive_processor->last_driver_output_full_timestamp) * 1000;
@@ -257,6 +278,7 @@ void ConnectorScanOperator::begin_driver_process() {
 
 void ConnectorScanOperator::begin_pull_chunk(ChunkPtr res) {
     _adaptive_processor->op_pull_chunks += 1;
+    _adaptive_processor->op_pull_rows += res->num_rows();
 }
 
 void ConnectorScanOperator::end_pull_chunk(int64_t time) {
@@ -267,6 +289,9 @@ void ConnectorScanOperator::end_driver_process(PipelineDriver* driver) {
     _adaptive_processor->check_all_io_tasks_last_timestamp = 0;
     _adaptive_processor->in_driver_process = false;
     _unpluging = false;
+
+    VLOG_FILE << "[XXXX]. end_driver_process. query = " << driver->query_ctx()->query_id()
+              << ", id = " << _driver_sequence << ", rows = " << _adaptive_processor->op_pull_rows;
 
     // we think when scan operator is blocked by output full state
     // it's still running, and it will affect consume chunk speed.
@@ -306,7 +331,8 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     int min_io_tasks = config::connector_io_tasks_min_size;
     auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     ConnectorScanOperatorIOTasksMemLimiter* L = factory->_io_tasks_mem_limiter;
-    const int max_io_tasks = L->available_chunk_source_count();
+    int max_io_tasks = L->available_chunk_source_count();
+    max_io_tasks = std::min(max_io_tasks, _io_tasks_per_scan_operator);
     min_io_tasks = std::min(min_io_tasks, max_io_tasks);
 
     int64_t now = GetCurrentTimeMicros();
@@ -324,7 +350,9 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     // to avoid frequent adjustment.
     int& io_tasks = P.expected_io_tasks;
     io_tasks = std::max(min_io_tasks, io_tasks);
+    io_tasks = std::min(max_io_tasks, io_tasks);
     if ((now - P.adjust_io_tasks_last_timestamp) <= config::connector_io_tasks_adjust_interval_ms * 1000) {
+        VLOG_FILE << "[XXX]. pickup morsel. cached count = " << io_tasks;
         return io_tasks;
     }
     P.adjust_io_tasks_last_timestamp = now;
@@ -402,7 +430,6 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
 
     do_adjustment();
     io_tasks = std::min(io_tasks, max_io_tasks);
-    io_tasks = std::min(io_tasks, _io_tasks_per_scan_operator);
     io_tasks = std::max(io_tasks, min_io_tasks);
 
     auto build_log = [&]() {
@@ -481,11 +508,13 @@ ConnectorScanOperatorIOTasksMemLimiter* ConnectorChunkSource::_get_io_tasks_mem_
 
 void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
-    _closed = true;
-    _data_source->close(state);
 
     ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
-    limiter->running_chunk_source_count -= 1;
+    limiter->update_running_chunk_source_count(-1);
+    limiter->update_estimated_mem_usage_per_chunk_source(_data_source->estimated_mem_usage());
+
+    _closed = true;
+    _data_source->close(state);
 }
 
 Status ConnectorChunkSource::_open_data_source(RuntimeState* state) {
@@ -499,10 +528,11 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state) {
     } else {
         _ck_acc.set_max_size(state->chunk_size());
     }
-    _opened = true;
 
     ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
-    limiter->running_chunk_source_count += 1;
+    limiter->update_running_chunk_source_count(1);
+
+    _opened = true;
 
     return Status::OK();
 }

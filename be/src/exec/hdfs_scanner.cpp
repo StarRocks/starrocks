@@ -242,6 +242,14 @@ Status HdfsScanner::open_random_access_file() {
     return Status::OK();
 }
 
+int64_t HdfsScanner::estimated_mem_usage() const {
+    if (_shared_buffered_input_stream == nullptr) {
+        // don't read data in columnar format, usually in a fixed size.
+        return 32 * 1024 * 1024;
+    }
+    return _shared_buffered_input_stream->estimated_mem_usage();
+}
+
 void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {
     static const char* const kHdfsIOProfileSectionPrefix = "HdfsIO";
     if (_file == nullptr) return;
