@@ -62,7 +62,7 @@ PROPERTIES(
 >
 > - To create a table in StarRocks, you MUST specify a bucket key in the `DISTRIBUTED BY HASH` clause to strategize the data distribution plan of the table. By default, the data is distributed to 10 tablets. See [Data Distribution](../table_design/Data_model.md#starrocks-data-distribution) for more information.
 > - You need to specify the table property `replication_num`, which represents the number of data replicas, as `1` because the StarRocks instance you deployed has only one BE node.
-> - If no [data model](../table_design/Data_model.md) is specified, a Duplicate Key model is created by default. See [Duplicate Key model](../table_design/Data_model.md#duplicate-key-model)
+> - If no [table type](../table_design/Table_types.md) is specified, a Duplicate Key table is created by default. See [Duplicate Key table](../table_design/Data_model.md#duplicate-key-model)
 > - The columns of the table exactly correspond to the fields of data that you will be loading into StarRocks in the tutorial on [loading and querying data](../quick_start/Import_and_query.md).
 > - To guarantee the high performance **in the production environment**, we strongly recommend that you strategize the data partitioning plan for the table by using the `PARTITION BY` clause. See [Design partitioning and bucketing rules](../table_design/Data_model.md#design-partitioning-and-bucketing-rules) for more instructions.
 
@@ -75,7 +75,7 @@ To learn more about conceptual details of StarRocks tables, see [StarRocks Table
 In addition to the features this tutorial has demonstrated, StarRocks also supports:
 
 - A variety of [data types](../sql-reference/sql-statements/data-types/BIGINT.md)
-- Multiple [data models](../table_design/Data_model.md)
+- Multiple [table types](../table_design/Table_types.md)
 - Flexible [partitioning strategies](../table_design/Data_distribution.md#dynamic-partition-management)
 - Classic database query indexes, including [bitmap index](../table_design/Bitmap_index.md) and [bloom filter index](../table_design/Bloomfilter_index.md)
 - [Materialized view](../using_starrocks/Materialized_view.md)
