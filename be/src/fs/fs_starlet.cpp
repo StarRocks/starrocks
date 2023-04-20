@@ -38,6 +38,7 @@ DIAGNOSTIC_POP
 #include "io/output_stream.h"
 #include "io/seekable_input_stream.h"
 #include "service/staros_worker.h"
+#include "storage/olap_common.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {
@@ -151,6 +152,24 @@ public:
         } else {
             return to_status(res.status());
         }
+    }
+
+    StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
+        auto stream_st = _file_ptr->stream();
+        if (!stream_st.ok()) {
+            return to_status(stream_st.status());
+        }
+
+        const auto& read_stats = (*stream_st)->get_read_stats();
+        auto stats = std::make_unique<io::NumericStatistics>();
+        stats->reserve(6);
+        stats->append(kBytesReadLocalDisk, read_stats.bytes_read_local_disk);
+        stats->append(kBytesReadRemote, read_stats.bytes_read_remote);
+        stats->append(kIOCountLocalDisk, read_stats.io_count_local_disk);
+        stats->append(kIOCountRemote, read_stats.io_count_remote);
+        stats->append(kIONsLocalDisk, read_stats.io_ns_local_disk);
+        stats->append(kIONsRemote, read_stats.io_ns_remote);
+        return std::move(stats);
     }
 
 private:
