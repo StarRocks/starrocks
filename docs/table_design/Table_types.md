@@ -1,15 +1,16 @@
 # Table Types
 
-You must specify a data model and define one or more columns as a sort key at table creation. This way, when data is initially loaded into the table that you created, StarRocks can sort, process, and store the data based on the sort key. This topic describes the data models that StarRocks provides to meet your varying business requirements.
+You must specify a table type and define one or more columns as a sort key at table creation. This way, when data is initially loaded into the table that you created, StarRocks can sort, process, and store the data based on the sort key. This topic describes the table types that StarRocks provides to meet your varying business requirements.
 
 ## Basic concepts
 
-### Data models
+### Table types
 
-StarRocks provides four data models: Duplicate Key, Aggregate Key, Unique Key, and Primary Key. These four data models are well suited to a wide range of data analytics scenarios such as log analysis, data aggregation and analysis, and real-time data analysis.
+StarRocks provides four table types: Duplicate Key, Aggregate Key, Unique Key, and Primary Key. These four table types are well suited to a wide range of data analytics scenarios such as log analysis, data aggregation and analysis, and real-time data analysis.
 
 ### Sort keys
 
+<<<<<<< HEAD
 When you create a table, you can specify one or more columns based on which StarRocks sorts, processes, and stores the data loaded in to that table. The one or more columns that you specified comprise the sort key. These columns are referred to as sort key columns. The sort key is usually created on dimension columns that are frequently used as filter conditions for queries, because this can accelerate queries. In the Duplicate Key model, the sort key is created on columns that are used to sort data, and is defined by using the `DUPLICATE KEY` keyword. In the Aggregate Key model, the sort key is created on columns that are used to aggregate data, and is defined by using the `AGGREGATE KEY` keyword. In the Unique Key model or Primary Key model, the sort key is created on columns on which unique constraints are enforced, and is defined by using the `PRIMARY KEY` or `UNIQUE KEY` keyword.
 
 Compared with traditional primary keys, sort keys in StarRocks have the following characteristics:
@@ -21,6 +22,19 @@ Compared with traditional primary keys, sort keys in StarRocks have the followin
 - StarRocks tables use clustered storage. This means that the values in each column of a table are stored in sorted order based on the sort key that you specified for the table.
 
 - Prefix indexes can be generated based on sort keys.
+=======
+When data is loaded into a table created by using a certain table type, data is sorted and stored according to one or more columns defined as the sort key when the table is created. The sort key is usually one or more columns that are frequently used as filter conditions in queries, thereby accelerating queries.
+
+In the Duplicate Key table, the sort key specified by `DUPLICATE KEY` is used to sort data and is not assigned a UNIQUE constraint.
+In the Aggregate Key table, the sort key specified by `AGGRAGATE KEY` is used to sort data and is assigned a UNIQUE constraint.
+In the Unique Key table, the sort key specified by `UNIQUE KEY` is used to sort data and is assigned a UNIQUE constraint.
+In the Primary Key table, the primary key and sort key are decoupled. The primary key specified by `PRIMARY KEY` is assigned UNIQUE and NOT NULL constraints. The sort key specified by `ORDER BY` is used for sorting data.
+
+> **NOTE**
+>
+> - In versions earlier than v3.0, the Primary Key table does not support defining the primary key and sort key separately.
+> - For more descriptions of sort keys, see [Sort keys and prefix indexes](./Sort_key.md).
+>>>>>>> 05c6b616af (split data model and update related proper names)
 
 ## Precautions
 
@@ -30,28 +44,28 @@ Compared with traditional primary keys, sort keys in StarRocks have the followin
 
 - The length of the prefix index for a table is limited to 36 bytes. If the total length of the sort key columns exceeds 36 bytes, StarRocks stores only the first few sort key columns within the length limit for the prefix index.
 
-- If the records to be loaded into a table have the same primary key, StarRocks processes and stores the records based on the data model of the table:
-  - Duplicate Key model
+- If the records to be loaded into a table have the same primary key, StarRocks processes and stores the records based on the table type:
+  - Duplicate Key table
 
     StarRocks loads each of the records as a separate row into the table. After the data load is complete, the table contains rows that have the same primary key, and the rows map the source records in a one-to-one relationship. You can recall all historical data that you loaded.
 
-  - Aggregate Key model
+  - Aggregate Key table
 
     StarRocks aggregates the records into one record and loads the aggregated record as a row into the table. After the loading is complete, the table does not contain rows that have the same primary key. You can recall the aggregation results of all historical data that you loaded. However, you cannot recall all historical data.
 
-  - Unique Key model and Primary Key model
+  - Unique Key table and Primary Key table
 
-    StarRocks replaces each newly loaded record with the previously loaded record and retains only the most recently loaded record as a row in the table. After the loading is complete, the table does not contain rows that have the same primary key. The Unique Key model and the Primary Key model can be considered a special Aggregate Key model in which the REPLACE aggregate function is specified for metric columns to return the most recent record among a group of records that have the same primary key.
+    StarRocks replaces each newly loaded record with the previously loaded record and retains only the most recently loaded record as a row in the table. After the loading is complete, the table does not contain rows that have the same primary key. The Unique Key table and the Primary Key table can be considered a special Aggregate Key table in which the REPLACE aggregate function is specified for metric columns to return the most recent record among a group of records that have the same primary key.
 
-## Duplicate Key model
+## Duplicate Key table
 
-The Duplicate Key model is the default model in StarRocks. If you did not specify a model when you create a table, a Duplicate Key table is created by default.
+The Duplicate Key table is the default model in StarRocks. If you did not specify a model when you create a table, a Duplicate Key table is created by default.
 
-When you create a Duplicate Key table, you can define a sort key for that table. If the filter conditions contain the sort key columns, StarRocks can quickly filter data from the table to accelerate queries. The Duplicate Key model allows you to append new data to the table. However, it does not allow you to modify existing data in the table.
+When you create a Duplicate Key table, you can define a sort key for that table. If the filter conditions contain the sort key columns, StarRocks can quickly filter data from the table to accelerate queries. The Duplicate Key table allows you to append new data to the table. However, it does not allow you to modify existing data in the table.
 
 ### Scenarios
 
-The Duplicate Key model is suitable for the following scenarios:
+The Duplicate Key table is suitable for the following scenarios:
 
 - Analyze raw data, such as raw logs and raw operation records.
 - Query data by using a variety of methods without being limited by the pre-aggregation method.
@@ -84,25 +98,25 @@ DISTRIBUTED BY HASH(user_id) BUCKETS 8;
 
     > Note: By default, if you do not specify sort key columns, StarRocks uses the **first three** columns as sort key columns.
 
-  - In the Duplicate Key model, the sort key can consist of some or all of the dimension columns.
+  - In the Duplicate Key table, the sort key can consist of some or all of the dimension columns.
 
 - You can create indexes such as BITMAP indexes and Bloomfilter indexes at table creation.
 
-- If two identical records are loaded, the Duplicate Key model retains them as two records, rather than one.
+- If two identical records are loaded, the Duplicate Key table retains them as two records, rather than one.
 
 ### What to do next
 
 After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Data import](../loading/Loading_intro.md).
 
-> Note: When you load data into a table that uses the Duplicate Key model, you can only append data to the table. You cannot modify the existing data in the table.
+> Note: When you load data into a table that uses the Duplicate Key table, you can only append data to the table. You cannot modify the existing data in the table.
 
-## Aggregate Key model
+## Aggregate Key table
 
-When you create a table that uses the Aggregate Key model, you can define sort key columns and metric columns and can specify an aggregate function for the metric columns. If the records to be loaded have the same sort key, the metric columns are aggregated. The Aggregate Key model helps reduce the amount of data that needs to be processed for queries, thereby accelerating queries.
+When you create a table that uses the Aggregate Key table, you can define sort key columns and metric columns and can specify an aggregate function for the metric columns. If the records to be loaded have the same sort key, the metric columns are aggregated. The Aggregate Key table helps reduce the amount of data that needs to be processed for queries, thereby accelerating queries.
 
 ### Scenarios
 
-The Aggregate Key model is well suited to data statistics and analytics scenarios. A few examples are as follows:
+The Aggregate Key table is well suited to data statistics and analytics scenarios. A few examples are as follows:
 
 - Help website or app providers analyze the amount of traffic and time that their users spend on a specific website or app and the total number of visits to the website or app.
 
@@ -118,7 +132,7 @@ The data querying and ingestion in the preceding scenarios have the following ch
 
 ### Principle
 
-Starting from data ingestion to data querying, data with the same sort key in a table that uses the Aggregate Key model is aggregated multiple times as follows:
+Starting from data ingestion to data querying, data with the same sort key in a table that uses the Aggregate Key table is aggregated multiple times as follows:
 
 1. In the data ingestion phase, when data is loaded as batches into the table, each batch comprises a data version. After a data version is generated, StarRocks aggregates the data that has the same sort key in the data version.
 2. In the background compaction phase, when the files of multiple data versions that are generated at data ingestion are periodically compacted into a large file, StarRocks aggregates the data that has the same sort key in the large file.
@@ -126,7 +140,7 @@ Starting from data ingestion to data querying, data with the same sort key in a 
 
 The aggregate operations help reduce the amount of data that needs to be processed, thereby accelerating queries.
 
-Suppose that you have a table that uses the Aggregate Key model and want to load the following four raw records into the table.
+Suppose that you have a table that uses the Aggregate Key table and want to load the following four raw records into the table.
 
 | Date       | Country | PV   |
 | ---------- | ------- | ---- |
@@ -174,7 +188,7 @@ PROPERTIES (
 
 - You can specify an aggregate function following the name of a column to define the column as a metric column. In most cases, metric columns hold data that needs to be aggregated and analyzed.
 
-- For information about the aggregate functions that are supported by the Aggregate Key model, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
+- For information about the aggregate functions that are supported by the Aggregate Key table, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
 - When queries are run, sort key columns are filtered before the aggregation of multiple data versions, whereas metric columns are filtered after the aggregation of multiple data versions. Therefore, we recommend that you identify the columns that are frequently used as filter conditions and define these columns as the sort key. This way, data filtering can start before the aggregation of multiple data versions to improve query performance.
 
@@ -184,21 +198,21 @@ PROPERTIES (
 
 After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Data import](../loading/Loading_intro.md).
 
-> Note: When you load data into a table that uses the Aggregate Key model, you can only update all columns of the table. For example, when you update the preceding `example_db.aggregate_tbl` table, you must update all its columns, which are `site_id`, `date`, `city_code`, and `pv`.
+> Note: When you load data into a table that uses the Aggregate Key table, you can only update all columns of the table. For example, when you update the preceding `example_db.aggregate_tbl` table, you must update all its columns, which are `site_id`, `date`, `city_code`, and `pv`.
 
-## Unique Key model
+## Unique Key table
 
-When you create a table, you can define primary key columns and metric columns. This way, queries return the most recent record among a group of records that have the same primary key. Compared with the Duplicate Key model, the Unique Key model simplifies the data loading process to better support real-time and frequent data updates.
+When you create a table, you can define primary key columns and metric columns. This way, queries return the most recent record among a group of records that have the same primary key. Compared with the Duplicate Key table, the Unique Key table simplifies the data loading process to better support real-time and frequent data updates.
 
 ### Scenarios
 
-The Unique Key model is suitable for business scenarios in which data needs to be frequently updated in real time. For example, in e-commerce scenarios, hundreds of millions of orders can be placed per day, and the statuses of the orders frequently change.
+The Unique Key table is suitable for business scenarios in which data needs to be frequently updated in real time. For example, in e-commerce scenarios, hundreds of millions of orders can be placed per day, and the statuses of the orders frequently change.
 
 ### Principle
 
-The Unique Key model can be considered a special Aggregate Key model in which the REPLACE aggregate function is specified for metric columns to return the most recent record among a group of records that have the same primary key.
+The Unique Key table can be considered a special Aggregate Key table in which the REPLACE aggregate function is specified for metric columns to return the most recent record among a group of records that have the same primary key.
 
-When you load data into a table that uses the Unique Key model, the data is split into multiple batches. Each batch is assigned a version number. Therefore, records with the same primary key may come in multiple versions, of which the most recent version (namely, the record with the largest version number) is retrieved for queries.
+When you load data into a table that uses the Unique Key table, the data is split into multiple batches. Each batch is assigned a version number. Therefore, records with the same primary key may come in multiple versions, of which the most recent version (namely, the record with the largest version number) is retrieved for queries.
 
 As shown in the following table, `ID` is the primary key column, `value` is a metric column, and `_version` holds the data version numbers generated within StarRocks. In this example, the record with an `ID` of 1 is loaded by two batches whose version numbers are `1` and `2`, and the record with an `ID` of `2` is loaded by three batches whose version numbers are  `3`, `4`, and `5`.
 
@@ -246,31 +260,35 @@ DISTRIBUTED BY HASH(order_id) BUCKETS 8;
 
 - When you create a table, you cannot create BITMAP indexes or Bloom Filter indexes on the metric columns of the table.
 
-- The Unique Key model does not support materialized views.
+- The Unique Key table does not support materialized views.
 
 ### What to do next
 
 After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Data import](../loading/Loading_intro.md).
 
-> - When you load data into a table that uses the Unique Key model, you can only update all columns of the table. For example, when you update the preceding `orders` table, you must update all its columns, which are `create_time`, `order_id`, `order_state`, and `total_price`.
-> - When you query data from a table that uses the Unique Key model, StarRocks needs to aggregate records of multiple data versions. In this situation, a large number of data versions decreases query performance. Therefore, we recommend that you specify a proper frequency at which data is loaded into the table to meet meet your requirements for real-time data analytics while preventing a large number of data versions. If you require minute-level data, you can specify a loading frequency of 1 minute instead of a loading frequency of 1 second.
+> - When you load data into a table that uses the Unique Key table, you can only update all columns of the table. For example, when you update the preceding `orders` table, you must update all its columns, which are `create_time`, `order_id`, `order_state`, and `total_price`.
+> - When you query data from a table that uses the Unique Key table, StarRocks needs to aggregate records of multiple data versions. In this situation, a large number of data versions decreases query performance. Therefore, we recommend that you specify a proper frequency at which data is loaded into the table to meet meet your requirements for real-time data analytics while preventing a large number of data versions. If you require minute-level data, you can specify a loading frequency of 1 minute instead of a loading frequency of 1 second.
 
-## Primary Key model
+## Primary Key table
 
-StarRocks has started to support the Primary Key model since v1.19. When you create a table that uses the Primary Key model, you can define primary key columns and metric columns. Queries return the most recent record among a group of records that have the same primary key. Unlike the Unique Key model, the Primary Key model does not require aggregate operations during queries and supports the pushdown of predicates and indexes. As such, the Primary Key model can deliver high query performance despite real-time and frequent data updates.
+When a table is created, you can define the primary key and sort key separately. When data is loaded into a Primary Key table, StarRocks sorts the data according to the sort key before it stores the data. Queries return the most recent record among a group of records that have the same primary key. Unlike the Unique Key table, the Primary Key table does not require aggregate operations during queries and supports the pushdown of predicates and indexes. As such, the Primary Key table can deliver high query performance despite real-time and frequent data updates.
+
+> NOTE
+>
+> In versions earlier than v3.0, the Primary Key table does not support decoupling the primary key and sort key.
 
 ### Scenarios
 
-- The Primary Key model is suitable for the following scenarios in which data needs to be frequently updated in real time:
-  - **Stream data in real time from transaction processing systems into StarRocks.** In normal cases, transaction processing systems involve a large number of update and delete operations in addition to insert operations. If you need to synchronize data from a transaction processing system to StarRocks, we recommend that you create a table that uses the Primary Key model. Then, you can use tools, such as CDC Connectors for Apache Flink®, to synchronize the binary logs of the transaction processing system to StarRocks. StarRocks uses the binary logs to add, delete, and update the data in the table in real time. This simplifies data synchronization and delivers 3 to 10 times higher query performance than when a Merge on Read (MoR) table of the Unique Key model is used. For example, you can use flink-connector-starrocks to load data. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
+- The Primary Key table is suitable for the following scenarios in which data needs to be frequently updated in real time:
+  - **Stream data in real time from transaction processing systems into StarRocks.** In normal cases, transaction processing systems involve a large number of update and delete operations in addition to insert operations. If you need to synchronize data from a transaction processing system to StarRocks, we recommend that you create a table that uses the Primary Key table. Then, you can use tools, such as CDC Connectors for Apache Flink®, to synchronize the binary logs of the transaction processing system to StarRocks. StarRocks uses the binary logs to add, delete, and update the data in the table in real time. This simplifies data synchronization and delivers 3 to 10 times higher query performance than when a Merge on Read (MoR) table of the Unique Key table is used. For example, you can use flink-connector-starrocks to load data. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
 
-  - **Join multiple streams by performing update operations on individual columns**. In business scenarios such as user profiling, flat tables are preferably used to improve multi-dimensional analysis performance and simplify the analytics model that is used by data analysts. Upstream data in these scenarios may come from various apps, such as shopping apps, delivery apps, and banking apps, or from systems, such as machine learning systems that perform computations to obtain the distinct tags and properties of users. The Primary Key model is well suited in these scenarios, because it supports updates to individual columns. Each app or system can update only the columns that hold the data within its own service scope while benefiting from real-time data additions, deletions, and updates at high query performance.
+  - **Join multiple streams by performing update operations on individual columns**. In business scenarios such as user profiling, flat tables are preferably used to improve multi-dimensional analysis performance and simplify the analytics model that is used by data analysts. Upstream data in these scenarios may come from various apps, such as shopping apps, delivery apps, and banking apps, or from systems, such as machine learning systems that perform computations to obtain the distinct tags and properties of users. The Primary Key table is well suited in these scenarios, because it supports updates to individual columns. Each app or system can update only the columns that hold the data within its own service scope while benefiting from real-time data additions, deletions, and updates at high query performance.
 
-- The Primary Key model is suitable for scenarios in which the memory occupied by the primary key is controllable.
+- The Primary Key table is suitable for scenarios in which the memory occupied by the primary key is controllable.
 
-  The storage engine of StarRocks creates an index for the primary key of each table that uses the Primary Key model. Additionally, when you load data into a table, StarRocks loads the primary key index into the memory. Therefore, the Primary Key model requires a larger memory capacity than the other three data models. **StarRocks limits the total length of the fields that comprise the primary key to 127 bytes after encoding.**
+  The storage engine of StarRocks creates an index for the primary key of each table that uses the Primary Key table. Additionally, when you load data into a table, StarRocks loads the primary key index into the memory. Therefore, the Primary Key table requires a larger memory capacity than the other three table types. **StarRocks limits the total length of the fields that comprise the primary key to 127 bytes after encoding.**
 
-  Consider using the Primary Key model if a table has the following characteristics:
+  Consider using the Primary Key table if a table has the following characteristics:
 
   - The table contains both fast-changing data and slow-changing data. Fast-changing data is frequently updated over the most recent days, whereas slow-changing data is rarely updated. Suppose that you need to synchronize a MySQL order table to StarRocks in real time for analytics and queries. In this example, the data of the table is partitioned by day, and most updates are performed on orders that are created within the most recent days. Historical orders are no longer updated after they are completed. When you run a data load job, the primary key index is not loaded into the memory and only the index entries of the recently updated orders are loaded into the memory.
 
@@ -286,11 +304,11 @@ StarRocks has started to support the Primary Key model since v1.19. When you cre
 
 ### Principle
 
-The Primary Key model is designed based on a new storage engine that is provided by StarRocks. The metadata structure and the read/write mechanism in the Primary Key model differ from those in the Duplicate Key model. As such, the Primary Key model does not require aggregate operations and supports the pushdown of predicates and indexes. These significantly increase query performance.
+The Primary Key table is designed based on a new storage engine that is provided by StarRocks. The metadata structure and the read/write mechanism in the Primary Key table differ from those in the Duplicate Key table. As such, the Primary Key table does not require aggregate operations and supports the pushdown of predicates and indexes. These significantly increase query performance.
 
-The Duplicate Key model adopts the MoR policy. MoR streamlines data writes but requires online aggregation of multiple data versions. Additionally, the Merge operator does not support the pushdown of predicates and indexes. As a result, query performance deteriorates.
+The Duplicate Key table adopts the MoR policy. MoR streamlines data writes but requires online aggregation of multiple data versions. Additionally, the Merge operator does not support the pushdown of predicates and indexes. As a result, query performance deteriorates.
 
-The Primary Key model adopts the Delete+Insert policy to ensure that each record has a unique primary key. This way, the Primary Key model does not require merge operations. Details are as follows:
+The Primary Key table adopts the Delete+Insert policy to ensure that each record has a unique primary key. This way, the Primary Key table does not require merge operations. Details are as follows:
 
 - When StarRocks receives a request for an update operation on a record, it locates the record by searching the primary key index, marks the record as deleted, and inserts a new record. In other words, StarRocks converts an update operation to a delete operation plus an insert operation.
 
@@ -388,4 +406,4 @@ PROPERTIES("replication_num" = "3",
 
 ### What to do next
 
-You can run a  stream load, broker load, or routine load job to perform insert, update, or delete operations on all or individual columns of a table that uses the Primary Key model. For more information, see [Overview of data loading](../loading/Loading_intro.md).
+You can run a  stream load, broker load, or routine load job to perform insert, update, or delete operations on all or individual columns of a table that uses the Primary Key table. For more information, see [Overview of data loading](../loading/Loading_intro.md).

@@ -67,7 +67,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 1. In your StarRocks database `test_db`, create StarRocks tables.
 
-   a. Create a table named `table1` that uses the Primary Key model. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+   a. Create a table named `table1` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table1`
@@ -81,7 +81,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    DISTRIBUTED BY HASH(`id`) BUCKETS 10;
    ```
 
-   b. Create a table named `table2` that uses the Primary Key model. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
+   b. Create a table named `table2` that uses the Primary Key table. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table2`

@@ -2,7 +2,7 @@
 
 ## Terminology
 
-1. Duplicate model: The data model stores detailed data in StarRocks. The model can be specified during table build, and the data in the metric columns will not be aggregated.
+1. Duplicate Key table: The table stores detailed data in StarRocks. The table type can be specified during table build, and the data in the metric columns will not be aggregated.
 2. Base table: The table created by `CREATE TABLE` in StarRocks.
 3. Materialized Views table: Pre-calculated data set that contains results of a query. Abbreviated as MV.
 
@@ -22,7 +22,7 @@ The two mentioned use cases are both valid since the users need to:
 1. get the sales number of a certain item on a certain day, so we need to aggregate price on the `item_id` and `sold_time` dimensions;
 2. analyze the transaction details of a certain item by a certain person on a certain day.
 
-In the existing StarRocks data model, if you create only one table with aggregation model, for example a table with `item_id`, `sold_time`, `customer_id`, `sum(price)`, you are not able to analyze detailed data since the aggregation drops some information of the data. If only a duplicate model is built, you can run queries on all the dimension, but the queries will not be accelerated because of lack of Rollup support. If you build a table with the aggregation model and a table with the duplicate model at the same time, you can get both the performance and can run queries on all the dimensions, but the two tables are not related to each other, so you need to choose the analysis table manually. It doesn’t offer good flexibility and usability.
+In the existing StarRocks table type, if you create only one table with aggregation model, for example a table with `item_id`, `sold_time`, `customer_id`, `sum(price)`, you are not able to analyze detailed data since the aggregation drops some information of the data. If only a duplicate model is built, you can run queries on all the dimension, but the queries will not be accelerated because of lack of Rollup support. If you build a table with the aggregation model and a table with the duplicate model at the same time, you can get both the performance and can run queries on all the dimensions, but the two tables are not related to each other, so you need to choose the analysis table manually. It doesn’t offer good flexibility and usability.
 
 ## How to use
 
