@@ -2,7 +2,7 @@
 
 欢迎来到 StarRocks 文档仓库！本仓库存放的是 StarRocks 官网中文文档的源文件。官网英文文档的源文件存放于 [StarRocks/starrocks/docs](https://github.com/StarRocks/starrocks/tree/main/docs)。
 
-如果您在使用 StarRocks 文档时发现文档问题，可以直接在 [文档官网](https://docs.starrocks.io/zh-cn/latest/introduction/StarRocks_intro) 右上角点击 “反馈” 按钮提交 Issue，或者直接提交 Pull Request 来进行修改。StarRocks 团队会及时修复您提交的问题和 PR。详细的问题反馈和 PR 提交流程，参见 [如何贡献文档和反馈意见](feedback-and-contribute.md)。我们期待您的宝贵意见！
+如果您在使用 StarRocks 文档时发现文档问题，可以直接在**文档官网**右上角点击 “反馈” 按钮提交 Issue，或者直接提交 Pull Request 来进行修改。StarRocks 团队会及时修复您提交的问题和 PR。详细的问题反馈和 PR 提交流程，参见 [如何贡献文档和反馈意见](feedback-and-contribute.md)。我们期待您的宝贵意见！
 
 如果您对产品使用或功能有疑问，或者想获取更多技术支持，可以在 [StarRocks 代码库](https://github.com/StarRocks/starrocks/issues) 提交 issue 或者加入 StarRocks 社区群。
 
