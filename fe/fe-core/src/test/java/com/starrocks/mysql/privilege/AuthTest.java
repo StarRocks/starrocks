@@ -1697,7 +1697,7 @@ public class AuthTest {
         UserIdentity lastUserIdentity = new UserIdentity(lastUserName, "%");
         lastUserIdentity.analyze();
         // information_schema
-        Assert.assertEquals(1, auth.getDBPrivEntries(lastUserIdentity).size());
+        Assert.assertEquals(2, auth.getDBPrivEntries(lastUserIdentity).size());
         int infomationSchemaTableCnt = auth.getTablePrivEntries(lastUserIdentity).size();
         Assert.assertEquals(1, auth.getAuthInfo(lastUserIdentity).size());
 
@@ -1738,7 +1738,7 @@ public class AuthTest {
 
         // check the last user
         // infomation_schema
-        Assert.assertEquals(1, auth.getDBPrivEntries(lastUserIdentity).size());
+        Assert.assertEquals(2, auth.getDBPrivEntries(lastUserIdentity).size());
         Assert.assertEquals(bigNumber / 2 + infomationSchemaTableCnt, auth.getTablePrivEntries(lastUserIdentity).size());
         Assert.assertEquals(1, auth.getAuthInfo(lastUserIdentity).size());
     }
@@ -2020,7 +2020,8 @@ public class AuthTest {
         Assert.assertEquals(1, infos.size());
         Assert.assertEquals(2, infos.get(0).size());
         Assert.assertEquals(emptyPrivilegeUser.toString(), infos.get(0).get(0));
-        Assert.assertEquals("GRANT SELECT ON information_schema.* TO USER 'user1'@'%'", infos.get(0).get(1));
+        Assert.assertEquals("GRANT SELECT ON information_schema.* TO USER 'user1'@'%'\n" +
+                "GRANT SELECT ON mysql.* TO USER 'user1'@'%'", infos.get(0).get(1));
 
         // 2. grant table privilege to onePrivilegeUser
         TablePattern table = new TablePattern("testdb", "table1");
