@@ -6,6 +6,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Range;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import com.google.gson.JsonPrimitive;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
@@ -58,6 +59,7 @@ public class ExternalOlapTable extends OlapTable {
     private static final String JSON_KEY_SOURCE_DB_ID = "source_db_id";
     private static final String JSON_KEY_SOURCE_TABLE_ID = "source_table_id";
     private static final String JSON_KEY_SOURCE_TABLE_NAME = "source_table_name";
+    private static final String JSON_KEY_SOURCE_TABLE_TYPE = "source_table_type";
 
     public class ExternalTableInfo {
         // remote doris cluster fe addr
@@ -73,6 +75,7 @@ public class ExternalOlapTable extends OlapTable {
 
         private long dbId;
         private long tableId;
+        private TableType tableType;
 
         public ExternalTableInfo() {
             this.host = "";
@@ -83,6 +86,7 @@ public class ExternalOlapTable extends OlapTable {
             this.tableName = "";
             this.dbId = -1;
             this.tableId = -1;
+            this.tableType = TableType.OLAP;
         }
 
         public String getHost() {
@@ -121,8 +125,16 @@ public class ExternalOlapTable extends OlapTable {
             return tableId;
         }
 
+        public TableType getTableType() {
+            return tableType;
+        }
+
         public void setTableId(long tableId) {
             this.tableId = tableId;
+        }
+
+        public void setTableType(TableType tableType) {
+            this.tableType = tableType;
         }
 
         public void toJsonObj(JsonObject obj) {
@@ -134,6 +146,7 @@ public class ExternalOlapTable extends OlapTable {
             obj.addProperty(JSON_KEY_SOURCE_DB_ID, dbId);
             obj.addProperty(JSON_KEY_SOURCE_TABLE_NAME, tableName);
             obj.addProperty(JSON_KEY_SOURCE_TABLE_ID, tableId);
+            obj.addProperty(JSON_KEY_SOURCE_TABLE_TYPE, tableType.name());
         }
 
         public void fromJsonObj(JsonObject obj) {
@@ -145,6 +158,10 @@ public class ExternalOlapTable extends OlapTable {
             dbId = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_DB_ID).getAsLong();
             tableName = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_TABLE_NAME).getAsString();
             tableId = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_TABLE_ID).getAsLong();
+            JsonPrimitive tableTypeJson = obj.getAsJsonPrimitive(JSON_KEY_SOURCE_TABLE_TYPE);
+            if (tableTypeJson != null) {
+                tableType = TableType.valueOf(tableTypeJson.getAsString());
+            }
         }
 
         public void parseFromProperties(Map<String, String> properties) throws DdlException {
@@ -244,6 +261,10 @@ public class ExternalOlapTable extends OlapTable {
         return externalTableInfo.getTableName();
     }
 
+    public TableType getSourceTableType() {
+        return externalTableInfo.getTableType();
+    }
+
     public String getSourceTableHost() {
         return externalTableInfo.getHost();
     }
@@ -258,6 +279,10 @@ public class ExternalOlapTable extends OlapTable {
 
     public String getSourceTablePassword() {
         return externalTableInfo.getPassword();
+    }
+
+    public boolean isSourceTableLakeTable() {
+        return externalTableInfo.getTableType() == TableType.LAKE;
     }
 
     @Override
@@ -305,6 +330,9 @@ public class ExternalOlapTable extends OlapTable {
         clusterId = meta.getCluster_id();
         externalTableInfo.setDbId(meta.getDb_id());
         externalTableInfo.setTableId(meta.getTable_id());
+        if (meta.isSetTable_type()) {
+            externalTableInfo.setTableType(TableType.valueOf(meta.getTable_type()));
+        }
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {

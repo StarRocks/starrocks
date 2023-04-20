@@ -191,6 +191,14 @@ public class Table extends MetaObject implements Writable {
     public boolean isMaterializedView() {
         return type == TableType.MATERIALIZED_VIEW;
     }
+    
+    public boolean isOlapExternalTable() {
+        return type == TableType.OLAP_EXTERNAL;
+    }
+
+    public boolean isOlapMaterializedView() {
+        return type == TableType.MATERIALIZED_VIEW;
+    }
 
     public boolean isLakeTable() {
         return type == TableType.LAKE;
