@@ -199,7 +199,11 @@ The following table describes the parameters you need to configure in `StorageCr
 
 For information about how to choose a credential method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
+<<<<<<< HEAD
 ##### AWS S3-compatible storage
+=======
+##### S3-compatible storage system
+>>>>>>> 3da49b01a ([Doc] update s3-compatible storage description (#22011))
 
 If you choose an AWS S3-compatible storage system, such as MinIO, as storage for your Hive cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
 

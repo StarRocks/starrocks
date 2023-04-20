@@ -50,7 +50,11 @@ Broker Load supports the following storage systems:
 
 - Google GCS
 
+<<<<<<< HEAD
 - AWS S3-compatible storage system such as MinIO
+=======
+- Other S3-compatible storage system such as MinIO
+>>>>>>> 3da49b01a ([Doc] update s3-compatible storage description (#22011))
 
 ## How it works
 
@@ -195,7 +199,11 @@ WITH BROKER
 >
 > Broker Load supports accessing Google GCS only according to the S3A protocol. Therefore, when you load data from Google GCS, you must replace the prefix in the GCS URI you pass as a file path into `DATA INFILE` with `s3a://`.
 
+<<<<<<< HEAD
 #### Load data from an AWS S3-compatible storage
+=======
+#### Load data from other S3-compatible storage system
+>>>>>>> 3da49b01a ([Doc] update s3-compatible storage description (#22011))
 
 Use MinIO as an example. You can execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your MinIO bucket `bucket_gcs` into `table1` and `table2`, respectively:
 

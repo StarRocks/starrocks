@@ -67,9 +67,21 @@
   + [Sorted streaming aggregate](./using_starrocks/sorted_aggregate.md)
 + Integration
   + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
+<<<<<<< HEAD
   + Integrate with BI tools
     + [Apache Superset](./integrations/superset_support.md)
   + [Integrate with other tools and systems](./integrations/other_integrations/intro.md)
+=======
+  + BI tools
+    + [Hex](./integrations/BI_integrations/Hex.md)
+    + [Querybook](./integrations/BI_integrations/Querybook.md)
+    + [Apache Superset](./integrations/BI_integrations/Superset.md)
+    + [Tableau Desktop](./integrations/BI_integrations/Tableau_Desktop.md)
+  + IDE tools
+    + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
+    + [DBeaver](./integrations/IDE_integrations/DBeaver.md)
+  + [Other tools and systems](./integrations/other_integrations/intro.md)
+>>>>>>> 3da49b01a ([Doc] update s3-compatible storage description (#22011))
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)

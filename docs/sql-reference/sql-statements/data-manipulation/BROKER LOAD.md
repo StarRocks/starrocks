@@ -306,9 +306,15 @@ To create an Access/Secret key pair to access your Google GCS bucket, follow the
 
 5. Click the **Create new Key** button to create an Access/Secret key pair.
 
+<<<<<<< HEAD
 #### AWS S3-compatible storage system
 
 If you choose an AWS S3-compatible storage system, such as MinIO, configure `StorageCredentialParams` as follows:
+=======
+#### Other S3-compatible storage system
+
+If you choose other S3-compatible storage system, such as MinIO, configure `StorageCredentialParams` as follows:
+>>>>>>> 3da49b01a ([Doc] update s3-compatible storage description (#22011))
 
 ```SQL
 "aws.s3.enable_ssl" = "<true | false>",
