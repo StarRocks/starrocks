@@ -74,12 +74,12 @@ DEFINE_UNARY_FN_WITH_IMPL(HllSerializeImpl, hll) {
     return std::string(data, size);
 }
 
-StatusOr<ColumnPtr> HyperloglogFunctions::hll_serialize(FunctionContext* context, const Columns& columns) {
+ColumnPtr HyperloglogFunction::hll_serialize(FunctionContext* context, const Columns& columns) {
     return VectorizedStringStrictUnaryFunction<HllSerializeImpl>::evaluate<TYPE_HLL, TYPE_VARCHAR>(columns[0]);
 }
 
 // hll_deserialize
-StatusOr<ColumnPtr> HyperloglogFunctions::hll_deserialize(FunctionContext* context, const Columns& columns) {
+ColumnPtr HyperloglogFunction::hll_deserialize(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
     auto hll_column = HyperLogLogColumn::create();
     size_t size = columns[0]->size();
