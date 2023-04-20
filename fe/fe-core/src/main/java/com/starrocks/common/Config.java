@@ -2100,6 +2100,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static int lake_compaction_max_tasks = -1;
 
+    @ConfField(mutable = true)
+    public static int lake_compaction_history_size = 12;
+
+    @ConfField(mutable = true)
+    public static int lake_compaction_fail_history_size = 12;
+
     @ConfField
     public static int experimental_lake_publish_version_threads = 16;
 

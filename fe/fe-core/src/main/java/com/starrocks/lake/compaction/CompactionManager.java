@@ -163,8 +163,8 @@ public class CompactionManager {
     }
 
     @NotNull
-    public ConcurrentHashMap<PartitionIdentifier, CompactionContext> getRunningCompactions() {
-        return compactionScheduler.getRunningCompactions();
+    public List<CompactionRecord> getHistory() {
+        return compactionScheduler.getHistory();
     }
 
     public static CompactionManager loadCompactionManager(DataInput in) throws IOException {

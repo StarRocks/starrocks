@@ -26,21 +26,20 @@ import java.util.concurrent.TimeUnit;
 import javax.validation.constraints.NotNull;
 
 public class CompactionContext {
-    private long txnId;
-    private long startTs;
-    private long commitTs;
-    private long visibleTs;
-    private String partitionName;
+    private final String partitionName;
+    private final long txnId;
+    private final long startTs;
+    private volatile long commitTs;
+    private volatile long finishTs;
     private Map<Long, List<Long>> beToTablets;
     private List<Future<CompactResponse>> responseList;
     private VisibleStateWaiter visibleStateWaiter;
 
-    public CompactionContext() {
-        responseList = Lists.newArrayList();
-    }
-
-    public void setTxnId(long txnId) {
+    public CompactionContext(String partitionName, long txnId, long startTs) {
+        this.partitionName = partitionName;
         this.txnId = txnId;
+        this.startTs = startTs;
+        responseList = Lists.newArrayList();
     }
 
     public long getTxnId() {
@@ -83,10 +82,6 @@ public class CompactionContext {
         return beToTablets.values().stream().mapToInt(List::size).sum();
     }
 
-    public void setStartTs(long startTs) {
-        this.startTs = startTs;
-    }
-
     public long getStartTs() {
         return startTs;
     }
@@ -99,16 +94,12 @@ public class CompactionContext {
         return commitTs;
     }
 
-    public void setVisibleTs(long visibleTs) {
-        this.visibleTs = visibleTs;
+    public void setFinishTs(long finishTs) {
+        this.finishTs = finishTs;
     }
 
-    public long getVisibleTs() {
-        return visibleTs;
-    }
-
-    public void setFullPartitionName(String partitionName) {
-        this.partitionName = partitionName;
+    public long getFinishTs() {
+        return finishTs;
     }
 
     public String getFullPartitionName() {
