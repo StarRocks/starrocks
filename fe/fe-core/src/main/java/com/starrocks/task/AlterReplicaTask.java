@@ -189,7 +189,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
      *      So the replica's version should be larger than X. So we don't need to modify the replica version
      *      because its already looks like normal.
      */
-    public void handleFinishAlterTask() throws MetaNotFoundException {
+    public void handleFinishAlterTask() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb(getDbId());
         if (db == null) {
             throw new MetaNotFoundException("database " + getDbId() + " does not exist");
@@ -257,8 +257,11 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     public void run() {
         try {
             handleFinishAlterTask();
-        } catch (MetaNotFoundException e) {
-            LOG.warn("failed to handle finish alter task: {}, {}", getSignature(), e.getMessage());
+        } catch (Exception e) {
+            String errMsg = "failed to handle finish alter task: " + getSignature() + ", " + e.getMessage();
+            LOG.warn(errMsg);
+            setErrorMsg(errMsg);
+            setFailed(true);
         }
     }
 
