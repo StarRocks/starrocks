@@ -49,6 +49,7 @@ import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetListItem;
@@ -312,9 +313,9 @@ public class ConnectContext {
         try {
             Set<Long> defaultRoleIds;
             if (GlobalVariable.isActivateAllRolesOnLogin()) {
-                defaultRoleIds = this.getGlobalStateMgr().getAuthorizationManager().getRoleIdsByUser(user);
+                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(user);
             } else {
-                defaultRoleIds = this.getGlobalStateMgr().getAuthorizationManager().getDefaultRoleIdsByUser(user);
+                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationManager().getDefaultRoleIdsByUser(user);
             }
             this.currentRoleIds = defaultRoleIds;
         } catch (PrivilegeException e) {
@@ -584,7 +585,10 @@ public class ConnectContext {
     }
 
     public String getCurrentWarehouse() {
-        return currentWarehouse;
+        if (currentWarehouse != null) {
+            return currentWarehouse;
+        }
+        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     }
 
     public void setCurrentWarehouse(String currentWarehouse) {

@@ -28,12 +28,16 @@ public class TableScanDesc {
     private final LogicalScanOperator scanOperator;
     // join type of LogicalJoinOperator above scan operator
     private final JoinOperator parentJoinType;
+    private final boolean isLeft;
 
-    public TableScanDesc(Table table, int index, LogicalScanOperator scanOperator, JoinOperator parentJoinType) {
+    public TableScanDesc(Table table, int index,
+                         LogicalScanOperator scanOperator, JoinOperator parentJoinType,
+                         boolean isLeft) {
         this.table = table;
         this.index = index;
         this.scanOperator = scanOperator;
         this.parentJoinType = parentJoinType;
+        this.isLeft = isLeft;
     }
 
     public Table getTable() {
@@ -54,6 +58,30 @@ public class TableScanDesc {
 
     public LogicalScanOperator getScanOperator() {
         return scanOperator;
+    }
+
+    public boolean isMatch(TableScanDesc other) {
+        boolean matched =  table.equals(other.table);
+        if (!matched) {
+            return false;
+        }
+
+        // for
+        // query: a left join c
+        // mv: a inner join b left join c
+        if (parentJoinType.isInnerJoin()) {
+            return other.parentJoinType.isInnerJoin() || (other.parentJoinType.isLeftOuterJoin() && other.isLeft);
+        }
+
+        // for
+        // query: a inner join c
+        // mv: a left outer join b inner join c
+        if (parentJoinType.isLeftOuterJoin()) {
+            return (isLeft && other.parentJoinType.isInnerJoin())
+                    || (other.parentJoinType.isLeftOuterJoin() && isLeft == other.isLeft);
+        }
+
+        return false;
     }
 
     @Override

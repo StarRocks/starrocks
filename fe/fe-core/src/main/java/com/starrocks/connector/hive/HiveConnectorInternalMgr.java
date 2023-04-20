@@ -54,7 +54,7 @@ public class HiveConnectorInternalMgr {
         this.properties = properties;
         this.hdfsEnvironment = hdfsEnvironment;
         this.enableMetastoreCache = Boolean.parseBoolean(properties.getOrDefault("enable_metastore_cache", "true"));
-        this.hmsConf = new CachingHiveMetastoreConf(properties);
+        this.hmsConf = new CachingHiveMetastoreConf(properties, "hive");
 
         this.enableRemoteFileCache = Boolean.parseBoolean(properties.getOrDefault("enable_remote_file_cache", "true"));
         this.remoteFileConf = new CachingRemoteFileConf(properties);
@@ -116,7 +116,7 @@ public class HiveConnectorInternalMgr {
                     new ThreadFactoryBuilder().setNameFormat("hive-remote-files-refresh-%d").build());
             baseRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                     remoteFileIO,
-                    new ReentrantExecutor(refreshRemoteFileExecutor, remoteFileConf.getPerQueryCacheMaxSize()),
+                    new ReentrantExecutor(refreshRemoteFileExecutor, remoteFileConf.getRefreshMaxThreadNum()),
                     remoteFileConf.getCacheTtlSec(),
                     enableHmsEventsIncrementalSync ? NEVER_REFRESH : remoteFileConf.getCacheRefreshIntervalSec(),
                     remoteFileConf.getCacheMaxSize());

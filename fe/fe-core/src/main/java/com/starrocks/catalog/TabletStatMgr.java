@@ -40,7 +40,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.proto.TabletStatRequest;
@@ -59,6 +59,7 @@ import com.starrocks.thrift.TTabletStatResult;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -67,15 +68,21 @@ import java.util.concurrent.Future;
  * TabletStatMgr is for collecting tablet(replica) statistics from backends.
  * Each FE will collect by itself.
  */
-public class TabletStatMgr extends LeaderDaemon {
+public class TabletStatMgr extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletStatMgr.class);
 
     // for lake table
-    private Map<Long, Long> partitionToUpdatedVersion;
+    private final Map<Long, Long> partitionToUpdatedVersion;
+
+    private LocalDateTime lastWorkTimestamp = LocalDateTime.MIN;
 
     public TabletStatMgr() {
         super("tablet stat mgr", Config.tablet_stat_update_interval_second * 1000L);
         partitionToUpdatedVersion = Maps.newHashMap();
+    }
+
+    public LocalDateTime getLastWorkTimestamp() {
+        return lastWorkTimestamp;
     }
 
     @Override
@@ -118,6 +125,7 @@ public class TabletStatMgr extends LeaderDaemon {
         }
         LOG.info("finished to update index row num of all databases. cost: {} ms",
                 (System.currentTimeMillis() - start));
+        lastWorkTimestamp = LocalDateTime.now();
     }
 
     private void updateLocalTabletStat() {

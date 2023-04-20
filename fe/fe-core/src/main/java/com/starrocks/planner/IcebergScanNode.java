@@ -60,14 +60,11 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
-import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
-import org.apache.iceberg.expressions.Expression;
-import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -79,6 +76,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class IcebergScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
@@ -237,13 +236,16 @@ public class IcebergScanNode extends ScanNode {
             return;
         }
 
-
+        Map<StructLike, Long> partitionKeyToId = Maps.newHashMap();
         for (FileScanTask task : remoteFileDesc.getIcebergScanTasks()) {
             DataFile file = task.file();
             LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
             if (file.fileSizeInBytes() == 0) {
                 continue;
             }
+
+            StructLike partition = task.file().partition();
+            partitionKeyToId.putIfAbsent(partition, nextPartitionId());
 
             TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
@@ -277,12 +279,13 @@ public class IcebergScanNode extends ScanNode {
             scanRange.setHdfs_scan_range(hdfsScanRange);
             scanRangeLocations.setScan_range(scanRange);
 
-            // TODO: get hdfs block location information for scheduling, use iceberg meta cache
             TScanRangeLocation scanRangeLocation = new TScanRangeLocation(new TNetworkAddress("-1", -1));
             scanRangeLocations.addToLocations(scanRangeLocation);
 
             result.add(scanRangeLocations);
         }
+
+        scanNodePredicates.setSelectedPartitionIds(partitionKeyToId.values());
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -332,6 +335,16 @@ public class IcebergScanNode extends ScanNode {
                             .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
             }
+        }
+
+        if (detailLevel == TExplainLevel.VERBOSE && !isResourceMappingCatalog(srIcebergTable.getCatalogName())) {
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    srIcebergTable.getCatalogName(), srIcebergTable.getRemoteDbName(), srIcebergTable.getRemoteTableName());
+
+            output.append(prefix).append(
+                    String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
+                            partitionNames.size() == 0 ? 1 : partitionNames.size()));
+            output.append("\n");
         }
 
         return output.toString();

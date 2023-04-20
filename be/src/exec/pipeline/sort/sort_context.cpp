@@ -56,13 +56,7 @@ bool SortContext::is_partition_ready() const {
     });
 }
 
-void SortContext::cancel() {
-    for (const auto& sorter : _chunks_sorter_partitions) {
-        if (sorter) {
-            sorter->cancel();
-        }
-    }
-}
+void SortContext::cancel() {}
 
 StatusOr<ChunkPtr> SortContext::pull_chunk() {
     _init_merger();

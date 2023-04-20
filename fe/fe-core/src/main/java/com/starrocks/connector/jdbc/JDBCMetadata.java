@@ -16,12 +16,14 @@
 package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -32,7 +34,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class JDBCMetadata implements ConnectorMetadata {
 
@@ -67,9 +68,7 @@ public class JDBCMetadata implements ConnectorMetadata {
     @Override
     public List<String> listDbNames() {
         try (Connection connection = getConnection()) {
-            return schemaResolver.listSchemas(connection).stream()
-                    .map(String::toLowerCase)
-                    .collect(Collectors.toList());
+            return Lists.newArrayList(schemaResolver.listSchemas(connection));
         } catch (SQLException e) {
             throw new StarRocksConnectorException(e.getMessage());
         }
@@ -95,7 +94,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                 ImmutableList.Builder<String> list = ImmutableList.builder();
                 while (resultSet.next()) {
                     String tableName = resultSet.getString("TABLE_NAME");
-                    list.add(tableName.toLowerCase());
+                    list.add(tableName);
                 }
                 return list.build();
             }
@@ -112,7 +111,8 @@ public class JDBCMetadata implements ConnectorMetadata {
             if (fullSchema.isEmpty()) {
                 return null;
             }
-            return schemaResolver.getTable(0, tblName, fullSchema, dbName, properties);
+            return schemaResolver.getTable(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+                    tblName, fullSchema, dbName, properties);
         } catch (SQLException | DdlException e) {
             LOG.warn(e.getMessage());
             return null;

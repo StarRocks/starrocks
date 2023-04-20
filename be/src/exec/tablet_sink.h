@@ -336,7 +336,7 @@ public:
 
 private:
     template <LogicalType LT>
-    void _validate_decimal(RuntimeState* state, Column* column, const SlotDescriptor* desc,
+    void _validate_decimal(RuntimeState* state, Chunk* chunk, Column* column, const SlotDescriptor* desc,
                            std::vector<uint8_t>* validate_selection);
     // This method will change _validate_selection
     void _validate_data(RuntimeState* state, Chunk* chunk);
@@ -404,6 +404,7 @@ private:
     bool _need_gen_rollup = false;
     int _tuple_desc_id = -1;
     std::string _merge_condition;
+    TPartialUpdateMode::type _partial_update_mode;
 
     // this is tuple descriptor of destination OLAP table
     TupleDescriptor* _output_tuple_desc = nullptr;
@@ -499,8 +500,6 @@ private:
     bool _null_expr_in_auto_increment = false;
 
     bool _miss_auto_increment_column = false;
-
-    bool _abort_delete = false;
 
     std::unique_ptr<ThreadPoolToken> _automatic_partition_token;
 

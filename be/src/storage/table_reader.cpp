@@ -111,9 +111,8 @@ Status TableReader::multi_get(Chunk& keys, const std::vector<std::string>& value
     std::vector<uint8_t> validate_selection;
     std::vector<uint32_t> validate_select_idx;
     validate_selection.assign(num_rows, 1);
-    int invalid_row_index = 0;
-    RETURN_IF_ERROR(_partition_param->find_tablets(&keys, &partitions, &tablet_indexes, &validate_selection,
-                                                   &invalid_row_index, 0, nullptr));
+    RETURN_IF_ERROR(_partition_param->find_tablets(&keys, &partitions, &tablet_indexes, &validate_selection, nullptr, 0,
+                                                   nullptr));
     // Arrange selection_idx by merging _validate_selection
     // If chunk num_rows is 6
     // _validate_selection is [1, 0, 0, 0, 1, 1]

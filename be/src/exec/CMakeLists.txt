@@ -93,6 +93,7 @@ set(EXEC_FILES
     hdfs_scanner_text.cpp
     json_scanner.cpp
     json_parser.cpp
+    avro_scanner.cpp
     project_node.cpp
     dict_decode_node.cpp
     repeat_node.cpp
@@ -125,17 +126,21 @@ set(EXEC_FILES
     schema_scanner/schema_be_txns_scanner.cpp
     schema_scanner/schema_be_configs_scanner.cpp
     schema_scanner/schema_be_threads_scanner.cpp
+    schema_scanner/schema_be_logs_scanner.cpp
     schema_scanner/schema_fe_tablet_schedules_scanner.cpp
     schema_scanner/schema_be_compactions_scanner.cpp
+    schema_scanner/schema_be_bvars_scanner.cpp
     schema_scanner/schema_helper.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
+    sorting/merge_path.cpp
     sorting/merge_cascade.cpp
     sorting/sort_column.cpp
     sorting/sort_permute.cpp
     connector_scan_node.cpp
     pipeline/exchange/exchange_merge_sort_source_operator.cpp
+    pipeline/exchange/exchange_parallel_merge_source_operator.cpp
     pipeline/exchange/exchange_sink_operator.cpp
     pipeline/exchange/exchange_source_operator.cpp
     pipeline/exchange/local_exchange.cpp
@@ -186,6 +191,7 @@ set(EXEC_FILES
     pipeline/sort/local_partition_topn_context.cpp
     pipeline/sort/local_merge_sort_source_operator.cpp
     pipeline/sort/spillable_partition_sort_sink_operator.cpp
+    pipeline/sort/local_parallel_merge_sort_source_operator.cpp
     pipeline/sort/sort_context.cpp
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
@@ -219,6 +225,8 @@ set(EXEC_FILES
     pipeline/hashjoin/hash_join_build_operator.cpp
     pipeline/hashjoin/hash_join_probe_operator.cpp
     pipeline/hashjoin/hash_joiner_factory.cpp
+    pipeline/hashjoin/spillable_hash_join_build_operator.cpp
+    pipeline/hashjoin/spillable_hash_join_probe_operator.cpp
     pipeline/set/except_context.cpp
     pipeline/set/except_build_sink_operator.cpp
     pipeline/set/except_probe_sink_operator.cpp
@@ -248,6 +256,7 @@ set(EXEC_FILES
     query_cache/lane_arbiter.cpp
     query_cache/conjugate_operator.cpp
     query_cache/ticket_checker.cpp
+    spill/spill_components.cpp
     spill/spiller.cpp
     spill/spiller_factory.cpp
     spill/spill_components.cpp

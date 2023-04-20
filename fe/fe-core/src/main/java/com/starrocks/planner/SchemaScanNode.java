@@ -75,6 +75,12 @@ public class SchemaScanNode extends ScanNode {
     private Long txnId = null;
     private String type = null;
     private String state = null;
+    private Long logStartTs = null;
+    private Long logEndTs = null;
+    private String logLevel = null;
+    private String logPattern = null;
+    private Long logLimit = null;
+
     private List<TScanRangeLocations> beScanRanges = null;
 
     public void setSchemaDb(String schemaDb) {
@@ -192,6 +198,21 @@ public class SchemaScanNode extends ScanNode {
         if (state != null) {
             msg.schema_scan_node.setState(state);
         }
+        if (logStartTs != null) {
+            msg.schema_scan_node.setLog_start_ts(logStartTs);
+        }
+        if (logEndTs != null) {
+            msg.schema_scan_node.setLog_end_ts(logEndTs);
+        }
+        if (logLevel != null) {
+            msg.schema_scan_node.setLog_level(logLevel);
+        }
+        if (logPattern != null) {
+            msg.schema_scan_node.setLog_pattern(logPattern);
+        }
+        if (logLimit != null) {
+            msg.schema_scan_node.setLog_limit(logLimit);
+        }
         // setting limit for the scanner may cause query to return less rows than expected
         // but this is for the purpose of protect FE resource usage, so it's acceptable
         if (getLimit() > 0) {
@@ -227,6 +248,26 @@ public class SchemaScanNode extends ScanNode {
         this.state = state;
     }
 
+    public void setLogStartTs(long logStartTs) {
+        this.logStartTs = logStartTs;
+    }
+
+    public void setLogEndTs(long logEndTs) {
+        this.logEndTs = logEndTs;
+    }
+
+    public void setLogLevel(String logLevel) {
+        this.logLevel = logLevel;
+    }
+
+    public void setLogPattern(String logPattern) {
+        this.logPattern = logPattern;
+    }
+
+    public void setLogLimit(long logLimit) {
+        this.logLimit = logLimit;
+    }
+
     public boolean isBeSchemaTable() {
         return SchemaTable.isBeSchemaTable(tableName);
     }
@@ -235,7 +276,7 @@ public class SchemaScanNode extends ScanNode {
         for (Backend be : GlobalStateMgr.getCurrentSystemInfo().getIdToBackend().values()) {
             // if user specifies BE id, we try to scan all BEs(including bad BE)
             // if user doesn't specify BE id, we only scan live BEs
-            if ((be.isAlive() && beId == null) || be.getId() == beId) {
+            if ((be.isAlive() && beId == null) || (beId != null && beId.equals(be.getId()))) {
                 if (beScanRanges == null) {
                     beScanRanges = Lists.newArrayList();
                 }

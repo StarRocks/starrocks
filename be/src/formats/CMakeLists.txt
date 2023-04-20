@@ -17,7 +17,6 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
 add_library(Formats STATIC
         csv/array_converter.cpp
         csv/array_reader.cpp
-        csv/binary_converter.cpp
         csv/boolean_converter.cpp
         csv/converter.cpp
         csv/csv_reader.cpp
@@ -30,9 +29,14 @@ add_library(Formats STATIC
         csv/numeric_converter.cpp
         csv/nullable_converter.cpp
         csv/default_value_converter.cpp
+        csv/string_converter.cpp
+        csv/varbinary_converter.cpp
         json/nullable_column.cpp
         json/numeric_column.cpp
         json/binary_column.cpp
+        avro/nullable_column.cpp
+        avro/numeric_column.cpp
+        avro/binary_column.cpp
         orc/orc_chunk_reader.cpp
         orc/orc_input_stream.cpp
         orc/orc_mapping.cpp

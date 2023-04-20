@@ -408,6 +408,7 @@ public class ShowExecutorTest {
         ShowDbStmt stmt = new ShowDbStmt(null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchBlockCatalog());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ShowResultSet resultSet = executor.execute();
     }
 
@@ -1151,8 +1152,9 @@ public class ShowExecutorTest {
         Assert.assertEquals("test_hive", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE EXTERNAL CATALOG `test_hive`\n" +
                 "comment \"hive_test\"\n" +
-                "PROPERTIES (\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
-                "\"type\"  =  \"hive\"\n)", resultSet.getResultRows().get(0).get(1));
+                "PROPERTIES (\"type\"  =  \"hive\",\n" +
+                "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\"\n" +
+                ")", resultSet.getResultRows().get(0).get(1));
     }
 
     @Test

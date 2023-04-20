@@ -37,8 +37,6 @@ public class SetWarehouseStmtTest {
         AnalyzeTestUtil.init();
         StarRocksAssert starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1").useDatabase("tbl1");
-        String createWarehouse = "create warehouse aaa";
-        starRocksAssert.withWarehouse(createWarehouse);
         ctx = new ConnectContext(null);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
     }

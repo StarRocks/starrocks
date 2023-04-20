@@ -160,6 +160,13 @@ public:
         return _global_dict_columns_valid_info;
     }
 
+private:
+    Status _flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data);
+
+    Status _flush_delete_file(const SegmentPB& segment_pb, butil::IOBuf& data);
+
+    Status _flush_update_file(const SegmentPB& segment_pb, butil::IOBuf& data);
+
 protected:
     RowsetWriterContext _context;
     std::shared_ptr<FileSystem> _fs;
@@ -167,21 +174,24 @@ protected:
     std::unique_ptr<RowsetTxnMetaPB> _rowset_txn_meta_pb;
     SegmentWriterOptions _writer_options;
 
-    int _num_segment{0};
-    int _num_delfile{0};
+    int _num_segment = 0;
+    int _num_delfile = 0;
+    int _num_uptfile = 0;
     vector<uint32> _delfile_idxes;
     vector<std::string> _tmp_segment_files;
     // mutex lock for vectorized add chunk and flush
     std::mutex _lock;
 
     // counters and statistics maintained during data write
-    int64_t _num_rows_written;
+    int64_t _num_rows_written = 0;
     int64_t _num_rows_flushed = 0;
     std::vector<int64_t> _num_rows_of_tmp_segment_files;
-    int64_t _num_rows_del;
-    int64_t _total_row_size;
-    int64_t _total_data_size;
-    int64_t _total_index_size;
+    int64_t _num_rows_del = 0;
+    int64_t _total_row_size = 0;
+    int64_t _total_data_size = 0;
+    int64_t _total_index_size = 0;
+    int64_t _num_rows_upt = 0;
+    int64_t _total_update_row_size = 0;
 
     bool _is_pending = false;
     bool _already_built = false;

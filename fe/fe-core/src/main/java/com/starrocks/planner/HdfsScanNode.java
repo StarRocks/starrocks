@@ -23,8 +23,8 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.RemoteScanRangeLocations;
-import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.server.GlobalStateMgr;
@@ -91,8 +91,7 @@ public class HdfsScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
-        HiveConnector connector = (HiveConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
-                getConnector(catalog);
+        Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
         }
@@ -204,10 +203,7 @@ public class HdfsScanNode extends ScanNode {
             msg.hdfs_scan_node.setTable_name(hiveTable.getName());
         }
 
-        // TODO(SmithCruise)
-        // We only set cloudConfiguration when CloudType is non-default.
-        // Because BE didn't handle CloudType.DEFAULT situation now
-        if (cloudConfiguration != null && cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+        if (cloudConfiguration != null) {
             TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
             cloudConfiguration.toThrift(tCloudConfiguration);
             msg.hdfs_scan_node.setCloud_configuration(tCloudConfiguration);

@@ -353,6 +353,12 @@ Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescri
         RuntimeFilterProbeDescriptor* rf_desc = it.second;
         RETURN_IF_ERROR(rf_desc->prepare(state, row_desc, profile));
     }
+    if (state != nullptr) {
+        const TQueryOptions& options = state->query_options();
+        if (options.__isset.runtime_filter_early_return_selectivity) {
+            _early_return_selectivity = options.runtime_filter_early_return_selectivity;
+        }
+    }
     return Status::OK();
 }
 Status RuntimeFilterProbeCollector::open(RuntimeState* state) {
@@ -497,8 +503,8 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
         auto true_count = SIMD::count_nonzero(selection);
         eval_context.run_filter_nums += 1;
         double selectivity = true_count * 1.0 / chunk_size;
-        if (selectivity <= 0.5) {     // useful filter
-            if (selectivity < 0.05) { // very useful filter, could early return
+        if (selectivity <= 0.5) {                          // useful filter
+            if (selectivity < _early_return_selectivity) { // very useful filter, could early return
                 seletivity_map.clear();
                 seletivity_map.emplace(selectivity, rf_desc);
                 chunk->filter(selection);

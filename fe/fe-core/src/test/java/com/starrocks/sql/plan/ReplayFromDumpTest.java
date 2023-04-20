@@ -59,11 +59,11 @@ public class ReplayFromDumpTest {
         UtFrameUtils.createMinStarRocksCluster();
         // Should disable Dynamic Partition in replay dump test
         Config.dynamic_partition_enable = false;
+        Config.tablet_sched_disable_colocate_overall_balance = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setJoinImplementationMode("auto");
-        connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
@@ -164,7 +164,6 @@ public class ReplayFromDumpTest {
             queryDumpInfo.setSessionVariable(sessionVariable);
         }
         queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        queryDumpInfo.getSessionVariable().setEnableLocalShuffleAgg(false);
         queryDumpInfo.getSessionVariable().setCboPushDownAggregateMode(-1);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
@@ -364,14 +363,14 @@ public class ReplayFromDumpTest {
                 "  |  equal join conjunct: [257: ss_ticket_number, INT, false] = [280: sr_ticket_number, INT, true]\n" +
                 "  |  equal join conjunct: [256: ss_item_sk, INT, false] = [279: sr_item_sk, INT, true]\n" +
                 "  |  other predicates: 280: sr_ticket_number IS NULL\n" +
-                "  |  output columns: 256, 258, 260, 266, 267, 269\n" +
+                "  |  output columns: 256, 258, 260, 266, 267, 269, 280\n" +
                 "  |  cardinality: 37372757"));
         Assert.assertTrue(replayPair.second, replayPair.second.contains("15:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [331: ws_order_number, INT, false] = [365: wr_order_number, INT, true]\n" +
                 "  |  equal join conjunct: [330: ws_item_sk, INT, false] = [364: wr_item_sk, INT, true]\n" +
                 "  |  other predicates: 365: wr_order_number IS NULL\n" +
-                "  |  output columns: 330, 332, 335, 348, 349, 351\n" +
+                "  |  output columns: 330, 332, 335, 348, 349, 351, 365\n" +
                 "  |  cardinality: 7914602"));
     }
 
@@ -441,6 +440,7 @@ public class ReplayFromDumpTest {
 
     @Test
     public void testCrossReorder() throws Exception {
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
         RuleSet mockRule = new RuleSet() {
             @Override
             public void addJoinTransformationRules() {
@@ -464,6 +464,7 @@ public class ReplayFromDumpTest {
                 "  |  other join predicates: CASE WHEN CAST(6: v3 AS BOOLEAN) THEN CAST(11: v2 AS VARCHAR) " +
                 "WHEN CAST(3: v3 AS BOOLEAN) THEN '123' ELSE CAST(12: v3 AS VARCHAR) END > '1', " +
                 "(2: v2 = CAST(8: v2 AS VARCHAR(1048576))) OR (3: v3 = 8: v2)\n"));
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
     }
 
     @Test
@@ -790,5 +791,61 @@ public class ReplayFromDumpTest {
                 "  |  - filter_id = 3, build_expr = (58: r_regionkey), remote = false\n" +
                 "  |  output columns: 50\n" +
                 "  |  cardinality: 5"));
+    }
+
+    @Test
+    public void testHiveTPCH02UsingCatalog() throws Exception {
+        FeConstants.isReplayFromQueryDump = true;
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch02_catalog"), null,
+                        TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("5:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 17: ps_partkey = 1: p_partkey"));
+        FeConstants.isReplayFromQueryDump = false;
+    }
+
+    @Test
+    public void testHiveTPCH05UsingCatalog() throws Exception {
+        FeConstants.isReplayFromQueryDump = true;
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch05_catalog"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("15:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 20: l_suppkey = 34: s_suppkey\n" +
+                "  |  equal join conjunct: 4: c_nationkey = 37: s_nationkey\n" +
+                "  |  \n" +
+                "  |----14:EXCHANGE\n" +
+                "  |    \n" +
+                "  12:EXCHANGE"));
+        FeConstants.isReplayFromQueryDump = false;
+    }
+
+    @Test
+    public void testHiveTPCH08UsingCatalog() throws Exception {
+        FeConstants.isReplayFromQueryDump = true;
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch08_catalog"), null, TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 33:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 52: n_regionkey = 58: r_regionkey"));
+        FeConstants.isReplayFromQueryDump = false;
+    }
+
+    @Test
+    public void testTPCH11() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            Pair<QueryDumpInfo, String> replayPair =
+                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
+            Assert.assertTrue(replayPair.second, replayPair.second.contains(
+                    "n_name,[<place-holder> = 'GERMANY'])\n" +
+                            "     dict_col=n_name"));
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
     }
 }

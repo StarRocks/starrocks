@@ -468,56 +468,6 @@ public class ScalarType extends Type implements Cloneable {
     }
 
     /**
-     * Returns true if t2 can be fully compatible with t1.
-     * fully compatible means that all possible values of t1 can be represented by t2,
-     * and no null values will be produced if we cast t1 as t2.
-     * This is closely related to the implementation by BE.
-     * @TODO: the currently implementation is conservative, we can add more rules later.
-     */
-    public static boolean isFullyCompatible(Type t1, Type t2) {
-        if (t1.isScalarType() && t2.isScalarType()) {
-            return isFullyCompatible((ScalarType) t1, (ScalarType) t2);
-        }
-        if (t1.isArrayType() && t2.isArrayType()) {
-            return isFullyCompatible(((ArrayType) t1).getItemType(), ((ArrayType) t2).getItemType());
-        }
-        return false;
-    }
-
-    public static boolean isFullyCompatible(ScalarType t1, ScalarType t2) {
-        // same type
-        if (t1.equals(t2)) {
-            return true;
-        }
-        if (t1.isBoolean()) {
-            return t2.isIntegerType() || t2.isLargeIntType() || t2.isStringType() || t2.isNumericType();
-        }
-        if (t1.isIntegerType() || t1.isLargeIntType()) {
-            if (t2.isIntegerType() || t2.isLargeIntType()) {
-                return t1.ordinal() < t2.ordinal();
-            }
-            if (t2.isStringType()) {
-                return true;
-            }
-            return false;
-        }
-        if (t1.isDecimalV3()) {
-            if (t2.isDecimalV3()) {
-                return t2.precision >= t1.precision && t2.scale >= t1.scale;
-            }
-            if (t2.isStringType() || t2.isFloatingPointType()) {
-                return true;
-            }
-            return false;
-        }
-        // both string
-        if (t1.isStringType() && t2.isStringType()) {
-            return true;
-        }
-        return false;
-    }
-
-    /**
      * Returns true t1 can be implicitly cast to t2, false otherwise.
      * If strict is true, only consider casts that result in no loss of precision.
      */
@@ -614,6 +564,9 @@ public class ScalarType extends Type implements Cloneable {
             case FUNCTION:
                 stringBuilder.append(type.toString().toLowerCase());
                 break;
+            case NULL_TYPE:
+                stringBuilder.append(type);
+                break;
             default:
                 stringBuilder.append("unknown type: ").append(type);
                 break;
@@ -662,6 +615,45 @@ public class ScalarType extends Type implements Cloneable {
                 break;
             }
         }
+    }
+
+    @Override
+    public boolean isFullyCompatible(Type other) {
+        if (!other.isScalarType()) {
+            return false;
+        }
+
+        if (this.equals(other)) {
+            return true;
+        }
+
+        ScalarType t = (ScalarType) other;
+        if (isBoolean()) {
+            return t.isIntegerType() || t.isLargeIntType() || t.isStringType() || t.isNumericType();
+        }
+        if (isIntegerType() || isLargeIntType()) {
+            if (t.isIntegerType() || t.isLargeIntType()) {
+                return ordinal() < t.ordinal();
+            }
+            if (t.isStringType()) {
+                return true;
+            }
+            return false;
+        }
+        if (isDecimalV3()) {
+            if (t.isDecimalV3()) {
+                return t.precision >= precision && t.scale >= scale;
+            }
+            if (t.isStringType() || t.isFloatingPointType()) {
+                return true;
+            }
+            return false;
+        }
+        // both string
+        if (isStringType() && t.isStringType()) {
+            return true;
+        }
+        return false;
     }
 
     public int decimalPrecision() {

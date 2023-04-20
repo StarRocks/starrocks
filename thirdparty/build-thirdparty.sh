@@ -522,7 +522,7 @@ build_librdkafka() {
 
     $CMAKE_CMD -DCMAKE_LIBRARY_PATH=$TP_INSTALL_DIR/lib -DCMAKE_INCLUDE_PATH=$TP_INSTALL_DIR/include \
         -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DRDKAFKA_BUILD_STATIC=ON -DWITH_SASL=OFF -DWITH_SASL_SCRAM=ON \
-        -DRDKAFKA_BUILD_EXAMPLES=OFF -DRDKAFKA_BUILD_TESTS=OFF -DWITH_SASL_OAUTHBEARER=ON -DCMAKE_INSTALL_LIBDIR=lib
+        -DRDKAFKA_BUILD_EXAMPLES=OFF -DRDKAFKA_BUILD_TESTS=OFF -DWITH_SSL=ON -DCMAKE_INSTALL_LIBDIR=lib
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -955,7 +955,16 @@ build_jemalloc() {
     unset CFLAGS
     export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
     cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
-    ./configure --prefix=${TP_INSTALL_DIR} --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared
+    # jemalloc supports a runtime page size that's smaller or equal to the build
+    # time one, but aborts on a larger one. If not defined, it falls back to the
+    # the build system's _SC_PAGESIZE, which in many architectures can vary. Set
+    # this to 64K (2^16) for arm architecture, and default 4K on x86 for performance.
+    local addition_opts=" --with-lg-page=12"
+    if [[ $MACHINE_TYPE == "aarch64" ]] ; then
+        # change to 64K for arm architecture
+        addition_opts=" --with-lg-page=16"
+    fi
+    ./configure --prefix=${TP_INSTALL_DIR} --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
     make -j$PARALLEL
     make install
     mv $TP_INSTALL_DIR/lib/libjemalloc.a $TP_INSTALL_DIR/lib/libjemalloc_for_starrocks.a

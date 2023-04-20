@@ -42,6 +42,15 @@ public class MetaUtils {
 
     private static final Logger LOG = LogManager.getLogger(MVUtils.class);
 
+    public static void checkCatalogExistAndReport(String catalogName) throws AnalysisException {
+        if (catalogName == null) {
+            ErrorReport.reportAnalysisException("Catalog is null");
+        }
+        if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+        }
+    }
+
     public static void checkDbNullAndReport(Database db, String name) throws AnalysisException {
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, name);
@@ -76,6 +85,14 @@ public class MetaUtils {
         return db;
     }
 
+    public static Database getDatabase(String catalogName, String dbName) {
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        if (db == null) {
+            throw new SemanticException("Database %s is not found", dbName);
+        }
+        return db;
+    }
+
     public static Table getTable(TableName tableName) {
         Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
         if (db == null) {
@@ -96,6 +113,14 @@ public class MetaUtils {
         Table table = db.getTable(tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName.getTbl());
+        }
+        return table;
+    }
+
+    public static Table getTable(String catalogName, String dbName, String tableName) {
+        Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+        if (table == null) {
+            throw new SemanticException("Table %s is not found", tableName);
         }
         return table;
     }
@@ -138,5 +163,4 @@ public class MetaUtils {
                 originStmt.originStmt);
         return Maps.newConcurrentMap();
     }
-
 }

@@ -30,77 +30,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
 
-        String deptsTable = "" +
-                "CREATE TABLE depts(    \n" +
-                "   deptno INT NOT NULL,\n" +
-                "   name VARCHAR(20)    \n" +
-                ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`deptno`)\n" +
-                "DISTRIBUTED BY HASH(`deptno`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"unique_constraints\" = \"deptno\"\n," +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String locationsTable = "" +
-                "CREATE TABLE locations(\n" +
-                "    locationid INT NOT NULL,\n" +
-                "    state CHAR(2), \n" +
-                "   name VARCHAR(20)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`locationid`)\n" +
-                "DISTRIBUTED BY HASH(`locationid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String ependentsTable = "" +
-                "CREATE TABLE dependents(\n" +
-                "   empid INT NOT NULL,\n" +
-                "   name VARCHAR(20)   \n" +
-                ") ENGINE=OLAP \n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        String empsTable = "" +
-                "CREATE TABLE emps\n" +
-                "(\n" +
-                "    empid      INT         NOT NULL,\n" +
-                "    deptno     INT         NOT NULL,\n" +
-                "    locationid INT         NOT NULL,\n" +
-                "    commission INT         NOT NULL,\n" +
-                "    name       VARCHAR(20) NOT NULL,\n" +
-                "    salary     DECIMAL(18, 2)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"foreign_key_constraints\" = \"(deptno) REFERENCES depts(deptno)\"," +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-
-        String empsWithBigintTable = "" +
-                "CREATE TABLE emps_bigint\n" +
-                "(\n" +
-                "    empid      BIGINT        NOT NULL,\n" +
-                "    deptno     BIGINT         NOT NULL,\n" +
-                "    locationid BIGINT         NOT NULL,\n" +
-                "    commission BIGINT         NOT NULL,\n" +
-                "    name       VARCHAR(20) NOT NULL,\n" +
-                "    salary     DECIMAL(18, 2)\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`empid`)\n" +
-                "DISTRIBUTED BY HASH(`empid`) BUCKETS 12\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ");";
-        starRocksAssert
-                .withTable(deptsTable)
-                .withTable(empsTable)
-                .withTable(locationsTable)
-                .withTable(ependentsTable)
-                .withTable(empsWithBigintTable);
-
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer` (\n" +
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
                 "    `c_name` varchar(26) NOT NULL COMMENT \"\",\n" +
@@ -416,25 +345,55 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void testMultiOuterJoinQueryComplete() {
-        for (String joinType : outerJoinTypes) {
-            String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
-                    "" + joinType + " join locations on emps.locationid = locations.locationid";
-            testRewriteOK(mv, "select count(*) from " +
-                    "emps " + joinType + " join locations on emps.locationid = locations.locationid");
-            testRewriteOK(mv, "select empid as col2, emps.locationid from " +
-                    "emps " + joinType + " join locations on emps.locationid = locations.locationid " +
-                    "and emps.locationid > 10");
-            testRewriteOK(mv, "select count(*) from " +
-                    "emps " + joinType + " join locations on emps.locationid = locations.locationid " +
-                    "and emps.locationid > 10");
-            testRewriteOK(mv, "select empid as col2, locations.locationid from " +
-                    "emps " + joinType + " join locations on emps.locationid = locations.locationid " +
-                    "and locations.locationid > 10");
-            testRewriteFail(mv, "select empid as col2, locations.locationid from " +
-                    "emps inner join locations on emps.locationid = locations.locationid " +
-                    "and locations.locationid > 10");
-        }
+    public void testLeftOuterJoinQueryComplete() {
+        String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                " left join locations on emps.locationid = locations.locationid";
+        testRewriteOK(mv, "select count(*) from " +
+                "emps  left join locations on emps.locationid = locations.locationid");
+        testRewriteOK(mv, "select empid as col2, emps.locationid from " +
+                "emps  left join locations on emps.locationid = locations.locationid " +
+                "where emps.deptno > 10");
+        testRewriteOK(mv, "select count(*) from " +
+                "emps  left join locations on emps.locationid = locations.locationid " +
+                "where emps.deptno > 10");
+        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
+                "emps left join locations on emps.locationid = locations.locationid " +
+                "where emps.locationid > 10");
+        // TODO: Query's left outer join will be converted to Inner Join.
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps left join locations on emps.locationid = locations.locationid " +
+                "where locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and emps.locationid > 10");
+    }
+
+    @Test
+    public void testRightOuterJoinQueryComplete() {
+        String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                " right join locations on emps.locationid = locations.locationid";
+        testRewriteOK(mv, "select count(*) from " +
+                "emps  right join locations on emps.locationid = locations.locationid");
+        // TODO: Query's right outer join will be converted to Inner Join.
+        testRewriteFail(mv, "select empid as col2, emps.locationid from " +
+                "emps  right join locations on emps.locationid = locations.locationid " +
+                "where emps.deptno > 10");
+        // TODO: Query's right outer join will be converted to Inner Join.
+        testRewriteFail(mv, "select count(*) from " +
+                "emps  right join locations on emps.locationid = locations.locationid " +
+                "where emps.deptno > 10");
+        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
+                "emps  right join locations on emps.locationid = locations.locationid " +
+                "where locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and emps.locationid > 10");
     }
 
     @Test
@@ -1657,6 +1616,19 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testViewDeltaJoinUKFK14() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join dependents using (empid)"
+                + "where emps.empid = 1";
+
+        String query = "select emps.empid, dependents.name from emps\n"
+                + "left outer join dependents using (empid)\n"
+                + "where emps.empid = 1";
+        testRewriteOK(mv, query);
+    }
+
+    @Test
     public void testViewDeltaColumnCaseSensitiveOnDuplicate() throws Exception {
         {
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
@@ -2007,6 +1979,106 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             starRocksAssert.dropTable("tbl_01");
             starRocksAssert.dropTable("tbl_02");
             starRocksAssert.dropTable("tbl_03");
+        }
+    }
+
+    @Test
+    public void testJoinTypeMismatchRewriteForViewDelta() throws Exception {
+        {
+            String query = "select sum(lo_linenumber) from `lineorder`" +
+                    " LEFT OUTER JOIN `dates`" +
+                    " ON `lineorder`.`lo_orderdate` = `dates`.`d_datekey` WHERE `lineorder`.`lo_orderdate` = 19961001;";
+
+            String mv = "SELECT\n" +
+                    "       l.LO_ORDERKEY AS LO_ORDERKEY,\n" +
+                    "       l.LO_LINENUMBER AS LO_LINENUMBER,\n" +
+                    "       l.LO_CUSTKEY AS LO_CUSTKEY,\n" +
+                    "       l.LO_PARTKEY AS LO_PARTKEY,\n" +
+                    "       l.LO_SUPPKEY AS LO_SUPPKEY,\n" +
+                    "       l.LO_ORDERDATE AS LO_ORDERDATE,\n" +
+                    "       l.LO_ORDERPRIORITY AS LO_ORDERPRIORITY,\n" +
+                    "       l.LO_SHIPPRIORITY AS LO_SHIPPRIORITY,\n" +
+                    "       l.LO_QUANTITY AS LO_QUANTITY,\n" +
+                    "       l.LO_EXTENDEDPRICE AS LO_EXTENDEDPRICE,\n" +
+                    "       l.LO_ORDTOTALPRICE AS LO_ORDTOTALPRICE,\n" +
+                    "       l.LO_DISCOUNT AS LO_DISCOUNT,\n" +
+                    "       l.LO_REVENUE AS LO_REVENUE,\n" +
+                    "       l.LO_SUPPLYCOST AS LO_SUPPLYCOST,\n" +
+                    "       l.LO_TAX AS LO_TAX,\n" +
+                    "       l.LO_COMMITDATE AS LO_COMMITDATE,\n" +
+                    "       l.LO_SHIPMODE AS LO_SHIPMODE,\n" +
+                    "       c.C_NAME AS C_NAME,\n" +
+                    "       c.C_ADDRESS AS C_ADDRESS,\n" +
+                    "       c.C_CITY AS C_CITY,\n" +
+                    "       c.C_NATION AS C_NATION,\n" +
+                    "       c.C_REGION AS C_REGION,\n" +
+                    "       c.C_PHONE AS C_PHONE,\n" +
+                    "       c.C_MKTSEGMENT AS C_MKTSEGMENT,\n" +
+                    "       s.S_NAME AS S_NAME,\n" +
+                    "       s.S_ADDRESS AS S_ADDRESS,\n" +
+                    "       s.S_CITY AS S_CITY,\n" +
+                    "       s.S_NATION AS S_NATION,\n" +
+                    "       s.S_REGION AS S_REGION,\n" +
+                    "       s.S_PHONE AS S_PHONE,\n" +
+                    "       p.P_NAME AS P_NAME,\n" +
+                    "       p.P_MFGR AS P_MFGR,\n" +
+                    "       p.P_CATEGORY AS P_CATEGORY,\n" +
+                    "       p.P_BRAND AS P_BRAND,\n" +
+                    "       p.P_COLOR AS P_COLOR,\n" +
+                    "       p.P_TYPE AS P_TYPE,\n" +
+                    "       p.P_SIZE AS P_SIZE,\n" +
+                    "       p.P_CONTAINER AS P_CONTAINER,\n" +
+                    "       d.d_date AS d_date,\n" +
+                    "       d.d_dayofweek AS d_dayofweek,\n" +
+                    "       d.d_month AS d_month,\n" +
+                    "       d.d_year AS d_year,\n" +
+                    "       d.d_yearmonthnum AS d_yearmonthnum,\n" +
+                    "       d.d_yearmonth AS d_yearmonth,\n" +
+                    "       d.d_daynuminweek AS d_daynuminweek,\n" +
+                    "       d.d_daynuminmonth AS d_daynuminmonth,\n" +
+                    "       d.d_daynuminyear AS d_daynuminyear,\n" +
+                    "       d.d_monthnuminyear AS d_monthnuminyear,\n" +
+                    "       d.d_weeknuminyear AS d_weeknuminyear,\n" +
+                    "       d.d_sellingseason AS d_sellingseason,\n" +
+                    "       d.d_lastdayinweekfl AS d_lastdayinweekfl,\n" +
+                    "       d.d_lastdayinmonthfl AS d_lastdayinmonthfl,\n" +
+                    "       d.d_holidayfl AS d_holidayfl,\n" +
+                    "       d.d_weekdayfl AS d_weekdayfl\n" +
+                    "   FROM lineorder AS l\n" +
+                    "            INNER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY\n" +
+                    "            INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY\n" +
+                    "            INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY\n" +
+                    "            INNER JOIN dates AS d ON l.lo_orderdate = d.d_datekey;";
+            testRewriteFail(mv, query);
+        }
+
+        {
+            String mv = "select" +
+                    " l.LO_ORDERKEY AS LO_ORDERKEY,\n" +
+                    " l.LO_LINENUMBER AS LO_LINENUMBER,\n" +
+                    " l.LO_CUSTKEY AS LO_CUSTKEY,\n" +
+                    " l.LO_PARTKEY AS LO_PARTKEY," +
+                    " c.C_NAME AS C_NAME,\n" +
+                    " c.C_ADDRESS AS C_ADDRESS,\n" +
+                    " c.C_CITY AS C_CITY," +
+                    " s.S_NAME AS S_NAME,\n" +
+                    " s.S_ADDRESS AS S_ADDRESS,\n" +
+                    " s.S_CITY AS S_CITY" +
+                    " from lineorder AS l\n" +
+                    " LEFT OUTER JOIN customer AS c ON c.C_CUSTKEY = l.LO_CUSTKEY\n" +
+                    " LEFT OUTER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY";
+
+            String query = "select" +
+                    " l.LO_ORDERKEY AS LO_ORDERKEY,\n" +
+                    " l.LO_LINENUMBER AS LO_LINENUMBER,\n" +
+                    " l.LO_CUSTKEY AS LO_CUSTKEY,\n" +
+                    " l.LO_PARTKEY AS LO_PARTKEY," +
+                    " c.C_NAME AS C_NAME,\n" +
+                    " c.C_ADDRESS AS C_ADDRESS,\n" +
+                    " c.C_CITY AS C_CITY" +
+                    " from customer AS c\n" +
+                    " LEFT OUTER JOIN lineorder AS l ON c.C_CUSTKEY = l.LO_CUSTKEY";
+            testRewriteFail(mv, query);
         }
     }
 }

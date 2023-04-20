@@ -83,6 +83,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
+import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -174,7 +175,7 @@ public class MvUtils {
                 LogicalScanOperator scanOperator = (LogicalScanOperator) optExpression.getOp();
                 Table table = scanOperator.getTable();
                 Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
-                TableScanDesc tableScanDesc = new TableScanDesc(table, id, scanOperator, null);
+                TableScanDesc tableScanDesc = new TableScanDesc(table, id, scanOperator, null, false);
                 context.getTableScanDescs().add(tableScanDesc);
                 scanContext.getTableIdMap().put(table, ++id);
                 return null;
@@ -182,14 +183,15 @@ public class MvUtils {
 
             @Override
             public Void visitLogicalJoin(OptExpression optExpression, TableScanContext context) {
-                for (OptExpression child : optExpression.getInputs()) {
+                for (int i = 0; i < optExpression.getInputs().size(); i++) {
+                    OptExpression child = optExpression.inputAt(i);
                     if (child.getOp() instanceof LogicalScanOperator) {
                         LogicalScanOperator scanOperator = (LogicalScanOperator) child.getOp();
                         Table table = scanOperator.getTable();
                         Integer id = scanContext.getTableIdMap().computeIfAbsent(table, t -> 0);
                         LogicalJoinOperator joinOperator = optExpression.getOp().cast();
                         TableScanDesc tableScanDesc =
-                                new TableScanDesc(table, id, scanOperator, joinOperator.getJoinType());
+                                new TableScanDesc(table, id, scanOperator, joinOperator.getJoinType(), i == 0);
                         context.getTableScanDescs().add(tableScanDesc);
                         scanContext.getTableIdMap().put(table, ++id);
                     } else {
@@ -343,6 +345,7 @@ public class MvUtils {
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
         optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
         optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,
@@ -379,6 +382,44 @@ public class MvUtils {
         List<ScalarOperator> predicates = Lists.newArrayList();
         getAllPredicates(root, predicates);
         return predicates;
+    }
+
+    // If join is not cross/inner join, MV Rewrite must rewrite, otherwise may cause bad results.
+    // eg.
+    // mv: select * from customer left outer join orders on c_custkey = o_custkey;
+    //
+    //query（cannot rewrite）:
+    //select count(1) from customer left outer join orders
+    //  on c_custkey = o_custkey and o_comment not like '%special%requests%';
+    //
+    //query（can rewrite）:
+    //select count(1)
+    //          from customer left outer join orders on c_custkey = o_custkey
+    //          where o_comment not like '%special%requests%';
+    public static List<ScalarOperator> getJoinOnPredicates(OptExpression root) {
+        List<ScalarOperator> predicates = Lists.newArrayList();
+        getJoinOnPredicates(root, predicates);
+        return predicates;
+    }
+
+    private static void getJoinOnPredicates(OptExpression root, List<ScalarOperator> predicates) {
+        Operator operator = root.getOp();
+
+        if (operator instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+            JoinOperator joinOperatorType = joinOperator.getJoinType();
+            // Collect all join on predicates which join type are not inner/cross join.
+            if ((joinOperatorType != JoinOperator.INNER_JOIN
+                    && joinOperatorType != JoinOperator.CROSS_JOIN) && joinOperator.getOnPredicate() != null) {
+                // Now join's on-predicates may be pushed down below join, so use original on-predicates
+                // instead of new on-predicates.
+                List<ScalarOperator> conjuncts = Utils.extractConjuncts(joinOperator.getOriginalOnPredicate());
+                predicates.addAll(conjuncts);
+            }
+        }
+        for (OptExpression child : root.getInputs()) {
+            getJoinOnPredicates(child, predicates);
+        }
     }
 
     public static ScalarOperator rewriteOptExprCompoundPredicate(OptExpression root,

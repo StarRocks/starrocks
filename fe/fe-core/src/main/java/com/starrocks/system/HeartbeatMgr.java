@@ -43,7 +43,7 @@ import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.Util;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.persist.HbPackage;
@@ -80,7 +80,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * Heartbeat manager run as a daemon at a fix interval.
  * For now, it will send heartbeat to all Frontends, Backends and Brokers
  */
-public class HeartbeatMgr extends LeaderDaemon {
+public class HeartbeatMgr extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(HeartbeatMgr.class);
 
     private final ExecutorService executor;
@@ -223,8 +223,10 @@ public class HeartbeatMgr extends LeaderDaemon {
             case BACKEND: {
                 BackendHbResponse hbResponse = (BackendHbResponse) response;
                 ComputeNode computeNode = nodeMgr.getBackend(hbResponse.getBeId());
+                boolean isBackend = true;
                 if (computeNode == null) {
                     computeNode = nodeMgr.getComputeNode(hbResponse.getBeId());
+                    isBackend = false;
                 }
                 if (computeNode != null) {
                     boolean isChanged = computeNode.handleHbResponse(hbResponse, isReplay);
@@ -236,9 +238,10 @@ public class HeartbeatMgr extends LeaderDaemon {
                                     .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
                         }
                     } else {
-                        if (RunMode.allowCreateLakeTable() && !isReplay) {
+                        if (RunMode.allowCreateLakeTable() && !isReplay && isBackend) {
                             // addWorker
                             int starletPort = computeNode.getStarletPort();
+
                             if (starletPort != 0) {
                                 String workerAddr = computeNode.getHost() + ":" + starletPort;
                                 GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(computeNode.getId(), workerAddr);

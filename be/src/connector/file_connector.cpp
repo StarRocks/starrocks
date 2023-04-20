@@ -14,6 +14,7 @@
 
 #include "connector/file_connector.h"
 
+#include "exec/avro_scanner.h"
 #include "exec/csv_scanner.h"
 #include "exec/exec_node.h"
 #include "exec/json_scanner.h"
@@ -71,6 +72,11 @@ Status FileDataSource::_create_scanner() {
     if (_scan_range.ranges.empty()) {
         return Status::EndOfFile("scan range is empty");
     }
+    if (_runtime_state->enable_log_rejected_record() &&
+        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_CSV_PLAIN &&
+        _scan_range.ranges[0].format_type != TFileFormatType::FORMAT_JSON) {
+        return Status::InternalError("only support csv/json format to log rejected record");
+    }
     // create scanner object and open
     if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_ORC) {
         _scanner = std::make_unique<ORCScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
@@ -79,9 +85,7 @@ Status FileDataSource::_create_scanner() {
     } else if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_JSON) {
         _scanner = std::make_unique<JsonScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     } else if (_scan_range.ranges[0].format_type == TFileFormatType::FORMAT_AVRO) {
-        // TODO(yangzaorang): we use json as an intermediate format to parse avro format, but there are
-        // performance issues here, and we could directly parse avro format data later.
-        _scanner = std::make_unique<JsonScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
+        _scanner = std::make_unique<AvroScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     } else {
         _scanner = std::make_unique<CSVScanner>(_runtime_state, _runtime_profile, _scan_range, &_counter);
     }
@@ -124,12 +128,8 @@ Status FileDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 
         size_t before_rows = (*chunk)->num_rows();
 
-        const TQueryOptions& query_options = state->query_options();
-        if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::BROKER) {
-            size_t before_size = (*chunk)->bytes_usage();
-            state->update_num_rows_load_from_source(before_rows);
-            state->update_num_bytes_load_from_source(before_size);
-        }
+        state->update_num_rows_load_from_source(before_rows);
+        state->update_num_bytes_load_from_source((*chunk)->bytes_usage());
 
         _counter.filtered_rows_read += before_rows;
         // eval conjuncts
@@ -169,13 +169,17 @@ int64_t FileDataSource::cpu_time_spent() const {
 void FileDataSource::_init_counter() {
     // Profile
     _scanner_total_timer = ADD_TIMER(_runtime_profile, "ScannerTotalTime");
-    RuntimeProfile* p = _runtime_profile->create_child("FileScanner", true, true);
-    _scanner_fill_timer = ADD_TIMER(p, "FillTime");
-    _scanner_read_timer = ADD_TIMER(p, "ReadTime");
-    _scanner_cast_chunk_timer = ADD_TIMER(p, "CastChunkTime");
-    _scanner_materialize_timer = ADD_TIMER(p, "MaterializeTime");
-    _scanner_init_chunk_timer = ADD_TIMER(p, "CreateChunkTime");
-    _scanner_file_reader_timer = ADD_TIMER(p->create_child("FilePRead", true, true), "FileReadTime");
+    {
+        static const char* prefix = "FileScanner";
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        RuntimeProfile* p = _runtime_profile;
+        _scanner_fill_timer = ADD_CHILD_TIMER(p, "FillTime", prefix);
+        _scanner_read_timer = ADD_CHILD_TIMER(p, "ReadTime", prefix);
+        _scanner_cast_chunk_timer = ADD_CHILD_TIMER(p, "CastChunkTime", prefix);
+        _scanner_materialize_timer = ADD_CHILD_TIMER(p, "MaterializeTime", prefix);
+        _scanner_init_chunk_timer = ADD_CHILD_TIMER(p, "CreateChunkTime", prefix);
+        _scanner_file_reader_timer = ADD_CHILD_TIMER(p, "FileReadTime", prefix);
+    }
 }
 
 void FileDataSource::_update_counter() {

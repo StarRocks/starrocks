@@ -28,11 +28,13 @@ import com.google.common.graph.MutableGraph;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.Pair;
@@ -55,6 +57,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
@@ -132,6 +135,18 @@ public class MaterializedViewRewriter {
                     joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin())) {
                 return false;
             }
+            List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
+            List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression);
+            // there should be at least one same join type in mv scan descs for every query scan desc.
+            // to forbid rewrite for:
+            // query: a left outer join b
+            // mv: a inner join b inner join c
+            for (TableScanDesc queryScanDesc : queryTableScanDescs) {
+                if (queryScanDesc.getParentJoinType() != null
+                        && !mvTableScanDescs.stream().anyMatch(scanDesc -> scanDesc.isMatch(queryScanDesc))) {
+                    return false;
+                }
+            }
         } else {
             return false;
         }
@@ -167,10 +182,15 @@ public class MaterializedViewRewriter {
         ScalarOperator mvPredicate = MvUtils.rewriteOptExprCompoundPredicate(mvExpression, mvColumnRefRewriter);
 
         if (materializationContext.getMvPartialPartitionPredicate() != null) {
-            // add latest partition predicate to mv predicate
-            ScalarOperator rewritten =
-                    mvColumnRefRewriter.rewrite(materializationContext.getMvPartialPartitionPredicate());
-            mvPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(mvPredicate, rewritten));
+            List<ScalarOperator> partitionPredicates =
+                    getPartitionRelatedPredicates(mvPredicate, mvRewriteContext.getMaterializationContext().getMv());
+            if (partitionPredicates.stream().noneMatch(p -> p instanceof IsNullPredicateOperator)) {
+                // there is no partition column is null predicate
+                // add latest partition predicate to mv predicate
+                ScalarOperator rewritten =
+                        mvColumnRefRewriter.rewrite(materializationContext.getMvPartialPartitionPredicate());
+                mvPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(mvPredicate, rewritten));
+            }
         }
         final PredicateSplit mvPredicateSplit = PredicateSplit.splitPredicate(mvPredicate);
 
@@ -305,38 +325,22 @@ public class MaterializedViewRewriter {
             if (matchMode == MatchMode.VIEW_DELTA) {
                 final EquivalenceClasses newQueryEc = queryEc.clone();
                 // convert mv-based compensation join columns into query based after we get relationId mapping
-                for (final Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : compensationJoinColumns.entries()) {
-                    final ColumnRefOperator left = entry.getKey();
-                    final ColumnRefOperator right = entry.getValue();
-                    ColumnRefOperator newKey = columnRewriter.rewriteViewToQuery(left);
-                    ColumnRefOperator newValue = columnRewriter.rewriteViewToQuery(right);
-                    if (newKey == null || newValue == null) {
-                        return null;
-                    }
-                    newQueryEc.addEquivalence(newKey, newValue);
+                if (!addCompensationJoinColumnsIntoEquivalenceClasses(columnRewriter, newQueryEc,
+                        compensationJoinColumns)) {
+                    return null;
                 }
                 rewriteContext.setQueryEquivalenceClasses(newQueryEc);
             }
 
             // construct query based view EC
-            final EquivalenceClasses queryBasedViewEqualPredicate = new EquivalenceClasses();
-            if (mvEqualPredicate != null) {
-                for (ScalarOperator equalPredicate : Utils.extractConjuncts(mvEqualPredicate)) {
-                    Preconditions.checkState(equalPredicate.getChild(0).isColumnRef());
-                    ColumnRefOperator left = (ColumnRefOperator) equalPredicate.getChild(0);
-                    Preconditions.checkState(equalPredicate.getChild(1).isColumnRef());
-                    ColumnRefOperator right = (ColumnRefOperator) equalPredicate.getChild(1);
-                    ColumnRefOperator leftTarget = columnRewriter.rewriteViewToQuery(left);
-                    ColumnRefOperator rightTarget = columnRewriter.rewriteViewToQuery(right);
-                    if (leftTarget == null || rightTarget == null) {
-                        return null;
-                    }
-                    queryBasedViewEqualPredicate.addEquivalence(leftTarget, rightTarget);
-                }
+            final EquivalenceClasses queryBasedViewEqualPredicate =
+                    createQueryBasedEquivalenceClasses(columnRewriter, mvEqualPredicate);
+            if (queryBasedViewEqualPredicate == null) {
+                return null;
             }
             rewriteContext.setQueryBasedViewEquivalenceClasses(queryBasedViewEqualPredicate);
 
-            OptExpression rewrittenExpression = tryRewriteForRelationMapping(rewriteContext);
+            OptExpression rewrittenExpression = tryRewriteForRelationMapping(rewriteContext, compensationJoinColumns);
             if (rewrittenExpression != null) {
                 return rewrittenExpression;
             }
@@ -639,7 +643,8 @@ public class MaterializedViewRewriter {
         return Utils.compoundAnd(mvPrunePredicates);
     }
 
-    private OptExpression tryRewriteForRelationMapping(RewriteContext rewriteContext) {
+    private OptExpression tryRewriteForRelationMapping(RewriteContext rewriteContext,
+                                                       Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
         // the rewritten expression to replace query
         // should copy the op because the op will be modified and reused
         final LogicalOlapScanOperator mvScanOperator = materializationContext.getScanMvOperator();
@@ -649,8 +654,7 @@ public class MaterializedViewRewriter {
         // Rewrite original mv's predicates into query if needed.
         final ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
         final Map<ColumnRefOperator, ScalarOperator> mvColumnRefToScalarOp = rewriteContext.getMVColumnRefToScalarOp();
-        if (mvRewriteContext.getMvPruneConjunct() != null
-                && !ConstantOperator.TRUE.equals(mvRewriteContext.getMvPruneConjunct())) {
+        if (mvRewriteContext.getMvPruneConjunct() != null && !mvRewriteContext.getMvPruneConjunct().isTrue()) {
             ScalarOperator rewrittenPrunePredicate = rewriteMVCompensationExpression(rewriteContext, columnRewriter,
                     mvColumnRefToScalarOp, mvRewriteContext.getMvPruneConjunct(), false);
             mvRewriteContext.setMvPruneConjunct(MvUtils.canonizePredicate(rewrittenPrunePredicate));
@@ -658,13 +662,14 @@ public class MaterializedViewRewriter {
         OptExpression mvScanOptExpression = OptExpression.create(mvScanBuilder.build());
         deriveLogicalProperty(mvScanOptExpression);
 
-        final PredicateSplit compensationPredicates = getCompensationPredicates(rewriteContext, true);
+        final PredicateSplit compensationPredicates = getCompensationPredicatesQueryToView(columnRewriter,
+                rewriteContext, compensationJoinColumns);
         if (compensationPredicates == null) {
             if (!materializationContext.getOptimizerContext().getSessionVariable()
                     .isEnableMaterializedViewUnionRewrite()) {
                 return null;
             }
-            return tryUnionRewrite(rewriteContext, mvScanOptExpression);
+            return tryUnionRewrite(rewriteContext, mvScanOptExpression, compensationJoinColumns);
         } else {
             // all predicates are now query based
             final ScalarOperator equalPredicates = MvUtils.canonizePredicate(compensationPredicates.getEqualPredicates());
@@ -677,8 +682,8 @@ public class MaterializedViewRewriter {
                 return null;
             }
 
-            if (!ConstantOperator.TRUE.equals(compensationPredicate)) {
-                // NOTE: Keeps mv's original predicates which have been already rewritten.
+            if (!compensationPredicate.isTrue()) {
+                // NOTE: Keep mv's original predicates which have been already rewritten.
                 ScalarOperator finalCompensationPredicate = compensationPredicate;
                 if (mvScanOptExpression.getOp().getPredicate() != null) {
                     finalCompensationPredicate = Utils.compoundAnd(finalCompensationPredicate,
@@ -697,6 +702,69 @@ public class MaterializedViewRewriter {
             // add projection
             return viewBasedRewrite(rewriteContext, mvScanOptExpression);
         }
+    }
+
+    // Rewrite non-inner/cross join's on-predicates, all on-predicates should not compensated.
+    // For non inner/cross join, we must ensure all on-predicates are not compensated, otherwise there may
+    // be some correctness bugs.
+    private ScalarOperator rewriteJoinOnPredicates(ColumnRewriter columnRewriter,
+                                                   Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns,
+                                                   List<ScalarOperator> srcJoinOnPredicates,
+                                                   List<ScalarOperator> targetJoinOnPredicates,
+                                                   boolean isQueryAgainstView) {
+        if (srcJoinOnPredicates.isEmpty() && targetJoinOnPredicates.isEmpty()) {
+            return ConstantOperator.TRUE;
+        }
+        if (srcJoinOnPredicates.isEmpty() && !targetJoinOnPredicates.isEmpty()) {
+            return ConstantOperator.TRUE;
+        }
+        if (!srcJoinOnPredicates.isEmpty() && targetJoinOnPredicates.isEmpty()) {
+            return null;
+        }
+        final PredicateSplit srcJoinOnPredicateSplit =
+                PredicateSplit.splitPredicate(Utils.compoundAnd(srcJoinOnPredicates));
+        final PredicateSplit targetJoinOnPredicateSplit =
+                PredicateSplit.splitPredicate(Utils.compoundAnd(targetJoinOnPredicates));
+
+        final EquivalenceClasses sourceEquivalenceClasses =
+                createEquivalenceClasses(srcJoinOnPredicateSplit.getEqualPredicates());
+        final EquivalenceClasses targetEquivalenceClasses = createQueryBasedEquivalenceClasses(columnRewriter,
+                targetJoinOnPredicateSplit.getEqualPredicates());
+        if (targetEquivalenceClasses == null) {
+            return null;
+        }
+
+        // NOTE: For view-delta mode, we still need add extra join-compensations equal predicates.
+        if (compensationJoinColumns != null) {
+            if (!addCompensationJoinColumnsIntoEquivalenceClasses(columnRewriter,
+                    sourceEquivalenceClasses, compensationJoinColumns)) {
+                return null;
+            }
+            if (!addCompensationJoinColumnsIntoEquivalenceClasses(columnRewriter,
+                    targetEquivalenceClasses, compensationJoinColumns)) {
+                return null;
+            }
+        }
+
+        final PredicateSplit compensationPredicates = getCompensationPredicates(columnRewriter,
+                sourceEquivalenceClasses,
+                targetEquivalenceClasses,
+                srcJoinOnPredicateSplit,
+                targetJoinOnPredicateSplit,
+                isQueryAgainstView);
+        if (compensationPredicates == null) {
+            return null;
+        }
+        if (!ScalarOperator.isTrue(compensationPredicates.getEqualPredicates())) {
+            return null;
+        }
+        if (!ScalarOperator.isTrue(compensationPredicates.getRangePredicates())) {
+            return null;
+        }
+        if (!ScalarOperator.isTrue(compensationPredicates.getResidualPredicates())) {
+            return null;
+        }
+        return ConstantOperator.TRUE;
     }
 
     private ScalarOperator getMVCompensationPredicate(RewriteContext rewriteContext,
@@ -753,15 +821,18 @@ public class MaterializedViewRewriter {
         return Utils.compoundAnd(candidates);
     }
 
-    private OptExpression tryUnionRewrite(RewriteContext rewriteContext, OptExpression mvOptExpr) {
-        final PredicateSplit mvCompensationToQuery = getCompensationPredicates(rewriteContext, false);
+    private OptExpression tryUnionRewrite(RewriteContext rewriteContext,
+                                          OptExpression mvOptExpr,
+                                          Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
+        final ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
+        final PredicateSplit mvCompensationToQuery = getCompensationPredicatesViewToQuery(columnRewriter,
+                rewriteContext, compensationJoinColumns);
         if (mvCompensationToQuery == null) {
             return null;
         }
         Preconditions.checkState(mvCompensationToQuery.getPredicates()
                 .stream().anyMatch(predicate -> !ConstantOperator.TRUE.equals(predicate)));
 
-        final ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
         // construct viewToQueryRefSet
         final Set<ColumnRefOperator> mvColumnRefSet = rewriteContext.getMvRefFactory().getColumnRefToColumns().keySet();
         final Set<ColumnRefOperator> viewToQueryColRefs = mvColumnRefSet.stream()
@@ -854,12 +925,23 @@ public class MaterializedViewRewriter {
                 Utils.compoundAnd(
                         rewriteContext.getQueryPredicateSplit().toScalarOperator(),
                         CompoundPredicateOperator.not(compensationPredicates)));
+        List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
+        predicates.removeAll(mvRewriteContext.getOnPredicates());
+        queryCompensationPredicate = Utils.compoundAnd(predicates);
+        ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
+        queryCompensationPredicate = columnRewriter.rewriteByQueryEc(queryCompensationPredicate);
+        queryCompensationPredicate = MvUtils.canonizePredicate(queryCompensationPredicate);
         if (!ConstantOperator.TRUE.equals(queryCompensationPredicate)) {
             if (queryExpression.getOp().getProjection() != null) {
                 ReplaceColumnRefRewriter rewriter =
                         new ReplaceColumnRefRewriter(queryExpression.getOp().getProjection().getColumnRefMap());
                 queryCompensationPredicate = rewriter.rewrite(queryCompensationPredicate);
             }
+            queryCompensationPredicate = processNullPartition(rewriteContext, queryCompensationPredicate);
+            if (queryCompensationPredicate == null) {
+                return null;
+            }
+
             // add filter to op
             Operator.Builder builder = OperatorBuilderFactory.build(queryExpression.getOp());
             builder.withOperator(queryExpression.getOp());
@@ -870,6 +952,122 @@ public class MaterializedViewRewriter {
             return newQueryExpr;
         }
         return null;
+    }
+
+    private List<ScalarOperator> getPartitionRelatedPredicates(ScalarOperator predicate, MaterializedView mv) {
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            return Lists.newArrayList();
+        }
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
+        Preconditions.checkState(partitionColumns.size() == 1);
+        List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
+        List<ScalarOperator> partitionRelatedPredicates = conjuncts.stream()
+                .filter(p -> isRelatedPredicate(p, partitionColumns.get(0).getName()))
+                .collect(Collectors.toList());
+        return partitionRelatedPredicates;
+    }
+
+    // process null value partition
+    // when query select all data from base tables,
+    // should add partition column is null predicate into queryCompensationPredicate to get null partition value related data
+    private ScalarOperator processNullPartition(RewriteContext rewriteContext, ScalarOperator queryCompensationPredicate) {
+        MaterializedView mv = mvRewriteContext.getMaterializationContext().getMv();
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
+            return queryCompensationPredicate;
+        }
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
+        Preconditions.checkState(partitionColumns.size() == 1);
+        ScalarOperator queryPredicate = rewriteContext.getQueryPredicateSplit().toScalarOperator();
+        List<ScalarOperator> queryPartitionRelatedScalars = getPartitionRelatedPredicates(queryPredicate, mv);
+
+        ScalarOperator mvPredicate = rewriteContext.getMvPredicateSplit().toScalarOperator();
+        List<ScalarOperator> mvPartitionRelatedScalars = getPartitionRelatedPredicates(mvPredicate, mv);
+        if (queryPartitionRelatedScalars.isEmpty() && !mvPartitionRelatedScalars.isEmpty()) {
+            // when query has no partition related predicates and mv has,
+            // we should consider to add null value predicate into compensation predicates
+            ColumnRefOperator partitionColumnRef =
+                    getColumnRefFromPredicate(mvPredicate, partitionColumns.get(0).getName());
+            Preconditions.checkState(partitionColumnRef != null);
+            if (!partitionColumnRef.isNullable()) {
+                // only add null value into compensation predicate when partition column is nullable
+                return queryCompensationPredicate;
+            }
+            ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
+            partitionColumnRef = columnRewriter.rewriteViewToQuery(partitionColumnRef).cast();
+            IsNullPredicateOperator isNullPredicateOperator = new IsNullPredicateOperator(partitionColumnRef);
+            IsNullPredicateOperator isNotNullPredicateOperator = new IsNullPredicateOperator(true, partitionColumnRef);
+            List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
+            List<ScalarOperator> partitionRelatedPredicates = predicates.stream()
+                    .filter(predicate -> isRelatedPredicate(predicate, partitionColumns.get(0).getName()))
+                    .collect(Collectors.toList());
+            predicates.removeAll(partitionRelatedPredicates);
+            if (partitionRelatedPredicates.contains(isNullPredicateOperator)
+                    || partitionRelatedPredicates.contains(isNotNullPredicateOperator)) {
+                if (partitionRelatedPredicates.size() != 1) {
+                    // has other partition predicates except partition column is null
+                    // do not support now
+                    // can it happend?
+                    return null;
+                }
+                predicates.addAll(partitionRelatedPredicates);
+            } else {
+                // add partition column is null into compensation predicates
+                ScalarOperator partitionPredicate =
+                        Utils.compoundOr(Utils.compoundAnd(partitionRelatedPredicates), isNullPredicateOperator);
+                predicates.add(partitionPredicate);
+            }
+            queryCompensationPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(predicates));
+        }
+        return queryCompensationPredicate;
+    }
+
+    private boolean isRelatedPredicate(ScalarOperator scalarOperator, String name) {
+        ScalarOperatorVisitor<Boolean, Void> visitor = new ScalarOperatorVisitor<Boolean, Void>() {
+            @Override
+            public Boolean visit(ScalarOperator scalarOperator, Void context) {
+                for (ScalarOperator child : scalarOperator.getChildren()) {
+                    boolean ret = child.accept(this, null);
+                    if (ret) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            @Override
+            public Boolean visitVariableReference(ColumnRefOperator columnRefOperator, Void context) {
+                return columnRefOperator.getName().equalsIgnoreCase(name);
+            }
+        };
+        return scalarOperator.accept(visitor, null);
+    }
+
+    private ColumnRefOperator getColumnRefFromPredicate(ScalarOperator predicate, String name) {
+        ScalarOperatorVisitor<ColumnRefOperator, Void> visitor = new ScalarOperatorVisitor<ColumnRefOperator, Void>() {
+            @Override
+            public ColumnRefOperator visit(ScalarOperator scalarOperator, Void context) {
+                for (ScalarOperator child : scalarOperator.getChildren()) {
+                    ColumnRefOperator ret = child.accept(this, null);
+                    if (ret != null) {
+                        return ret;
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public ColumnRefOperator visitVariableReference(ColumnRefOperator columnRefOperator, Void context) {
+                if (columnRefOperator.getName().equalsIgnoreCase(name)) {
+                    return columnRefOperator;
+                }
+                return null;
+            }
+        };
+        return predicate.accept(visitor, null);
     }
 
     protected OptExpression createUnion(OptExpression queryInput, OptExpression viewInput,
@@ -980,6 +1178,49 @@ public class MaterializedViewRewriter {
             ec.addEquivalence(left, right);
         }
         return ec;
+    }
+
+    private EquivalenceClasses createQueryBasedEquivalenceClasses(ColumnRewriter columnRewriter,
+                                                                  ScalarOperator equalPredicates) {
+        EquivalenceClasses ec = new EquivalenceClasses();
+        if (equalPredicates == null) {
+            return ec;
+        }
+
+        for (ScalarOperator equalPredicate : Utils.extractConjuncts(equalPredicates)) {
+            Preconditions.checkState(equalPredicate.getChild(0).isColumnRef());
+            ColumnRefOperator left = (ColumnRefOperator) equalPredicate.getChild(0);
+            Preconditions.checkState(equalPredicate.getChild(1).isColumnRef());
+            ColumnRefOperator right = (ColumnRefOperator) equalPredicate.getChild(1);
+            ColumnRefOperator leftTarget = columnRewriter.rewriteViewToQuery(left);
+            ColumnRefOperator rightTarget = columnRewriter.rewriteViewToQuery(right);
+            if (leftTarget == null || rightTarget == null) {
+                return null;
+            }
+            ec.addEquivalence(leftTarget, rightTarget);
+        }
+        return ec;
+    }
+
+    private boolean addCompensationJoinColumnsIntoEquivalenceClasses(
+            ColumnRewriter columnRewriter,
+            EquivalenceClasses ec,
+            Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
+        if (compensationJoinColumns == null || compensationJoinColumns.isEmpty()) {
+            return true;
+        }
+
+        for (final Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : compensationJoinColumns.entries()) {
+            final ColumnRefOperator left = entry.getKey();
+            final ColumnRefOperator right = entry.getValue();
+            ColumnRefOperator newKey = columnRewriter.rewriteViewToQuery(left);
+            ColumnRefOperator newValue = columnRewriter.rewriteViewToQuery(right);
+            if (newKey == null || newValue == null) {
+                return false;
+            }
+            ec.addEquivalence(newKey, newValue);
+        }
+        return true;
     }
 
     private MatchMode getMatchMode(List<Table> queryTables, List<Table> mvTables) {
@@ -1256,27 +1497,66 @@ public class MaterializedViewRewriter {
         return result;
     }
 
+    private PredicateSplit getCompensationPredicatesQueryToView(
+            ColumnRewriter columnRewriter,
+            RewriteContext rewriteContext,
+            Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
+        final List<ScalarOperator> queryJoinOnPredicates = mvRewriteContext.getQueryJoinOnPredicates();
+        final List<ScalarOperator> mvJoinOnPredicates = mvRewriteContext.getMvJoinOnPredicates();
+        final ScalarOperator queryJoinOnPredicateCompensations =
+                rewriteJoinOnPredicates(columnRewriter, compensationJoinColumns,
+                        queryJoinOnPredicates, mvJoinOnPredicates, true);
+        if (queryJoinOnPredicateCompensations == null) {
+            return null;
+        }
+
+        return getCompensationPredicates(columnRewriter,
+                rewriteContext.getQueryEquivalenceClasses(),
+                rewriteContext.getQueryBasedViewEquivalenceClasses(),
+                rewriteContext.getQueryPredicateSplit(),
+                rewriteContext.getMvPredicateSplit(),
+                true);
+    }
+
+    private PredicateSplit getCompensationPredicatesViewToQuery(
+            ColumnRewriter columnRewriter,
+            RewriteContext rewriteContext,
+            Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns) {
+        final List<ScalarOperator> queryJoinOnPredicates = mvRewriteContext.getQueryJoinOnPredicates();
+        final List<ScalarOperator> mvJoinOnPredicates = mvRewriteContext.getMvJoinOnPredicates();
+        final ScalarOperator queryJoinOnPredicateCompensations =
+                rewriteJoinOnPredicates(columnRewriter, compensationJoinColumns,
+                        mvJoinOnPredicates, queryJoinOnPredicates, false);
+        if (queryJoinOnPredicateCompensations == null) {
+            return null;
+        }
+
+        return getCompensationPredicates(columnRewriter,
+                rewriteContext.getQueryBasedViewEquivalenceClasses(),
+                rewriteContext.getQueryEquivalenceClasses(),
+                rewriteContext.getMvPredicateSplit(),
+                rewriteContext.getQueryPredicateSplit(),
+                false);
+    }
+
     // when isQueryAgainstView is true, get compensation predicates of query against view
     // or get compensation predicates of view against query
-    private PredicateSplit getCompensationPredicates(RewriteContext rewriteContext, boolean isQueryAgainstView) {
+    private PredicateSplit getCompensationPredicates(ColumnRewriter columnRewriter,
+                                                     EquivalenceClasses sourceEquivalenceClasses,
+                                                     EquivalenceClasses targetEquivalenceClasses,
+                                                     PredicateSplit srcPredicateSplit,
+                                                     PredicateSplit targetPredicateSplit,
+                                                     boolean isQueryAgainstView) {
         // 1. equality join subsumption test
-        EquivalenceClasses sourceEquivalenceClasses = isQueryAgainstView ?
-                rewriteContext.getQueryEquivalenceClasses() : rewriteContext.getQueryBasedViewEquivalenceClasses();
-        EquivalenceClasses targetEquivalenceClasses = isQueryAgainstView ?
-                rewriteContext.getQueryBasedViewEquivalenceClasses() : rewriteContext.getQueryEquivalenceClasses();
         final ScalarOperator compensationEqualPredicate =
                 getCompensationEqualPredicate(sourceEquivalenceClasses, targetEquivalenceClasses);
         if (compensationEqualPredicate == null) {
-            // means source equal predicates cannot be rewritten by target
             return null;
         }
 
         // 2. range subsumption test
-        ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
-        ScalarOperator srcPr = isQueryAgainstView ? rewriteContext.getQueryPredicateSplit().getRangePredicates()
-                : rewriteContext.getMvPredicateSplit().getRangePredicates();
-        ScalarOperator targetPr = isQueryAgainstView ? rewriteContext.getMvPredicateSplit().getRangePredicates()
-                : rewriteContext.getQueryPredicateSplit().getRangePredicates();
+        ScalarOperator srcPr = srcPredicateSplit.getRangePredicates();
+        ScalarOperator targetPr = targetPredicateSplit.getRangePredicates();
         ScalarOperator compensationPr =
                 getCompensationRangePredicate(srcPr, targetPr, columnRewriter, isQueryAgainstView);
         if (compensationPr == null) {
@@ -1284,10 +1564,8 @@ public class MaterializedViewRewriter {
         }
 
         // 3. residual subsumption test
-        ScalarOperator srcPu = isQueryAgainstView ? rewriteContext.getQueryPredicateSplit().getResidualPredicates()
-                : rewriteContext.getMvPredicateSplit().getResidualPredicates();
-        ScalarOperator targetPu = isQueryAgainstView ? rewriteContext.getMvPredicateSplit().getResidualPredicates()
-                : rewriteContext.getQueryPredicateSplit().getResidualPredicates();
+        ScalarOperator srcPu = srcPredicateSplit.getResidualPredicates();
+        ScalarOperator targetPu = targetPredicateSplit.getResidualPredicates();
         if (srcPu == null && targetPu != null) {
             // query: empid < 5
             // mv: empid < 5 or salary > 100

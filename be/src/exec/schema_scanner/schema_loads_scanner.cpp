@@ -30,6 +30,10 @@ SchemaScanner::ColumnDesc SchemaLoadsScanner::_s_tbls_columns[] = {
         {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"PRIORITY", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"SCAN_ROWS", TYPE_BIGINT, sizeof(int64_t), false},
+        {"FILTERED_ROWS", TYPE_BIGINT, sizeof(int64_t), false},
+        {"UNSELECTED_ROWS", TYPE_BIGINT, sizeof(int64_t), false},
+        {"SINK_ROWS", TYPE_BIGINT, sizeof(int64_t), false},
         {"ETL_INFO", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TASK_INFO", TYPE_VARCHAR, sizeof(StringValue), false},
         {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
@@ -40,7 +44,8 @@ SchemaScanner::ColumnDesc SchemaLoadsScanner::_s_tbls_columns[] = {
         {"JOB_DETAILS", TYPE_VARCHAR, sizeof(StringValue), false},
         {"ERROR_MSG", TYPE_VARCHAR, sizeof(StringValue), true},
         {"TRACKING_URL", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TRACKING_SQL", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"TRACKING_SQL", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"REJECTED_RECORD_PATH", TYPE_VARCHAR, sizeof(StringValue), true}};
 
 SchemaLoadsScanner::SchemaLoadsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -76,7 +81,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < _result.loads.size(); _cur_idx++) {
         auto& info = _result.loads[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 18) {
+            if (slot_id < 1 || slot_id > 23) {
                 return Status::InternalError(fmt::format("invalid slot id:$0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -123,6 +128,26 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 8: {
+                // scan_rows
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_scan_rows);
+                break;
+            }
+            case 9: {
+                // filtered_rows
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_filtered_rows);
+                break;
+            }
+            case 10: {
+                // unselected_rows
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_unselected_rows);
+                break;
+            }
+            case 11: {
+                // sink_rows
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_sink_rows);
+                break;
+            }
+            case 12: {
                 // etl_info
                 if (info.__isset.etl_info) {
                     Slice etl_info = Slice(info.etl_info);
@@ -132,13 +157,13 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 9: {
+            case 13: {
                 // task info
                 Slice task_info = Slice(info.task_info);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&task_info);
                 break;
             }
-            case 10: {
+            case 14: {
                 // create time
                 DateTimeValue t;
                 if (info.__isset.create_time) {
@@ -150,7 +175,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 break;
             }
-            case 11: {
+            case 15: {
                 // etl start time
                 DateTimeValue t;
                 if (info.__isset.etl_start_time) {
@@ -162,7 +187,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 break;
             }
-            case 12: {
+            case 16: {
                 // etl finish time
                 DateTimeValue t;
                 if (info.__isset.etl_finish_time) {
@@ -174,7 +199,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 break;
             }
-            case 13: {
+            case 17: {
                 // load start time
                 DateTimeValue t;
                 if (info.__isset.load_start_time) {
@@ -186,7 +211,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 break;
             }
-            case 14: {
+            case 18: {
                 // load finish time
                 DateTimeValue t;
                 if (info.__isset.load_finish_time) {
@@ -198,13 +223,13 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 break;
             }
-            case 15: {
+            case 19: {
                 // job details
                 Slice job_details = Slice(info.job_details);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&job_details);
                 break;
             }
-            case 16: {
+            case 20: {
                 // error_msg
                 if (info.__isset.error_msg) {
                     Slice error_msg = Slice(info.error_msg);
@@ -214,7 +239,7 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 17: {
+            case 21: {
                 // url
                 if (info.__isset.url) {
                     Slice url = Slice(info.url);
@@ -224,11 +249,21 @@ Status SchemaLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 }
                 break;
             }
-            case 18: {
+            case 22: {
                 // tracking sql
                 if (info.__isset.tracking_sql) {
                     Slice sql = Slice(info.tracking_sql);
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&sql);
+                } else {
+                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                }
+                break;
+            }
+            case 23: {
+                // rejected record path
+                if (info.__isset.rejected_record_path) {
+                    Slice path = Slice(info.rejected_record_path);
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&path);
                 } else {
                     down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 }

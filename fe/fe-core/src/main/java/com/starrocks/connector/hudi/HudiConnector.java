@@ -16,24 +16,26 @@
 package com.starrocks.connector.hudi;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileIO;
-import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 public class HudiConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
+    public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
+    public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("glue", "dlf");
     private final Map<String, String> properties;
     private final CloudConfiguration cloudConfiguration;
     private final String catalogName;
@@ -52,9 +54,16 @@ public class HudiConnector implements Connector {
     }
 
     public void validate() {
-        String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
-                "%s must be set in properties when creating hudi catalog", HIVE_METASTORE_URIS);
-        Util.validateMetastoreUris(hiveMetastoreUris);
+        if (properties.containsKey(HIVE_METASTORE_TYPE)) {
+            String hiveMetastoreType = properties.get(HIVE_METASTORE_TYPE).toLowerCase();
+            if (!SUPPORTED_METASTORE_TYPE.contains(hiveMetastoreType)) {
+                throw new SemanticException("hive metastore type [%s] is not supported", hiveMetastoreType);
+            }
+        } else {
+            String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
+                    "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
+            Util.validateMetastoreUris(hiveMetastoreUris);
+        }
     }
 
     @Override
@@ -77,12 +86,6 @@ public class HudiConnector implements Connector {
     }
 
     public void onCreate() {
-        if (!CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(catalogName) &&
-                internalMgr.isEnableBackgroundRefreshHudiMetadata()) {
-            Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
-            updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
-                    .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
-        }
     }
 
     public CloudConfiguration getCloudConfiguration() {

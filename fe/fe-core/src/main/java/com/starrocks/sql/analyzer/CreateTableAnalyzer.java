@@ -18,8 +18,11 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.KeysDesc;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -33,13 +36,23 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.external.elasticsearch.EsUtil;
+import com.starrocks.connector.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.AnalyzeState;
+import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
@@ -65,21 +78,36 @@ public class CreateTableAnalyzer {
     private static final String DEFAULT_CHARSET_NAME = "utf8";
 
     private static final String ELASTICSEARCH = "elasticsearch";
+    private static final String ICEBERG = "iceberg";
 
     public enum CharsetType {
         UTF8,
         GBK,
     }
 
-    private static String analyzeEngineName(String engineName) {
-        if (Strings.isNullOrEmpty(engineName)) {
-            return EngineType.defaultEngine().name();
-        }
-
-        try {
-            return EngineType.valueOf(engineName.toUpperCase()).name();
-        } catch (IllegalArgumentException e) {
-            throw new SemanticException("Unknown engine name: %s", engineName);
+    private static String analyzeEngineName(String engineName, String catalogName) {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            if (Strings.isNullOrEmpty(engineName)) {
+                return EngineType.defaultEngine().name();
+            } else {
+                try {
+                    return EngineType.valueOf(engineName.toUpperCase()).name();
+                } catch (IllegalArgumentException e) {
+                    throw new SemanticException("Unknown engine name: %s", engineName);
+                }
+            }
+        } else {
+            String catalogType = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(catalogName);
+            if (Strings.isNullOrEmpty(engineName)) {
+                if (!catalogType.equals("iceberg")) {
+                    throw new SemanticException("Currently doesn't support creating tables of type " + catalogType);
+                }
+                return catalogType;
+            } else if (!engineName.equalsIgnoreCase(catalogType)) {
+                throw new SemanticException("Can't create %s table in the %s catalog", engineName, catalogType);
+            } else {
+                return engineName;
+            }
         }
     }
 
@@ -110,7 +138,19 @@ public class CreateTableAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
         }
 
-        final String engineName = analyzeEngineName(statement.getEngineName()).toLowerCase();
+        final String catalogName = tableNameObject.getCatalog();
+        try {
+            MetaUtils.checkCatalogExistAndReport(catalogName);
+        } catch (AnalysisException e) {
+            throw new SemanticException(e.getMessage());
+        }
+
+        String dbName = tableNameObject.getDb();
+        if (GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName) == null) {
+            throw new SemanticException("Unknown database '%s'", dbName);
+        }
+
+        final String engineName = analyzeEngineName(statement.getEngineName(), catalogName).toLowerCase();
         statement.setEngineName(engineName);
         statement.setCharsetName(analyzeCharsetName(statement.getCharsetName()).toLowerCase());
 
@@ -280,6 +320,10 @@ public class CreateTableAnalyzer {
                         throw new SemanticException(e.getMessage());
                     }
                 } else if (partitionDesc instanceof ExpressionPartitionDesc) {
+                    if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                        throw new SemanticException("Cloud native table does not support automatic partition");
+                    }
+
                     ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
                     try {
                         expressionPartitionDesc.analyze(columnDefs, properties);
@@ -310,6 +354,15 @@ public class CreateTableAnalyzer {
         } else {
             if (engineName.equalsIgnoreCase(ELASTICSEARCH)) {
                 EsUtil.analyzePartitionAndDistributionDesc(partitionDesc, distributionDesc);
+            } else if (engineName.equalsIgnoreCase(ICEBERG)) {
+                if (partitionDesc != null) {
+                    try {
+                        // Iceberg table must use ListPartitionDesc
+                        ((ListPartitionDesc) partitionDesc).analyzePartitionColumns(columnDefs);
+                    } catch (AnalysisException e) {
+                        throw new SemanticException(e.getMessage());
+                    }
+                }
             } else {
                 if (partitionDesc != null || distributionDesc != null) {
                     NodePosition pos = NodePosition.ZERO;
@@ -338,6 +391,75 @@ public class CreateTableAnalyzer {
                 }
             }
             columns.add(col);
+        }
+        boolean hasMaterializedColum = false;
+        for (Column column : columns) {
+            if (column.isMaterializedColumn()) {
+                hasMaterializedColum = true;
+                break;
+            }
+        }
+
+        Map<String, Column> columnsMap = Maps.newHashMap();
+        for (Column column : columns) {
+            columnsMap.put(column.getName(), column);
+            if (column.isMaterializedColumn() && keysDesc.containsCol(column.getName())) {
+                throw new SemanticException("Materialized Column can not be KEY");
+            }
+        }
+
+        if (hasMaterializedColum) {
+            if (!statement.isOlapEngine()) {
+                throw new SemanticException("Materialized Column only support olap table");
+            }
+
+            boolean found = false;
+            for (Column column : columns) {
+                if (found && !column.isMaterializedColumn()) {
+                    throw new SemanticException("All materialized columns must be defined after ordinary columns");
+                }
+
+                if (column.isMaterializedColumn()) {
+                    Expr expr = column.materializedColumnExpr();
+
+                    ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                            new RelationFields(columns.stream().map(col -> new Field(
+                                    col.getName(), col.getType(), tableNameObject, null))
+                                        .collect(Collectors.toList()))), context);
+
+                    // check if contain aggregation
+                    List<FunctionCallExpr> funcs = Lists.newArrayList();
+                    expr.collect(FunctionCallExpr.class, funcs);
+                    for (FunctionCallExpr fn : funcs) {
+                        if (fn.isAggregateFunction()) {
+                            throw new SemanticException("Materialized Column don't support aggregation function");
+                        }
+                    }
+
+                    // check if the expression refers to other materialized columns
+                    List<SlotRef> slots = Lists.newArrayList();
+                    expr.collect(SlotRef.class, slots);
+                    if (slots.size() != 0) {
+                        for (SlotRef slot : slots) {
+                            Column refColumn = columnsMap.get(slot.getColumnName());
+                            if (refColumn.isMaterializedColumn()) {
+                                throw new SemanticException("Expression can not refers to other materialized columns");
+                            }
+                            if (refColumn.isAutoIncrement()) {
+                                throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                            }
+                        }
+                    }
+
+                    if (!column.getType().matchesType(expr.getType())) {
+                        throw new SemanticException("Illege expression type for Materialized Column " +
+                                                    "Column Type: " + column.getType().toString() +
+                                                    ", Expression Type: " + expr.getType().toString());
+                    }
+
+                    found = true;
+                }
+            }
         }
         List<IndexDef> indexDefs = statement.getIndexDefs();
         if (CollectionUtils.isNotEmpty(indexDefs)) {

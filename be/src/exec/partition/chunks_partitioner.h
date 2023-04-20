@@ -59,6 +59,9 @@ public:
         if (!_is_passthrough) {
             for (size_t i = 0; i < _partition_exprs.size(); i++) {
                 ASSIGN_OR_RETURN(_partition_columns[i], _partition_exprs[i]->evaluate(chunk.get()));
+                if (_hash_map_variant.is_nullable()) {
+                    _partition_columns[i] = NullableColumn::wrap_if_necessary(_partition_columns[i]);
+                }
             }
         }
 

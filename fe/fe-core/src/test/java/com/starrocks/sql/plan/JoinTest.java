@@ -664,18 +664,20 @@ public class JoinTest extends PlanTestBase {
                 "limit \n" +
                 "  45;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  8:Project\n" +
-                        "  |  <slot 3> : 3: t1c\n" +
-                        "  |  <slot 21> : 37\n" +
-                        "  |  <slot 32> : 32: S_SUPPKEY\n" +
-                        "  |  <slot 33> : 33: S_NAME\n" +
-                        "  |  <slot 34> : 34: S_ADDRESS\n" +
-                        "  |  <slot 35> : 35: S_NATIONKEY\n" +
-                        "  |  <slot 36> : 36: S_PHONE\n" +
-                        "  |  <slot 37> : 37: S_ACCTBAL\n" +
-                        "  |  <slot 38> : 38: S_COMMENT\n" +
-                        "  |  <slot 39> : 39: PAD\n" +
-                        "  |  <slot 40> : CAST(37 AS INT)\n");
+        assertContains(plan, "9:Project\n" +
+                "  |  <slot 3> : 3: t1c\n" +
+                "  |  <slot 21> : 37\n" +
+                "  |  <slot 22> : 22: P_PARTKEY\n" +
+                "  |  <slot 23> : 23: P_NAME\n" +
+                "  |  <slot 24> : 24: P_MFGR\n" +
+                "  |  <slot 25> : 25: P_BRAND\n" +
+                "  |  <slot 26> : 26: P_TYPE\n" +
+                "  |  <slot 27> : 27: P_SIZE\n" +
+                "  |  <slot 28> : 28: P_CONTAINER\n" +
+                "  |  <slot 29> : 29: P_RETAILPRICE\n" +
+                "  |  <slot 30> : 30: P_COMMENT\n" +
+                "  |  <slot 31> : 31: PAD\n" +
+                "  |  <slot 40> : CAST(37 AS INT)");
     }
 
     @Test
@@ -780,7 +782,7 @@ public class JoinTest extends PlanTestBase {
 
         sql = "select v1+1,v4 from t0, t1 where v2 = v5 and v3 > v6";
         plan = getVerboseExplain(sql);
-        assertContains(plan, "output columns: 1, 4");
+        assertContains(plan, "output columns: 1, 3, 4, 6");
 
         sql = "select (v2+v6 = 1 or v2+v6 = 5) from t0, t1 where v2 = v5 ";
         plan = getVerboseExplain(sql);

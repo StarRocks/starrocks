@@ -80,6 +80,7 @@ import com.starrocks.task.PriorityLeaderTask;
 import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TEtlState;
 import com.starrocks.thrift.TLoadInfo;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
 import com.starrocks.transaction.BeginTransactionException;
@@ -124,7 +125,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     protected boolean strictMode = false; // default is false
     protected String timezone = TimeUtils.DEFAULT_TIME_ZONE;
     protected boolean partialUpdate = false;
+    protected String partialUpdateMode = "row";
     protected int priority = LoadPriority.NORMAL_VALUE;
+    protected long logRejectedRecordNum = 0;
     // reuse deleteFlag as partialUpdate
     // @Deprecated
     // protected boolean deleteFlag = false;
@@ -246,10 +249,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         loadStartTimestamp = System.currentTimeMillis();
     }
 
-    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId,
-                              long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
-        loadingStatus.getLoadStatistic().updateLoadProgress(beId, loadId, fragmentId, sinkRows,
-                sinkBytes, sourceRows, sourceBytes, isDone);
+    public void updateProgess(TReportExecStatusParams params) {
+        loadingStatus.getLoadStatistic().updateLoadProgress(params);
     }
 
     public void setLoadFileInfo(int fileNum, long fileSize) {
@@ -318,6 +319,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             if (properties.containsKey(LoadStmt.PARTIAL_UPDATE)) {
                 partialUpdate = Boolean.valueOf(properties.get(LoadStmt.PARTIAL_UPDATE));
             }
+            if (properties.containsKey(LoadStmt.PARTIAL_UPDATE_MODE)) {
+                partialUpdateMode = properties.get(LoadStmt.PARTIAL_UPDATE_MODE);
+            }
 
             if (properties.containsKey(LoadStmt.LOAD_MEM_LIMIT)) {
                 try {
@@ -340,6 +344,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
             if (properties.containsKey(LoadStmt.PRIORITY)) {
                 priority = LoadPriority.priorityByName(properties.get(LoadStmt.PRIORITY));
+            }
+
+            if (properties.containsKey(LoadStmt.LOG_REJECTED_RECORD_NUM)) {
+                logRejectedRecordNum = Long.parseLong(properties.get(LoadStmt.LOG_REJECTED_RECORD_NUM));
             }
         }
     }
@@ -753,8 +761,13 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             // priority
             jobInfo.add(LoadPriority.priorityToName(priority));
 
+            jobInfo.add(loadingStatus.getLoadStatistic().totalSourceLoadRows());
+            jobInfo.add(loadingStatus.getLoadStatistic().totalFilteredRows());
+            jobInfo.add(loadingStatus.getLoadStatistic().totalUnselectedRows());
+            jobInfo.add(loadingStatus.getLoadStatistic().totalSinkLoadRows());
+
             // etl info
-            if (loadingStatus.getCounters().size() == 0) {
+            if (jobType != EtlJobType.SPARK || loadingStatus.getCounters().size() == 0) {
                 jobInfo.add(FeConstants.NULL_STRING);
             } else {
                 jobInfo.add(Joiner.on("; ").withKeyValueSeparator("=").join(loadingStatus.getCounters()));
@@ -836,7 +849,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             info.setPriority(LoadPriority.priorityToName(priority));
 
             // etl info
-            if (loadingStatus.getCounters().size() == 0) {
+            if (jobType != EtlJobType.SPARK || loadingStatus.getCounters().size() == 0) {
                 info.setEtl_info("");
             } else {
                 info.setEtl_info(Joiner.on("; ").withKeyValueSeparator("=").join(loadingStatus.getCounters()));
@@ -874,7 +887,14 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                 info.setUrl(loadingStatus.getTrackingUrl());
                 info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
             }
+            if (!loadingStatus.getRejectedRecordPaths().isEmpty()) {
+                info.setRejected_record_path(Joiner.on(", ").join(loadingStatus.getRejectedRecordPaths()));
+            }
             info.setJob_details(loadingStatus.getLoadStatistic().toShowInfoStr());
+            info.setNum_filtered_rows(loadingStatus.getLoadStatistic().totalFilteredRows());
+            info.setNum_unselected_rows(loadingStatus.getLoadStatistic().totalUnselectedRows());
+            info.setNum_scan_rows(loadingStatus.getLoadStatistic().totalSourceLoadRows());
+            info.setNum_sink_rows(loadingStatus.getLoadStatistic().totalSinkLoadRows());
             return info;
         } finally {
             readUnlock();

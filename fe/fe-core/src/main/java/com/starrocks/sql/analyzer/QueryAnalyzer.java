@@ -312,11 +312,10 @@ public class QueryAnalyzer {
                 Field field;
                 if (baseSchema.contains(column)) {
                     field = new Field(column.getName(), column.getType(), tableName,
-                            new SlotRef(tableName, column.getName(), column.getName()), true);
+                            new SlotRef(tableName, column.getName(), column.getName()), true, column.isAllowNull());
                 } else {
                     field = new Field(column.getName(), column.getType(), tableName,
-
-                            new SlotRef(tableName, column.getName(), column.getName()), false);
+                            new SlotRef(tableName, column.getName(), column.getName()), false, column.isAllowNull());
                 }
                 columns.put(field, column);
                 fields.add(field);
@@ -442,12 +441,35 @@ public class QueryAnalyzer {
                 scope = new Scope(RelationId.of(join), leftScope.getRelationFields());
             } else if (join.getJoinOp().isRightSemiAntiJoin()) {
                 scope = new Scope(RelationId.of(join), rightScope.getRelationFields());
+            } else if (join.getJoinOp().isLeftOuterJoin()) {
+                List<Field> rightFields = getFieldsWithNullable(rightScope);
+                scope = new Scope(RelationId.of(join),
+                        leftScope.getRelationFields().joinWith(new RelationFields(rightFields)));
+            } else if (join.getJoinOp().isRightOuterJoin()) {
+                List<Field> leftFields = getFieldsWithNullable(leftScope);
+                scope = new Scope(RelationId.of(join),
+                        new RelationFields(leftFields).joinWith(rightScope.getRelationFields()));
+            } else if (join.getJoinOp().isFullOuterJoin()) {
+                List<Field> rightFields = getFieldsWithNullable(rightScope);
+                List<Field> leftFields = getFieldsWithNullable(leftScope);
+                scope = new Scope(RelationId.of(join),
+                        new RelationFields(leftFields).joinWith(new RelationFields(rightFields)));
             } else {
                 scope = new Scope(RelationId.of(join),
                         leftScope.getRelationFields().joinWith(rightScope.getRelationFields()));
             }
             join.setScope(scope);
             return scope;
+        }
+
+        private List<Field> getFieldsWithNullable(Scope scope) {
+            List<Field> newFields = new ArrayList<>();
+            for (Field field : scope.getRelationFields().getAllFields()) {
+                Field newField = new Field(field);
+                newField.setNullable(true);
+                newFields.add(newField);
+            }
+            return newFields;
         }
 
         private Expr analyzeJoinUsing(List<String> usingColNames, Scope left, Scope right) {
@@ -558,7 +580,13 @@ public class QueryAnalyzer {
 
         @Override
         public Scope visitView(ViewRelation node, Scope scope) {
-            Scope queryOutputScope = process(node.getQueryStatement(), scope);
+            Scope queryOutputScope;
+            try {
+                queryOutputScope = process(node.getQueryStatement(), scope);
+            } catch (SemanticException e) {
+                throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
+                        "function(s) or definer/invoker of view lack rights to use them");
+            }
             View view = node.getView();
             List<Field> fields = Lists.newArrayList();
             for (int i = 0; i < view.getBaseSchema().size(); ++i) {

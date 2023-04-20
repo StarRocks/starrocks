@@ -18,6 +18,7 @@
 package com.starrocks.fs.hdfs;
 
 import com.amazonaws.util.AwsHostNameUtils;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.common.NotImplementedException;
@@ -248,6 +249,7 @@ public class HdfsFsManager {
     // supported scheme
     private static final String HDFS_SCHEME = "hdfs";
     private static final String VIEWFS_SCHEME = "viewfs";
+    private static final String S3_SCHEMA = "s3";
     private static final String S3A_SCHEME = "s3a";
     private static final String OSS_SCHEME = "oss";
     private static final String COS_SCHEME = "cosn";
@@ -266,72 +268,73 @@ public class HdfsFsManager {
     // arguments for ha hdfs
     private static final String DFS_NAMESERVICES_KEY = "dfs.nameservices";
     private static final String FS_DEFAULTFS_KEY = "fs.defaultFS";
-    public static final String FS_HDFS_IMPL_DISABLE_CACHE = "fs.hdfs.impl.disable.cache";
+    protected static final String FS_HDFS_IMPL_DISABLE_CACHE = "fs.hdfs.impl.disable.cache";
     // If this property is not set to "true", FileSystem instance will be returned
     // from cache
     // which is not thread-safe and may cause 'Filesystem closed' exception when it
     // is closed by other thread.
 
     // arguments for s3a
-    public static final String FS_S3A_ACCESS_KEY = "fs.s3a.access.key";
-    public static final String FS_S3A_SECRET_KEY = "fs.s3a.secret.key";
-    public static final String FS_S3A_ENDPOINT = "fs.s3a.endpoint";
+    protected static final String FS_S3A_ACCESS_KEY = "fs.s3a.access.key";
+    protected static final String FS_S3A_SECRET_KEY = "fs.s3a.secret.key";
+    protected static final String FS_S3A_ENDPOINT = "fs.s3a.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
-    public static final String FS_S3A_IMPL_DISABLE_CACHE = "fs.s3a.impl.disable.cache";
-    public static final String FS_S3A_CONNECTION_SSL_ENABLED = "fs.s3a.connection.ssl.enabled";
-    public static final String FS_S3A_MAX_CONNECTION = "fs.s3a.connection.maximum";
-    public static final String FS_S3A_AWS_CRED_PROVIDER = "fs.s3a.aws.credentials.provider";
+    protected static final String FS_S3A_IMPL_DISABLE_CACHE = "fs.s3a.impl.disable.cache";
+    protected static final String FS_S3_IMPL_DISABLE_CACHE = "fs.s3.impl.disable.cache";
+    protected static final String FS_S3A_CONNECTION_SSL_ENABLED = "fs.s3a.connection.ssl.enabled";
+    protected static final String FS_S3A_MAX_CONNECTION = "fs.s3a.connection.maximum";
+    protected static final String FS_S3A_AWS_CRED_PROVIDER = "fs.s3a.aws.credentials.provider";
 
     // arguments for ks3
-    public static final String FS_KS3_ACCESS_KEY = "fs.ks3.AccessKey";
-    public static final String FS_KS3_SECRET_KEY = "fs.ks3.AccessSecret";
-    public static final String FS_KS3_ENDPOINT = "fs.ks3.endpoint";
-    public static final String FS_KS3_IMPL = "fs.ks3.impl";
+    protected static final String FS_KS3_ACCESS_KEY = "fs.ks3.AccessKey";
+    protected static final String FS_KS3_SECRET_KEY = "fs.ks3.AccessSecret";
+    protected static final String FS_KS3_ENDPOINT = "fs.ks3.endpoint";
+    protected static final String FS_KS3_IMPL = "fs.ks3.impl";
     // This property is used like 'fs.ks3.impl.disable.cache'
-    public static final String FS_KS3_CONNECTION_SSL_ENABLED = "fs.ks3.connection.ssl.enabled";
-    public static final String FS_KS3_IMPL_DISABLE_CACHE = "fs.ks3.impl.disable.cache";
+    protected static final String FS_KS3_CONNECTION_SSL_ENABLED = "fs.ks3.connection.ssl.enabled";
+    protected static final String FS_KS3_IMPL_DISABLE_CACHE = "fs.ks3.impl.disable.cache";
 
     // arguments for oss
-    public static final String FS_OSS_ACCESS_KEY = "fs.oss.accessKeyId";
-    public static final String FS_OSS_SECRET_KEY = "fs.oss.accessKeySecret";
-    public static final String FS_OSS_ENDPOINT = "fs.oss.endpoint";
+    protected static final String FS_OSS_ACCESS_KEY = "fs.oss.accessKeyId";
+    protected static final String FS_OSS_SECRET_KEY = "fs.oss.accessKeySecret";
+    protected static final String FS_OSS_ENDPOINT = "fs.oss.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
-    public static final String FS_OSS_IMPL_DISABLE_CACHE = "fs.oss.impl.disable.cache";
-    public static final String FS_OSS_CONNECTION_SSL_ENABLED = "fs.oss.connection.secure.enabled";
-    public static final String FS_OSS_IMPL = "fs.oss.impl";
+    protected static final String FS_OSS_IMPL_DISABLE_CACHE = "fs.oss.impl.disable.cache";
+    protected static final String FS_OSS_CONNECTION_SSL_ENABLED = "fs.oss.connection.secure.enabled";
+    protected static final String FS_OSS_IMPL = "fs.oss.impl";
 
     // arguments for cos
-    public static final String FS_COS_ACCESS_KEY = "fs.cosn.userinfo.secretId";
-    public static final String FS_COS_SECRET_KEY = "fs.cosn.userinfo.secretKey";
-    public static final String FS_COS_ENDPOINT = "fs.cosn.bucket.endpoint_suffix";
-    public static final String FS_COS_IMPL_DISABLE_CACHE = "fs.cosn.impl.disable.cache";
-    public static final String FS_COS_CONNECTION_SSL_ENABLED = "fs.cos.connection.ssl.enabled";
-    public static final String FS_COS_IMPL = "fs.cosn.impl";
+    protected static final String FS_COS_ACCESS_KEY = "fs.cosn.userinfo.secretId";
+    protected static final String FS_COS_SECRET_KEY = "fs.cosn.userinfo.secretKey";
+    protected static final String FS_COS_ENDPOINT = "fs.cosn.bucket.endpoint_suffix";
+    protected static final String FS_COS_IMPL_DISABLE_CACHE = "fs.cosn.impl.disable.cache";
+    protected static final String FS_COS_CONNECTION_SSL_ENABLED = "fs.cos.connection.ssl.enabled";
+    protected static final String FS_COS_IMPL = "fs.cosn.impl";
 
     // arguments for obs
-    public static final String FS_OBS_ACCESS_KEY = "fs.obs.access.key";
-    public static final String FS_OBS_SECRET_KEY = "fs.obs.secret.key";
-    public static final String FS_OBS_ENDPOINT = "fs.obs.endpoint";
+    protected static final String FS_OBS_ACCESS_KEY = "fs.obs.access.key";
+    protected static final String FS_OBS_SECRET_KEY = "fs.obs.secret.key";
+    protected static final String FS_OBS_ENDPOINT = "fs.obs.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
-    public static final String FS_OBS_IMPL_DISABLE_CACHE = "fs.obs.impl.disable.cache";
-    public static final String FS_OBS_CONNECTION_SSL_ENABLED = "fs.obs.connection.ssl.enabled";
-    public static final String FS_OBS_IMPL = "fs.obs.impl";
-    public static final String FS_ABFS_IMPL_DISABLE_CACHE = "fs.abfs.impl.disable.cache";
-    public static final String FS_ABFSS_IMPL_DISABLE_CACHE = "fs.abfss.impl.disable.cache";
-    public static final String FS_ADL_IMPL_DISABLE_CACHE = "fs.adl.impl.disable.cache";
-    public static final String FS_WASB_IMPL_DISABLE_CACHE = "fs.wasb.impl.disable.cache";
-    public static final String FS_WASBS_IMPL_DISABLE_CACHE = "fs.wasbs.impl.disable.cache";
-    public static final String FS_GS_IMPL_DISABLE_CACHE = "fs.gs.impl.disable.cache";
+    protected static final String FS_OBS_IMPL_DISABLE_CACHE = "fs.obs.impl.disable.cache";
+    protected static final String FS_OBS_CONNECTION_SSL_ENABLED = "fs.obs.connection.ssl.enabled";
+    protected static final String FS_OBS_IMPL = "fs.obs.impl";
+    protected static final String FS_ABFS_IMPL_DISABLE_CACHE = "fs.abfs.impl.disable.cache";
+    protected static final String FS_ABFSS_IMPL_DISABLE_CACHE = "fs.abfss.impl.disable.cache";
+    protected static final String FS_ADL_IMPL_DISABLE_CACHE = "fs.adl.impl.disable.cache";
+    protected static final String FS_WASB_IMPL_DISABLE_CACHE = "fs.wasb.impl.disable.cache";
+    protected static final String FS_WASBS_IMPL_DISABLE_CACHE = "fs.wasbs.impl.disable.cache";
+    protected static final String FS_GS_IMPL_DISABLE_CACHE = "fs.gs.impl.disable.cache";
 
     // arguments for tos
-    public static final String FS_TOS_ACCESS_KEY = "fs.tos.access.key";
-    public static final String FS_TOS_SECRET_KEY = "fs.tos.secret.key";
-    public static final String FS_TOS_ENDPOINT = "fs.tos.endpoint";
+    protected static final String FS_TOS_ACCESS_KEY = "fs.tos.access.key";
+    protected static final String FS_TOS_SECRET_KEY = "fs.tos.secret.key";
+    protected static final String FS_TOS_ENDPOINT = "fs.tos.endpoint";
     // This property is used like 'fs.hdfs.impl.disable.cache'
-    public static final String FS_TOS_IMPL_DISABLE_CACHE = "fs.tos.impl.disable.cache";
-    public static final String FS_TOS_CONNECTION_SSL_ENABLED = "fs.tos.connection.ssl.enabled";
-    public static final String FS_TOS_IMPL = "fs.tos.impl";
-    public static final String FS_TOS_REGION = "fs.tos.region";
+    protected static final String FS_TOS_IMPL_DISABLE_CACHE = "fs.tos.impl.disable.cache";
+    protected static final String FS_TOS_CONNECTION_SSL_ENABLED = "fs.tos.connection.ssl.enabled";
+    protected static final String FS_TOS_IMPL = "fs.tos.impl";
+    protected static final String FS_TOS_REGION = "fs.tos.region";
 
     private final ScheduledExecutorService handleManagementPool = Executors.newScheduledThreadPool(1);
 
@@ -358,22 +361,6 @@ public class HdfsFsManager {
         ((ConfigurationWrap) conf).convertObjectStoreConfToProperties(path, tProperties, tObjectStoreType);
     }
 
-    private static void tryWriteCloudCredentialToProperties(CloudConfiguration cloudConfiguration,
-                                                            THdfsProperties tHdfsProperties) {
-        if (cloudConfiguration == null) {
-            return;
-        }
-        if (cloudConfiguration.getCloudType() == CloudType.DEFAULT) {
-            // TODO(SmithCruise)
-            // We only set cloudConfiguration when CloudType is non-default.
-            // Because BE didn't handle CloudType.DEFAULT situation now
-            return;
-        }
-        TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
-        cloudConfiguration.toThrift(tCloudConfiguration);
-        tHdfsProperties.setCloud_configuration(tCloudConfiguration);
-    }
-
     /**
      * visible for test
      *
@@ -392,6 +379,8 @@ public class HdfsFsManager {
                 return getDistributedFileSystem(scheme, path, loadProperties, tProperties);
             case S3A_SCHEME:
                 return getS3AFileSystem(path, loadProperties, tProperties);
+            case S3_SCHEMA:
+                return getS3FileSystem(path, loadProperties, tProperties);
             case OSS_SCHEME:
                 return getOSSFileSystem(path, loadProperties, tProperties);
             case COS_SCHEME:
@@ -535,8 +524,14 @@ public class HdfsFsManager {
      */
     public HdfsFs getS3AFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
+        CloudConfiguration cloudConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
+        // If we don't set new authenticate parameters, we use original way (just for compatible)
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
+        }
+
         WildcardURI pathUri = new WildcardURI(path);
-        HdfsFsIdentity fileSystemIdentity = null;
 
         String accessKey = loadProperties.getOrDefault(FS_S3A_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_S3A_SECRET_KEY, "");
@@ -545,19 +540,12 @@ public class HdfsFsManager {
         String connectionSSLEnabled = loadProperties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "false");
         String awsCredProvider = loadProperties.getOrDefault(FS_S3A_AWS_CRED_PROVIDER, null);
 
-        CloudConfiguration cloudConfiguration =
-                CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
-        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-            String host = S3A_SCHEME + "://" + pathUri.getUri().getHost();
-            fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.getCredentialString());
-        } else {
-            // endpoint is the server host, pathUri.getUri().getHost() is the bucket
-            // we should use these two params as the host identity, because FileSystem will
-            // cache both.
-            String host = S3A_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
-            String s3aUgi = accessKey + "," + secretKey;
-            fileSystemIdentity = new HdfsFsIdentity(host, s3aUgi);
-        }
+        // endpoint is the server host, pathUri.getUri().getHost() is the bucket
+        // we should use these two params as the host identity, because FileSystem will
+        // cache both.
+        String host = S3A_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
+        String s3aUgi = accessKey + "," + secretKey;
+        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, s3aUgi);
 
         cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
         HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
@@ -576,23 +564,19 @@ public class HdfsFsManager {
                 LOG.info("could not find file system for path " + path + " create a new one");
                 // create a new filesystem
                 Configuration conf = new ConfigurationWrap();
-                if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
-                    cloudConfiguration.applyToConfiguration(conf);
-                } else {
-                    if (!accessKey.isEmpty()) {
-                        conf.set(FS_S3A_ACCESS_KEY, accessKey);
-                    }
-                    if (!secretKey.isEmpty()) {
-                        conf.set(FS_S3A_SECRET_KEY, secretKey);
-                    }
-                    if (!endpoint.isEmpty()) {
-                        conf.set(FS_S3A_ENDPOINT, endpoint);
-                    }
-                    // Only set ssl for origin logic
-                    conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
-                    if (awsCredProvider != null) {
-                        conf.set(FS_S3A_AWS_CRED_PROVIDER, awsCredProvider);
-                    }
+                if (!accessKey.isEmpty()) {
+                    conf.set(FS_S3A_ACCESS_KEY, accessKey);
+                }
+                if (!secretKey.isEmpty()) {
+                    conf.set(FS_S3A_SECRET_KEY, secretKey);
+                }
+                if (!endpoint.isEmpty()) {
+                    conf.set(FS_S3A_ENDPOINT, endpoint);
+                }
+                // Only set ssl for origin logic
+                conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
+                if (awsCredProvider != null) {
+                    conf.set(FS_S3A_AWS_CRED_PROVIDER, awsCredProvider);
                 }
 
                 conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCache);
@@ -601,13 +585,11 @@ public class HdfsFsManager {
                 fileSystem.setConfiguration(conf);
                 if (tProperties != null) {
                     convertObjectStoreConfToProperties(path, conf, tProperties, TObjectStoreType.S3);
-                    tryWriteCloudCredentialToProperties(cloudConfiguration, tProperties);
                 }
             } else {
                 if (tProperties != null) {
                     convertObjectStoreConfToProperties(path, fileSystem.getConfiguration(), tProperties,
                             TObjectStoreType.S3);
-                    tryWriteCloudCredentialToProperties(cloudConfiguration, tProperties);
                 }
             }
             return fileSystem;
@@ -617,6 +599,13 @@ public class HdfsFsManager {
         } finally {
             fileSystem.getLock().unlock();
         }
+    }
+
+    public HdfsFs getS3FileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
+            throws UserException {
+        CloudConfiguration cloudConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
+        return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
     }
 
     /**
@@ -625,57 +614,12 @@ public class HdfsFsManager {
      */
     public HdfsFs getAzureFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
-        WildcardURI pathUri = new WildcardURI(path);
-
         // Put path into fileProperties, so that we can get storage account in AzureStorageCloudConfiguration
         loadProperties.put(AzureCloudConfigurationFactory.AZURE_PATH_KEY, path);
 
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
-
-        String host = pathUri.getUri().getScheme() + "://" + pathUri.getUri().getHost();
-        HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.getCredentialString());
-
-        cachedFileSystem.putIfAbsent(fileSystemIdentity, new HdfsFs(fileSystemIdentity));
-        HdfsFs fileSystem = cachedFileSystem.get(fileSystemIdentity);
-        if (fileSystem == null) {
-            // it means it is removed concurrently by checker thread
-            return null;
-        }
-        fileSystem.getLock().lock();
-        try {
-            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
-                // this means the file system is closed by file system checker thread
-                // it is a corner case
-                return null;
-            }
-            if (fileSystem.getDFSFileSystem() == null) {
-                LOG.info("could not find file system for path " + path + " create a new one");
-                // create a new filesystem
-                Configuration conf = new ConfigurationWrap();
-                cloudConfiguration.applyToConfiguration(conf);
-
-                // Always disable hadoop's cache for azure storage
-                conf.set(FS_ABFS_IMPL_DISABLE_CACHE, "true");
-                conf.set(FS_ABFSS_IMPL_DISABLE_CACHE, "true");
-                conf.set(FS_ADL_IMPL_DISABLE_CACHE, "true");
-                conf.set(FS_WASB_IMPL_DISABLE_CACHE, "true");
-                conf.set(FS_WASBS_IMPL_DISABLE_CACHE, "true");
-
-                FileSystem azureFileSystem = FileSystem.get(pathUri.getUri(), conf);
-                fileSystem.setFileSystem(azureFileSystem);
-                fileSystem.setConfiguration(conf);
-            }
-            if (tProperties != null) {
-                tryWriteCloudCredentialToProperties(cloudConfiguration, tProperties);
-            }
-            return fileSystem;
-        } catch (Exception e) {
-            LOG.error("errors while connect to " + path, e);
-            throw new UserException(e);
-        } finally {
-            fileSystem.getLock().unlock();
-        }
+        return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
     }
 
     /**
@@ -684,10 +628,21 @@ public class HdfsFsManager {
      */
     public HdfsFs getGoogleFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
-        WildcardURI pathUri = new WildcardURI(path);
-
         CloudConfiguration cloudConfiguration =
                 CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
+        return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
+    }
+
+    /**
+     * This function create FileSystem by CloudConfiguration
+     * Support s3://, s3a://, abfs://, abfss://, adl://, wasb://, wasbs://, gs://, oss://, obs://, cosn://,
+     * tos://, ks3://
+     */
+    private HdfsFs getFileSystemByCloudConfiguration(CloudConfiguration cloudConfiguration, String path,
+                                                     THdfsProperties tProperties)
+            throws UserException {
+        Preconditions.checkArgument(cloudConfiguration != null);
+        WildcardURI pathUri = new WildcardURI(path);
 
         String host = pathUri.getUri().getScheme() + "://" + pathUri.getUri().getHost();
         HdfsFsIdentity fileSystemIdentity = new HdfsFsIdentity(host, cloudConfiguration.getCredentialString());
@@ -711,15 +666,36 @@ public class HdfsFsManager {
                 Configuration conf = new ConfigurationWrap();
                 cloudConfiguration.applyToConfiguration(conf);
 
-                // Always disable hadoop's cache for azure storage
+                // Disable cache for AWS
+                conf.set(FS_S3_IMPL_DISABLE_CACHE, "true");
+                conf.set(FS_S3A_IMPL_DISABLE_CACHE, "true");
+                // Disable cache for Azure
+                conf.set(FS_ABFS_IMPL_DISABLE_CACHE, "true");
+                conf.set(FS_ABFSS_IMPL_DISABLE_CACHE, "true");
+                conf.set(FS_ADL_IMPL_DISABLE_CACHE, "true");
+                conf.set(FS_WASB_IMPL_DISABLE_CACHE, "true");
+                conf.set(FS_WASBS_IMPL_DISABLE_CACHE, "true");
+                // Disable cache for GCS
                 conf.set(FS_GS_IMPL_DISABLE_CACHE, "true");
+                // Disable cache for OSS
+                conf.set(FS_OSS_IMPL_DISABLE_CACHE, "true");
+                // Disable cache for OBS
+                conf.set(FS_OBS_IMPL_DISABLE_CACHE, "true");
+                // Disable cache for COS
+                conf.set(FS_COS_IMPL_DISABLE_CACHE, "true");
+                // Disable cache for TOS
+                conf.set(FS_TOS_IMPL_DISABLE_CACHE, "true");
+                // Disable cache for KS3
+                conf.set(FS_KS3_IMPL_DISABLE_CACHE, "true");
 
-                FileSystem azureFileSystem = FileSystem.get(pathUri.getUri(), conf);
-                fileSystem.setFileSystem(azureFileSystem);
+                FileSystem innerFileSystem = FileSystem.get(pathUri.getUri(), conf);
+                fileSystem.setFileSystem(innerFileSystem);
                 fileSystem.setConfiguration(conf);
             }
             if (tProperties != null) {
-                tryWriteCloudCredentialToProperties(cloudConfiguration, tProperties);
+                TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+                cloudConfiguration.toThrift(tCloudConfiguration);
+                tProperties.setCloud_configuration(tCloudConfiguration);
             }
             return fileSystem;
         } catch (Exception e) {
@@ -738,6 +714,14 @@ public class HdfsFsManager {
      */
     public HdfsFs getKS3FileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
+        CloudConfiguration cloudConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
+        // If we don't set new authenticate parameters, we use original way (just for compatible)
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
+        }
+        // TODO(SmithCruise) Maybe we can delete below code, because KS3 is never support officially
+        // We can remove it relevant jars, using S3AFileSystem instead, it can save for 15MB space.
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_KS3_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_KS3_SECRET_KEY, "");
@@ -807,6 +791,12 @@ public class HdfsFsManager {
      */
     public HdfsFs getOBSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
+        CloudConfiguration cloudConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
+        // If we don't set new authenticate parameters, we use original way (just for compatible)
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
+        }
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_OBS_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_OBS_SECRET_KEY, "");
@@ -955,6 +945,13 @@ public class HdfsFsManager {
      */
     public HdfsFs getOSSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
+        CloudConfiguration cloudConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
+        // If we don't set new authenticate parameters, we use original way (just for compatible)
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
+        }
+
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_OSS_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_OSS_SECRET_KEY, "");
@@ -1025,6 +1022,13 @@ public class HdfsFsManager {
      */
     public HdfsFs getCOSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
             throws UserException {
+        CloudConfiguration cloudConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
+        // If we don't set new authenticate parameters, we use original way (just for compatible)
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
+        }
+
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_COS_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_COS_SECRET_KEY, "");
@@ -1094,6 +1098,14 @@ public class HdfsFsManager {
      */
     public HdfsFs getTOSFileSystem(String path, Map<String, String> loadProperties, THdfsProperties tProperties)
         throws UserException {
+        CloudConfiguration cloudConfiguration =
+                CloudConfigurationFactory.buildCloudConfigurationForStorage(loadProperties);
+        // If we don't set new authenticate parameters, we use original way (just for compatible)
+        if (cloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+            return getFileSystemByCloudConfiguration(cloudConfiguration, path, tProperties);
+        }
+        // TODO(SmithCruise) Maybe we can delete below code, because TOS is never support officially
+        // We can remove it relevant jars, using S3AFileSystem instead.
         WildcardURI pathUri = new WildcardURI(path);
         String accessKey = loadProperties.getOrDefault(FS_TOS_ACCESS_KEY, "");
         String secretKey = loadProperties.getOrDefault(FS_TOS_SECRET_KEY, "");
@@ -1226,10 +1238,20 @@ public class HdfsFsManager {
     public void renamePath(String srcPath, String destPath, Map<String, String> loadProperties) throws UserException {
         WildcardURI srcPathUri = new WildcardURI(srcPath);
         WildcardURI destPathUri = new WildcardURI(destPath);
-        if (!srcPathUri.getAuthority().trim().equals(destPathUri.getAuthority().trim())) {
-            throw new UserException(
-                    "only allow rename in same file system");
+
+        boolean srcAuthorityNull = (srcPathUri.getAuthority() == null);
+        boolean destAuthorityNull = (destPathUri.getAuthority() == null);
+        if (srcAuthorityNull != destAuthorityNull) {
+            throw new UserException("Different authority info between srcPath: " + srcPath +
+                                    " and destPath: " + destPath);
         }
+        if (!srcAuthorityNull && !destAuthorityNull &&
+                !srcPathUri.getAuthority().trim().equals(destPathUri.getAuthority().trim())) {
+            throw new UserException(
+                "only allow rename in same file system");
+
+        }
+
         HdfsFs fileSystem = getFileSystem(srcPath, loadProperties, null);
         Path srcfilePath = new Path(srcPathUri.getPath());
         Path destfilePath = new Path(destPathUri.getPath());
@@ -1413,7 +1435,7 @@ public class HdfsFsManager {
         public void run() {
             try {
                 for (HdfsFs fileSystem : cachedFileSystem.values()) {
-                    if (fileSystem.isExpired(Config.hdfs_file_sytem_expire_seconds)) {
+                    if (fileSystem.isExpired(Config.hdfs_file_system_expire_seconds)) {
                         LOG.info("file system " + fileSystem + " is expired, close and remove it");
                         fileSystem.getLock().lock();
                         try {

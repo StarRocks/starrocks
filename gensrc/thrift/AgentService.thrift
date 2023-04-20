@@ -116,6 +116,12 @@ struct TAlterTabletReq {
     3: required TCreateTabletReq new_tablet_req
 }
 
+struct TAlterTabletMaterializedColumnReq {
+    1: optional InternalService.TQueryGlobals query_globals
+    2: optional InternalService.TQueryOptions query_options
+    3: optional map<i32, Exprs.TExpr> mc_exprs
+}
+
 // This v2 request will replace the old TAlterTabletReq.
 // TAlterTabletReq should be deprecated after new alter job process merged.
 struct TAlterTabletReqV2 {
@@ -128,6 +134,7 @@ struct TAlterTabletReqV2 {
     7: optional list<TAlterMaterializedViewParam> materialized_view_params
     8: optional TTabletType tablet_type
     9: optional i64 txn_id
+    10: optional TAlterTabletMaterializedColumnReq materialized_column_req
 }
 
 struct TAlterMaterializedViewParam {
@@ -204,6 +211,11 @@ struct TCheckConsistencyReq {
     2: required Types.TSchemaHash schema_hash
     3: required Types.TVersion version
     4: required Types.TVersionHash version_hash // Deprecated
+}
+
+struct TCompactionReq {
+    1: optional list<Types.TTableId> tablet_ids
+    2: optional bool is_base_compaction
 }
 
 struct TUploadReq {
@@ -370,6 +382,7 @@ struct TAgentTaskRequest {
     25: optional i64 recv_time // time the task is inserted to queue
     26: optional TUpdateTabletMetaInfoReq update_tablet_meta_info_req
     27: optional TDropAutoIncrementMapReq drop_auto_increment_map_req
+    28: optional TCompactionReq compaction_req
 }
 
 struct TAgentResult {

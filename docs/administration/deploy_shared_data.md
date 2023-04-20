@@ -24,7 +24,7 @@ The deployment of a shared-data StarRocks cluster is similar to that of a classi
 
 ### Configure FE nodes for shared-data StarRocks
 
-Before starting FE, add the following configuration items in the FE configuration file **fe.conf**:
+Before starting FEs, add the following configuration items in the FE configuration file **fe.conf**:
 
 | **Configuration item**              | **Description**                                              |
 | ----------------------------------- | ------------------------------------------------------------ |
@@ -41,90 +41,126 @@ Before starting FE, add the following configuration items in the FE configuratio
 | aws_s3_iam_role_arn                 | The ARN of the IAM role that has privileges on your S3 bucket in which your data files are stored. |
 | aws_s3_external_id                  | The external ID of the AWS account that is used for cross-account access to your S3 bucket. |
 
-- If you use the default authentication credential of AWS SDK to access S3, add the following configuration items:
+- If you use AWS S3
 
-  ```YAML
+  - If you use the default authentication credential of AWS SDK to access S3, add the following configuration items:
+
+    ```Plain
+    run_mode = shared_data
+    cloud_native_meta_port = <meta_port>
+    cloud_native_storage_type = S3
+    aws_s3_path = <s3_path>
+    aws_s3_region = <region>
+    aws_s3_endpoint = <endpoint_url>
+    aws_s3_use_aws_sdk_default_behavior = true
+    ```
+
+  - If you use IAM user-based credential (Access Key and Secret Key) to access S3, add the following configuration items:
+
+    ```Plain
+    run_mode = shared_data
+    cloud_native_meta_port = <meta_port>
+    cloud_native_storage_type = S3
+    aws_s3_path = <s3_path>
+    aws_s3_region = <region>
+    aws_s3_endpoint = <endpoint_url>
+    aws_s3_access_key = <access_key>
+    aws_s3_secret_key = <secret_key>
+    ```
+
+  - If you use Instance Profile to access S3, add the following configuration items:
+
+    ```Plain
+    run_mode = shared_data
+    cloud_native_meta_port = <meta_port>
+    cloud_native_storage_type = S3
+    aws_s3_path = <s3_path>
+    aws_s3_region = <region>
+    aws_s3_endpoint = <endpoint_url>
+    aws_s3_use_instance_profile = true
+    ```
+
+  - If you use Assumed Role to access S3, add the following configuration items:
+
+    ```Plain
+    run_mode = shared_data
+    cloud_native_meta_port = <meta_port>
+    cloud_native_storage_type = S3
+    aws_s3_path = <s3_path>
+    aws_s3_region = <region>
+    aws_s3_endpoint = <endpoint_url>
+    aws_s3_use_instance_profile = true
+    aws_s3_iam_role_arn = <role_arn>
+    ```
+
+  - If you use Assumed Role to access S3 from an external AWS account, add the following configuration items:
+
+    ```Plain
+    run_mode = shared_data
+    cloud_native_meta_port = <meta_port>
+    cloud_native_storage_type = S3
+    aws_s3_path = <s3_path>
+    aws_s3_region = <region>
+    aws_s3_endpoint = <endpoint_url>
+    aws_s3_use_instance_profile = true
+    aws_s3_iam_role_arn = <role_arn>
+    aws_s3_external_id = <external_id>
+    ```
+
+- If you use GCP Cloud Storage:
+
+  ```Plain
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
   aws_s3_path = <s3_path>
-  aws_s3_region = <region>
-  aws_s3_endpoint = <endpoint_url>
-  aws_s3_use_aws_sdk_default_behavior = true
-  ```
 
-- If you use IAM user-based credential (Access Key and Secret Key) to access S3, add the following configuration items:
-
-  ```YAML
-  run_mode = shared_data
-  cloud_native_meta_port = <meta_port>
-  cloud_native_storage_type = S3
-  aws_s3_path = <s3_path>
+  # For example: us-east-1
   aws_s3_region = <region>
+
+  # For example: https://storage.googleapis.com
   aws_s3_endpoint = <endpoint_url>
-  aws_s3_use_aws_sdk_default_behavior = false
-  aws_s3_use_instance_profile = false
+
   aws_s3_access_key = <access_key>
-  aws_s3_secret_key = <secrete_key>
+  aws_s3_secret_key = <secret_key>
   ```
 
-- If you use Instance Profile to access S3, add the following configuration items:
 
-  ```YAML
+- If you use MinIO:
+
+  ```Plain
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
   aws_s3_path = <s3_path>
+
+  # For example: us-east-1
   aws_s3_region = <region>
+
+  # For example: http://172.26.xx.xxx:39000
   aws_s3_endpoint = <endpoint_url>
-  aws_s3_use_aws_sdk_default_behavior = false
-  aws_s3_use_instance_profile = true
-  ```
-
-- If you use Assumed Role to access S3, add the following configuration items:
-
-  ```YAML
-  run_mode = shared_data
-  cloud_native_meta_port = <meta_port>
-  cloud_native_storage_type = S3
-  aws_s3_path = <s3_path>
-  aws_s3_region = <region>
-  aws_s3_endpoint = <endpoint_url>
-  aws_s3_use_aws_sdk_default_behavior = false
-  aws_s3_use_instance_profile = true
-  aws_s3_iam_role_arn = <role_arn>
-  ```
-
-- If you use Assumed Role to access S3 from an external AWS account, add the following configuration items:
-
-  ```YAML
-  run_mode = shared_data
-  cloud_native_meta_port = <meta_port>
-  cloud_native_storage_type = S3
-  aws_s3_path = <s3_path>
-  aws_s3_region = <region>
-  aws_s3_endpoint = <endpoint_url>
-  aws_s3_use_aws_sdk_default_behavior = false
-  aws_s3_use_instance_profile = true
-  aws_s3_iam_role_arn = <role_arn>
-  aws_s3_external_id = <external_id>
+  
+  aws_s3_access_key = <access_key>
+  aws_s3_secret_key = <secret_key>
   ```
 
 ### Configure BE nodes for shared-data StarRocks
 
-Add the following configuration items in the BE configuration file **be.conf**:
+**Before starting BEs**, add the following configuration items in the BE configuration file **be.conf**:
 
-```YAML
+```Plain
 starlet_port = <starlet_port>
+storage_root_path = <storage_root_path>
 ```
 
 | **Configuration item** | **Description**                |
 | ---------------------- | ------------------------------ |
 | starlet_port           | The BE heartbeat service port. Default value: `9070`.|
+| storage_root_path      | The storage volume directory that the local cached data depends on and the medium type of the storage. Multiple volumes are separated by semicolon (;). If the storage medium is SSD, add `,medium:ssd` at the end of the directory. If the storage medium is HDD, add `,medium:hdd` at the end of the directory. Example: `/data1,medium:hdd;/data2,medium:ssd`. Default value: `${STARROCKS_HOME}/storage`. |
 
 > **NOTE**
 >
-> Whereas data has been stored in object storage, you do not need to specify `storage_root_path` in the BE configuration file when you deploy a shared-data StarRocks cluster.
+> The data is cached under the directory **<storage_root_path\>/starlet_cache**.
 
 ## Use your shared-data StarRocks cluster
 
@@ -183,14 +219,14 @@ Example:
 
 ```Plain
 mysql> SHOW PROC "/dbs/xxxxx";
-+---------+-------------+----------+---------------------+--------------+--------+------+--------------------------+--------------+---------------+------------------------------+
-| TableId | TableName   | IndexNum | PartitionColumnName | PartitionNum | State  | Type | LastConsistencyCheckTime | ReplicaCount | PartitionType | StoragePath                  |
-+---------+-------------+----------+---------------------+--------------+--------+------+--------------------------+--------------+---------------+------------------------------+
-| 12003   | detail_demo | 1        | NULL                | 1            | NORMAL | LAKE | NULL                     | 8            | UNPARTITIONED | s3://xxxxxxxxxxxxxx/1/12003/ |
-+---------+-------------+----------+---------------------+--------------+--------+------+--------------------------+--------------+---------------+------------------------------+
++---------+-------------+----------+---------------------+--------------+--------+--------------+--------------------------+--------------+---------------+------------------------------+
+| TableId | TableName   | IndexNum | PartitionColumnName | PartitionNum | State  | Type         | LastConsistencyCheckTime | ReplicaCount | PartitionType | StoragePath                  |
++---------+-------------+----------+---------------------+--------------+--------+--------------+--------------------------+--------------+---------------+------------------------------+
+| 12003   | detail_demo | 1        | NULL                | 1            | NORMAL | CLOUD_NATIVE | NULL                     | 8            | UNPARTITIONED | s3://xxxxxxxxxxxxxx/1/12003/ |
++---------+-------------+----------+---------------------+--------------+--------+--------------+--------------------------+--------------+---------------+------------------------------+
 ```
 
-The `Type` of a table in shared-data StarRocks cluster is `LAKE`. In the field `StoragePath`, StarRocks returns the object storage directory where the table is stored.
+The `Type` of a table in shared-data StarRocks cluster is `CLOUD_NATIVE`. In the field `StoragePath`, StarRocks returns the object storage directory where the table is stored.
 
 ### Load data into a shared-data StarRocks cluster
 

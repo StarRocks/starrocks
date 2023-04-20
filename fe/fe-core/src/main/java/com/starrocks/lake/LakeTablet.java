@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake;
 
 import com.google.common.collect.Sets;
@@ -79,8 +78,8 @@ public class LakeTablet extends Tablet {
         this.rowCount = rowCount;
     }
 
-    public long getPrimaryBackendId() throws UserException {
-        return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryBackendIdByShard(getShardId());
+    public long getPrimaryComputeNodeId() throws UserException {
+        return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryComputeNodeIdByShard(getShardId());
     }
 
     @Override
@@ -98,7 +97,8 @@ public class LakeTablet extends Tablet {
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
         for (long backendId : getBackendIds()) {
-            Replica replica = new Replica(getId(), backendId, -1, NORMAL);
+            Replica replica = new Replica(getId(), backendId, visibleVersion, schemaHash, getDataSize(true),
+                    getRowCount(visibleVersion), NORMAL, -1, visibleVersion);
             allQuerableReplicas.add(replica);
             if (localBeId != -1 && backendId == localBeId) {
                 localReplicas.add(replica);

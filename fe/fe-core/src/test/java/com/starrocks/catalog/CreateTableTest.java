@@ -333,6 +333,50 @@ public class CreateTableTest {
                 () -> createTable("create table test.atbl14 (k1 int, k2 int, k3 float) duplicate key(k1)\n"
                         + "partition by range(k1) (partition p1 values less than(\"10\") ('wrong_key' = 'value'))\n"
                         + "distributed by hash(k2) buckets 1 properties('replication_num' = '1'); "));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illege expression type for Materialized Column "
+                                + "Column Type: INT, Expression Type: DOUBLE",
+                        () -> createTable("CREATE TABLE test.atbl15 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                                          + "mc INT AS (array_avg(array_data)) ) Primary KEY (id) \n"
+                                          + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized Column must be nullable column.",
+                        () -> createTable("CREATE TABLE test.atbl16 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                                          + "mc DOUBLE NOT NULL AS (array_avg(array_data)) ) \n"
+                                          + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                                          + " ('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Input 'AS' is not "
+                                + "valid at this position.",
+                        () -> createTable("CREATE TABLE test.atbl17 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                                        + "mc DOUBLE AUTO_INCREMENT AS (array_avg(array_data)) ) \n"
+                                        + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                                        + "('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Input 'AS' is not "
+                                + "valid at this position.",
+                        () -> createTable("CREATE TABLE test.atbl18 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                                          + "mc DOUBLE DEFAULT '1.0' AS (array_avg(array_data)) ) \n"
+                                          + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                                          + "('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to AUTO_INCREMENT columns",
+                        () -> createTable("CREATE TABLE test.atbl19 ( id BIGINT NOT NULL,  incr BIGINT AUTO_INCREMENT, \n"
+                                          + "array_data ARRAY<int> NOT NULL, mc BIGINT AS (incr) )\n"
+                                          + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                                          + "('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to other materialized columns",
+                        () -> createTable("CREATE TABLE test.atbl20 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                                          + "mc DOUBLE AS (array_avg(array_data)), \n"
+                                          + "mc_1 DOUBLE AS (mc) ) Primary KEY (id) \n"
+                                          + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
+        
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized Column don't support aggregation function",
+                        () -> createTable("CREATE TABLE test.atbl21 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                                          + "mc BIGINT AS (sum(id)) ) \n"
+                                          + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES \n"
+                                          + "('replication_num' = '1');\n"));
     }
 
     @Test
@@ -637,24 +681,24 @@ public class CreateTableTest {
     }
 
     @Test
-    public void testCreateBinaryTable() {
+    public void testCreateVarBinaryTable() {
         // duplicate table
         ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table test.binary_tbl\n" +
+                "create table test.varbinary_tbl\n" +
                         "(k1 int, j varbinary(10))\n" +
                         "duplicate key(k1)\n" +
                         "partition by range(k1)\n" +
                         "(partition p1 values less than(\"10\"))\n" +
                         "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
         ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table test.binary_tbl1\n" +
+                "create table test.varbinary_tbl1\n" +
                         "(k1 int, j varbinary)\n" +
                         "duplicate key(k1)\n" +
                         "partition by range(k1)\n" +
                         "(partition p1 values less than(\"10\"))\n" +
                         "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
         ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table test.binary_tbl2\n" +
+                "create table test.varbinary_tbl2\n" +
                         "(k1 int, j varbinary(1), j1 varbinary(10), j2 varbinary)\n" +
                         "duplicate key(k1)\n" +
                         "partition by range(k1)\n" +
@@ -662,19 +706,19 @@ public class CreateTableTest {
                         "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
         // default table
         ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table test.binary_tbl3\n"
+                "create table test.varbinary_tbl3\n"
                         + "(k1 int, k2 varbinary)\n"
                         + "distributed by hash(k1) buckets 1\n"
                         + "properties('replication_num' = '1');"));
 
         // unique key table
-        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.binary_tbl4 \n" +
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.varbinary_tbl4 \n" +
                 "(k1 int(40), j varbinary, j1 varbinary(1), j2 varbinary(10))\n" +
                 "unique key(k1)\n" +
                 "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
 
         // primary key table
-        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.binary_tbl5 \n" +
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.varbinary_tbl5 \n" +
                 "(k1 int(40), j varbinary, j1 varbinary, j2 varbinary(10))\n" +
                 "primary key(k1)\n" +
                 "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
@@ -682,22 +726,90 @@ public class CreateTableTest {
         // failed
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Invalid data type of key column 'k2': 'VARBINARY'",
-                () -> createTable("create table test.binary_tbl0\n"
+                () -> createTable("create table test.varbinary_tbl0\n"
                         + "(k1 int, k2 varbinary)\n"
                         + "duplicate key(k1, k2)\n"
                         + "distributed by hash(k1) buckets 1\n"
                         + "properties('replication_num' = '1');"));
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "VARBINARY(10) column can not be distribution column",
-                () -> createTable("create table test.binary_tbl0 \n"
+                () -> createTable("create table test.varbinary_tbl0 \n"
                         + "(k1 int, k2 varbinary(10) )\n"
                         + "duplicate key(k1)\n"
                         + "distributed by hash(k2) buckets 1\n"
                         + "properties('replication_num' = '1');"));
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Column[j] type[VARBINARY] cannot be a range partition key",
-                () -> createTable("create table test.binary_tbl0 \n" +
+                () -> createTable("create table test.varbinary_tbl0 \n" +
                         "(k1 int(40), j varbinary, j1 varbinary(20), j2 varbinary)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1, j)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+    }
+
+    @Test
+    public void testCreateBinaryTable() {
+        // duplicate table
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl\n" +
+                        "(k1 int, j binary(10))\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl1\n" +
+                        "(k1 int, j binary)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl2\n" +
+                        "(k1 int, j binary(1), j1 binary(10), j2 binary)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        // default table
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl3\n"
+                        + "(k1 int, k2 binary)\n"
+                        + "distributed by hash(k1) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
+
+        // unique key table
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.binary_tbl4 \n" +
+                "(k1 int(40), j binary, j1 binary(1), j2 binary(10))\n" +
+                "unique key(k1)\n" +
+                "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+
+        // primary key table
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.binary_tbl5 \n" +
+                "(k1 int(40), j binary, j1 binary, j2 binary(10))\n" +
+                "primary key(k1)\n" +
+                "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+
+        // failed
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Invalid data type of key column 'k2': 'VARBINARY'",
+                () -> createTable("create table test.binary_tbl0\n"
+                        + "(k1 int, k2 binary)\n"
+                        + "duplicate key(k1, k2)\n"
+                        + "distributed by hash(k1) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "VARBINARY(10) column can not be distribution column",
+                () -> createTable("create table test.binary_tbl0 \n"
+                        + "(k1 int, k2 binary(10) )\n"
+                        + "duplicate key(k1)\n"
+                        + "distributed by hash(k2) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Column[j] type[VARBINARY] cannot be a range partition key",
+                () -> createTable("create table test.binary_tbl0 \n" +
+                        "(k1 int(40), j binary, j1 binary(20), j2 binary)\n" +
                         "duplicate key(k1)\n" +
                         "partition by range(k1, j)\n" +
                         "(partition p1 values less than(\"10\"))\n" +
@@ -708,13 +820,70 @@ public class CreateTableTest {
      * Disable varbinary on unique/primary/aggregate key
      */
     @Test
+    public void testAlterVarBinaryTable() {
+        // use json as bloomfilter
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_varbinary_bf(\n" +
+                        "k1 INT,\n" +
+                        "k2 INT,\n" +
+                        "k3 VARBINARY\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")"
+        ));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Invalid bloom filter column 'k3': unsupported type VARBINARY",
+                () -> alterTableWithNewParser("ALTER TABLE test.t_varbinary_bf set (\"bloom_filter_columns\"= \"k3\");"));
+
+        // Modify column in unique key
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_varbinary_unique_key (\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "UNIQUE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")"
+        ));
+        // Add column in unique key
+        ExceptionChecker.expectThrowsNoException(
+                () -> alterTableWithNewParser("ALTER TABLE test.t_varbinary_unique_key ADD COLUMN k3 VARBINARY(12)"));
+
+        // Add column in primary key
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_varbinary_primary_key (\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "PRIMARY KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+        ExceptionChecker.expectThrowsNoException(
+                () -> alterTableWithNewParser("ALTER TABLE test.t_varbinary_primary_key ADD COLUMN k3 VARBINARY(21)"));
+    }
+
+    /**
+     * Disable binary on unique/primary/aggregate key
+     */
+    @Test
     public void testAlterBinaryTable() {
         // use json as bloomfilter
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.t_binary_bf(\n" +
                         "k1 INT,\n" +
                         "k2 INT,\n" +
-                        "k3 VARBINARY\n" +
+                        "k3 BINARY\n" +
                         ") ENGINE=OLAP\n" +
                         "DUPLICATE KEY(k1)\n" +
                         "COMMENT \"OLAP\"\n" +
@@ -742,7 +911,7 @@ public class CreateTableTest {
         ));
         // Add column in unique key
         ExceptionChecker.expectThrowsNoException(
-                () -> alterTableWithNewParser("ALTER TABLE test.t_binary_unique_key ADD COLUMN k3 VARBINARY(12)"));
+                () -> alterTableWithNewParser("ALTER TABLE test.t_binary_unique_key ADD COLUMN k3 BINARY(12)"));
 
         // Add column in primary key
         ExceptionChecker.expectThrowsNoException(() -> createTable(

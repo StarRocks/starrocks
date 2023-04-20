@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
@@ -128,7 +129,7 @@ public class HiveTableTest {
 
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testNoDb() throws Exception {
         String createTableSql = "create external table nodb.hive_tbl (col1 int, col2 int) engine=hive properties " +
                 "(\"resource\"=\"hive0\", \"table\"=\"table0\")";
@@ -137,7 +138,7 @@ public class HiveTableTest {
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = DdlException.class)
+    @Test(expected = AnalysisException.class)
     public void testNoTbl() throws Exception {
         String createTableSql = "create external table nodb.hive_tbl (col1 int, col2 int) engine=hive properties " +
                 "(\"resource\"=\"hive0\")";

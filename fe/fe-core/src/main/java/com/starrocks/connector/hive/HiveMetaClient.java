@@ -23,6 +23,7 @@ import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
 import com.starrocks.sql.PlannerProfile;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -91,7 +92,7 @@ public class HiveMetaClient {
                         AWSCatalogMetastoreClient.class.getName());
             } else {
                 hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
-                        HiveMetaStoreThriftClient.class.getName());
+                        HiveMetaStoreClient.class.getName());
             }
         }
 

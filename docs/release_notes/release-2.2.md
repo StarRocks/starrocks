@@ -1,5 +1,21 @@
 # StarRocks version 2.2
 
+Release date: April 6, 2023
+
+## Improvements
+
+- Optimized the bitmap_contains() function to reduce its memory consumption and improve its performance in some scenarios. [#20616](https://github.com/StarRocks/starrocks/issues/20616)
+- Optimized the Compaction framework to reduce its CPU resource consumption. [#11746](https://github.com/StarRocks/starrocks/issues/11746)
+
+## Bug Fixes
+
+The following bugs are fixed:
+
+- If the requested URL in a Stream Load job is not correct, the responsible FE hangs and is unable to handle the HTTP request. [#18468](https://github.com/StarRocks/starrocks/issues/18468)
+- When the responsible FE collects statistics, it may consume an abnormally large amount of memory, which causes OOM. [#16331](https://github.com/StarRocks/starrocks/issues/16331)
+- BEs crash if memory release is not properly handled in some queries. [#11395](https://github.com/StarRocks/starrocks/issues/11395)
+- After the command TRUNCATE TABLE is executed, a NullPointerException may occur and the responsible FE fails to restart. [#16773](https://github.com/StarRocks/starrocks/issues/16773)
+
 ## 2.2.10
 
 Release date: December 2, 2022

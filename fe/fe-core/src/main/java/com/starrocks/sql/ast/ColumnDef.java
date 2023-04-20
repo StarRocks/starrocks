@@ -133,6 +133,7 @@ public class ColumnDef implements ParseNode {
     private boolean isAllowNullImplicit = false;
     private Boolean isAllowNull;
     private Boolean isAutoIncrement;
+    private Expr materializedColumnExpr;
     private DefaultValueDef defaultValueDef;
     private final String comment;
 
@@ -140,24 +141,30 @@ public class ColumnDef implements ParseNode {
 
     public ColumnDef(String name, TypeDef typeDef) {
         this(name, typeDef, null, false, null, false, DefaultValueDef.NOT_SET,
-                null, "", NodePosition.ZERO);
+                null, null, "", NodePosition.ZERO);
+    }
+
+    public ColumnDef(String name, TypeDef typeDef, Boolean isAllowNull) {
+        this(name, typeDef, null, false, null, isAllowNull, DefaultValueDef.NOT_SET,
+                null, null, "", NodePosition.ZERO);
     }
 
     public ColumnDef(String name, TypeDef typeDef, boolean isKey, AggregateType aggregateType,
                      Boolean isAllowNull, DefaultValueDef defaultValueDef, String comment) {
         this(name, typeDef, null, isKey, aggregateType, isAllowNull, defaultValueDef,
-                null, comment, NodePosition.ZERO);
+                null, null, comment, NodePosition.ZERO);
     }
 
     public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
-                     Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement, String comment) {
+                     Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement,
+                     Expr materializedColumnExpr, String comment) {
         this(name, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef, isAutoIncrement,
-                comment, NodePosition.ZERO);
+                materializedColumnExpr, comment, NodePosition.ZERO);
     }
 
     public ColumnDef(String name, TypeDef typeDef, String charsetName, boolean isKey, AggregateType aggregateType,
-                     Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement, String comment,
-                     NodePosition pos) {
+                     Boolean isAllowNull, DefaultValueDef defaultValueDef, Boolean isAutoIncrement, 
+                     Expr materializedColumnExpr, String comment, NodePosition pos) {
         this.pos = pos;
         this.name = name;
         this.typeDef = typeDef;
@@ -181,6 +188,7 @@ public class ColumnDef implements ParseNode {
         } else {
             this.isAutoIncrement = true;
         }
+        this.materializedColumnExpr = materializedColumnExpr;
         this.comment = comment;
     }
 
@@ -194,6 +202,14 @@ public class ColumnDef implements ParseNode {
 
     public boolean isAutoIncrement() {
         return isAutoIncrement;
+    }
+
+    public boolean isMaterializedColumn() {
+        return materializedColumnExpr != null;
+    }
+
+    public Expr materializedColumnExpr() {
+        return materializedColumnExpr;
     }
 
     // The columns will obey NULL constraint if not specified. The primary key column should abide by the NOT NULL constraint default to be compatible with ANSI.
@@ -212,6 +228,10 @@ public class ColumnDef implements ParseNode {
             return null;
         }
         return null;
+    }
+
+    public DefaultValueDef getDefaultValueDef() {
+        return defaultValueDef;
     }
 
     public String getName() {
@@ -459,6 +479,10 @@ public class ColumnDef implements ParseNode {
             sb.append("AUTO_INCREMENT ");
         }
 
+        if (isMaterializedColumn()) {
+            sb.append("AS " + materializedColumnExpr.toSql() + " ");
+        }
+
         if (defaultValueDef.isSet) {
             sb.append("DEFAULT ").append(toDefaultExpr(defaultValueDef.expr)).append(" ");
         }
@@ -475,6 +499,7 @@ public class ColumnDef implements ParseNode {
     public Column toColumn() {
         Column col = new Column(name, typeDef.getType(), isKey, aggregateType, isAllowNull, defaultValueDef, comment);
         col.setIsAutoIncrement(isAutoIncrement);
+        col.setMaterializedColumnExpr(materializedColumnExpr);
         return col;
     }
 

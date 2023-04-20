@@ -16,7 +16,6 @@
 package com.starrocks.connector.iceberg;
 
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -27,6 +26,7 @@ import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.catalog.Catalog;
 import org.apache.iceberg.catalog.TableIdentifier;
+import org.apache.iceberg.hive.IcebergHiveCatalog;
 import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.junit.Assert;
 import org.junit.Test;
@@ -41,9 +41,9 @@ public class IcebergHiveCatalogTest {
     @Test
     public void testCatalogType() {
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergHiveCatalog icebergHiveCatalog =
-                (IcebergHiveCatalog) CatalogLoader.hive("hive_native_catalog", new Configuration(), icebergProperties)
-                        .loadCatalog();
+        icebergProperties.put("hive.metastore.uris", "thrift://129.1.2.3:9876");
+        IcebergHiveCatalog icebergHiveCatalog = (IcebergHiveCatalog) CatalogUtil.loadCatalog(
+                IcebergHiveCatalog.class.getName(), "hive_native_catalog", icebergProperties, new Configuration());
         Assert.assertEquals(IcebergCatalogType.HIVE_CATALOG, icebergHiveCatalog.getIcebergCatalogType());
     }
 
@@ -69,9 +69,9 @@ public class IcebergHiveCatalogTest {
 
         Map<String, String> icebergProperties = new HashMap<>();
         HdfsEnvironment hdfsEnvironment = new HdfsEnvironment();
-        IcebergHiveCatalog icebergHiveCatalog =
-                (IcebergHiveCatalog) CatalogLoader.hive("hive_native_catalog", new Configuration(), icebergProperties)
-                        .loadCatalog();
+        icebergProperties.put("hive.metastore.uris", "thrift://129.1.2.3:9876");
+        IcebergHiveCatalog icebergHiveCatalog = (IcebergHiveCatalog) CatalogUtil.loadCatalog(
+                IcebergHiveCatalog.class.getName(), "hive_native_catalog", icebergProperties, new Configuration());
         Table table = icebergHiveCatalog.loadTable(identifier);
         Assert.assertEquals("test", table.name());
     }
@@ -97,9 +97,9 @@ public class IcebergHiveCatalogTest {
         };
 
         Map<String, String> icebergProperties = new HashMap<>();
-        IcebergHiveCatalog icebergHiveCatalog =
-                (IcebergHiveCatalog) CatalogLoader.hive("hive_native_catalog", new Configuration(), icebergProperties)
-                        .loadCatalog();
+        icebergProperties.put("hive.metastore.uris", "thrift://129.1.2.3:9876");
+        IcebergHiveCatalog icebergHiveCatalog = (IcebergHiveCatalog) CatalogUtil.loadCatalog(
+                IcebergHiveCatalog.class.getName(), "hive_native_catalog", icebergProperties, new Configuration());
         List<String> dbs = icebergHiveCatalog.listAllDatabases();
         Assert.assertEquals(Arrays.asList("db1", "db2"), dbs);
     }

@@ -61,6 +61,15 @@ std::string json_value_to_string(const rapidjson::Value& value) {
     return scratch_buffer.GetString();
 }
 
+#define RETURN_NULL_IF_STR_EMPTY(col, column)                                          \
+    do {                                                                               \
+        const std::string& null_str = json_value_to_string(col);                       \
+        if ((null_str.length() <= 0 || "\"\"" == null_str) && column->is_nullable()) { \
+            _append_null(column);                                                      \
+            return Status::OK();                                                       \
+        }                                                                              \
+    } while (false)
+
 #define RETURN_ERROR_IF_COL_IS_ARRAY(col, type)                               \
     do {                                                                      \
         if (col.IsArray()) {                                                  \
@@ -306,6 +315,9 @@ void ScrollParser::_append_null(Column* column) {
 Status ScrollParser::_append_value_from_json_val(Column* column, const TypeDescriptor& type_desc,
                                                  const rapidjson::Value& col, bool pure_doc_value) {
     LogicalType type = type_desc.type;
+    if (type != TYPE_CHAR && type != TYPE_VARCHAR) {
+        RETURN_NULL_IF_STR_EMPTY(col, column);
+    }
     switch (type) {
     case TYPE_CHAR:
     case TYPE_VARCHAR: {

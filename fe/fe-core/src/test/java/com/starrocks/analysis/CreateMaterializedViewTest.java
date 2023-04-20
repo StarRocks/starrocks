@@ -1408,8 +1408,17 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testAsTableNoOlapTable() {
-        String sql = "create materialized view mv1 " +
+    public void testMySQLTable() throws Exception {
+        String sql1 = "create materialized view mv1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ")" +
+                "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
+        UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
+
+        String sql2 = "create materialized view mv1 " +
                 "partition by ss " +
                 "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
@@ -1418,9 +1427,11 @@ public class CreateMaterializedViewTest {
                 ")" +
                 "as select tbl1.k1 ss, tbl1.k2 from mysql_external_table tbl1;";
         try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
+            Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Create materialized view do not support the table type: MYSQL"));
+            Assert.assertTrue(e.getMessage()
+                    .contains("Materialized view with partition does not support base table type : MYSQL"));
         }
     }
 
@@ -2439,6 +2450,30 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testJdbcTable() throws Exception {
+        starRocksAssert.withResource("create external resource jdbc0\n" +
+                "properties (\n" +
+                "    \"type\"=\"jdbc\",\n" +
+                "    \"user\"=\"postgres\",\n" +
+                "    \"password\"=\"changeme\",\n" +
+                "    \"jdbc_uri\"=\"jdbc:postgresql://127.0.0.1:5432/jdbc_test\",\n" +
+                "    \"driver_url\"=\"https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar\",\n" +
+                "    \"driver_class\"=\"org.postgresql.Driver\"\n" +
+                "); ");
+        starRocksAssert.withTable("create external table jdbc_tbl (\n" +
+                "     `id` bigint NULL,\n" +
+                "     `data` varchar(200) NULL\n" +
+                " ) ENGINE=jdbc\n" +
+                " properties (\n" +
+                "     \"resource\"=\"jdbc0\",\n" +
+                "     \"table\"=\"dest_tbl\"\n" +
+                " );");
+        starRocksAssert.withMaterializedView("create materialized view mv_jdbc " +
+                "distributed by hash(id) refresh deferred manual " +
+                "as select * from jdbc_tbl;");
+    }
+
+    @Test
     public void testCreateRealtimeMV() throws Exception {
         String sql = "create materialized view rtmv \n" +
                 "refresh incremental " +
@@ -2602,6 +2637,80 @@ public class CreateMaterializedViewTest {
         testMVColumnAlias("(char_length(c_1_9)) + 1");
         testMVColumnAlias("(char_length(c_1_9)) + '$'");
         testMVColumnAlias("c_1_9 + c_1_10");
+    }
+
+    private Table getTable(String dbName, String mvName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Table table = db.getTable(mvName);
+        Assert.assertNotNull(table);
+        return table;
+    }
+
+    private MaterializedView getMv(String dbName, String mvName) {
+        Table table = getTable(dbName, mvName);
+        Assert.assertTrue(table instanceof MaterializedView);
+        MaterializedView mv = (MaterializedView) table;
+        return mv;
+    }
+
+    @Test
+    public void testMvNullable() throws Exception {
+        starRocksAssert.withTable("create table emps (\n" +
+                "    empid int not null,\n" +
+                "    deptno int not null,\n" +
+                "    name varchar(25) not null,\n" +
+                "    salary double\n" +
+                ")\n" +
+                "distributed by hash(`empid`) buckets 10\n" +
+                "properties (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");")
+                .withTable("create table depts (\n" +
+                        "    deptno int not null,\n" +
+                        "    name varchar(25) not null\n" +
+                        ")\n" +
+                        "distributed by hash(`deptno`) buckets 10\n" +
+                        "properties (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");");
+        {
+            starRocksAssert.withMaterializedView("create materialized view mv_nullable" +
+                    " distributed by hash(`empid`) as" +
+                    " select empid, d.deptno, d.name" +
+                    " from emps e left outer join depts d on e.deptno = d.deptno");
+            MaterializedView mv = getMv("test", "mv_nullable");
+            Assert.assertFalse(mv.getColumn("empid").isAllowNull());
+            Assert.assertTrue(mv.getColumn("deptno").isAllowNull());
+            Assert.assertTrue(mv.getColumn("name").isAllowNull());
+            starRocksAssert.dropMaterializedView("mv_nullable");
+        }
+
+        {
+            starRocksAssert.withMaterializedView("create materialized view mv_nullable" +
+                    " distributed by hash(`empid`) as" +
+                    " select empid, d.deptno, d.name" +
+                    " from emps e right outer join depts d on e.deptno = d.deptno");
+            MaterializedView mv = getMv("test", "mv_nullable");
+            Assert.assertTrue(mv.getColumn("empid").isAllowNull());
+            Assert.assertFalse(mv.getColumn("deptno").isAllowNull());
+            Assert.assertFalse(mv.getColumn("name").isAllowNull());
+            starRocksAssert.dropMaterializedView("mv_nullable");
+        }
+
+        {
+            starRocksAssert.withMaterializedView("create materialized view mv_nullable" +
+                    " distributed by hash(`empid`) as" +
+                    " select empid, d.deptno, d.name" +
+                    " from emps e full outer join depts d on e.deptno = d.deptno");
+            MaterializedView mv = getMv("test", "mv_nullable");
+            Assert.assertTrue(mv.getColumn("empid").isAllowNull());
+            Assert.assertTrue(mv.getColumn("deptno").isAllowNull());
+            Assert.assertTrue(mv.getColumn("name").isAllowNull());
+            starRocksAssert.dropMaterializedView("mv_nullable");
+        }
+
+        starRocksAssert.dropTable("emps");
+        starRocksAssert.dropTable("depts");
     }
 }
 

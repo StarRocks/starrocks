@@ -69,6 +69,8 @@ PROPERTIES
 )
 ```
 
+For more information, see [CREATE EXTERNAL CATALOG](../../sql-reference/sql-statements/data-definition/CREATE%20EXTERNAL%20CATALOG.md).
+
 ### Parameters
 
 #### `catalog_name`
@@ -90,7 +92,7 @@ The type of your data source. Set the value to `deltalake`.
 
 A set of parameters about how StarRocks integrates with the metastore of your data source.
 
-###### Hive metastore
+##### Hive metastore
 
 If you choose Hive metastore as the metastore of your data source, configure `MetastoreParams` as follows:
 
@@ -108,7 +110,7 @@ The following table describes the parameter you need to configure in `MetastoreP
 | ------------------- | -------- | ------------------------------------------------------------ |
 | hive.metastore.uris | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>","thrift://<metastore_IP_address_2>:<metastore_port_2>","thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
-###### AWS Glue
+##### AWS Glue
 
 If you choose AWS Glue as the metastore of your data source, take one of the following actions:
 
@@ -159,7 +161,7 @@ You need to configure `StorageCredentialParams` only when your Delta Lake cluste
 
 If your Delta Lake cluster uses any other storage system, you can ignore `StorageCredentialParams`.
 
-###### AWS S3
+##### AWS S3
 
 If you choose AWS S3 as storage for your Delta Lake cluster, take one of the following actions:
 
@@ -181,7 +183,7 @@ If you choose AWS S3 as storage for your Delta Lake cluster, take one of the fol
 - To choose IAM user as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "aws.s3.use_instance_profile" = 'false',
+  "aws.s3.use_instance_profile" = "false",
   "aws.s3.access_key" = "<iam_user_access_key>",
   "aws.s3.secret_key" = "<iam_user_secret_key>",
   "aws.s3.region" = "<aws_s3_region>"
@@ -192,12 +194,34 @@ The following table describes the parameters you need to configure in `StorageCr
 | Parameter                   | Required | Description                                                  |
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | Yes      | Specifies whether to enable the credential methods instance profile and assumed role. Valid values: `true` and `false`. Default value: `false`. |
-| "aws.s3.iam_role_arn"       | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Delta Lake data by using a Delta Lake catalog. |
-| "aws.s3.region"             | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
-| "aws.s3.access_key"         | No       | The access key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Delta Lake data by using a Delta Lake catalog. |
-| "aws.s3.secret_key"         | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this user when it accesses your Delta Lake data by using a Delta Lake catalog. |
+| aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Delta Lake data by using a Delta Lake catalog. |
+| aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
+| aws.s3.access_key           | No       | The access key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Delta Lake data by using a Delta Lake catalog. |
+| aws.s3.secret_key           | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this user when it accesses your Delta Lake data by using a Delta Lake catalog. |
 
 For information about how to choose a credential method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+
+##### S3-compatible storage system
+
+If you choose an S3-compatible storage system, such as MinIO, as storage for your Hive cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
+
+```SQL
+"aws.s3.enable_ssl" = "<true | false>",
+"aws.s3.enable_path_style_access" = "<true | false>",
+"aws.s3.endpoint" = "<s3_endpoint>",
+"aws.s3.access_key" = "<iam_user_access_key>",
+"aws.s3.secret_key" = "<iam_user_secret_key>"
+```
+
+The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+| Parameter                        | Required | Description                                                  |
+| -------------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection. Valid values: `true` and `false`. Default value: `true`. |
+| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style URL access. Valid values: `true` and `false`. Default value: `false`. |
+| aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your AWS S3 bucket. |
+| aws.s3.access_key                | Yes      | The access key of your AWS IAM user. |
+| aws.s3.secret_key                | Yes      | The secret key of your AWS IAM user. |
 
 #### `MetadataUpdateParams`
 
@@ -369,19 +393,31 @@ You can use one of the following syntaxes to view the schema of a Delta Lake tab
 
 ## Query a Delta Lake table
 
-1. Use the following syntax to view the databases in your Delta Lake cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW%20DATABASES.md) to view the databases in your Delta Lake cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. Use the following syntax to connect to your target Delta Lake database:
+2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to switch to the destination catalog in the current session:
 
-   ```SQL
-   USE <catalog_name>.<database_name>
-   ```
+    ```SQL
+    SET CATALOG <catalog_name>;
+    ```
 
-3. Use the following syntax to query the Delta Lake table:
+    Then, use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify the active database in the current session:
+
+    ```SQL
+    USE <db_name>;
+    ```
+
+    Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly specify the active database in the destination catalog:
+
+    ```SQL
+    USE <catalog_name>.<db_name>;
+    ```
+
+3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10

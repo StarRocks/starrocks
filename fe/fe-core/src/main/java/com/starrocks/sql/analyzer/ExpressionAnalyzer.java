@@ -74,6 +74,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -357,6 +358,9 @@ public class ExpressionAnalyzer {
             ResolvedField resolvedField = scope.resolveField(node);
             node.setType(resolvedField.getField().getType());
             node.setTblName(resolvedField.getField().getRelationAlias());
+            // help to get nullable info in Analyzer phase
+            // now it is used in creating mv to decide nullable of fields
+            node.setNullable(resolvedField.getField().isNullable());
 
             if (node.getType().isStructType()) {
                 // If SlotRef is a struct type, it needs special treatment, reset SlotRef's col, label name.
@@ -412,14 +416,8 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitMapExpr(MapExpr node, Scope scope) {
             if (!node.getChildren().isEmpty()) {
-                Type keyType = Type.NULL;
-                Type valueType = Type.NULL;
-                if (node.getKeyExpr() != null) {
-                    keyType = node.getKeyExpr().getType();
-                }
-                if (node.getValueExpr() != null) {
-                    valueType = node.getValueExpr().getType();
-                }
+                Type keyType = node.getKeyCommonType();
+                Type valueType = node.getValueCommonType();
                 node.setType(new MapType(keyType, valueType));
             } else {
                 node.setType(new MapType(Type.NULL, Type.NULL));
@@ -525,18 +523,17 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitCompoundPredicate(CompoundPredicate node, Scope scope) {
+            node.setType(Type.BOOLEAN);
             for (int i = 0; i < node.getChildren().size(); i++) {
-                Type type = node.getChild(i).getType();
-                if (!type.isBoolean() && !type.isNull()) {
-                    String msg = String.format("Operand '%s' part of predicate " +
-                                    "'%s' should return type 'BOOLEAN' but returns type '%s'",
-                            AstToStringBuilder.toString(node), AstToStringBuilder.toString(node.getChild(i)),
-                            type.toSql());
-                    throw new SemanticException(msg, node.getChild(i).getPos());
+                Expr child = node.getChild(i);
+                if (child.getType().isBoolean() || child.getType().isNull()) {
+                    // do nothing
+                } else if (!session.getSessionVariable().isEnableStrictType() && Type.canCastTo(child.getType(), Type.BOOLEAN)) {
+                    node.getChildren().set(i, new CastExpr(Type.BOOLEAN, child));
+                } else {
+                    throw new SemanticException(child.toSql() + " can not be converted to boolean type.");
                 }
             }
-
-            node.setType(Type.BOOLEAN);
             return null;
         }
 
@@ -1247,7 +1244,7 @@ public class ExpressionAnalyzer {
                 whenTypes.add(node.getChild(i).getType());
             }
 
-            Type compatibleType = Type.NULL;
+            Type compatibleType = Type.BOOLEAN;
             if (null != caseExpr) {
                 compatibleType = TypeManager.getCompatibleTypeForCaseWhen(whenTypes);
             }
@@ -1329,8 +1326,7 @@ public class ExpressionAnalyzer {
                 node.setStrValue(session.getCurrentUserIdentity().toString());
             } else if (funcType.equalsIgnoreCase("CURRENT_ROLE")) {
                 node.setType(Type.VARCHAR);
-
-                AuthorizationManager manager = session.getGlobalStateMgr().getAuthorizationManager();
+                AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
                 List<String> roleName = new ArrayList<>();
 
                 try {
@@ -1356,7 +1352,7 @@ public class ExpressionAnalyzer {
                 node.setStrValue("");
             } else if (funcType.equalsIgnoreCase("CURRENT_CATALOG")) {
                 node.setType(Type.VARCHAR);
-                node.setStrValue(session.getCurrentCatalog().toString());
+                node.setStrValue(session.getCurrentCatalog());
             }
             return null;
         }

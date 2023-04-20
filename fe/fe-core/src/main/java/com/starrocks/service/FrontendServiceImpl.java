@@ -41,11 +41,13 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -99,6 +101,7 @@ import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.privilege.PrivilegeActions;
+import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
@@ -229,6 +232,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.HashMap;
 import java.util.List;
@@ -317,7 +321,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
         }
 
-        // database privs should be checked in analysis phrase
+        // database privs should be checked in analysis phase
         Database db = GlobalStateMgr.getCurrentState().getDb(params.db);
         UserIdentity currentUser = null;
         if (params.isSetCurrent_user_ident()) {
@@ -382,6 +386,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 List<Table> tables = listingViews ? db.getViews() : db.getTables();
                 for (Table table : tables) {
                     if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                        // TODO(yiming): set role ids for ephemeral user in all the PrivilegeActions.* call in this dir
                         if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null, params.db, table)) {
                             continue;
                         }
@@ -403,23 +408,34 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         View view = (View) table;
                         String ddlSql = view.getInlineViewDef();
                         QueryStatement queryStatement = view.getQueryStatement();
-                        Analyzer.analyze(queryStatement, new ConnectContext());
-                        Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(queryStatement);
-                        for (TableName tableName : allTables.keySet()) {
-                            if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-                                Table tbl = db.getTable(tableName.getTbl());
-                                if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
-                                        tableName.getDb(), tbl)) {
-                                    break;
-                                }
-                            } else {
-                                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
-                                        currentUser, tableName.getDb(), tableName.getTbl(), PrivPredicate.SHOW)) {
-                                    ddlSql = "";
-                                    break;
+
+                        ConnectContext connectContext = new ConnectContext();
+                        connectContext.setQualifiedUser(AuthenticationManager.ROOT_USER);
+                        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+                        connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+
+                        try {
+                            Analyzer.analyze(queryStatement, connectContext);
+                            Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(queryStatement);
+                            for (TableName tableName : allTables.keySet()) {
+                                if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                                    Table tbl = db.getTable(tableName.getTbl());
+                                    if (!PrivilegeActions.checkAnyActionOnTableLikeObject(currentUser, null,
+                                            tableName.getDb(), tbl)) {
+                                        break;
+                                    }
+                                } else {
+                                    if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
+                                            currentUser, tableName.getDb(), tableName.getTbl(), PrivPredicate.SHOW)) {
+                                        ddlSql = "";
+                                        break;
+                                    }
                                 }
                             }
+                        } catch (SemanticException e) {
+                            // ignore semantic exception because view may be is invalid
                         }
+
                         status.setDdl_sql(ddlSql);
                     }
                     tablesResult.add(status);
@@ -1035,6 +1051,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
             }
             // check INSERT action on table
+            // TODO(yiming): set role ids for ephemeral user
             if (!PrivilegeActions.checkTableAction(currentUser, null, db, tbl, PrivilegeType.INSERT)) {
                 throw new AuthenticationException(
                         "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
@@ -1415,6 +1432,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 throw new UserException("txn does not exist: " + request.getTxnId());
             }
             txnState.addTableIndexes((OlapTable) table);
+            plan.setImport_label(txnState.getLabel());
+            plan.setDb_name(dbName);
+            plan.setLoad_job_id(request.getTxnId());
 
             return plan;
         } finally {
@@ -1510,6 +1530,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
                 if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                    // TODO(yiming): set role ids for ephemeral user
                     if (!PrivilegeActions.checkTableAction(userIdentity, null, dbName,
                             tableName, PrivilegeType.INSERT)) {
                         throw new UnauthorizedException(String.format(
@@ -1618,6 +1639,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         LOG.info("Receive create partition: {}", request);
 
+        TCreatePartitionResult result;
+        try {
+            result = createPartitionProcess(request);
+        } catch (Throwable t) {
+            LOG.warn(t);
+            result = new TCreatePartitionResult();
+            TStatus errorStatus = new TStatus(RUNTIME_ERROR);
+            errorStatus.setError_msgs(Lists.newArrayList(String.format("txn_id=%d failed. %s",
+                    request.getTxn_id(), t.getMessage())));
+            result.setStatus(errorStatus);
+        }
+
+        return result;
+    }
+
+    @NotNull
+    private static TCreatePartitionResult createPartitionProcess(TCreatePartitionRequest request) {
         long dbId = request.getDb_id();
         long tableId = request.getTable_id();
         TCreatePartitionResult result = new TCreatePartitionResult();
@@ -1800,7 +1838,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         return result;
                     }
                     // replicas[0] will be the primary replica
-                    // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable 
+                    // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable
                     List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
                     tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
                             .collect(Collectors.toList())));

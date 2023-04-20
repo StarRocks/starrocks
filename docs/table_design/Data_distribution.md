@@ -169,6 +169,9 @@ If you intend to set the number of buckets, StarRocks 2.4 and later versions sup
 ### Create partitions
 
 Since version 3.0, StarRocks supports [automatic partitioning](./automatic_partitioning.md) during data loading. You no longer need to create a large number of partitions in advance. This on-demand partition creation method can help you reduce the O&M costs.
+> **NOTICE**
+>
+> Currently, StarRocks's shared-data mode does not support this feature.
 
 If you need to create partitions in advance, you can use other partition creation methods, such as enabling dynamic partitioning and manually creating partitions.
 

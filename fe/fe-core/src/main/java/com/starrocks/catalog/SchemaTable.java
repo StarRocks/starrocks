@@ -575,6 +575,10 @@ public class SchemaTable extends Table {
                                     .column("PROGRESS", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("PRIORITY", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("SCAN_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("FILTERED_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("UNSELECTED_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("SINK_ROWS", ScalarType.createType(PrimitiveType.BIGINT))
                                     .column("ETL_INFO", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("TASK_INFO", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("CREATE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
@@ -586,6 +590,7 @@ public class SchemaTable extends Table {
                                     .column("ERROR_MSG", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("TRACKING_URL", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("TRACKING_SQL", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("REJECTED_RECORD_PATH", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .build()))
                     .put("load_tracking_logs", new SchemaTable(
                             SystemId.LOAD_TRACKING_LOGS_ID,
@@ -725,6 +730,26 @@ public class SchemaTable extends Table {
                                     .column("IDLE", ScalarType.createType(PrimitiveType.BOOLEAN))
                                     .column("FINISHED_TASKS", ScalarType.createType(PrimitiveType.BIGINT))
                                     .build()))
+                    .put("be_logs", new SchemaTable(
+                            SystemId.BE_LOGS_ID,
+                            "be_logs",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("LEVEL", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TIMESTAMP", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("TID", ScalarType.createType(PrimitiveType.BIGINT))
+                                    .column("LOG", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .build()))
+                    .put("be_bvars", new SchemaTable(
+                            SystemId.BE_BVARS_ID,
+                            "be_bvars",
+                            TableType.SCHEMA,
+                            builder()
+                                    .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT), false)
+                                    .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN), false)
+                                    .column("DESC", ScalarType.createVarchar(NAME_CHAR_LEN), false)
+                                    .build()))
                     .build();
 
     public static class Builder {
@@ -735,7 +760,11 @@ public class SchemaTable extends Table {
         }
 
         public Builder column(String name, ScalarType type) {
-            columns.add(new Column(name, type, false, null, true, null, ""));
+            return column(name, type, true);
+        }
+
+        public Builder column(String name, ScalarType type, boolean nullable) {
+            columns.add(new Column(name, type, false, null, nullable, null, ""));
             return this;
         }
 
@@ -826,7 +855,9 @@ public class SchemaTable extends Table {
         SCH_BE_CONFIGS("BE_CONFIGS", "BE_CONFIGS", TSchemaTableType.SCH_BE_CONFIGS),
         SCH_FE_TABLET_SCHEDULES("FE_TABLET_SCHEDULES", "FE_TABLET_SCHEDULES", TSchemaTableType.SCH_FE_TABLET_SCHEDULES),
         SCH_BE_COMPACTIONS("BE_COMPACTIONS", "BE_COMPACTIONS", TSchemaTableType.SCH_BE_COMPACTIONS),
-        SCH_BE_THREADS("BE_THREADS", "BE_THREADS", TSchemaTableType.SCH_BE_THREADS);
+        SCH_BE_THREADS("BE_THREADS", "BE_THREADS", TSchemaTableType.SCH_BE_THREADS),
+        SCH_BE_LOGS("BE_LOGS", "BE_LOGS", TSchemaTableType.SCH_BE_LOGS),
+        SCH_BE_BVARS("BE_BVARS", "BE_BVARS", TSchemaTableType.SCH_BE_BVARS);
 
         private final String description;
         private final String tableName;

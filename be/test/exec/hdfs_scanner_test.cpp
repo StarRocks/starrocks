@@ -18,6 +18,7 @@
 
 #include <memory>
 
+#include "block_cache/block_cache.h"
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
@@ -48,6 +49,7 @@ public:
 protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
+    Status _init_block_cache(size_t mem_size);
     HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, const TupleDescriptor* tuple_desc);
     void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
                                  bool diff_case_sensitive = false);
@@ -76,6 +78,16 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     }
     _runtime_state = _pool.add(new RuntimeState(fragment_id, query_options, query_globals, nullptr));
     _runtime_state->init_instance_mem_tracker();
+}
+
+Status HdfsScannerTest::_init_block_cache(size_t mem_size) {
+    BlockCache* cache = BlockCache::instance();
+    CacheOptions cache_options;
+    cache_options.mem_space_size = mem_size;
+    cache_options.block_size = starrocks::config::block_cache_block_size;
+    cache_options.checksum = starrocks::config::block_cache_checksum_enable;
+    cache_options.engine = starrocks::config::block_cache_engine;
+    return cache->init(cache_options);
 }
 
 THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uint64_t offset, uint64_t length) {
@@ -1435,6 +1447,37 @@ TEST_F(HdfsScannerTest, TestCSVCaseIgnore) {
         ASSERT_TRUE(status.ok()) << status.get_error_msg();
 
         READ_SCANNER_ROWS(scanner, 2);
+        scanner->close(_runtime_state);
+    }
+}
+
+TEST_F(HdfsScannerTest, TestCSVWithoutEndDelemeter) {
+    SlotDesc csv_descs[] = {{"col1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                            {"col2", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                            {"col3", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                            {""}};
+
+    const std::string small_file = "./be/test/exec/test_data/csv_scanner/delimiter.csv";
+    Status status;
+
+    {
+        status = _init_block_cache(50 * 1024 * 1024); // 50MB
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        auto* range = _create_scan_range(small_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(small_file, range, tuple_desc);
+        param->use_block_cache = true;
+        build_hive_column_names(param, tuple_desc, true);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        READ_SCANNER_ROWS(scanner, 3);
         scanner->close(_runtime_state);
     }
 }

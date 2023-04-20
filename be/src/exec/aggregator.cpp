@@ -800,7 +800,6 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             size_t id = _group_by_columns.size() + i;
             auto slot_id = slots[id]->id();
-            // TODO: evaluate agg input columns
             if (use_intermediate_as_input) {
                 DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
                 result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
@@ -817,6 +816,52 @@ Status Aggregator::output_chunk_by_streaming(Chunk* input_chunk, ChunkPtr* chunk
     _num_rows_processed += result_chunk->num_rows();
     *chunk = std::move(result_chunk);
     COUNTER_SET(_agg_stat->pass_through_row_count, _num_pass_through_rows);
+    return Status::OK();
+}
+
+Status Aggregator::convert_to_spill_format(Chunk* input_chunk, ChunkPtr* chunk) {
+    auto use_intermediate_as_input = _use_intermediate_as_input();
+    size_t num_rows = input_chunk->num_rows();
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+    const auto& slots = _intermediate_tuple_desc->slots();
+    // build group by column
+    for (size_t i = 0; i < _group_by_columns.size(); i++) {
+        DCHECK_EQ(num_rows, _group_by_columns[i]->size());
+        // materialize group by const columns
+        if (_group_by_columns[i]->is_constant()) {
+            auto res =
+                    ColumnHelper::unfold_const_column(_group_by_types[i].result_type, num_rows, _group_by_columns[i]);
+            result_chunk->append_column(std::move(res), slots[i]->id());
+        } else {
+            result_chunk->append_column(_group_by_columns[i], slots[i]->id());
+        }
+    }
+
+    if (!_agg_fn_ctxs.empty()) {
+        DCHECK(!_group_by_columns.empty());
+
+        RETURN_IF_ERROR(evaluate_agg_fn_exprs(input_chunk));
+
+        const auto num_rows = _group_by_columns[0]->size();
+        Columns agg_result_column = _create_agg_result_columns(num_rows, true);
+        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+            size_t id = _group_by_columns.size() + i;
+            auto slot_id = slots[id]->id();
+            // If it is AGG stage 3/4, the input of AGG is the intermediate result type (merge/serilaze stage and merge/finalize stage),
+            // and it can be directly converted to intermediate result type at this time
+            if (_is_merge_funcs[i] || use_intermediate_as_input) {
+                DCHECK(i < _agg_input_columns.size() && _agg_input_columns[i].size() >= 1);
+                result_chunk->append_column(std::move(_agg_input_columns[i][0]), slot_id);
+            } else {
+                _agg_functions[i]->convert_to_serialize_format(_agg_fn_ctxs[i], _agg_input_columns[i],
+                                                               result_chunk->num_rows(), &agg_result_column[i]);
+                result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
+            }
+        }
+    }
+    _num_rows_processed += result_chunk->num_rows();
+    *chunk = std::move(result_chunk);
+
     return Status::OK();
 }
 
@@ -1183,7 +1228,7 @@ void Aggregator::build_hash_map_with_selection_and_allocation(size_t chunk_size,
     });
 }
 
-Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk) {
+Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk, bool* use_intermediate_as_output) {
     SCOPED_TIMER(_agg_stat->get_results_timer);
 
     RETURN_IF_ERROR(_hash_map_variant.visit([&](auto& variant_value) {
@@ -1195,7 +1240,8 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
 
         const auto hash_map_size = _hash_map_variant.size();
         auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
-        auto use_intermediate = _use_intermediate_as_output();
+        auto use_intermediate =
+                use_intermediate_as_output != nullptr ? *use_intermediate_as_output : _use_intermediate_as_output();
         Columns group_by_columns = _create_group_by_columns(num_rows);
         Columns agg_result_columns = _create_agg_result_columns(num_rows, use_intermediate);
 

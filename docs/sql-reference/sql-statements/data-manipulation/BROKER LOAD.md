@@ -12,8 +12,14 @@ LOAD LABEL [<database_name>.]<label_name>
     data_desc[, data_desc ...]
 )
 WITH BROKER
-[broker_properties]
-[opt_properties]
+(
+    StorageCredentialParams
+)
+[PROPERTIES
+(
+    opt_properties
+)
+]
 ```
 
 Note that in StarRocks some literals are used as reserved keywords by the SQL language. Do not directly use these keywords in SQL statements. If you want to use such a keyword in an SQL statement, enclose it in a pair of backticks (`). See [Keywords](../../../sql-reference/sql-statements/keywords.md).
@@ -117,7 +123,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
   | **Parameter** | **Description**                                              |
   | ------------- | ------------------------------------------------------------ |
   | skip_header   | Specifies whether to skip the first rows of the data file when the data file is in CSV format. Type: INTEGER. Default value: `0`.<br>In some CSV-formatted data files, the first rows at the beginning are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip the first rows of the data file during data loading. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.<br>The first rows at the beginning in the data file must be separated by using the row separator that you specify in the load statement or command. For example, for Stream Load, the `row_delimiter` parameter is used to specify the row separator. |
-  | trim_space    | Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br>For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br>Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (\|) as the column separator and double quotation marks (`"`) as the `enclose`-specified character:<br>`\|"Love StarRocks"\| \|" Love StarRocks "\| \| "Love StarRocks" \|`<br>If you set `trim_space` to `true`, StarRocks processes the preceding field values as follows:<br>`\|"Love StarRocks"\| \|" Love StarRocks "\| \|"Love StarRocks"\|` |
+  | trim_space    | Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br>For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br>Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (<code class="language-text">&#124;</code>) as the column separator and double quotation marks (`"`) as the `enclose`-specified character:<br><code class="language-text">&#124;"Love StarRocks"&#124;</code> <br><code class="language-text">&#124;" Love StarRocks "&#124;</code> <br><code class="language-text">&#124; "Love StarRocks" &#124;</code> <br>If you set `trim_space` to `true`, StarRocks processes the preceding field values as follows:<br><code class="language-text">&#124;"Love StarRocks"&#124;</code> <br><code class="language-text">&#124;" Love StarRocks "&#124;</code> <br><code class="language-text">&#124;"Love StarRocks"&#124;</code> |
   | enclose       | Specifies the character that is used to wrap the field values in the data file according to [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).<br>All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.<br>If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file. |
   | escape        | Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br>**NOTE**<br>The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br>Two examples are as follows:<ul><li>When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.</li><li>Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.</li></ul> |
 
@@ -167,17 +173,17 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
 In v2.4 and earlier, input `WITH BROKER "<broker_name>"` to specify the broker you want to use. From v2.5 onwards, you no longer need to specify a broker, but you still need to retain the `WITH BROKER` keyword. For more information, see [Load data from HDFS or cloud storage > Background information](../../../loading/BrokerLoad.md#background-information).
 
-### `broker_properties`
+### `StorageCredentialParams`
 
-Specifies the information that is used to authenticate the source data. The authentication information varies depending on the data source.
+The authentication information used by StarRocks to access your storage system.
 
 #### HDFS
 
-Open-source HDFS supports two authentication methods: simple authentication and Kerberos authentication. Broker Load uses simple authentication by default. Open-source HDFS also supports configuring an HA mechanism for the NameNode. If the source data comes from an open-source HDFS cluster, provide the following configurations:
+Open-source HDFS supports two authentication methods: simple authentication and Kerberos authentication. Broker Load uses simple authentication by default. Open-source HDFS also supports configuring an HA mechanism for the NameNode. If you choose open-source HDFS as your storage system, you can specify the authentication configuration and HA configuration as follows:
 
 - Authentication configuration
 
-  - If you use simple authentication, specify the following configuration:
+  - If you use simple authentication, configure `StorageCredentialParams` as follows:
 
     ```Plain
     "hadoop.security.authentication" = "simple"
@@ -185,14 +191,15 @@ Open-source HDFS supports two authentication methods: simple authentication and 
     "password" = "<hdfs_password>"
     ```
 
-    The following table describes the parameters in the simple authentication configuration.
+    The following table describes the parameters in `StorageCredentialParams`.
 
-    | Parameter | Description                                                  |
-    | --------- | ------------------------------------------------------------ |
-    | username  | The username of the account that you want to use to access the NameNode of the HDFS cluster. |
-    | password  | The password of the account that you want to use to access the NameNode of the HDFS cluster. |
+    | Parameter                       | Description                                                  |
+    | ------------------------------- | ------------------------------------------------------------ |
+    | hadoop.security.authentication  | The authentication method. Valid values: `simple` and `kerberos`. Default value: `simple`. `simple` represents simple authentication, meaning no authentication, and `kerberos` represents Kerberos authentication. |
+    | username                        | The username of the account that you want to use to access the NameNode of the HDFS cluster. |
+    | password                        | The password of the account that you want to use to access the NameNode of the HDFS cluster. |
 
-  - If you use Kerberos authentication, specify the following configuration:
+  - If you use Kerberos authentication, configure `StorageCredentialParams` as follows:
 
     ```Plain
     "hadoop.security.authentication" = "kerberos",
@@ -201,13 +208,14 @@ Open-source HDFS supports two authentication methods: simple authentication and 
     "kerberos_keytab_content = "YWFhYWFh"
     ```
 
-    The following table describes the parameters in the Kerberos authentication configuration.
+    The following table describes the parameters in `StorageCredentialParams`.
 
-    | Parameter               | Description                                                  |
-    | ----------------------- | ------------------------------------------------------------ |
-    | kerberos_principal      | The Kerberos principal to be authenticated. Each principal consists of the following three parts to ensure that it is unique across the HDFS cluster:<ul><li>`username` or `servicename`: The name of the principal.</li><li>`instance`: the name of the server that hosts the node to be authenticated in the HDFS cluster. The server name helps ensure that the principal is unique, for example, when the HDFS cluster consists of multiple DataNodes that each are independently authenticated.</li><li>`realm`: The name of the realm. The realm name must be capitalized. Example: `nn/[zelda1@ZELDA.COM](mailto:zelda1@ZELDA.COM)`.</li></ul> |
-    | kerberos_keytab         | The save path of the Kerberos keytab file. |
-    | kerberos_keytab_content | The Base64-encoded content of the the Kerberos keytab file. You can choose to specify either `kerberos_keytab` or `kerberos_keytab_content`. |
+    | Parameter                       | Description                                                  |
+    | ------------------------------- | ------------------------------------------------------------ |
+    | hadoop.security.authentication  | The authentication method. Valid values: `simple` and `kerberos`. Default value: `simple`. `simple` represents simple authentication, meaning no authentication, and `kerberos` represents Kerberos authentication. |
+    | kerberos_principal              | The Kerberos principal to be authenticated. Each principal consists of the following three parts to ensure that it is unique across the HDFS cluster:<ul><li>`username` or `servicename`: The name of the principal.</li><li>`instance`: the name of the server that hosts the node to be authenticated in the HDFS cluster. The server name helps ensure that the principal is unique, for example, when the HDFS cluster consists of multiple DataNodes that each are independently authenticated.</li><li>`realm`: The name of the realm. The realm name must be capitalized. Example: `nn/[zelda1@ZELDA.COM](mailto:zelda1@ZELDA.COM)`.</li></ul> |
+    | kerberos_keytab                 | The save path of the Kerberos keytab file. |
+    | kerberos_keytab_content         | The Base64-encoded content of the the Kerberos keytab file. You can choose to specify either `kerberos_keytab` or `kerberos_keytab_content`. |
 
     If you have configured multiple Kerberos users, you must deploy an independent broker and in the load statement you must input `WITH BROKER "<broker_name>"` to specify the broker you want to use. Additionally, you must open the broker startup script file **start_broker.sh** and modify line 42 of the file to enable the broker to read the **krb5.conf** file. Example:
 
@@ -248,31 +256,63 @@ Open-source HDFS supports two authentication methods: simple authentication and 
       | dfs.namenode.rpc-address.XXX.NN    | The RPC address of the NameNode in the HDFS cluster. `NN` is the NameNode name that you have specified in `dfs.ha.namenodes.XXX`. |
       | dfs.client.failover.proxy.provider | The provider of the NameNode to which the client will connect. Default value: `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`. |
 
-#### Amazon S3
+#### AWS S3
 
-If the source data is stored in an Amazon S3 bucket, provide the following configurations.
+If you choose AWS S3 as your storage system, take one of the following actions:
 
-| Parameter         | Description                                                  |
-| ----------------- | ------------------------------------------------------------ |
-| aws.s3.access_key | The Access Key ID that you can use to access the Amazon S3 bucket. |
-| aws.s3.secret_key | The Secret Access Key that you can use to access the Amazon S3 bucket. |
-| aws.s3.endpoint   | The endpoint that you can use to access the Amazon S3 bucket. |
+- To choose instance profile as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
 
-For more information, see AWS documentation [Managing access keys for IAM users](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html).
+  ```SQL
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
 
-> **NOTE**
->
-> If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `aws.s3.access_key` and `aws.s3.secret_key` unspecified.
+- To choose assumed role as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "true",
+  "aws.s3.iam_role_arn" = "<iam_role_arn>",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+- To choose IAM user as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "aws.s3.use_instance_profile" = "false",
+  "aws.s3.access_key" = "<iam_user_access_key>",
+  "aws.s3.secret_key" = "<iam_user_secret_key>",
+  "aws.s3.region" = "<aws_s3_region>"
+  ```
+
+The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+| Parameter                   | Required | Description                                                  |
+| --------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.use_instance_profile | Yes      | Specifies whether to enable the credential methods instance profile and assumed role. Valid values: `true` and `false`. Default value: `false`. |
+| aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Hive data by using a Hive catalog. |
+| aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
+| aws.s3.access_key           | No       | The access key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Hive data by using a Hive catalog. |
+| aws.s3.secret_key           | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this user when it accesses your Hive data by using a Hive catalog. |
+
+For information about how to choose a credential method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 #### Google GCS
 
-If the source data is stored in a Google GCS bucket, provide the following configurations.
+If you choose Google GCS as your storage system, configure `StorageCredentialParams` as follows:
+
+```SQL
+"fs.s3a.access.key" = "<gcs_access_key>",
+"fs.s3a.secret.key" = "<gcs_secret_key>",
+"fs.s3a.endpoint" = "<gcs_endpoint>"
+```
+
+The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
 | Parameter         | Description                                                  |
 | ----------------- | ------------------------------------------------------------ |
-| fs.s3a.access.key | The Access Key that you can use to access the Google GCS bucket. |
-| fs.s3a.secret.key | The Secret Key that you can use to access the Google GCS bucket. |
-| fs.s3a.endpoint   | The endpoint that you can use to access the Google GCS bucket. |
+| fs.s3a.access.key | The Access Key that you can use to access your Google GCS bucket. |
+| fs.s3a.secret.key | The Secret Key that you can use to access your Google GCS bucket. |
+| fs.s3a.endpoint   | The endpoint that you can use to access your Google GCS bucket. |
 
 > **NOTE**
 >
@@ -290,7 +330,29 @@ To create an Access/Secret key pair to access your Google GCS bucket, follow the
 
    ![img](../../../assets/BROKERLOAD-1.png)
 
-5. Click the **Create new Key** button to create an Access/Secret keypair.
+5. Click the **Create new Key** button to create an Access/Secret key pair.
+
+#### Other S3-compatible storage system
+
+If you choose other S3-compatible storage system, such as MinIO, configure `StorageCredentialParams` as follows:
+
+```SQL
+"aws.s3.enable_ssl" = "<true | false>",
+"aws.s3.enable_path_style_access" = "<true | false>",
+"aws.s3.endpoint" = "<s3_endpoint>",
+"aws.s3.access_key" = "<iam_user_access_key>",
+"aws.s3.secret_key" = "<iam_user_secret_key>"
+```
+
+The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+| Parameter                        | Required | Description                                                  |
+| -------------------------------- | -------- | ------------------------------------------------------------ |
+| aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection. Valid values: `true` and `false`. Default value: `true`. |
+| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style URL access. Valid values: `true` and `false`. Default value: `false`. |
+| aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your AWS S3 bucket. |
+| aws.s3.access_key                | Yes      | The access key of your AWS IAM user. |
+| aws.s3.secret_key                | Yes      | The secret key of your AWS IAM user. |
 
 ### `opt_properties`
 

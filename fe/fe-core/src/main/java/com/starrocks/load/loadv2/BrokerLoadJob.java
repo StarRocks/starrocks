@@ -66,7 +66,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TLoadJobType;
+import com.starrocks.thrift.TPartialUpdateMode;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.TransactionState;
@@ -95,6 +98,11 @@ public class BrokerLoadJob extends BulkLoadJob {
     public BrokerLoadJob() {
         super();
         this.jobType = EtlJobType.BROKER;
+    }
+
+    // for ut
+    public void setConnectContext(ConnectContext context) {
+        this.context = context;
     }
 
     public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, OriginStatement originStmt, ConnectContext context)
@@ -239,13 +247,33 @@ public class BrokerLoadJob extends BulkLoadJob {
                             + tableId + " not found");
                 }
 
+                if (context == null) {
+                    context = new ConnectContext();
+                    context.setDatabase(db.getFullName());
+                    if (sessionVariables.get(CURRENT_QUALIFIED_USER_KEY) != null) {
+                        context.setQualifiedUser(sessionVariables.get(CURRENT_QUALIFIED_USER_KEY));
+                        context.setCurrentUserIdentity(UserIdentity.fromString(sessionVariables.get(CURRENT_USER_IDENT_KEY)));
+                        context.setCurrentRoleIds(UserIdentity.fromString(sessionVariables.get(CURRENT_USER_IDENT_KEY)));
+                    } else {
+                        throw new DdlException("Failed to divide job into loading task when user is null");
+                    }
+                }
+
                 String mergeCondition = (brokerDesc == null) ? "" : brokerDesc.getMergeConditionStr();
+                TPartialUpdateMode mode = TPartialUpdateMode.UNKNOWN_MODE;
+                if (partialUpdateMode.equals("column")) {
+                    mode = TPartialUpdateMode.COLUMN_MODE;
+                } else if (partialUpdateMode.equals("auto")) {
+                    mode = TPartialUpdateMode.AUTO_MODE;
+                } else if (partialUpdateMode.equals("row")) {
+                    mode = TPartialUpdateMode.ROW_MODE;
+                }
                 // Generate loading task and init the plan of task
                 LoadLoadingTask task = new LoadLoadingTask(db, table, brokerDesc,
                         brokerFileGroups, getDeadlineMs(), loadMemLimit,
                         strictMode, transactionId, this, timezone, timeoutSecond,
                         createTimestamp, partialUpdate, mergeCondition, sessionVariables,
-                        context,  TLoadJobType.BROKER, priority, originStmt);
+                        context,  TLoadJobType.BROKER, priority, originStmt, mode);
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
                 task.init(loadId, attachment.getFileStatusByTable(aggKey), attachment.getFileNumByTable(aggKey));
@@ -379,6 +407,9 @@ public class BrokerLoadJob extends BulkLoadJob {
         if (attachment.getTrackingUrl() != null) {
             loadingStatus.setTrackingUrl(attachment.getTrackingUrl());
         }
+        if (!attachment.getRejectedRecordPaths().isEmpty()) {
+            loadingStatus.setRejectedRecordPaths(attachment.getRejectedRecordPaths());
+        }
         commitInfos.addAll(attachment.getCommitInfoList());
         failInfos.addAll(attachment.getFailInfoList());
         progress = (int) ((double) finishedTaskIds.size() / idToTasks.size() * 100);
@@ -408,11 +439,10 @@ public class BrokerLoadJob extends BulkLoadJob {
     }
 
     @Override
-    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId,
-                              long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
+    public void updateProgess(TReportExecStatusParams params) {
         writeLock();
         try {
-            super.updateProgess(beId, loadId, fragmentId, sinkRows, sinkBytes, sourceRows, sourceBytes, isDone);
+            super.updateProgess(params);
             if (!loadingStatus.getLoadStatistic().getLoadFinish()) {
                 progress = (int) ((double) loadingStatus.getLoadStatistic().totalSourceLoadBytes() /
                         loadingStatus.getLoadStatistic().totalFileSize() * 100);

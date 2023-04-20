@@ -43,6 +43,7 @@ StarRocks have optimized the metadata information provided by the following tabl
 | --------------------------------- | ------------------------------------------------------------ |
 | tables                            | Provides general metadata information of tables.             |
 | tables_config                     | Provides additional table metadata information that is unique to StarRocks. |
+| load_tracking_logs                | Provides error information (if any) of load jobs. |
 
 ### tables
 
@@ -89,3 +90,16 @@ The following fields are provided in `tables_config`:
 | DISTRIBUTE_BUCKET | Number of buckets in the table.                              |
 | SORT_KEY         | Sort keys of the table.                                      |
 | PROPERTIES       | Properties of the table.                                     |
+
+## load_tracking_logs
+
+This feature is supported since StarRocks v3.0.
+
+The following fields are provided in `load_tracking_logs`:
+
+| **Field**        | **Description**                                              |
+| ---------------- | ------------------------------------------------------------ |
+| JOB_ID           | The ID of the load job.                                      |
+| LABEL            | The label of the load job.                                   |
+| DATABASE_NAME    | The database that the load job belongs to.                   |
+| TRACKING_LOG     | Error logs (if any) of the load job.                         |

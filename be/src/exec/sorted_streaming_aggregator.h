@@ -29,7 +29,10 @@ public:
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) override;
 
-    StatusOr<ChunkPtr> streaming_compute_agg_state(size_t chunk_size, bool is_update_phase = false);
+    StatusOr<ChunkPtr> streaming_compute_agg_state(size_t chunk_size, bool is_update_phase = true);
+
+    // only group by cols. no any aggregate functions
+    StatusOr<ChunkPtr> streaming_compute_distinct(size_t chunk_size);
 
     StatusOr<ChunkPtr> pull_eos_chunk();
 
@@ -37,6 +40,9 @@ private:
     Status _compute_group_by(size_t chunk_size);
 
     Status _update_states(size_t chunk_size, bool is_update_phase);
+    // init selector by _cmp_vector
+    // return selected_size (distinct num_rows)
+    size_t _init_selector(std::vector<uint8_t>& selector, size_t chunk_size);
 
     Status _get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
                                    Columns& agg_result_columns);

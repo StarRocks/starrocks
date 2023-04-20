@@ -21,7 +21,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
@@ -179,8 +178,8 @@ public class HiveMetadata implements ConnectorMetadata {
             session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
         }
 
-        HiveTable hiveTable = (HiveTable) table;
-        session.getDumpInfo().getHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getName())
+        HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
+        session.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(), table.getName())
                 .setScanRowCount(statistics.getOutputRowCount());
 
         return statistics;
@@ -200,9 +199,10 @@ public class HiveMetadata implements ConnectorMetadata {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         if (isResourceMappingCatalog(catalogName)) {
-            HiveTable hiveTable = (HiveTable) GlobalStateMgr.getCurrentState().getMetadata().getTable(dbName, tableName);
+            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) GlobalStateMgr.getCurrentState()
+                    .getMetadata().getTable(dbName, tableName);
             cacheUpdateProcessor.ifPresent(processor -> processor.invalidateTable(
-                    hiveTable.getDbName(), hiveTable.getTableName(), hiveTable.getTableLocation()));
+                    hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
         }
     }
 

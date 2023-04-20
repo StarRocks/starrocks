@@ -40,8 +40,8 @@ public class AnalyzeCreateTableLikeTest {
 
     @Test
     public void testAnalyzeSuccess() {
-        analyzeSuccess("CREATE TABLE test1.table2 LIKE db1.t0;");
-        analyzeSuccess("CREATE TABLE test1.table2 LIKE db2.t0;");
+        analyzeSuccess("CREATE TABLE test.table2 LIKE db1.t0;");
+        analyzeSuccess("CREATE TABLE test.table2 LIKE db2.t0;");
         analyzeSuccess("CREATE TABLE table2 LIKE t0;");
     }
 

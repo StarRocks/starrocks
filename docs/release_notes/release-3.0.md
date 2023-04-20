@@ -1,6 +1,24 @@
 # StarRocks version 3.0
 
-## 3.0-rc01
+## 3.0.0-rc02
+
+Release date: April 13, 2023
+
+### Improvements
+
+- Updated Docker image and the related [Docker deployment document](../quick_start/deploy_in_docker.md) for version 3.0. ([#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021))
+- Supports creating asynchronous INSERT tasks. For more information, see [INSERT](../loading/InsertInto.md#load-data-asynchronously-using-insert) and [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md). ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
+- Supports adding MV partitions in batches, which improves the efficiency of partition addition during materialized view building. ([#21167](https://github.com/StarRocks/starrocks/pull/21167))
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- FEs fail to start when a VARCHAR column is used as the partitioning column of a materialized view. ([#19366](https://github.com/StarRocks/starrocks/issues/19366))
+- Window functions [LEAD](../sql-reference/sql-functions/Window_function.md#lead) and [LAG](../sql-reference/sql-functions/Window_function.md#lag) incorrectly handle IGNORE NULLS. ([#21001](https://github.com/StarRocks/starrocks/pull/21001))
+- Adding temporary partitions conflicts with automatic partition creation. ([#21222](https://github.com/StarRocks/starrocks/issues/21222))
+
+## 3.0.0-rc01
 
 Release date: March 31, 2023
 
@@ -21,7 +39,6 @@ Release date: March 31, 2023
 
 - [Preview] Supports Presto/Trino compatible dialect. Presto/Trino's SQL can be automatically rewritten into StarRocks' SQL pattern. For more information, see [the system variable](../reference/System_variable.md) `sql_dialect`.
 - [Preview] Supports [JDBC catalogs](../data_source/catalog/jdbc_catalog.md).
-- Supports [Global UDFs](../sql-reference/sql-functions/JAVA_UDF.md).
 - Supports using [SET CATALOG](../sql-reference/sql-statements/data-definition/SET%20CATALOG.md) to manually switch between catalogs in the current session.
 
 **Privileges and Security**
@@ -31,8 +48,9 @@ Release date: March 31, 2023
 
 **Query engine**
 
-- [Preview] Supports operator **spilling** for large queries, which can use disk space to ensure stable running of queries in case of insufficient memory.
+<!-- - [Preview] Supports operator **spilling** for large queries, which can use disk space to ensure stable running of queries in case of insufficient memory. -->
 - Allows more queries on joined tables to benefit from the [query cache](../using_starrocks/query_cache.md). For example, the query cache now supports aggregate queries on multiple tables that are joined by using  bucket shuffle joins and broadcast joins.
+- Supports [Global UDFs](../sql-reference/sql-functions/JAVA_UDF.md).
 - Dynamic adaptive parallelism: StarRocks can automatically adjust the `pipeline_dop` parameter for query concurrency.
 
 **Functions**
@@ -55,7 +73,7 @@ Release date: March 31, 2023
   - Supports rewrite of View Delta Join, Outer Join, and Cross Join.
   - Optimized SQL rewrite of Union with partition.
 - Improved materialized view building capabilities: supporting CTE, select *, and Union.
-- Optimized the information returned by [SHOW MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md).
+- Optimized the information returned by [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md).
 
 **Query engine**
 
@@ -81,7 +99,8 @@ Release date: March 31, 2023
 
 ### Behavior Change
 
-The new role-based access control (RBAC) system supports the previous privileges and roles. However, the syntax of related statements such as [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) is changed.
+- The new role-based access control (RBAC) system supports the previous privileges and roles. However, the syntax of related statements such as [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) and [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) is changed.
+- Renamed SHOW MATERIALIZED VIEW as [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md).
 
 ### Upgrade Notes
 

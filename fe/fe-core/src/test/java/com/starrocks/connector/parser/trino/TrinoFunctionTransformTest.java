@@ -57,18 +57,12 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "array_distinct(array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR");
 
         sql = "select concat(array[1,2,3], array[4,5,6]) from test_array";
-        assertPlanContains(sql, "array_concat(ARRAY<tinyint(4)>[1,2,3], ARRAY<tinyint(4)>[4,5,6])");
+        assertPlanContains(sql, "array_concat([1,2,3], [4,5,6])");
 
         sql = "select contains(array[1,2,3], 1)";
-        assertPlanContains(sql, "array_contains(ARRAY<tinyint(4)>[1,2,3], 1)");
-
-        sql = "select contains_sequence(c1, array['1','2']) from test_array";
-        assertPlanContains(sql, "array_contains_all(2: c1, ARRAY<varchar>['1','2'])");
-
-        sql = "select contains_sequence(c1, array['1','2']) from test_array";
-        assertPlanContains(sql, "array_contains_all(2: c1, ARRAY<varchar>['1','2'])");
+        assertPlanContains(sql, "array_contains([1,2,3], 1)");
 
         sql = "select slice(array[1,2,3,4], 2, 2)";
-        assertPlanContains(sql, "array_slice(ARRAY<tinyint(4)>[1,2,3,4], 2, 2)");
+        assertPlanContains(sql, "array_slice([1,2,3,4], 2, 2)");
     }
 }

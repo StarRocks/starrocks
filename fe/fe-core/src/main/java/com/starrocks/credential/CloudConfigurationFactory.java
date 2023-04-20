@@ -19,6 +19,7 @@ import com.starrocks.credential.aws.AWSCloudConfigurationFactory;
 import com.starrocks.credential.azure.AzureCloudConfigurationFactory;
 import com.starrocks.credential.gcp.GCPCloudConfigurationFactory;
 import com.starrocks.thrift.TCloudConfiguration;
+import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
@@ -58,7 +59,7 @@ public abstract class CloudConfigurationFactory {
         return new CloudConfiguration() {
             @Override
             public void toThrift(TCloudConfiguration tCloudConfiguration) {
-
+                tCloudConfiguration.cloud_type = TCloudType.DEFAULT;
             }
 
             @Override

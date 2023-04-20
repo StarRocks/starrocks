@@ -40,7 +40,7 @@ public class DeltaLakeInternalMgr {
         this.catalogName = catalogName;
         this.properties = properties;
         this.enableMetastoreCache = Boolean.parseBoolean(properties.getOrDefault("enable_metastore_cache", "false"));
-        this.hmsConf = new CachingHiveMetastoreConf(properties);
+        this.hmsConf = new CachingHiveMetastoreConf(properties, "delta lake");
         this.hdfsEnvironment = hdfsEnvironment;
     }
 

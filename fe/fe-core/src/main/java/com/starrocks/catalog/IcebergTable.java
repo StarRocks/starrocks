@@ -65,9 +65,10 @@ public class IcebergTable extends Table {
     private String remoteDbName;
     private String remoteTableName;
     private String resourceName;
-    private Optional<IcebergMetricsReporter> metricsReporter;
+    private Optional<IcebergMetricsReporter> metricsReporter = Optional.empty();
 
     private Map<String, String> icebergProperties = Maps.newHashMap();
+    private List<Column> partitionColumns;
 
     public IcebergTable() {
         super(TableType.ICEBERG);
@@ -119,10 +120,19 @@ public class IcebergTable extends Table {
     }
 
     public List<Column> getPartitionColumns() {
-        List<PartitionField> identityPartitionFields = this.getNativeTable().spec().fields().stream().
-                filter(partitionField -> partitionField.transform().isIdentity()).collect(Collectors.toList());
-        return identityPartitionFields.stream().map(partitionField -> getColumn(partitionField.name())).collect(
-                Collectors.toList());
+        if (partitionColumns == null) {
+            List<PartitionField> identityPartitionFields = this.getNativeTable().spec().fields().stream().
+                    filter(partitionField -> partitionField.transform().isIdentity()).collect(Collectors.toList());
+            partitionColumns = identityPartitionFields.stream().map(partitionField -> getColumn(partitionField.name()))
+                    .collect(Collectors.toList());
+        }
+
+        return partitionColumns;
+    }
+
+    public List<Integer> partitionColumnIndexes() {
+        List<Column> partitionCols = getPartitionColumns();
+        return partitionCols.stream().map(col -> fullSchema.indexOf(col)).collect(Collectors.toList());
     }
 
     public boolean isUnPartitioned() {
@@ -135,7 +145,7 @@ public class IcebergTable extends Table {
     }
 
     public Optional<IcebergMetricsReporter.IcebergScanReportWithCounter> reportScanMetrics() {
-        return metricsReporter.isPresent() ? Optional.ofNullable(metricsReporter.get().lastReport()) : Optional.empty();
+        return metricsReporter.map(IcebergMetricsReporter::lastReport);
     }
 
     @Override
@@ -228,6 +238,11 @@ public class IcebergTable extends Table {
     }
 
     @Override
+    public boolean supportInsert() {
+        return true;
+    }
+
+    @Override
     public int hashCode() {
         return com.google.common.base.Objects.hashCode(getCatalogName(), remoteDbName, getTableIdentifier());
     }
@@ -261,7 +276,7 @@ public class IcebergTable extends Table {
         private List<Column> fullSchema;
         private Map<String, String> icebergProperties;
         private org.apache.iceberg.Table nativeTable;
-        private Optional<IcebergMetricsReporter> metricsReporter;
+        private Optional<IcebergMetricsReporter> metricsReporter = Optional.empty();
 
         public Builder() {
         }

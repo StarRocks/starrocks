@@ -105,9 +105,11 @@ add_library(Storage STATIC
     rowset/segment_options.cpp
     rowset/rowid_range_option.cpp
     rowset/rowset_meta.cpp
+    rowset/horizontal_update_rowset_writer.cpp
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
+    task/engine_manual_compaction_task.cpp
     task/engine_storage_migration_task.cpp
     task/engine_alter_tablet_task.cpp
     aggregate_iterator.cpp
@@ -163,6 +165,7 @@ add_library(Storage STATIC
     push_utils.cpp
     lake/async_delta_writer.cpp
     lake/compaction_policy.cpp
+    lake/compaction_scheduler.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
     lake/gc.cpp

@@ -199,6 +199,7 @@ enum TTaskType {
     UNINSTALL_PLUGIN,
     // this use for calculate enum count
     DROP_AUTO_INCREMENT_MAP,
+    COMPACTION,
     NUM_TASK_TYPE
 }
 
@@ -506,4 +507,31 @@ enum TPartialUpdateMode {
     UNKNOWN_MODE = 0;
     ROW_MODE = 1;
     COLUMN_MODE = 2;
+    AUTO_MODE = 3;
+}
+
+struct TIcebergColumnStats {
+    1: optional map<i32, i64> column_sizes
+    2: optional map<i32, i64> value_counts
+    3: optional map<i32, i64> null_value_counts
+    4: optional map<i32, i64> nan_value_counts
+    5: optional map<i32, binary> lower_bounds;
+    6: optional map<i32, binary> upper_bounds;
+}
+
+struct TIcebergDataFile {
+    1: optional string path
+    2: optional string format
+    3: optional i64 record_count
+    4: optional i64 file_size_in_bytes
+    5: optional string partition_path;
+    6: optional list<i64> split_offsets;
+    7: optional TIcebergColumnStats column_stats;
+}
+
+struct TSinkCommitInfo {
+    1: optional TIcebergDataFile iceberg_data_file
+    // ... for other tables sink commit info
+
+    100: optional bool is_overwrite;
 }

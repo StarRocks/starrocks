@@ -122,7 +122,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.QueryableReentrantLock;
@@ -133,17 +133,18 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
+import com.starrocks.connector.elasticsearch.EsRepository;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.credential.CloudCredentialUtil;
-import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.ha.StateChangeExecution;
+import com.starrocks.healthchecker.SafeModeChecker;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
@@ -225,6 +226,7 @@ import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.BackupStmt;
@@ -349,9 +351,9 @@ public class GlobalStateMgr {
     private DeleteHandler deleteHandler;
     private UpdateDbUsedDataQuotaDaemon updateDbUsedDataQuotaDaemon;
 
-    private LeaderDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
-    private LeaderDaemon txnTimeoutChecker; // To abort timeout txns
-    private LeaderDaemon taskCleaner;   // To clean expire Task/TaskRun
+    private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
+    private FrontendDaemon txnTimeoutChecker; // To abort timeout txns
+    private FrontendDaemon taskCleaner;   // To clean expire Task/TaskRun
     private JournalWriter journalWriter; // leader only: write journal log
     private Daemon replayer;
     private Daemon timePrinter;
@@ -451,6 +453,8 @@ public class GlobalStateMgr {
 
     private final StatisticAutoCollector statisticAutoCollector;
 
+    private final SafeModeChecker safeModeChecker;
+
     private AnalyzeManager analyzeManager;
 
     private StatisticStorage statisticStorage;
@@ -458,6 +462,8 @@ public class GlobalStateMgr {
     private long imageJournalId;
 
     private long feStartTime;
+
+    private boolean isSafeMode = false;
 
     private ResourceGroupMgr resourceGroupMgr;
 
@@ -600,6 +606,7 @@ public class GlobalStateMgr {
         this.updateDbUsedDataQuotaDaemon = new UpdateDbUsedDataQuotaDaemon();
         this.statisticsMetaManager = new StatisticsMetaManager();
         this.statisticAutoCollector = new StatisticAutoCollector();
+        this.safeModeChecker = new SafeModeChecker();
         this.statisticStorage = new CachedStatisticStorage();
 
         this.replayedJournalId = new AtomicLong(0L);
@@ -716,6 +723,14 @@ public class GlobalStateMgr {
         }
     }
 
+    public boolean isSafeMode() {
+        return isSafeMode;
+    }
+
+    public void setSafeMode(boolean isSafeMode) {
+        this.isSafeMode = isSafeMode;
+    }
+
     public ConcurrentHashMap<Long, Database> getIdToDb() {
         return localMetastore.getIdToDb();
     }
@@ -795,6 +810,10 @@ public class GlobalStateMgr {
         return getCurrentState().getStarOSAgent();
     }
 
+    public static WarehouseManager getCurrentWarehouseMgr() {
+        return getCurrentState().getWarehouseMgr();
+    }
+
     public static HeartbeatMgr getCurrentHeartbeatMgr() {
         return getCurrentState().getHeartbeatMgr();
     }
@@ -836,6 +855,10 @@ public class GlobalStateMgr {
 
     public static StatisticStorage getCurrentStatisticStorage() {
         return getCurrentState().statisticStorage;
+    }
+
+    public static TabletStatMgr getCurrentTabletStatMgr() {
+        return getCurrentState().tabletStatMgr;
     }
 
     // Only used in UT
@@ -1050,6 +1073,7 @@ public class GlobalStateMgr {
                     // already upgraded, set auth = null
                     auth = null;
                 }
+                warehouseMgr.init();
                 break;
             }
 
@@ -1108,6 +1132,7 @@ public class GlobalStateMgr {
         // Set the feType to LEADER before writing edit log, because the feType must be Leader when writing edit log.
         // It will be set to the old type if any error happens in the following procedure
         feType = FrontendNodeType.LEADER;
+
         try {
             // Log meta_version
             int communityMetaVersion = MetaContext.get().getMetaVersion();
@@ -1152,7 +1177,7 @@ public class GlobalStateMgr {
             // start all daemon threads that only running on MASTER FE
             startLeaderOnlyDaemonThreads();
             // start other daemon threads that should run on all FEs
-            startNonLeaderDaemonThreads();
+            startAllNodeTypeDaemonThreads();
             insertOverwriteJobManager.cancelRunningJobs();
 
             MetricRepo.init();
@@ -1258,10 +1283,15 @@ public class GlobalStateMgr {
         if (RunMode.allowCreateLakeTable()) {
             shardDeleter.start();
         }
+
+        if (Config.enable_safe_mode) {
+            LOG.info("Start safe mode checker!");
+            safeModeChecker.start();
+        }
     }
 
-    // start threads that should running on all FE
-    private void startNonLeaderDaemonThreads() {
+    // start threads that should run on all FE
+    private void startAllNodeTypeDaemonThreads() {
         tabletStatMgr.start();
         // load and export job label cleaner thread
         labelCleaner.start();
@@ -1303,7 +1333,7 @@ public class GlobalStateMgr {
             replayer.start();
         }
 
-        startNonLeaderDaemonThreads();
+        startAllNodeTypeDaemonThreads();
 
         MetricRepo.init();
 
@@ -1796,7 +1826,7 @@ public class GlobalStateMgr {
     }
 
     public void createLabelCleaner() {
-        labelCleaner = new LeaderDaemon("LoadLabelCleaner", Config.label_clean_interval_second * 1000L) {
+        labelCleaner = new FrontendDaemon("LoadLabelCleaner", Config.label_clean_interval_second * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
                 clearExpiredJobs();
@@ -1805,7 +1835,7 @@ public class GlobalStateMgr {
     }
 
     public void createTaskCleaner() {
-        taskCleaner = new LeaderDaemon("TaskCleaner", Config.task_check_interval_second * 1000L) {
+        taskCleaner = new FrontendDaemon("TaskCleaner", Config.task_check_interval_second * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
                 doTaskBackgroundJob();
@@ -1814,7 +1844,7 @@ public class GlobalStateMgr {
     }
 
     public void createTxnTimeoutChecker() {
-        txnTimeoutChecker = new LeaderDaemon("txnTimeoutChecker", Config.transaction_clean_interval_second) {
+        txnTimeoutChecker = new FrontendDaemon("txnTimeoutChecker", Config.transaction_clean_interval_second) {
             @Override
             protected void runAfterCatalogReady() {
                 globalTransactionMgr.abortTimeoutTxns();
@@ -2051,7 +2081,7 @@ public class GlobalStateMgr {
 
     public void createTimePrinter() {
         // time printer will write timestamp edit log every 10 seconds
-        timePrinter = new LeaderDaemon("timePrinter", 10 * 1000L) {
+        timePrinter = new FrontendDaemon("timePrinter", 10 * 1000L) {
             @Override
             protected void runAfterCatalogReady() {
                 Timestamp stamp = new Timestamp();
@@ -2581,13 +2611,13 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.FILE) {
             FileTable fileTable = (FileTable) table;
-            Map<String, String> fileProperties = fileTable.getFileProperties();
-            CloudCredentialUtil.maskCloudCredential(fileProperties);
+            Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
+            CloudCredentialUtil.maskCloudCredential(clonedFileProperties);
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
             sb.append("\nPROPERTIES (\n");
-            sb.append(new PrintableMap<>(fileProperties, " = ", true, true, false).toString());
+            sb.append(new PrintableMap<>(clonedFileProperties, " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
             HudiTable hudiTable = (HudiTable) table;
@@ -3136,6 +3166,10 @@ public class GlobalStateMgr {
     // entry of rename table operation
     public void renameTable(Database db, OlapTable table, TableRenameClause tableRenameClause) throws DdlException {
         localMetastore.renameTable(db, table, tableRenameClause);
+    }
+
+    public void alterTableComment(Database db, Table table, AlterTableCommentClause clause) {
+        localMetastore.alterTableComment(db, table, clause);
     }
 
     public void replayRenameTable(TableInfo tableInfo) {

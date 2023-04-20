@@ -34,7 +34,7 @@ public class TableFunctionTest extends PlanTestBase {
                 "  |  returnTypes: [INT]\n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 3> : ARRAY<int(11)>[1,2,3]\n" +
+                "  |  <slot 3> : [1,2,3]\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
@@ -58,7 +58,7 @@ public class TableFunctionTest extends PlanTestBase {
                 "  |  returnTypes: [INT]\n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 3> : ARRAY<int(11)>[1,2,3]\n" +
+                "  |  <slot 3> : [1,2,3]\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
@@ -88,7 +88,7 @@ public class TableFunctionTest extends PlanTestBase {
                 "  |  returnTypes: [INT]\n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 3> : ARRAY<int(11)>[1]\n" +
+                "  |  <slot 3> : [1]\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
@@ -108,7 +108,7 @@ public class TableFunctionTest extends PlanTestBase {
                 "  |  returnTypes: [INT]\n" +
                 "  |  \n" +
                 "  4:Project\n" +
-                "  |  <slot 6> : ARRAY<int(11)>[1,2,3]\n" +
+                "  |  <slot 6> : [1,2,3]\n" +
                 "  |  \n" +
                 "  3:UNION\n" +
                 "     constant exprs: \n" +
@@ -143,7 +143,7 @@ public class TableFunctionTest extends PlanTestBase {
                 "  |  returnTypes: [INT]\n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 3> : ARRAY<int(11)>[1]\n" +
+                "  |  <slot 3> : [1]\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
@@ -166,7 +166,7 @@ public class TableFunctionTest extends PlanTestBase {
                 "  |  returnTypes: [INT]\n" +
                 "  |  \n" +
                 "  5:Project\n" +
-                "  |  <slot 6> : ARRAY<int(11)>[1,2,3]\n" +
+                "  |  <slot 6> : [1,2,3]\n" +
                 "  |  \n" +
                 "  4:UNION\n" +
                 "     constant exprs: \n" +
@@ -198,7 +198,7 @@ public class TableFunctionTest extends PlanTestBase {
                 "  |  returnTypes: [INT]\n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 3> : ARRAY<int(11)>[1]\n" +
+                "  |  <slot 3> : [1]\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
@@ -218,7 +218,7 @@ public class TableFunctionTest extends PlanTestBase {
                 "  |  returnTypes: [INT]\n" +
                 "  |  \n" +
                 "  4:Project\n" +
-                "  |  <slot 6> : ARRAY<int(11)>[1,2,3]\n" +
+                "  |  <slot 6> : [1,2,3]\n" +
                 "  |  \n" +
                 "  3:UNION\n" +
                 "     constant exprs: \n" +

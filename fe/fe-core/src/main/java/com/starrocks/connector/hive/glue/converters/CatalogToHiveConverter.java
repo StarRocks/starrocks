@@ -37,7 +37,8 @@ import org.apache.hadoop.hive.metastore.api.SkewedInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hadoop.hive.metastore.api.TableMeta;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
@@ -52,7 +53,7 @@ import static org.apache.commons.lang3.ObjectUtils.firstNonNull;
 
 public class CatalogToHiveConverter {
 
-    private static final Logger LOGGER = Logger.getLogger(CatalogToHiveConverter.class);
+    private static final Logger LOGGER = LogManager.getLogger(CatalogToHiveConverter.class);
 
     private static final ImmutableMap<String, HiveException> EXCEPTION_MAP =
             ImmutableMap.<String, HiveException>builder()

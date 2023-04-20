@@ -18,8 +18,11 @@ import com.starrocks.common.Id;
 import com.starrocks.common.IdGenerator;
 
 public class ConnectorTableId extends Id<ConnectorTableId> {
+
+    public static final IdGenerator<ConnectorTableId> CONNECTOR_ID_GENERATOR = createGenerator();
+    private static int CONNECTOR_TABLE_ID_OFFSET = 100000000;
     public ConnectorTableId(int id) {
-        super(id);
+        super(id + CONNECTOR_TABLE_ID_OFFSET);
     }
 
     public static IdGenerator<ConnectorTableId> createGenerator() {

@@ -448,14 +448,21 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
         for (auto& it : _store_map) {
             if (it.second->is_used()) {
                 if (_available_storage_medium_type_count == 1 || it.second->storage_medium() == storage_medium) {
-                    stores.push_back(it.second);
+                    if (it.second->available_bytes() > config::storage_flood_stage_left_capacity_bytes) {
+                        stores.push_back(it.second);
+                    }
                 }
             }
         }
     }
+
+    std::sort(stores.begin(), stores.end(),
+              [](const auto& a, const auto& b) { return a->available_bytes() > b->available_bytes(); });
+
+    const int mid = stores.size() / 2 + 1;
     //  TODO(lingbin): should it be a global util func?
     std::srand(std::random_device()());
-    std::shuffle(stores.begin(), stores.end(), std::mt19937(std::random_device()()));
+    std::shuffle(stores.begin(), stores.begin() + mid, std::mt19937(std::random_device()()));
     return stores;
 }
 

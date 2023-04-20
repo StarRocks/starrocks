@@ -96,6 +96,13 @@ struct TypeDescriptor {
         return ret;
     }
 
+    static TypeDescriptor create_varbinary_type(int len) {
+        TypeDescriptor ret;
+        ret.type = TYPE_VARBINARY;
+        ret.len = len;
+        return ret;
+    }
+
     static TypeDescriptor create_json_type() {
         TypeDescriptor res;
         res.type = TYPE_JSON;

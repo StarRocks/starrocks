@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TResultSinkType;
 
 import java.util.List;
@@ -83,6 +84,10 @@ public class UpdatePlanner {
             long tableId = table.getId();
             List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
             for (Column column : table.getFullSchema()) {
+                if (updateStmt.usePartialUpdate() && !updateStmt.isAssignmentColumn(column.getName()) && !column.isKey()) {
+                    // When using partial update, skip columns which aren't key column and not be assign
+                    continue;
+                }
                 SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
                 slotDescriptor.setIsMaterialized(true);
                 slotDescriptor.setType(column.getType());
@@ -102,9 +107,14 @@ public class UpdatePlanner {
                 for (Partition partition : table.getPartitions()) {
                     partitionIds.add(partition.getId());
                 }
+                OlapTable olapTable = (OlapTable) table;
                 DataSink dataSink =
-                        new OlapTableSink(((OlapTable) table), olapTuple, partitionIds, ((OlapTable) table).writeQuorum(),
-                                ((OlapTable) table).enableReplicatedStorage(), updateStmt.nullExprInAutoIncrement());
+                        new OlapTableSink(olapTable, olapTuple, partitionIds, olapTable.writeQuorum(),
+                                olapTable.enableReplicatedStorage(), false, olapTable.supportedAutomaticPartition());
+                if (updateStmt.usePartialUpdate()) {
+                    // using column mode partial update in UPDATE stmt
+                    ((OlapTableSink) dataSink).setPartialUpdateMode(TPartialUpdateMode.COLUMN_MODE);
+                }
                 execPlan.getFragments().get(0).setSink(dataSink);
                 execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             } else if (table instanceof SchemaTable) {

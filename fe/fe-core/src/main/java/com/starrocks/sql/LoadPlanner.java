@@ -411,9 +411,16 @@ public class LoadPlanner {
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink
-            dataSink = new OlapTableSink((OlapTable) destTable, tupleDesc, partitionIds, canUsePipeLine,
-                    ((OlapTable) destTable).writeQuorum(), ((OlapTable) destTable).enableReplicatedStorage(),
-                    checkNullExprInAutoIncrement());
+            OlapTable olapTable = (OlapTable) destTable;
+            boolean enableAutomaticPartition;
+            if (fileGroups != null && fileGroups.stream().anyMatch(BrokerFileGroup::isSpecifyPartition)) {
+                enableAutomaticPartition = false;
+            } else {
+                enableAutomaticPartition = olapTable.supportedAutomaticPartition();
+            }
+            dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds, canUsePipeLine,
+                    olapTable.writeQuorum(), olapTable.enableReplicatedStorage(),
+                    checkNullExprInAutoIncrement(), enableAutomaticPartition);
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
             }

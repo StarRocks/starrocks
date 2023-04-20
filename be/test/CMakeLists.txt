@@ -74,6 +74,7 @@ set(EXEC_FILES
         ./exprs/decimal_binary_function_test.cpp
         ./exprs/array_expr_test.cpp
         ./exprs/array_functions_test.cpp
+        ./exprs/binary_function_test.cpp
         ./exprs/binary_functions_test.cpp
         ./exprs/binary_predicate_test.cpp
         ./exprs/bitmap_functions_test.cpp
@@ -101,6 +102,7 @@ set(EXEC_FILES
         ./exprs/lambda_map_expr_test.cpp
         ./exprs/like_test.cpp
         ./exprs/map_element_expr_test.cpp
+        ./exprs/map_expr_test.cpp
         ./exprs/map_functions_test.cpp
         ./exprs/math_functions_test.cpp
         ./exprs/null_if_expr_test.cpp
@@ -123,7 +125,6 @@ set(EXEC_FILES
         ./exprs/runtime_filter_test.cpp
         ./exprs/subfield_expr_test.cpp
         ./formats/csv/array_converter_test.cpp
-        ./formats/csv/binary_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/date_converter_test.cpp
         ./formats/csv/datetime_converter_test.cpp
@@ -133,9 +134,14 @@ set(EXEC_FILES
         ./formats/csv/nullable_converter_test.cpp
         ./formats/csv/numeric_converter_test.cpp
         ./formats/csv/default_value_converter_test.cpp
+        ./formats/csv/string_converter_test.cpp
+        ./formats/csv/varbinary_converter_test.cpp
         ./formats/json/binary_column_test.cpp
         ./formats/json/numeric_column_test.cpp
         ./formats/json/nullable_column_test.cpp
+        ./formats/avro/binary_column_test.cpp
+        ./formats/avro/numeric_column_test.cpp
+        ./formats/avro/nullable_column_test.cpp
         ./formats/orc/orc_chunk_reader_test.cpp
         ./formats/orc/orc_lazy_load_test.cpp
         ./formats/orc/orc_test_util/MemoryOutputStream.cc
@@ -201,6 +207,7 @@ set(EXEC_FILES
         ./storage/lake/primary_key_publish_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
+        ./storage/rowset_column_partial_update_test.cpp
         ./storage/rowset/rowset_test.cpp
         ./storage/rowset/binary_dict_page_test.cpp
         ./storage/rowset/binary_plain_page_test.cpp
@@ -295,6 +302,7 @@ set(EXEC_FILES
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
         ./runtime/memory_scratch_sink_test.cpp
         ./runtime/command_executor_test.cpp
+        ./runtime/exec_env_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
         ./types/bitmap_value_test.cpp
@@ -351,14 +359,12 @@ set(EXEC_FILES
         ./util/cpu_usage_info_test.cpp
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
+        ./block_cache/block_cache_test.cpp
+        ./io/cache_input_stream_test.cpp
         )
 
 if ("${USE_STAROS}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
-endif ()
-if ("${WITH_BLOCK_CACHE}" STREQUAL "ON")
-    list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
-    list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 
 if (USE_AVX2)

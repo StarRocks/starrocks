@@ -48,6 +48,11 @@ public:
 
     void close() override;
 
+    static Status convert_array_to_column(ConvertFunc func, size_t num_elements, const arrow::Array* array,
+                                          const TypeDescriptor* type_desc, const ColumnPtr& column,
+                                          size_t batch_start_idx, size_t column_start_idx, Filter* chunk_filter,
+                                          ArrowConvertContext* conv_ctx);
+
 private:
     // Read next buffer from reader
     Status open_next_reader();
@@ -57,8 +62,6 @@ private:
     bool chunk_is_full();
     bool batch_is_exhausted();
     Status finalize_src_chunk(ChunkPtr* chunk);
-    Status convert_array_to_column(ConvertFunc func, size_t num_elements, const arrow::Array* array,
-                                   const TypeDescriptor* type_desc, const ColumnPtr& column);
 
     Status new_column(const arrow::DataType* arrow_type, const SlotDescriptor* slot_desc, ColumnPtr* column,
                       ConvertFunc* conv_func, Expr** expr);
