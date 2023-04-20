@@ -18,7 +18,7 @@ StarRocks 支持四种数据模型，分别是明细模型 (Duplicate Key Model)
 > **说明**
 >
 > - 3.0 版本之前，主键模型不支持分别定义主键和排序键。
-> - 排序键的更多说明，请参见[排序键和前缀索引](https://docs.starrocks.io/zh-cn/latest/table_design/Sort_key)。
+> - 排序键的更多说明，请参见[排序键和前缀索引](Sort_key.md)。
 
 ## 注意事项
 

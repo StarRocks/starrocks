@@ -2,7 +2,7 @@
 
 ## 功能
 
-同 [from_base64()](https://docs.starrocks.io/en-us/3.0/sql-reference/sql-functions/crytographic-functions/from_base64) 函数，用于解码某个 Base64 编码的字符串，是 [to_base64()](https://docs.starrocks.io/en-us/3.0/sql-reference/sql-functions/crytographic-functions/to_base64) 函数的反向函数。
+同 [from_base64()](../crytographic-functions/from_base64.md) 函数，用于解码某个 Base64 编码的字符串，是 [to_base64()](../crytographic-functions/to_base64.md) 函数的反向函数。
 
 ## 语法
 

@@ -6,8 +6,8 @@
 
 | HTTP 请求方法       | HTTP 请求路径                                                   | 描述                                                                                                                |
 |------------------| --------------------------------------------------------------  |-------------------------------------------------------------------------------------------------------------------- |
-| PUT              | /api/{db}/{table}/_stream_load                                  | Stream Load 操作，详见 [Stream Load](https://docs.starrocks.io/zh-cn/latest/loading/StreamLoad)。                               |
-| POST/PUT         | /api/transaction/{txn_op}                                       | Stream Load 事务接口，详见 [Stream Load 事务接口](https://docs.starrocks.io/zh-cn/latest/loading/Stream_Load_transaction_interface)     |
+| PUT              | /api/{db}/{table}/_stream_load                                  | Stream Load 操作，详见 [Stream Load](../loading/StreamLoad.md)。                               |
+| POST/PUT         | /api/transaction/{txn_op}                                       | Stream Load 事务接口，详见 [Stream Load 事务接口](../loading/Stream_Load_transaction_interface.md)     |
 | GET              | /api/{db}/_load_info
 | GET              | /api/_set_config?config_key1=config_value1                      | 更新 FE 配置。                                                                                                            |
 | GET              | /api/_get_ddl?db={}&tbl={}                                      | 查看表 DDL 语句。
@@ -35,7 +35,7 @@
 | GET              | /api/query_detail
 | GET              | /api/connection
 | GET              | /api/show_data?db={}                                            | 查询指定数据库的大小。                                                                                                    |
-| POST             | /api/query_dump                                                 | 获取 query dump 信息，详见 [Query dump](https://docs.starrocks.io/zh-cn/latest/faq/Dump_query) 。                       |
+| POST             | /api/query_dump                                                 | 获取 query dump 信息，详见 [Query dump](../faq/Dump_query.md) 。                       |
 | GET              | /api/stop
 | GET              | /image
 | GET              | /info
@@ -45,7 +45,7 @@
 | GET              | /check
 | GET              | /dump
 | GET              | /role
-| GET              | /api/{db}/{table}/_count                                       
+| GET              | /api/{db}/{table}/_count
 | GET              | /api/{db}/{table}/_schema                                      | 查看表结构。                                                                                                          |
 | GET/POST         | /api/{db}/{table}/_query_plan
 
@@ -53,8 +53,8 @@
 
 | HTTP 请求方法       | HTTP 请求路径                                                     | 描述                                                                                                                |
 |------------------| --------------------------------------------------------------  |-------------------------------------------------------------------------------------------------------------------- |
-| PUT              | /api/{db}/{table}/_stream_load                                  | Stream Load 操作，详见 [Stream Load](https://docs.starrocks.io/zh-cn/latest/loading/StreamLoad)                          |
-| POST/PUT         | /api/transaction/{txn_op}                                       | Stream Load 事务接口，详见 [Stream Load 事务接口](https://docs.starrocks.io/zh-cn/latest/loading/Stream_Load_transaction_interface)   |
+| PUT              | /api/{db}/{table}/_stream_load                                  | Stream Load 操作，详见 [Stream Load](../loading/StreamLoad.md)                          |
+| POST/PUT         | /api/transaction/{txn_op}                                       | Stream Load 事务接口，详见 [Stream Load 事务接口](../loading/Stream_Load_transaction_interface.md)   |
 | PUT              | /api/transaction/load                                           |
 | HEAD/GET         | /api/_download_load                                             |
 | HEAD/GET         | /api/_tablet/_download                                          |
@@ -78,7 +78,7 @@
 | POST             | /api/compact?tablet_id={}&compaction_type={base/cumulative}     | 手动对指定 tablet 进行 compaction。                                                                                       |
 | GET              | /api/compaction/show_repair                                     |
 | PUT              | /api/compaction/submit_repair                                   |
-| POST             | /api/update_config                                              | 更新 BE 配置，详见 [更新 BE 配置](https://docs.starrocks.io/zh-cn/latest/administration/Configuration#be-%E9%85%8D%E7%BD%AE%E9%A1%B9)  |
+| POST             | /api/update_config                                              | 更新 BE 配置，详见 [更新 BE 配置](../administration/Configuration.md#be-配置项)。  |
 | GET/PUT          | /api/runtime_filter_cache/{action}                              |
 | POST             | /api/compact_rocksdb_meta                                       |
 | GET/PUT          | /api/query_cache/{action}                                       |
