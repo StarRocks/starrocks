@@ -66,7 +66,12 @@ void ArrayColumn::resize(size_t n) {
 }
 
 void ArrayColumn::assign(size_t n, size_t idx) {
-    DCHECK(false) << "array column shouldn't call assign";
+    DCHECK_LE(idx, this->size()) << "Range error when assign arrayColumn.";
+    auto desc = this->clone_empty();
+    auto datum = get(idx); // just reference
+    desc->append_value_multiple_times(&datum, n);
+    swap_column(*desc);
+    desc->reset_column();
 }
 
 void ArrayColumn::append_datum(const Datum& datum) {
