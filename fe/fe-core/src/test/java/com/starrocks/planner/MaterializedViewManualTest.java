@@ -47,7 +47,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
 
     @Test
     public void testDistinct2() throws Exception {
-        String tableSQL = "CREATE TABLE `test_partition_expr_tbl1` (\n" +
+        String tableSQL = "CREATE TABLE `test_distinct2` (\n" +
                 "  `order_id` bigint(20) NOT NULL DEFAULT \"-1\" COMMENT \"\",\n" +
                 "  `dt` datetime NOT NULL DEFAULT \"1996-01-01 00:00:00\" COMMENT \"\",\n" +
                 "  `k1`bigint,\n" +
@@ -71,7 +71,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "\"replication_num\" = \"1\"" +
                 ");";
         starRocksAssert.withTable(tableSQL);
-        String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
+        String mv = "CREATE MATERIALIZED VIEW `test_distinct2_mv`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY (date_trunc('hour', `dt`))\n" +
                 "DISTRIBUTED BY HASH(`dt`) BUCKETS 10\n" +
@@ -83,13 +83,13 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "k1, " +
                 "count(DISTINCT `order_id`) AS `order_num`, \n" +
                 "`dt`\n" +
-                "FROM `test_partition_expr_tbl1`\n" +
+                "FROM `test_distinct2`\n" +
                 "group by dt, k1;";
         starRocksAssert.withMaterializedView(mv);
         sql("select dt, count(distinct order_id) " +
                 "from test_partition_expr_tbl1 group by dt")
                 .nonMatch("test_partition_expr_mv1");
-        starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
+        starRocksAssert.dropMaterializedView("test_distinct2_mv");
     }
 
     @Test
@@ -177,5 +177,6 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "FROM `test_partition_expr_tbl1`\n" +
                 "WHERE `dt` >= '2023-04-10 17:00:00' and `dt` < '2023-04-10 18:00:00'\n" +
                 "group by ts").nonMatch("test_partition_expr_mv1");
+        starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
     }
 }
