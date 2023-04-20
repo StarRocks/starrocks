@@ -214,8 +214,8 @@ public class InsertPlanner {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
 
-            if (canUsePipeline && targetTable instanceof OlapTable) {
-                PlanFragment sinkFragment = execPlan.getFragments().get(0);
+            PlanFragment sinkFragment = execPlan.getFragments().get(0);
+            if (canUsePipeline && (targetTable instanceof OlapTable || targetTable instanceof IcebergTable)) {
                 if (shuffleServiceEnable) {
                     // For shuffle insert into, we only support tablet sink dop = 1
                     // because for tablet sink dop > 1, local passthourgh exchange will influence the order of sending,
@@ -230,13 +230,19 @@ public class InsertPlanner {
                                 .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
                     }
                 }
-                sinkFragment.setHasOlapTableSink();
-                sinkFragment.setForceSetTableSinkDop();
-                sinkFragment.setForceAssignScanRangesPerDriverSeq();
+
+                if (targetTable instanceof OlapTable) {
+                    sinkFragment.setHasOlapTableSink();
+                    sinkFragment.setForceAssignScanRangesPerDriverSeq();
+                } else {
+                    sinkFragment.setHasIcebergTableSink();
+                }
+
                 sinkFragment.disableRuntimeAdaptiveDop();
+                sinkFragment.setForceSetTableSinkDop();
             }
-            execPlan.getFragments().get(0).setSink(dataSink);
-            execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
+            sinkFragment.setSink(dataSink);
+            sinkFragment.setLoadGlobalDicts(globalDicts);
             return execPlan;
         } finally {
             session.getSessionVariable().setEnableLocalShuffleAgg(prevIsEnableLocalShuffleAgg);

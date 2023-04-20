@@ -30,6 +30,7 @@ import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION;
 import static org.apache.iceberg.TableProperties.PARQUET_COMPRESSION_DEFAULT;
 
 public class IcebergTableSink extends DataSink {
+    public final static int ICEBERG_SINK_MAX_DOP = 32;
     protected final TupleDescriptor desc;
     private final long targetTableId;
     private final String fileFormat;

@@ -418,7 +418,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add(DISABLE_BUCKET_JOIN)
             .add(CBO_ENABLE_REPLICATED_JOIN)
             .add(FOREIGN_KEY_CHECKS)
-            .add(PIPELINE_SINK_DOP)
             .add("enable_cbo")
             .add("enable_vectorized_engine")
             .add("vectorized_engine_enable")
@@ -657,6 +656,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
+
+    @VariableMgr.VarAttr(name = PIPELINE_SINK_DOP)
+    private int pipelineSinkDop = 0;
 
     /*
      * The maximum pipeline dop limit which only takes effect when pipeline_dop=0.
@@ -1577,6 +1579,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getPipelineDop() {
         return this.pipelineDop;
+    }
+
+    public int getPipelineSinkDop() {
+        return pipelineSinkDop;
+    }
+
+    public void setPipelineSinkDop(int pipelineSinkDop) {
+        this.pipelineSinkDop = pipelineSinkDop;
     }
 
     public void setMaxPipelineDop(int maxPipelineDop) {

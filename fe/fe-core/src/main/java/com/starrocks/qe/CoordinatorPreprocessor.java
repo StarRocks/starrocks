@@ -41,10 +41,12 @@ import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.IcebergTableSink;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.MultiCastDataSink;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
@@ -1495,9 +1497,10 @@ public class CoordinatorPreprocessor {
          */
         private void toThriftForCommonParams(TExecPlanFragmentParams commonParams,
                                              TNetworkAddress destHost, TDescriptorTable descTable,
-                                             boolean isEnablePipelineEngine, int tabletSinkTotalDop,
+                                             boolean isEnablePipelineEngine, int tableSinkTotalDop,
                                              boolean isEnableStreamPipeline) {
-            boolean enablePipelineTableSinkDop = isEnablePipelineEngine && fragment.hasOlapTableSink();
+            boolean enablePipelineTableSinkDop = isEnablePipelineEngine &&
+                    (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
             commonParams.setProtocol_version(InternalServiceVersion.V1);
             commonParams.setFragment(fragment.toThrift());
             commonParams.setDesc_tbl(descTable);
@@ -1510,7 +1513,7 @@ public class CoordinatorPreprocessor {
             commonParams.params.setInstances_number(hostToNumbers.get(destHost));
             commonParams.params.setDestinations(destinations);
             if (enablePipelineTableSinkDop) {
-                commonParams.params.setNum_senders(tabletSinkTotalDop);
+                commonParams.params.setNum_senders(tableSinkTotalDop);
             } else {
                 commonParams.params.setNum_senders(instanceExecParams.size());
             }
@@ -1572,11 +1575,12 @@ public class CoordinatorPreprocessor {
          */
         private void toThriftForUniqueParams(TExecPlanFragmentParams uniqueParams, int fragmentIndex,
                                              FInstanceExecParam instanceExecParam, boolean enablePipelineEngine,
-                                             int accTabletSinkDop, int curTabletSinkDop)
+                                             int accTabletSinkDop, int curTableSinkDop)
                 throws Exception {
             // if pipeline is enable and current fragment contain olap table sink, in fe we will
             // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-            boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
+            boolean enablePipelineTableSinkDop = enablePipelineEngine &&
+                    (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
 
             uniqueParams.setProtocol_version(InternalServiceVersion.V1);
             uniqueParams.setBackend_num(instanceExecParam.backendNum);
@@ -1634,7 +1638,7 @@ public class CoordinatorPreprocessor {
 
             if (enablePipelineTableSinkDop) {
                 uniqueParams.params.setSender_id(accTabletSinkDop);
-                uniqueParams.params.setPipeline_sink_dop(curTabletSinkDop);
+                uniqueParams.params.setPipeline_sink_dop(curTableSinkDop);
             } else {
                 uniqueParams.params.setSender_id(fragmentIndex);
             }
@@ -1676,7 +1680,7 @@ public class CoordinatorPreprocessor {
         public List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
                                                       TDescriptorTable descTable,
                                                       boolean enablePipelineEngine, int accTabletSinkDop,
-                                                      int tabletSinkTotalDop,
+                                                      int tableSinkTotalDop,
                                                       boolean isEnableStreamPipeline) throws Exception {
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
             setBucketSeqToInstanceForRuntimeFilters();
@@ -1687,21 +1691,32 @@ public class CoordinatorPreprocessor {
                 if (!inFlightInstanceIds.contains(instanceExecParam.instanceId)) {
                     continue;
                 }
-                int curTabletSinkDop = 0;
+                int curTableSinkDop = 0;
                 if (forceSetTableSinkDop) {
-                    curTabletSinkDop = fragment.getPipelineDop();
+                    DataSink dataSink = fragment.getSink();
+                    int dop = fragment.getPipelineDop();
+                    if (dataSink instanceof OlapTableSink) {
+                        curTableSinkDop = dop;
+                    } else if (dataSink instanceof IcebergTableSink) {
+                        int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();
+                        if (sessionVarSinkDop > 0) {
+                            curTableSinkDop = Math.min(dop, sessionVarSinkDop);
+                        } else {
+                            curTableSinkDop = Math.min(dop, IcebergTableSink.ICEBERG_SINK_MAX_DOP);
+                        }
+                    }
                 } else {
-                    curTabletSinkDop = instanceExecParam.getPipelineDop();
+                    curTableSinkDop = instanceExecParam.getPipelineDop();
                 }
                 TExecPlanFragmentParams params = new TExecPlanFragmentParams();
 
                 toThriftForCommonParams(params, instanceExecParam.getHost(), descTable, enablePipelineEngine,
-                        tabletSinkTotalDop, isEnableStreamPipeline);
+                        tableSinkTotalDop, isEnableStreamPipeline);
                 toThriftForUniqueParams(params, i, instanceExecParam, enablePipelineEngine,
-                        accTabletSinkDop, curTabletSinkDop);
+                        accTabletSinkDop, curTableSinkDop);
 
                 paramsList.add(params);
-                accTabletSinkDop += curTabletSinkDop;
+                accTabletSinkDop += curTableSinkDop;
             }
             return paramsList;
         }
@@ -1709,14 +1724,14 @@ public class CoordinatorPreprocessor {
         TExecBatchPlanFragmentsParams toThriftInBatch(
                 Set<TUniqueId> inFlightInstanceIds, TNetworkAddress destHost, TDescriptorTable descTable,
                 boolean enablePipelineEngine, int accTabletSinkDop,
-                int tabletSinkTotalDop) throws Exception {
+                int tableSinkTotalDop) throws Exception {
 
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
 
             setBucketSeqToInstanceForRuntimeFilters();
 
             TExecPlanFragmentParams commonParams = new TExecPlanFragmentParams();
-            toThriftForCommonParams(commonParams, destHost, descTable, enablePipelineEngine, tabletSinkTotalDop, false);
+            toThriftForCommonParams(commonParams, destHost, descTable, enablePipelineEngine, tableSinkTotalDop, false);
             fillRequiredFieldsToThrift(commonParams);
 
             List<TExecPlanFragmentParams> uniqueParamsList = Lists.newArrayList();
@@ -1725,20 +1740,31 @@ public class CoordinatorPreprocessor {
                 if (!inFlightInstanceIds.contains(instanceExecParam.instanceId)) {
                     continue;
                 }
-                int curTabletSinkDop = 0;
+                int curTableSinkDop = 0;
                 if (forceSetTableSinkDop) {
-                    curTabletSinkDop = fragment.getPipelineDop();
+                    DataSink dataSink = fragment.getSink();
+                    int dop = fragment.getPipelineDop();
+                    if (dataSink instanceof OlapTableSink) {
+                        curTableSinkDop = dop;
+                    } else if (dataSink instanceof IcebergTableSink) {
+                        int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();
+                        if (sessionVarSinkDop > 0) {
+                            curTableSinkDop = Math.min(dop, sessionVarSinkDop);
+                        } else {
+                            curTableSinkDop = Math.min(dop, IcebergTableSink.ICEBERG_SINK_MAX_DOP);
+                        }
+                    }
                 } else {
-                    curTabletSinkDop = instanceExecParam.getPipelineDop();
+                    curTableSinkDop = instanceExecParam.getPipelineDop();
                 }
 
                 TExecPlanFragmentParams uniqueParams = new TExecPlanFragmentParams();
                 toThriftForUniqueParams(uniqueParams, i, instanceExecParam, enablePipelineEngine,
-                        accTabletSinkDop, curTabletSinkDop);
+                        accTabletSinkDop, curTableSinkDop);
                 fillRequiredFieldsToThrift(uniqueParams);
 
                 uniqueParamsList.add(uniqueParams);
-                accTabletSinkDop += curTabletSinkDop;
+                accTabletSinkDop += curTableSinkDop;
             }
 
             TExecBatchPlanFragmentsParams request = new TExecBatchPlanFragmentsParams();
