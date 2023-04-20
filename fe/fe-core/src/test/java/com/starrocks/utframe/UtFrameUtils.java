@@ -461,7 +461,7 @@ public class UtFrameUtils {
                 starRocksAssert.withDatabase(dbName);
             }
             starRocksAssert.useDatabase(dbName);
-            starRocksAssert.withTable(entry.getValue());
+            starRocksAssert.withSingleReplicaTable(entry.getValue());
         }
         // create view
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateViewStmtMap().entrySet()) {
