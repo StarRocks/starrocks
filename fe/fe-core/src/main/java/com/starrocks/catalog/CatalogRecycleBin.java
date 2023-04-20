@@ -269,7 +269,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
      * if we can erase this instance, we should check if anyone enable erase later.
      * Only used by main loop.
      */
-    private synchronized boolean canErase(long id, long currentTimeMs) {
+    private synchronized boolean timeExpired(long id, long currentTimeMs) {
         long latencyMs = currentTimeMs - idToRecycleTime.get(id);
         long expireMs = max(Config.catalog_trash_expire_second * 1000L, MIN_ERASE_LATENCY);
         if (enableEraseLater.contains(id)) {
@@ -277,6 +277,38 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             expireMs += LATE_RECYCLE_INTERVAL_SECONDS * 1000L;
         }
         return latencyMs > expireMs;
+    }
+
+
+    private synchronized boolean canEraseTable(RecycleTableInfo tableInfo, long currentTimeMs) {
+        if (timeExpired(tableInfo.getTable().getId(), currentTimeMs)) {
+            return true;
+        }
+
+        // database is force dropped, the table can not be recovered, erase it.
+        if (GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(tableInfo.getDbId()) == null) {
+            return true;
+        }
+        return false;
+    }
+
+    private synchronized boolean canErasePartition(RecyclePartitionInfo partitionInfo, long currentTimeMs) {
+        if (timeExpired(partitionInfo.getPartition().getId(), currentTimeMs)) {
+            return true;
+        }
+
+        // database is force dropped, the partition can not be recovered, erase it.
+        Database database = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(partitionInfo.getDbId());
+        if (database == null) {
+            return true;
+        }
+
+        // table is force dropped, the partition can not be recovered, erase it.
+        if (GlobalStateMgr.getCurrentState().getTableIncludeRecycleBin(database, partitionInfo.getTableId()) == null) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -307,7 +339,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             Map.Entry<Long, RecycleDatabaseInfo> entry = dbIter.next();
             RecycleDatabaseInfo dbInfo = entry.getValue();
             Database db = dbInfo.getDb();
-            if (canErase(db.getId(), currentTimeMs)) {
+            if (timeExpired(db.getId(), currentTimeMs)) {
                 // erase db
                 dbIter.remove();
                 removeRecycleMarkers(entry.getKey());
@@ -357,7 +389,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 Table table = tableInfo.getTable();
                 long tableId = table.getId();
 
-                if (canErase(tableId, currentTimeMs)) {
+                // 1. time expired
+                // 2. the db have been dropped force, this table can never be recovered
+                if (canEraseTable(tableInfo, currentTimeMs)
+                        || GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(tableInfo.dbId) == null) {
                     tableToRemove.add(tableInfo);
                     currentEraseOpCnt++;
                     if (currentEraseOpCnt >= MAX_ERASE_OPERATIONS_PER_CYCLE) {
@@ -429,7 +464,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             Partition partition = partitionInfo.getPartition();
 
             long partitionId = entry.getKey();
-            if (canErase(partitionId, currentTimeMs)) {
+            if (canErasePartition(partitionInfo, currentTimeMs)) {
                 GlobalStateMgr.getCurrentState().onErasePartition(partition);
                 // erase partition
                 iterator.remove();
