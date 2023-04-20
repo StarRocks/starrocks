@@ -296,11 +296,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (stmt.getDesiredConcurrentNum() != -1) {
             this.desireTaskConcurrentNum = stmt.getDesiredConcurrentNum();
         }
-        this.maxErrorNum = stmt.getMaxErrorNum();
-        if (Math.abs(stmt.getMaxFilterRatio() - 1) > 0.001) {
-            this.maxFilterRatio = stmt.getMaxFilterRatio();
+        if (stmt.getMaxErrorNum() != -1) {
+            this.maxErrorNum = stmt.getMaxErrorNum();
         }
-
+        this.maxFilterRatio = stmt.getMaxFilterRatio();
         if (stmt.getMaxBatchIntervalS() != -1) {
             this.taskSchedIntervalS = stmt.getMaxBatchIntervalS();
         }
