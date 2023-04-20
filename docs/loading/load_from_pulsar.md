@@ -129,7 +129,7 @@ MySQL [example_db]> SHOW ROUTINE LOAD TASK WHERE JobName = "routine_wiki_edit_1"
 
 ## Alter a load job
 
-Before altering a load job, you must pause it by using the [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/PAUSE%20ROUTINE%20LOAD.md) statement. Then you can execute the [ALTER ROUTINE LOAD](https://docs.starrocks.io/en-us/latest/sql-reference/sql-statements/data-manipulation/alter-routine-load). After altering it, you can execute the [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md) statement to resume it, and check its status by using the [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md) statement.
+Before altering a load job, you must pause it by using the [PAUSE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/PAUSE%20ROUTINE%20LOAD.md) statement. Then you can execute the [ALTER ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/alter-routine-load.md). After altering it, you can execute the [RESUME ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/RESUME%20ROUTINE%20LOAD.md) statement to resume it, and check its status by using the [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20ROUTINE%20LOAD.md) statement.
 
 When Routine Load is used to consume data from Pulsar, most returned parameters except for `data_source_properties` are the same as consuming data from Kafka.
 
