@@ -669,14 +669,13 @@ INNER JOIN (join-predicate [20: add = 17: max AND add(19: cast, 2: v2) = add(1: 
 select t0.v1, t1.v4, t2.v7 from t0 left join t1 on t0.v1 = t1.v4 left join t2 on t0.v2 = t2.v8 where t1.v5 <=> (select max(t1d - 1) from test_all_type where t0.v1 + t1.v4 + t2.v9 = case when t1c = 1 then 1 else t0.v1 + t1.v4 + t2.v9 end);
 [result]
 LEFT OUTER JOIN (join-predicate [add(add(1: v1, 4: v4), 9: v9) = if(12: t1c = 1, 1, add(add(1: v1, 4: v4), 9: v9))] post-join-predicate [5: v5 <=> 21: max])
-    LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
-        RIGHT OUTER JOIN (join-predicate [8: v8 = 2: v2] post-join-predicate [null])
-            EXCHANGE SHUFFLE[8]
-                SCAN (columns[7: v7, 8: v8, 9: v9] predicate[null])
-            EXCHANGE SHUFFLE[2]
-                SCAN (columns[1: v1, 2: v2] predicate[null])
+    LEFT OUTER JOIN (join-predicate [2: v2 = 8: v8] post-join-predicate [null])
+        LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
+            SCAN (columns[1: v1, 2: v2] predicate[null])
+            EXCHANGE SHUFFLE[4]
+                SCAN (columns[4: v4, 5: v5] predicate[null])
         EXCHANGE BROADCAST
-            SCAN (columns[4: v4, 5: v5] predicate[null])
+            SCAN (columns[7: v7, 8: v8, 9: v9] predicate[null])
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{21: max=max(21: max)}] group by [[12: t1c]] having [null]
             EXCHANGE SHUFFLE[12]
@@ -688,14 +687,13 @@ LEFT OUTER JOIN (join-predicate [add(add(1: v1, 4: v4), 9: v9) = if(12: t1c = 1,
 select t0.v1, t1.v4, t2.v7 from t0 left join t1 on t0.v1 = t1.v4 left join t2 on t0.v2 = t2.v8 where t1.v5 = (select max(t1d - 1) from test_all_type where t0.v1 + t1.v4 + t2.v9 = case when t1c + t1.v5 = 1 then 1 else t0.v1 + t1.v4 + t2.v9 end);
 [result]
 INNER JOIN (join-predicate [5: v5 = 21: max AND add(add(1: v1, 4: v4), 9: v9) = if(add(23: cast, 5: v5) = 1, 1, add(add(1: v1, 4: v4), 9: v9))] post-join-predicate [null])
-    INNER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
-        RIGHT OUTER JOIN (join-predicate [8: v8 = 2: v2] post-join-predicate [null])
-            EXCHANGE SHUFFLE[8]
-                SCAN (columns[7: v7, 8: v8, 9: v9] predicate[null])
-            EXCHANGE SHUFFLE[2]
-                SCAN (columns[1: v1, 2: v2] predicate[1: v1 IS NOT NULL])
+    LEFT OUTER JOIN (join-predicate [2: v2 = 8: v8] post-join-predicate [null])
+        INNER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
+            SCAN (columns[1: v1, 2: v2] predicate[1: v1 IS NOT NULL])
+            EXCHANGE SHUFFLE[4]
+                SCAN (columns[4: v4, 5: v5] predicate[5: v5 IS NOT NULL])
         EXCHANGE BROADCAST
-            SCAN (columns[4: v4, 5: v5] predicate[5: v5 IS NOT NULL])
+            SCAN (columns[7: v7, 8: v8, 9: v9] predicate[null])
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{21: max=max(21: max)}] group by [[23: cast]] having [21: max IS NOT NULL]
             EXCHANGE SHUFFLE[23]
@@ -707,14 +705,13 @@ INNER JOIN (join-predicate [5: v5 = 21: max AND add(add(1: v1, 4: v4), 9: v9) = 
 select t0.v1, t1.v4, t2.v7 from t0 left join t1 on t0.v1 = t1.v4 left join t2 on t0.v2 = t2.v8 where t0.v1 + t1.v5 <=> (select max(t1d - 1) from test_all_type where t0.v1 + t1.v4 + t2.v9 = case when t1c = 1 then 1 else t0.v1 + t1.v4 + t2.v9 end);
 [result]
 LEFT OUTER JOIN (join-predicate [add(add(1: v1, 4: v4), 9: v9) = if(12: t1c = 1, 1, add(add(1: v1, 4: v4), 9: v9))] post-join-predicate [add(1: v1, 5: v5) <=> 21: max])
-    LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
-        RIGHT OUTER JOIN (join-predicate [8: v8 = 2: v2] post-join-predicate [null])
-            EXCHANGE SHUFFLE[8]
-                SCAN (columns[7: v7, 8: v8, 9: v9] predicate[null])
-            EXCHANGE SHUFFLE[2]
-                SCAN (columns[1: v1, 2: v2] predicate[null])
+    LEFT OUTER JOIN (join-predicate [2: v2 = 8: v8] post-join-predicate [null])
+        LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
+            SCAN (columns[1: v1, 2: v2] predicate[null])
+            EXCHANGE SHUFFLE[4]
+                SCAN (columns[4: v4, 5: v5] predicate[null])
         EXCHANGE BROADCAST
-            SCAN (columns[4: v4, 5: v5] predicate[null])
+            SCAN (columns[7: v7, 8: v8, 9: v9] predicate[null])
     EXCHANGE BROADCAST
         AGGREGATE ([GLOBAL] aggregate [{21: max=max(21: max)}] group by [[12: t1c]] having [null]
             EXCHANGE SHUFFLE[12]
@@ -905,14 +902,13 @@ select t0.v1, t1.v4, t2.v7 from t0 left join t1 on t0.v1 = t1.v4 left join t2 on
 [result]
 PREDICATE 5: v5 <=> 21: expr
     LEFT OUTER JOIN (join-predicate [add(add(1: v1, 4: v4), 9: v9) = if(12: t1c = 1, 1, add(add(1: v1, 4: v4), 9: v9))] post-join-predicate [null])
-        LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
-            RIGHT OUTER JOIN (join-predicate [8: v8 = 2: v2] post-join-predicate [null])
-                EXCHANGE SHUFFLE[8]
-                    SCAN (columns[7: v7, 8: v8, 9: v9] predicate[null])
-                EXCHANGE SHUFFLE[2]
-                    SCAN (columns[1: v1, 2: v2] predicate[null])
+        LEFT OUTER JOIN (join-predicate [2: v2 = 8: v8] post-join-predicate [null])
+            LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
+                SCAN (columns[1: v1, 2: v2] predicate[null])
+                EXCHANGE SHUFFLE[4]
+                    SCAN (columns[4: v4, 5: v5] predicate[null])
             EXCHANGE BROADCAST
-                SCAN (columns[4: v4, 5: v5] predicate[null])
+                SCAN (columns[7: v7, 8: v8, 9: v9] predicate[null])
         EXCHANGE BROADCAST
             AGGREGATE ([GLOBAL] aggregate [{22: countRows=count(22: countRows), 23: anyValue=any_value(23: anyValue)}] group by [[12: t1c]] having [null]
                 EXCHANGE SHUFFLE[12]
@@ -925,14 +921,13 @@ select t0.v1, t1.v4, t2.v7 from t0 left join t1 on t0.v1 = t1.v4 left join t2 on
 [result]
 PREDICATE 5: v5 = 21: expr
     LEFT OUTER JOIN (join-predicate [add(add(1: v1, 4: v4), 9: v9) = if(add(22: cast, 5: v5) = 1, 1, add(add(1: v1, 4: v4), 9: v9))] post-join-predicate [null])
-        LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
-            RIGHT OUTER JOIN (join-predicate [8: v8 = 2: v2] post-join-predicate [null])
-                EXCHANGE SHUFFLE[8]
-                    SCAN (columns[7: v7, 8: v8, 9: v9] predicate[null])
-                EXCHANGE SHUFFLE[2]
-                    SCAN (columns[1: v1, 2: v2] predicate[null])
+        LEFT OUTER JOIN (join-predicate [2: v2 = 8: v8] post-join-predicate [null])
+            LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
+                SCAN (columns[1: v1, 2: v2] predicate[null])
+                EXCHANGE SHUFFLE[4]
+                    SCAN (columns[4: v4, 5: v5] predicate[null])
             EXCHANGE BROADCAST
-                SCAN (columns[4: v4, 5: v5] predicate[null])
+                SCAN (columns[7: v7, 8: v8, 9: v9] predicate[null])
         EXCHANGE BROADCAST
             AGGREGATE ([GLOBAL] aggregate [{23: countRows=count(23: countRows), 24: anyValue=any_value(24: anyValue)}] group by [[22: cast]] having [null]
                 EXCHANGE SHUFFLE[22]
@@ -945,14 +940,13 @@ select t0.v1, t1.v4, t2.v7 from t0 left join t1 on t0.v1 = t1.v4 left join t2 on
 [result]
 PREDICATE add(1: v1, 5: v5) <=> 21: expr
     LEFT OUTER JOIN (join-predicate [add(add(1: v1, 4: v4), 9: v9) = if(12: t1c = 1, 1, add(add(1: v1, 4: v4), 9: v9))] post-join-predicate [null])
-        LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
-            RIGHT OUTER JOIN (join-predicate [8: v8 = 2: v2] post-join-predicate [null])
-                EXCHANGE SHUFFLE[8]
-                    SCAN (columns[7: v7, 8: v8, 9: v9] predicate[null])
-                EXCHANGE SHUFFLE[2]
-                    SCAN (columns[1: v1, 2: v2] predicate[null])
+        LEFT OUTER JOIN (join-predicate [2: v2 = 8: v8] post-join-predicate [null])
+            LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
+                SCAN (columns[1: v1, 2: v2] predicate[null])
+                EXCHANGE SHUFFLE[4]
+                    SCAN (columns[4: v4, 5: v5] predicate[null])
             EXCHANGE BROADCAST
-                SCAN (columns[4: v4, 5: v5] predicate[null])
+                SCAN (columns[7: v7, 8: v8, 9: v9] predicate[null])
         EXCHANGE BROADCAST
             AGGREGATE ([GLOBAL] aggregate [{22: countRows=count(22: countRows), 23: anyValue=any_value(23: anyValue)}] group by [[12: t1c]] having [null]
                 EXCHANGE SHUFFLE[12]

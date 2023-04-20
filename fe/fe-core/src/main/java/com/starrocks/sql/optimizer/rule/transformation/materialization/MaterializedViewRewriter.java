@@ -925,6 +925,12 @@ public class MaterializedViewRewriter {
                 Utils.compoundAnd(
                         rewriteContext.getQueryPredicateSplit().toScalarOperator(),
                         CompoundPredicateOperator.not(compensationPredicates)));
+        List<ScalarOperator> predicates = Utils.extractConjuncts(queryCompensationPredicate);
+        predicates.removeAll(mvRewriteContext.getOnPredicates());
+        queryCompensationPredicate = Utils.compoundAnd(predicates);
+        ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
+        queryCompensationPredicate = columnRewriter.rewriteByQueryEc(queryCompensationPredicate);
+        queryCompensationPredicate = MvUtils.canonizePredicate(queryCompensationPredicate);
         if (!ConstantOperator.TRUE.equals(queryCompensationPredicate)) {
             if (queryExpression.getOp().getProjection() != null) {
                 ReplaceColumnRefRewriter rewriter =
