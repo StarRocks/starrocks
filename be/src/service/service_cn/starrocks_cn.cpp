@@ -41,8 +41,8 @@ void start_cn() {
     auto* exec_env = starrocks::ExecEnv::GetInstance();
 
     // Begin to start services
-    // 1. Start thrift server with 'thrift_port'.
-    auto thrift_server = ComputeService::create<ComputeService>(exec_env, starrocks::config::thrift_port);
+    // 1. Start thrift server with 'be_port'.
+    auto thrift_server = ComputeService::create<ComputeService>(exec_env, starrocks::config::be_port);
     if (auto status = thrift_server->start(); !status.ok()) {
         LOG(ERROR) << "Fail to start ComputeService thrift server on port " << starrocks::config::be_port << ": "
                    << status;

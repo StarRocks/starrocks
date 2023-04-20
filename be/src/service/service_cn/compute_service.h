@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "agent/agent_server.h"
 #include "service/backend_base.h"
 
 namespace starrocks {
@@ -25,6 +26,9 @@ public:
     explicit ComputeService(ExecEnv* exec_env);
 
     ~ComputeService() override;
+
+private:
+    AgentServer* _agent_server;
 };
 
 } // namespace starrocks

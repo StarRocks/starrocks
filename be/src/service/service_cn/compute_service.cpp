@@ -14,9 +14,12 @@
 
 #include "compute_service.h"
 
+#include "runtime/exec_env.h"
+
 namespace starrocks {
 
-ComputeService::ComputeService(ExecEnv* exec_env) : BackendServiceBase(exec_env) {}
+ComputeService::ComputeService(ExecEnv* exec_env)
+        : BackendServiceBase(exec_env), _agent_server(exec_env->agent_server()) {}
 
 ComputeService::~ComputeService() = default;
 
