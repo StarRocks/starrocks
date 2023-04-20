@@ -148,7 +148,7 @@ enum TSchemaTableType {
     SCH_BE_THREADS,
     SCH_BE_LOGS,
     SCH_BE_BVARS,
-    SCH_BE_CLOUD_NATIVE_COMPACTIONS
+    SCH_BE_CLOUD_NATIVE_COMPACTIONS,
 }
 
 enum THdfsCompression {
