@@ -243,6 +243,8 @@ private:
 
     bool _skip_fill_local_cache() const { return _opts.reader_type != READER_QUERY; }
 
+    void _update_stats(RandomAccessFile* rfile);
+
 private:
     using RawColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using ColumnDecoders = std::vector<ColumnDecoder>;
@@ -1552,6 +1554,42 @@ Status SegmentIterator::_get_row_ranges_by_rowid_range() {
     return Status::OK();
 }
 
+// Currently, update stats is only used for lake tablet, and numeric statistics is nullptr for local tablet.
+void SegmentIterator::_update_stats(RandomAccessFile* rfile) {
+    auto stats_or = rfile->get_numeric_statistics();
+    if (!stats_or.ok()) {
+        LOG(WARNING) << "failed to get statistics: " << stats_or.status();
+        return;
+    }
+
+    std::unique_ptr<io::NumericStatistics> stats = std::move(stats_or).value();
+    if (stats == nullptr || stats->size() == 0) {
+        return;
+    }
+
+    for (int64_t i = 0, sz = stats->size(); i < sz; ++i) {
+        auto&& name = stats->name(i);
+        auto&& value = stats->value(i);
+        if (name == kBytesReadLocalDisk) {
+            _opts.stats->compressed_bytes_read_local_disk += value;
+            _opts.stats->compressed_bytes_read += value;
+        } else if (name == kBytesReadRemote) {
+            _opts.stats->compressed_bytes_read_remote += value;
+            _opts.stats->compressed_bytes_read += value;
+        } else if (name == kIOCountLocalDisk) {
+            _opts.stats->io_count_local_disk += value;
+            _opts.stats->io_count += value;
+        } else if (name == kIOCountRemote) {
+            _opts.stats->io_count_remote += value;
+            _opts.stats->io_count += value;
+        } else if (name == kIONsLocalDisk) {
+            _opts.stats->io_ns_local_disk += value;
+        } else if (name == kIONsRemote) {
+            _opts.stats->io_ns_remote += value;
+        }
+    }
+}
+
 void SegmentIterator::close() {
     if (_del_vec) {
         _del_vec.reset();
@@ -1564,6 +1602,8 @@ void SegmentIterator::close() {
     _column_decoders.clear();
 
     for (auto& [cid, rfile] : _column_files) {
+        // update statistics before reset column file
+        _update_stats(rfile.get());
         rfile.reset();
     }
 
