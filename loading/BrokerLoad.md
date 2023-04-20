@@ -54,7 +54,11 @@ Broker Load 支持从如下外部存储系统导入数据：
 
 - 腾讯云 COS
 
+<<<<<<< HEAD
 - AWS S3 兼容存储（如 MinIO）
+=======
+- 其他兼容 S3 协议的对象存储（如 MinIO）
+>>>>>>> a8366196 ([Doc] update s3-compatible storage description (#5102))
 
 ## 基本原理
 
@@ -276,9 +280,15 @@ WITH BROKER
 >
 > 从华为云 OBS 导入数据时，需要先下载[依赖库](https://github.com/huaweicloud/obsa-hdfs/releases/download/v45/hadoop-huaweicloud-2.8.3-hw-45.jar)添加到 **$BROKER_HOME/lib/** 路径下并重启 Broker。
 
+<<<<<<< HEAD
 #### 从 AWS S3 兼容存储导入
 
 可以通过如下语句，把 AWS S3 兼容存储空间（如 MinIO） `bucket_minio` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+=======
+#### 从其他兼容 S3 协议的对象存储导入
+
+可以通过如下语句，把兼容 S3 协议的对象存储空间（如 MinIO） `bucket_minio` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+>>>>>>> a8366196 ([Doc] update s3-compatible storage description (#5102))
 
 ```SQL
 LOAD LABEL test_db.label7
