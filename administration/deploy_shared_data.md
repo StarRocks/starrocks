@@ -44,7 +44,7 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 
 - 如果您使用 HDFS 存储，请添加以下配置项：
 
-  ```YAML
+  ```Plain
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = HDFS
@@ -55,7 +55,7 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 
   - 如果您使用 AWS SDK 默认的认证凭证，请添加以下配置项：
 
-    ```YAML
+    ```Plain
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -67,7 +67,7 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 
   - 如果您使用 IAM user-based 认证，请添加以下配置项：
 
-    ```YAML
+    ```Plain
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -80,7 +80,7 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 
   - 如果您使用 Instance Profile 认证，请添加以下配置项：
 
-    ```YAML
+    ```Plain
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -92,7 +92,7 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 
   - 如果您使用 Assumed Role 认证，请添加以下配置项：
 
-    ```YAML
+    ```Plain
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -105,7 +105,7 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 
   - 如果您使用外部 AWS 账户通过 Assumed Role 认证，请添加以下配置项：
 
-    ```YAML
+    ```Plain
     run_mode = shared_data
     cloud_native_meta_port = <meta_port>
     cloud_native_storage_type = S3
@@ -119,90 +119,142 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 
 - 如果您使用 GCP Cloud Storage：
 
-  ```YAML
+  ```Plain
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
   aws_s3_path = <s3_path>
-  aws_s3_region = <region>                 # 例如：us-east-1
-  aws_s3_endpoint = <endpoint_url>         # 例如：https://storage.googleapis.com
+
+  # 例如：us-east-1
+  aws_s3_region = <region>
+
+  # 例如：https://storage.googleapis.com
+  aws_s3_endpoint = <endpoint_url>
+
   aws_s3_access_key = <access_key>
   aws_s3_secret_key = <secret_key>
   ```
 
 - 如果您使用阿里云 OSS：
 
-  ```YAML
+  ```Plain
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
   aws_s3_path = <s3_path>
-  aws_s3_region = <region>                 # 例如：cn-zhangjiakou
-  aws_s3_endpoint = <endpoint_url>         # 例如：https://oss-cn-zhangjiakou-internal.aliyuncs.com
+
+  # 例如：cn-zhangjiakou
+  aws_s3_region = <region>
+
+  # 例如：https://oss-cn-zhangjiakou-internal.aliyuncs.com
+  aws_s3_endpoint = <endpoint_url>
+
   aws_s3_access_key = <access_key>
   aws_s3_secret_key = <secret_key>
   ```
 
 - 如果您使用华为云 OBS：
 
-  ```YAML
+  ```Plain
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
   aws_s3_path = <s3_path>
-  aws_s3_region = <region>                 # 例如：cn-north-4
-  aws_s3_endpoint = <endpoint_url>         # 例如：https://obs.cn-north-4.myhuaweicloud.com
+
+  # 例如：cn-north-4
+  aws_s3_region = <region>
+
+  # 例如：https://obs.cn-north-4.myhuaweicloud.com
+  aws_s3_endpoint = <endpoint_url>
+
   aws_s3_access_key = <access_key>
   aws_s3_secret_key = <secret_key>
   ```
 
 - 如果您使用腾讯云 COS：
 
-  ```YAML
+  ```Plain
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
   aws_s3_path = <s3_path>
-  aws_s3_region = <region>                 # 例如：ap-beijing
-  aws_s3_endpoint = <endpoint_url>         # 例如：https://cos.ap-beijing.myqcloud.com
+
+  # 例如：ap-beijing
+  aws_s3_region = <region>
+
+  # 例如：https://cos.ap-beijing.myqcloud.com
+  aws_s3_endpoint = <endpoint_url>
+
   aws_s3_access_key = <access_key>
   aws_s3_secret_key = <secret_key>
   ```
 
 - 如果您使用火山引擎 TOS：
 
-  ```YAML
+  ```Plain
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
   aws_s3_path = <s3_path>
-  aws_s3_region = <region>                 # 例如：cn-beijing
-  aws_s3_endpoint = <endpoint_url>         # 例如：https://tos-s3-cn-beijing.ivolces.com
+
+  # 例如：cn-beijing
+  aws_s3_region = <region>
+
+  # 例如：https://tos-s3-cn-beijing.ivolces.com
+  aws_s3_endpoint = <endpoint_url>
+
+  aws_s3_access_key = <access_key>
+  aws_s3_secret_key = <secret_key>
+  ```
+
+- 如果您使用金山云：
+
+  ```Plain
+  run_mode = shared_data
+  cloud_native_meta_port = <meta_port>
+  cloud_native_storage_type = S3
+  aws_s3_path = <s3_path>
+
+  # 例如：BEIJING
+  aws_s3_region = <region>
+  
+  # 注意请使用三级域名, 金山云不支持二级域名
+  # 例如：jeff-test.ks3-cn-beijing.ksyuncs.com
+  aws_s3_endpoint = <endpoint_url>
+
   aws_s3_access_key = <access_key>
   aws_s3_secret_key = <secret_key>
   ```
 
 - 如果您使用 MinIO：
 
-  ```YAML
+  ```Plain
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
   aws_s3_path = <s3_path>
-  aws_s3_region = <region>                 # 例如：us-east-1
-  aws_s3_endpoint = <endpoint_url>         # 例如：http://172.26.xx.xxx:39000
+
+  # 例如：us-east-1
+  aws_s3_region = <region>
+
+  # 例如：http://172.26.xx.xxx:39000
+  aws_s3_endpoint = <endpoint_url>
+
   aws_s3_access_key = <access_key>
   aws_s3_secret_key = <secret_key>
   ```
 
 - 如果您使用 Ceph S3：
 
-  ```YAML
+  ```Plain
   run_mode = shared_data
   cloud_native_meta_port = <meta_port>
   cloud_native_storage_type = S3
   aws_s3_path = <s3_path>
-  aws_s3_endpoint = <endpoint_url>         # 例如：http://172.26.xx.xxx:7480
+  
+  # 例如：http://172.26.xx.xxx:7480
+  aws_s3_endpoint = <endpoint_url>
+
   aws_s3_access_key = <access_key>
   aws_s3_secret_key = <secret_key>
   ```
@@ -211,7 +263,7 @@ StarRocks 存算分离集群的部署方式与普通 StarRocks 集群的部署�
 
 **在启动 BE 之前**，在 BE 配置文件 **be.conf** 中添加以下配置项：
 
-```YAML
+```Plain
 starlet_port = <starlet_port>
 storage_root_path = <storage_root_path>
 ```
