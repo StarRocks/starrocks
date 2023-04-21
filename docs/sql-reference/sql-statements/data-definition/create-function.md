@@ -16,7 +16,7 @@ RETURNS ret_type
 
 AGGREGATE: This parameter indicates that the created function is an aggregate function, otherwise it is a scalar function.
 
-function_name: When creating the name of a function, you can include the name of the database. For example,`db1.my_func`。
+function_name: When creating the name of a function, you can include the name of the database. For example,`db1.my_func`.
 
 arg_type: Argument type of function, the same type as that defined when creating table. The added argument can be represented by`, ...` The added type is the same as that of the last argument before it was added.
 
