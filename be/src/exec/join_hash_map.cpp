@@ -507,7 +507,7 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, con
     _table_items->row_count += chunk->num_rows();
 }
 
-StatusOr<ChunkPtr> JoinHashTable::convert_to_serialize_format(const ChunkPtr& chunk) const {
+StatusOr<ChunkPtr> JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {
     ChunkPtr output = std::make_shared<Chunk>();
     //
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
