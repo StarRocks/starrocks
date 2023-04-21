@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "storage/rowset_update_state.h"
+#include "storage/rowset_column_update_state.h"
 
 #include <gtest/gtest.h>
 
@@ -40,11 +40,11 @@
 
 namespace starrocks {
 
-class RowsetUpdateStateTest : public ::testing::Test {
+class RowsetColumnUpdateStateTest : public ::testing::Test {
 public:
     void SetUp() override {
         _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
-        _metadata_mem_tracker = std::make_unique<MemTracker>();
+        _update_tracker = std::make_unique<MemTracker>();
     }
 
     void TearDown() override {
@@ -139,6 +139,7 @@ public:
         writer_context.version.first = 0;
         writer_context.version.second = 0;
         writer_context.segments_overlap = NONOVERLAPPING;
+        writer_context.partial_update_mode = PartialUpdateMode::COLUMN_MODE;
         std::unique_ptr<RowsetWriter> writer;
         EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
         auto schema = ChunkHelper::convert_schema(*partial_schema.get());
@@ -159,7 +160,7 @@ public:
 protected:
     TabletSharedPtr _tablet;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
-    std::unique_ptr<MemTracker> _metadata_mem_tracker;
+    std::unique_ptr<MemTracker> _update_tracker;
 };
 
 static ChunkIteratorPtr create_tablet_iterator(TabletReader& reader, Schema& schema) {
@@ -207,7 +208,7 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
     return read_until_eof(iter);
 }
 
-TEST_F(RowsetUpdateStateTest, prepare_partial_update_states) {
+TEST_F(RowsetColumnUpdateStateTest, prepare_partial_update_states) {
     const int N = 100;
     _tablet = create_tablet(rand(), rand());
     ASSERT_EQ(1, _tablet->updates()->version_history_count());
@@ -235,106 +236,37 @@ TEST_F(RowsetUpdateStateTest, prepare_partial_update_states) {
     ASSERT_EQ(N, read_tablet(_tablet, rowsets.size()));
 
     std::vector<int32_t> column_indexes = {0, 1};
-    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
-    RowsetSharedPtr partial_rowset = create_partial_rowset(_tablet, keys, column_indexes, partial_schema);
-    // check data of write column
-    RowsetUpdateState state;
-    state.load(_tablet.get(), partial_rowset.get());
-    const std::vector<PartialUpdateState>& parital_update_states = state.parital_update_states();
-    ASSERT_EQ(parital_update_states.size(), 1);
-    ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
-    ASSERT_EQ(parital_update_states[0].write_columns.size(), 1);
-    for (size_t i = 0; i < keys.size(); i++) {
-        ASSERT_EQ((int32_t)(keys[i] % 1000 + 2), parital_update_states[0].write_columns[0]->get(i).get_int32());
+    {
+        std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
+        RowsetSharedPtr partial_rowset = create_partial_rowset(_tablet, keys, column_indexes, partial_schema);
+        // check data of write column
+        RowsetColumnUpdateState state;
+        state.load(_tablet.get(), partial_rowset.get(), _update_tracker.get());
+        const std::vector<ColumnPartialUpdateState>& parital_update_states = state.parital_update_states();
+        ASSERT_EQ(parital_update_states.size(), 1);
+        ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
+        ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.size(), N);
+        for (int upt_id = 0; upt_id < parital_update_states[0].src_rss_rowids.size(); upt_id++) {
+            uint64_t src_rss_rowid = parital_update_states[0].src_rss_rowids[upt_id];
+            ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.find(src_rss_rowid)->second, upt_id);
+        }
     }
-}
-
-TEST_F(RowsetUpdateStateTest, check_conflict) {
-    // create full rowset first
-    const int N = 100;
-    _tablet = create_tablet(rand(), rand());
-    ASSERT_EQ(1, _tablet->updates()->version_history_count());
-    std::vector<int64_t> keys(N);
-    for (int i = 0; i < N; i++) {
-        keys[i] = i;
+    {
+        // partial update keys that not exist
+        std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
+        std::vector<int64_t> keys_no_exist(N);
+        for (int i = 0; i < N; i++) {
+            keys_no_exist[i] = i + N;
+        }
+        RowsetSharedPtr partial_rowset = create_partial_rowset(_tablet, keys_no_exist, column_indexes, partial_schema);
+        // check data of write column
+        RowsetColumnUpdateState state;
+        state.load(_tablet.get(), partial_rowset.get(), _update_tracker.get());
+        const std::vector<ColumnPartialUpdateState>& parital_update_states = state.parital_update_states();
+        ASSERT_EQ(parital_update_states.size(), 1);
+        ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
+        ASSERT_EQ(parital_update_states[0].rss_rowid_to_update_rowid.size(), 0);
     }
-    RowsetSharedPtr rowset = create_rowset(_tablet, keys);
-    auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
-    auto version = 2;
-    auto st = _tablet->rowset_commit(version, rowset, 0);
-    ASSERT_TRUE(st.ok()) << st.to_string();
-    ASSERT_LE(pool->num_threads(), 1);
-    ASSERT_EQ(version, _tablet->updates()->max_version());
-    ASSERT_EQ(version, _tablet->updates()->version_history_count());
-    ASSERT_EQ(N, read_tablet(_tablet, 2));
-
-    // create partial_rowset
-    std::vector<int32_t> column_indexes = {0, 1};
-    std::shared_ptr<TabletSchema> partial_schema = TabletSchema::create(_tablet->tablet_schema(), column_indexes);
-    RowsetSharedPtr partial_rowset = create_partial_rowset(_tablet, keys, column_indexes, partial_schema);
-    RowsetUpdateState state;
-    state.load(_tablet.get(), partial_rowset.get());
-    const std::vector<PartialUpdateState>& parital_update_states = state.parital_update_states();
-    ASSERT_EQ(parital_update_states.size(), 1);
-    ASSERT_EQ(parital_update_states[0].src_rss_rowids.size(), N);
-    ASSERT_EQ(parital_update_states[0].write_columns.size(), 1);
-    for (size_t i = 0; i < keys.size(); i++) {
-        ASSERT_EQ((int32_t)(keys[i] % 1000 + 2), parital_update_states[0].write_columns[0]->get(i).get_int32());
-    }
-
-    // create new rowset to make conflict
-    RowsetWriterContext writer_context;
-    RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
-    writer_context.rowset_id = rowset_id;
-    writer_context.tablet_id = _tablet->tablet_id();
-    writer_context.tablet_schema_hash = _tablet->schema_hash();
-    writer_context.partition_id = 0;
-    writer_context.rowset_path_prefix = _tablet->schema_hash_path();
-    writer_context.rowset_state = COMMITTED;
-    writer_context.tablet_schema = &_tablet->tablet_schema();
-    writer_context.version.first = 0;
-    writer_context.version.second = 0;
-    writer_context.segments_overlap = NONOVERLAPPING;
-    std::unique_ptr<RowsetWriter> writer;
-    EXPECT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &writer).ok());
-    auto schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
-    auto chunk = ChunkHelper::new_chunk(schema, N);
-    auto& cols = chunk->columns();
-    for (size_t i = 0; i < N; i++) {
-        cols[0]->append_datum(Datum(i));
-        cols[1]->append_datum(Datum((int16_t)(i % 100 + 1)));
-        cols[2]->append_datum(Datum((int32_t)(i % 1000 + 3)));
-    }
-    CHECK_OK(writer->flush_chunk(*chunk));
-    RowsetSharedPtr new_rowset = *writer->build();
-    version = 3;
-    st = _tablet->rowset_commit(version, new_rowset, 0);
-    ASSERT_TRUE(st.ok()) << st.to_string();
-    ASSERT_LE(pool->num_threads(), 1);
-    ASSERT_EQ(version, _tablet->updates()->max_version());
-    ASSERT_EQ(version, _tablet->updates()->version_history_count());
-    ASSERT_EQ(N, read_tablet(_tablet, 3));
-
-    // check and resolve conflict
-    EditVersion latest_applied_version(3, 0);
-    auto manager = StorageEngine::instance()->update_manager();
-    auto index_entry = manager->index_cache().get_or_create(_tablet->tablet_id());
-    auto& index = index_entry->value();
-    st = index.load(_tablet.get());
-    std::vector<uint32_t> read_column_ids = {2};
-    state.test_check_conflict(_tablet.get(), partial_rowset.get(), partial_rowset->rowset_meta()->get_rowset_seg_id(),
-                              0, latest_applied_version, read_column_ids, index);
-
-    // check data of write column
-    const std::vector<PartialUpdateState>& new_parital_update_states = state.parital_update_states();
-    ASSERT_EQ(new_parital_update_states.size(), 1);
-    ASSERT_EQ(new_parital_update_states[0].src_rss_rowids.size(), N);
-    ASSERT_EQ(new_parital_update_states[0].write_columns.size(), 1);
-    for (size_t i = 0; i < keys.size(); i++) {
-        ASSERT_EQ((int32_t)(keys[i] % 1000 + 3), new_parital_update_states[0].write_columns[0]->get(i).get_int32());
-    }
-
-    manager->index_cache().release(index_entry);
 }
 
 } // namespace starrocks
