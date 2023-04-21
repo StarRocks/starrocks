@@ -1434,6 +1434,9 @@ public class StmtExecutor {
 
             if (!coord.getExecStatus().ok()) {
                 String errMsg = coord.getExecStatus().getErrorMsg();
+                if (errMsg.length() == 0) {
+                    errMsg = coord.getExecStatus().getErrorCodeString();
+                }
                 LOG.warn("insert failed: {}", errMsg);
                 ErrorReport.reportDdlException(errMsg, ErrorCode.ERR_FAILED_WHEN_INSERT);
             }
@@ -1585,7 +1588,7 @@ public class StmtExecutor {
             } catch (Exception abortTxnException) {
                 LOG.warn("errors when cancel insert load job {}", jobId);
             }
-            return;
+            throw new UserException(t.getMessage());
         } finally {
             if (insertError) {
                 try {

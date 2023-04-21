@@ -342,4 +342,33 @@ public class SelectStmtTest {
             Assert.fail("Should not throw an exception");
         }
     }
+
+    @Test
+    public void testMultiDistinctMultiColumnWithLimit() throws Exception {
+        String[] sqlList = {
+                "select count(distinct k1, k2), count(distinct k3) from db1.tbl1 limit 1",
+                "select * from (select count(distinct k1, k2), count(distinct k3) from db1.tbl1) t1 limit 1",
+                "with t1 as (select count(distinct k1, k2) as a, count(distinct k3) as b from db1.tbl1) " +
+                        "select * from t1 limit 1",
+                "select count(distinct k1, k2), count(distinct k3) from db1.tbl1 group by k4 limit 1",
+                "select * from (select count(distinct k1, k2), count(distinct k3) from db1.tbl1 group by k4, k3) t1" +
+                        " limit 1",
+                "with t1 as (select count(distinct k1, k2) as a, count(distinct k3) as b from db1.tbl1 " +
+                        "group by k2, k3, k4) select * from t1 limit 1",
+        };
+        boolean cboCteReuse = starRocksAssert.getCtx().getSessionVariable().isCboCteReuse();
+        try {
+            starRocksAssert.getCtx().getSessionVariable().setCboCteReuse(true);
+            for (String sql : sqlList) {
+                UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            }
+            starRocksAssert.getCtx().getSessionVariable().setCboCteReuse(false);
+            for (String sql : sqlList) {
+                UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
+            }
+
+        } finally {
+            starRocksAssert.getCtx().getSessionVariable().setCboCteReuse(cboCteReuse);
+        }
+    }
 }

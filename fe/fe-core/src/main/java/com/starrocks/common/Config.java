@@ -2055,6 +2055,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static int lake_compaction_max_tasks = -1;
 
+    @ConfField(mutable = true)
+    public static int lake_compaction_history_size = 12;
+
+    @ConfField(mutable = true)
+    public static int lake_compaction_fail_history_size = 12;
+
     @ConfField
     public static int experimental_lake_publish_version_threads = 16;
 
@@ -2154,7 +2160,7 @@ public class Config extends ConfigBase {
      * default size of minimum cache size of auto increment id allocation
      **/
     @ConfField(mutable = true)
-    public static long auto_increment_cache_size = 100000;
+    public static int auto_increment_cache_size = 100000;
 
     /**
      * Enable the experimental temporary table feature

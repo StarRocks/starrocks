@@ -70,15 +70,15 @@
 + Integration
   + [Integrate with StarRocks](./integrations/intro.md)
   + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
-  + Integrate with BI tools
+  + BI tools
     + [Hex](./integrations/BI_integrations/Hex.md)
     + [Querybook](./integrations/BI_integrations/Querybook.md)
     + [Apache Superset](./integrations/BI_integrations/Superset.md)
     + [Tableau Desktop](./integrations/BI_integrations/Tableau_Desktop.md)
-  + Integrate with IDE tools
+  + IDE tools
     + [DataGrip](./integrations/IDE_integrations/DataGrip.md)
     + [DBeaver](./integrations/IDE_integrations/DBeaver.md)
-  + [Integrate with other tools and systems](./integrations/other_integrations/intro.md)
+  + [Other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
   + Deployment
     + [Deploy a shared-data StarRocks cluster](./administration/deploy_shared_data.md)

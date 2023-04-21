@@ -176,12 +176,8 @@ bool BinaryDictPageBuilder::is_valid_global_dict(const GlobalDictMap* global_dic
 }
 
 template <LogicalType Type>
-BinaryDictPageDecoder<Type>::BinaryDictPageDecoder(Slice data, const PageDecoderOptions& options)
-        : _data(data),
-          _options(options),
-          _data_page_decoder(nullptr),
-          _parsed(false),
-          _encoding_type(UNKNOWN_ENCODING) {}
+BinaryDictPageDecoder<Type>::BinaryDictPageDecoder(Slice data)
+        : _data(data), _data_page_decoder(nullptr), _parsed(false), _encoding_type(UNKNOWN_ENCODING) {}
 
 template <LogicalType Type>
 Status BinaryDictPageDecoder<Type>::init() {
@@ -196,10 +192,10 @@ Status BinaryDictPageDecoder<Type>::init() {
     if (_encoding_type == DICT_ENCODING) {
         // copy the codewords into a temporary buffer first
         // And then copy the strings corresponding to the codewords to the destination buffer
-        _data_page_decoder = std::make_unique<BitShufflePageDecoder<TYPE_INT>>(_data, _options);
+        _data_page_decoder = std::make_unique<BitShufflePageDecoder<TYPE_INT>>(_data);
     } else if (_encoding_type == PLAIN_ENCODING) {
         DCHECK_EQ(_encoding_type, PLAIN_ENCODING);
-        _data_page_decoder.reset(new BinaryPlainPageDecoder<Type>(_data, _options));
+        _data_page_decoder.reset(new BinaryPlainPageDecoder<Type>(_data));
     } else {
         LOG(WARNING) << "invalid encoding type:" << _encoding_type;
         return Status::Corruption(strings::Substitute("invalid encoding type:$0", _encoding_type));

@@ -145,9 +145,8 @@ public class StatisticExecutor {
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(" + version + " as bigint), " +
-                "dict_merge(" + "`" + column +
-                "`) as _dict_merge_" + column +
-                " from " + catalogName + "." + db.getOriginName() + "." + table.getName() + " [_META_]";
+                "dict_merge(" +  StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+                " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
 
 
         ConnectContext context = StatisticUtils.buildConnectContext();
