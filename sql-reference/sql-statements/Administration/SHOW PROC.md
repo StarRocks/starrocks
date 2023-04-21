@@ -7,7 +7,7 @@
 ## 语法
 
 ```SQL
-SHOW PROC { '/auth' | '/backends' | '/compute_nodes' | '/dbs' 
+SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' 
           | '/jobs' | '/statistic' | '/tasks' | '/frontends' 
           | '/brokers' | '/resources' | '/load_error_hub' 
           | '/transactions' | '/monitor' | '/current_queries' 
@@ -19,7 +19,6 @@ SHOW PROC { '/auth' | '/backends' | '/compute_nodes' | '/dbs'
 
 | **参数**                     | **说明**                                                     |
 | ---------------------------- | ------------------------------------------------------------ |
-| '/auth'                      | 查看当前集群的用户权限及认证信息。                           |
 | '/backends'                  | 查看当前集群的 BE 节点信息。                                 |
 | '/compute_nodes'             | 查看当前集群的 CN 节点信息。                                 |
 | '/dbs'                       | 查看当前集群的数据库信息。                                   |
@@ -41,39 +40,37 @@ SHOW PROC { '/auth' | '/backends' | '/compute_nodes' | '/dbs'
 
 ## 示例
 
-示例一：查看当前集群的用户权限及认证信息。
+示例一：查看当前集群的 BE 节点信息。
 
 ```Plain
-mysql> SHOW PROC '/auth';
-+-------------------------------------+----------+------------+-------------------+----------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------+---------------+
-| UserIdentity                        | Password | AuthPlugin | UserForAuthPlugin | GlobalPrivs                                                                | DatabasePrivs                                                                                                                                                                         | TablePrivs | ResourcePrivs |
-+-------------------------------------+----------+------------+-------------------+----------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------+---------------+
-| 'root'@'%'                          | Yes      | NULL       | NULL              | Node_priv Admin_priv  (false)                                              | NULL                                                                                                                                                                                  | NULL       | NULL          |
-| 'default_cluster:johndoe'@'%'       | Yes      | NULL       | NULL              | Admin_priv Select_priv Load_priv Alter_priv Create_priv Drop_priv  (false) | information_schema: Select_priv  (false)                                                                                                                                              | NULL       | NULL          |
-| 'default_cluster:katherine'@'%'     | Yes      | NULL       | NULL              |  (false)                                                                   | information_schema: Select_priv  (false)                                                                                                                                              | NULL       | NULL          |
-+-------------------------------------+----------+------------+-------------------+----------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------+---------------+
-```
-
-| **返回**          | **说明**                                                     |
-| ----------------- | ------------------------------------------------------------ |
-| UserIdentity      | 用户标识，形式为 `username@'userhost'` 或 `username@['domain']`。 |
-| Password          | 用户是否通过密码连接集群。                                   |
-| AuthPlugin        | 用户的认证方式，仅包括 `mysql_native_password` 和 `authentication_ldap_simple`。 |
-| UserForAuthPlugin | 假如用户以 LDAP 认证，则提供 LDAP 中的 Distinguished Name（DN）。 |
-| GlobalPrivs       | 用户拥有的全局权限。                                         |
-| DatabasePrivs     | 用户拥有的数据库级别权限。                                   |
-| TablePrivs        | 用户拥有的表级别权限。                                       |
-| ResourcePrivs     | 用户拥有的资源级别权限。                                     |
-
-示例二：查看当前集群的 BE 节点信息。
-
-```Plain
-mysql> SHOW PROC '/backends';
-+-----------+---------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+-----------+------------------+---------------+---------------+---------+----------------+--------+-------------------+--------------------------------------------------------+-------------------+-------------+----------+
-| BackendId | IP            | HeartbeatPort | BePort | HttpPort | BrpcPort | LastStartTime       | LastHeartbeat       | Alive | SystemDecommissioned | ClusterDecommissioned | TabletNum | DataUsedCapacity | AvailCapacity | TotalCapacity | UsedPct | MaxDiskUsedPct | ErrMsg | Version           | Status                                                 | DataTotalCapacity | DataUsedPct | CpuCores |
-+-----------+---------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+-----------+------------------+---------------+---------------+---------+----------------+--------+-------------------+--------------------------------------------------------+-------------------+-------------+----------+
-| 56038515  | xxx.xx.xx.xxx | 9052          | 9060   | 8097     | 8059     | 2022-10-09 19:57:57 | 2022-10-10 16:23:24 | true  | false                | false                 | 47015     | 67.952 GB        | 1.089 TB      | 1.968 TB      | 44.69 % | 44.69 %        |        | UNKNOWN-de75d4fbb | {"lastSuccessReportTabletsTime":"2022-10-10 16:22:44"} | 1.155 TB          | 5.74 %      | 104      |
-+-----------+---------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+-----------+------------------+---------------+---------------+---------+----------------+--------+-------------------+--------------------------------------------------------+-------------------+-------------+----------+
+mysql> SHOW PROC '/backends'\G
+*************************** 1. row ***************************
+            BackendId: 10004
+                   IP: xxx.xx.92.200
+        HeartbeatPort: 9354
+               BePort: 9360
+             HttpPort: 8338
+             BrpcPort: 8360
+        LastStartTime: 2023-04-21 09:56:10
+        LastHeartbeat: 2023-04-21 09:56:10
+                Alive: true
+ SystemDecommissioned: false
+ClusterDecommissioned: false
+            TabletNum: 2199
+     DataUsedCapacity: 0.000 
+        AvailCapacity: 584.578 GB
+        TotalCapacity: 1.968 TB
+              UsedPct: 71.00 %
+       MaxDiskUsedPct: 71.00 %
+               ErrMsg: 
+              Version: BRANCH-3.0-RELEASE-8eb8705
+               Status: {"lastSuccessReportTabletsTime":"N/A"}
+    DataTotalCapacity: 584.578 GB
+          DataUsedPct: 0.00 %
+             CpuCores: 16
+    NumRunningQueries: 0
+           MemUsedPct: 0.52 %
+           CpuUsedPct: 0.0 %
 ```
 
 | **返回**              | **说明**                                                     |
@@ -101,8 +98,11 @@ mysql> SHOW PROC '/backends';
 | DataTotalCapacity     | 数据文件所占用的磁盘空间 + 可用磁盘空间，即 DataUsedCapacity + AvailCapacity。 |
 | DataUsedPct           | 数据文件占用磁盘的比例，即 DataUsedCapacity/DataTotalCapacity。 |
 | CpuCores              | BE 节点 CPU 核数。                                           |
+| NumRunningQueries     | 当前运行中的查询数量。                                            |
+| MemUsedPct            | 当前内存使用占比。                                            |
+| CpuUsedPct            | 当前 CPU 使用占比。                                          |
 
-示例三：查看当前集群的数据库信息。
+示例二：查看当前集群的数据库信息。
 
 ```Plain
 mysql> SHOW PROC '/dbs';
@@ -127,7 +127,7 @@ mysql> SHOW PROC '/dbs';
 | LastConsistencyCheckTime | 数据库上一次一致性检查时间。 |
 | ReplicaQuota             | 数据库的副本配额。           |
 
-示例四：查看当前集群的作业信息。您可以通过对应的 `DbId` 进一步查询该数据库中的详细作业信息。
+示例三：查看当前集群的作业信息。您可以通过对应的 `DbId` 进一步查询该数据库中的详细作业信息。
 
 ```Plain
 mysql> SHOW PROC '/jobs';
@@ -163,7 +163,7 @@ mysql> SHOW PROC '/jobs/10005';
 | Cancelled | 已取消作业数。   |
 | Total     | 总作业数。       |
 
-示例五：查看当前集群各数据库的统计信息。
+示例四：查看当前集群各数据库的统计信息。
 
 ```Plain
 mysql> SHOW PROC '/statistic';
@@ -203,7 +203,7 @@ mysql> show proc '/statistic/10002';
 | ErrorStateTabletNum   | 主键模型表中错误状态的 Tablet 数量。          |
 | ErrorStateTablets     | 主键模型表中错误状态的 Tablet 的 ID。         |
 
-示例六：查看当前集群各种任务类型的总数和失败总数。
+示例五：查看当前集群各种任务类型的总数和失败总数。
 
 ```Plain
 mysql> SHOW PROC '/tasks';
@@ -246,7 +246,7 @@ mysql> SHOW PROC '/tasks';
 | FailedNum | 失败任务数。 |
 | TotalNum  | 总任务数。   |
 
-示例七：查看当前集群的 FE 节点信息。
+示例六：查看当前集群的 FE 节点信息。
 
 ```Plain
 mysql> SHOW PROC '/frontends';
@@ -276,7 +276,7 @@ mysql> SHOW PROC '/frontends';
 | StartTime         | FE 节点启动时间。                             |
 | Version           | FE 节点 StarRocks 版本。                      |
 
-示例八：查看当前集群的 Broker 节点信息。
+示例七：查看当前集群的 Broker 节点信息。
 
 ```Plain
 mysql> SHOW PROC '/brokers';
@@ -299,7 +299,7 @@ mysql> SHOW PROC '/brokers';
 | LastUpdateTime | Broker 节点上一次更新时间。                      |
 | ErrMsg         | Broker 节点错误信息。                            |
 
-示例九：查看当前集群的资源信息。
+示例八：查看当前集群的资源信息。
 
 ```Plain
 mysql> SHOW PROC '/resources';
@@ -318,7 +318,7 @@ mysql> SHOW PROC '/resources';
 | Key          | 资源关键字。 |
 | Value        | 资源值。     |
 
-示例十：查看当前集群的事务信息。您可以通过对应的 `DbId` 进一步查询该数据库中的详细事务信息。
+示例九：查看当前集群的事务信息。您可以通过对应的 `DbId` 进一步查询该数据库中的详细事务信息。
 
 ```Plain
 mysql> SHOW PROC '/transactions';
@@ -347,7 +347,7 @@ mysql> SHOW PROC '/transactions/10005';
 | State    | 事务状态。   |
 | Number   | 事务数量。   |
 
-示例十一：查看当前集群的监控信息。
+示例十：查看当前集群的监控信息。
 
 ```Plain
 mysql> SHOW PROC '/monitor';
@@ -363,7 +363,7 @@ mysql> SHOW PROC '/monitor';
 | Name     | JVM 名称。 |
 | Info     | JVM 信息。 |
 
-示例十二：查看当前集群的负载信息。
+示例十一：查看当前集群的负载信息。
 
 ```Plain
 mysql> SHOW PROC '/cluster_balance';
@@ -385,7 +385,7 @@ mysql> SHOW PROC '/cluster_balance';
 | Item     | cluster_balance 中的子命令。                 |
 | Number   | cluster_balance 中每个子命令正在执行的个数。 |
 
-示例十三：查看当前集群的 Colocate Join Group 信息。
+示例十二：查看当前集群的 Colocate Join Group 信息。
 
 ```Plain
 mysql> SHOW PROC '/colocation_group';
@@ -414,7 +414,7 @@ mysql> SHOW PROC '/colocation_group';
 | DistCols       | Colocate Join Group 的分桶列类型。    |
 | IsStable       | Colocate Join Group 是否稳定。        |
 
-示例十四：查看当前集群的 Catalog 信息。
+示例十三：查看当前集群的 Catalog 信息。
 
 ```Plain
 mysql> SHOW PROC '/catalog';
