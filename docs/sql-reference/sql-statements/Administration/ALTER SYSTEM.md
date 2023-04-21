@@ -81,12 +81,12 @@ Note:
      Hub of Mysql type needs to specify the following parameters:
 
    ```plain text
-   host：mysql host
-   port：mysql port
-   user：mysql user
-   password：mysql password
-   database：mysql database
-   table：mysql table
+   host: mysql host
+   port: mysql port
+   user: mysql user
+   password: mysql password
+   database: mysql database
+   table: mysql table
    ```
 
    - When using the Broker type, import errors will be generated into a file and be written into a designated remote storage system through Broker. Please make sure that corresponding broker is already deployed in the remote system.

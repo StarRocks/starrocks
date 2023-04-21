@@ -192,7 +192,7 @@ SHOW RESOURCE GROUPS;
 Execute the following statement to query a specified resource group and its classifiers:
 
 ```SQL
-SHOW RESOURCE GROUP group_name；
+SHOW RESOURCE GROUP group_name;
 ```
 
 Example:

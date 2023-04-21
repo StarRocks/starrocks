@@ -34,7 +34,7 @@ Example 2: Add `count(distinct )` to the SQL blacklist.
 mysql> ADD SQLBLACKLIST "select count(distinct .+) from .+";
 ```
 
-Example 3: Add `order by limit x, y，1 <= x <=7, 5 <=y <=7` to the SQL blacklist.
+Example 3: Add `order by limit x, y, 1 <= x <=7, 5 <=y <=7` to the SQL blacklist.
 
 ```Plain
 mysql> ADD SQLBLACKLIST "select id_int from test_all_type_select1 
