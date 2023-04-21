@@ -57,7 +57,7 @@ SHOW ALL AUTHENTICATION;
 +---------------+----------+-------------------------+-------------------+
 ```
 
-Example 3：Display the authentication information of a specified user.
+Example 3: Display the authentication information of a specified user.
 
 ```Plain
 SHOW AUTHENTICATION FOR root;
