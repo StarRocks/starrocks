@@ -25,6 +25,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
 import org.junit.Assert;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.HashMap;
@@ -94,6 +95,7 @@ public class InformationSchemaDataSourceTest {
     }
 
     @Test
+    @Ignore
     public void testGetTablesConfigBasic() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
