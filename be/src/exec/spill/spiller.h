@@ -54,6 +54,11 @@ struct SpillProcessMetrics {
     RuntimeProfile::Counter* restore_rows = nullptr;
     RuntimeProfile::Counter* shuffle_timer = nullptr;
     RuntimeProfile::Counter* split_partition_timer = nullptr;
+
+    RuntimeProfile::Counter* flush_bytes = nullptr;
+    RuntimeProfile::Counter* restore_bytes = nullptr;
+    RuntimeProfile::Counter* serialize_timer = nullptr;
+    RuntimeProfile::Counter* deserialize_timer = nullptr;
 };
 
 // major spill interfaces
@@ -149,6 +154,7 @@ public:
 
     const std::shared_ptr<spill::Serde>& serde() { return _serde; }
     BlockManager* block_manager() { return _block_manager; }
+    const ChunkBuilder& chunk_builder() { return _chunk_builder; }
 
 private:
     Status _get_spilled_task_status() {

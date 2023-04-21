@@ -18,6 +18,7 @@ set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/serde")
 set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/serde")
 
 add_library(Serde STATIC
+        encode_context.cpp
         column_array_serde.cpp
         protobuf_serde.cpp
         )

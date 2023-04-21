@@ -47,12 +47,17 @@ SpillProcessMetrics::SpillProcessMetrics(RuntimeProfile* profile) {
     restore_timer = ADD_TIMER(profile, "SpillRestoreTimer");
     shuffle_timer = ADD_TIMER(profile, "SpillShuffleTimer");
     split_partition_timer = ADD_TIMER(profile, "SplitPartitionTimer");
+
+    flush_bytes = ADD_COUNTER(profile, "SpillFlushBytes", TUnit::BYTES);
+    restore_bytes = ADD_COUNTER(profile, "SpillRestoreBytes", TUnit::BYTES);
+    serialize_timer = ADD_TIMER(profile, "SpillSerializeTimer");
+    deserialize_timer = ADD_TIMER(profile, "SpillDeserializeTimer");
 }
 
 Status Spiller::prepare(RuntimeState* state) {
     _chunk_builder.chunk_schema() = std::make_shared<SpilledChunkBuildSchema>();
 
-    ASSIGN_OR_RETURN(_serde, Serde::create_serde(_chunk_builder, _opts.compress_type));
+    ASSIGN_OR_RETURN(_serde, Serde::create_serde(this));
 
     if (_opts.init_partition_nums > 0) {
         _writer = std::make_unique<PartitionedSpillerWriter>(this, state);
