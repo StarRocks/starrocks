@@ -123,8 +123,8 @@ GRANT IMPERSONATE ON USER <user_identity> TO USER <user_identity> [ WITH GRANT O
 ### Grant roles  to roles or users
 
 ```SQL
-GRANT <role_name> [,<role_name>, ...] TO ROLE <role_name>；
-GRANT <role_name> [,<role_name>, ...] TO USER <user_identity>；
+GRANT <role_name> [,<role_name>, ...] TO ROLE <role_name>;
+GRANT <role_name> [,<role_name>, ...] TO USER <user_identity>;
 ```
 
 ## References
