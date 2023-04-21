@@ -927,9 +927,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 selectedBasePartitionInfos.put(baseTableInfoOptional.get(), selectedPartitionIdVersions);
             } else if (scanNode instanceof OlapScanNode) {
                 OlapScanNode olapScanNode = (OlapScanNode) scanNode;
-                Table olapTable = olapScanNode.getOlapTable();
+                OlapTable olapTable = olapScanNode.getOlapTable();
                 Optional<BaseTableInfo> baseTableInfoOptional = materializedView.getBaseTableInfos().stream().filter(
-                        baseTableInfo -> baseTableInfo.getTableIdentifier().equals(olapTable.getTableIdentifier())).
+                        baseTableInfo -> baseTableInfo.getTableIdentifier().equals(String.valueOf(olapTable.getId()))).
                         findAny();
                 if (!baseTableInfoOptional.isPresent()) {
                     continue;
