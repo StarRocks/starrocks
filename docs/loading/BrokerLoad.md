@@ -266,7 +266,7 @@ LOAD LABEL test_db.label_7
 WITH BROKER 
 (
     StorageCredentialParams
-)；
+);
 ```
 
 To load all data files from the `input` folder into `table1`, execute the following statement:
@@ -282,7 +282,7 @@ LOAD LABEL test_db.label_8
 WITH BROKER 
 (
     StorageCredentialParams
-)；
+);
 ```
 
 ### View a load job
