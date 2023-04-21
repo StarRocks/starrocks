@@ -193,7 +193,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     private void flushInsertStatisticsData(ConnectContext context, boolean force) throws Exception {
         // hll serialize to hex, about 32kb
         long bufferSize = 33L * 1024 * rowsBuffer.size();
-        if (bufferSize < Config.statistics_full_collect_buffer && !force) {
+        if (bufferSize < Config.statistic_full_collect_buffer && !force) {
             return;
         }
         if (rowsBuffer.isEmpty()) {
