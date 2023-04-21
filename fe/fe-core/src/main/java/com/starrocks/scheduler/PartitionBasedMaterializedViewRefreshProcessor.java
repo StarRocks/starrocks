@@ -334,8 +334,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
                 refreshContext.getBaseTableVisibleVersionMap();
         // should write this to log at one time
-        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> changedTablePartitionInfos =
-                getSourceTablePartitionInfos(execPlan);
+        Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> changedTablePartitionInfos =
+                getSourceTableInfoPartitionInfos(execPlan);
 
         Table partitionTable = null;
         if (mvContext.hasNextBatchPartition()) {
@@ -343,9 +343,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             partitionTable = partitionTableAndColumn.first;
         }
         // update version map of materialized view
-        for (Map.Entry<Long, Map<String, MaterializedView.BasePartitionInfo>> tableEntry
+        for (Map.Entry<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> tableEntry
                 : changedTablePartitionInfos.entrySet()) {
-            Long tableId = tableEntry.getKey();
+            Long tableId = tableEntry.getKey().getTableId();
             if (partitionTable != null && tableId != partitionTable.getId()) {
                 continue;
             }
@@ -356,6 +356,18 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     currentVersionMap.get(tableId);
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = tableEntry.getValue();
             currentTablePartitionInfo.putAll(partitionInfoMap);
+            Table table = tableEntry.getKey().getTable();
+            Preconditions.checkState(table.isOlapTable());
+            OlapTable olapTable = (OlapTable) table;
+            // set partitions that exist in base but not read for mv, which may be pruned by predicates.
+            // used to judge whether these partition are used by mv.
+            // if the partition version is -1, it means that the partition is not used by mv.
+            // when decide whether mv should be refresh, these partition are excluded to consider
+            for (Partition partition : olapTable.getPartitions()) {
+                MaterializedView.BasePartitionInfo invalidPartitionInfo =
+                        new MaterializedView.BasePartitionInfo(partition.getId(), -1);
+                currentTablePartitionInfo.putIfAbsent(partition.getName(), invalidPartitionInfo);
+            }
 
             // remove partition info of not-exist partition for snapshot table from version map
             Table snapshotTable = snapshotBaseTables.get(tableId).second;
@@ -876,6 +888,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         return false;
     }
 
+    /*
     private Map<Long, Map<String, MaterializedView.BasePartitionInfo>> getSourceTablePartitionInfos(ExecPlan execPlan) {
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> selectedBasePartitionInfos = Maps.newHashMap();
         List<ScanNode> scanNodes = execPlan.getScanNodes();
@@ -891,6 +904,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         return selectedBasePartitionInfos;
     }
 
+     */
+
     private Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> getSourceTableInfoPartitionInfos(
             ExecPlan execPlan) {
         Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> selectedBasePartitionInfos =
@@ -900,7 +915,6 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             if (scanNode instanceof HdfsScanNode) {
                 HdfsScanNode hdfsScanNode = (HdfsScanNode) scanNode;
                 Table hiveTable = hdfsScanNode.getHiveTable();
-
                 Optional<BaseTableInfo> baseTableInfoOptional = materializedView.getBaseTableInfos().stream().filter(
                         baseTableInfo -> baseTableInfo.getTableIdentifier().equals(hiveTable.getTableIdentifier())).
                         findAny();
@@ -910,6 +924,18 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
                 Map<String, MaterializedView.BasePartitionInfo> selectedPartitionIdVersions =
                         getSelectedPartitionInfos(hdfsScanNode, baseTableInfoOptional.get());
+                selectedBasePartitionInfos.put(baseTableInfoOptional.get(), selectedPartitionIdVersions);
+            } else if (scanNode instanceof OlapScanNode) {
+                OlapScanNode olapScanNode = (OlapScanNode) scanNode;
+                Table olapTable = olapScanNode.getOlapTable();
+                Optional<BaseTableInfo> baseTableInfoOptional = materializedView.getBaseTableInfos().stream().filter(
+                        baseTableInfo -> baseTableInfo.getTableIdentifier().equals(olapTable.getTableIdentifier())).
+                        findAny();
+                if (!baseTableInfoOptional.isPresent()) {
+                    continue;
+                }
+                Map<String, MaterializedView.BasePartitionInfo> selectedPartitionIdVersions =
+                        getSelectedPartitionInfos(olapScanNode);
                 selectedBasePartitionInfos.put(baseTableInfoOptional.get(), selectedPartitionIdVersions);
             }
         }
