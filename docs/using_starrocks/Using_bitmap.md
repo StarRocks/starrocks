@@ -2,32 +2,32 @@
 
 ## Background
 
-There are usually two ways to conduct  accurate de-duplication analysis in StarRocks.
+There are usually two ways to conduct accurate de-duplication analysis in StarRocks.
 
-* Detail-based de-duplication: This is  a traditional count distinct approach that is able to retain detailed data for flexible analysis. However,  it consumes huge computational and storage resources and is not friendly enough to support scenarios involving large-scale datasets and query latency-sensitive de-duplication.
-* Precomputation-based de-duplication: This approach is also recommended by StarRocks. In some scenarios, users only want to get the results after de-duplication and care less about detailed data. Such a scenario can be analyzed by precomputation, which is essentially using space for time and resonates with the core idea of the MOLAP aggregation model. It is to calculate in the  process of data import, reducing the storage cost and the cost of on-site calculation during query. You can further reduce the size of datasets for on-site computation  by shrinking RollUp dimension.
+* Detail-based de-duplication: This is a traditional count distinct approach that is able to retain detailed data for flexible analysis. However, it consumes huge computational and storage resources and is not friendly enough to support scenarios involving large-scale datasets and query latency-sensitive de-duplication.
+* Precomputation-based de-duplication: This approach is also recommended by StarRocks. In some scenarios, users only want to get the results after de-duplication and care less about detailed data. Such a scenario can be analyzed by precomputation, which is essentially using space for time and resonates with the core idea of the multidimensional OLAP (MOLAP) aggregation model. It is to calculate data in the process of data loading, reducing the storage cost and the cost of on-site calculation during query. You can further reduce the size of datasets for on-site computation by shrinking RollUp dimension.
 
 ## Traditional Count Distinct Calculation
 
-StarRocks is implemented based on the MPP architecture that supports retaining detailed data when using count distinct calculation for accurate de-duplication t. However, because of the need for multiple data shuffles (transferring data between different nodes and calculating de-weighting) during query, it leads to a linear decrease in performance as the data volume increases.
+StarRocks is implemented based on the MPP architecture that supports retaining detailed data when using count distinct calculation for accurate de-duplication. However, because of the need for multiple data shuffles (transferring data across nodes and calculating de-weighting) during query, it leads to a linear decrease in performance as the data volume increases.
 
 In the following scenario, there are tables (dt, page, user_id) that need to calculate UV by detailed data.
 
 |  dt   |   page  | user_id |
 | :---: | :---: | :---:|
-|   20191206  |   xiaoxiang  | 101 |
-|   20191206  |   waimai  | 101 |
-|   20191206  |   xiaoxiang  | 101 |
-|   20191206  |   waimai  | 101 |
-|   20191206  |   xiaoxiang  | 101 |
-|   20191206  |   waimai  | 101 |
+|   20191206  |   game  | 101 |
+|   20191206  |   shopping  | 101 |
+|   20191206  |   game  | 101 |
+|   20191206  |   shopping  | 101 |
+|   20191206  |   game  | 101 |
+|   20191206  |   shopping  | 101 |
 
 Count `uv` grouping by `page`
 
 |  page   |   uv  |
 | :---: | :---: |
-|   xiaoxiang  |  1   |
-|   waimai  |   2  |
+|   game  |  1   |
+|   shopping  |   2  |
 
 ```sql
  select page, count(distinct user_id) as uv from table group by page;
@@ -48,7 +48,7 @@ Given an array A with values in the range [0, n) (note: not including n), a bitm
 ## Advantages of bitmap de-duplication
 
 1. Space advantage: Using one bit of a bitmap to indicate the existence of the corresponding subscript has a great space advantage. For example, for int32 de-duplication, the storage space required by a normal bitmap is only 1/32 of the traditional de-duplication. The implementation of Roaring Bitmap in StarRocks further significantly reduces storage usage through optimizing sparse bitmaps.
-2. Time advantage: The bitmap de-duplication involves computation such as bit placement for a given subscript and counting the number of placed bitmaps, which are O(1) and O(n) operations respectively. The latter can be computed efficiently using clz, ctz and other instructions. In addition, bitmap de-duplication can be accelerated in parallel in the MPP execution engine, where each computing node computes a local sub-bitmap and uses the bitor operation to merge allsub-bitmaps into a final bitmap. Bitor operation is more efficient than sort-based or hash-based de-duplication in that it has no condition or data dependencies and supports vectorized execution.
+2. Time advantage: The bitmap de-duplication involves computation such as bit placement for a given subscript and counting the number of placed bitmaps, which are O(1) and O(n) operations respectively. The latter can be computed efficiently using clz, ctz and other instructions. In addition, bitmap de-duplication can be accelerated in parallel in the MPP execution engine, where each computing node computes a local sub-bitmap and uses the bit_or function to merge all sub-bitmaps into a final bitmap. bit_or is more efficient than sort-based or hash-based de-duplication in that it has no condition or data dependencies and supports vectorized execution.
 
 Roaring Bitmap implementation, details can be found at: [specific paper and implementation](https://github.com/RoaringBitmap/RoaringBitmap)
 
@@ -67,9 +67,9 @@ First, create a table with a BITMAP column, where `visit_users` is an aggregated
 
 ```sql
 CREATE TABLE `page_uv` (
-  `page_id` INT NOT NULL COMMENT '页面id',
-  `visit_date` datetime NOT NULL COMMENT '访问时间',
-  `visit_users` BITMAP BITMAP_UNION NOT NULL COMMENT '访问用户id'
+  `page_id` INT NOT NULL COMMENT 'page ID',
+  `visit_date` datetime NOT NULL COMMENT 'access time',
+  `visit_users` BITMAP BITMAP_UNION NOT NULL COMMENT 'user ID'
 ) ENGINE=OLAP
 AGGREGATE KEY(`page_id`, `visit_date`)
 DISTRIBUTED BY HASH(`page_id`) BUCKETS 1

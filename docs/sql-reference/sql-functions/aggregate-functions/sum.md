@@ -75,7 +75,7 @@ Data type mapping between input value and return value:
 
 4. Use this function to compute sum.
 
-    Example 1：Calculate the total sales of each region.
+    Example 1: Calculate the total sales of each region.
 
     ```Plain Text
     MySQL > SELECT region_num, sum(sales) from employees

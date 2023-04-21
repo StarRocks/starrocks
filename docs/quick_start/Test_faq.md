@@ -17,7 +17,7 @@
 
 #### Range partitioning
 
-* Reasonable range partitioning can reduce the amount of data for scanning. Taking a data management perspective, we normally choose “time” or “region” as range partition keys.
+* Reasonable range partitioning can reduce the amount of data for scanning. Taking a data management perspective, we normally choose "time" or "region" as range partition keys.
 * With dynamic partitioning, you can create partitions automatically at regular intervals (on a daily basis).
 
 #### Hash partitioning

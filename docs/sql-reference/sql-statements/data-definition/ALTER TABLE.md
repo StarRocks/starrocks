@@ -370,7 +370,7 @@ Note:
 Syntax:
 
 ```sql
-DROP INDEX index_name；
+DROP INDEX index_name;
 ```
 
 ### Swap

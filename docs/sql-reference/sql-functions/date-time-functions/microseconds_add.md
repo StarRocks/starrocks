@@ -18,7 +18,7 @@ DATETIME microseconds_add(DATETIME expr1,INT expr2);
 
 ## Return value
 
-Returns a value of the DATETIME type. If the input value is of the DATE type，the hour, minute, and seconds parts are processed as `00:00:00`.
+Returns a value of the DATETIME type. If the input value is of the DATE type, the hour, minute, and seconds parts are processed as `00:00:00`.
 
 ## Examples
 

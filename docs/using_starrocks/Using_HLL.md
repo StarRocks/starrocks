@@ -15,16 +15,16 @@ Since the HLL algorithm involves a lot of mathematical knowledge, we will use a 
 * ...
 * X=n, P(X=n)=(1/2)<sup>n</sup>
 
-We use test A to construct randomized test B which is to do N independent repetitions of test A, generating N independent identically distributed random variables X<sub>1</sub>, X<sub>2</sub>, X<sub>3</sub>, ..., X<sub>N</sub>.Take the maximum value of the random variables as X<sub>max</sub>. Leveraging the  great likelihood estimation, the estimated value of N is 2<sup>X<sub>max</sub></sup>。
+We use test A to construct randomized test B which is to do N independent repetitions of test A, generating N independent identically distributed random variables X<sub>1</sub>, X<sub>2</sub>, X<sub>3</sub>, ..., X<sub>N</sub>.Take the maximum value of the random variables as X<sub>max</sub>. Leveraging the  great likelihood estimation, the estimated value of N is 2<sup>X<sub>max</sub></sup>.
 <br/>
 
 Now, we simulate the above experiment using the hash function on the given dataset:
 
 * Test A: Calculate the hash value of dataset elements and convert the hash value to binary representation. Record the occurrence of bit=1, starting from the lowest bit of the binary.
-* Test B: Repeat the Test A process for dataset elements of Test B. Update the maximum position “m” of the first bit 1 occurrence for each test;
+* Test B: Repeat the Test A process for dataset elements of Test B. Update the maximum position "m" of the first bit 1 occurrence for each test;
 * Estimate the number of non-repeating elements in the dataset as m<sup>2</sup>.
 
-In fact, the HLL algorithm divides the elements into K=2<sup>k</sup> buckets based on the lower k bits of the element hash. Count the maximum value of the first bit 1 occurrence from the k+1st bit as m<sub>1</sub>, m<sub>2</sub>,..., m<sub>k</sub>, and estimate the number of non-repeating elements in the bucket as 2<sup>m<sub>1</sub></sup>, 2<sup>m<sub>2</sub></sup>,..., 2<sup>m<sub>k</sub></sup>. The number of non-repeating elements in the data set is the summed average of the number of buckets multiplied by the number of non-repeating elements in the buckets: N = K(K/(2<sup>\-m<sub>1</sub></sup>+2<sup>\-m<sub>2</sub></sup>,..., 2<sup>\-m<sub>K</sub></sup>))。
+In fact, the HLL algorithm divides the elements into K=2<sup>k</sup> buckets based on the lower k bits of the element hash. Count the maximum value of the first bit 1 occurrence from the k+1st bit as m<sub>1</sub>, m<sub>2</sub>,..., m<sub>k</sub>, and estimate the number of non-repeating elements in the bucket as 2<sup>m<sub>1</sub></sup>, 2<sup>m<sub>2</sub></sup>,..., 2<sup>m<sub>k</sub></sup>. The number of non-repeating elements in the data set is the summed average of the number of buckets multiplied by the number of non-repeating elements in the buckets: N = K(K/(2<sup>\-m<sub>1</sub></sup>+2<sup>\-m<sub>2</sub></sup>,..., 2<sup>\-m<sub>K</sub></sup>)).
 <br/>
 
 HLL multiplies the correction factor with the estimation result to make the result more accurate.

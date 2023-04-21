@@ -64,7 +64,7 @@ public class Trino2SRFunctionCallTransformer {
     private static void registerAllFunctionTransformer() {
         registerAggregateFunctionTransformer();
         registerArrayFunctionTransformer();
-        // todo： support more function transform
+        // todo: support more function transform
     }
 
     private static void registerAggregateFunctionTransformer() {

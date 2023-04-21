@@ -118,7 +118,7 @@ The parameters in the return result are described as follows:
   WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122";
   ```
 
-- Query export jobs that are in the `EXPORTING` state in the database `example_db` and specify to sort the export job records in the result set by `StartTime` in ascending order：
+- Query export jobs that are in the `EXPORTING` state in the database `example_db` and specify to sort the export job records in the result set by `StartTime` in ascending order:
 
   ```SQL
   SHOW EXPORT FROM example_db

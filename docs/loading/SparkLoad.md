@@ -108,7 +108,7 @@ REVOKE USAGE_PRIV ON RESOURCE resource_name FROM user_identityREVOKE USAGE_PRIV 
 
 * Create resource
 
-**For example**：
+**For example**:
 
 ~~~sql
 -- yarn cluster mode

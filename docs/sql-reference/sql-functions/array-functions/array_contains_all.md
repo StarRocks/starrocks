@@ -22,7 +22,7 @@ Returns a value of the BOOLEAN type.
 
 1 is returned if `arr2` is a subset of `arr1`. Otherwise, 0 is returned.
 
-If any of the two arrays is NULL， NULL is returned.
+If any of the two arrays is NULL, NULL is returned.
 
 ## Usage notes
 

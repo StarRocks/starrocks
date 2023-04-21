@@ -69,15 +69,15 @@ This package needs to be obtained through Aliyun mirror address.
 
 **Solution:**
 
-Please make sure that the mirror part of /etc/maven/settings.xml is all configured to be obtained through Aliyun mirror address.
+Please make sure that the mirror part of `/etc/maven/settings.xml` is all configured to be obtained through Aliyun mirror address.
 
-If it is, please change it to the following:
+If it is, change it to the following:
 
  <mirror>
     <id>aliyunmaven </id>
     <mirrorf>central</mirrorf>
-    <name>阿里云公共仓库</name>
-    <url>https：//maven.aliyun.com/repository/public</url>
+    <name>aliyun public repo</name>
+    <url>https: //maven.aliyun.com/repository/public</url>
 </mirror>
 
 ## The meaning of parameter sink.buffer-flush.interval-ms in Flink-connector-StarRocks

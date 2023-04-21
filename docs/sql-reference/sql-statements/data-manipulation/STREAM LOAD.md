@@ -64,7 +64,7 @@ Describes the data file that you want to load. The `data_desc` descriptor can in
 -H "format: CSV | JSON"
 -H "column_separator: <column_separator>"
 -H "row_delimiter: <row_delimiter>"
--H "columns: <column1_name>[, <column2_name>，... ]"
+-H "columns: <column1_name>[, <column2_name>, ... ]"
 -H "partitions: <partition1_name>[, <partition2_name>, ...]"
 -H "jsonpaths: [ \"<json_path1>\"[, \"<json_path2>\", ...] ]"
 -H "strip_outer_array:  true | false"
@@ -302,7 +302,7 @@ If you want to load only the data records whose values in the first column of `e
 
 ```Bash
 curl --location-trusted -u root: -H "label:label4" \
-    -H "columns: col1, col2，col3]"\
+    -H "columns: col1, col2, col3]"\
     -H "where: col1 = 20180601" \
     -T example4.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table4/_stream_load

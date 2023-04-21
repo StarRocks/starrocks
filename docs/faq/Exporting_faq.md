@@ -50,8 +50,8 @@ PROPERTIES ("key"="value", ...);
 
 ```plain text
 PROPERTIES currently supports the following properties:
-"type" = "full"：indicates that this is a full update (default).
-"timeout" = "3600"：task timeout. The default is one day. The unit is seconds.
+"type" = "full": indicates that this is a full update (default).
+"timeout" = "3600": task timeout. The default is one day. The unit is seconds.
 ```
 
 StarRocks does not support full database backup at present. We need to specify the tables or partitions to be backed up ON (...), and these tables or partitions will be backed up in parallel.

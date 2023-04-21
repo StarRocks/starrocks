@@ -22,7 +22,7 @@ This change does not affect your download behavior or use of StarRocks. You can 
 
     > **NOTE**
     >
-    > Replace `<sr_ver>` with the version number of the StarRocks installation package you want to download。
+    > Replace `<sr_ver>` with the version number of the StarRocks installation package you want to download.
 
 2. Load the debuginfo file when you perform GDB debugging.
 

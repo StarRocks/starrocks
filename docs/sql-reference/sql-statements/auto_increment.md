@@ -111,7 +111,7 @@ DISTRIBUTED BY HASH(id)
 PROPERTIES("replicated_storage" = "true");
 ```
 
-Implicitly assign and explicitly specify the values for the `AUTO_INCREMENT` column `number` in the table `test_tbl2`。
+Implicitly assign and explicitly specify the values for the `AUTO_INCREMENT` column `number` in the table `test_tbl2`.
 
 ```SQL
 INSERT INTO test_tbl2 (id, number) VALUES (1, DEFAULT);

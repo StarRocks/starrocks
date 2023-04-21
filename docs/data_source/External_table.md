@@ -6,7 +6,7 @@ StarRocks supports access to other data sources by using external tables. Extern
 >
 > Since v3.0, we recommend that you use catalogs to query Hive, Iceberg, and Hudi data. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
 
-From 2.5 onwards, StarRocks provides the Local Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Local Cache](Block_cache.md)。
+From 2.5 onwards, StarRocks provides the Local Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Local Cache](Block_cache.md).
 
 ## MySQL external table
 
@@ -94,7 +94,7 @@ insert into external_t values ('2020-10-11', 1, 1, 'hello', '2020-10-11 10:00:00
 insert into external_t select * from other_table;
 ~~~
 
-Parameters：
+Parameters:
 
 * **EXTERNAL:** This keyword indicates that the table to be created is an external table.
 * **host:** This parameter specifies the IP address of the leader FE node of the destination StarRocks cluster.
@@ -472,7 +472,7 @@ The required parameters in `properties` are as follows:
 
 * `resource`: the name of the JDBC resource used to create the external table.
 
-* `table`：the target table name in the database.
+* `table`: the target table name in the database.
 
 For supported data types and data type mapping between StarRocks and target databases, see [Data type mapping](External_table.md#Data type mapping).
 
@@ -696,13 +696,13 @@ select count(*) from profile_wos_p7;
 
 ### Configuration
 
-* The path of the FE configuration file is `fe/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example: HDFS cluster uses a highly available nameservice, you need to put `hdfs-site.xml` under `fe/conf`.  If HDFS is configured with viewfs, you need to put the `core-site.xml` under `fe/conf`.
+* The path of the FE configuration file is `fe/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example: HDFS cluster uses a highly available nameservice, you need to put `hdfs-site.xml` under `fe/conf`. If HDFS is configured with viewfs, you need to put the `core-site.xml` under `fe/conf`.
 * The path of the BE configuration file is `be/conf`, to which configuration file can be added if you need to customize the Hadoop cluster. For example, HDFS cluster using a highly available nameservice, you need to put `hdfs-site.xml` under `be/conf`. If HDFS is configured with viewfs, you need to put `core-site.xml` under `be/conf`.
 * The machine where BE is located need to configure JAVA_HOME as a jdk environment rather than a jre environment
 * kerberos supports:
   1. To log in with `kinit -kt keytab_path principal` to all FE/BE machines, you need to have access to Hive and HDFS. The kinit command login is only good for a period of time and needs to be put into crontab to be executed regularly.
   2. Put `hive-site.xml/core-site.xml/hdfs-site.xml` under `fe/conf`, and put `core-site.xml/hdfs-site.xml` under `be/conf`.
-  3. Add **Djava.security.krb5.conf:/etc/krb5.conf** to the **JAVA_OPTS/JAVA_OPTS_FOR_JDK_9** option of the **fe/conf/fe.conf** file.  **/etc/krb5.conf** is the path of the **krb5.conf** file. You can adjust the path based on your operating system.
+  3. Add **Djava.security.krb5.conf:/etc/krb5.conf** to the **JAVA_OPTS/JAVA_OPTS_FOR_JDK_9** option of the **fe/conf/fe.conf** file. **/etc/krb5.conf** is the path of the **krb5.conf** file. You can adjust the path based on your operating system.
   4. When you add a Hive resource, you must pass in a domain name to `hive.metastore.uris`. In addition, you must add the mapping between Hive/HDFS domain names and IP addresses in the **/etc/hosts** file*.*
 
 * Configure support for AWS S3: Add the following configuration to `fe/conf/core-site.xml` and `be/conf/core-site.xml`.

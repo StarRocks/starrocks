@@ -7,12 +7,12 @@ Converts a UNIX timestamp into the required time format. The default format is `
 Currently, `string_format` supports the following formats:
 
 ```plain text
-%Y：Year  e.g.：2014，1900
-%m：Month   e.g.：12，09
-%d：Day  e.g.：11，01
-%H：Hour  e.g.：23，01，12
-%i：Minute  e.g.：05，11
-%s：Second  e.g.：59，01
+%Y: Year  e.g.: 2014, 1900
+%m: Month   e.g.: 12, 09
+%d: Day  e.g.: 11, 01
+%H: Hour  e.g.: 23, 01, 12
+%i: Minute  e.g.: 05, 11
+%s: Second  e.g.: 59, 01
 ```
 
 Other formats are invalid and NULL will be returned.
