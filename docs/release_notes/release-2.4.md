@@ -1,5 +1,39 @@
 # StarRocks version 2.4
 
+## 2.4.5
+
+Release date: April 21, 2023
+
+### Improvements
+
+- Forbade the List Partition syntax because it may cause errors in upgrading metadata. [#15401](https://github.com/StarRocks/starrocks/pull/15401)
+- Supports BITMAP, HLL, and PERCENTILE types for materialized views. [#15731](https://github.com/StarRocks/starrocks/pull/15731)
+- Optimized the inference of `storage_medium`. When BEs use both SSD and HDD as storage devices, if the property `storage_cooldown_time` is specified, StarRocks sets `storage_medium` to `SSD`. Otherwise, StarRocks sets `storage_medium` to `HDD`. [#18649](https://github.com/StarRocks/starrocks/pull/18649)
+- Optimized the accuracy of thread dump. [#16748](https://github.com/StarRocks/starrocks/pull/16748)
+- Optimized load efficiency by triggering metadata compaction before loading. [#19347](https://github.com/StarRocks/starrocks/pull/19347)
+- Optimized the Stream Load planner timeout. [#18992](https://github.com/StarRocks/starrocks/pull/18992/files)
+- Optimized the Unique key table performance by forbidding the collection of statistics from value columns. [#19563](https://github.com/StarRocks/starrocks/pull/19563)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- NPE is returned when an unsupported data type is used in CREATE TABLE. [# 20999](https://github.com/StarRocks/starrocks/issues/20999)
+- Wrong results are returned to queries using Broadcast Join with the short-circuit. [#20952](https://github.com/StarRocks/starrocks/issues/20952)
+- The disk occupation problem caused by the wrong data truncate logic. [#20590](https://github.com/StarRocks/starrocks/pull/20590)
+- The AuditLoader plugin can neither be installed nor deleted. [#20468](https://github.com/StarRocks/starrocks/issues/20468)
+- If an exception is thrown when a tablet is being scheduled, other tablets in the same batch will never be scheduled. [#20681](https://github.com/StarRocks/starrocks/pull/20681)
+- Unknown Error is returned when an unsupported SQL function is used in the creation of a synchronous materialized view. [#20348](https://github.com/StarRocks/starrocks/issues/20348)
+- Multiple COUNT DISTINCT calculations are incorrectly rewritten. [#19714](https://github.com/StarRocks/starrocks/pull/19714)
+- Wrong results are returned to queries on the tablet that is in compaction. [#20084](https://github.com/StarRocks/starrocks/issues/20084)
+- Wrong results are returned to queries with aggregation. [#19725](https://github.com/StarRocks/starrocks/issues/19725)
+- No error message is returned when loading NULL parquet data into NOT NULL columns. [#19885](https://github.com/StarRocks/starrocks/pull/19885)
+- The query concurrency metric decreases slowly when the concurrency limit of a resource group is continuously reached. [#19363](https://github.com/StarRocks/starrocks/pull/19363)
+- FE fails to start when replaying the `InsertOverwriteJob` state change log. [#19061](https://github.com/StarRocks/starrocks/issues/19061)
+- The Primary Key table deadlock. [#18488](https://github.com/StarRocks/starrocks/pull/18488)
+- For Colocation tables, the replica status can be manually specified as `bad` by using statements like `ADMIN SET REPLICA STATUS PROPERTIES ("tablet_id" = "10003", "backend_id" = "10001", "status" = "bad");`. If the number of BEs is less than or equal to the number of replicas, the corrupted replica cannot be repaired. [#17876](https://github.com/StarRocks/starrocks/issues/17876)
+- Issues caused by ARRAY-related functions. [#18556](https://github.com/StarRocks/starrocks/pull/18556)
+
 ## 2.4.4
 
 Release date: February 22, 2023
