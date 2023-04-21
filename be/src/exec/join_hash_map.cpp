@@ -17,7 +17,10 @@
 #include <column/chunk.h>
 #include <runtime/descriptors.h>
 
+#include <memory>
+
 #include "column/vectorized_fwd.h"
+#include "common/statusor.h"
 #include "exec/hash_join_node.h"
 #include "serde/column_array_serde.h"
 #include "simd/simd.h"
@@ -496,6 +499,22 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, con
     }
 
     _table_items->row_count += chunk->num_rows();
+}
+
+StatusOr<ChunkPtr> JoinHashTable::convert_to_spill_schema(const ChunkPtr& chunk) const {
+    ChunkPtr output = std::make_shared<Chunk>();
+    //
+    for (size_t i = 0; i < _table_items->build_column_count; i++) {
+        SlotDescriptor* slot = _table_items->build_slots[i].slot;
+        const ColumnPtr& column = chunk->get_column_by_slot_id(slot->id());
+        output->append_column(column, slot->id());
+    }
+
+    if (_need_create_tuple_columns) {
+        return Status::NotSupported("unreachable path");
+    }
+
+    return output;
 }
 
 void JoinHashTable::remove_duplicate_index(Filter* filter) {
