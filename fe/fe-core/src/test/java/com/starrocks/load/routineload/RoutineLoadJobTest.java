@@ -267,6 +267,7 @@ public class RoutineLoadJobTest {
         String desiredConcurrentNumber = "3";
         String maxBatchInterval = "60";
         String maxErrorNumber = "10000";
+        String maxFilterRatio = "0.3";
         String maxBatchRows = "200000";
         String strictMode = "true";
         String timeZone = "UTC";
@@ -278,6 +279,7 @@ public class RoutineLoadJobTest {
                 "   \"desired_concurrent_number\" = \"" + desiredConcurrentNumber + "\"," +
                 "   \"max_batch_interval\" = \"" + maxBatchInterval + "\"," +
                 "   \"max_error_number\" = \"" + maxErrorNumber + "\"," +
+                "   \"max_filter_ratio\" = \"" + maxFilterRatio + "\"," +
                 "   \"max_batch_rows\" = \"" + maxBatchRows + "\"," +
                 "   \"strict_mode\" = \"" + strictMode + "\"," +
                 "   \"timezone\" = \"" + timeZone + "\"," +
@@ -294,6 +296,8 @@ public class RoutineLoadJobTest {
                 (long) Deencapsulation.getField(routineLoadJob, "taskSchedIntervalS"));
         Assert.assertEquals(Long.parseLong(maxErrorNumber),
                 (long) Deencapsulation.getField(routineLoadJob, "maxErrorNum"));
+        Assert.assertEquals(Double.parseDouble(maxFilterRatio),
+                (double) Deencapsulation.getField(routineLoadJob, "maxFilterRatio"), 0.01);
         Assert.assertEquals(Long.parseLong(maxBatchRows),
                 (long) Deencapsulation.getField(routineLoadJob, "maxBatchRows"));
         Assert.assertEquals(Boolean.parseBoolean(strictMode), routineLoadJob.isStrictMode());
