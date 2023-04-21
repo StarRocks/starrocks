@@ -1695,9 +1695,9 @@ public class CoordinatorPreprocessor {
                 if (forceSetTableSinkDop) {
                     DataSink dataSink = fragment.getSink();
                     int dop = fragment.getPipelineDop();
-                    if (dataSink instanceof OlapTableSink) {
+                    if (!(dataSink instanceof IcebergTableSink)) {
                         curTableSinkDop = dop;
-                    } else if (dataSink instanceof IcebergTableSink) {
+                    } else {
                         int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();
                         if (sessionVarSinkDop > 0) {
                             curTableSinkDop = Math.min(dop, sessionVarSinkDop);
