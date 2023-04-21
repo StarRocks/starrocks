@@ -581,6 +581,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<Task> taskList = taskManager.showTasks(null);
 
         for (Task task : taskList) {
+            if (task.getDbName() == null) {
+                LOG.warn("Ignore the task db because information is incorrect: " + task);
+                continue;
+            }
             if (globalStateMgr.isUsingNewPrivilege()) {
                 if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, task.getDbName())) {
                     continue;
@@ -625,6 +629,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TaskRunStatus> taskRunList = taskManager.showTaskRunStatus(null);
 
         for (TaskRunStatus status : taskRunList) {
+            if (status.getDbName() == null) {
+                LOG.warn("Ignore the task status because db information is incorrect: " + status);
+                continue;
+            }
             if (globalStateMgr.isUsingNewPrivilege()) {
                 if (!PrivilegeActions.checkAnyActionOnOrInDb(currentUser, null, status.getDbName())) {
                     continue;
