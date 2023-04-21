@@ -341,8 +341,13 @@ public class TaskManager {
         if (dbName == null) {
             taskList.addAll(nameToTaskMap.values());
         } else {
-            taskList.addAll(nameToTaskMap.values().stream()
-                    .filter(u -> u.getDbName().equals(dbName)).collect(Collectors.toList()));
+            for (Map.Entry<String, Task> entry : nameToTaskMap.entrySet()) {
+                Task task = entry.getValue();
+
+                if (task.getDbName() != null && task.getDbName().equals(dbName)) {
+                    taskList.add(task);
+                }
+            }
         }
         return taskList;
     }

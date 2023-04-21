@@ -200,7 +200,7 @@ For information about how to choose a credential method for accessing AWS S3 and
 
 ##### S3-compatible storage system
 
-If you choose an S3-compatible storage system, such as MinIO, as storage for your Hive cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
+If you choose an S3-compatible storage system, such as MinIO, as storage for your Hudi cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
 
 ```SQL
 "aws.s3.enable_ssl" = "<true | false>",
