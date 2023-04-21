@@ -43,6 +43,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -628,7 +629,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         // 1. check if replicas' backends are mismatch
         Set<Long> replicaBackendIds = getBackendIds();
         for (Long backendId : backendsSet) {
-            if (!replicaBackendIds.contains(backendId)) {
+            if (!replicaBackendIds.contains(backendId)
+                    && containsAny(replicaBackendIds, Config.tablet_sched_be_high_priority)) {
                 return TabletStatus.COLOCATE_MISMATCH;
             }
         }
@@ -660,6 +662,20 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         }
 
         return TabletStatus.HEALTHY;
+    }
+
+    private boolean containsAny(Set<Long> backendIds, long[] highPriorityBackendIds) {
+        if (highPriorityBackendIds == null || highPriorityBackendIds.length <= 0) {
+            return true;
+        }
+
+        for (long beId : highPriorityBackendIds) {
+            if (backendIds.contains(beId)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
