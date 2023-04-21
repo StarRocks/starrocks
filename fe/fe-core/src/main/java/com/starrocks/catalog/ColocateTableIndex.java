@@ -166,9 +166,44 @@ public class ColocateTableIndex implements Writable {
         this.lock.writeLock().unlock();
     }
 
+    public void addTableToGroup(Database db,
+                                OlapTable olapTable, String colocateGroup, boolean expectLakeTable)
+            throws DdlException {
+        if (Strings.isNullOrEmpty(colocateGroup)) {
+            return;
+        }
+
+        if (olapTable.isCloudNativeTableOrMaterializedView() != expectLakeTable) {
+            return;
+        }
+
+        String fullGroupName = db.getId() + "_" + colocateGroup;
+        ColocateGroupSchema groupSchema = this.getGroupSchema(fullGroupName);
+        ColocateTableIndex.GroupId colocateGrpIdInOtherDb = null; /* to use GroupId.grpId */
+        if (groupSchema != null) {
+            // group already exist, check if this table can be added to this group
+            groupSchema.checkColocateSchema(olapTable);
+        } else {
+            // we also need to check the schema consistency with colocate group in other database
+            colocateGrpIdInOtherDb = this.checkColocateSchemaWithGroupInOtherDb(
+                    colocateGroup, db.getId(), olapTable);
+        }
+        // Add table to this group, if group does not exist, create a new one.
+        // If the to create colocate group should colocate with groups in other databases,
+        // i.e. `colocateGrpIdInOtherDb` is not null, we reuse `GroupId.grpId` from those
+        // groups, so that we can have a mechanism to precisely find all the groups that colocate with
+        // each other in different databases.
+        this.addTableToGroup(db.getId(), olapTable, colocateGroup,
+                colocateGrpIdInOtherDb == null ? null :
+                        new ColocateTableIndex.GroupId(db.getId(), colocateGrpIdInOtherDb.grpId),
+                false /* isReplay */);
+        olapTable.setColocateGroup(colocateGroup);
+    }
+
     // NOTICE: call 'addTableToGroup()' will not modify 'group2BackendsPerBucketSeq'
     // 'group2BackendsPerBucketSeq' need to be set manually before or after, if necessary.
-    public GroupId addTableToGroup(long dbId, OlapTable tbl, String groupName, GroupId assignedGroupId, boolean isReplay)
+    public GroupId addTableToGroup(long dbId, OlapTable tbl, String groupName, GroupId assignedGroupId,
+                                   boolean isReplay)
             throws DdlException {
         writeLock();
         try {

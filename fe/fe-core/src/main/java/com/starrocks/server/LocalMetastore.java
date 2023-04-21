@@ -2850,6 +2850,12 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.getTableProperty().setForceExternalTableQueryRewrite(forceExternalTableQueryReWrite);
             }
 
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
+                String colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
+                colocateTableIndex.addTableToGroup(db, materializedView, colocateGroup,
+                        materializedView.isCloudNativeMaterializedView());
+            }
+
             if (materializedView.isCloudNativeMaterializedView()) {
                 setLakeStorageInfo(materializedView, properties);
             }

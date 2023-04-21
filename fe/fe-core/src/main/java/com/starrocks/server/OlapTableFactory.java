@@ -20,7 +20,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -363,7 +362,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         String colocateGroup = null;
         try {
             colocateGroup = PropertyAnalyzer.analyzeColocate(properties);
-            processColocationProperties(colocateTableIndex, colocateGroup, db, table, false /* expectLakeTable */);
+            colocateTableIndex.addTableToGroup(db, table, colocateGroup, false /* expectLakeTable */);
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
@@ -544,7 +543,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             }
 
             // process lake table colocation properties, after partition and tablet creation
-            processColocationProperties(colocateTableIndex, colocateGroup, db, table, true /* expectLakeTable */);
+            colocateTableIndex.addTableToGroup(db, table, colocateGroup, true /* expectLakeTable */);
 
             // check database exists again, because database can be dropped when creating table
             if (!metastore.tryLock(false)) {
@@ -627,36 +626,4 @@ public class OlapTableFactory implements AbstractTableFactory {
         }
     }
 
-    private void processColocationProperties(ColocateTableIndex colocateTableIndex, String colocateGroup, Database db,
-                                             OlapTable olapTable, boolean expectLakeTable) throws DdlException {
-        if (Strings.isNullOrEmpty(colocateGroup)) {
-            return;
-        }
-
-        if (olapTable.isCloudNativeTable() != expectLakeTable) {
-            return;
-        }
-
-        String fullGroupName = db.getId() + "_" + colocateGroup;
-        ColocateGroupSchema groupSchema = colocateTableIndex.getGroupSchema(fullGroupName);
-        ColocateTableIndex.GroupId colocateGrpIdInOtherDb = null; /* to use GroupId.grpId */
-        if (groupSchema != null) {
-            // group already exist, check if this table can be added to this group
-            groupSchema.checkColocateSchema(olapTable);
-        } else {
-            // we also need to check the schema consistency with colocate group in other database
-            colocateGrpIdInOtherDb = colocateTableIndex.checkColocateSchemaWithGroupInOtherDb(
-                    colocateGroup, db.getId(), olapTable);
-        }
-        // Add table to this group, if group does not exist, create a new one.
-        // If the to create colocate group should colocate with groups in other databases,
-        // i.e. `colocateGrpIdInOtherDb` is not null, we reuse `GroupId.grpId` from those
-        // groups, so that we can have a mechanism to precisely find all the groups that colocate with
-        // each other in different databases.
-        colocateTableIndex.addTableToGroup(db.getId(), olapTable, colocateGroup,
-                colocateGrpIdInOtherDb == null ? null :
-                        new ColocateTableIndex.GroupId(db.getId(), colocateGrpIdInOtherDb.grpId),
-                false /* isReplay */);
-        olapTable.setColocateGroup(colocateGroup);
-    }
 }
