@@ -82,10 +82,7 @@ private:
         std::vector<uint8_t> buffer;
         void align(int64_t align_size, int64_t file_size);
     };
-<<<<<<< HEAD
-=======
     Status _get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes);
->>>>>>> fb2c98068 ([BugFix] fix shared buffer io coalesce (#20384))
     StatusOr<SharedBuffer*> _find_shared_buffer(size_t offset, size_t count);
     Status _read_stream_buffer(SharedBuffer& sb, size_t offset, size_t count);
     std::shared_ptr<SeekableInputStream> _stream;
