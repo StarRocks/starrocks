@@ -934,7 +934,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int connectorIoTasksSlowIoLatency = 50;
 
     @VariableMgr.VarAttr(name = CONNECTOR_SCAN_USE_QUERY_MEM_RATIO)
-    private double connectorScanUseQueryMemRatio = 0.5;
+    private double connectorScanUseQueryMemRatio = 0.3;
 
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateBlockCache = true;
