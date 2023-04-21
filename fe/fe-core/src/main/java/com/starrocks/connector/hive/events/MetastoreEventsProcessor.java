@@ -18,7 +18,7 @@ package com.starrocks.connector.hive.events;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.server.CatalogMgr;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
@@ -55,7 +55,7 @@ import javax.annotation.Nullable;
  * iteration so the next batch can be requested appropriately. The current batch size is
  * constant and set to {@link Config#hms_events_batch_size_per_rpc}.
  */
-public class MetastoreEventsProcessor extends LeaderDaemon {
+public class MetastoreEventsProcessor extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(MetastoreEventsProcessor.class);
     public static final String HMS_ADD_THRIFT_OBJECTS_IN_EVENTS_CONFIG_KEY =
             "hive.metastore.notifications.add.thrift.objects";

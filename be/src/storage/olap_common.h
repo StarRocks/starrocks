@@ -239,6 +239,7 @@ struct OlapReaderStatistics {
 
     int64_t get_rowsets_ns = 0;
     int64_t get_delvec_ns = 0;
+    int64_t get_delta_column_group_ns = 0;
     int64_t segment_init_ns = 0;
 
     int64_t segment_stats_filtered = 0;
@@ -262,13 +263,33 @@ struct OlapReaderStatistics {
 
     int64_t runtime_stats_filtered = 0;
 
-    // for lake tablet
-    int64_t io_ns_from_local_disk = 0;
-    int64_t compressed_bytes_from_local_disk = 0;
+    // ------ for lake tablet ------
     int64_t pages_from_local_disk = 0;
+
+    int64_t compressed_bytes_read_local_disk = 0;
+    int64_t compressed_bytes_read_remote = 0;
+    // bytes read requested from be, same as compressed_bytes_read for local tablet
+    int64_t compressed_bytes_read_request = 0;
+
+    int64_t io_count = 0;
+    int64_t io_count_local_disk = 0;
+    int64_t io_count_remote = 0;
+    int64_t io_count_request = 0;
+
+    int64_t io_ns_local_disk = 0;
+    int64_t io_ns_remote = 0;
+    // ------ for lake tablet ------
 };
 
+const char* const kBytesReadLocalDisk = "bytes_read_local_disk";
+const char* const kBytesReadRemote = "bytes_read_remote";
+const char* const kIOCountLocalDisk = "io_count_local_disk";
+const char* const kIOCountRemote = "io_count_remote";
+const char* const kIONsLocalDisk = "io_ns_local_disk";
+const char* const kIONsRemote = "io_ns_remote";
+
 typedef uint32_t ColumnId;
+typedef int32_t ColumnUID;
 // Column unique id set
 typedef std::set<uint32_t> UniqueIdSet;
 // Column unique Id -> column id map

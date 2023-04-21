@@ -98,6 +98,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 
     _get_rowsets_timer = ADD_TIMER(_runtime_profile, "GetRowsets");
     _get_delvec_timer = ADD_TIMER(_runtime_profile, "GetDelVec");
+    _get_delta_column_group_timer = ADD_TIMER(_runtime_profile, "GetDeltaColumnGroup");
 
     // SegmentInit
     _seg_init_timer = ADD_TIMER(_runtime_profile, "SegmentInit");
@@ -159,7 +160,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.skip_aggregation = skip_aggregation;
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
-    _params.use_page_cache = !config::disable_storage_page_cache;
+    _params.use_page_cache = _runtime_state->use_page_cache();
     if (thrift_olap_scan_node.__isset.sorted_by_keys_per_tablet) {
         _params.sorted_by_keys_per_tablet = thrift_olap_scan_node.sorted_by_keys_per_tablet;
     }
@@ -392,7 +393,7 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
 
     COUNTER_UPDATE(_io_timer, _reader->stats().io_ns);
-    COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
+    COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read_request);
     COUNTER_UPDATE(_decompress_timer, _reader->stats().decompress_ns);
     COUNTER_UPDATE(_read_uncompressed_counter, _reader->stats().uncompressed_bytes_read);
     COUNTER_UPDATE(_bytes_read_counter, _reader->stats().bytes_read);
@@ -405,6 +406,7 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_chunk_copy_timer, _reader->stats().vec_cond_chunk_copy_ns);
     COUNTER_UPDATE(_get_rowsets_timer, _reader->stats().get_rowsets_ns);
     COUNTER_UPDATE(_get_delvec_timer, _reader->stats().get_delvec_ns);
+    COUNTER_UPDATE(_get_delta_column_group_timer, _reader->stats().get_delta_column_group_ns);
     COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
 
     COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);

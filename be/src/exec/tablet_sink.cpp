@@ -196,6 +196,13 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
                         std::vector<PTabletWithPartition>& tablets, bool incremental_open) {
     PTabletWriterOpenRequest request;
     request.set_merge_condition(_parent->_merge_condition);
+    if (_parent->_partial_update_mode == TPartialUpdateMode::type::ROW_MODE) {
+        request.set_partial_update_mode(PartialUpdateMode::ROW_MODE);
+    } else if (_parent->_partial_update_mode == TPartialUpdateMode::type::AUTO_MODE) {
+        request.set_partial_update_mode(PartialUpdateMode::AUTO_MODE);
+    } else if (_parent->_partial_update_mode == TPartialUpdateMode::type::COLUMN_MODE) {
+        request.set_partial_update_mode(PartialUpdateMode::COLUMN_MODE);
+    }
     request.set_allocated_id(&_parent->_load_id);
     request.set_index_id(index_id);
     request.set_txn_id(_parent->_txn_id);
@@ -907,6 +914,7 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
     DCHECK(t_sink.__isset.olap_table_sink);
     const auto& table_sink = t_sink.olap_table_sink;
     _merge_condition = table_sink.merge_condition;
+    _partial_update_mode = table_sink.partial_update_mode;
     _load_id.set_hi(table_sink.load_id.hi);
     _load_id.set_lo(table_sink.load_id.lo);
     _txn_id = table_sink.txn_id;
@@ -1960,9 +1968,9 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         // update_column for auto increment column.
         if (_has_auto_increment && _auto_increment_slot_id == desc->id() && column_ptr->is_nullable()) {
             auto* nullable = down_cast<NullableColumn*>(column_ptr.get());
-            // If _null_expr_in_auto_increment == true, it means that user specify a null value in auto
-            // increment column, we abort the entire chunk and append a single error msg. Because be know
-            // nothing about whether this row is specified by the user as null or setted during planning.
+            // If nullable->has_null() && _null_expr_in_auto_increment == true, it means that user specify a
+            // null value in auto increment column, we abort the entire chunk and append a single error msg.
+            // Because be know nothing about whether this row is specified by the user as null or setted during planning.
             if (nullable->has_null() && _null_expr_in_auto_increment) {
                 std::stringstream ss;
                 ss << "NULL value in auto increment column '" << desc->col_name() << "'";

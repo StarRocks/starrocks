@@ -129,16 +129,16 @@ CREATE EXTERNAL TABLE elastic_search_external_table
 )
 ENGINE=ELASTICSEARCH
 PROPERTIES (
-    "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
+    "hosts" = "http://192.168.0.1:9200,http://192.168.0.2:9200",
     "user" = "root",
     "password" = "root",
     "index" = "tindex",
-    "type" = "doc",
+    "type" = "_doc",
     "es.net.ssl" = "true"
 );
 ~~~
 
-The followint table describes the parameters.
+The following table describes the parameters.
 
 | **Parameter**        | **Required** | **Default value** | **Description**                                              |
 | -------------------- | ------------ | ----------------- | ------------------------------------------------------------ |

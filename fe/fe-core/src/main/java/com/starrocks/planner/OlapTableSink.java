@@ -48,6 +48,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
@@ -88,6 +89,7 @@ import com.starrocks.thrift.TOlapTableSink;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.transaction.TransactionState;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -122,6 +124,7 @@ public class OlapTableSink extends DataSink {
     private boolean missAutoIncrementColumn;
     private int autoIncrementSlotId;
     private boolean enableAutomaticPartition;
+    private TPartialUpdateMode partialUpdateMode;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -154,6 +157,7 @@ public class OlapTableSink extends DataSink {
                 }
             }
         }
+        this.partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
     }
 
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS)
@@ -173,7 +177,8 @@ public class OlapTableSink extends DataSink {
         }
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
-        tSink.setIs_lake_table(dstTable.isCloudNativeTableOrMaterializedView());
+        tSink.setIs_lake_table(dstTable.isCloudNativeTableOrMaterializedView() || 
+                dstTable.isOlapExternalTable() && ((ExternalOlapTable)dstTable).isSourceTableCloudNativeTableOrMaterializedView());
         tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tSink.setWrite_quorum_type(writeQuorum);
         tSink.setEnable_replicated_storage(enableReplicatedStorage);
@@ -199,6 +204,10 @@ public class OlapTableSink extends DataSink {
 
     public void updateLoadId(TUniqueId newLoadId) {
         tDataSink.getOlap_table_sink().setLoad_id(newLoadId);
+    }
+
+    public void setPartialUpdateMode(TPartialUpdateMode mode) {
+        this.partialUpdateMode = mode;
     }
 
     public void complete(String mergeCondition) throws UserException {
@@ -228,6 +237,7 @@ public class OlapTableSink extends DataSink {
         tSink.setPartition(createPartition(tSink.getDb_id(), dstTable));
         tSink.setLocation(createLocation(dstTable));
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(clusterId));
+        tSink.setPartial_update_mode(this.partialUpdateMode);
     }
 
     @Override

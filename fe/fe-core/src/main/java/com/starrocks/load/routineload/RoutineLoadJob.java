@@ -172,6 +172,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected int desireTaskConcurrentNum; // optional
     protected JobState state = JobState.NEED_SCHEDULE;
     protected LoadDataSourceType dataSourceType;
+    protected double maxFilterRatio = 1;
     // max number of error data in max batch rows * 10
     // maxErrorNum / (maxBatchRows * 10) = max error rate of routine load job
     // if current error rate is more than max error rate, the job will be paused
@@ -300,6 +301,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (stmt.getMaxErrorNum() != -1) {
             this.maxErrorNum = stmt.getMaxErrorNum();
         }
+        this.maxFilterRatio = stmt.getMaxFilterRatio();
         if (stmt.getMaxBatchIntervalS() != -1) {
             this.taskSchedIntervalS = stmt.getMaxBatchIntervalS();
         }
@@ -308,6 +310,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         }
         jobProperties.put(LoadStmt.LOG_REJECTED_RECORD_NUM, String.valueOf(stmt.getLogRejectedRecordNum()));
         jobProperties.put(LoadStmt.PARTIAL_UPDATE, String.valueOf(stmt.isPartialUpdate()));
+        jobProperties.put(LoadStmt.PARTIAL_UPDATE_MODE, String.valueOf(stmt.getPartialUpdateMode()));
         jobProperties.put(LoadStmt.TIMEZONE, stmt.getTimezone());
         jobProperties.put(LoadStmt.STRICT_MODE, String.valueOf(stmt.isStrictMode()));
         if (stmt.getMergeConditionStr() != null) {
@@ -539,8 +542,16 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         return Boolean.valueOf(value);
     }
 
+    public String getPartialUpdateMode() {
+        return jobProperties.get(LoadStmt.PARTIAL_UPDATE_MODE);
+    }
+
     public RoutineLoadProgress getProgress() {
         return progress;
+    }
+
+    public double getMaxFilterRatio() {
+        return maxFilterRatio;
     }
 
     public long getMaxBatchRows() {
@@ -1079,6 +1090,17 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
         routineLoadTaskInfo.setTxnStatus(txnStatus);
 
+        if (TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr) == 
+                                            TransactionState.TxnStatusChangeReason.FILTERED_ROWS) {
+            updateState(JobState.PAUSED,
+                        new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, txnStatusChangeReasonStr),
+                        false /* not replay */);
+            LOG.warn(
+                    "routine load task [job name {}, task id {}] aborted because of {}, change state to PAUSED",
+                     name, routineLoadTaskInfo.getId().toString(), txnStatusChangeReasonStr);
+            return;
+        }
+
         if (state == JobState.RUNNING) {
             if (txnStatus == TransactionStatus.ABORTED) {
                 RoutineLoadTaskInfo newRoutineLoadTaskInfo = unprotectRenewTask(
@@ -1416,6 +1438,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             jobProperties.put("rowDelimiter", rowDelimiter == null ? "\t" : rowDelimiter.toString());
         }
         jobProperties.put("maxErrorNum", String.valueOf(maxErrorNum));
+        jobProperties.put("maxFilterRatio", String.valueOf(maxFilterRatio));
         jobProperties.put("maxBatchIntervalS", String.valueOf(taskSchedIntervalS));
         jobProperties.put("maxBatchRows", String.valueOf(maxBatchRows));
         jobProperties.put("currentTaskConcurrentNum", String.valueOf(currentTaskConcurrentNum));
@@ -1673,6 +1696,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY)) {
             this.maxErrorNum = Long.parseLong(
                     copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY));
+        }
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+            this.maxFilterRatio = Double.parseDouble(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY));
         }
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY)) {
             this.taskSchedIntervalS = Long.parseLong(

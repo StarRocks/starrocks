@@ -49,7 +49,6 @@
 #include "util/logging.h"
 
 using starrocks::PageBuilderOptions;
-using starrocks::PageDecoderOptions;
 
 namespace starrocks {
 
@@ -92,8 +91,7 @@ public:
         typedef typename TypeTraits<Type>::CppType CppType;
         OwnedSlice s = rle_encode<Type>(src, size);
 
-        PageDecoderOptions decodeder_options;
-        RlePageDecoder<Type> rle_page_decoder(s.slice(), decodeder_options);
+        RlePageDecoder<Type> rle_page_decoder(s.slice());
         Status status = rle_page_decoder.init();
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, rle_page_decoder.current_index());
@@ -128,8 +126,7 @@ public:
         typedef typename TypeTraits<Type>::CppType CppType;
         OwnedSlice s = rle_encode<Type>(src, size);
 
-        PageDecoderOptions decodeder_options;
-        RlePageDecoder<Type> rle_page_decoder(s.slice(), decodeder_options);
+        RlePageDecoder<Type> rle_page_decoder(s.slice());
         Status status = rle_page_decoder.init();
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, rle_page_decoder.current_index());

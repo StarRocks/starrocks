@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
@@ -393,8 +394,12 @@ public class SelectAnalyzer {
         AnalyzerUtils.verifyNoWindowFunctions(predicate, "WHERE");
         AnalyzerUtils.verifyNoGroupingFunctions(predicate, "WHERE");
 
-        if (!predicate.getType().matchesType(Type.BOOLEAN) && !predicate.getType().matchesType(Type.NULL)) {
-            throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s", predicate.getType());
+        if (predicate.getType().isBoolean() || predicate.getType().isNull()) {
+            // do nothing
+        } else if (!session.getSessionVariable().isEnableStrictType() && Type.canCastTo(predicate.getType(), Type.BOOLEAN)) {
+            predicate = new CastExpr(Type.BOOLEAN, predicate);
+        } else {
+            throw new SemanticException("WHERE clause %s can not be converted to boolean type", predicate.toSql());
         }
 
         analyzeState.setPredicate(predicate);
@@ -552,7 +557,7 @@ public class SelectAnalyzer {
 
     // If alias is same with table column name, we directly use table name.
     // otherwise, we use output expression according to the alias
-    private static class RewriteAliasVisitor extends AstVisitor<Expr, Void> {
+    public static class RewriteAliasVisitor extends AstVisitor<Expr, Void> {
         private final Scope sourceScope;
         private final Scope outputScope;
         private final List<Expr> outputExprs;

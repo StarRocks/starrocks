@@ -858,43 +858,28 @@ public class DDLStmtExecutor {
 
         @Override
         public ShowResultSet visitCreateWarehouseStatement(CreateWarehouseStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getWarehouseMgr().createWarehouse(stmt);
-            });
-            return null;
+            throw new RuntimeException(new DdlException("unsupported statement"));
         }
 
         @Override
         public ShowResultSet visitAlterWarehouseStatement(AlterWarehouseStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getWarehouseMgr().alterWarehouse(stmt);
-            });
-            return null;
+            throw new RuntimeException(new DdlException("unsupported statement"));
         }
 
         @Override
         public ShowResultSet visitSuspendWarehouseStatement(SuspendWarehouseStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getWarehouseMgr().suspendWarehouse(stmt);
-            });
-            return null;
+            throw new RuntimeException(new DdlException("unsupported statement"));
         }
 
         @Override
         public ShowResultSet visitResumeWarehouseStatement(ResumeWarehouseStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getWarehouseMgr().resumeWarehouse(stmt);
-            });
-            return null;
+            throw new RuntimeException(new DdlException("unsupported statement"));
         }
 
 
         @Override
         public ShowResultSet visitDropWarehouseStatement(DropWarehouseStmt stmt, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getWarehouseMgr().dropWarehouse(stmt);
-            });
-            return null;
+            throw new RuntimeException(new DdlException("unsupported statement"));
         }
 
         @Override
@@ -905,7 +890,6 @@ public class DDLStmtExecutor {
                 throw new RuntimeException(e);
             }
         }
-
     }
 
 }

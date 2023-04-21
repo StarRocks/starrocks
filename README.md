@@ -1,4 +1,5 @@
 
+ <img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=e8355b6b-a9fc-4d4e-8ed8-b3157aa1827d" />
  <p align="center">
  <a href="https://starrocks.io/index">
     <img  width="900" src="https://cdn.starrocks.io/static/github/starrocks.png">
@@ -115,11 +116,3 @@ This project is used by the following companies. Learn more about their use case
 - [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8) 
 - [Zepp Health](https://starrocks.io/blog/zeppheath) 
 - [Lenovo](https://starrocks.io/blog/lenovo_en) 
-
-<br>
-
-## Acknowledgment
-
-StarRocks is built upon Apache® Doris™ 0.13 in early 2020. We have recreated many important parts of the database including a full vectorized execution engine, a brand new CBO optimizer, a novel real-time update engine, and query federation for data lakes. 
-
-Today, only less than 20% of the code in StarRocks is from Apache® Doris™.

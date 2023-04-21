@@ -2100,6 +2100,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static int lake_compaction_max_tasks = -1;
 
+    @ConfField(mutable = true)
+    public static int lake_compaction_history_size = 12;
+
+    @ConfField(mutable = true)
+    public static int lake_compaction_fail_history_size = 12;
+
     @ConfField
     public static int experimental_lake_publish_version_threads = 16;
 
@@ -2190,6 +2196,18 @@ public class Config extends ConfigBase {
     public static long binlog_max_size = Long.MAX_VALUE; // no limit
 
     /**
+     * Enable check if the cluster is under safe mode or not
+     **/
+    @ConfField(mutable = true)
+    public static boolean enable_safe_mode = false;
+
+    /**
+     * The safe mode checker thread work interval
+     */
+    @ConfField(mutable = true)
+    public static long safe_mode_checker_interval_sec = 5;
+
+    /**
      * Enable auto create tablet when creating table and add partition
      **/
     @ConfField(mutable = true)
@@ -2199,7 +2217,7 @@ public class Config extends ConfigBase {
      * default size of minimum cache size of auto increment id allocation
      **/
     @ConfField(mutable = true)
-    public static long auto_increment_cache_size = 100000;
+    public static int auto_increment_cache_size = 100000;
 
     /**
      * Enable the experimental temporary table feature
