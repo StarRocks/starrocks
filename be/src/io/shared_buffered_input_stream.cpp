@@ -19,10 +19,6 @@
 namespace starrocks::io {
 
 SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream,
-<<<<<<< HEAD
-                                                     const std::string& filename, size_t size)
-        : _stream(stream), _size(size) {}
-=======
                                                      const std::string& filename, size_t file_size)
         : _stream(stream), _filename(filename), _file_size(file_size) {}
 
@@ -36,7 +32,6 @@ void SharedBufferedInputStream::SharedBuffer::align(int64_t align_size, int64_t 
         size = raw_size;
     }
 }
->>>>>>> fb2c98068 ([BugFix] fix shared buffer io coalesce (#20384))
 
 Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& ranges) {
     if (ranges.size() == 0) {
@@ -172,7 +167,7 @@ StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
     if (ret->buffer.capacity() == 0) return Status::NotSupported("peek shared buffer empty");
     const uint8_t* buf = nullptr;
     RETURN_IF_ERROR(_get_bytes(&buf, _offset, count));
-    return std::string_view((const char*)buf, count);    
+    return std::string_view((const char*)buf, count);
 }
 
 } // namespace starrocks::io
