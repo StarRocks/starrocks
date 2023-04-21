@@ -160,7 +160,7 @@ jobs:
         id: update-image
         run: |
           set -ex
-          if [[ ${{ needs.be-checker.outputs.output2 }} == 'true' ]]; then
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
             rm -rf ./elastic-service
             cp -rf /var/lib/elastic-service ./elastic-service
             cd elastic-service && git pull
@@ -168,7 +168,7 @@ jobs:
             ip=$(grep hosts conf/starrocks_deploy.conf | head -n 1 | awk '{print $NF}')
             instance_id=$(grep instances conf/starrocks_deploy.conf | head -n 1 | awk '{print $NF}')
             echo "ip=${ip}" >> $GITHUB_OUTPUT
-            echo "instance_id=${instance_id}" >> $GITHUB_OUTPUTs
+            echo "instance_id=${instance_id}" >> $GITHUB_OUTPUT
             sudo ssh-keygen -f "/root/.ssh/known_hosts" -R "${ip}" || true
             sshpass -p ${{ secrets.PASSWORD }} scp -o StrictHostKeyChecking=no -r bin/elastic-build-thirdparty.sh root@$ip:/home/disk1/
             sshpass -p ${{ secrets.PASSWORD }} ssh -o StrictHostKeyChecking=no root@$ip "cd /home/disk1; ./elastic-build-thirdparty.sh $BRANCH $PR_NUMBER"
@@ -207,7 +207,7 @@ jobs:
           rm -rf ./elastic-service
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
-          if [[ ${{ needs.be-checker.outputs.output2 }} == 'true' ]]; then
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
@@ -435,7 +435,7 @@ jobs:
           rm -rf ./elastic-service
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
-          if [[ ${{ needs.be-checker.outputs.output2 }} == 'true' ]]; then
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
