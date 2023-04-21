@@ -170,6 +170,7 @@ jobs:
             instance_id=$(grep instances conf/starrocks_deploy.conf | head -n 1 | awk '{print $NF}')
             echo "ip=${ip}" >> $GITHUB_OUTPUT
             echo "instance_id=${instance_id}" >> $GITHUB_OUTPUT
+            sleep 30
             sudo ssh-keygen -f "/root/.ssh/known_hosts" -R "${ip}" || true
             sshpass -p ${{ secrets.PASSWORD }} scp -o StrictHostKeyChecking=no -r bin/elastic-build-thirdparty.sh root@$ip:/home/disk1/
             sshpass -p ${{ secrets.PASSWORD }} ssh -o StrictHostKeyChecking=no root@$ip "cd /home/disk1; ./elastic-build-thirdparty.sh $BRANCH $PR_NUMBER"
@@ -181,8 +182,10 @@ jobs:
       - name: Clean ENV
         if: always()
         run: |
-          cd elastic-service
-          python3 lib/ecs_lib.py delete_instances conf/starrocks_deploy.conf
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+              cd elastic-service
+              python3 lib/ecs_lib.py delete_instances conf/starrocks_deploy.conf
+          fi
 
   be-ut:
     runs-on: self-hosted
