@@ -46,7 +46,6 @@ import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.MultiCastDataSink;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.OlapScanNode;
-import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
@@ -1744,9 +1743,9 @@ public class CoordinatorPreprocessor {
                 if (forceSetTableSinkDop) {
                     DataSink dataSink = fragment.getSink();
                     int dop = fragment.getPipelineDop();
-                    if (dataSink instanceof OlapTableSink) {
+                    if (!(dataSink instanceof IcebergTableSink)) {
                         curTableSinkDop = dop;
-                    } else if (dataSink instanceof IcebergTableSink) {
+                    } else {
                         int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();
                         if (sessionVarSinkDop > 0) {
                             curTableSinkDop = Math.min(dop, sessionVarSinkDop);
