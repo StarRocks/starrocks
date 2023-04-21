@@ -588,8 +588,6 @@ public class Coordinator {
             int backendId = 0;
             int profileFragmentId = 0;
 
-            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
-
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
                 CoordinatorPreprocessor.FragmentExecParams params =
@@ -866,8 +864,6 @@ public class Coordinator {
             // execute all instances from up to bottom
             int backendNum = 0;
             int profileFragmentId = 0;
-
-            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
 
             this.descTable.setIs_cached(false);
             TDescriptorTable emptyDescTable = new TDescriptorTable();
