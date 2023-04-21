@@ -481,7 +481,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             BasePartitionInfo basePartitionInfo = versionEntry.getValue();
             if (basePartitionInfo == null
                     || basePartitionInfo.getId() != basePartition.getId()
-                    || basePartition.getVisibleVersion() > basePartitionInfo.getVersion()) {
+                    || (basePartitionInfo.getVersion() != -1
+                    && basePartition.getVisibleVersion() > basePartitionInfo.getVersion())) {
                 result.add(basePartitionName);
             }
         }
