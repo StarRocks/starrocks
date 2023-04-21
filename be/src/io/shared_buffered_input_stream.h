@@ -86,6 +86,7 @@ private:
     StatusOr<SharedBuffer*> _find_shared_buffer(size_t offset, size_t count);
     Status _read_stream_buffer(SharedBuffer& sb, size_t offset, size_t count);
     std::shared_ptr<SeekableInputStream> _stream;
+    std::string _filename;
     std::map<int64_t, SharedBuffer> _map;
     CoalesceOptions _options;
     int64_t _offset = 0;
