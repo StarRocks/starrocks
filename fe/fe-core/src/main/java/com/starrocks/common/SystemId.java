@@ -93,4 +93,6 @@ public class SystemId {
     public static final long BE_LOGS_ID = 37L;
 
     public static final long BE_BVARS_ID = 38L;
+
+    public static final long BE_CLOUD_NATIVE_COMPACTIONS = 39L;
 }
