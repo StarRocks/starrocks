@@ -173,6 +173,7 @@ StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
     const uint8_t* buf = nullptr;
     RETURN_IF_ERROR(_get_bytes(&buf, _offset, count));
     return std::string_view((const char*)buf, count);
+    
 }
 
 } // namespace starrocks::io
