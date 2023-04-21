@@ -99,8 +99,8 @@ ClusterDecommissioned: false
 | DataUsedPct           | Percentage at which the data storage takes up the total data capacity (DataUsedCapacity/DataTotalCapacity). |
 | CpuCores              | Number of CPU cores in the BE node.                          |
 | NumRunningQueries     | The number of queries currently running in the cluster.      |
-| MemUsedPct            | The memory usage percentage.                                 |
-| CpuUsedPct            | The CPU usage percentage.                                    |
+| MemUsedPct            | The current memory usage percentage.                                 |
+| CpuUsedPct            | The current CPU usage percentage.                                    |
 
 Example 2: Shows the information of databases in the cluster.
 
