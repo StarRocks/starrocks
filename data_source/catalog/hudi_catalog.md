@@ -197,7 +197,7 @@ StarRocks 访问 Hudi 集群文件存储的相关参数配置。
 
 ##### 兼容 S3 协议的对象存储
 
-如果选择兼容 S3 协议的对象存储（如 MinIO）作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择兼容 S3 协议的对象存储（如 MinIO）作为 Hudi 集群的文件存储，请按如下配置 `StorageCredentialParams`：
 
 ```SQL
 "aws.s3.enable_ssl" = "<true | false>",
