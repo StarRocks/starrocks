@@ -21,7 +21,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.ExecPlan;
@@ -94,6 +93,10 @@ public class StatisticsSQLTest extends PlanTestBase {
 
         String sql = job.buildSampleInsertSQL(db.getId(), t0StatsTableId, columnNames, 200);
         starRocksAssert.useDatabase("_statistics_");
+        String except = String.format("SELECT %s, '%s', %s, '%s', '%s'",
+                t0.getId(), "v3", db.getId(), "test.stat0", "test");
+        assertCContains(sql, except);
+
         String plan = getFragmentPlan(sql);
 
         Assert.assertEquals(3, StringUtils.countMatches(plan, "OlapScanNode"));
@@ -127,7 +130,7 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testEscapeFullSQL() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("escape0['abc']");
+        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("escape0['abc']");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         List<Long> pids = t0.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
@@ -151,7 +154,7 @@ public class StatisticsSQLTest extends PlanTestBase {
 
     @Test
     public void testEscapeSampleSQL() throws Exception {
-        Table t0 = GlobalStateMgr.getCurrentState().getDb("test").getTable("escape0['abc']");
+        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("escape0['abc']");
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
 
         List<String> columnNames = t0.getColumns().stream().map(Column::getName).collect(Collectors.toList());
