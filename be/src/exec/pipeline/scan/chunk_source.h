@@ -54,6 +54,7 @@ public:
 
     // Counters of scan
     int64_t get_cpu_time_spent() const { return _cpu_time_spent_ns; }
+    int64_t get_io_time_spent() const { return _io_time_spent_ns; }
     int64_t get_scan_rows() const { return _scan_rows_num; }
     int64_t get_scan_bytes() const { return _scan_bytes; }
 
@@ -90,6 +91,7 @@ protected:
     int64_t _cpu_time_spent_ns = 0;
     int64_t _scan_rows_num = 0;
     int64_t _scan_bytes = 0;
+    int64_t _io_time_spent_ns = 0;
 
     BalancedChunkBuffer& _chunk_buffer;
     Status _status = Status::OK();

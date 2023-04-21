@@ -546,4 +546,9 @@ int64_t HiveDataSource::cpu_time_spent() const {
     return _scanner->cpu_time_spent();
 }
 
+int64_t HiveDataSource::io_time_spent() const {
+    if (_scanner == nullptr) return 0;
+    return _scanner->io_time_spent();
+}
+
 } // namespace starrocks::connector

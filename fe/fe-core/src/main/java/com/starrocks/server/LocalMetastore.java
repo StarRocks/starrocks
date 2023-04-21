@@ -2663,6 +2663,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // create columns
         List<Column> baseSchema = stmt.getMvColumnItems();
         validateColumns(baseSchema);
+
         // create partition info
         PartitionInfo partitionInfo = buildPartitionInfo(stmt);
         // create distribution info
