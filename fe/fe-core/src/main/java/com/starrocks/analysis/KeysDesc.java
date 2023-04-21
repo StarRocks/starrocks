@@ -189,7 +189,7 @@ public class KeysDesc implements ParseNode, Writable {
         }
     }
 
-    public void checkColumnDefs(List<ColumnDef> cols) {
+    public void checkColumnDefs(List<ColumnDef> cols, List<Integer> sortKeyIdxes) {
         if (type == null) {
             throw new SemanticException("Keys type is null.");
         }
@@ -236,6 +236,16 @@ public class KeysDesc implements ParseNode, Writable {
                     throw new SemanticException(type.name() + " table should not specify aggregate type for "
                             + "non-key column[%s]", cols.get(i).getName());
                 }
+            }
+        }
+
+        for (int i = 0; i < sortKeyIdxes.size(); i++) {
+            String name = cols.get(sortKeyIdxes.get(i)).getName();
+            ColumnDef cd = cols.get(sortKeyIdxes.get(i));
+            Type t = cd.getType();
+            if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
+                    t.isDatetime())) {
+                throw new SemanticException("sort key column[" + name + "] type not supported: " + t.toSql());
             }
         }
     }
