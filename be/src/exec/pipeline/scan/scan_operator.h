@@ -77,9 +77,12 @@ public:
     void set_query_ctx(const QueryContextPtr& query_ctx);
 
     virtual int available_pickup_morsel_count() { return _io_tasks_per_scan_operator; }
-    virtual void begin_pull_chunk(ChunkPtr res) {}
+    void begin_pull_chunk(ChunkPtr res) {
+        _op_pull_chunks += 1;
+        _op_pull_rows += res->num_rows();
+    }
+    void end_pull_chunk(int64_t time) { _op_running_time_ns += time; }
     virtual void begin_driver_process() {}
-    virtual void end_pull_chunk(int64_t time) {}
     virtual void end_driver_process(PipelineDriver* driver) {}
     virtual bool is_running_all_io_tasks() const;
 
@@ -156,6 +159,10 @@ protected:
     RuntimeProfile::Counter* _morsels_counter = nullptr;
     RuntimeProfile::Counter* _buffer_unplug_counter = nullptr;
     RuntimeProfile::Counter* _submit_task_counter = nullptr;
+
+    int64_t _op_pull_chunks = 0;
+    int64_t _op_pull_rows = 0;
+    int64_t _op_running_time_ns = 0;
 
 private:
     int32_t _io_task_retry_cnt = 0;

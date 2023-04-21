@@ -175,6 +175,8 @@ int64_t SharedBufferedInputStream::estimated_mem_usage() const {
     for (const auto& [_, sb] : _map) {
         mem_usage += sb.size;
     }
+    // add 50% overhead
+    mem_usage += mem_usage / 2;
     return mem_usage;
 }
 
