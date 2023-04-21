@@ -47,7 +47,7 @@ WITH BROKER
     - `column_separator`: specifies the exported column separator, defaulting to `t`.
     - `line_delimiter`: specifies the exported line separator, defaulting to `\n`.
     - `exec_mem_limit`: specifies the upper limit of memory usage for export jobs on a single BE node, defaulting to 2 GB in bytes.
-    - `timeout`：specifies the time-out period for export jobs, defaulting to 1 day in seconds.
+    - `timeout`: specifies the time-out period for export jobs, defaulting to 1 day in seconds.
     - `include_query_id`: specifies whether the exported file name contains query ID, defaulting to `true`.
 
 5. broker

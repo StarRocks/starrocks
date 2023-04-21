@@ -18,7 +18,7 @@ WHERE
 [LIMIT limit]
 ```
 
-Note：
+Note:
 
 ```plain text
 1. 1. If db_ name is not specified, use the current default db

@@ -230,7 +230,7 @@ For more information about how to create a ClickHouse table and import data to t
       be_heartbeat_port: 9050
       broker_port: 8000
 
-    # parallel_fragment_exec_instance_num 设置并行度,建议是每个集群节点逻辑核数的一半,以下以8为例
+    # parallel_fragment_exec_instance_num Set the parallelism. The recommended value is half the number of logical cores of each cluster node. Use 8 for example.
       parallel_num: 8
     ...
     ```
