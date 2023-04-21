@@ -38,6 +38,8 @@ public:
 
     DEFINE_VECTORIZED_FN(map_filter);
 
+    DEFINE_VECTORIZED_FN(flat_map);
+
 private:
     static void _filter_map_items(const MapColumn* src_column, const ColumnPtr raw_filter, MapColumn* dest_column,
                                   NullColumn* dest_null_map);

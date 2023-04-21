@@ -453,4 +453,80 @@ PARALLEL_TEST(MapFunctionsTest, test_map_filter_int_nullable) {
     }
 }
 
+PARALLEL_TEST(MapFunctionsTest, test_flat_map) {
+    TypeDescriptor type_map_int_int;
+    type_map_int_int.type = LogicalType::TYPE_MAP;
+    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+
+    auto map_column_nullable = ColumnHelper::create_column(type_map_int_int, true);
+    {
+        //   [1->44, 2->55, 4->66]
+        //   [2->77, 3->88]
+        //   [3 -> NULL]
+        //   []
+        //   NULL
+        DatumMap map1;
+        map1[(int32_t)1] = (int32_t)44;
+        map1[(int32_t)2] = (int32_t)55;
+        map1[(int32_t)4] = (int32_t)66;
+        map_column_nullable->append_datum(map1);
+
+        DatumMap map2;
+        map2[(int32_t)2] = (int32_t)77;
+        map2[(int32_t)3] = (int32_t)88;
+        map_column_nullable->append_datum(map2);
+
+        DatumMap map3;
+        map3[(int32_t)3] = Datum();
+        map_column_nullable->append_datum(map3);
+
+        // {} empty
+        map_column_nullable->append_datum(DatumMap());
+        // NULL
+        map_column_nullable->append_datum(Datum{});
+    }
+
+    auto map_column_not_nullable = ColumnHelper::create_column(type_map_int_int, false);
+    {
+        //   [1->44, 2->55, 4->66]
+        //   [2->77, 3->88]
+        //   [3 -> NULL]
+        //   []
+        //   []
+        DatumMap map1;
+        map1[(int32_t)1] = (int32_t)44;
+        map1[(int32_t)2] = (int32_t)55;
+        map1[(int32_t)4] = (int32_t)66;
+        map_column_not_nullable->append_datum(map1);
+
+        DatumMap map2;
+        map2[(int32_t)2] = (int32_t)77;
+        map2[(int32_t)3] = (int32_t)88;
+        map_column_not_nullable->append_datum(map2);
+
+        DatumMap map3;
+        map3[(int32_t)3] = Datum();
+        map_column_not_nullable->append_datum(map3);
+
+        // {} empty
+        map_column_not_nullable->append_datum(DatumMap());
+        map_column_not_nullable->append_datum(DatumMap());
+    }
+    {
+        auto result = MapFunctions::flat_map(nullptr, {map_column_nullable}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(),
+                     "[{1:44,2:55,3:NULL,4:66}, {1:NULL,2:77,3:88,4:NULL}, {1:NULL,2:NULL,3:NULL,4:NULL}, "
+                     "{1:NULL,2:NULL,3:NULL,4:NULL}, NULL]");
+    }
+    {
+        auto result = MapFunctions::flat_map(nullptr, {map_column_not_nullable}).value();
+        EXPECT_FALSE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(),
+                     "{1:44,2:55,3:NULL,4:66}, {1:NULL,2:77,3:88,4:NULL}, {1:NULL,2:NULL,3:NULL,4:NULL}, "
+                     "{1:NULL,2:NULL,3:NULL,4:NULL}, {1:NULL,2:NULL,3:NULL,4:NULL}");
+    }
+}
+
 } // namespace starrocks

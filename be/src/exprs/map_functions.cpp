@@ -16,6 +16,7 @@
 
 #include "column/array_column.h"
 #include "column/map_column.h"
+#include "column/struct_column.h"
 #include "common/logging.h"
 
 namespace starrocks {
@@ -283,6 +284,73 @@ void MapFunctions::_filter_map_items(const MapColumn* src_column, const ColumnPt
     }
     dest_column->keys_column()->append_selective(src_column->keys(), indexes);
     dest_column->values_column()->append_selective(src_column->values(), indexes);
+}
+
+StatusOr<ColumnPtr> MapFunctions::flat_map(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(1, columns.size());
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    size_t chunk_size = columns[0]->size();
+    ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+
+    MapColumn* col_map = nullptr;
+    NullColumnPtr null_flag = nullptr;
+    if (src_column->is_nullable()) {
+        auto nullable_col = down_cast<NullableColumn*>(src_column.get());
+        col_map = down_cast<MapColumn*>(nullable_col->data_column().get());
+        null_flag = nullable_col->null_column();
+    } else {
+        col_map = down_cast<MapColumn*>(src_column.get());
+    }
+
+    std::map<std::string, ColumnPtr> name_column_map;
+    auto& offset = col_map->offsets().get_data();
+    auto& values = col_map->values();
+    for (auto i = 0; i < chunk_size; ++i) {
+        if (null_flag == nullptr || !null_flag->get_data()[i]) {
+            for (auto idx = offset[i]; idx < offset[i + 1]; ++idx) {
+                auto name = col_map->keys().debug_item(idx);
+                auto it = name_column_map.find(name);
+                if (name_column_map.end() == it) { // new nullable column and append current value
+                    ColumnPtr field_col = col_map->values().clone_empty();
+                    NullableColumn* nullable_field = nullptr;
+                    if (!field_col->is_nullable()) {
+                        field_col = NullableColumn::create(std::move(field_col), std::move(NullColumn::create()));
+                    }
+                    nullable_field = down_cast<NullableColumn*>(field_col.get());
+                    if (i > 0) {
+                        nullable_field->append_default(i);
+                    }
+                    nullable_field->append(values, idx, 1);
+                    name_column_map[name] = field_col;
+                } else { // just append current value
+                    auto nullable_field = down_cast<NullableColumn*>(it->second.get());
+                    if (i - nullable_field->size() > 0) {
+                        nullable_field->append_default(i - nullable_field->size());
+                    }
+                    nullable_field->append(values, idx, 1);
+                }
+            }
+        }
+    }
+    Columns field_columns;
+    std::vector<std::string> field_names;
+    for (auto it = name_column_map.begin(); it != name_column_map.end(); it++) {
+        // append tails
+        auto field = it->second.get();
+        auto count = chunk_size - field->size();
+        if (count > 0) {
+            field->append_default(count);
+        }
+        // get field names and columns
+        field_names.push_back(it->first);
+        field_columns.push_back(it->second);
+    }
+    auto struct_col = StructColumn::create(std::move(field_columns), std::move(field_names));
+    if (null_flag != nullptr) {
+        return NullableColumn::create(struct_col, NullColumn::create(*null_flag));
+    }
+    return struct_col;
 }
 
 } // namespace starrocks

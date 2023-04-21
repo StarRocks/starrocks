@@ -412,6 +412,8 @@ public class FunctionSet {
     public static final String TRANSFORM_VALUES = "transform_values";
     public static final String TRANSFORM_KEYS = "transform_keys";
 
+    public static final String FLAT_MAP = "flat_map";
+
     // Struct functions:
     public static final String ROW = "row";
 
