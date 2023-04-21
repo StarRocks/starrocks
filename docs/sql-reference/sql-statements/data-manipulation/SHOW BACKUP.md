@@ -10,7 +10,7 @@ This statement is used to view BACKUP tasks
 SHOW BACKUP [FROM <db_name>]
 ```
 
-Note：
+Note:
 
 ```plain text
 1. Only the last BACKUP task is saved in StarRocks.

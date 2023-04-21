@@ -33,8 +33,8 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 Note:
 
 ```Plain%20Text
-col_name：Column name
-col_type：Column type
+col_name: Column name
+col_type: Column type
 
 
 
@@ -47,31 +47,31 @@ Specific column information, such as types and ranges:
 - HLL (1~16385 bytes): For HLL type, there's no need to specify length or default value. The length will be controlled within the system according to data aggregation. HLL column can only be queried or used by [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md), [Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md), and [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md).
 - BITMAP: Bitmap type does not require specified length or default value. It represents a set of unsigned bigint numbers. The largest element could be up to 2^64 - 1.
 
-* TINYINT（1 byte）
+* TINYINT (1 byte)
 
 Range: -2^7 + 1 ~ 2^7 - 1
 
-* SMALLINT（2 bytes）
+* SMALLINT (2 bytes )
 
 Range: -2^15 + 1 ~ 2^15 - 1
 
-* INT（4 bytes）
+* INT (4 bytes)
 
 Range: -2^31 + 1 ~ 2^31 - 1
 
-* BIGINT（8 bytes）
+* BIGINT (8 bytes)
 
 Range: -2^63 + 1 ~ 2^63 - 1
 
-* LARGEINT（16 bytes）
+* LARGEINT (16 bytes)
 
 Range: -2^127 + 1 ~ 2^127 - 1
 
-* FLOAT（4 bytes）
+* FLOAT (4 bytes)
 
 Support scientific notation 
 
-* DOUBLE（8 bytes）
+* DOUBLE (8 bytes)
 
 Support scientific notation 
 
@@ -83,21 +83,21 @@ Support scientific notation
 
  scale: 0 ~ precision
 
-Integer part：precision - scale
+Integer part: precision - scale
 
 Scientific notation is not supported 
 
-* DATE（3 bytes）
+* DATE (3 bytes)
 
 Range: 0000-01-01 ~ 9999-12-31
 
-* DATETIME（8 bytes ）
+* DATETIME (8 bytes)
 
 Range: 0000-01-01 00:00:00 ~ 9999-12-31 23:59:59
 
 * CHAR[(length)]
 
-Fixed length string. Range：1 ~ 255. Default value: 1.
+Fixed length string. Range: 1 ~ 255. Default value: 1.
 
 * VARCHAR[(length)]
 
@@ -112,24 +112,23 @@ For HLL type, there's no need to specify length or default value.
 
 The length will be controlled within the system according to data aggregation. 
 
-HLL column can only be queried or used by hll_union_agg、Hll_cardinality、hll_hash.
+HLL column can only be queried or used by hll_union_agg, Hll_cardinality, hll_hash.
 
 * BITMAP
 
  Bitmap type does not require specified length or default value. It represents a set of unsigned bigint numbers. The largest element could be up to 2^64 - 1.
-agg_type：aggregation type. If not specified, this column is key column. 
+agg_type: aggregation type. If not specified, this column is key column. 
 
 If specified, it it value column. 
 
 The aggregation types supported are as follows: 
 
-* SUM、MAX、MIN、REPLACE
-
+* SUM, MAX, MIN, REPLACE
 * HLL_UNION (only for HLL type) 
 
 * BITMAP_UNION(only for BITMAP) 
 
-* REPLACE_IF_NOT_NULL：This means the imported data will only be replaced when it is of non-null value. If it is of null value, StarRocks will retain the original value. 
+* REPLACE_IF_NOT_NULL: This means the imported data will only be replaced when it is of non-null value. If it is of null value, StarRocks will retain the original value. 
 
 Note: if NOT NULL is specified by REPLACE_IF_NOT_NULL column when the table was created, StarRocks will still convert the data to NULL without sending an error report to the user. With this, the user can import selected columns. 
 
