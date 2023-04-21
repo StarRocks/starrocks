@@ -1,16 +1,16 @@
 # DESCRIBE
 
-## description
+## Description
 
 This statement is used to display schema information for the specified table.
 
-Syntax：
+Syntax
 
 ```sql
 DESC[RIBE] [db_name.]table_name [ALL];
 ```
 
-Note：
+Note:
 
 If ALL is specified, the schema of all indexes(rollup) of the table is displayed
 
