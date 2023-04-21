@@ -2,6 +2,8 @@ comment:
   layout: "newheader, diff, flags, files, newfooter"
 codecov:
   allow_coverage_offsets: true
+github_checks:
+  annotations: false
 coverage:
   status:
     project:
