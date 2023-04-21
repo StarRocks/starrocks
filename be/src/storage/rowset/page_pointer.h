@@ -43,6 +43,7 @@
 
 namespace starrocks {
 
+
 class PagePointer {
 public:
     uint64_t offset{0};
@@ -86,5 +87,24 @@ public:
 
     bool operator!=(const PagePointer& other) const { return !(*this == other); }
 };
+
+template <typename T>
+struct OrdinalIndexPagePointer {
+    T offset = 0;
+    uint32_t size = 0;
+
+    OrdinalIndexPagePointer() = default;
+
+    void operator=(const PagePointerPB& pb) {
+        offset = pb.offset();
+        size = pb.size();
+    }
+
+    void operator=(const PagePointer& pp) {
+        offset = pp.offset;
+        size = pp.size;
+    }
+};
+
 
 } // namespace starrocks

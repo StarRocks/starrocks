@@ -36,6 +36,8 @@
 
 #include <bthread/sys_futex.h>
 
+#include <memory>
+
 #include "common/logging.h"
 #include "fs/fs.h"
 #include "storage/key_coder.h"
@@ -103,7 +105,13 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
         _num_pages = 1;
         _ordinals.push_back(0);
         _ordinals.push_back(num_values);
-        _pages.emplace_back(meta.root_page().root_page());
+        if (LIKELY(!opts.is_large_segment)) {
+            _pages = std::make_unique<OrdinalIndexPagePointer<uint32_t>[]>(1);
+            _pages[0] = meta.root_page().root_page();
+        } else {
+            _large_pages = std::make_unique<OrdinalIndexPagePointer<uint64_t>[]>(1);
+            _large_pages[0] = meta.root_page().root_page();
+        }
         return Status::OK();
     }
     // need to read index page
@@ -131,15 +139,28 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
 
     _num_pages = reader.count();
     _ordinals.resize(_num_pages + 1);
-    _pages.resize(_num_pages);
-    for (int i = 0; i < _num_pages; i++) {
-        Slice key = reader.get_key(i);
-        ordinal_t ordinal = 0;
-        RETURN_IF_ERROR(KeyCoderTraits<TYPE_UNSIGNED_BIGINT>::decode_ascending(&key, sizeof(ordinal_t),
-                                                                               (uint8_t*)&ordinal, nullptr));
+    if (LIKELY(!opts.is_large_segment)) {
+        _pages = std::make_unique<OrdinalIndexPagePointer<uint32_t>[]>(_num_pages);
+        for (int i = 0; i < _num_pages; i++) {
+            Slice key = reader.get_key(i);
+            ordinal_t ordinal = 0;
+            RETURN_IF_ERROR(KeyCoderTraits<TYPE_UNSIGNED_BIGINT>::decode_ascending(&key, sizeof(ordinal_t),
+                                                                                   (uint8_t*)&ordinal, nullptr));
 
-        _ordinals[i] = ordinal;
-        _pages[i] = reader.get_value(i);
+            _ordinals[i] = ordinal;
+            _pages[i] = reader.get_value(i);
+        }
+    } else {
+        _large_pages = std::make_unique<OrdinalIndexPagePointer<uint64_t>[]>(_num_pages);
+        for (int i = 0; i < _num_pages; i++) {
+            Slice key = reader.get_key(i);
+            ordinal_t ordinal = 0;
+            RETURN_IF_ERROR(KeyCoderTraits<TYPE_UNSIGNED_BIGINT>::decode_ascending(&key, sizeof(ordinal_t),
+                                                                                   (uint8_t*)&ordinal, nullptr));
+
+            _ordinals[i] = ordinal;
+            _large_pages[i] = reader.get_value(i);
+        }
     }
     _ordinals[_num_pages] = num_values;
     return Status::OK();
@@ -148,7 +169,8 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
 void OrdinalIndexReader::_reset() {
     _num_pages = 0;
     std::vector<ordinal_t>{}.swap(_ordinals);
-    std::vector<PagePointer>{}.swap(_pages);
+    _pages.reset();
+    _large_pages.reset();
 }
 
 OrdinalPageIndexIterator OrdinalIndexReader::seek_at_or_before(ordinal_t ordinal) {

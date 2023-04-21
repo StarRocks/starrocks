@@ -59,6 +59,7 @@ public:
     bool kept_in_memory = false;
     // for lake tablet
     bool skip_fill_local_cache = false;
+    bool is_large_segment = false;
 };
 
 } // namespace starrocks
