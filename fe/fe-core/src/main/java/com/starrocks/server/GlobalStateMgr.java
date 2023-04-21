@@ -3489,6 +3489,7 @@ public class GlobalStateMgr {
 
     public void initDefaultWarehouse() {
         warehouseMgr.initDefaultWarehouse();
+        isDefaultWarehouseCreated = true;
     }
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
