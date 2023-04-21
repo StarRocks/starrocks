@@ -15,6 +15,7 @@
 package com.starrocks.privilege;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -313,6 +314,7 @@ public class PrivilegeActions {
 
     public static boolean checkAnyActionOnOrInDb(UserIdentity userIdentity, Set<Long> roleIds,
                                                  String catalogName, String db) {
+        Preconditions.checkNotNull(db, "db should not null");
         if (checkAnyActionOnDb(userIdentity, roleIds, catalogName, db)
                 || checkAnyActionOnTable(userIdentity, roleIds, catalogName, db, "*")) {
             return true;
