@@ -5,13 +5,16 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -24,9 +27,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.commons.lang.StringEscapeUtils;
@@ -57,9 +58,9 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     private final List<Long> partitionIdList;
 
     private final List<String> sqlBuffer = Lists.newArrayList();
-    private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
+    private final List<ArrayList<Expr>> rowsBuffer = Lists.newArrayList();
 
-    public FullStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columns,
+    public FullStatisticsCollectJob(Database db, OlapTable table, List<Long> partitionIdList, List<String> columns,
                                     StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                     Map<String, String> properties) {
         super(db, table, columns, type, scheduleType, properties);
@@ -134,7 +135,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         String tableName = StringEscapeUtils.escapeSql(db.getOriginName() + "." + table.getName());
         for (TStatisticData data : dataList) {
             List<String> params = Lists.newArrayList();
-            List<Expr> row = Lists.newArrayList();
+            ArrayList<Expr> row = Lists.newArrayList();
 
             String partitionName = StringEscapeUtils.escapeSql(table.getPartition(data.getPartitionId()).getName());
 
@@ -175,7 +176,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     private void flushInsertStatisticsData(ConnectContext context, boolean force) throws Exception {
         // hll serialize to hex, about 32kb
         long bufferSize = 33L * 1024 * rowsBuffer.size();
-        if (bufferSize < Config.statistics_full_collect_buffer && !force) {
+        if (bufferSize < Config.statistic_full_collect_buffer && !force) {
             return;
         }
         if (rowsBuffer.isEmpty()) {

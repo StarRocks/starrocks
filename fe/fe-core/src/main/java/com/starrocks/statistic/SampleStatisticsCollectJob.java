@@ -10,7 +10,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.MetaUtils;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.velocity.VelocityContext;
 
@@ -24,12 +23,13 @@ import java.util.stream.Collectors;
 public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
     private static final String INSERT_SELECT_METRIC_SAMPLE_TEMPLATE =
-            "SELECT $tableId, '$columnNameStr', $dbId, '$tableNameStr', '$dbNameStr', COUNT(1) * $ratio, "
+            "SELECT $tableId, '$columnNameStr', $dbId, '$dbNameStr.$tableNameStr', '$dbNameStr', COUNT(1) * $ratio, "
                     + "$dataSize * $ratio, 0, 0, '', '', NOW() "
                     + "FROM (SELECT `$columnName` as column_key FROM `$dbName`.`$tableName` $hints ) as t ";
 
     private static final String INSERT_SELECT_TYPE_SAMPLE_TEMPLATE =
-            "SELECT $tableId, '$columnNameStr', $dbId, '$tableNameStr', '$dbNameStr', IFNULL(SUM(t1.count), 0) * $ratio, "
+            "SELECT $tableId, '$columnNameStr', $dbId, '$dbNameStr.$tableNameStr', '$dbNameStr', "
+                    + "       IFNULL(SUM(t1.count), 0) * $ratio, "
                     + "       $dataSize * $ratio, $countDistinctFunction, "
                     + "       IFNULL(SUM(IF(t1.`column_key` IS NULL, t1.count, 0)), 0) * $ratio, "
                     + "       $maxFunction, $minFunction, NOW() "
