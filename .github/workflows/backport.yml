@@ -81,6 +81,7 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
     steps:
       - name: commit_sha
+        id: commit_sha
         run: |
           set -x
           commit_sha=`curl -L \
