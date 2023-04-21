@@ -20,14 +20,6 @@ MySQL > SELECT REVERSE('hello');
 | olleh            |
 +------------------+
 1 row in set (0.00 sec)
-
-MySQL > SELECT REVERSE('你好');
-+------------------+
-| REVERSE('你好')  |
-+------------------+
-| 好你             |
-+------------------+
-1 row in set (0.00 sec)
 ```
 
 ## keyword

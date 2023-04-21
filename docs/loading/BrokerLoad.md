@@ -250,7 +250,7 @@ WITH BROKER "mybroker"
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
     "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
-)；
+);
 ```
 
 To load all data files from the `input` folder into `table1`, execute the following statement:
@@ -268,7 +268,7 @@ WITH BROKER "mybroker"
     "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
     "fs.s3a.endpoint" = "s3.ap-northeast-1.amazonaws.com"
-)；
+);
 ```
 
 ### View a load job

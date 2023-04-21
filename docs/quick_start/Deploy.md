@@ -348,5 +348,5 @@ Having deployed StarRocks, you can continue the QuickStart tutorials on [creatin
 
 You can also:
 
-* [Create a table](Create_table.md)
-* [Upgrade StarRocks](../administration/Cluster_administration.md#集群升级)
+- [Create a table](Create_table.md)
+- [Upgrade StarRocks](../administration/Cluster_administration.md#upgrade-starrocks)

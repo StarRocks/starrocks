@@ -11,17 +11,17 @@ SHOW SNAPSHOT ON `repo_name`
 [WHERE SNAPSHOT = "snapshot" [AND TIMESTAMP = "backup_timestamp"]];
 ```
 
-Note：
+Note:
 
 ```plain text
 1.The meanings of each column are as follows:
-Snapshot：   name of the backup
-Timestamp：  the time version of the corresponding backup
-Status：     if the backup is normal, it displays OK; otherwise, it displays an error message
+Snapshot:   name of the backup
+Timestamp:  the time version of the corresponding backup
+Status:     if the backup is normal, it displays OK; otherwise, it displays an error message
 
 2.2. If TIMESTAMP is specified, the following additional information will be displayed:
-Database：   the name of the database to which the backup data belongs
-Details：    display the data directory and file structure of the whole backup in the form of Json
+Database:   the name of the database to which the backup data belongs
+Details:    display the data directory and file structure of the whole backup in the form of Json
 ```
 
 ## Examples
