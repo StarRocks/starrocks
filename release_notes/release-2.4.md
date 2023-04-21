@@ -1,5 +1,39 @@
 # StarRocks version 2.4
 
+## 2.4.5
+
+发布日期：2023 年 4 月 21 日
+
+### 功能优化
+
+- 禁止使用 List Partition 语法，因为它可能导致元数据升级出错。 [#15401](https://github.com/StarRocks/starrocks/pull/15401)
+- 物化视图支持 BITMAP、HLL 和 PERCENTILE 类型。 [#15731](https://github.com/StarRocks/starrocks/pull/15731)
+- 优化 `storage_medium` 的推导机制。当 BE 同时使用 SSD 和 HDD 作为存储介质时，如果配置了 `storage_cooldown_time`，StarRocks 设置 `storage_medium` 为 `SSD`。反之，则 StarRocks 设置 `storage_medium` 为 `HDD`。 [#18649](https://github.com/StarRocks/starrocks/pull/18649)
+- 优化 Thread Dump 的准确性。 [#16748](https://github.com/StarRocks/starrocks/pull/16748)
+- 通过在导入前触发元数据 Compaction 来优化导入效率。 [#19347](https://github.com/StarRocks/starrocks/pull/19347)
+- 优化 Stream Load Planner 超时。 [#18992](https://github.com/StarRocks/starrocks/pull/18992/files)
+- 通过禁止收集 Value 列统计数据优化更新模型表性能。 [#19563](https://github.com/StarRocks/starrocks/pull/19563)
+
+### 问题修复
+
+修复了如下问题：
+
+- 在 CREATE TABLE 中使用不支持的数据类型时返回 NPE。 [# 20999](https://github.com/StarRocks/starrocks/issues/20999)
+- 使用 Broadcast Join 和 short-circuit 的查询返回错误结果。 [#20952](https://github.com/StarRocks/starrocks/issues/20952)
+- 错误的数据删除逻辑导致的磁盘占用问题。 [#20590](https://github.com/StarRocks/starrocks/pull/20590)
+- AuditLoader 插件既无法被安装也不能被删除。 [#20468](https://github.com/StarRocks/starrocks/issues/20468)
+- 如果调度一个 Tablet 时抛出异常，则与其同一批的其他 Tablet 无法被调度。 [#20681](https://github.com/StarRocks/starrocks/pull/20681)
+- 在创建同步物化视图时使用了不支持的 SQL 函数时，返回未知错误。 [#20348](https://github.com/StarRocks/starrocks/issues/20348)
+- 多个 COUNT DISTINCT 重写错误。 [#19714](https://github.com/StarRocks/starrocks/pull/19714)
+- 查询正在 Compaction 中的 Tablet 返回错误结果。 [#20084](https://github.com/StarRocks/starrocks/issues/20084)
+- 聚合查询返回错误结果。 [#19725](https://github.com/StarRocks/starrocks/issues/19725)
+- 将 NULL Parquet 数据加载到 NOT NULL 列时不返回错误消息。 [#19885](https://github.com/StarRocks/starrocks/pull/19885)
+- 在持续触发资源隔离的并发限制时，查询并发数量指标下降缓慢。 [#19363](https://github.com/StarRocks/starrocks/pull/19363)
+- 重放 `InsertOverwriteJob` 状态变更日志时，FE 启动失败。 [#19061](https://github.com/StarRocks/starrocks/issues/19061)
+- 主键模型表死锁。 [#18488](https://github.com/StarRocks/starrocks/pull/18488)
+- 对于 Colocation 表，可以通过命令手动指定副本状态为 `bad`：`ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "10003", "backend_id" = "10001", "status" = "bad");`，如果 BE 数量小于等于副本数量，则该副本无法被修复。 [#17876](https://github.com/StarRocks/starrocks/issues/17876)
+- ARRAY 相关函数引起的问题。 [#18556](https://github.com/StarRocks/starrocks/pull/18556)
+
 ## 2.4.4
 
 发布日期：2023 年 2 月 22 日
