@@ -97,6 +97,7 @@ jobs:
         id: be-changes-info
         run: |
           echo "be=${{ steps.changes.outputs.be }}" >> $GITHUB_OUTPUT
+          echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
 
   clang-format:
     runs-on: self-hosted
