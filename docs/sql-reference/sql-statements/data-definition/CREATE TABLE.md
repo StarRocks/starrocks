@@ -42,7 +42,7 @@ Specific column information, such as types and ranges:
 
 - DATE (3 bytes): Ranges from 0000-01-01 to 9999-12-31.
 - DATETIME (8 bytes): Ranges from 0000-01-01 00:00:00 to 9999-12-31 23:59:59.
-- CHAR[(length)]: Fixed length string. Range：1 ~ 255. Default value: 1.
+- CHAR[(length)]: Fixed length string. Range: 1 ~ 255. Default value: 1.
 - VARCHAR[(length)]: A variable-length string. The default value is 1. Unit: bytes. In versions earlier than StarRocks 2.1, the value range of `length` is 1–65533. [Preview] In StarRocks 2.1 and later versions, the value range of `length` is 1–1048576.
 - HLL (1~16385 bytes): For HLL type, there's no need to specify length or default value. The length will be controlled within the system according to data aggregation. HLL column can only be queried or used by [hll_union_agg](../../sql-functions/aggregate-functions/hll_union_agg.md), [Hll_cardinality](../../sql-functions/scalar-functions/hll_cardinality.md), and [hll_hash](../../sql-functions/aggregate-functions/hll_hash.md).
 - BITMAP: Bitmap type does not require specified length or default value. It represents a set of unsigned bigint numbers. The largest element could be up to 2^64 - 1.
@@ -241,7 +241,7 @@ Optional value: mysql, elasticsearch, hive, jdbc (2.3 and later), iceberg, and h
 
 ### key_desc
 
-Syntax：
+Syntax: 
 
 ```SQL
 key_type(k1[,k2 ...])
@@ -494,7 +494,7 @@ PROPERTIES(
 );
 ```
 
-### Create a Duplicate Key table that uses Range partition, Hash bucketing，and column-based storage, and set the storage medium and cooldown time
+### Create a Duplicate Key table that uses Range partition, Hash bucketing, and column-based storage, and set the storage medium and cooldown time
 
 LESS THAN
 

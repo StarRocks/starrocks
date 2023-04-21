@@ -166,7 +166,7 @@ PROPERTIES (
 );
 ~~~
 
-Table 2：
+Table 2:
 
 ~~~SQL
 CREATE TABLE `tbl2` (
@@ -377,13 +377,13 @@ This API is implemented on the FE and can be accessed using `fe_host:fe_http_por
     * Mark as Stable
         `POST /api/colocate/group_stable?db_id=10005&group_id=10008`
 
-        `Return：200`
+        `Return: 200`
 
     * Mark as Unstable
 
         `DELETE /api/colocate/group_stable?db_id=10005&group_id=10008`
 
-        `Return：200`
+        `Return: 200`
 
 3. Set the data distribution of a Group
 

@@ -414,7 +414,7 @@ PROPERTIES
 "property.security.protocol" = "ssl",
 -- The location of the CA certificate.
 "property.ssl.ca.location" = "FILE:ca-cert",
--- If authentication is enabled for Kafka clients, you need to configure the following properties：
+-- If authentication is enabled for Kafka clients, you need to configure the following properties:
 -- The location of the Kafka client's public key.
 "property.ssl.certificate.location" = "FILE:client.pem",
 -- The location of the Kafka client's private key.

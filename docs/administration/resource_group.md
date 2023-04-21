@@ -91,7 +91,7 @@ A classifier matches a query only when one or all conditions of the classifier m
 >
 > If a query does not hit any classifiers, the default resource group `default_wg` is used. The resource limits of `default_wg` are as follows:
 >
-> - `cpu_core_limit`: 1 (<= v2.3.7) or the number of CPU cores in BE（> v2.3.7)
+> - `cpu_core_limit`: 1 (<= v2.3.7) or the number of CPU cores in BE (> v2.3.7)
 > - `mem_limit`: 100%
 > - `concurrency_limit`: 0
 > - `big_query_cpu_second_limit`: 0
@@ -208,7 +208,7 @@ SHOW RESOURCE GROUPS;
 Execute the following statement to query a specified resource group and its classifiers:
 
 ```SQL
-SHOW RESOURCE GROUP group_name；
+SHOW RESOURCE GROUP group_name;
 ```
 
 Example:
