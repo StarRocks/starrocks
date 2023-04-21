@@ -80,7 +80,7 @@ Example 1: Set the replica status of tablet 10003 on BE 10001 to `bad`.
 ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "10003", "backend_id" = "10001", "status" = "bad");
 ```
 
-Example 2: Set the replica status of tablet 10003 on BE 10001 to `ok`。
+Example 2: Set the replica status of tablet 10003 on BE 10001 to `ok`.
 
 ```SQL
 ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "10003", "backend_id" = "10001", "status" = "ok");

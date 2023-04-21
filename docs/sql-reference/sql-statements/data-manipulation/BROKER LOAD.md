@@ -292,7 +292,7 @@ The following parameters are supported:
 
   Suppose that you want to load a 1-GB data file on which two materialized views are created into a StarRocks cluster whose average load speed is 10 MB/s and maximum number of concurrent instances allowed per task is 3. The amount of time required for the data load is approximately 102 seconds.
 
-  (1 x 1024 x 3)/(10 x 3) = 102（second）
+  (1 x 1024 x 3)/(10 x 3) = 102 (second)
 
   For this example, we recommend that you set the timeout period to a value greater than 102 seconds.
 
