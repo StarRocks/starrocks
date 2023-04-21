@@ -120,7 +120,7 @@ Broker Load 支持从如下外部存储系统导入数据：
    200,'北京'
    ```
 
-3. 把创建好的数据文件 `file1.csv` 和 `file2.csv` 分别上传到 HDFS 集群的 `/user/starrocks/` 路径下、AWS S3 存储空间 `bucket_s3` 里的 `input` 文件夹下、 Google GCS 存储空间 `bucket_gcs` 里的 `input` 文件夹下、阿里云 OSS 存储空间 `bucket_oss` 里的 `input` 文件夹下、以及腾讯云 COS 存储空间 `bucket_cos` 里的 `input` 文件夹下。
+3. 把创建好的数据文件 `file1.csv` 和 `file2.csv` 分别上传到 HDFS 集群的 `/user/starrocks/` 路径下、AWS S3 存储空间 `bucket_s3` 里的 `input` 文件夹下、 Google GCS 存储空间 `bucket_gcs` 里的 `input` 文件夹下、阿里云 OSS 存储空间 `bucket_oss` 里的 `input` 文件夹下、腾讯云 COS 存储空间 `bucket_cos` 里的 `input` 文件夹下、以及 Azure Storage 的指定路径下。
 
 #### 从 HDFS 导入
 
@@ -178,17 +178,17 @@ WITH BROKER
 
 #### 从 Google GCS 导入
 
-可以通过如下语句，把 Google GCS 存储空间 `bucket_gcs` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+通过如下语句，把 Google GCS 存储空间 `bucket_gcs` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
 
 ```SQL
 LOAD LABEL test_db.label3
 (
-    DATA INFILE("s3a://bucket_gcs/input/file1.csv")
+    DATA INFILE("gs://bucket_gcs/input/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
     ,
-    DATA INFILE("s3a://bucket_gcs/input/file2.csv")
+    DATA INFILE("gs://bucket_gcs/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
     (id, city)
@@ -201,7 +201,7 @@ WITH BROKER
 
 > **说明**
 >
-> 由于 Broker Load 只支持通过 S3A 协议访问 Google GCS，因此当从 Google GCS 导入数据时，`DATA INFILE` 中传入的目标文件的 GCS URI，前缀必须修改为 `s3a://`。
+> Broker Load 只支持通过 gs 协议访问 Google GCS。因此，当您从 Google GCS 导入数据时，必须确保 `DATA INFILE` 中传入的目标文件的 GCS URI 使用 `gs` 为前缀。
 
 #### 从 阿里云 OSS 导入
 
@@ -289,6 +289,29 @@ LOAD LABEL test_db.label7
     (id, name, score)
     ,
     DATA INFILE("obs://bucket_minio/input/file2.csv")
+    INTO TABLE table2
+    COLUMNS TERMINATED BY ","
+    (id, city)
+)
+WITH BROKER
+(
+    StorageCredentialParams
+);
+```
+
+#### 从 Microsoft Azure Storage 导入
+
+通过如下语句，把 Azure Storage 指定路径下的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+
+```SQL
+LOAD LABEL test_db.label8
+(
+    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    (id, name, score)
+    ,
+    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
     (id, city)
