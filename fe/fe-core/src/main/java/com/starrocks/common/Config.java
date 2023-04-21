@@ -1527,6 +1527,17 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static double statistic_auto_collect_ratio = 0.8;
 
+    // If the health in statistic_full_collect_interval is lower than this value,
+    // choose collect sample statistics first
+    @ConfField(mutable = true)
+    public static double statistic_auto_collect_sample_threshold = 0.3;
+
+    @ConfField(mutable = true)
+    public static long statistic_auto_collect_table_interval_size = 5L * 1024 * 1024 * 1024; // 5G
+
+    @ConfField(mutable = true)
+    public static long statistic_auto_collect_table_interval = 3600L * 12; // unit: second, default 12h
+
     /**
      * Full statistics collection max data size
      */
@@ -2055,6 +2066,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static int lake_compaction_max_tasks = -1;
 
+    @ConfField(mutable = true)
+    public static int lake_compaction_history_size = 12;
+
+    @ConfField(mutable = true)
+    public static int lake_compaction_fail_history_size = 12;
+
     @ConfField
     public static int experimental_lake_publish_version_threads = 16;
 
@@ -2154,7 +2171,7 @@ public class Config extends ConfigBase {
      * default size of minimum cache size of auto increment id allocation
      **/
     @ConfField(mutable = true)
-    public static long auto_increment_cache_size = 100000;
+    public static int auto_increment_cache_size = 100000;
 
     /**
      * Enable the experimental temporary table feature

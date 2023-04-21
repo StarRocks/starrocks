@@ -119,7 +119,7 @@ private:
 template <LogicalType Type>
 class BinaryPrefixPageDecoder final : public PageDecoder {
 public:
-    BinaryPrefixPageDecoder(Slice data, const PageDecoderOptions& options) : _data(data) {}
+    BinaryPrefixPageDecoder(Slice data) : _data(data) {}
 
     Status init() override;
 

@@ -23,6 +23,7 @@ public class StatsConstants {
     public static final int STATISTIC_HISTOGRAM_VERSION = 2;
     public static final int STATISTIC_TABLE_VERSION = 3;
 
+    public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;
     public static final String STATISTICS_DB_NAME = "_statistics_";
     public static final String SAMPLE_STATISTICS_TABLE_NAME = "table_statistic_v1";
     public static final String FULL_STATISTICS_TABLE_NAME = "column_statistics";
@@ -33,6 +34,8 @@ public class StatsConstants {
     //Statistics collection threshold
     public static final String STATISTIC_AUTO_COLLECT_RATIO = "statistic_auto_collect_ratio";
     public static final String STATISTIC_SAMPLE_COLLECT_ROWS = "statistic_sample_collect_rows";
+    public static final String STATISTIC_EXCLUDE_PATTERN = "statistic_exclude_pattern";
+    public static final String STATISTIC_AUTO_COLLECT_INTERVAL = "statistic_auto_collect_interval";
 
     //Histogram Statistics properties
     public static final String HISTOGRAM_BUCKET_NUM = "histogram_bucket_num";

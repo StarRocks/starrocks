@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "block_cache/fb_cachelib.h"
+#include "block_cache/cachelib_wrapper.h"
 
 #include "common/logging.h"
 #include "common/statusor.h"
@@ -21,7 +21,7 @@
 
 namespace starrocks {
 
-Status FbCacheLib::init(const CacheOptions& options) {
+Status CacheLibWrapper::init(const CacheOptions& options) {
     Cache::Config config;
     config.setCacheSize(options.mem_space_size).setCacheName("default cache").setAccessConfig({25, 10}).validate();
 
@@ -53,7 +53,7 @@ Status FbCacheLib::init(const CacheOptions& options) {
     return Status::OK();
 }
 
-Status FbCacheLib::write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds) {
+Status CacheLibWrapper::write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds) {
     // TODO: check size for chain item
     auto handle = _cache->allocate(_default_pool, key, size);
     if (!handle) {
@@ -65,7 +65,7 @@ Status FbCacheLib::write_cache(const std::string& key, const char* value, size_t
     return Status::OK();
 }
 
-StatusOr<size_t> FbCacheLib::read_cache(const std::string& key, char* value, size_t off, size_t size) {
+StatusOr<size_t> CacheLibWrapper::read_cache(const std::string& key, char* value, size_t off, size_t size) {
     // TODO:
     // 1. check chain item
     // 2. replace with async methods
@@ -86,17 +86,17 @@ StatusOr<size_t> FbCacheLib::read_cache(const std::string& key, char* value, siz
     return size;
 }
 
-Status FbCacheLib::remove_cache(const std::string& key) {
+Status CacheLibWrapper::remove_cache(const std::string& key) {
     _cache->remove(key);
     return Status::OK();
 }
 
-std::unordered_map<std::string, double> FbCacheLib::cache_stats() {
+std::unordered_map<std::string, double> CacheLibWrapper::cache_stats() {
     const auto navy_stats = _cache->getNvmCacheStatsMap().toMap();
     return navy_stats;
 }
 
-Status FbCacheLib::shutdown() {
+Status CacheLibWrapper::shutdown() {
     if (_cache) {
         _dump_cache_stats();
         auto res = _cache->shutDown();
@@ -108,7 +108,7 @@ Status FbCacheLib::shutdown() {
     return Status::OK();
 }
 
-void FbCacheLib::_dump_cache_stats() {
+void CacheLibWrapper::_dump_cache_stats() {
     std::ofstream of;
     of.open(_meta_path + "/cachelib_stat", std::ios::out | std::ios::trunc);
     const auto stats = cache_stats();
