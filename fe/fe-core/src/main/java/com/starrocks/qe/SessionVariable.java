@@ -387,6 +387,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
     public static final String SPILL_OPERATOR_MIN_BYTES = "spill_operator_min_bytes";
     public static final String SPILL_OPERATOR_MAX_BYTES = "spill_operator_max_bytes";
+    public static final String SPILL_ENCODE_LEVEL = "spill_encode_level";
 
     // full_sort_max_buffered_{rows,bytes} are thresholds that limits input size of partial_sort
     // in full sort.
@@ -703,6 +704,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long spillOperatorMinBytes = 1024L * 1024 * 10;
     @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)
     private long spillOperatorMaxBytes = 1024L * 1024 * 1000;
+    // the encoding level of spilled data, the meaning of values is similar to transmission_encode_level,
+    // see more details in the comment above transmissionEncodeLevel
+    @VarAttr(name = SPILL_ENCODE_LEVEL)
+    private int spillEncodeLevel = 7;
 
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
@@ -791,6 +796,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = RPC_HTTP_MIN_SIZE, flag = VariableMgr.INVISIBLE)
     private long rpcHttpMinSize = ((1L << 31) - (1L << 10));
 
+    // encode integers/binary per column for exchange, controlled by transmission_encode_level
+    // if transmission_encode_level & 2, intergers are encode by streamvbyte, in order or not;
+    // if transmission_encode_level & 4, binary columns are compressed by lz4
+    // if transmission_encode_level & 1, enable adaptive encoding.
+    // e.g.
+    // if transmission_encode_level = 7, SR will adaptively encode numbers and string columns according to the proper encoding ratio(< 0.9);
+    // if transmission_encode_level = 6, SR will force encoding numbers and string columns.
+    // in short,
+    // for transmission_encode_level,
+    // 2 for encoding integers or types supported by integers,
+    // 4 for encoding string,
+    // json and object columns are left to be supported later.
     @VariableMgr.VarAttr(name = TRANSMISSION_ENCODE_LEVEL)
     private int transmissionEncodeLevel = 7;
 
@@ -1335,6 +1352,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getSpillOperatorMaxBytes() {
         return this.spillOperatorMaxBytes;
+    }
+
+    public int getSpillEncodeLevel() {
+        return this.spillEncodeLevel;
     }
 
     public boolean getForwardToLeader() {
@@ -2035,6 +2056,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpill_mem_limit_threshold(spillMemLimitThreshold);
             tResult.setSpill_operator_min_bytes(spillOperatorMinBytes);
             tResult.setSpill_operator_max_bytes(spillOperatorMaxBytes);
+            tResult.setSpill_encode_level(spillEncodeLevel);
         }
 
         // Compression Type
