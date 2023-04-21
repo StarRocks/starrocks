@@ -970,6 +970,8 @@ vectorized_functions = [
     [170100, 'cardinality', 'INT', ['ANY_MAP'], 'MapFunctions::map_size'],
     [170101, 'cardinality', 'INT', ['ANY_ARRAY'], 'ArrayFunctions::array_length'],
 
+
+    [170116, 'flat_map', 'ANY_STRUCT', ['ANY_MAP'], 'MapFunctions::flat_map'],
     # struct functions
     # [170500, 'row', 'ANY_STRUCT', ['ANY_ELEMENT', "..."], 'StructFunctions::row'],
 ]

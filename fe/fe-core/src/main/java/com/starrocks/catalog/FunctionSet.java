@@ -419,6 +419,8 @@ public class FunctionSet {
     public static final String ELEMENT_AT = "element_at";
 
     public static final String CARDINALITY = "cardinality";
+    public static final String FLAT_MAP = "flat_map";
+
     // Struct functions:
     public static final String ROW = "row";
 
