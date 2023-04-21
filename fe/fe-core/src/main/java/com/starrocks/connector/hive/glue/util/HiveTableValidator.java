@@ -21,6 +21,9 @@ import org.apache.hadoop.hive.metastore.TableType;
 
 import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 import static org.apache.hadoop.hive.metastore.api.hive_metastoreConstants.META_TABLE_STORAGE;
+import static org.apache.iceberg.BaseMetastoreTableOperations.ICEBERG_TABLE_TYPE_VALUE;
+import static org.apache.iceberg.BaseMetastoreTableOperations.METADATA_LOCATION_PROP;
+import static org.apache.iceberg.BaseMetastoreTableOperations.TABLE_TYPE_PROP;
 
 public enum HiveTableValidator {
 
@@ -34,8 +37,16 @@ public enum HiveTableValidator {
 
             if (table.getTableType() == null) {
                 missingProperty = "TableType";
-            } else if (table.getStorageDescriptor() == null) {
-                missingProperty = "StorageDescriptor";
+            } else {
+                // for iceberg table, must contain metadata location in parameters
+                // TODO(zombee0), check hudi deltalake
+                if (isIcebergTable(table)) {
+                    if (table.getParameters().get(METADATA_LOCATION_PROP) == null) {
+                        missingProperty = "MetadataLocation";
+                    }
+                } else if (table.getStorageDescriptor() == null) {
+                    missingProperty = "StorageDescriptor";
+                }
             }
 
             if (missingProperty != null) {
@@ -44,6 +55,12 @@ public enum HiveTableValidator {
             }
         }
     };
+
+    public static boolean isIcebergTable(Table table) {
+        return table.getParameters() != null &&
+                table.getParameters().get(TABLE_TYPE_PROP) != null &&
+                table.getParameters().get(TABLE_TYPE_PROP).equalsIgnoreCase(ICEBERG_TABLE_TYPE_VALUE);
+    }
 
     public abstract void validate(Table table);
 
