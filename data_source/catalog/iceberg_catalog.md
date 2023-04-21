@@ -216,7 +216,7 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 
 ##### 兼容 S3 协议的对象存储
 
-如果选择兼容 S3 协议的对象存储（如 MinIO）作为 Hive 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择兼容 S3 协议的对象存储（如 MinIO）作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
 
 ```SQL
 "aws.s3.enable_ssl" = "<true | false>",
@@ -235,6 +235,160 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 | aws.s3.endpoint                  | Yes      | 用于访问 AWS S3 Bucket 的 Endpoint。 |
 | aws.s3.access_key                | Yes      | IAM User 的 Access Key。 |
 | aws.s3.secret_key                | Yes      | IAM User 的 Secret Key。 |
+
+##### Microsoft Azure Storage
+
+###### Azure Blob Storage
+
+如果选择 Blob Storage 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+
+- 基于 Shared Key 进行认证和鉴权
+
+  ```SQL
+  "azure.blob.storage_account" = "<blob_storage_account_name>",
+  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                   | **是否必须** | **说明**                         |
+  | -------------------------- | ------------ | -------------------------------- |
+  | azure.blob.storage_account | 是           | Blob Storage 账号的用户名。      |
+  | azure.blob.shared_key      | 是           | Blob Storage 账号的 Shared Key。 |
+
+- 基于 SAS Token 进行认证和鉴权
+
+  ```SQL
+  "azure.blob.account_name" = "<blob_storage_account_name>",
+  "azure.blob.container_name" = "<blob_container_name>",
+  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                  | **是否必须** | **说明**                                 |
+  | ------------------------- | ------------ | ---------------------------------------- |
+  | azure.blob.account_name   | 是           | Blob Storage 账号的用户名。              |
+  | azure.blob.container_name | 是           | 数据所在 Blob 容器的名称。               |
+  | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
+
+###### Azure Data Lake Storage Gen1
+
+如果选择 Data Lake Storage Gen1 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+
+- 基于 Managed Service Identity 进行认证和鉴权
+
+  ```SQL
+  "azure.adls1.use_managed_service_identity" = "true"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                                 | **是否必须** | **说明**                                                     |
+  | ---------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.use_managed_service_identity | 是           | 指定是否开启 Managed Service Identity 鉴权方式。设置为 `true`。 |
+
+- 基于 Service Principal 进行认证和鉴权
+
+  ```SQL
+  "azure.adls1.oauth2_client_id" = "<application_client_id>"
+  "azure.adls1.oauth2_credential" = "<application_client_credential>"
+  "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **Parameter**                 | **Required** | **Description**                                              |
+  | ----------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.oauth2_client_id  | 是           | Service Principal 的 Client (Application) ID。               |
+  | azure.adls1.oauth2_credential | 是           | 新建的 Client (Application) Secret。                         |
+  | azure.adls1.oauth2_endpoint   | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
+
+###### Azure Data Lake Storage Gen2
+
+如果选择 Data Lake Storage Gen2 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+
+- 基于 Managed Identity 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true"
+  "azure.adls2.oauth2_tenant_id" = "<service_principle_tenant_id>"
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                                | **是否必须** | **说明**                                                |
+  | --------------------------------------- | ------------ | ------------------------------------------------------- |
+  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
+  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属 Tenant 的 ID。                                 |
+  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
+
+- 基于 Shared Key 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>"
+  "azure.adls2.shared_key" = "<shared_key>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                    | **是否必须** | **说明**                                   |
+  | --------------------------- | ------------ | ------------------------------------------ |
+  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
+  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
+
+- 基于 Service Principal 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  "azure.adls2.oauth2_client_secret" = "<service_principle_client_secret>"
+  "azure.adls2.oauth2_client_endpoint" = "<service_principle_client_endpoint>
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                           | **是否必须** | **说明**                                                     |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
+  | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
+  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
+
+##### Google GCS
+
+如果选择 Google GCS 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+
+- 基于 VM 进行认证和鉴权
+
+  ```SQL
+  "gcp.gcs.use_compute_engine_service_account" = "true"
+  ```
+
+- 基于 Service Account 进行认证和鉴权
+
+  ```SQL
+  "gcp.gcs.service_account_email" = "<google_service_account_email>"
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>"
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
+  ```
+
+- 基于 Impersonating 进行认证和鉴权
+
+  - 使用 VM Instance 模拟服务账号
+
+    ```SQL
+    "gcp.gcs.use_compute_engine_service_account" = "true"
+    "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+    ```
+
+  - 使用一个服务账号（即“Meta 服务账号”）模拟另一个服务账号（即“Data 服务账号”）
+
+    ```SQL
+    "gcp.gcs.service_account_email" = "<google_service_account_email>"
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>"
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>"
+    "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
+    ```
 
 #### `MetadataUpdateParams`
 
@@ -544,3 +698,24 @@ StarRocks 采用如下策略更新和淘汰缓存的元数据：
 - 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔超过 2 小时，则 StarRocks 会更新 `p1` 的缓存元数据。
 - 如果继上次更新结束后，`p1` 在 24 小时内未被访问，则 StarRocks 会淘汰 `p1` 的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 的元数据。
 - 如果继上次更新结束后，`p1` 在 36 小时内未被访问，则 StarRocks 会淘汰 `p1` 下数据文件的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 下数据文件的元数据。
+
+## 附录：元数据两级缓存
+
+Iceberg 的元数据文件可能存储在 AWS S3 或 HDFS 上。为了加速查询，StarRocks 提供了基于内存和磁盘的元数据两级缓存机制，在初次查询时触发缓存，在后续查询中会优先使用缓存。如果缓存中无对应元数据，则会直接访问远端存储。
+
+StarRocks 采用 Least Recently Used (LRU) 策略来缓存和淘汰数据，基本原则如下：
+
+- 优先从内存读取元数据。如果在内存中没有找到，才会从磁盘上读取。从磁盘上读取的元数据，会被加载到内存中。如果没有命中磁盘上的缓存，则会从远端存储拉取元数据，并在内存中缓存。
+- 从内存中淘汰的元数据，会写入磁盘；从磁盘上淘汰的元数据，会被废弃。
+
+您可以通过以下 FE 配置项来设置缓存方式：
+
+| **配置项**                                       | **单位** | **默认值**                                           | **含义**                                                     |
+| ------------------------------------------------ | -------- | ---------------------------------------------------- | ------------------------------------------------------------ |
+| enable_iceberg_metadata_disk_cache               | 无       | `false`                                              | 是否开启磁盘缓存。                                           |
+| iceberg_metadata_cache_disk_path                 | 无       | `StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"` | 磁盘缓存的元数据文件位置。                                   |
+| iceberg_metadata_disk_cache_capacity             | 字节     | `2147483648`，即 2 GB                                | 磁盘中缓存的元数据最大空间。                                 |
+| iceberg_metadata_memory_cache_capacity           | 字节     | `536870912`，即 512 MB                               | 内存中缓存的元数据最大空间。                                 |
+| iceberg_metadata_memory_cache_expiration_seconds | 秒       | `86500`                                              | 内存中的缓存自最后一次访问后的过期时间。                     |
+| iceberg_metadata_disk_cache_expiration_seconds   | 秒       | `604800`，即一周                                     | 磁盘中的缓存自最后一次访问后的过期时间。                     |
+| iceberg_metadata_cache_max_entry_size            | 字节     | `8388608`，即 8 MB                                   | 缓存的单个文件最大大小，以防止单个文件过大挤占其他文件空间。超过此大小的文件不会缓存，如果查询命中则会直接访问远端元数据文件。 |

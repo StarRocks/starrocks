@@ -307,37 +307,37 @@ StarRocks 访问存储系统的认证配置。
 
 如果存储系统为 Google GCS，请按如下配置 `StorageCredentialParams`：
 
-```SQL
-"fs.s3a.access.key" = "<gcs_access_key>",
-"fs.s3a.secret.key" = "<gcs_secret_key>",
-"fs.s3a.endpoint" = "<gcs_endpoint>"
-```
+- 基于 VM 进行认证和鉴权
 
-`StorageCredentialParams` 包含如下参数。
+  ```SQL
+  "gcp.gcs.use_compute_engine_service_account" = "true"
+  ```
 
-| **参数名称**      | **参数说明**                                                 |
-| ----------------- | ------------------------------------------------------------ |
-| fs.s3a.access.key | 访问 Google GCS 存储空间的 Access Key。      |
-| fs.s3a.secret.key | 访问 Google GCS 存储空间的 Secret Key。 |
-| fs.s3a.endpoint   | 访问 Google GCS 存储空间的连接地址。                         |
+- 基于 Service Account 号进行认证和鉴权
 
-> **说明**
->
-> 由于 Broker Load 只支持通过 S3A 协议访问 Google GCS，因此当从 Google GCS 导入数据时，`DATA INFILE` 中传入的目标文件的 GCS URI，前缀必须修改为 `s3a://`。
+  ```SQL
+  "gcp.gcs.service_account_email" = "<google_service_account_email>"
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>"
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
+  ```
 
-创建访问 Google GCS 存储空间的密钥对的操作步骤如下：
+- 基于 Impersonating 进行认证和鉴权
 
-1. 登录 [Google GCP](https://console.cloud.google.com/storage/settings)。
+  - 使用 VM Instance 模拟服务账号
 
-2. 在左侧导航栏，选择 **Google Cloud Storage**，然后选择 **Settings**。
+    ```SQL
+    "gcp.gcs.use_compute_engine_service_account" = "true"
+    "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+    ```
 
-3. 选择 **Interoperability** 页签。
+  - 使用一个服务账号（即“Meta 服务账号”）模拟另一个服务账号（即“Data 服务账号”）
 
-   如果还没有启用 Interoperability 特性，请单击 **Interoperable Access**。
-
-   ![Google GCS - Access Key Pair](/assets/8.2.2-1.png)
-
-4. 单击 **Create new Key** 按钮，按界面提示完成密钥对的创建。
+    ```SQL
+    "gcp.gcs.service_account_email" = "<google_service_account_email>"
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>"
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>"
+    "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
+    ```
 
 #### 阿里云 OSS
 
@@ -424,6 +424,131 @@ StarRocks 访问存储系统的认证配置。
 | aws.s3.endpoint                 | 是       | 用于访问 AWS S3 Bucket 的 Endpoint。                         |
 | aws.s3.access_key               | 是       | IAM User 的 Access Key。                                     |
 | aws.s3.secret_key               | 是       | IAM User 的 Secret Key。                                     |
+
+#### Microsoft Azure Storage
+
+##### Azure Blob Storage
+
+如果存储系统为 Blob Storage，请按如下配置 `StorageCredentialParams`：
+
+> **NOTE**
+>
+> 从 Blob Storage 导入数据时，需要根据使用的访问协议在文件路径 (`DATA INFILE`) 添加前缀：
+>
+> - 如果使用 HTTP 协议进行访问，请使用 `wasb` 作为前缀，例如，`wasb://<container>@<storage_account>.``blob.core.windows.net/<path>/<file_name>/*`。
+> - 如果使用 HTTPS 协议进行访问，请使用 `wasbs` 作为前缀，例如，`wasbs://<container>@<storage_account>.``blob.core.windows.net/<path>/<file_name>/*`。
+
+- 基于 Shared Key 进行认证和鉴权
+
+  ```SQL
+  "azure.blob.storage_account" = "<blob_storage_account_name>",
+  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                   | **是否必须** | **说明**                         |
+  | -------------------------- | ------------ | -------------------------------- |
+  | azure.blob.storage_account | 是           | Blob Storage 账号的用户名。      |
+  | azure.blob.shared_key      | 是           | Blob Storage 账号的 Shared Key。 |
+
+- 基于 SAS Token 进行认证和鉴权
+
+  ```SQL
+  "azure.blob.account_name" = "<blob_storage_account_name>",
+  "azure.blob.container_name" = "<blob_container_name>",
+  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **参数**                  | **是否必须** | **说明**                                 |
+  | ------------------------- | ------------ | ---------------------------------------- |
+  | azure.blob.account_name   | 是           | Blob Storage 账号的用户名。              |
+  | azure.blob.container_name | 是           | 用于存储数据的 Blob 容器的名称。         |
+  | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
+
+##### Azure Data Lake Storage Gen1
+
+如果存储系统为 Data Lake Storage Gen1，请按如下配置 `StorageCredentialParams`：
+
+- 基于 Managed Service Identity 进行认证和鉴权
+
+  ```SQL
+  "azure.adls1.use_managed_service_identity" = "true"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                                 | **是否必须** | **说明**                                                     |
+  | ---------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.use_managed_service_identity | 是           | 指定是否开启 Managed Service Identity 鉴权方式。设置为 `true`。 |
+
+- 基于 Service Principal 进行认证和鉴权
+
+  ```SQL
+  "azure.adls1.oauth2_client_id" = "<application_client_id>"
+  "azure.adls1.oauth2_credential" = "<application_client_credential>"
+  "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                      | **是否必须** | **说明**                                                     |
+  | ----------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.oauth2_client_id  | 是           | Service Principal 的 Client (Application) ID。               |
+  | azure.adls1.oauth2_credential | 是           | 新建 Client (Application) Secret。                           |
+  | azure.adls1.oauth2_endpoint   | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
+
+##### Azure Data Lake Storage Gen2
+
+如果存储系统为 Data Lake Storage Gen2，请按如下配置 `StorageCredentialParams`：
+
+- 基于 Managed Identity 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true"
+  "azure.adls2.oauth2_tenant_id" = "<service_principle_tenant_id>"
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                                | **是否必须** | **说明**                                                |
+  | --------------------------------------- | ------------ | ------------------------------------------------------- |
+  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
+  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属的 Tenant 的 ID。                               |
+  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
+
+- 基于 Shared Key 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>"
+  "azure.adls2.shared_key" = "<shared_key>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                    | **是否必须** | **说明**                                   |
+  | --------------------------- | ------------ | ------------------------------------------ |
+  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
+  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
+
+- 基于 Service Principal 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  "azure.adls2.oauth2_client_secret" = "<service_principle_client_secret>"
+  "azure.adls2.oauth2_client_endpoint" = "<service_principle_client_endpoint>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                           | **是否必须** | **说明**                                                     |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
+  | azure.adls2.oauth2_client_secret   | 是           | 新建 Client (Application) Secret。                           |
+  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
 ### `opt_properties`
 
