@@ -115,13 +115,8 @@ StatusOr<SharedBufferedInputStream::SharedBuffer*> SharedBufferedInputStream::_f
     return &sb;
 }
 
-<<<<<<< HEAD
-Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) {
-    ASSIGN_OR_RETURN(auto ret, _find_shared_buffer(offset, *nbytes));
-=======
 Status SharedBufferedInputStream::_get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes) {
     ASSIGN_OR_RETURN(auto ret, _find_shared_buffer(offset, nbytes));
->>>>>>> fb2c98068 ([BugFix] fix shared buffer io coalesce (#20384))
     SharedBuffer& sb = *ret;
     if (sb.buffer.capacity() == 0) {
         SCOPED_RAW_TIMER(&_shared_io_timer);
@@ -156,12 +151,7 @@ Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64
     }
 
     const uint8_t* buffer = nullptr;
-<<<<<<< HEAD
-    size_t nbytes = count;
-    RETURN_IF_ERROR(get_bytes(&buffer, offset, &nbytes));
-=======
     RETURN_IF_ERROR(_get_bytes(&buffer, offset, count));
->>>>>>> fb2c98068 ([BugFix] fix shared buffer io coalesce (#20384))
     strings::memcpy_inlined(out, buffer, count);
     return Status::OK();
 }
@@ -181,14 +171,8 @@ StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
     ASSIGN_OR_RETURN(auto ret, _find_shared_buffer(_offset, count));
     if (ret->buffer.capacity() == 0) return Status::NotSupported("peek shared buffer empty");
     const uint8_t* buf = nullptr;
-<<<<<<< HEAD
-    size_t nbytes = count;
-    RETURN_IF_ERROR(get_bytes(&buf, _offset, &nbytes));
-    return std::string_view((const char*)buf, count);
-=======
     RETURN_IF_ERROR(_get_bytes(&buf, _offset, count));
-    return Status::OK();
->>>>>>> fb2c98068 ([BugFix] fix shared buffer io coalesce (#20384))
+    return std::string_view((const char*)buf, count);
 }
 
 } // namespace starrocks::io
