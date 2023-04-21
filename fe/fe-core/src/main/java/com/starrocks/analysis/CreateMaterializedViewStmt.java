@@ -39,6 +39,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -289,7 +290,11 @@ public class CreateMaterializedViewStmt extends DdlStmt {
         public Void visitCreateMaterializedViewStmt(CreateMaterializedViewStmt statement,
                                                     ConnectContext context) {
             QueryStatement queryStatement = statement.getQueryStatement();
+            long originSelectLimit = context.getSessionVariable().getSqlSelectLimit();
+            // ignore limit in creating mv
+            context.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
             com.starrocks.sql.analyzer.Analyzer.analyze(statement.getQueryStatement(), context);
+            context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
 
             // forbid explain query
             if (queryStatement.isExplain()) {
