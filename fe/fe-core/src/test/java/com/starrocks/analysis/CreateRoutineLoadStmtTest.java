@@ -85,6 +85,7 @@ public class CreateRoutineLoadStmtTest {
                 + "(\n"
                 + "\"desired_concurrent_number\"=\"3\",\n"
                 + "\"max_batch_interval\" = \"20\",\n"
+                + "\"max_filter_ratio\" = \"0.12\",\n"
                 + "\"strict_mode\" = \"false\",\n"
                 + "\"timezone\" = \"Asia/Shanghai\"\n"
                 + ")\n"
@@ -108,6 +109,11 @@ public class CreateRoutineLoadStmtTest {
         Assert.assertEquals("kafkahost1:9092,kafkahost2:9092", createRoutineLoadStmt.getKafkaBrokerList());
         Assert.assertEquals("topictest", createRoutineLoadStmt.getKafkaTopic());
         Assert.assertEquals("Asia/Shanghai", createRoutineLoadStmt.getTimezone());
+<<<<<<< HEAD
+=======
+        Assert.assertEquals("https://user:password@confluent.west.us", createRoutineLoadStmt.getConfluentSchemaRegistryUrl());
+        Assert.assertEquals(0.12, createRoutineLoadStmt.getMaxFilterRatio(), 0.01);
+>>>>>>> 11342c234 ([Feature] Support error rate for routine load (#21532))
     }
 
     @Test
