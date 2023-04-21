@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
