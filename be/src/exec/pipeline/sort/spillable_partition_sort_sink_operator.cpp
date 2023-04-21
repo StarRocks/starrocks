@@ -50,6 +50,7 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
     if (state->is_cancelled()) {
         _is_finished = true;
         _chunks_sorter->cancel();
+        _chunks_sorter->spill_channel()->set_finishing();
         return Status::Cancelled("runtime state is cancelled");
     }
 
@@ -136,7 +137,7 @@ Status SpillablePartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "local-sort-spill";
     _spill_options->plan_node_id = _plan_node_id;
-
+    _spill_options->encode_level = state->spill_encode_level();
     return Status::OK();
 }
 

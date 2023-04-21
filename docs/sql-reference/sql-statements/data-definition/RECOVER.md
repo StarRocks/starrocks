@@ -24,7 +24,7 @@ Syntax:
     RECOVER PARTITION partition_name FROM [<db_name>.]<table_name>
     ```
 
-Note：
+Note:
 
 1. It can only recover meta-information deleted some time ago. The default time: one day. (You can change it through parameter configuration catalog_trash_expire_second in fe.conf. )
 2. If the meta-information is deleted with an identical meta-information created, the previous one will not be recovered.

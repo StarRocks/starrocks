@@ -19,6 +19,7 @@ import com.amazonaws.services.glue.model.ErrorDetail;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.connector.hive.glue.util.HiveTableValidator;
 import org.apache.hadoop.hive.metastore.api.AlreadyExistsException;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
@@ -152,7 +153,12 @@ public class CatalogToHiveConverter {
         Date lastAccessedTime = catalogTable.getLastAccessTime();
         hiveTable.setLastAccessTime(lastAccessedTime == null ? 0 : (int) (lastAccessedTime.getTime() / 1000));
         hiveTable.setRetention(catalogTable.getRetention());
-        hiveTable.setSd(convertStorageDescriptor(catalogTable.getStorageDescriptor()));
+        // for iceberg table, don't need to set StorageDescriptor
+        // just use metadata location in parameters that checked in HiveTableValidator
+        // TODO(zombee0), check hudi deltalake
+        if (!HiveTableValidator.isIcebergTable(catalogTable)) {
+            hiveTable.setSd(convertStorageDescriptor(catalogTable.getStorageDescriptor()));
+        }
         hiveTable.setPartitionKeys(convertFieldSchemaList(catalogTable.getPartitionKeys()));
         // Hive may throw a NPE during dropTable if the parameter map is null.
         Map<String, String> parameterMap = catalogTable.getParameters();

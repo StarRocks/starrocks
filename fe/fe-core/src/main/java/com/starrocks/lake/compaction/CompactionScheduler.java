@@ -386,26 +386,6 @@ public class CompactionScheduler extends Daemon {
         }
         context.setVisibleStateWaiter(waiter);
         context.setCommitTs(System.currentTimeMillis());
-        if (LOG.isDebugEnabled()) {
-            long numInputBytes = 0;
-            long numInputRows = 0;
-            long numOutputBytes = 0;
-            long numOutputRows = 0;
-            for (Future<CompactResponse> responseFuture : context.getResponseList()) {
-                CompactResponse response = responseFuture.get();
-                numInputBytes += response.numInputBytes;
-                numInputRows += response.numInputRows;
-                numOutputBytes += response.numOutputBytes;
-                numOutputRows += response.numOutputRows;
-            }
-            LOG.debug("Committed compaction. {} inputBytes={} inputRows={} outputBytes={} outputRows={} time={}",
-                    context.getDebugString(),
-                    numInputBytes,
-                    numInputRows,
-                    numOutputBytes,
-                    numOutputRows,
-                    (context.getCommitTs() - context.getStartTs()));
-        }
     }
 
     private void abortTransactionIgnoreError(long dbId, long txnId, String reason) {
