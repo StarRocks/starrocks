@@ -186,6 +186,7 @@ statement
     | showPluginsStatement
     | showRepositoriesStatement
     | showOpenTableStatement
+    | showPrivilegesStatement
     | showProcedureStatement
     | showProcStatement
     | showProcesslistStatement
@@ -1210,6 +1211,9 @@ showRepositoriesStatement
 
 showOpenTableStatement
     : SHOW OPEN TABLES
+    ;
+showPrivilegesStatement
+    : SHOW PRIVILEGES
     ;
 
 showProcedureStatement
