@@ -319,6 +319,7 @@ private:
     uint32_t _fixed_key_size = -1;
     uint64_t _offset = 0;
     uint64_t _page_size = 0;
+    EditVersion _snapshot_version;
     std::string _path;
     std::unique_ptr<WritableFile> _index_file;
     std::shared_ptr<FileSystem> _fs;

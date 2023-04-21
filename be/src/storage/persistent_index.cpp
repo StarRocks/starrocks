@@ -1836,6 +1836,7 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
             return Status::InternalError(err_msg);
         }
     }
+    _snapshot_version = start_version;
     ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(index_file_name));
     // if mutable index is empty, set _offset as 0, otherwise set _offset as snapshot size
     _offset = snapshot_off + snapshot_size;
@@ -2765,7 +2766,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
             RETURN_IF_ERROR(_flush_l0());
         }
     }
-    _dump_snapshot |= !_flushed && _l0->file_size() > config::l0_max_file_size;
+    _dump_snapshot |= !_flushed && _version.major() - _l0->_snapshot_version.major() > config::max_l0_wal_version_num;
     // for case1 and case2
     if (_flushed) {
         // update PersistentIndexMetaPB
