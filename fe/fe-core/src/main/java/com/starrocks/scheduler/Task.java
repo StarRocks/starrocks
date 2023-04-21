@@ -173,4 +173,21 @@ public class Task implements Writable {
         Text.writeString(out, json);
     }
 
+    @Override
+    public String toString() {
+        return "Task{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", type=" + type +
+                ", state=" + state +
+                ", schedule=" + schedule +
+                ", createTime=" + createTime +
+                ", dbName='" + dbName + '\'' +
+                ", definition='" + definition + '\'' +
+                ", properties=" + properties +
+                ", expireTime=" + expireTime +
+                ", source=" + source +
+                ", createUser='" + createUser + '\'' +
+                '}';
+    }
 }
