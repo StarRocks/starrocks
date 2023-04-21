@@ -201,15 +201,9 @@ StarRocks 访问 Hive 集群文件存储的相关参数配置。
 
 有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
 
-<<<<<<< HEAD
-##### AWS S3 兼容存储
-
-如果选择 AWS S3 兼容存储（如 MinIO）作为 Hive 集群的文件存储，请按如下配置 `StorageCredentialParams`：
-=======
 ##### 兼容 S3 协议的对象存储
 
 如果选择兼容 S3 协议的对象存储（如 MinIO）作为 Hive 集群的文件存储，请按如下配置 `StorageCredentialParams`：
->>>>>>> a8366196 ([Doc] update s3-compatible storage description (#5102))
 
 ```SQL
 "aws.s3.enable_ssl" = "<true | false>",
