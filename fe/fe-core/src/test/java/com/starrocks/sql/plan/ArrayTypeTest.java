@@ -57,6 +57,53 @@ public class ArrayTypeTest extends PlanTestBase {
     }
 
     @Test
+    public void testConcatArray() throws Exception {
+        String sql = "select concat(c1, c2) from test_array";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>))");
+
+        sql = "select concat(c1, c0) from test_array";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(2: c1, CAST([1: c0] AS ARRAY<VARCHAR>))");
+
+        sql = "select concat(c0, c2) from test_array";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat([1: c0], 3: c2)");
+
+        sql = "select concat(t1a, t1b, t1c) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "concat(1: t1a, CAST(2: t1b AS VARCHAR), CAST(3: t1c AS VARCHAR))");
+
+        sql = "select concat(i_1, s_1, d_1) from adec";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(CAST(2: i_1 AS ARRAY<VARCHAR>), 3: s_1, CAST(4: d_1 AS ARRAY<VARCHAR>))");
+
+        sql = "select concat(i_1, s_1, d_1, d_2, d_3, d_4, d_5, d_6) from adec";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(CAST(2: i_1 AS ARRAY<VARCHAR>), 3: s_1, CAST(4: d_1 AS ARRAY<VARCHAR>), " +
+                "CAST(5: d_2 AS ARRAY<VARCHAR>), CAST(6: d_3 AS ARRAY<VARCHAR>), CAST(7: d_4 AS ARRAY<VARCHAR>), " +
+                "CAST(8: d_5 AS ARRAY<VARCHAR>), CAST(9: d_6 AS ARRAY<VARCHAR>)");
+
+        sql = "select concat(v1, [1,2,3], s_1) from adec";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(CAST([1: v1] AS ARRAY<VARCHAR>), CAST([1,2,3] AS ARRAY<VARCHAR>), 3: s_1)");
+
+        sql = "select concat(1,2, [1,2])";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat([1], [2], [1,2])");
+
+        sql = "select concat(1,2, [1,2], 'a', 'b')";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(CAST([1] AS ARRAY<VARCHAR>), CAST([2] AS ARRAY<VARCHAR>), " +
+                "CAST([1,2] AS ARRAY<VARCHAR>), ['a'], ['b'])");
+
+        sql = "select concat(1,2, [1,2], 'a', 'b', 1.1)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(CAST([1] AS ARRAY<VARCHAR>), CAST([2] AS ARRAY<VARCHAR>), " +
+                "CAST([1,2] AS ARRAY<VARCHAR>), ['a'], ['b'], CAST([1.1] AS ARRAY<VARCHAR>)");
+    }
+
+    @Test
     public void testSelectArrayElementFromArrayColumn() throws Exception {
         String sql = "select v3[1] from tarray";
         String plan = getFragmentPlan(sql);
@@ -651,7 +698,6 @@ public class ArrayTypeTest extends PlanTestBase {
     public void testEmptyArrayOlap() throws Exception {
         String sql = "select arrays_overlap([[],[]],[])";
         String plan = getVerboseExplain(sql);
-        System.out.println(plan);
         assertCContains(plan, "arrays_overlap[([[],[]], []); " +
                 "args: INVALID_TYPE,INVALID_TYPE; " +
                 "result: BOOLEAN; args nullable: true; result nullable: true]");

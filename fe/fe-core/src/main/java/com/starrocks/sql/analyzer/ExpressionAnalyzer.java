@@ -957,6 +957,28 @@ public class ExpressionAnalyzer {
 
                     fn = newFn;
                 }
+            } else if (FunctionSet.CONCAT.equals(fnName) && node.getChildren().stream().anyMatch(child ->
+                    child.getType().isArrayType())) {
+                List<Type> arrayTypes = Arrays.stream(argumentTypes).map(argumentType -> {
+                    if (argumentType.isArrayType()) {
+                        return argumentType;
+                    } else {
+                        return new ArrayType(argumentType);
+                    }
+                }).collect(Collectors.toList());
+                // check if all array types are compatible
+                TypeManager.getCommonSuperType(arrayTypes);
+                for (int i = 0; i < argumentTypes.length; ++i) {
+                    if (!argumentTypes[i].isArrayType()) {
+                        node.setChild(i, new ArrayExpr(new ArrayType(argumentTypes[i]),
+                                Lists.newArrayList(node.getChild(i))));
+                    }
+                }
+                argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+
+                fn = Expr.getBuiltinFunction(FunctionSet.ARRAY_CONCAT, argumentTypes,
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                node.resetFnName(null, FunctionSet.ARRAY_CONCAT);
             } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(fnName, argumentTypes)) {
                 // Since the priority of decimal version is higher than double version (according functionId),
                 // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always
@@ -974,7 +996,7 @@ public class ExpressionAnalyzer {
             } else if (FunctionSet.ARRAY_GENERATE.equals(fnName)) {
                 fn = getArrayGenerateFunction(node);
                 argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
-            } else {
+            }  else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
 
