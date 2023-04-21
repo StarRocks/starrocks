@@ -20,10 +20,12 @@ as (
      and partsupp.ps_partkey=part.p_partkey
      and supplier.s_nationkey=nation.n_nationkey
      and nation.n_regionkey=region.r_regionkey)
-select * from cte union all select * from cte;
+select a.n_name as a1, b.n_name as a2, a.ps_supplycost as b1, b.ps_supplycost as b2 from cte as a join cte as b on a.n_name=b.n_name;
 [result]
-UNION
-    SCAN (mv[partsupp_mv] columns[174: n_name, 175: p_mfgr, 176: p_size, 177: p_type, 178: ps_partkey, 179: ps_suppkey, 180: ps_supplycost, 181: r_name, 182: s_acctbal, 183: s_address, 184: s_comment, 185: s_name, 186: s_nationkey, 187: s_phone, 188: ps_partvalue] predicate[null])
-    SCAN (mv[partsupp_mv] columns[189: n_name, 190: p_mfgr, 191: p_size, 192: p_type, 193: ps_partkey, 194: ps_suppkey, 195: ps_supplycost, 196: r_name, 197: s_acctbal, 198: s_address, 199: s_comment, 200: s_name, 201: s_nationkey, 202: s_phone, 203: ps_partvalue] predicate[null])
+INNER JOIN (join-predicate [52: n_name = 81: n_name] post-join-predicate [null])
+    EXCHANGE SHUFFLE[52]
+        SCAN (mv[partsupp_mv] columns[174: n_name, 180: ps_supplycost] predicate[null])
+    EXCHANGE SHUFFLE[81]
+        SCAN (mv[partsupp_mv] columns[159: n_name, 165: ps_supplycost] predicate[null])
 [end]
 
