@@ -83,6 +83,10 @@ public class BaseTableInfo {
         return this.catalogName;
     }
 
+    public boolean isExternalTable() {
+        return catalogName != null && !catalogName.equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+    }
+
     public String getDbName() {
         return this.dbName != null ? this.dbName : getDb().getFullName();
     }
