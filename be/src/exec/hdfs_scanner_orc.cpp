@@ -184,7 +184,7 @@ bool OrcRowReaderFilter::filterOnPickRowGroup(size_t rowGroupIdx,
 bool OrcRowReaderFilter::filterOnPickStringDictionary(
         const std::unordered_map<uint64_t, orc::StringDictionary*>& sdicts) {
     _dict_filter_eval_cache.clear();
-    
+
     if (sdicts.empty()) return false;
 
     if (!_init_use_dict_filter_slots) {
