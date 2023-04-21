@@ -146,7 +146,7 @@ jobs:
     outputs:
       ip: ${{ steps.update-image.outputs.ip }}
       instance_id: ${{ steps.update-image.outputs.instance_id }}
-      image: ${{ steps.update-image.outputs.image }}
+      image_cache_id: ${{ steps.update-image.outputs.image }}
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
@@ -174,7 +174,7 @@ jobs:
             sshpass -p ${{ secrets.PASSWORD }} ssh -o StrictHostKeyChecking=no root@$ip "cd /home/disk1; ./elastic-build-thirdparty.sh $BRANCH $PR_NUMBER"
             image_cache_id=$(python3 lib/eci_imagecache.py $BRANCH-$PR_NUMBER)
             echo "create image cache..." && sleep 600
-            echo "image=${image_cache_id}" >> $GITHUB_OUTPUT
+            echo "image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
           fi
 
       - name: Clean ENV
@@ -190,6 +190,7 @@ jobs:
     name: BE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
     steps:
       - name: BRANCH INFO
         id: branch
@@ -207,7 +208,8 @@ jobs:
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
           if [[ ${{ needs.be-checker.outputs.output2 }} == 'true' ]]; then
-              export image=${{ needs.thirdparty-update.outputs.output2 }}
+              export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+              export image_tag=$BRANCH-$PR_NUMBER
           fi
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be
 
@@ -411,6 +413,7 @@ jobs:
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
     outputs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
     if: always() && (needs.be-ut.result == 'success' && needs.fe-ut.result == 'success') || (needs.be-checker.outputs.output1 != 'true' && needs.fe-ut.result == 'success') || (needs.fe-checker.outputs.output1 != 'true' && needs.be-ut.result == 'success')
@@ -433,7 +436,8 @@ jobs:
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
           if [[ ${{ needs.be-checker.outputs.output2 }} == 'true' ]]; then
-              export image=${{ needs.thirdparty-update.outputs.output2 }}
+              export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+              export image_tag=$BRANCH-$PR_NUMBER
           fi
           ./bin/elastic-build.sh --pr ${PR_NUMBER}
 
