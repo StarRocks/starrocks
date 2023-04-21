@@ -147,7 +147,7 @@ jobs:
     outputs:
       ip: ${{ steps.update-image.outputs.ip }}
       instance_id: ${{ steps.update-image.outputs.instance_id }}
-      image_cache_id: ${{ steps.update-image.outputs.image }}
+      image_cache_id: ${{ steps.update-image.outputs.image_cache_id }}
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
