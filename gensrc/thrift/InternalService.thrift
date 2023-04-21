@@ -183,6 +183,8 @@ struct TQueryOptions {
   75: optional double spill_mem_limit_threshold;
   76: optional i64 spill_operator_min_bytes;
   77: optional i64 spill_operator_max_bytes;
+  78: optional i32 spill_encode_level;
+
   85: optional TSpillMode spill_mode;
   
   86: optional i32 io_tasks_per_scan_operator = 4;

@@ -256,6 +256,7 @@ private:
 
 Status OrderedInputStream::init(SerdePtr serde, const SortExecExprs* sort_exprs, const SortDescs* descs) {
     std::vector<starrocks::ChunkProvider> chunk_providers;
+    DCHECK(!_input_blocks.empty());
     for (auto& block : _input_blocks) {
         std::vector<BlockPtr> blocks{block};
         auto stream = std::make_shared<BufferedInputStream>(chunk_buffer_max_size,
