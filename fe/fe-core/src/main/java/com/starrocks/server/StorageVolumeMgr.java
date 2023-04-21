@@ -18,6 +18,7 @@ import com.staros.util.LockCloseable;
 import com.starrocks.storagevolume.StorageVolume;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -29,10 +30,10 @@ public class StorageVolumeMgr {
 
     private String defaultSV;
 
-    public void createStorageVolume(String name, String svType, String location, Map<String, String> params,
+    public void createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
                                     Boolean enabled, String comment) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            StorageVolume sv = new StorageVolume(name, svType, location, params, enabled, comment);
+            StorageVolume sv = new StorageVolume(name, svType, locations, params, enabled, comment);
             nameToSV.put(name, sv);
         }
     }
@@ -43,7 +44,8 @@ public class StorageVolumeMgr {
         }
     }
 
-    public void updateStorageVolume(String name, Map<String, String> params, Boolean enabled, String comment) {
+    public void updateStorageVolume(String name, Map<String, String> params, Boolean enabled, String comment,
+                                    String defaultSV) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = nameToSV.get(name);
             if (sv == null) {
@@ -61,12 +63,34 @@ public class StorageVolumeMgr {
             if (!comment.isEmpty()) {
                 sv.setComment(comment);
             }
+
+            if (defaultSV != null) {
+                setDefaultStorageVolume(defaultSV);
+            }
         }
     }
 
     public void setDefaultStorageVolume(String svKey) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             defaultSV = svKey;
+        }
+    }
+
+    public String getDefaultSV() {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return defaultSV;
+        }
+    }
+
+    public boolean exists(String svKey) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return nameToSV.containsKey(svKey);
+        }
+    }
+
+    public StorageVolume getStorageVolume(String svKey) {
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            return nameToSV.get(svKey);
         }
     }
 }

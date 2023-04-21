@@ -14,21 +14,21 @@
 
 package com.starrocks.storagevolume.storageparams;
 
+import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.storagevolume.credential.aws.AWSCredential;
+import com.starrocks.storagevolume.credential.aws.AWSDefaultCredential;
+import com.starrocks.storagevolume.credential.aws.AWSSimpleCredential;
+import com.starrocks.storagevolume.credential.aws.AwsAssumeIamRoleCredential;
+import com.starrocks.storagevolume.credential.aws.AwsInstanceProfileCredential;
 
 import java.util.Map;
 
-public class S3StorageParams implements StorageParams {
-    public static String s3Region = "aws.s3.region";
-    public static String s3Endpoint = "aws.s3.endpoint";
-    public static String s3useDefaultBehaviour = "aws.s3.use_aws_sdk_default_behavior";
-    public static String s3UseInstanceProfile = "aws.s3.use_instance_profile";
-    public static String s3IamRoleArn = "aws.s3.iam_role_arn";
-    public static String s3ExternalId = "aws.s3.external_id";
 
-    private Boolean useDefaultBehaviour;
+public class S3StorageParams implements StorageParams {
     private String region;
     private String endpoint;
+    private AWSCredential credential;
 
     @Override
     public StorageVolume.StorageVolumeType type() {
@@ -36,9 +36,43 @@ public class S3StorageParams implements StorageParams {
     }
 
     public S3StorageParams(Map<String, String> params) {
-        region = params.get(s3Region);
-        endpoint = params.get(s3Endpoint);
+        region = params.get(CloudConfigurationConstants.AWS_S3_REGION);
+        endpoint = params.get(CloudConfigurationConstants.AWS_S3_ENDPOINT);
+        credential = buildCredential(params);
+    }
 
+    private AWSCredential buildCredential(Map<String, String> params) {
+        boolean useAWSSDKDefaultBehavior =
+                Boolean.parseBoolean(params.getOrDefault(
+                        CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false"));
+        if (useAWSSDKDefaultBehavior) {
+            return new AWSDefaultCredential();
+        }
 
+        boolean useInstanceProfile =
+                Boolean.parseBoolean(params.getOrDefault(
+                        CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "false"));
+        if (useInstanceProfile) {
+            if (params.containsKey(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN)) {
+                return new AwsAssumeIamRoleCredential(params.getOrDefault(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, ""),
+                        params.getOrDefault(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, ""));
+            }
+            return new AwsInstanceProfileCredential();
+        }
+
+        return new AWSSimpleCredential(params.getOrDefault(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, ""),
+                params.getOrDefault(CloudConfigurationConstants.AWS_S3_SECRET_KEY, ""));
+    }
+
+    public String getRegion() {
+        return region;
+    }
+
+    public String getEndpoint() {
+        return endpoint;
+    }
+
+    public AWSCredential getCredential() {
+        return credential;
     }
 }

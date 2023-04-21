@@ -14,8 +14,11 @@
 
 package com.starrocks.storagevolume;
 
+import com.starrocks.storagevolume.storageparams.HDFSStorageParams;
+import com.starrocks.storagevolume.storageparams.S3StorageParams;
 import com.starrocks.storagevolume.storageparams.StorageParams;
 
+import java.util.List;
 import java.util.Map;
 
 public class StorageVolume {
@@ -29,7 +32,7 @@ public class StorageVolume {
 
     private StorageVolumeType svt;
 
-    private String storageLocation;
+    private List<String> locations;
 
     private StorageParams storageParams;
 
@@ -39,34 +42,39 @@ public class StorageVolume {
 
     private Boolean enabled;
 
-    public StorageVolume(String name, String svt, String storageLocation,
+    public StorageVolume(String name, String svt, List<String> locations,
                          Map<String, String> storageParams, Boolean enabled, String comment) {
         this.name = name;
         this.svt = toStorageVolumeType(svt);
-        this.storageLocation = storageLocation;
+        this.locations = locations;
         this.comment = comment;
         refCount = 0;
         this.enabled = enabled;
+        this.storageParams = toStorageParams(storageParams);
     }
 
     public void setStorageParams(Map<String, String> params) {
+        this.storageParams = toStorageParams(params);
+    }
 
+    public StorageParams getStorageParams() {
+        return storageParams;
     }
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
     }
 
+    public Boolean getEnabled() {
+        return enabled;
+    }
+
     public void setComment(String comment) {
         this.comment = comment;
     }
 
-    public void increaseRefCount() {
-        ++refCount;
-    }
-
-    public void decreaseRefCount() {
-        --refCount;
+    public String getComment() {
+        return comment;
     }
 
     private StorageVolumeType toStorageVolumeType(String svt) {
@@ -77,6 +85,17 @@ public class StorageVolume {
                 return StorageVolumeType.HDFS;
             default:
                 return StorageVolumeType.UNKNOWN;
+        }
+    }
+
+    private StorageParams toStorageParams(Map<String, String> storageParams) {
+        switch (svt) {
+            case S3:
+                return new S3StorageParams(storageParams);
+            case HDFS:
+                return new HDFSStorageParams(storageParams);
+            default:
+                return null;
         }
     }
 }

@@ -12,10 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.storagevolume.storageparams;
+package com.starrocks.storagevolume.credential.aws;
 
-import com.starrocks.storagevolume.StorageVolume;
-
-public interface StorageParams {
-    public StorageVolume.StorageVolumeType type();
+public class AwsInstanceProfileCredential implements AWSCredential {
+    @Override
+    public AWSCredentialType type() {
+        return AWSCredentialType.INSTANCE_PROFILE;
+    }
 }

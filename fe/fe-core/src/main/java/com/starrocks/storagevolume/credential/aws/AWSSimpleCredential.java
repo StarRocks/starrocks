@@ -12,10 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.storagevolume.storageparams;
+package com.starrocks.storagevolume.credential.aws;
 
-import com.starrocks.storagevolume.StorageVolume;
+public class AWSSimpleCredential implements AWSCredential {
+    private String accessKey;
+    private String secretKey;
 
-public interface StorageParams {
-    public StorageVolume.StorageVolumeType type();
+    public AWSSimpleCredential(String accessKey, String secretKey) {
+        this.accessKey = accessKey;
+        this.secretKey = secretKey;
+    }
+
+    @Override
+    public AWSCredentialType type() {
+        return AWSCredentialType.SIMPLE;
+    }
+
+    public String getAccessKey() {
+        return accessKey;
+    }
+
+    public String getSecretKey() {
+        return secretKey;
+    }
 }

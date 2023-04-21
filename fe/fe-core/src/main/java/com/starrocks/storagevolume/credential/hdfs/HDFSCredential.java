@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.storagevolume.storageparams;
+package com.starrocks.storagevolume.credential.hdfs;
 
-import com.starrocks.storagevolume.StorageVolume;
+public interface HDFSCredential {
+    public HDFSCredentialType type();
 
-public interface StorageParams {
-    public StorageVolume.StorageVolumeType type();
+    public enum HDFSCredentialType {
+        SIMPLE,
+        KERBEROS,
+    }
 }

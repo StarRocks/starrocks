@@ -12,10 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.storagevolume.storageparams;
+package com.starrocks.storagevolume.credential.aws;
 
-import com.starrocks.storagevolume.StorageVolume;
+public class AwsAssumeIamRoleCredential implements AWSCredential {
+    private String iamRoleArn;
+    private String externalId;
 
-public interface StorageParams {
-    public StorageVolume.StorageVolumeType type();
+    public AwsAssumeIamRoleCredential(String iamRoleArn, String externalId) {
+        this.iamRoleArn = iamRoleArn;
+        this.externalId = externalId;
+    }
+
+    @Override
+    public AWSCredentialType type() {
+        return AWSCredentialType.ASSUME_ROLE;
+    }
+
+    public String getIamRoleArn() {
+        return iamRoleArn;
+    }
+
+    public String getExternalId() {
+        return externalId;
+    }
 }
