@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.statistic;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
@@ -12,6 +11,7 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.velocity.VelocityContext;
 
 import java.io.StringWriter;
@@ -24,12 +24,13 @@ import java.util.stream.Collectors;
 public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
     private static final String INSERT_SELECT_METRIC_SAMPLE_TEMPLATE =
-            "SELECT $tableId, '$columnName', $dbId, '$tableName', '$dbName', COUNT(1) * $ratio, "
+            "SELECT $tableId, '$columnNameStr', $dbId, '$dbNameStr.$tableNameStr', '$dbNameStr', COUNT(1) * $ratio, "
                     + "$dataSize * $ratio, 0, 0, '', '', NOW() "
                     + "FROM (SELECT `$columnName` as column_key FROM `$dbName`.`$tableName` $hints ) as t ";
 
     private static final String INSERT_SELECT_TYPE_SAMPLE_TEMPLATE =
-            "SELECT $tableId, '$columnName', $dbId, '$tableName', '$dbName', IFNULL(SUM(t1.count), 0) * $ratio, "
+            "SELECT $tableId, '$columnNameStr', $dbId, '$dbNameStr.$tableNameStr', '$dbNameStr', "
+                    + "       IFNULL(SUM(t1.count), 0) * $ratio, "
                     + "       $dataSize * $ratio, $countDistinctFunction, "
                     + "       IFNULL(SUM(IF(t1.`column_key` IS NULL, t1.count, 0)), 0) * $ratio, "
                     + "       $maxFunction, $minFunction, NOW() "
@@ -95,8 +96,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         return "COUNT(1) * " + typeSize;
     }
 
-    @VisibleForTesting
-    public String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, long rows) {
+    protected String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, long rows) {
         Table table = MetaUtils.getTable(dbId, tableId);
 
         long hitRows = 1;
@@ -154,8 +154,11 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
             context.put("dbId", dbId);
             context.put("tableId", tableId);
             context.put("columnName", name);
+            context.put("columnNameStr", StringEscapeUtils.escapeSql(name));
             context.put("dbName", db.getFullName());
+            context.put("dbNameStr", StringEscapeUtils.escapeSql(db.getFullName()));
             context.put("tableName", table.getName());
+            context.put("tableNameStr", StringEscapeUtils.escapeSql(table.getName()));
             context.put("dataSize", getDataSize(column));
             context.put("ratio", ratio);
             context.put("hints", hintTablets);

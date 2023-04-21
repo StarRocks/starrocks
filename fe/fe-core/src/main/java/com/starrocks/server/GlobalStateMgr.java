@@ -800,6 +800,10 @@ public class GlobalStateMgr {
         return getCurrentState().statisticStorage;
     }
 
+    public static TabletStatMgr getCurrentTabletStatMgr() {
+        return getCurrentState().tabletStatMgr;
+    }
+
     // Only used in UT
     public void setStatisticStorage(StatisticStorage statisticStorage) {
         this.statisticStorage = statisticStorage;

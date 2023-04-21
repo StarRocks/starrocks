@@ -13,7 +13,7 @@ One way is to implement code at the application layer to perform retry and load 
 JDBC connector supports automatic retry:
 
 ~~~sql
-jdbc:mysql://[host:port],[host:port].../[database][?propertyName1][=propertyValue1][&propertyName2][=propertyValue2]...
+jdbc:mysql:loadbalance://[host1][:port],[host2][:port][,[host3][:port]]...[/[database]][?propertyName1=propertyValue1[&propertyName2=propertyValue2]...]
 ~~~
 
 ## ProxySQL
