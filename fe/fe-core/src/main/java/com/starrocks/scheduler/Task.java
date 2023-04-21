@@ -197,4 +197,10 @@ public class Task implements Writable {
         Text.writeString(out, json);
     }
 
+    @Override
+    public String toString() {
+        return "db: " + dbName + ", type: " + type +
+                ", create user: " + createUser + ", state: " +
+                state + ", name: " + name + ", source: " + source + ", definition: " + definition;
+    }
 }
