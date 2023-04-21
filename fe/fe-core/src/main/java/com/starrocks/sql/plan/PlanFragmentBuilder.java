@@ -600,15 +600,6 @@ public class PlanFragmentBuilder {
                 context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
             }
 
-            for (ColumnRefOperator entry : node.getGlobalDictStringColumns()) {
-                SlotDescriptor slotDescriptor =
-                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getId()));
-                slotDescriptor.setIsNullable(entry.isNullable());
-                slotDescriptor.setType(entry.getType());
-                slotDescriptor.setIsMaterialized(false);
-                context.getColRefToExpr().put(entry, new SlotRef(entry.toString(), slotDescriptor));
-            }
-
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
             ScalarOperatorToExpr.FormatterContext formatterContext =
@@ -1089,7 +1080,7 @@ public class PlanFragmentBuilder {
             }
 
             // set a per node log scan limit to prevent BE/CN OOM
-            if (scanNode.getLimit() > 0) {
+            if (scanNode.getLimit() > 0 && predicates.isEmpty()) {
                 scanNode.setLogLimit(Math.min(scanNode.getLimit(), Config.max_per_node_grep_log_limit));
             } else {
                 scanNode.setLogLimit(Config.max_per_node_grep_log_limit);

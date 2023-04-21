@@ -471,6 +471,15 @@ private:
         case MemTracker::SCHEMA_CHANGE_TASK:                                                                        \
             str << "You can change the limit by modify BE config [memory_limitation_per_thread_for_schema_change]"; \
             break;                                                                                                  \
+        case MemTracker::RESOURCE_GROUP:                                                                            \
+            /* TODO: make default_wg configuable. */                                                                \
+            if (tracker->label() == "default_wg") {                                                                 \
+                str << "Mem usage has exceed the limit of query pool";                                              \
+            } else {                                                                                                \
+                str << "Mem usage has exceed the limit of the resource group [" << tracker->label() << "]. "        \
+                    << "You can change the limit by modify [mem_limit] of this group";                              \
+            }                                                                                                       \
+            break;                                                                                                  \
         default:                                                                                                    \
             break;                                                                                                  \
         }                                                                                                           \

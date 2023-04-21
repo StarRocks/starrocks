@@ -67,9 +67,9 @@
   + [Sorted streaming aggregate](./using_starrocks/sorted_aggregate.md)
 + Integration
   + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
-  + Integrate with BI tools
+  + BI tools
     + [Apache Superset](./integrations/superset_support.md)
-  + [Integrate with other tools and systems](./integrations/other_integrations/intro.md)
+  + [Other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)

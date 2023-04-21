@@ -1040,7 +1040,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         throw new RuntimeException("Don't support anymore");
     }
 
-    public int getSignature(int signatureVersion, List<String> partNames) {
+    public int getSignature(int signatureVersion, List<String> partNames, boolean isRestore) {
         Adler32 adler32 = new Adler32();
         adler32.update(signatureVersion);
 
@@ -1060,8 +1060,12 @@ public class OlapTable extends Table implements GsonPostProcessable {
             LOG.debug("signature. index name: {}", indexName);
             MaterializedIndexMeta indexMeta = indexIdToMeta.get(indexId);
             // schema hash
-            adler32.update(indexMeta.getSchemaHash());
-            LOG.debug("signature. index schema hash: {}", indexMeta.getSchemaHash());
+            // schema hash will change after finish schema change. It is make no sense
+            // that check the schema hash here when doing restore
+            if (!isRestore) {
+                adler32.update(indexMeta.getSchemaHash());
+                LOG.debug("signature. index schema hash: {}", indexMeta.getSchemaHash());
+            }
             // short key column count
             adler32.update(indexMeta.getShortKeyColumnCount());
             LOG.debug("signature. index short key: {}", indexMeta.getShortKeyColumnCount());

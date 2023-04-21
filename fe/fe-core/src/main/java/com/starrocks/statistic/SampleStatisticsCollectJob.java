@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.statistic;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
@@ -24,12 +23,12 @@ import java.util.stream.Collectors;
 public class SampleStatisticsCollectJob extends StatisticsCollectJob {
 
     private static final String INSERT_SELECT_METRIC_SAMPLE_TEMPLATE =
-            "SELECT $tableId, '$columnName', $dbId, '$tableName', '$dbName', COUNT(1) * $ratio, "
+            "SELECT $tableId, '$columnName', $dbId, '$dbName.$tableName', '$dbName', COUNT(1) * $ratio, "
                     + "$dataSize * $ratio, 0, 0, '', '', NOW() "
                     + "FROM (SELECT `$columnName` as column_key FROM `$dbName`.`$tableName` $hints ) as t ";
 
     private static final String INSERT_SELECT_TYPE_SAMPLE_TEMPLATE =
-            "SELECT $tableId, '$columnName', $dbId, '$tableName', '$dbName', IFNULL(SUM(t1.count), 0) * $ratio, "
+            "SELECT $tableId, '$columnName', $dbId, '$dbName.$tableName', '$dbName', IFNULL(SUM(t1.count), 0) * $ratio, "
                     + "       $dataSize * $ratio, $countDistinctFunction, "
                     + "       IFNULL(SUM(IF(t1.`column_key` IS NULL, t1.count, 0)), 0) * $ratio, "
                     + "       $maxFunction, $minFunction, NOW() "
@@ -95,8 +94,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         return "COUNT(1) * " + typeSize;
     }
 
-    @VisibleForTesting
-    public String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, long rows) {
+    protected String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, long rows) {
         Table table = MetaUtils.getTable(dbId, tableId);
 
         long hitRows = 1;
