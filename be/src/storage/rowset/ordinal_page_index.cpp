@@ -103,7 +103,8 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
         _num_pages = 1;
         _ordinals.push_back(0);
         _ordinals.push_back(num_values);
-        _pages.emplace_back(meta.root_page().root_page());
+        _pages.emplace_back(meta.root_page().root_page().offset());
+        _pages.emplace_back(meta.root_page().root_page().offset() + meta.root_page().root_page().size());
         return Status::OK();
     }
     // need to read index page
@@ -131,7 +132,7 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
 
     _num_pages = reader.count();
     _ordinals.resize(_num_pages + 1);
-    _pages.resize(_num_pages);
+    _pages.resize(_num_pages + 1);
     for (int i = 0; i < _num_pages; i++) {
         Slice key = reader.get_key(i);
         ordinal_t ordinal = 0;
@@ -139,16 +140,17 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
                                                                                (uint8_t*)&ordinal, nullptr));
 
         _ordinals[i] = ordinal;
-        _pages[i] = reader.get_value(i);
+        _pages[i] = reader.get_value(i).offset;
     }
     _ordinals[_num_pages] = num_values;
+    _pages[_num_pages] = reader.get_value(_num_pages - 1).offset + reader.get_value(_num_pages - 1).size;
     return Status::OK();
 }
 
 void OrdinalIndexReader::_reset() {
     _num_pages = 0;
     std::vector<ordinal_t>{}.swap(_ordinals);
-    std::vector<PagePointer>{}.swap(_pages);
+    std::vector<uint64_t>{}.swap(_pages);
 }
 
 OrdinalPageIndexIterator OrdinalIndexReader::seek_at_or_before(ordinal_t ordinal) {
