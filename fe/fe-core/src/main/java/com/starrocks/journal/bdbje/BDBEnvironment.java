@@ -202,7 +202,7 @@ public class BDBEnvironment {
         replicationConfig
                 .setConfigParam(ReplicationConfig.REPLICA_TIMEOUT, Config.bdbje_heartbeat_timeout_second + " s");
         replicationConfig
-                .setConfigParam(ReplicationConfig.FEEDER_TIMEOUT, Config.bdbje_heartbeat_timeout_second + " s");
+                .setConfigParam(ReplicationConfig.FEEDER_TIMEOUT, (10 + Config.bdbje_heartbeat_timeout_second) + " s");
         replicationConfig
                 .setConfigParam(ReplicationConfig.REPLAY_COST_PERCENT,
                         String.valueOf(Config.bdbje_replay_cost_percent));
