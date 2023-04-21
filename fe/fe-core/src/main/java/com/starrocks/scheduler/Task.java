@@ -199,8 +199,20 @@ public class Task implements Writable {
 
     @Override
     public String toString() {
-        return "db: " + dbName + ", type: " + type +
-                ", create user: " + createUser + ", state: " +
-                state + ", name: " + name + ", source: " + source + ", definition: " + definition;
+        return "Task{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", type=" + type +
+                ", state=" + state +
+                ", schedule=" + schedule +
+                ", createTime=" + createTime +
+                ", dbName='" + dbName + '\'' +
+                ", definition='" + definition + '\'' +
+                ", postRun='" + postRun + '\'' +
+                ", properties=" + properties +
+                ", expireTime=" + expireTime +
+                ", source=" + source +
+                ", createUser='" + createUser + '\'' +
+                '}';
     }
 }

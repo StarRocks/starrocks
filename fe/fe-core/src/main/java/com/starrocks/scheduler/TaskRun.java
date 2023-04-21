@@ -143,6 +143,7 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
+        Preconditions.checkNotNull(status.getDefinition(), "The definition of task run should not null");
         taskRunContext.setDefinition(status.getDefinition());
         taskRunContext.setPostRun(status.getPostRun());
         runCtx = new ConnectContext(null);
@@ -276,5 +277,19 @@ public class TaskRun implements Comparable<TaskRun> {
     @Override
     public int hashCode() {
         return Objects.hash(status);
+    }
+
+    @Override
+    public String toString() {
+        return "TaskRun{" +
+                "taskId=" + taskId +
+                ", properties=" + properties +
+                ", future=" + future +
+                ", task=" + task +
+                ", runCtx=" + runCtx +
+                ", processor=" + processor +
+                ", status=" + status +
+                ", type=" + type +
+                '}';
     }
 }

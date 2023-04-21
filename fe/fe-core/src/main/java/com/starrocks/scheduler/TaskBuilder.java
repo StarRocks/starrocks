@@ -24,6 +24,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.persist.TaskSchedule;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
@@ -39,11 +40,22 @@ public class TaskBuilder {
 
     public static Task buildTask(SubmitTaskStmt submitTaskStmt, ConnectContext context) {
         String taskName = submitTaskStmt.getTaskName();
+        String taskNamePrefix;
+        Constants.TaskSource taskSource;
+        if (submitTaskStmt.getInsertStmt() != null) {
+            taskNamePrefix = "insert-";
+            taskSource = Constants.TaskSource.INSERT;
+        } else if (submitTaskStmt.getCreateTableAsSelectStmt() != null) {
+            taskNamePrefix = "ctas-";
+            taskSource = Constants.TaskSource.CTAS;
+        } else {
+            throw new SemanticException("Submit task statement is not supported");
+        }
         if (taskName == null) {
-            taskName = "ctas-" + DebugUtil.printId(context.getExecutionId());
+            taskName = taskNamePrefix + DebugUtil.printId(context.getExecutionId());
         }
         Task task = new Task(taskName);
-        task.setSource(Constants.TaskSource.CTAS);
+        task.setSource(taskSource);
         task.setCreateTime(System.currentTimeMillis());
         task.setDbName(submitTaskStmt.getDbName());
         task.setDefinition(submitTaskStmt.getSqlText());
