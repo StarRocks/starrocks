@@ -15,12 +15,12 @@ Note:
 Description of the return parameters:
 
 ```plain text
-1. Key：        Configuration item name
-2. Value：      Configuration item value
-3. Type：       Configuration item type 
-4. IsMutable：  Whether it can be set through the ADMIN SET CONFIG command
-5. MasterOnly： Whether it only applies to leader FE
-6. Comment：    Configuration item description 
+1. Key:        Configuration item name
+2. Value:      Configuration item value
+3. Type:       Configuration item type 
+4. IsMutable:  Whether it can be set through the ADMIN SET CONFIG command
+5. MasterOnly: Whether it only applies to leader FE
+6. Comment:    Configuration item description 
 ```
 
 ## Examples

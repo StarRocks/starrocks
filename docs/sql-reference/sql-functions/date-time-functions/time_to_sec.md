@@ -14,7 +14,7 @@ BIGINT time_to_sec(TIME time)
 
 ## Parameters
 
-`time`：It must be of the TIME type。
+`time`: It must be of the TIME type.
 
 ## Return value
 
