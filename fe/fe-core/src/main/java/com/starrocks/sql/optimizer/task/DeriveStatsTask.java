@@ -16,8 +16,10 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.GroupExpression;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
@@ -60,6 +62,15 @@ public class DeriveStatsTask extends OptimizerTask {
         if (currentStatistics == null ||
                 (expressionContext.getStatistics().getOutputRowCount() < currentStatistics.getOutputRowCount())) {
             groupExpression.getGroup().setStatistics(expressionContext.getStatistics());
+        }
+        if (currentStatistics != null && !currentStatistics.equals(expressionContext.getStatistics())) {
+            if (groupExpression.getOp() instanceof LogicalOlapScanOperator) {
+                LogicalOlapScanOperator scan = groupExpression.getOp().cast();
+                if (scan.getTable().isMaterializedView()) {
+                    MaterializedView mv = (MaterializedView) scan.getTable();
+                    groupExpression.getGroup().setMvStatistics(mv.getId(), expressionContext.getStatistics());
+                }
+            }
         }
 
         groupExpression.setStatsDerived();

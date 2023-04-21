@@ -121,17 +121,15 @@ ConnectorScanNode::~ConnectorScanNode() {
 Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ScanNode::init(tnode, state));
     RETURN_IF_ERROR(_data_source_provider->init(_pool, state));
-    _estimate_scan_row_bytes();
-    _adjust_io_tasks_per_scan_operator(state);
-    return Status::OK();
-}
 
-void ConnectorScanNode::_adjust_io_tasks_per_scan_operator(RuntimeState* state) {
-    const TQueryOptions& options = state->query_options();
+    const TQueryOptions& query_options = state->query_options();
     _io_tasks_per_scan_operator = config::connector_io_tasks_per_scan_operator;
-    if (options.__isset.connector_io_tasks_per_scan_operator) {
-        _io_tasks_per_scan_operator = options.connector_io_tasks_per_scan_operator;
+    if (query_options.__isset.connector_io_tasks_per_scan_operator) {
+        _io_tasks_per_scan_operator = query_options.connector_io_tasks_per_scan_operator;
     }
+
+    _estimate_scan_row_bytes();
+    return Status::OK();
 }
 
 void ConnectorScanNode::_estimate_scan_row_bytes() {
@@ -169,6 +167,12 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
 
     // port from olap scan node. to control chunk buffer usage, we can control memory consumption to avoid OOM.
     size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
+
+    if (_limit != -1) {
+        size_t max_chunks = std::max<size_t>(_limit / (runtime_state()->chunk_size()), 1);
+        max_buffer_capacity = std::min(max_buffer_capacity, max_chunks);
+    }
+
     size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, _estimated_max_concurrent_chunks());
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
             max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());

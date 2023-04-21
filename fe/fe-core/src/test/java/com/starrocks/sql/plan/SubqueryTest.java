@@ -330,16 +330,14 @@ public class SubqueryTest extends PlanTestBase {
                 "    ) IS NULL\n" +
                 "  );";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "20:HASH JOIN\n" +
+        assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: v9 = 13: v4\n" +
                 "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)\n" +
                 "  |  \n" +
-                "  |----19:EXCHANGE\n" +
-                "  |    \n" +
-                "  13:NESTLOOP JOIN");
-        assertContains(plan, "13:NESTLOOP JOIN\n" +
+                "  |----12:EXCHANGE");
+        assertContains(plan, "20:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)");
