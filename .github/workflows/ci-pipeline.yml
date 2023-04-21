@@ -637,4 +637,4 @@ jobs:
 
       - name: Clean TMP
         run: |
-          rm $CONF_FILE
+          rm -f $CONF_FILE
