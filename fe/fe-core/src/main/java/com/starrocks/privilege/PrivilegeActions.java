@@ -14,7 +14,6 @@
 
 package com.starrocks.privilege;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
@@ -32,6 +31,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class PrivilegeActions {
     private static final Logger LOG = LogManager.getLogger(PrivilegeActions.class);
@@ -46,12 +46,12 @@ public class PrivilegeActions {
         } catch (PrivObjNotFoundException e) {
             LOG.info("Object not found when checking action[{}] on {} {}, message: {}",
                     privilegeType, objectType.name().replace("_", " "),
-                    Joiner.on(".").join(objectTokens), e.getMessage());
+                    getFullyQualifiedNameFromListAllowNull(objectTokens), e.getMessage());
             return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on {} {}",
                     privilegeType, objectType.name().replace("_", " "),
-                    Joiner.on(".").join(objectTokens), e);
+                    getFullyQualifiedNameFromListAllowNull(objectTokens), e);
             return false;
         }
     }
@@ -173,6 +173,12 @@ public class PrivilegeActions {
         }
     }
 
+    private static String getFullyQualifiedNameFromListAllowNull(List<String> objectTokens) {
+        return objectTokens.stream()
+                .map(e -> e == null ? "null" : e)
+                .collect(Collectors.joining("."));
+    }
+
     private static boolean checkAnyActionOnObject(UserIdentity currentUser, Set<Long> roleIds, ObjectType objectType,
                                                   List<String> objectTokens) {
         AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
@@ -183,11 +189,11 @@ public class PrivilegeActions {
             return manager.provider.searchAnyActionOnObject(objectType, pEntryObject, collection);
         } catch (PrivObjNotFoundException e) {
             LOG.info("Object not found when checking any action on {} {}, message: {}",
-                    objectType.name(), Joiner.on(".").join(objectTokens), e.getMessage());
+                    objectType.name(), getFullyQualifiedNameFromListAllowNull(objectTokens), e.getMessage());
             return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking any action on {} {}",
-                    objectType.name(), Joiner.on(".").join(objectTokens), e);
+                    objectType.name(), getFullyQualifiedNameFromListAllowNull(objectTokens), e);
             return false;
         }
     }
