@@ -57,7 +57,7 @@ public:
 
     size_t memory_usage() const { return _memory_usage; }
 
-    std::string relative_column_file() const { return _column_file; }
+    const std::string& relative_column_file() const { return _column_file; }
 
 private:
     void _calc_memory_usage();

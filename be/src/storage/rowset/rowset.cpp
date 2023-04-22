@@ -272,9 +272,12 @@ Status Rowset::remove() {
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << path << ": " << st;
         merge_status(st);
     }
-    auto st = _remove_delta_column_group_files(fs);
-    merge_status(st);
     return result;
+}
+
+Status Rowset::remove_delta_column_group() {
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_rowset_path));
+    return _remove_delta_column_group_files(fs);
 }
 
 Status Rowset::_remove_delta_column_group_files(std::shared_ptr<FileSystem> fs) {

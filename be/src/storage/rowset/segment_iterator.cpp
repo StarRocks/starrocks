@@ -246,8 +246,7 @@ private:
     // search delta column group by column uniqueid, if this column exist in delta column group,
     // then return column iterator and delta column's fillname.
     // Or just return null
-    StatusOr<std::unique_ptr<ColumnIterator>> _new_dcg_column_iterator(DeltaColumnGroupList dcgs, uint32_t ucid,
-                                                                       std::string* filename);
+    StatusOr<std::unique_ptr<ColumnIterator>> _new_dcg_column_iterator(uint32_t ucid, std::string* filename);
 
     // This function is a unified entry for creating column iterators.
     // `ucid` means unique column id, use it for searching delta column group.
@@ -421,12 +420,11 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
             _opts.stats->raw_rows_read);
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_iterator(DeltaColumnGroupList dcgs,
-                                                                                    uint32_t ucid,
+StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_iterator(uint32_t ucid,
                                                                                     std::string* filename) {
     // build column iter from delta column group
     // iterate dcg from new ver to old ver
-    for (const auto& dcg : dcgs) {
+    for (const auto& dcg : _dcgs) {
         int idx = dcg->get_column_idx(ucid);
         if (idx >= 0) {
             std::string column_file = dcg->column_file(parent_name(_segment->file_name()));
@@ -455,7 +453,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         LOG(ERROR) << "invalid unique columnid in segment iterator, ucid: " << ucid
                    << ", segment: " << _segment->file_name();
     }
-    ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator(_dcgs, (uint32_t)ucid, &dcg_filename));
+    ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator((uint32_t)ucid, &dcg_filename));
     if (col_iter == nullptr) {
         // not found in delta column group, create normal column iterator
         ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid));

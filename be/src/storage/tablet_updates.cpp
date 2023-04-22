@@ -884,12 +884,15 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
             failure_handler("apply_rowset_commit failed", st);
             return;
         }
-        // clear cached delta column group
-        std::vector<TabletSegmentId> tsids;
+        // set cached delta column group
         for (const auto& dcg : state.delta_column_groups()) {
-            tsids.push_back(TabletSegmentId(tablet_id, dcg.first));
+            st = manager->set_cached_delta_column_group(_tablet.data_dir()->get_meta(),
+                                                        TabletSegmentId(tablet_id, dcg.first), dcg.second);
+            if (!st.ok()) {
+                failure_handler("set_cached_delta_column_group failed", st);
+                return;
+            }
         }
-        manager->clear_cached_delta_column_group(tsids);
         // 5. apply memory
         _next_log_id++;
         _apply_version_idx++;
@@ -3266,9 +3269,16 @@ void TabletUpdates::_remove_unused_rowsets(bool drop_tablet) {
         _clear_rowset_del_vec_cache(*rowset);
         _clear_rowset_delta_column_group_cache(*rowset);
 
-        Status st =
-                TabletMetaManager::rowset_delete(_tablet.data_dir(), _tablet.tablet_id(),
-                                                 rowset->rowset_meta()->get_rowset_seg_id(), rowset->num_segments());
+        Status st = rowset->remove_delta_column_group();
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to delete delta column group. err: " << st.get_error_msg()
+                         << ", rowset_id: " << rowset->rowset_id() << ", tablet_id: " << _tablet.tablet_id();
+            skipped_rowsets.emplace_back(std::move(rowset));
+            continue;
+        }
+
+        st = TabletMetaManager::rowset_delete(_tablet.data_dir(), _tablet.tablet_id(),
+                                              rowset->rowset_meta()->get_rowset_seg_id(), rowset->num_segments());
         if (!st.ok()) {
             LOG(WARNING) << "Fail to delete rowset " << rowset->rowset_id() << ": " << st
                          << " tablet:" << _tablet.tablet_id();
@@ -3548,7 +3558,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
                 auto st = FileSystem::Default()->path_exists(dcg_file);
                 if (!st.ok()) {
                     return Status::InternalError("delta column file: " + dcg_file +
-                                                 " does not exist: " + st.to_string());
+                                                 " does not exist: " + st.get_error_msg());
                 }
             }
             auto id = rssid + _next_rowset_id;
