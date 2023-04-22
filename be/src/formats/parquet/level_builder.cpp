@@ -108,7 +108,7 @@ Status LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const T
         return _write_varchar_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
     }
     case TYPE_ARRAY: {
-        return _write_array_column_chunkV2(ctx, type_desc, node, col, write_leaf_callback);
+        return _write_array_column_chunkV3(ctx, type_desc, node, col, write_leaf_callback);
     }
     case TYPE_MAP: {
         return _write_map_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
@@ -413,6 +413,7 @@ Status LevelBuilder::_write_array_column_chunkV2(const LevelBuilderContext& ctx,
         auto def_level = ctx._def_levels ? (*ctx._def_levels)[i] : 0;
         auto rep_level = ctx._rep_levels ? (*ctx._rep_levels)[i] : 0;
 
+        // already null in parent column
         if (def_level < ctx._max_def_level) {
             (*def_levels)[num_levels] = def_level;
             (*rep_levels)[num_levels] = rep_level;
@@ -421,6 +422,7 @@ Status LevelBuilder::_write_array_column_chunkV2(const LevelBuilderContext& ctx,
             continue;
         }
 
+        // null in current array_column
         if (null_col != nullptr && null_col[offset]) {
             (*def_levels)[num_levels] = def_level;
             (*rep_levels)[num_levels] = rep_level;
@@ -431,6 +433,7 @@ Status LevelBuilder::_write_array_column_chunkV2(const LevelBuilderContext& ctx,
         }
 
         auto array_size = offsets[offset + 1] - offsets[offset];
+        // not null but empty array
         if (array_size == 0) {
             (*def_levels)[num_levels] = def_level + node->is_optional();
             (*rep_levels)[num_levels] = rep_level;
@@ -440,12 +443,104 @@ Status LevelBuilder::_write_array_column_chunkV2(const LevelBuilderContext& ctx,
             continue;
         }
 
+        // not null and non-empty array
         (*rep_levels)[num_levels] = rep_level;
         num_levels += array_size;
         offset++;
     }
 
     DCHECK(col->size() == offset);
+
+    def_levels->resize(num_levels);
+    rep_levels->resize(num_levels);
+    LevelBuilderContext derived_ctx(def_levels->size(), def_levels, ctx._max_def_level + node->is_optional() + 1,
+                                    rep_levels, ctx._max_rep_level + 1);
+
+    return _write_column_chunk(derived_ctx, type_desc.children[0], inner_node, elements, write_leaf_callback);
+}
+
+Status LevelBuilder::_write_array_column_chunkV3(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                                 const CallbackFunction& write_leaf_callback) {
+    DCHECK(type_desc.type == TYPE_ARRAY);
+    auto outer_node = std::static_pointer_cast<::parquet::schema::GroupNode>(node);
+    auto mid_node = std::static_pointer_cast<::parquet::schema::GroupNode>(outer_node->field(0));
+    auto inner_node = mid_node->field(0);
+
+    const auto null_col = get_raw_null_column(col);
+    const auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
+    const auto& elements = array_col->elements_column();
+    const auto& offsets = array_col->offsets_column()->get_data();
+
+    size_t num_levels_upper_bound = ctx.num_levels() + elements->size();
+    auto def_levels = std::make_shared<std::vector<int16_t>>(num_levels_upper_bound,
+                                                             ctx._max_def_level + node->is_optional() + 1);
+    auto rep_levels = std::make_shared<std::vector<int16_t>>(num_levels_upper_bound, ctx._max_rep_level + 1);
+
+    size_t num_levels = 0; // pointer to def/rep levels
+    int offset = 0;        // pointer to current column
+    int ctx_ptr = 0;       // pointer to levels in context
+
+    if (null_col != nullptr) {
+        while (ctx_ptr < ctx.num_levels() && offset < col->size()) {
+            auto def_level = ctx._def_levels ? (*ctx._def_levels)[ctx_ptr] : 0;
+            auto rep_level = ctx._rep_levels ? (*ctx._rep_levels)[ctx_ptr] : 0;
+
+            bool null_in_parent_column = def_level != ctx._max_def_level;
+            bool null_in_current_column = null_col[offset] == 1;
+            bool empty_array = offsets[offset + 1] == offsets[offset];
+            auto array_size = offsets[offset + 1] - offsets[offset];
+
+            // set def_level back for null in parent column
+            (*def_levels)[num_levels] += null_in_parent_column * (def_level - (*def_levels)[num_levels]);
+            // decrement 1 for empty array
+            (*def_levels)[num_levels] -= (!null_in_parent_column && !null_in_current_column && empty_array);
+            // decrement node->is_optional for null in current column
+            (*def_levels)[num_levels] -= (!null_in_parent_column && null_in_current_column && node->is_optional());
+            (*rep_levels)[num_levels] = rep_level;
+
+            // update pointers
+            num_levels += (null_in_parent_column || null_in_current_column || empty_array) ? 1 : array_size;
+            offset += !null_in_parent_column;
+            ctx_ptr++;
+        }
+    } else {
+        while (ctx_ptr < ctx.num_levels() && offset < col->size()) {
+            auto def_level = ctx._def_levels ? (*ctx._def_levels)[ctx_ptr] : 0;
+            auto rep_level = ctx._rep_levels ? (*ctx._rep_levels)[ctx_ptr] : 0;
+
+            bool null_in_parent_column = def_level != ctx._max_def_level;
+            bool empty_array = offsets[offset + 1] == offsets[offset];
+            auto array_size = offsets[offset + 1] - offsets[offset];
+
+            // set def_level back for null in parent column
+            (*def_levels)[num_levels] = null_in_parent_column ? def_level : (*def_levels)[num_levels];
+            // decrement 1 for empty array
+            (*def_levels)[num_levels] -= (!null_in_parent_column && empty_array);
+            (*rep_levels)[num_levels] = rep_level;
+
+            // update pointers
+            num_levels += (null_in_parent_column || empty_array) ? 1 : array_size;
+            offset += !null_in_parent_column;
+            ctx_ptr++;
+        }
+    }
+    DCHECK(col->size() == offset);
+
+    // handle remaining undefined entries
+    if (ctx_ptr < ctx.num_levels()) {
+        if (ctx._def_levels == nullptr) {
+            memset(def_levels->data() + num_levels, 0, ctx.num_levels() - ctx_ptr);
+        } else {
+            memcpy(def_levels->data() + num_levels, ctx._def_levels->data() + ctx_ptr, ctx.num_levels() - ctx_ptr);
+        }
+
+        if (ctx._rep_levels == nullptr) {
+            memset(rep_levels->data() + num_levels, 0, ctx.num_levels() - ctx_ptr);
+        } else {
+            memcpy(rep_levels->data() + num_levels, ctx._rep_levels->data() + ctx_ptr, ctx.num_levels() - ctx_ptr);
+        }
+    }
 
     def_levels->resize(num_levels);
     rep_levels->resize(num_levels);

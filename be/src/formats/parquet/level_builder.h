@@ -127,6 +127,10 @@ private:
                                        const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                        const CallbackFunction& write_leaf_callback);
 
+    Status _write_array_column_chunkV3(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                       const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                       const CallbackFunction& write_leaf_callback);
+
     Status _write_map_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                    const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                    const CallbackFunction& write_leaf_callback);
