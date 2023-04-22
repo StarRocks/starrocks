@@ -28,6 +28,7 @@
 namespace starrocks {
 
 static std::atomic<int32_t> connector_scan_node_open_limit;
+static constexpr double kChunkBufferMemRatio = 0.5;
 
 // ======================================================
 // if *lvalue == expect, swap(*lvalue,*rvalue)
@@ -163,7 +164,7 @@ int ConnectorScanNode::_estimated_max_concurrent_chunks() const {
     size_t chunk_mem_usage = row_mem_usage * runtime_state()->chunk_size();
     DCHECK_GT(chunk_mem_usage, 0);
     // give half of the memory to the chunk buffer
-    int concurrency = std::max<int>(_mem_limit / 2 / chunk_mem_usage, 1);
+    int concurrency = std::max<int>(int(_mem_limit * kChunkBufferMemRatio / chunk_mem_usage), 1);
     return concurrency;
 }
 
@@ -180,9 +181,9 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
         max_buffer_capacity = std::min(max_buffer_capacity, max_chunks);
     }
     size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, _estimated_max_concurrent_chunks());
-
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
-            max_buffer_capacity, default_buffer_capacity, _mem_limit, runtime_state()->chunk_size());
+            max_buffer_capacity, default_buffer_capacity, int64_t(_mem_limit * kChunkBufferMemRatio),
+            runtime_state()->chunk_size());
     scan_op = !stream_data_source
                       ? std::make_shared<pipeline::ConnectorScanOperatorFactory>(
                                 context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter))
