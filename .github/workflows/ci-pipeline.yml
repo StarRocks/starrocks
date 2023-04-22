@@ -413,7 +413,7 @@ jobs:
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
   build:
     runs-on: self-hosted
-    needs: [be-checker, fe-checker, be-ut, fe-ut]
+    needs: [be-checker, fe-checker, be-ut, fe-ut, thirdparty-update]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
