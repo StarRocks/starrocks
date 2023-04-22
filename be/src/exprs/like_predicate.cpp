@@ -172,6 +172,18 @@ Status LikePredicate::regex_prepare(FunctionContext* context, FunctionContext::F
     if (!context->is_notnull_constant_column(1)) {
         return Status::OK();
     }
+    if (context->get_num_args() == 3 && context->is_notnull_constant_column(2)) {
+        ColumnPtr column_ignore_case = context->get_constant_column(2);
+        Slice ignore_case_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_ignore_case);
+        auto ignore_case = ignore_case_slice.to_string();
+        if (ignore_case == "i") {
+            state->set_ignore_case(true);
+        } else if (ignore_case == "c"){
+            state->set_ignore_case(false);
+        } else {
+            return Status::InternalError("regex ignore case must in {i, c}");
+        }
+    }
 
     auto column = context->get_constant_column(1);
     auto pattern = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
@@ -514,6 +526,13 @@ StatusOr<ColumnPtr> LikePredicate::regex_match_partial(FunctionContext* context,
     opts.set_never_nl(false);
     opts.set_dot_nl(true);
     opts.set_log_errors(false);
+
+    auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    if (state->ignore_case) {
+        opts.set_case_sensitive(false);
+    } else {
+        opts.set_case_sensitive(true);
+    }
 
     for (int row = 0; row < num_rows; ++row) {
         if (value_viewer.is_null(row) || pattern_viewer.is_null(row)) {
