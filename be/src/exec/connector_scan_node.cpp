@@ -180,11 +180,7 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
         size_t max_chunks = std::max<size_t>(_limit / (runtime_state()->chunk_size()), 1);
         max_buffer_capacity = std::min(max_buffer_capacity, max_chunks);
     }
-    size_t default_buffer_capacity = _estimated_max_concurrent_chunks();
-    // if default capacity are far less than max capacity, we should cap it.
-    // otherwise chunk buffer will use more memory than expected.
-    max_buffer_capacity = std::min(max_buffer_capacity, default_buffer_capacity * 2);
-    default_buffer_capacity = std::min(default_buffer_capacity, max_buffer_capacity);
+    size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, _estimated_max_concurrent_chunks());
 
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
             max_buffer_capacity, default_buffer_capacity, int64_t(_mem_limit * kChunkBufferMemRatio),
