@@ -1,5 +1,4 @@
-comment:
-  layout: "newheader, diff, flags, files, newfooter"
+comment: false
 codecov:
   allow_coverage_offsets: true
 github_checks:
