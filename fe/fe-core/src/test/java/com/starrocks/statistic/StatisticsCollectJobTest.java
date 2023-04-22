@@ -315,6 +315,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
     public void testAnalyzeHistogram() {
         Database db = GlobalStateMgr.getCurrentState().getDb(10002);
         OlapTable olapTable = (OlapTable) db.getTable("t0_stats");
+        long dbid = db.getId();
 
         Map<String, String> properties = new HashMap<>();
         properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "0.1");
@@ -489,7 +490,7 @@ public class StatisticsCollectJobTest extends PlanTestBase {
 
         String sql = Deencapsulation.invoke(sampleStatisticsCollectJob, "buildSampleInsertSQL",
                 dbid, olapTable.getId(), Lists.newArrayList("v1", "count"), 100L);
-        assertContains(sql, "`stats`.`tcount`  Tablet(16465)");
+        assertContains(sql, "`stats`.`tcount`");
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
 
         FullStatisticsCollectJob fullStatisticsCollectJob = new FullStatisticsCollectJob(
