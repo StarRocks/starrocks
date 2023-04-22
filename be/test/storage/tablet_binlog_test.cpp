@@ -201,6 +201,8 @@ TEST_F(TabletBinlogTest, test_publish_out_of_order) {
 }
 
 TEST_F(TabletBinlogTest, test_load) {
+    // verify load empty rowsets
+    ASSERT_OK(_tablet->finish_load_rowsets());
     std::vector<DupKeyVersionInfo> version_infos;
     ingest_random_binlog(_tablet, 2, 50, &version_infos);
     // simulate to checkpoint tablet meta

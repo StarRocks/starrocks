@@ -353,7 +353,7 @@ private:
     // If true, will decline to generate new binlog and read requests
     std::atomic<bool> _init_failure{false};
 
-    int64_t BINLOG_MIN_FILE_ID = 1;
+    static const int64_t BINLOG_MIN_FILE_ID = 1;
     // file id for the next binlog file. Protected by Tablet#_meta_lock
     std::atomic<int64_t> _next_file_id = BINLOG_MIN_FILE_ID;
     // the version of running ingestion. -1 indicates no ingestion.

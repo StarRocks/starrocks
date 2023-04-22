@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <re2/re2.h>
+#include <list>
 
 #include "common/status.h"
 #include "gen_cpp/binlog.pb.h"
@@ -55,6 +55,8 @@ public:
     }
 
     static std::string file_meta_to_string(BinlogFileMetaPB* file_meta);
+
+    static std::string page_header_to_string(PageHeaderPB* page_header);
 
     static bool get_file_id_from_name(const std::string& file_name, int64_t* file_id);
 

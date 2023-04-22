@@ -32,8 +32,21 @@ std::string BinlogUtil::file_meta_to_string(BinlogFileMetaPB* file_meta) {
        << ", start_seq_id: " << file_meta->start_seq_id()
        << ", start_timestamp_in_us: " << file_meta->start_timestamp_in_us()
        << ", end_version: " << file_meta->end_version() << ", end_seq_id: " << file_meta->end_seq_id()
-       << ", end_timestamp_in_us: " << file_meta->end_timestamp_in_us() << ", num_pages: " << file_meta->num_pages()
-       << ", file_size: " << file_meta->file_size() << "}";
+       << ", end_timestamp_in_us: " << file_meta->end_timestamp_in_us() << ", version_eof: " << file_meta->version_eof()
+       << ", num_pages: " << file_meta->num_pages() << ", file_size: " << file_meta->file_size() << "}";
+    return ss.str();
+}
+
+std::string BinlogUtil::page_header_to_string(PageHeaderPB* page_header) {
+    std::stringstream ss;
+    ss << "{page type: " << page_header->page_type() << ", compress type: " << page_header->compress_type()
+       << ", uncompressed size: " << page_header->uncompressed_size()
+       << ", compressed size: " << page_header->compressed_size() << ", crc: " << page_header->compressed_page_crc()
+       << ", version: " << page_header->version() << ", num log entries: " << page_header->num_log_entries()
+       << ", start seq id: " << page_header->start_seq_id() << ", end seq id: " << page_header->end_seq_id()
+       << ". timestamp in us: " << page_header->timestamp_in_us()
+       << ", end of version: " << page_header->end_of_version() << ", num rowsets: " << page_header->rowsets().size()
+       << "}";
     return ss.str();
 }
 

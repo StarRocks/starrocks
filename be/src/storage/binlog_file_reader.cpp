@@ -401,6 +401,10 @@ Status BinlogFileReader::parse_page_header(RandomAccessFile* read_file, int64_t 
     }
     *read_file_size = current_file_pos - file_pos;
 
+    VLOG(3) << "Read page header, file path: " << read_file->filename() << ", file pos: " << file_pos
+            << ", page header size: " << page_header_pb_size
+            << ", page header: " << BinlogUtil::page_header_to_string(page_header_pb);
+
     return Status::OK();
 }
 
@@ -426,13 +430,18 @@ StatusOr<BinlogFileMetaPBPtr> BinlogFileReader::load_meta_by_scan_pages(int64_t 
     while (true) {
         status = parse_page_header(read_file, file_size, file_pos, num_pages, page_header.get(), &read_file_size);
         if (!status.ok()) {
-            VLOG(3) << "Failed to parse binlog page header when loading meta, file path: " << read_file->filename()
+            VLOG(3) << "Stop to scan pages because of parsing page header failure, file path: " << read_file->filename()
                     << ", file_pos: " << file_pos << ", page_index: " << num_pages << ", " << status;
             break;
         }
 
-        BinlogLsn pageMaxLsn(page_header->version(), page_header->end_seq_id());
+        // for empty version, use seq_id 0 for max lsn
+        int64_t end_seq_id = page_header->end_seq_id() == -1 ? 0 : page_header->end_seq_id();
+        BinlogLsn pageMaxLsn(page_header->version(), end_seq_id);
         if (!(pageMaxLsn < maxLsnExclusive)) {
+            VLOG(3) << "Stop to scan pages because page max lsn exceeds, file path: " << read_file->filename()
+                    << ", file_pos: " << file_pos << ", page_index: " << num_pages
+                    << ", maxLsnExclusive: " << maxLsnExclusive << ", pageMaxLsn" << pageMaxLsn;
             break;
         }
 
@@ -456,6 +465,8 @@ StatusOr<BinlogFileMetaPBPtr> BinlogFileReader::load_meta_by_scan_pages(int64_t 
     }
 
     if (num_pages == 0) {
+        VLOG(3) << "There is no valid data found, file path: " << read_file->filename()
+                << ", maxLsnExclusive: " << maxLsnExclusive;
         return Status::NotFound("There is no valid data in binlog file, path: " + read_file->filename());
     }
 

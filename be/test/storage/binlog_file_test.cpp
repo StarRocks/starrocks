@@ -110,7 +110,7 @@ TEST_F(BinlogFileTest, test_basic_write_read) {
     ASSERT_OK(file_writer->commit(true));
 
     expect_file_meta.set_end_version(3);
-    expect_file_meta.set_end_seq_id(-1);
+    expect_file_meta.set_end_seq_id(0);
     expect_file_meta.set_end_timestamp_in_us(3);
     expect_file_meta.set_version_eof(true);
     expect_file_meta.set_num_pages(4);

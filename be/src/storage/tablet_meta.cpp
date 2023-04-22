@@ -332,10 +332,9 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
 
     if (_binlog_config != nullptr) {
         _binlog_config->to_pb(tablet_meta_pb->mutable_binlog_config());
-    }
-
-    if (_binlog_min_version != -1) {
-        tablet_meta_pb->set_binlog_min_version(_binlog_min_version);
+        BinlogLsnPB* lsn = tablet_meta_pb->mutable_binlog_min_lsn();
+        lsn->set_version(_binlog_min_lsn.version());
+        lsn->set_seq_id(_binlog_min_lsn.seq_id());
     }
 }
 

@@ -293,9 +293,10 @@ Status Tablet::finish_load_rowsets() {
     }
     valid_versions.sort();
 
-    // TabletMeta#binlog_min_lsn is first set when enable binlog in Tablet#update_binlog_config,
-    // and we don't know the first incremental version for add_inc_rowset, and the data may be
-    // copied to this tablet via full clone, so the min_lsn may be smaller than the actual version
+    // TabletMeta#binlog_min_lsn may be not accurate for the minimum version. Consider that when
+    // enable binlog in Tablet#update_binlog_config, we don't know the first incremental version
+    // for add_inc_rowset, so just set the min version to (_tablet_meta->max_version + 1), and
+    // after some ingestion, the actual min version may be larger than it
     int64_t min_valid_version = valid_versions.empty() ? min_lsn.version() : valid_versions.front();
     if (min_valid_version > min_lsn.version()) {
         min_lsn = BinlogLsn(min_valid_version, 0);

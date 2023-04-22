@@ -76,8 +76,9 @@ Status BinlogManager::init(BinlogLsn min_valid_lsn, std::list<int64_t>& sorted_v
 
     if (version_it != sorted_valid_versions.rend()) {
         std::string errMsg = fmt::format(
-                "Failed to init binlog because can't find binlog for all of versions, tablet {}, min_valid_lsn {},"
-                "num expected versions: {}, num recovered version: {}, last failed version: {}",
+                "Failed to init binlog because can't find binlog for all of versions, "
+                "tablet: {}, min_valid_lsn: {}, num expected versions: {}, num recovered version: {}, last failed "
+                "version: {}",
                 _tablet_id, min_valid_lsn.to_string(), sorted_valid_versions.size(), num_versions_recovered,
                 *version_it);
         LOG(ERROR) << errMsg;
@@ -115,9 +116,13 @@ Status BinlogManager::init(BinlogLsn min_valid_lsn, std::list<int64_t>& sorted_v
         _unused_binlog_file_ids.blocking_put(it);
     }
 
-    LOG(INFO) << "Init binlog successfully, tablet: " << _tablet_id << ", min_valid_lsn: " << min_valid_lsn
-              << ", min valid version: " << sorted_valid_versions.front()
-              << ", max version: " << sorted_valid_versions.back();
+    std::string version_details;
+    if (!sorted_valid_versions.empty()) {
+        version_details = fmt::format(", min valid lsn: {}, min/max valid version: {}/{}", min_valid_lsn.to_string(),
+                                      sorted_valid_versions.front(), sorted_valid_versions.back());
+    }
+    LOG(INFO) << "Init binlog successfully, tablet: " << _tablet_id
+              << ", num valid versions: " << sorted_valid_versions.size() << version_details;
 
     return Status::OK();
 }
@@ -212,9 +217,10 @@ StatusOr<BinlogFileMetaPBPtr> BinlogManager::_recover_file_meta_for_version(int6
         }
     }
 
-    std::string errMsg =
-            fmt::format("Failed to recover version {} because of discontinuous lsn, tablet {}, file_path: {}", version,
-                        _tablet_id, file_path);
+    std::string errMsg = fmt::format(
+            "Failed to recover version {} because of discontinuous lsn, "
+            "tablet: {}, file_path: {}",
+            version, _tablet_id, file_path);
     LOG(ERROR) << errMsg << ", current file meta: " << BinlogUtil::file_meta_to_string(file_meta.get())
                << ", last file meta: "
                << (last_file_meta == nullptr ? "null" : BinlogUtil::file_meta_to_string(last_file_meta));
@@ -360,7 +366,7 @@ void BinlogManager::_check_wait_reader_binlog_files() {
         if (binlog_file->reader_count() > 0) {
             break;
         }
-        auto& file_meta = binlog_file->file_meta();
+        auto file_meta = binlog_file->file_meta();
         _total_wait_reader_binlog_file_size -= file_meta->file_size();
         for (int64_t rowset_id : file_meta->rowsets()) {
             int32_t count = --_wait_reader_rowset_count_map[rowset_id];
@@ -399,7 +405,7 @@ bool BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t bi
     bool expired_or_overcapacity = false;
     for (auto it = _alive_binlog_files.begin(); it != _alive_binlog_files.end();) {
         auto& binlog_file = it->second;
-        auto& meta = binlog_file->file_meta();
+        auto meta = binlog_file->file_meta();
         // skip to clean up the active file
         if (meta->id() == active_file_id) {
             break;
