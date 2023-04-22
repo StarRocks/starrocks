@@ -241,6 +241,7 @@ public class Alter {
         } catch (MetaNotFoundException e) {
             if (stmt.isSetIfExists()) {
                 LOG.info(e.getMessage());
+                LOG.info("debug!!");
             } else {
                 throw e;
             }
