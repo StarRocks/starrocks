@@ -4,9 +4,9 @@
 
 ### Table Type Selection
 
-StarRocks supports four table types: Duplicate Key table, Aggragate Key table, Unique Key table, and Primary Key table. All three are sorted by KEY.
+StarRocks supports four table types: Duplicate Key table, Aggragate table, Unique Key table, and Primary Key table. All three are sorted by KEY.
 
-* AGGREGATE KEY: When the AGGREGATE KEY is the same, the old and new records are aggregated. The currently supported aggregate functions are SUM, MIN, MAX, REPLACE. Aggregate table can aggregate data in advance, which is suitable for reporting and multi-dimensional analyses.
+* AGGREGATE KEY: When the AGGREGATE KEY is the same, the old and new records are aggregated. The currently supported aggregate functions are SUM, MIN, MAX, and REPLACE. Aggregate tables support aggregating data in advance, facilitating reporting and multi-dimensional analyses.
 
 ~~~sql
 CREATE TABLE site_visit
