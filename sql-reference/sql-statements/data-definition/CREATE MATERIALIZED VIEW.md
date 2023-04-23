@@ -105,6 +105,33 @@ SELECT select_expr[, select_expr ...]
 - `replication_num`：创建物化视图副本数量。
 - `storage_medium`：存储介质类型。
 
+### 支持数据类型
+
+- 基于 StarRocks 内部数据目录（Default Catalog）创建的异步物化视图支持以下数据类型：
+
+  - DATE
+  - DATETIME
+  - CHAR
+  - VARCHAR
+  - BOOLEAN
+  - TINYINT
+  - SMALLINT
+  - INT
+  - BIGINT
+  - LARGEINT
+  - FLOAT
+  - DOUBLE
+  - DECIMAL
+  - ARRAY
+  - JSON
+  - BITMAP
+  - HLL
+  - PERCENTILE
+
+> **说明**
+>
+> 自 v2.4.5 起支持 BITMAP、HLL 以及 PERCENTILE。
+
 ### 聚合函数匹配关系
 
 使用物化视图搜索时，原始查询语句将会被自动改写并用于查询物化视图中保存的中间结果。下表展示了原始查询聚合函数和构建物化视图用到的聚合函数的匹配关系。您可以根据您的业务场景选择对应的聚合函数构建物化视图。
