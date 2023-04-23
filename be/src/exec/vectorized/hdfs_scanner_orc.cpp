@@ -297,6 +297,8 @@ static inline size_t remove_trailing_spaces(const char* s, size_t size) {
 
 bool OrcRowReaderFilter::filterOnPickStringDictionary(
         const std::unordered_map<uint64_t, orc::StringDictionary*>& sdicts) {
+    _dict_filter_eval_cache.clear();
+
     if (sdicts.empty()) return false;
 
     if (!_init_use_dict_filter_slots) {
@@ -313,8 +315,6 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
         _init_use_dict_filter_slots = true;
     }
-
-    _dict_filter_eval_cache.clear();
 
     for (auto& p : _use_dict_filter_slots) {
         SlotDescriptor* slot_desc = p.first;
