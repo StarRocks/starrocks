@@ -154,7 +154,7 @@ public class HiveMetaClient {
                 LOG.error("Failed to get hive client. {}", connectionException.getMessage());
             } else if (connectionException != null) {
                 LOG.error("An exception occurred when using the current long link " +
-                        "to access metastore. msg： {}", messageIfError);
+                        "to access metastore. msg: {}", messageIfError);
                 client.close();
             } else if (client != null) {
                 client.finish();
@@ -236,7 +236,7 @@ public class HiveMetaClient {
                     LOG.error("Failed to get hive client. {}", connectionException.getMessage());
                 } else if (connectionException != null) {
                     LOG.error("An exception occurred when using the current long link " +
-                            "to access metastore. msg： {}", connectionException.getMessage());
+                            "to access metastore. msg: {}", connectionException.getMessage());
                     client.close();
                 } else if (client != null) {
                     client.finish();

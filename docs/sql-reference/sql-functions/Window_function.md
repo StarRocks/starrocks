@@ -2,11 +2,11 @@
 
 ## Background
 
-The window function is a special class of built-in functions. Similar to the aggregation function, it also does calculations on multiple input rows to get a single data value. The difference is that the window function processes the input data within a specific window, rather than using the “group by” method. The data in each window can be sorted and grouped using the over() clause. The window function **computes a separate value for each row**, rather than computing one value for each group. This flexibility allows users to add additional columns to the select clause and further filter the result set. The window function can only appear in the select list and the outermost position of a clause. It takes effect at the end of the query, that is, after the `join`, `where`, and `group by` operations are performed. The window function is often used to analyze trends, calculate outliers, and perform bucketing analyses on large-scale data.
+The window function is a special class of built-in functions. Similar to the aggregation function, it also does calculations on multiple input rows to get a single data value. The difference is that the window function processes the input data within a specific window, rather than using the "group by" method. The data in each window can be sorted and grouped using the over() clause. The window function **computes a separate value for each row**, rather than computing one value for each group. This flexibility allows users to add additional columns to the select clause and further filter the result set. The window function can only appear in the select list and the outermost position of a clause. It takes effect at the end of the query, that is, after the `join`, `where`, and `group by` operations are performed. The window function is often used to analyze trends, calculate outliers, and perform bucketing analyses on large-scale data.
 
 ## Usage
 
-Syntax of the window function：
+Syntax of the window function:
 
 ~~~SQL
 function(args) OVER(partition_by_clause order_by_clause [window_clause])
@@ -453,20 +453,20 @@ Returns the value of the row that leads the current row by `offset` rows. This f
 
 Data types that can be queried by `lead()` are the same as those supported by [lag()](#lag).
 
-Syntax：
+Syntax
 
 ~~~Haskell
 LEAD(expr[, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ~~~
 
-Parameters：
+Parameters:
 
 * `expr`: the field you want to compute.
 * `offset`: the offset. It must be a positive integer. If this parameter is not specified, 1 is the default.
 * `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
 
-Example：
+Example:
 
 Calculate the trending of closing prices between two days, that is, whether the price of the next day is higher or lower. `default` is set to 0, which means 0 is returned if no matching row is found.
 
@@ -502,7 +502,7 @@ Output
 
 Returns the maximum value of the specified rows in the current window.
 
-Syntax：
+Syntax
 
 ~~~SQL
 MAX(expression) [OVER (analytic_clause)]
@@ -555,7 +555,7 @@ where property in ('prime','square');
 
 Returns the minimum value of the specified rows in the current window.
 
-Syntax：
+Syntax:
 
 ~~~SQL
 MIN(expression) [OVER (analytic_clause)]
@@ -810,7 +810,7 @@ The execution order of clauses in a query with QUALIFY is evaluated in the follo
 
 ### SUM()
 
-Syntax：
+Syntax:
 
 ~~~SQL
 SUM(expression) [OVER (analytic_clause)]

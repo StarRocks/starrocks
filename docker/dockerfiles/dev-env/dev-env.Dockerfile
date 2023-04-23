@@ -52,6 +52,7 @@ FROM base as dev-env
 ARG commit_id
 LABEL org.opencontainers.image.source="https://github.com/StarRocks/starrocks"
 LABEL com.starrocks.commit=${commit_id:-"UNKNOWN"}
+ENV PATH=$STARROCKS_GCC_HOME/bin:$PATH
 
 # Copy third-party dependencies
 COPY --from=builder $STARROCKS_THIRDPARTY $STARROCKS_THIRDPARTY

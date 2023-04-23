@@ -584,14 +584,16 @@ public class Column implements Writable {
             return false;
         }
 
-        if (this.getStrLen() != other.getStrLen()) {
-            return false;
-        }
-        if (this.getPrecision() != other.getPrecision()) {
-            return false;
-        }
-        if (this.getScale() != other.getScale()) {
-            return false;
+        if (this.getType().isScalarType() && other.getType().isScalarType()) {
+            if (this.getStrLen() != other.getStrLen()) {
+                return false;
+            }
+            if (this.getPrecision() != other.getPrecision()) {
+                return false;
+            }
+            if (this.getScale() != other.getScale()) {
+                return false;
+            }
         }
 
         return comment.equals(other.getComment());
