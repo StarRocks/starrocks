@@ -26,7 +26,7 @@ import java.nio.file.Paths;
 import java.util.List;
 
 public class ConfigTest {
-    private Config config = new Config();
+    private final Config config = new Config();
 
     private static class ConfigForTest extends ConfigBase {
         @ConfField(mutable = true, aliases = {"schedule_slot_num_per_path", "schedule_slot_num_per_path_only_for_test"})
@@ -36,11 +36,12 @@ public class ConfigTest {
     @Before
     public void setUp() throws Exception {
         URL resource = getClass().getClassLoader().getResource("conf/config_test.properties");
+        assert resource != null;
         config.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
     }
 
     @Test
-    public void testGetConfigFromPropertyFile() throws AnalysisException, DdlException {
+    public void testGetConfigFromPropertyFile() throws DdlException {
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("tablet_sched_slot_num_per_path", false);
         List<List<String>> configs = Config.getConfigInfo(matcher);
         Assert.assertEquals("3", configs.get(0).get(2));
@@ -49,6 +50,7 @@ public class ConfigTest {
     @Test
     public void testConfigGetCompatibleWithOldName() throws Exception {
         URL resource = getClass().getClassLoader().getResource("conf/config_test2.properties");
+        assert resource != null;
         config.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("schedule_slot_num_per_path", false);
         List<List<String>> configs = Config.getConfigInfo(matcher);
@@ -63,6 +65,7 @@ public class ConfigTest {
     public void testMultiAlias() throws Exception {
         ConfigForTest configForTest = new ConfigForTest();
         URL resource = getClass().getClassLoader().getResource("conf/config_test3.properties");
+        assert resource != null;
         configForTest.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("schedule_slot_num_per_path_only_for_test", false);
         List<List<String>> configs = ConfigForTest.getConfigInfo(matcher);
@@ -99,6 +102,7 @@ public class ConfigTest {
     public void testConfigArray() throws Exception {
         ConfigForArray configForArray = new ConfigForArray();
         URL resource = getClass().getClassLoader().getResource("conf/config_test3.properties");
+        assert resource != null;
         configForArray.init(Paths.get(resource.toURI()).toFile().getAbsolutePath());
         List<List<String>> configs = ConfigForArray.getConfigInfo(null);
         Assert.assertEquals("[1, 1]", configs.get(0).get(2));
@@ -111,6 +115,10 @@ public class ConfigTest {
         Assert.assertEquals("double[]", configs.get(3).get(3));
         Assert.assertEquals("[1, 2]", configs.get(4).get(2));
         Assert.assertEquals("String[]", configs.get(4).get(3));
-        setUp();
+
+        // check set an empty array works
+        ConfigForArray.setConfigField(ConfigForArray.getAllMutableConfigs().get("prop_array_long"), "");
+        configs = ConfigForArray.getConfigInfo(null);
+        Assert.assertEquals("[]", configs.get(2).get(2));
     }
 }
