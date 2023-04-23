@@ -677,8 +677,8 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column) {
 
     ExprContext* ctx = nullptr;
 
-    Status st = Expr::create_expr_tree(chunk_changer.get_object_pool(), t_expr, &ctx,
-                                       chunk_changer.get_runtime_state());
+    Status st =
+            Expr::create_expr_tree(chunk_changer.get_object_pool(), t_expr, &ctx, chunk_changer.get_runtime_state());
     DCHECK(st.ok()) << st.get_error_msg();
     st = ctx->prepare(chunk_changer.get_runtime_state());
     DCHECK(st.ok()) << st.get_error_msg();

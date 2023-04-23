@@ -95,6 +95,7 @@ set(UTIL_FILES
   lru_cache.cpp
   tdigest.cpp
   debug/query_trace_impl.cpp
+  random.cc
 )
 
 add_library(Util STATIC
