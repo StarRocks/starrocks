@@ -42,6 +42,19 @@ jdk_version() {
     echo "$result"
 }
 
+jvm_arch() {
+    march=`uname -m`
+    case $march in
+      aarch64 | arm64)
+        jvm_arch=aarch64
+        ;;
+      *)
+        jvm_arch=amd64
+        ;;
+    esac
+    echo $jvm_arch
+}
+
 export_env_from_conf() {
     while read line; do
         envline=`echo $line | sed 's/[[:blank:]]*=[[:blank:]]*/=/g' | sed 's/^[[:blank:]]*//g' | egrep "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`
