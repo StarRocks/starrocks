@@ -356,9 +356,9 @@ public class FunctionAnalyzer {
                 throw new SemanticException(
                         "percentile_approx requires the first parameter's type is numeric type");
             }
-            if (!functionCallExpr.getChild(1).getType().isNumericType()) {
+            if (!functionCallExpr.getChild(1).getType().isNumericType() || !functionCallExpr.getChild(1).isConstant()) {
                 throw new SemanticException(
-                        "percentile_approx requires the second parameter's type is numeric type");
+                        "percentile_approx requires the second parameter's type is numeric constant type");
             }
 
             double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
@@ -368,9 +368,10 @@ public class FunctionAnalyzer {
             }
 
             if (functionCallExpr.getChildren().size() == 3) {
-                if (!functionCallExpr.getChild(2).getType().isNumericType()) {
+                if (!functionCallExpr.getChild(2).getType().isNumericType() ||
+                        !functionCallExpr.getChild(2).isConstant()) {
                     throw new SemanticException(
-                            "percentile_approx requires the third parameter's type is numeric type");
+                            "percentile_approx requires the third parameter's type is numeric constant type");
                 }
             }
         }
