@@ -417,8 +417,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     currentVersionMap.get(baseTableInfo);
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = tableEntry.getValue();
             currentTablePartitionInfo.putAll(partitionInfoMap);
-            Set<String> partitionNames = Sets.newHashSet(PartitionUtil.getPartitionNames(baseTableInfo.getTable()));
             // remove partition info of not-exist partition for snapshot table from version map
+            Set<String> partitionNames = Sets.newHashSet(PartitionUtil.getPartitionNames(baseTableInfo.getTable()));
             currentTablePartitionInfo.keySet().removeIf(partitionName ->
                     !partitionNames.contains(partitionName));
         }
@@ -893,24 +893,6 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         }
         return false;
     }
-
-    /*
-    private Map<Long, Map<String, MaterializedView.BasePartitionInfo>> getSourceTablePartitionInfos(ExecPlan execPlan) {
-        Map<Long, Map<String, MaterializedView.BasePartitionInfo>> selectedBasePartitionInfos = Maps.newHashMap();
-        List<ScanNode> scanNodes = execPlan.getScanNodes();
-        for (ScanNode scanNode : scanNodes) {
-            if (scanNode instanceof OlapScanNode) {
-                OlapScanNode olapScanNode = (OlapScanNode) scanNode;
-                Map<String, MaterializedView.BasePartitionInfo> selectedPartitionIdVersions =
-                        getSelectedPartitionInfos(olapScanNode);
-                OlapTable olapTable = olapScanNode.getOlapTable();
-                selectedBasePartitionInfos.put(olapTable.getId(), selectedPartitionIdVersions);
-            }
-        }
-        return selectedBasePartitionInfos;
-    }
-
-     */
 
     private Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> getSourceTableInfoPartitionInfos(
             ExecPlan execPlan) {
