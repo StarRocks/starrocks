@@ -65,6 +65,8 @@ public class CTEContext {
 
     private double inlineCTERatio = 2.0;
 
+    private int cteIdSequence = 0;
+
     public CTEContext() {
         forceCTEList = Lists.newArrayList();
     }
@@ -79,6 +81,7 @@ public class CTEContext {
         consumeInlineCosts = Maps.newHashMap();
         produceCosts = Maps.newHashMap();
         produceComplexityScores = Maps.newHashMap();
+        cteIdSequence = 0;
     }
 
     public void setEnableCTE(boolean enableCTE) {
@@ -91,6 +94,7 @@ public class CTEContext {
 
     public void addCTEProduce(int cteId, OptExpression produce) {
         this.produces.put(cteId, produce);
+        cteIdSequence = Math.max(cteId, cteIdSequence);
     }
 
     public void addCTEConsume(int cteId) {
@@ -242,5 +246,9 @@ public class CTEContext {
 
     public void addForceCTE(int cteId) {
         this.forceCTEList.add(cteId);
+    }
+
+    public int getNextCteId() {
+        return ++cteIdSequence;
     }
 }

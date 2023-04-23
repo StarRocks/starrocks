@@ -3,8 +3,10 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -731,5 +733,14 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  <slot 14> : 8: v4\n" +
                 "  |  \n" +
                 "  28:EXCHANGE");
+    }
+    @Test
+    public void testCaseWhenSubquery3() throws Exception {
+        String sql = "with tmp as (select 8 id, 'season' type1, 'a.season' pretype, 'season' ranktype from dual ) " +
+                "select case when id = abs(0) then 'a' else " +
+                "case when exists (select 1 from tmp) then id in (select id > (select type1 from tmp) from tmp )" +
+                " else null end end from tmp a;";
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        assertContains(pair.first, "CTEAnchor(cteid=2)");
     }
 }
