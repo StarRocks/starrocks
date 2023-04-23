@@ -143,10 +143,10 @@ StarRocks 访问 Delta Lake 集群元数据服务的相关参数配置。
 | ----------------------------- | -------- | ------------------------------------------------------------ |
 | hive.metastore.type           | 是       | Delta Lake 集群所使用的元数据服务的类型。设置为 `glue`。           |
 | aws.glue.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
-| aws.glue.iam_role_arn         | 否       | 有权限访问 AWS Glue Data Catalog 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS Glue 时，必须指定此参数。这样，StarRocks 在使用 Delta Lake Catalog 访问 Delta Lake 数据时将会担任该 IAM Role。 |
+| aws.glue.iam_role_arn         | 否       | 有权限访问 AWS Glue Data Catalog 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | aws.glue.region               | 是       | AWS Glue Data Catalog 所在的地域。示例：`us-west-1`。        |
-| aws.glue.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。这样，StarRocks 在使用 Delta Lake Catalog 访问 Delta Lake 数据时将会担任该 IAM Role。 |
-| aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。这样，StarRocks 在使用 Delta Lake Catalog 访问 Delta Lake 数据时将会担任该 IAM Role。 |
+| aws.glue.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
+| aws.glue.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 
 有关如何选择用于访问 AWS Glue 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS Glue 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-glue-的认证参数)。
 
@@ -191,10 +191,10 @@ StarRocks 访问 Delta Lake 集群文件存储的相关参数配置。
 | 参数                        | 是否必须   | 说明                                                         |
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
-| aws.s3.iam_role_arn         | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。这样，StarRocks 在使用 Delta Lake Catalog 访问 Delta Lake 数据时将会担任该 IAM Role。 |
+| aws.s3.iam_role_arn         | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 | aws.s3.region               | 是       | AWS S3 Bucket 所在的地域。示例：`us-west-1`。                |
-| aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。这样，StarRocks 在使用 Delta Lake Catalog 访问 Delta Lake 数据时将会担任该 IAM Role。 |
-| aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。这样，StarRocks 在使用 Delta Lake Catalog 访问 Delta Lake 数据时将会担任该 IAM Role。 |
+| aws.s3.access_key           | 否       | IAM User 的 Access Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
+| aws.s3.secret_key           | 否       | IAM User 的 Secret Key。采用 IAM User 鉴权方式访问 AWS S3 时，必须指定此参数。 |
 
 有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
 
