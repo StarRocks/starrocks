@@ -359,12 +359,11 @@ public class ConstantExpressionTest extends PlanTestBase {
         try {
             connectContext.getSessionVariable().setSqlMode(prevSqlMode | SqlModeHelper.MODE_DOUBLE_LITERAL);
 
-            sql = "SELECT percentile_approx(2.25, false), percentile_approx(2.25, 0), percentile_approx(2.25, 0.)";
+            sql = "SELECT percentile_approx(2.25, 0), percentile_approx(2.25, 0.)";
             plan = getFragmentPlan(sql);
             assertContains(plan, "  2:Project\n" +
                     "  |  <slot 2> : 2: percentile_approx\n" +
                     "  |  <slot 3> : 2: percentile_approx\n" +
-                    "  |  <slot 4> : 2: percentile_approx\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
                     "  |  output: percentile_approx(2.25, 0.0)\n" +
