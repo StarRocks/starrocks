@@ -339,10 +339,29 @@ public class FunctionAnalyzer {
                 throw new SemanticException("percentile_approx requires second parameter must be a constant : "
                         + functionCallExpr.toSql());
             }
+<<<<<<< HEAD
             if (functionCallExpr.getChildren().size() == 3) {
                 if (!functionCallExpr.getChild(2).isConstant()) {
                     throw new SemanticException("percentile_approx requires the third parameter must be a constant : "
                             + functionCallExpr.toSql());
+=======
+            if (!functionCallExpr.getChild(1).getType().isNumericType() || !functionCallExpr.getChild(1).isConstant()) {
+                throw new SemanticException(
+                        "percentile_approx requires the second parameter's type is numeric constant type");
+            }
+
+            double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
+            if (rate < 0 || rate > 1) {
+                throw new SemanticException(
+                        fnName + " second parameter'value must be between 0 and 1");
+            }
+
+            if (functionCallExpr.getChildren().size() == 3) {
+                if (!functionCallExpr.getChild(2).getType().isNumericType() ||
+                        !functionCallExpr.getChild(2).isConstant()) {
+                    throw new SemanticException(
+                            "percentile_approx requires the third parameter's type is numeric constant type");
+>>>>>>> 4831d46ea (enhance analyse for percentile_approx to check constant (#22242))
                 }
             }
         }

@@ -214,6 +214,22 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testPercentileFunction() {
+        analyzeFail("select percentile_approx(0.5) from tall group by tb");
+        analyzeFail("select percentile_approx('c',0.5) from tall group by tb");
+        analyzeFail("select percentile_approx(1,'c') from tall group by tb");
+        analyzeFail("select percentile_approx(1,5) from tall group by tb");
+        analyzeFail("select percentile_approx(1,1,'c') from tall group by tb");
+        analyzeFail("select percentile_approx(1,1,tc) from tall group by tb");
+        analyzeFail("select percentile_approx(1,1,0.5,tc) from tall group by tb");
+        analyzeSuccess("select percentile_approx(1,0.5,1047) from tall group by tb");
+        analyzeSuccess("select percentile_disc(tj,0.5) from tall group by tb");
+    }
+
+    @Test
+>>>>>>> 4831d46ea (enhance analyse for percentile_approx to check constant (#22242))
     public void testWindowFunnelFunction() {
         // For the argument `window_size`.
         analyzeFail("SELECT window_funnel(-1, ti, 0, [ta='a', ta='b']) FROM tall",
