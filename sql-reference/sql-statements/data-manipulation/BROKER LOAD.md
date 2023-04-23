@@ -460,7 +460,7 @@ StarRocks 访问存储系统的认证配置。
   "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   ```
 
-  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+  `StorageCredentialParams` 包含如下参数。
 
   | **参数**                  | **是否必须** | **说明**                                 |
   | ------------------------- | ------------ | ---------------------------------------- |
