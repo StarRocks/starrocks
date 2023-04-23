@@ -321,6 +321,7 @@ import com.starrocks.sql.ast.ShowMaterializedViewsStmt;
 import com.starrocks.sql.ast.ShowOpenTableStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
+import com.starrocks.sql.ast.ShowPrivilegesStmt;
 import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowProcedureStmt;
 import com.starrocks.sql.ast.ShowProcesslistStmt;
@@ -883,10 +884,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         new FunctionCallExpr(functionName, new ArrayList<>()));
             }
         }
+        final StarRocksParser.MaterializedColumnDescContext materializedColumnDescContext =
+                                                            context.materializedColumnDesc();
+        Expr expr = null;
+        if (materializedColumnDescContext != null) {
+            if (isAllowNull != null && isAllowNull == false) {
+                throw new ParsingException(PARSER_ERROR_MSG.foundNotNull("Materialized Column"));
+            }
+            if (isKey) {
+                throw new ParsingException(PARSER_ERROR_MSG.isKey("Materialized Column"));
+            }
+
+            expr = (Expr) visit(materializedColumnDescContext.expression());
+        }
         String comment = context.comment() == null ? "" :
                 ((StringLiteral) visit(context.comment().string())).getStringValue();
         return new ColumnDef(columnName, typeDef, charsetName, isKey, aggregateType, isAllowNull, defaultValueDef,
-                isAutoIncrement, comment, createPos(context));
+                isAutoIncrement, expr, comment, createPos(context));
     }
 
     @Override
@@ -3359,8 +3373,27 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.rollupName != null) {
             rollupName = getIdentifierName(context.rollupName);
         }
-        return new AddColumnClause(columnDef, columnPosition, rollupName, getProperties(context.properties()),
-                createPos(context));
+        Map<String, String> properties = new HashMap<>();;
+        properties = getProperties(context.properties());
+
+        if (columnDef.isMaterializedColumn()) {
+            if (rollupName != null) {
+                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("rollupName", "ADD MATERIALIZED COLUMN"),
+                    columnDef.getPos());
+            }
+
+            if (columnPosition != null) {
+                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("columnPosition", "ADD MATERIALIZED COLUMN"),
+                    columnDef.getPos());
+            }
+
+            if (properties.size() != 0) {
+                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("properties", "ADD MATERIALIZED COLUMN"),
+                    columnDef.getPos());
+            }
+        }
+
+        return new AddColumnClause(columnDef, columnPosition, rollupName, properties, createPos(context));
     }
 
     @Override
@@ -3369,6 +3402,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         for (ColumnDef columnDef : columnDefs) {
             if (columnDef.isAutoIncrement()) {
                 throw new ParsingException(PARSER_ERROR_MSG.autoIncrementForbid(columnDef.getName(), "ADD"),
+                        columnDef.getPos());
+            }
+            if (columnDef.isMaterializedColumn()) {
+                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnForbid(columnDef.getName(), "ADD COLUMNS"),
                         columnDef.getPos());
             }
         }
@@ -3407,6 +3444,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String rollupName = null;
         if (context.rollupName != null) {
             rollupName = getIdentifierName(context.rollupName);
+        }
+        if (columnDef.isMaterializedColumn()) {
+            if (rollupName != null) {
+                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("rollupName",
+                    "MODIFY MATERIALIZED COLUMN"), columnDef.getPos());
+            }
+
+            if (columnPosition != null) {
+                throw new ParsingException(PARSER_ERROR_MSG.materializedColumnLimit("columnPosition",
+                    "MODIFY MATERIALIZED COLUMN"), columnDef.getPos());
+            }
         }
         return new ModifyColumnClause(columnDef, columnPosition, rollupName, getProperties(context.properties()),
                 createPos(context));
@@ -4097,8 +4145,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitPartitionNames(StarRocksParser.PartitionNamesContext context) {
-        if (context.listPartition() != null) {
-            return visit(context.listPartition());
+        if (context.keyPartitions() != null) {
+            return visit(context.keyPartitions());
         }
 
         List<Identifier> identifierList = visit(context.identifier(), Identifier.class);
@@ -4108,17 +4156,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitListPartitions(StarRocksParser.ListPartitionsContext context) {
-        List<String> partitionKeys = Lists.newArrayList();
-        List<Expr> partitionValues = Lists.newArrayList();
-        for (StarRocksParser.PartitionPairContext pair : context.partitionPair()) {
-            Identifier partitionName = (Identifier) visit(pair.key);
-            Expr partitionValue = (Expr) visit(pair.value);
-            partitionKeys.add(partitionName.getValue());
-            partitionValues.add(partitionValue);
+    public ParseNode visitKeyPartitionList(StarRocksParser.KeyPartitionListContext context) {
+        List<String> partitionColNames = Lists.newArrayList();
+        List<Expr> partitionColValues = Lists.newArrayList();
+        for (StarRocksParser.KeyPartitionContext pair : context.keyPartition()) {
+            Identifier partitionName = (Identifier) visit(pair.partitionColName);
+            Expr partitionValue = (Expr) visit(pair.partitionColValue);
+            partitionColNames.add(partitionName.getValue());
+            partitionColValues.add(partitionValue);
         }
 
-        return new PartitionNames(false, new ArrayList<>(), partitionKeys, partitionValues, NodePosition.ZERO);
+        return new PartitionNames(false, new ArrayList<>(), partitionColNames, partitionColValues, NodePosition.ZERO);
     }
 
     @Override
@@ -4210,6 +4258,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new ShowFunctionsStmt(dbName, isBuiltIn, isGlobal, isVerbose, pattern, where, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowPrivilegesStatement(StarRocksParser.ShowPrivilegesStatementContext ctx) {
+        return new ShowPrivilegesStmt();
     }
 
     @Override

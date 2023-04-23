@@ -54,6 +54,7 @@ bool SpillableHashJoinBuildOperator::need_input() const {
 
 Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
     if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+        _join_builder->spill_channel()->set_finishing();
         return HashJoinBuildOperator::set_finishing(state);
     }
 
@@ -158,9 +159,11 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
 
     // TODO: materialize chunk (const/nullable)
 
-    RETURN_IF_ERROR(append_hash_columns(chunk));
+    auto& ht = _join_builder->hash_join_builder()->hash_table();
+    ASSIGN_OR_RETURN(auto spill_chunk, ht.convert_to_spill_schema(chunk));
+    RETURN_IF_ERROR(append_hash_columns(spill_chunk));
 
-    RETURN_IF_ERROR(_join_builder->append_chunk_to_spill_buffer(state, chunk));
+    RETURN_IF_ERROR(_join_builder->append_chunk_to_spill_buffer(state, spill_chunk));
 
     if (_is_first_time_spill) {
         _is_first_time_spill = false;
@@ -185,7 +188,7 @@ std::function<StatusOr<ChunkPtr>()> SpillableHashJoinBuildOperator::_convert_has
     _hash_table_build_chunk_slice.reset(build_chunk);
     _hash_table_build_chunk_slice.skip(kHashJoinKeyColumnOffset);
 
-    return [this]() mutable -> StatusOr<ChunkPtr> {
+    return [this]() -> StatusOr<ChunkPtr> {
         if (_hash_table_build_chunk_slice.empty()) {
             _join_builder->hash_join_builder()->reset(_join_builder->hash_table_param());
             return Status::EndOfFile("eos");

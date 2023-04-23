@@ -186,6 +186,7 @@ statement
     | showPluginsStatement
     | showRepositoriesStatement
     | showOpenTableStatement
+    | showPrivilegesStatement
     | showProcedureStatement
     | showProcStatement
     | showProcesslistStatement
@@ -346,7 +347,7 @@ createTableStatement
      ;
 
 columnDesc
-    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)? (defaultDesc | AUTO_INCREMENT)? comment?
+    : identifier type charsetName? KEY? aggDesc? (NULL | NOT NULL)? (defaultDesc | AUTO_INCREMENT | materializedColumnDesc)? comment?
     ;
 
 charsetName
@@ -357,6 +358,10 @@ charsetName
 
 defaultDesc
     : DEFAULT (string | NULL | CURRENT_TIMESTAMP | '(' qualifiedName '(' ')' ')')
+    ;
+
+materializedColumnDesc
+    : AS expression
     ;
 
 indexDesc
@@ -1207,6 +1212,9 @@ showRepositoriesStatement
 showOpenTableStatement
     : SHOW OPEN TABLES
     ;
+showPrivilegesStatement
+    : SHOW PRIVILEGES
+    ;
 
 showProcedureStatement
     : SHOW (PROCEDURE | FUNCTION) STATUS ((LIKE pattern=string) | (WHERE where=expression))?
@@ -1820,11 +1828,11 @@ columnAliases
 partitionNames
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
     | TEMPORARY? (PARTITION | PARTITIONS) identifier
-    | listPartition
+    | keyPartitions
     ;
 
-listPartition
-    : PARTITION '(' partitionPair (',' partitionPair)* ')'                              #listPartitions
+keyPartitions
+    : PARTITION '(' keyPartition (',' keyPartition)* ')'                              #keyPartitionList
     ;
 
 tabletList
@@ -2152,8 +2160,8 @@ partitionValueList
     : '(' partitionValue (',' partitionValue)* ')'
     ;
 
-partitionPair
-    : key=identifier '=' value=literalExpression
+keyPartition
+    : partitionColName=identifier '=' partitionColValue=literalExpression
     ;
 
 partitionValue

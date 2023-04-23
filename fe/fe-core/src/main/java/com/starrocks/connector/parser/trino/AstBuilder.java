@@ -109,6 +109,7 @@ import io.trino.sql.tree.GroupingElement;
 import io.trino.sql.tree.GroupingOperation;
 import io.trino.sql.tree.GroupingSets;
 import io.trino.sql.tree.Identifier;
+import io.trino.sql.tree.IfExpression;
 import io.trino.sql.tree.InListExpression;
 import io.trino.sql.tree.InPredicate;
 import io.trino.sql.tree.Intersect;
@@ -125,6 +126,7 @@ import io.trino.sql.tree.LogicalExpression;
 import io.trino.sql.tree.LongLiteral;
 import io.trino.sql.tree.Node;
 import io.trino.sql.tree.NotExpression;
+import io.trino.sql.tree.NullIfExpression;
 import io.trino.sql.tree.NumericParameter;
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.QuerySpecification;
@@ -141,6 +143,7 @@ import io.trino.sql.tree.SubqueryExpression;
 import io.trino.sql.tree.SubscriptExpression;
 import io.trino.sql.tree.Table;
 import io.trino.sql.tree.TableSubquery;
+import io.trino.sql.tree.Trim;
 import io.trino.sql.tree.Union;
 import io.trino.sql.tree.WhenClause;
 import io.trino.sql.tree.Window;
@@ -913,6 +916,38 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitNullIfExpression(NullIfExpression node, ParseTreeContext context) {
+        List<Expr> arguments = visit(ImmutableList.of(node.getFirst(), node.getSecond()), context, Expr.class);
+        return new FunctionCallExpr("nullif", arguments);
+    }
+
+    @Override
+    protected ParseNode visitIfExpression(IfExpression node, ParseTreeContext context) {
+        List<Node> children = Lists.newArrayList();
+        children.add(node.getCondition());
+        children.add(node.getTrueValue());
+        if (node.getFalseValue().isPresent()) {
+            children.add(node.getFalseValue().get());
+        } else {
+            children.add(new io.trino.sql.tree.NullLiteral());
+        }
+        List<Expr> arguments = visit(children, context, Expr.class);
+        return new FunctionCallExpr("if", arguments);
+    }
+
+    @Override
+    protected ParseNode visitTrim(Trim node, ParseTreeContext context) {
+        Expr trimSource = (Expr) visit(node.getTrimSource(), context);
+        Expr trimCharacter = (Expr) processOptional(node.getTrimCharacter(), context);
+        List<Expr> arguments = Lists.newArrayList();
+        arguments.add(trimSource);
+        if (trimCharacter != null) {
+            arguments.add(trimCharacter);
+        }
+        return new FunctionCallExpr(node.getSpecification().getFunctionName(), arguments);
+    }
+
+    @Override
     protected ParseNode visitWhenClause(WhenClause node, ParseTreeContext context) {
         return new CaseWhenClause((Expr) visit(node.getOperand(), context), (Expr) visit(node.getResult(), context));
     }
@@ -921,7 +956,6 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitCast(Cast node, ParseTreeContext context) {
         return new CastExpr(new TypeDef(getType(node.getType())), (Expr) visit(node.getExpression(), context));
     }
-
 
     public Type getType(DataType dataType) {
         if (dataType instanceof GenericDataType) {

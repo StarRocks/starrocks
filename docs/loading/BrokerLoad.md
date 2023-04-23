@@ -50,7 +50,7 @@ Broker Load supports the following storage systems:
 
 - Google GCS
 
-- S3-compatible storage system such as MinIO
+- Other S3-compatible storage system such as MinIO
 
 ## How it works
 
@@ -179,12 +179,12 @@ Execute the following statement to load `file1.csv` and `file2.csv` from the `in
 ```SQL
 LOAD LABEL test_db.label3
 (
-    DATA INFILE("s3a://bucket_gcs/input/file1.csv")
+    DATA INFILE("gs://bucket_gcs/input/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
     ,
-    DATA INFILE("s3a://bucket_gcs/input/file2.csv")
+    DATA INFILE("gs://bucket_gcs/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
     (id, city)
@@ -197,9 +197,9 @@ WITH BROKER
 
 > **NOTE**
 >
-> Broker Load supports accessing Google GCS only according to the S3A protocol. Therefore, when you load data from Google GCS, you must replace the prefix in the GCS URI you pass as a file path into `DATA INFILE` with `s3a://`.
+> Broker Load supports accessing Google GCS only according to the gs protocol. Therefore, when you load data from Google GCS, you must use `gs` as the prefix in the GCS URI that you pass as a file path into `DATA INFILE`.
 
-#### Load data from an S3-compatible storage
+#### Load data from other S3-compatible storage system
 
 Use MinIO as an example. You can execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your MinIO bucket `bucket_gcs` into `table1` and `table2`, respectively:
 
@@ -212,6 +212,29 @@ LOAD LABEL test_db.label7
     (id, name, score)
     ,
     DATA INFILE("obs://bucket_minio/input/file2.csv")
+    INTO TABLE table2
+    COLUMNS TERMINATED BY ","
+    (id, city)
+)
+WITH BROKER
+(
+    StorageCredentialParams
+);
+```
+
+#### Load data from Microsoft Azure Storage
+
+Execute the following statement to load `file1.csv` and `file2.csv` from the specified paths of your Azure Storage:
+
+```SQL
+LOAD LABEL test_db.label8
+(
+    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    (id, name, score)
+    ,
+    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
     (id, city)
@@ -270,7 +293,7 @@ LOAD LABEL test_db.label_7
 WITH BROKER 
 (
     StorageCredentialParams
-)；
+);
 ```
 
 To load all data files from the `input` folder into `table1`, execute the following statement:
@@ -286,7 +309,7 @@ LOAD LABEL test_db.label_8
 WITH BROKER 
 (
     StorageCredentialParams
-)；
+);
 ```
 
 ### View a load job
