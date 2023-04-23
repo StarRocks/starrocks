@@ -90,6 +90,7 @@ import io.trino.sql.tree.Cast;
 import io.trino.sql.tree.CoalesceExpression;
 import io.trino.sql.tree.ComparisonExpression;
 import io.trino.sql.tree.Cube;
+import io.trino.sql.tree.CurrentTime;
 import io.trino.sql.tree.DataType;
 import io.trino.sql.tree.DateTimeDataType;
 import io.trino.sql.tree.DereferenceExpression;
@@ -143,6 +144,7 @@ import io.trino.sql.tree.SubqueryExpression;
 import io.trino.sql.tree.SubscriptExpression;
 import io.trino.sql.tree.Table;
 import io.trino.sql.tree.TableSubquery;
+import io.trino.sql.tree.TimestampLiteral;
 import io.trino.sql.tree.Trim;
 import io.trino.sql.tree.Union;
 import io.trino.sql.tree.WhenClause;
@@ -295,7 +297,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitQuerySpecification(QuerySpecification node, ParseTreeContext context) {
         List<SelectListItem> selectListItems = node.getSelect().getSelectItems().stream().map(
                 selectItem -> visit(selectItem, context)).map(selectItem -> (SelectListItem) selectItem).
-                collect(Collectors.toList());
+                collect(toList());
         boolean isDistinct = node.getSelect().isDistinct();
         SelectList selectList = new SelectList(selectListItems, isDistinct);
         Relation from = (Relation) processOptional(node.getFrom(), context);
@@ -454,7 +456,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 predicate = (Expr) visit(((JoinOn) joinCriteria).getExpression(), context);
             } else if (joinCriteria instanceof JoinUsing) {
                 usingColNames = ((JoinUsing) joinCriteria).getColumns().stream().map(Identifier::getValue).
-                        collect(Collectors.toList());
+                        collect(toList());
             }
         }
         JoinRelation joinRelation = new JoinRelation(joinType, left, right, predicate, false);
@@ -783,6 +785,15 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitTimestampLiteral(TimestampLiteral node, ParseTreeContext context) {
+        try {
+            return new DateLiteral(node.getValue(), Type.DATETIME);
+        } catch (AnalysisException e) {
+            throw new ParsingException("Invalid date literal: " + node.getValue());
+        }
+    }
+
+    @Override
     protected ParseNode visitCoalesceExpression(CoalesceExpression node, ParseTreeContext context) {
         List<Expr> children = visit(node, context, Expr.class);
         FunctionName fnName = FunctionName.createFnName("coalesce");
@@ -908,6 +919,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         }
 
         return compoundPredicate;
+    }
+
+    @Override
+    protected ParseNode visitCurrentTime(CurrentTime node, ParseTreeContext context) {
+        return new FunctionCallExpr(node.getFunction().getName(), new ArrayList<>());
     }
 
     @Override
