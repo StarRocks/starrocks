@@ -2,7 +2,7 @@
 
 ## Terminology
 
-1. Duplicate Key table: The table stores detailed data in StarRocks. The table type can be specified during table build, and the data in the metric columns will not be aggregated.
+1. Duplicate model: The data model stores detailed data in StarRocks. The table type can be specified during table build, and the data in the metric columns will not be aggregated.
 2. Base table: The table created by `CREATE TABLE` in StarRocks.
 3. Materialized Views table: Pre-calculated data set that contains results of a query. Abbreviated as MV.
 
