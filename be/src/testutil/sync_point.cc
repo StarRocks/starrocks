@@ -23,7 +23,7 @@
 
 #include "testutil/sync_point_impl.h"
 
-std::vector<std::string> rocksdb_kill_exclude_prefixes;
+std::vector<std::string> starrocks_kill_exclude_prefixes;
 
 #ifndef NDEBUG
 namespace starrocks {
@@ -78,24 +78,3 @@ void SyncPoint::Process(const std::string_view& point, void* cb_arg) {
 
 } // namespace starrocks
 #endif // NDEBUG
-
-namespace starrocks {
-void SetupSyncPointsToMockDirectIO() {
-#if !defined(NDEBUG) && !defined(OS_MACOSX) && !defined(OS_WIN) && !defined(OS_SOLARIS) && !defined(OS_AIX) && \
-        !defined(OS_OPENBSD)
-    starrocks::SyncPoint::GetInstance()->SetCallBack("NewWritableFile:O_DIRECT", [&](void* arg) {
-        int* val = static_cast<int*>(arg);
-        *val &= ~O_DIRECT;
-    });
-    starrocks::SyncPoint::GetInstance()->SetCallBack("NewRandomAccessFile:O_DIRECT", [&](void* arg) {
-        int* val = static_cast<int*>(arg);
-        *val &= ~O_DIRECT;
-    });
-    starrocks::SyncPoint::GetInstance()->SetCallBack("NewSequentialFile:O_DIRECT", [&](void* arg) {
-        int* val = static_cast<int*>(arg);
-        *val &= ~O_DIRECT;
-    });
-    starrocks::SyncPoint::GetInstance()->EnableProcessing();
-#endif
-}
-} // namespace starrocks
