@@ -16,7 +16,7 @@ The following table compares the asynchronous materialized views (ASYNC MVs) in 
 | **ASYNC MVs in v2.4** | Yes | Yes | No | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from the default catalog |
 | **SYNC MV (Rollup)**  | Limited choices of operators | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
 
-### Basic concepts
+## Basic concepts
 
 - **Base table**
 

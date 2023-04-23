@@ -393,7 +393,7 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_rows_read_counter, _num_rows_read);
 
     COUNTER_UPDATE(_io_timer, _reader->stats().io_ns);
-    COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read);
+    COUNTER_UPDATE(_read_compressed_counter, _reader->stats().compressed_bytes_read_request);
     COUNTER_UPDATE(_decompress_timer, _reader->stats().decompress_ns);
     COUNTER_UPDATE(_read_uncompressed_counter, _reader->stats().uncompressed_bytes_read);
     COUNTER_UPDATE(_bytes_read_counter, _reader->stats().bytes_read);

@@ -117,11 +117,11 @@ The following parameters apply only to the Flink DataStream reading method.
 | scan.columns | No       | STRING    | The column that you want to read. You can specify multiple columns, which must be separated by a comma (,). |
 | scan.filter  | No       | STRING    | The filter condition based on which you want to filter data. |
 
-Assume that in Flink you create a table that consists of three columns, which are `c1`、`c2`、`c3`. To read the rows whose values in the `c1` column of this Flink table are equal to `100`, you can specify two filter conditions `"scan.columns, "c1"` and `"scan.filter, "c1 = 100"`.
+Assume that in Flink you create a table that consists of three columns, which are `c1`, `c2`, `c3`. To read the rows whose values in the `c1` column of this Flink table are equal to `100`, you can specify two filter conditions `"scan.columns, "c1"` and `"scan.filter, "c1 = 100"`.
 
 ## Data type mapping between StarRocks and Flink
 
-The following data type mapping is valid only for Flink reading data from StarRocks. For the data type mapping used for Flink writing data into StarRocks, see [Continuously load data from Apache Flink®](https://docs.starrocks.io/en-us/latest/loading/Flink-connector-starrocks).
+The following data type mapping is valid only for Flink reading data from StarRocks. For the data type mapping used for Flink writing data into StarRocks, see [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md).
 
 | StarRocks  | Flink     |
 | ---------- | --------- |

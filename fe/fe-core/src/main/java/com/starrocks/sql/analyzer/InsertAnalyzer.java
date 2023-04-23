@@ -125,24 +125,24 @@ public class InsertAnalyzer {
             }
         }
 
-        if (table instanceof IcebergTable && insertStmt.isStaticPartitionInsert()) {
+        if (table instanceof IcebergTable && insertStmt.isStaticKeyPartitionInsert()) {
             IcebergTable icebergTable = (IcebergTable) table;
-            List<String> partitionKeys = targetPartitionNames.getPartitionKeys();
-            List<Expr> partitionValues = targetPartitionNames.getPartitionValues();
+            List<String> partitionColNames = targetPartitionNames.getPartitionColNames();
+            List<Expr> partitionColValues = targetPartitionNames.getPartitionColValues();
             List<String> tablePartitionColumnNames = icebergTable.getPartitionColumnNames();
 
-            Preconditions.checkState(partitionKeys.size() == partitionValues.size(),
-                    "Partition keys size must be equal to the partition values size. %d vs %d",
-                    partitionKeys.size(), partitionValues.size());
+            Preconditions.checkState(partitionColNames.size() == partitionColValues.size(),
+                    "Partition column names size must be equal to the partition column values size. %d vs %d",
+                    partitionColNames.size(), partitionColValues.size());
 
-            if (tablePartitionColumnNames.size() != partitionKeys.size()) {
+            if (tablePartitionColumnNames.size() != partitionColNames.size()) {
                 throw new SemanticException("Must include all partition column names");
             }
 
-            for (int i = 0; i < partitionKeys.size(); i++) {
-                String actualName = partitionKeys.get(i);
+            for (int i = 0; i < partitionColNames.size(); i++) {
+                String actualName = partitionColNames.get(i);
                 String expectedName = tablePartitionColumnNames.get(i);
-                Expr partitionValue = partitionValues.get(i);
+                Expr partitionValue = partitionColValues.get(i);
                 if (!actualName.equalsIgnoreCase(expectedName)) {
                     throw new SemanticException("Expected: %s, but actual: %s", expectedName, actualName);
                 }
@@ -165,15 +165,25 @@ public class InsertAnalyzer {
         List<Column> targetColumns;
         Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         if (insertStmt.getTargetColumnNames() == null) {
-            targetColumns = new ArrayList<>(table.getBaseSchema());
-            mentionedColumns =
-                    table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+            if (table instanceof OlapTable) {
+                targetColumns = new ArrayList<>(((OlapTable) table).getBaseSchemaWithoutMaterializedColumn());
+                mentionedColumns =
+                        ((OlapTable) table).getBaseSchemaWithoutMaterializedColumn().stream()
+                            .map(Column::getName).collect(Collectors.toSet());
+            } else {
+                targetColumns = new ArrayList<>(table.getBaseSchema());
+                mentionedColumns =
+                        table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toSet());
+            }
         } else {
             targetColumns = new ArrayList<>();
             for (String colName : insertStmt.getTargetColumnNames()) {
                 Column column = table.getColumn(colName);
                 if (column == null) {
                     throw new SemanticException("Unknown column '%s' in '%s'", colName, table.getName());
+                }
+                if (column.isMaterializedColumn()) {
+                    throw new SemanticException("materialized column '%s' can not be specified", colName);
                 }
                 if (!mentionedColumns.add(colName)) {
                     throw new SemanticException("Column '%s' specified twice", colName);
@@ -185,14 +195,19 @@ public class InsertAnalyzer {
         for (Column column : table.getBaseSchema()) {
             Column.DefaultValueType defaultValueType = column.getDefaultValueType();
             if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() &&
-                    !column.isAutoIncrement() && !mentionedColumns.contains(column.getName())) {
-                throw new SemanticException("'%s' must be explicitly mentioned in column permutation",
-                        column.getName());
+                    !column.isAutoIncrement() && !column.isMaterializedColumn() &&
+                    !mentionedColumns.contains(column.getName())) {
+                String msg = "";
+                for (String s : mentionedColumns) {
+                    msg = msg + " " + s + " ";
+                }
+                throw new SemanticException("'%s' must be explicitly mentioned in column permutation: %s",
+                        column.getName(), msg);
             }
         }
 
         int mentionedColumnSize = mentionedColumns.size();
-        if (table instanceof IcebergTable && insertStmt.isStaticPartitionInsert()) {
+        if (table instanceof IcebergTable && insertStmt.isStaticKeyPartitionInsert()) {
             // full column size = mentioned column size + partition column size for static partition insert
             mentionedColumnSize -= table.getPartitionColumnNames().size();
         }

@@ -2997,6 +2997,11 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
                 LOG(WARNING) << "failed to change data in chunk";
                 return Status::InternalError("failed to change data in chunk");
             }
+            status = chunk_changer->fill_materialized_columns(new_chunk);
+            if (!status.ok()) {
+                LOG(WARNING) << "failed to fill materialized column";
+                return Status::InternalError("failed to fill materialized column");
+            }
             RETURN_IF_ERROR(rowset_writer->add_chunk(*new_chunk));
         }
     }
@@ -3165,6 +3170,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         total_bytes += rowset_meta_pb.total_disk_size();
         total_rows += rowset_meta_pb.num_rows();
         total_files += rowset_meta_pb.num_segments() + rowset_meta_pb.num_delete_files();
+        chunk_arr.clear();
     }
 
     TabletMetaPB meta_pb;

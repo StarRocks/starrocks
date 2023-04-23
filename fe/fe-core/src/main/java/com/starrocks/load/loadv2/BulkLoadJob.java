@@ -97,6 +97,8 @@ public abstract class BulkLoadJob extends LoadJob {
 
     protected static final String PRIORITY_SESSION_VARIABLE_KEY = "priority.session.variable.key";
     public static final String LOG_REJECTED_RECORD_NUM_SESSION_VARIABLE_KEY = "log.rejected.record.num.session.variable.key";
+    public static final String CURRENT_USER_IDENT_KEY = "current.user.ident.key";
+    public static final String CURRENT_QUALIFIED_USER_KEY = "current.qualified.user.key";
 
     // only for log replay
     public BulkLoadJob() {
@@ -112,6 +114,8 @@ public abstract class BulkLoadJob extends LoadJob {
             SessionVariable var = ConnectContext.get().getSessionVariable();
             sessionVariables.put(SessionVariable.SQL_MODE, Long.toString(var.getSqlMode()));
             sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE, var.getloadTransmissionCompressionType());
+            sessionVariables.put(CURRENT_QUALIFIED_USER_KEY, ConnectContext.get().getQualifiedUser());
+            sessionVariables.put(CURRENT_USER_IDENT_KEY, ConnectContext.get().getCurrentUserIdentity().toString());
         } else {
             sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
         }

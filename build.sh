@@ -310,6 +310,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DWITH_BENCH=${WITH_BENCH} \
                     -DWITH_CACHELIB=${WITH_CACHELIB} \
                     -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
+                    -DSTARCACHE_SKIP_INSTALL=ON \
                     -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
                     -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
                     -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
@@ -328,6 +329,7 @@ if [ ${BUILD_BE} -eq 1 ] ; then
                     -DWITH_COMPRESS=${WITH_COMPRESS} \
                     -DWITH_CACHELIB=${WITH_CACHELIB} \
                     -DSTARCACHE_THIRDPARTY_DIR=${STARROCKS_THIRDPARTY}/installed \
+                    -DSTARCACHE_SKIP_INSTALL=ON \
                     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
     fi
     time ${BUILD_SYSTEM} -j${PARALLEL}

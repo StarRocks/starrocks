@@ -333,6 +333,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
+    public static final String ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS = "enable_connector_adaptive_io_tasks";
+    public static final String CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS = "connector_io_tasks_slow_io_latency_ms";
 
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
@@ -385,6 +387,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILL_MEM_LIMIT_THRESHOLD = "spill_mem_limit_threshold";
     public static final String SPILL_OPERATOR_MIN_BYTES = "spill_operator_min_bytes";
     public static final String SPILL_OPERATOR_MAX_BYTES = "spill_operator_max_bytes";
+    public static final String SPILL_ENCODE_LEVEL = "spill_encode_level";
 
     // full_sort_max_buffered_{rows,bytes} are thresholds that limits input size of partial_sort
     // in full sort.
@@ -409,6 +412,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE = "hdfs_backend_selector_scan_range_shuffle";
 
     public static final String SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
+
+    public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
+
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -698,6 +704,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long spillOperatorMinBytes = 1024L * 1024 * 10;
     @VarAttr(name = SPILL_OPERATOR_MAX_BYTES, flag = VariableMgr.INVISIBLE)
     private long spillOperatorMaxBytes = 1024L * 1024 * 1000;
+    // the encoding level of spilled data, the meaning of values is similar to transmission_encode_level,
+    // see more details in the comment above transmissionEncodeLevel
+    @VarAttr(name = SPILL_ENCODE_LEVEL)
+    private int spillEncodeLevel = 7;
 
     @VariableMgr.VarAttr(name = FORWARD_TO_LEADER, alias = FORWARD_TO_MASTER)
     private boolean forwardToLeader = false;
@@ -786,6 +796,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = RPC_HTTP_MIN_SIZE, flag = VariableMgr.INVISIBLE)
     private long rpcHttpMinSize = ((1L << 31) - (1L << 10));
 
+    // encode integers/binary per column for exchange, controlled by transmission_encode_level
+    // if transmission_encode_level & 2, intergers are encode by streamvbyte, in order or not;
+    // if transmission_encode_level & 4, binary columns are compressed by lz4
+    // if transmission_encode_level & 1, enable adaptive encoding.
+    // e.g.
+    // if transmission_encode_level = 7, SR will adaptively encode numbers and string columns according to the proper encoding ratio(< 0.9);
+    // if transmission_encode_level = 6, SR will force encoding numbers and string columns.
+    // in short,
+    // for transmission_encode_level,
+    // 2 for encoding integers or types supported by integers,
+    // 4 for encoding string,
+    // json and object columns are left to be supported later.
     @VariableMgr.VarAttr(name = TRANSMISSION_ENCODE_LEVEL)
     private int transmissionEncodeLevel = 7;
 
@@ -920,6 +942,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR)
     private int connectorIoTasksPerScanOperator = 16;
+
+    @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS)
+    private boolean enableConnectorAdaptiveIoTasks = true;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS, flag = VariableMgr.INVISIBLE)
+    private int connectorIoTasksSlowIoLatency = 50;
 
     @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
     private boolean enablePopulateBlockCache = true;
@@ -1102,6 +1130,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public void setEnableShowAllVariables(boolean enableShowAllVariables) {
         this.enableShowAllVariables = enableShowAllVariables;
     }
+
+    @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
+    private boolean enableStrictType = false;
 
     public int getStatisticCollectParallelism() {
         return statisticCollectParallelism;
@@ -1321,6 +1352,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public long getSpillOperatorMaxBytes() {
         return this.spillOperatorMaxBytes;
+    }
+
+    public int getSpillEncodeLevel() {
+        return this.spillEncodeLevel;
     }
 
     public boolean getForwardToLeader() {
@@ -1983,6 +2018,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return hdfsBackendSelectorScanRangeShuffle;
     }
 
+    public boolean isEnableStrictType() {
+        return enableStrictType;
+    }
+
+    public void setEnableStrictType(boolean val) {
+        this.enableStrictType = val;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -2013,6 +2056,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpill_mem_limit_threshold(spillMemLimitThreshold);
             tResult.setSpill_operator_min_bytes(spillOperatorMinBytes);
             tResult.setSpill_operator_max_bytes(spillOperatorMaxBytes);
+            tResult.setSpill_encode_level(spillEncodeLevel);
         }
 
         // Compression Type
@@ -2068,6 +2112,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
         tResult.setUse_page_cache(usePageCache);
+
+        tResult.setEnable_connector_adaptive_io_tasks(enableConnectorAdaptiveIoTasks);
+        tResult.setConnector_io_tasks_slow_io_latency_ms(connectorIoTasksSlowIoLatency);
         return tResult;
     }
 

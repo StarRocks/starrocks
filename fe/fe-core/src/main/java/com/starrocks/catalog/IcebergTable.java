@@ -130,6 +130,11 @@ public class IcebergTable extends Table {
         return partitionColumns;
     }
 
+    public List<Integer> partitionColumnIndexes() {
+        List<Column> partitionCols = getPartitionColumns();
+        return partitionCols.stream().map(col -> fullSchema.indexOf(col)).collect(Collectors.toList());
+    }
+
     public boolean isUnPartitioned() {
         return getPartitionColumns().size() == 0;
     }

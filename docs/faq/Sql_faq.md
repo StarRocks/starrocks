@@ -14,7 +14,7 @@ StarRocks does not directly cache final query results. From v2.5 onwards, StarRo
 
 In standard SQL, every calculation that includes an operand with a `NULL` value returns a `NULL`.
 
-## Why is the query result incorrect after I enclose quotation marks around a value of the BIGINT data type for an equivalence query？
+## Why is the query result incorrect after I enclose quotation marks around a value of the BIGINT data type for an equivalence query?
 
 ### Problem description
 
@@ -114,7 +114,7 @@ StarRocks is a distributed database, of which data stored in the underlying tabl
 
 ## Why is there a large gap in column efficiency between SELECT * and SELECT?
 
-To solve this problem, check the profile and see MERGE details：
+To solve this problem, check the profile and see MERGE details:
 
 - Check whether the aggregation on the storage layer takes up too much time.
 
