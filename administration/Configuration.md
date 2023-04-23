@@ -420,7 +420,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |file_descriptor_cache_capacity|16384|文件句柄缓存的容量。|
 |min_file_descriptor_number|60000|BE 进程的文件句柄 limit 要求的下线。|
 |index_stream_cache_capacity|10737418240|BloomFilter/Min/Max 等统计信息缓存的容量。|
-|disable_storage_page_cache|TRUE|是否开启 PageCache。开启 PageCache 后，查询结果会缓存在 Cache 中，对于查询重复性高的场景，会大幅提升查询效率。`true` 表示不开启。|
+|disable_storage_page_cache|FALSE|是否开启 PageCache。开启 PageCache 后，查询结果会缓存在 Cache 中，对于查询重复性高的场景，会大幅提升查询效率。`true` 表示不开启。自 2.4 版本起，该参数默认值由 `true` 变更为 `false`。|
 |base_compaction_num_threads_per_disk|1|每个磁盘 BaseCompaction 线程的数目。|
 |base_cumulative_delta_ratio|0.3|BaseCompaction 触发条件之一：Cumulative 文件大小达到 Base 文件的比例。|
 |compaction_trace_threshold|60|单次 Compaction 打印 trace 的时间阈值，如果单次 compaction 时间超过该阈值就打印 trace，单位为秒。|
