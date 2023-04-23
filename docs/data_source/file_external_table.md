@@ -124,8 +124,8 @@ For information about how to choose a credential method for accessing AWS S3 and
 If you need to access an AWS S3-compatible storage system, such as MinIO, configure `StorageCredentialParams` as follows to ensure a successful integration:
 
 ```SQL
-"aws.s3.enable_ssl" = "{true | false}",
-"aws.s3.enable_path_style_access" = "{true | false}",
+"aws.s3.enable_ssl" = "{ true | false }",
+"aws.s3.enable_path_style_access" = "{ true | false }",
 "aws.s3.endpoint" = "<s3_endpoint>",
 "aws.s3.access_key" = "<iam_user_access_key>",
 "aws.s3.secret_key" = "<iam_user_secret_key>"
