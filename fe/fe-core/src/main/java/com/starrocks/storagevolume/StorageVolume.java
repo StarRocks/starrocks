@@ -23,9 +23,9 @@ import java.util.Map;
 
 public class StorageVolume {
     public enum StorageVolumeType {
+        UNKNOWN,
         S3,
-        HDFS,
-        UNKNOWN
+        HDFS
     }
 
     private String name;

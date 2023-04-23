@@ -19,6 +19,7 @@ import com.starrocks.storagevolume.credential.hdfs.HDFSCredential;
 import com.starrocks.storagevolume.credential.hdfs.HDFSKerberosCredential;
 import com.starrocks.storagevolume.credential.hdfs.HDFSSimpleCredential;
 
+import java.util.HashMap;
 import java.util.Map;
 
 public class HDFSStorageParams implements StorageParams {
@@ -42,23 +43,25 @@ public class HDFSStorageParams implements StorageParams {
 
     private HDFSCredential buildCredential(Map<String, String> params) {
         String authentication = params.get(HDFS_AUTHENTICATION);
+        Map<String, String> haConfigurations = new HashMap<>();
+        haConfigurations.putAll(params);
         switch (authentication) {
             case "simple":
                 String userName = params.getOrDefault(HDFS_USER_NAME, "");
                 String password = params.getOrDefault(HDFS_PASSWORD, "");
-                params.remove(HDFS_AUTHENTICATION);
-                params.remove(HDFS_USER_NAME);
-                params.remove(HDFS_PASSWORD);
-                return new HDFSSimpleCredential(userName, password, params);
+                haConfigurations.remove(HDFS_AUTHENTICATION);
+                haConfigurations.remove(HDFS_USER_NAME);
+                haConfigurations.remove(HDFS_PASSWORD);
+                return new HDFSSimpleCredential(userName, password, haConfigurations);
             case "kerberos":
                 String principal = params.getOrDefault(HDFS_KERBEROS_PRINCIPAL, "");
                 String keyTab = params.getOrDefault(HDFS_KERBEROS_KEYTAB, "");
                 String keyTabContent = params.getOrDefault(HDFS_KERBEROS_KEYTAB_CONTENT, "");
-                params.remove(HDFS_AUTHENTICATION);
-                params.remove(HDFS_KERBEROS_PRINCIPAL);
-                params.remove(HDFS_KERBEROS_KEYTAB);
-                params.remove(HDFS_KERBEROS_KEYTAB_CONTENT);
-                return new HDFSKerberosCredential(principal, keyTab, keyTabContent, params);
+                haConfigurations.remove(HDFS_AUTHENTICATION);
+                haConfigurations.remove(HDFS_KERBEROS_PRINCIPAL);
+                haConfigurations.remove(HDFS_KERBEROS_KEYTAB);
+                haConfigurations.remove(HDFS_KERBEROS_KEYTAB_CONTENT);
+                return new HDFSKerberosCredential(principal, keyTab, keyTabContent, haConfigurations);
             default:
                 return null;
         }

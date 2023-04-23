@@ -14,6 +14,7 @@
 
 package com.starrocks.server;
 
+import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.staros.util.LockCloseable;
 import com.starrocks.storagevolume.StorageVolume;
 
@@ -33,6 +34,8 @@ public class StorageVolumeMgr {
     public void createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
                                     Boolean enabled, String comment) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Preconditions.checkState(!nameToSV.containsKey(name),
+                    "Storage Volume '%s' already exists", name);
             StorageVolume sv = new StorageVolume(name, svType, locations, params, enabled, comment);
             nameToSV.put(name, sv);
         }
@@ -40,6 +43,9 @@ public class StorageVolumeMgr {
 
     public void removeStorageVolume(String name) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Preconditions.checkState(nameToSV.containsKey(name),
+                    "Storage Volume '%s' does not exist", name);
+            Preconditions.checkState(!name.equals(defaultSV), "default storage volume can not be removed");
             nameToSV.remove(name);
         }
     }
@@ -47,11 +53,10 @@ public class StorageVolumeMgr {
     public void updateStorageVolume(String name, Map<String, String> params, Boolean enabled, String comment,
                                     String defaultSV) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            StorageVolume sv = nameToSV.get(name);
-            if (sv == null) {
-                return;
-            }
+            Preconditions.checkState(nameToSV.containsKey(name),
+                    "Storage Volume '%s' does not exist", name);
 
+            StorageVolume sv = nameToSV.get(name);
             if (!params.isEmpty()) {
                 sv.setStorageParams(params);
             }
