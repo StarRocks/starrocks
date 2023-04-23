@@ -129,7 +129,7 @@ StarRocks 访问 Delta Lake 集群元数据服务的相关参数配置。
 - 基于 IAM User 进行认证和鉴权
 
   ```SQL
-  "aws.glue.use_instance_profile" = 'false',
+  "aws.glue.use_instance_profile" = "false",
   "aws.glue.access_key" = "<iam_user_access_key>",
   "aws.glue.secret_key" = "<iam_user_secret_key>",
   "aws.glue.region" = "<aws_s3_region>"
@@ -201,8 +201,8 @@ StarRocks 访问 Delta Lake 集群文件存储的相关参数配置。
 如果选择兼容 S3 协议的对象存储（如 MinIO）作为 Delta Lake 集群的文件存储，请按如下配置 `StorageCredentialParams`：
 
 ```SQL
-"aws.s3.enable_ssl" = "<true | false>",
-"aws.s3.enable_path_style_access" = "<true | false>",
+"aws.s3.enable_ssl" = "{true | false}",
+"aws.s3.enable_path_style_access" = "{true | false}",
 "aws.s3.endpoint" = "<s3_endpoint>",
 "aws.s3.access_key" = "<iam_user_access_key>",
 "aws.s3.secret_key" = "<iam_user_secret_key>"

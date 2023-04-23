@@ -382,8 +382,8 @@ StarRocks 访问存储系统的认证配置。
 如果存储系统为其他兼容 S3 协议的对象存储（如 MinIO），请按如下配置 `StorageCredentialParams`：
 
 ```SQL
-"aws.s3.enable_ssl" = "<true | false>",
-"aws.s3.enable_path_style_access" = "<true | false>",
+"aws.s3.enable_ssl" = "{true | false}",
+"aws.s3.enable_path_style_access" = "{true | false}",
 "aws.s3.endpoint" = "<s3_endpoint>",
 "aws.s3.access_key" = "<iam_user_access_key>",
 "aws.s3.secret_key" = "<iam_user_secret_key>"
