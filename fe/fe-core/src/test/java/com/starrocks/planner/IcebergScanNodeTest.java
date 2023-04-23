@@ -200,10 +200,13 @@ public class IcebergScanNodeTest {
                 table.getNativeTable();
                 result = iTable;
 
-                iTable.currentSnapshot();
+                table.getSnapshot();
                 result = snapshot;
 
                 iTable.newScan().useSnapshot(0);
+                result = dataTableScan;
+
+                dataTableScan.includeColumnStats();
                 result = dataTableScan;
             }
         };
