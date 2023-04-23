@@ -864,7 +864,7 @@ public class Config extends ConfigBase {
      * In some situation, such as switch the master, the current number is maybe more than desired_max_waiting_jobs
      */
     @ConfField(mutable = true)
-    public static int desired_max_waiting_jobs = 100;
+    public static int desired_max_waiting_jobs = 1024;
 
     /**
      * maximum concurrent running txn num including prepare, commit txns under a single db
@@ -879,7 +879,7 @@ public class Config extends ConfigBase {
      * It should be less than 'max_running_txn_num_per_db'
      */
     @ConfField
-    public static int async_load_task_pool_size = 10;
+    public static int async_load_task_pool_size = 2;
 
     /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
