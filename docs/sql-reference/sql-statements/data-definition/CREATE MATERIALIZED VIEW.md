@@ -155,11 +155,15 @@ SELECT select_expr[, select_expr ...]
   - FLOAT
   - DOUBLE
   - DECIMAL
-  - ARRYA
+  - ARRAY
   - JSON
   - BITMAP
   - HLL
   - PERCENTILE
+
+> **NOTE**
+>
+> BITMAP, HLL, PERCENTILE have been supported since v2.4.5.
 
 - Asynchronous materialized views created based on the StarRocks external catalogs support the following data types:
 
