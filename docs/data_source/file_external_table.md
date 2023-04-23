@@ -69,7 +69,7 @@ A set of parameters for accessing the target data file.
 
 | Parameter                | Required | Description                                                  |
 | ------------------------ | -------- | ------------------------------------------------------------ |
-| path                     | Yes      | The path of the data file. <ul><li>If the data file is stored in HDFS, the path format is `hdfs://<IP address of HDFS>:<port>/<path>`.</li><li>If the data file is stored in AWS S3, the path format is `s3://<bucket name>/<folder>/`.</li></ul> Note the following rules when you enter the path: <ul><li>If you want to access all files in a path, end this parameter with a slash (`/`), such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data/`. When you run a query, StarRocks traverses all data files under the path. It does not traverse data files by using recursion.</li><li>If you want to access a single file, enter a path that directly points to this file, such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data`. When you run a query, StarRocks only scans this data file.</li></ul> |
+| path                     | Yes      | The path of the data file. <ul><li>If the data file is stored in HDFS, the path format is `hdfs://<IP address of HDFS>:<port>/<path>`. The default port number is 8020. If you use the default port, you do not need to specify it.</li><li>If the data file is stored in AWS S3, the path format is `s3://<bucket name>/<folder>/`.</li></ul> Note the following rules when you enter the path: <ul><li>If you want to access all files in a path, end this parameter with a slash (`/`), such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data/`. When you run a query, StarRocks traverses all data files under the path. It does not traverse data files by using recursion.</li><li>If you want to access a single file, enter a path that directly points to this file, such as `hdfs://x.x.x.x/user/hive/warehouse/array2d_parq/data`. When you run a query, StarRocks only scans this data file.</li></ul> |
 | format                   | Yes      | The format of the data file. Only Parquet and ORC are supported. |
 | enable_recursive_listing | No       | Specifies whether to recursively transverse all files under the current path. Default value: false. |
 
@@ -114,8 +114,8 @@ If you need to access a data file stored in AWS S3, configure the following auth
 | aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile and assumed role as credential methods for authentication when you access AWS S3. Valid values: true and false. Default value: false. |
 | aws.s3.iam_role_arn         | Yes      | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses the target data file. |
 | aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: us-west-1. |
-| aws.s3.access_key           | No       | The access key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses the target data file. |
-| aws.s3.secret_key           | No       | The secret key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this user when it accesses the target data fila. |
+| aws.s3.access_key           | No       | The access key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
+| aws.s3.secret_key           | No       | The secret key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter.|
 
 For information about how to choose a credential method for accessing AWS S3 and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS S3](../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
@@ -165,10 +165,11 @@ The following table provides the mapping of column types between the target data
 
 #### HDFS
 
-Create a file external table named `t0` to query a data file stored in HDFS.
+Create a file external table named `t0` to query Parquet data files stored in an HDFS path.
 
 ```SQL
 USE db_example;
+
 CREATE EXTERNAL TABLE t0
 (
     name string, 
@@ -188,6 +189,7 @@ Example 1: Create a file external table and use **instance profile** to access *
 
 ```SQL
 USE db_example;
+
 CREATE EXTERNAL TABLE table_1
 (
     name string, 
@@ -207,6 +209,7 @@ Example 2: Create a file external table and use **assumed role** to access **all
 
 ```SQL
 USE db_example;
+
 CREATE EXTERNAL TABLE table_1
 (
     name string, 
@@ -226,6 +229,8 @@ PROPERTIES
 Example 3: Create a file external table and use **IAM** **user** to access **all the ORC files** under the file path in AWS S3.
 
 ```SQL
+USE db_example;
+
 CREATE EXTERNAL TABLE table_1
 (
     name string, 
