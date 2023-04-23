@@ -655,8 +655,8 @@ Stripes:
 */
 
 TEST_F(HdfsScannerTest, TestOrcGetNextWithDiffEncodeDictFilter) {
-    SlotDesc two_diff_encode_orc_desc[] = {{"x", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
-                                           {"y", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+    SlotDesc two_diff_encode_orc_desc[] = {{"x", TypeDescriptor::from_primtive_type(PrimtiveType::TYPE_INT)},
+                                           {"y", TypeDescriptor::from_primtive_type(PrimtiveType::TYPE_VARCHAR)},
                                            {""}};
     const std::string two_diff_encode_orc_file = "./be/test/exec/test_data/orc_scanner/two-strips-dict-and-nodict.orc";
 
