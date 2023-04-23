@@ -39,7 +39,12 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletScheduler.AddResult;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.common.util.MasterDaemon;
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.FrontendDaemon;
+>>>>>>> c5b3ff155 ([Enhancement] Add randomness when choosing low replica num backend (#22257))
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -663,29 +668,32 @@ public class ColocateTableBalancer extends MasterDaemon {
             }
         }
 
-        return backendToReplicaNum
-                .entrySet()
-                .stream()
-                .sorted((entry1, entry2) -> {
-                    if (!entry1.getValue().equals(entry2.getValue())) {
-                        return (int) (entry2.getValue() - entry1.getValue());
-                    }
-                    BackendLoadStatistic beStat1 = statistic.getBackendLoadStatistic(entry1.getKey());
-                    BackendLoadStatistic beStat2 = statistic.getBackendLoadStatistic(entry2.getKey());
-                    if (beStat1 == null || beStat2 == null) {
-                        return 0;
-                    }
-                    double loadScore1 = beStat1.getMixLoadScore();
-                    double loadScore2 = beStat2.getMixLoadScore();
-                    if (Math.abs(loadScore1 - loadScore2) < 1e-6) {
-                        return 0;
-                    } else if (loadScore2 > loadScore1) {
-                        return 1;
-                    } else {
-                        return -1;
-                    }
-                })
-                .collect(Collectors.toList());
+        List<Map.Entry<Long, Long>> entries = new ArrayList<>(backendToReplicaNum.entrySet());
+        if (!FeConstants.runningUnitTest) {
+            // to randomize the relative order of entries with the same number of replicas
+            Collections.shuffle(entries);
+        }
+        entries.sort((entry1, entry2) -> {
+            if (!entry1.getValue().equals(entry2.getValue())) {
+                return (int) (entry2.getValue() - entry1.getValue());
+            }
+            BackendLoadStatistic beStat1 = statistic.getBackendLoadStatistic(entry1.getKey());
+            BackendLoadStatistic beStat2 = statistic.getBackendLoadStatistic(entry2.getKey());
+            if (beStat1 == null || beStat2 == null) {
+                return 0;
+            }
+            double loadScore1 = beStat1.getMixLoadScore();
+            double loadScore2 = beStat2.getMixLoadScore();
+            if (Math.abs(loadScore1 - loadScore2) < 1e-6) {
+                return 0;
+            } else if (loadScore2 > loadScore1) {
+                return 1;
+            } else {
+                return -1;
+            }
+        });
+
+        return entries;
     }
 
     /*
