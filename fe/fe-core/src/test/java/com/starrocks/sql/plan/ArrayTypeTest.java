@@ -76,13 +76,26 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select concat(i_1, s_1, d_1) from adec";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(CAST(2: i_1 AS ARRAY<VARCHAR>), 3: s_1, CAST(4: d_1 AS ARRAY<VARCHAR>))");
+        assertContains(plan, "array_concat(CAST(2: i_1 AS ARRAY<VARCHAR(65533)>), 3: s_1, " +
+                "CAST(4: d_1 AS ARRAY<VARCHAR(65533)>))");
+
+        sql = "select concat(d_1, d_2) from adec";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(CAST(4: d_1 AS ARRAY<DECIMAL128(27,3)>), " +
+                "CAST(5: d_2 AS ARRAY<DECIMAL128(27,3)>))");
+
+        sql = "select concat(d_1, d_2, d_3, d_4, d_5, d_6) from adec";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(CAST(4: d_1 AS ARRAY<DOUBLE>), CAST(5: d_2 AS ARRAY<DOUBLE>), " +
+                "CAST(6: d_3 AS ARRAY<DOUBLE>), CAST(7: d_4 AS ARRAY<DOUBLE>), CAST(8: d_5 AS ARRAY<DOUBLE>), " +
+                "CAST(9: d_6 AS ARRAY<DOUBLE>))");
 
         sql = "select concat(i_1, s_1, d_1, d_2, d_3, d_4, d_5, d_6) from adec";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "array_concat(CAST(2: i_1 AS ARRAY<VARCHAR>), 3: s_1, CAST(4: d_1 AS ARRAY<VARCHAR>), " +
-                "CAST(5: d_2 AS ARRAY<VARCHAR>), CAST(6: d_3 AS ARRAY<VARCHAR>), CAST(7: d_4 AS ARRAY<VARCHAR>), " +
-                "CAST(8: d_5 AS ARRAY<VARCHAR>), CAST(9: d_6 AS ARRAY<VARCHAR>)");
+        assertContains(plan, "array_concat(CAST(2: i_1 AS ARRAY<VARCHAR(65533)>), 3: s_1, " +
+                "CAST(4: d_1 AS ARRAY<VARCHAR(65533)>), CAST(5: d_2 AS ARRAY<VARCHAR(65533)>), " +
+                "CAST(6: d_3 AS ARRAY<VARCHAR(65533)>), CAST(7: d_4 AS ARRAY<VARCHAR(65533)>), " +
+                "CAST(8: d_5 AS ARRAY<VARCHAR(65533)>), CAST(9: d_6 AS ARRAY<VARCHAR(65533)>))");
 
         sql = "select concat(v1, [1,2,3], s_1) from adec";
         plan = getFragmentPlan(sql);

@@ -974,11 +974,15 @@ public class ExpressionAnalyzer {
                                 Lists.newArrayList(node.getChild(i))));
                     }
                 }
-                argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
 
-                fn = Expr.getBuiltinFunction(FunctionSet.ARRAY_CONCAT, argumentTypes,
-                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
                 node.resetFnName(null, FunctionSet.ARRAY_CONCAT);
+                if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(FunctionSet.ARRAY_CONCAT, argumentTypes)) {
+                    fn = DecimalV3FunctionAnalyzer.getDecimalV3Function(session, node, argumentTypes);
+                } else {
+                    fn = Expr.getBuiltinFunction(FunctionSet.ARRAY_CONCAT, argumentTypes,
+                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                }
             } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(fnName, argumentTypes)) {
                 // Since the priority of decimal version is higher than double version (according functionId),
                 // and in `Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF` mode, `Expr.getBuiltinFunction` always
