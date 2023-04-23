@@ -227,10 +227,7 @@ add_library(leveldb STATIC IMPORTED)
 set_target_properties(leveldb PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libleveldb.a)
 
 add_library(jemalloc STATIC IMPORTED)
-set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libjemalloc_for_starrocks.a)
-
-add_library(jemalloc_for_arrow STATIC IMPORTED)
-set_target_properties(jemalloc_for_arrow PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libjemalloc.a)
+set_target_properties(jemalloc PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libjemalloc_pic.a)
 
 add_library(brotlicommon STATIC IMPORTED)
 set_target_properties(brotlicommon PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib64/libbrotlicommon.a)
@@ -660,14 +657,13 @@ set(STARROCKS_DEPENDENCIES
     leveldb
     bitshuffle
     roaring
-    # arrow compiles jemalloc with a specific prefix, we should keep it
-    jemalloc_for_arrow
     brotlicommon
     brotlidec
     brotlienc
     zstd
     streamvbyte
     arrow
+    jemalloc # required by arrow
     parquet
     orc
     cctz
