@@ -925,11 +925,15 @@ public class StmtExecutor {
                     // Sync load cache, auto-populate column statistic cache after Analyze table manually
                     false);
         } else {
+            StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
+                    StatsConstants.AnalyzeType.FULL;
+            if (analyzeType == StatsConstants.AnalyzeType.FULL) {
+                statisticExecutor.dropTableStatistics(statsConnectCtx, table.getId(), analyzeType);
+            }
             statisticExecutor.collectStatistics(statsConnectCtx,
                     StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
                             analyzeStmt.getColumnNames(),
-                            analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
-                                    StatsConstants.AnalyzeType.FULL,
+                            analyzeType,
                             StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
                     analyzeStatus,
                     // Sync load cache, auto-populate column statistic cache after Analyze table manually
