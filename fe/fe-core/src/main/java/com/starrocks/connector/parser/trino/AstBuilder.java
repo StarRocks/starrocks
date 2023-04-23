@@ -109,6 +109,7 @@ import io.trino.sql.tree.GroupingElement;
 import io.trino.sql.tree.GroupingOperation;
 import io.trino.sql.tree.GroupingSets;
 import io.trino.sql.tree.Identifier;
+import io.trino.sql.tree.IfExpression;
 import io.trino.sql.tree.InListExpression;
 import io.trino.sql.tree.InPredicate;
 import io.trino.sql.tree.Intersect;
@@ -918,6 +919,20 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitNullIfExpression(NullIfExpression node, ParseTreeContext context) {
         List<Expr> arguments = visit(ImmutableList.of(node.getFirst(), node.getSecond()), context, Expr.class);
         return new FunctionCallExpr("nullif", arguments);
+    }
+
+    @Override
+    protected ParseNode visitIfExpression(IfExpression node, ParseTreeContext context) {
+        List<Node> children = Lists.newArrayList();
+        children.add(node.getCondition());
+        children.add(node.getTrueValue());
+        if (node.getFalseValue().isPresent()) {
+            children.add(node.getFalseValue().get());
+        } else {
+            children.add(new io.trino.sql.tree.NullLiteral());
+        }
+        List<Expr> arguments = visit(children, context, Expr.class);
+        return new FunctionCallExpr("if", arguments);
     }
 
     @Override

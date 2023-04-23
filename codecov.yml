@@ -1,7 +1,8 @@
-comment:
-  layout: "newheader, diff, flags, files, newfooter"
+comment: false
 codecov:
   allow_coverage_offsets: true
+github_checks:
+  annotations: false
 coverage:
   status:
     project:
@@ -9,7 +10,4 @@ coverage:
         target: 80%
         threshold: 5%
         only_pulls: true
-#    patch:
-#      fe-ut:
-#        target: 80%
-#        only_pulls: true
+    patch: false
