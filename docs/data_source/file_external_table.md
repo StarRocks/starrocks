@@ -51,11 +51,11 @@ PROPERTIES
 | table_name       | Yes      | The name of the file external table. The naming conventions are as follows:<ul><li> The name can contain letters, digits (0-9), and underscores (_). It must start with a letter.</li><li> The name cannot exceed 64 characters in length. |</li></ul>
 | col_name         | Yes      | The column name in the file external table. The column names in the file external table must be the same as those in the target data file but are not case-sensitive. The order of columns in the file external table can be different from that in the target data file. |
 | col_type         | Yes      | The column type in the file external table. You need to specify this parameter based on the column type in the target data file. For more information, see [Mapping of column types](#mapping-of-column-types). |
-| NULL \| NOT NULL | No       | Whether the column in the file external table is allowed to be NULL. <ul><li>NULL: NULL is allowed. </li><li>NOT NULL: NULL is not allowed.</li></ul>You must specify this modifier based on the following rules: <ul><li>If NULL \| NOT NULL is not specified for the columns in the target data file, you can choose not to specify NULL \| NOT NULL for the columns in the file external table or specify NULL for the columns in the file external table.</li><li>If NULL is specified for the columns in the target data file, you can choose not to specify NULL \| NOT NULL for the columns in the file external table or specify NULL for the columns in the file external table.</li><li>If NOT NULL is specified for the columns in the target data file, you must also specify NOT NULL for the columns in the file external table.</li></ul> |
+| NULL \| NOT NULL | No       | Whether the column in the file external table is allowed to be NULL. <ul><li>NULL: NULL is allowed. </li><li>NOT NULL: NULL is not allowed.</li></ul>You must specify this modifier based on the following rules: <ul><li>If this parameter is not specified for the columns in the target data file, you can choose not to specify it for the columns in the file external table or specify NULL for the columns in the file external table.</li><li>If NULL is specified for the columns in the target data file, you can choose not to specify this parameter for the columns in the file external table or specify NULL for the columns in the file external table.</li><li>If NOT NULL is specified for the columns in the target data file, you must also specify NOT NULL for the columns in the file external table.</li></ul> |
 | comment          | No       | The comment of column in the file external table.            |
 | ENGINE           | Yes      | The type of engine. Set the value to file.                   |
 | comment          | No       | The description of the file external table.                  |
-| PROPERTIES       | Yes      | - `FileLayoutParams`: specifies the path and format of the target file. This property is required. - `StorageCredentialParams`: specifies the credential information required for accessing object storage systems. This property is required only for AWS S3 and S3-compatible storage. |
+| PROPERTIES       | Yes      | <ul><li>`FileLayoutParams`: specifies the path and format of the target file. This property is required.</li><li>`StorageCredentialParams`: specifies the credential information required for accessing object storage systems. This property is required only for AWS S3 and S3-compatible storage.</li></ul> |
 
 #### FileLayoutParams
 
@@ -112,7 +112,7 @@ If you need to access a data file stored in AWS S3, configure the following auth
 | Parameter name              | Required | Description                                                  |
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile and assumed role as credential methods for authentication when you access AWS S3. Valid values: true and false. Default value: false. |
-| aws.s3.iam_role_arn         | Yes      | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses the target data file. |
+| aws.s3.iam_role_arn         | Yes      | The ARN of the IAM role that has privileges on your AWS S3 bucket. <br>If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses the target data file. |
 | aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: us-west-1. |
 | aws.s3.access_key           | No       | The access key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter.|
@@ -135,8 +135,8 @@ The following table describes the parameters you need to configure in `StorageCr
 
 | Parameter                       | Required | Description                                                  |
 | ------------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.enable_ssl               | Yes      | Specifies whether to enable SSL connection. Valid values: true and false. Default value: true. |
-| aws.s3.enable_path_style_access | Yes      | Specifies whether to enable path-style URL access. Valid values: true and false. Default value: false. |
+| aws.s3.enable_ssl               | Yes      | Specifies whether to enable SSL connection. <br>Valid values: true and false. Default value: true. |
+| aws.s3.enable_path_style_access | Yes      | Specifies whether to enable path-style URL access. <br>Valid values: true and false. Default value: false. |
 | aws.s3.endpoint                 | Yes      | The endpoint used to connect to an S3-compatible storage system instead of AWS S3. |
 | aws.s3.access_key               | Yes      | The access key of your IAM user.                         |
 | aws.s3.secret_key               | Yes      | The secret key of your IAM user.                         |
@@ -149,7 +149,7 @@ The following table provides the mapping of column types between the target data
 | ----------- | ------------------------------------------------------------ |
 | INT/INTEGER | INT                                                          |
 | BIGINT      | BIGINT                                                       |
-| TIMESTAMP   | DATETIME. Note that TIMESTAMP is converted to DATETIME without a time zone based on the time zone setting of the current session and loses some of its precision. |
+| TIMESTAMP   | DATETIME. <br>Note that TIMESTAMP is converted to DATETIME without a time zone based on the time zone setting of the current session and loses some of its precision. |
 | STRING      | STRING                                                       |
 | VARCHAR     | VARCHAR                                                      |
 | CHAR        | CHAR                                                         |
@@ -272,4 +272,4 @@ SELECT * FROM t0;
 
 ## Manage file external tables
 
-You can manage a file external table as a common StarRocks table. For example, you can view the schema of the table using [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md) or drop the table using [DROP TABLE](../sql-reference/sql-statements/data-definition/DROP%20TABLE.md).
+You can view the schema of the table using [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md) or drop the table using [DROP TABLE](../sql-reference/sql-statements/data-definition/DROP%20TABLE.md).
