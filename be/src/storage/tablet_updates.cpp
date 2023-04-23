@@ -2914,6 +2914,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         total_bytes += rowset_meta_pb.total_disk_size();
         total_rows += rowset_meta_pb.num_rows();
         total_files += rowset_meta_pb.num_segments() + rowset_meta_pb.num_delete_files();
+        chunk_arr.clear();
     }
 
     TabletMetaPB meta_pb;
