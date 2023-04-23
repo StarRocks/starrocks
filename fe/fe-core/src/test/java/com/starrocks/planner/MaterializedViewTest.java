@@ -2081,28 +2081,4 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             testRewriteFail(mv, query);
         }
     }
-
-    @Test
-    public void testMvRewrite() throws Exception {
-
-        String mv = "SELECT `lineorder`.`lo_orderkey`, `lineorder`.`lo_linenumber`, `lineorder`.`lo_custkey`," +
-                " `lineorder`.`lo_partkey`, `lineorder`.`lo_suppkey`, `lineorder`.`lo_orderdate`," +
-                " `lineorder`.`lo_orderpriority`, `lineorder`.`lo_shippriority`, `lineorder`.`lo_quantity`," +
-                " `lineorder`.`lo_extendedprice`, `lineorder`.`lo_ordtotalprice`, `lineorder`.`lo_discount`," +
-                " `lineorder`.`lo_revenue`, `lineorder`.`lo_supplycost`, `lineorder`.`lo_tax`, `lineorder`.`lo_commitdate`," +
-                " `lineorder`.`lo_shipmode`, `dates`.`d_datekey`, `dates`.`d_date`, `dates`.`d_dayofweek`," +
-                " `dates`.`d_month`, `dates`.`d_year`, `dates`.`d_yearmonthnum`, `dates`.`d_yearmonth`," +
-                " `dates`.`d_daynuminweek`, `dates`.`d_daynuminmonth`, `dates`.`d_daynuminyear`," +
-                " `dates`.`d_monthnuminyear`, `dates`.`d_weeknuminyear`, `dates`.`d_sellingseason`," +
-                " `dates`.`d_lastdayinweekfl`, `dates`.`d_lastdayinmonthfl`, `dates`.`d_holidayfl`," +
-                " `dates`.`d_weekdayfl`\n" +
-                "FROM `lineorder`" +
-                " LEFT OUTER JOIN `dates` ON `lineorder`.`lo_orderdate` = `dates`.`d_datekey`\n" +
-                "WHERE `lineorder`.`lo_orderdate` = 19961001;";
-
-        String query = "select sum(lo_linenumber) from `lineorder`" +
-                " LEFT OUTER JOIN `dates`" +
-                " ON `lineorder`.`lo_orderdate` = `dates`.`d_datekey` WHERE `lineorder`.`lo_orderdate` = 19961001;";
-        testRewriteOK(mv, query);
-    }
 }

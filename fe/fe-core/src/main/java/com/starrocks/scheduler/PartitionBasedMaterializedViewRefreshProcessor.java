@@ -417,9 +417,14 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     currentVersionMap.get(baseTableInfo);
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = tableEntry.getValue();
             currentTablePartitionInfo.putAll(partitionInfoMap);
+            List<String> partitionNames = PartitionUtil.getPartitionNames(baseTableInfo.getTable());
+            for (String partitionName : partitionNames) {
+                MaterializedView.BasePartitionInfo invalidPartitionInfo =
+                        new MaterializedView.BasePartitionInfo(-1, -1);
+                currentTablePartitionInfo.putIfAbsent(partitionName, invalidPartitionInfo);
+            }
 
             // remove partition info of not-exist partition for snapshot table from version map
-            Set<String> partitionNames = Sets.newHashSet(PartitionUtil.getPartitionNames(baseTableInfo.getTable()));
             currentTablePartitionInfo.keySet().removeIf(partitionName ->
                     !partitionNames.contains(partitionName));
         }

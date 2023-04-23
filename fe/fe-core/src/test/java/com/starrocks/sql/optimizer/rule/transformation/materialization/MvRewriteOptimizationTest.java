@@ -2501,4 +2501,15 @@ public class MvRewriteOptimizationTest {
             starRocksAssert.dropMaterializedView("partial_mv_13");
         }
     }
+
+    @Test
+    public void testNonpartitionedMvWithPartitionPredicate() throws Exception {
+        createAndRefreshMv("test", "mv_with_partition_predicate_1",
+                "create materialized view mv_with_partition_predicate_1 distributed by hash(`k1`)" +
+                        " as select k1, v1 from t1 where k1 = 3;");
+        String query = "select k1, v1 from t1 where k1 = 3;";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "mv_with_partition_predicate_1");
+        starRocksAssert.dropMaterializedView("mv_with_partition_predicate_1");
+    }
 }
