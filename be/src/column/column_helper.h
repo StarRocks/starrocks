@@ -60,6 +60,12 @@ public:
      */
     static size_t count_false_with_notnull(const ColumnPtr& col);
 
+    // Find the first non-null value
+    static size_t find_nonnull(const Column* col, size_t start, size_t end);
+
+    // Find the non-null value in reversed order
+    static size_t last_nonnull(const Column* col, size_t start, size_t end);
+
     template <PrimitiveType Type>
     static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
         static_assert(!pt_is_decimal<Type>,
@@ -193,8 +199,8 @@ public:
                                        const bool is_nullable);
 
     // Create a column with specified size, the column will be resized to size
-    static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size);
-
+    static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
+                                   bool use_adaptive_nullable_column = false);
     /**
      * Cast columnPtr to special type ColumnPtr
      * Plz sure actual column type by yourself

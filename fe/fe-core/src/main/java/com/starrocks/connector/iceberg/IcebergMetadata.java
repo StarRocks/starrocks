@@ -43,8 +43,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         if (IcebergCatalogType.HIVE_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG_TYPE))) {
             catalogType = properties.get(ICEBERG_CATALOG_TYPE);
             metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
-            icebergCatalog = getIcebergHiveCatalog(metastoreURI, properties, hdfsEnvironment);
             Util.validateMetastoreUris(metastoreURI);
+            icebergCatalog = getIcebergHiveCatalog(metastoreURI, properties, hdfsEnvironment);
         } else if (IcebergCatalogType.CUSTOM_CATALOG ==
                 IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG_TYPE))) {
             catalogType = properties.get(ICEBERG_CATALOG_TYPE);

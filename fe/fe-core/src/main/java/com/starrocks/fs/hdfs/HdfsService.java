@@ -55,7 +55,7 @@ public class HdfsService {
 
     public void listPath(TBrokerListPathRequest request, List<TBrokerFileStatus> fileStatuses, boolean skipDir,
                          boolean fileNameOnly) throws UserException {
-        LOG.info("receive a delete path request, path: {}", request.path);
+        LOG.info("receive a list path request, path: {}", request.path);
         List<TBrokerFileStatus> allFileStatuses = fileSystemManager.listPath(request.path, fileNameOnly,
                 request.properties);
 

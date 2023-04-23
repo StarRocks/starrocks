@@ -4,6 +4,7 @@
 
 #include <ryu/ryu.h>
 
+#include <stdexcept>
 #include <utility>
 
 #include "column/array_column.h"
@@ -153,6 +154,11 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             } else {
                 overflow = true;
             }
+        } else if constexpr (CastToString::extend_type<RunTimeCppType<FromType>>()) {
+            // Cast these types to string in json
+            auto v = viewer.value(row);
+            std::string str = CastToString::apply<RunTimeCppType<FromType>, std::string>(v);
+            value = JsonValue::from_string(str);
         } else {
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPE(FromType);
@@ -173,8 +179,8 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             builder.append(std::move(value));
         }
     }
-
     return builder.build(column->is_constant());
+    return {};
 }
 
 template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
@@ -1172,25 +1178,6 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(DoubleCastToString, v) {
     return std::string(buf, len);
 }
 
-/**
- * Cast other type to string without float, double, string
- */
-struct CastToString {
-    template <typename Type, typename ResultType>
-    static std::string apply(const Type& v) {
-        if constexpr (IsDate<Type> || IsTimestamp<Type> || IsDecimal<Type>) {
-            // DateValue, TimestampValue, DecimalV2
-            return v.to_string();
-        } else if constexpr (IsInt128<Type>) {
-            // int128_t
-            return LargeIntValue::to_string(v);
-        } else {
-            // int8_t ~ int64_t, boolean
-            return SimpleItoa(v);
-        }
-    }
-};
-
 // The StringUnaryFunction templace is defined in unary_function.h
 // This place is a trait for this, it's for performance.
 // CastToString will copy string when returning value,
@@ -1233,6 +1220,9 @@ CUSTOMIZE_FN_CAST(TYPE_FLOAT, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_DOUBLE, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_CHAR, TYPE_JSON, cast_to_json_fn);
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_TIME, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_DATETIME, TYPE_JSON, cast_to_json_fn);
+CUSTOMIZE_FN_CAST(TYPE_DATE, TYPE_JSON, cast_to_json_fn);
 
 /**
  * Resolve cast to string
@@ -1322,27 +1312,15 @@ private:
         return builder.build(column->is_constant());
     }
 
-    ColumnPtr _evaluate_string(ExprContext* context, const ColumnPtr& column) {
-        if (type().len <= 0) {
-            return column;
-        }
-
-        ColumnViewer<TYPE_VARCHAR> viewer(column);
-        ColumnBuilder<TYPE_VARCHAR> builder(viewer.size());
-
-        for (int row = 0; row < viewer.size(); ++row) {
-            if (viewer.is_null(row)) {
-                builder.append_null();
-                continue;
-            }
-
-            auto value = viewer.value(row);
-            int sz = std::min(type().len, (int)value.size);
-            builder.append(Slice(value.data, sz));
-        }
-
-        return builder.build(column->is_constant());
-    }
+    // cast(string as string) is trivial operation, just return the input column.
+    // This behavior is not compatible with MySQL
+    // 1. cast(string as varchar(n)) supported in SR, but not supported in MySQL
+    // 2. cast(string as char(n)) supported in both SR and MySQL, but in SR, in some queries, length
+    //    of char is neglected. in MySQL, the input string shall be truncated if its length is larger than
+    //    length of char.
+    // In SR, behaviors of both cast(string as varchar(n)) and cast(string as char(n)) keep the same: neglect
+    // of the length of char/varchar and return input column directly.
+    ColumnPtr _evaluate_string(ExprContext* context, const ColumnPtr& column) { return column; }
 
     ColumnPtr _evaluate_time(ExprContext* context, const ColumnPtr& column) {
         ColumnViewer<TYPE_TIME> viewer(column);
@@ -1593,6 +1571,9 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
                 CASE_TO_JSON(TYPE_DECIMAL32, allow_throw_exception);
                 CASE_TO_JSON(TYPE_DECIMAL64, allow_throw_exception);
                 CASE_TO_JSON(TYPE_DECIMAL128, allow_throw_exception);
+                CASE_TO_JSON(TYPE_DATE, allow_throw_exception);
+                CASE_TO_JSON(TYPE_TIME, allow_throw_exception);
+                CASE_TO_JSON(TYPE_DATETIME, allow_throw_exception);
             default:
                 LOG(WARNING) << "vectorized engine not support from type: " << type_to_string(from_type)
                              << ", to type: " << type_to_string(to_type);

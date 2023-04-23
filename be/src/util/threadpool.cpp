@@ -350,12 +350,20 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
     }
 
     // Size limit check.
-    int64_t capacity_remaining = static_cast<int64_t>(_max_threads) - _active_threads +
-                                 static_cast<int64_t>(_max_queue_size) - _total_queued_tasks;
+    int64_t capacity_remaining = 0;
+    const int cur_max_threads = _max_threads.load();
+    if (cur_max_threads >= _active_threads) {
+        capacity_remaining = static_cast<int64_t>(cur_max_threads) - _active_threads +
+                             static_cast<int64_t>(_max_queue_size) - _total_queued_tasks;
+    } else {
+        // dynamic decrease _max_threads
+        capacity_remaining = static_cast<int64_t>(_max_queue_size) - _total_queued_tasks;
+    }
+
     if (capacity_remaining < 1) {
         return Status::ServiceUnavailable(strings::Substitute(
                 "Thread pool is at capacity ($0/$1 tasks running, $2/$3 tasks queued)",
-                _num_threads + _num_threads_pending_start, _max_threads, _total_queued_tasks, _max_queue_size));
+                _num_threads + _num_threads_pending_start, _max_threads.load(), _total_queued_tasks, _max_queue_size));
     }
 
     // Should we create another thread?
@@ -378,7 +386,7 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
     int inactive_threads = _num_threads + _num_threads_pending_start - _active_threads;
     int additional_threads = static_cast<int>(_queue.size()) + threads_from_this_submit - inactive_threads;
     bool need_a_thread = false;
-    if (additional_threads > 0 && _num_threads + _num_threads_pending_start < _max_threads) {
+    if (additional_threads > 0 && _num_threads + _num_threads_pending_start < _max_threads.load()) {
         need_a_thread = true;
         _num_threads_pending_start++;
     }
@@ -444,9 +452,23 @@ bool ThreadPool::wait_for(const MonoDelta& delta) {
                                [&]() { return _total_queued_tasks <= 0 && _active_threads <= 0; });
 }
 
+Status ThreadPool::update_max_threads(int max_threads) {
+    if (max_threads < this->_min_threads) {
+        std::string err_msg = strings::Substitute("invalid max threads num $0 :  min threads num: $1",
+                                                  std::to_string(max_threads), std::to_string(this->_min_threads));
+        LOG(WARNING) << err_msg;
+        return Status::InvalidArgument(err_msg);
+    } else {
+        _max_threads.store(max_threads);
+        LOG(INFO) << "ThreadPool " << _name << " update max threads : " << _max_threads.load();
+    }
+    return Status::OK();
+}
+
 void ThreadPool::dispatch_thread() {
     std::unique_lock l(_lock);
-    InsertOrDie(&_threads, Thread::current_thread());
+    auto current_thread = Thread::current_thread();
+    InsertOrDie(&_threads, current_thread);
     DCHECK_GT(_num_threads_pending_start, 0);
     _num_threads++;
     _num_threads_pending_start--;
@@ -465,6 +487,7 @@ void ThreadPool::dispatch_thread() {
         }
 
         if (_queue.empty()) {
+            current_thread->set_idle(true);
             // There's no work to do, let's go idle.
             //
             // Note: if FIFO behavior is desired, it's as simple as changing this to push_back().
@@ -499,6 +522,7 @@ void ThreadPool::dispatch_thread() {
         }
 
         // Get the next token and task to execute.
+        current_thread->set_idle(false);
         ThreadPoolToken* token = _queue.front();
         _queue.pop_front();
         DCHECK_EQ(ThreadPoolToken::State::RUNNING, token->state());
@@ -513,6 +537,7 @@ void ThreadPool::dispatch_thread() {
 
         // Execute the task
         task.runnable->run();
+        current_thread->inc_finished_tasks();
 
         // Destruct the task while we do not hold the lock.
         //
@@ -560,6 +585,7 @@ void ThreadPool::dispatch_thread() {
         CHECK(_queue.empty());
         DCHECK_EQ(0, _total_queued_tasks);
     }
+    current_thread->set_idle(true);
 }
 
 Status ThreadPool::create_thread() {

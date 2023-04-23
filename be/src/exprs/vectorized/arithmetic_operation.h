@@ -20,6 +20,9 @@ struct BitAndOp {};
 struct BitOrOp {};
 struct BitXorOp {};
 struct BitNotOp {};
+struct BitShiftLeftOp {};
+struct BitShiftRightOp {};
+struct BitShiftRightLogicalOp {};
 
 struct MulOp64x64_128 {};
 struct MulOp32x64_128 {};
@@ -38,7 +41,11 @@ TYPE_GUARD(BitAndOpGuard, is_bitand_op, BitAndOp)
 TYPE_GUARD(BitOrOpGuard, is_bitor_op, BitOrOp)
 TYPE_GUARD(BitXorOpGuard, is_bitxor_op, BitXorOp)
 TYPE_GUARD(BitNotOpGuard, is_bitnot_op, BitNotOp)
-TYPE_GUARD(BinaryOpGuard, is_binary_op, AddOp, SubOp, MulOp, DivOp, ModOp, BitAndOp, BitOrOp, BitXorOp)
+TYPE_GUARD(BitShiftLeftOpGuard, is_bit_shift_left_op, BitShiftLeftOp)
+TYPE_GUARD(BitShiftRightOpGuard, is_bit_shift_right_op, BitShiftRightOp)
+TYPE_GUARD(BitShiftRightLogicalOpGuard, is_bit_shift_right_logical_op, BitShiftRightLogicalOp)
+TYPE_GUARD(BinaryOpGuard, is_binary_op, AddOp, SubOp, MulOp, DivOp, ModOp, BitAndOp, BitOrOp, BitXorOp, BitShiftLeftOp,
+           BitShiftRightOp, BitShiftRightLogicalOp)
 TYPE_GUARD(UnaryOpGuard, is_unary_op, BitNotOp)
 
 template <PrimitiveType Type, typename ResultType>
@@ -106,6 +113,22 @@ struct ArithmeticBinaryOperator {
             return l | r;
         } else if constexpr (is_bitxor_op<Op>) {
             return l ^ r;
+        } else if constexpr (is_bit_shift_left_op<Op>) {
+            return l << r;
+        } else if constexpr (is_bit_shift_right_op<Op>) {
+            return l >> r;
+        } else if constexpr (is_bit_shift_right_logical_op<Op>) {
+            if constexpr (std::is_same_v<LType, int8_t>) {
+                return uint8_t(l) >> r;
+            } else if constexpr (std::is_same_v<LType, int16_t>) {
+                return uint16_t(l) >> r;
+            } else if constexpr (std::is_same_v<LType, int32_t>) {
+                return uint32_t(l) >> r;
+            } else if constexpr (std::is_same_v<LType, int64_t>) {
+                return uint64_t(l) >> r;
+            } else if constexpr (std::is_same_v<LType, __int128_t>) {
+                return uint128_t(l) >> r;
+            }
         } else {
             static_assert(is_binary_op<Op>, "Invalid binary operators");
         }

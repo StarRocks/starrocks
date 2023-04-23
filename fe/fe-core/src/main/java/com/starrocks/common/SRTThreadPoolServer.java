@@ -29,6 +29,7 @@ import org.apache.thrift.transport.TServerTransport;
 import org.apache.thrift.transport.TTransport;
 import org.apache.thrift.transport.TTransportException;
 
+import java.net.SocketTimeoutException;
 import java.util.Random;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -347,6 +348,9 @@ public class SRTThreadPoolServer extends TServer {
                     case TTransportException.END_OF_FILE:
                     case TTransportException.TIMED_OUT:
                         return true;
+                }
+                if (tTransportException.getCause() instanceof SocketTimeoutException) {
+                    return true;
                 }
             }
             return false;

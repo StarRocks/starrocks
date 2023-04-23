@@ -154,11 +154,13 @@ struct TBrokerRangeDesc {
 }
 
 enum TObjectStoreType {
+  HDFS,
   S3,
   KS3,
   OSS,
   COS,
   OBS,
+  UNIVERSAL_FS
 }
 
 struct THdfsProperty {
@@ -318,6 +320,7 @@ struct TMySQLScanNode {
   3: required list<string> columns
   4: required list<string> filters
   5: optional i64 limit
+  6: optional string temporal_clause
 }
 
 struct TFileScanNode {
@@ -377,6 +380,20 @@ struct TSchemaScanNode {
   9: optional i64 thread_id
   10: optional string user_ip   // deprecated
   11: optional Types.TUserIdentity current_user_ident   // to replace the user and user_ip
+  12: optional i64 table_id
+  13: optional i64 partition_id
+  14: optional i64 tablet_id
+  15: optional i64 txn_id
+  16: optional i64 job_id
+  17: optional string label
+  18: optional string type
+  19: optional string state
+  20: optional i64 limit
+  21: optional i64 log_start_ts;
+  22: optional i64 log_end_ts;
+  23: optional string log_level;
+  24: optional string log_pattern;
+  25: optional i64 log_limit;
 }
 
 struct TOlapScanNode {
@@ -395,6 +412,8 @@ struct TOlapScanNode {
   25: optional bool sorted_by_keys_per_tablet = false
 
   26: optional list<Exprs.TExpr> bucket_exprs
+  27: optional list<string> sort_key_column_names
+  28: optional i32 max_parallel_scan_instance_num
 }
 
 struct TJDBCScanNode {
@@ -418,6 +437,7 @@ struct TLakeScanNode {
   9: optional map<i32, i32> dict_string_id_to_int_ids
   // which columns only be used to filter data in the stage of scan data
   10: optional list<string> unused_output_column_name
+  11: optional list<string> sort_key_column_names
 }
 
 struct TEqJoinCondition {
@@ -670,6 +690,10 @@ struct TSortNode {
   23: optional list<Exprs.TExpr> partition_exprs
   24: optional i64 partition_limit
   25: optional TTopNType topn_type;
+  26: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
+  27: optional i64 max_buffered_rows;
+  28: optional i64 max_buffered_bytes;
+  29: optional bool late_materialization;
 }
 
 enum TAnalyticWindowType {

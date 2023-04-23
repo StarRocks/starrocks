@@ -863,9 +863,9 @@ public class ReportHandler extends Daemon {
                 // continue to report them to FE forever and add some processing overhead(the tablet report
                 // process is protected with DB S lock).
                 addDropReplicaTask(batchTask, backendId, tabletId,
-                        -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId));
+                        -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId, backendId));
                 if (!FeConstants.runningUnitTest) {
-                    invertedIndex.eraseTabletForceDelete(tabletId);
+                    invertedIndex.eraseTabletForceDelete(tabletId, backendId);
                 }
                 ++deleteFromBackendCounter;
                 --maxTaskSendPerBe;
@@ -1066,27 +1066,6 @@ public class ReportHandler extends Daemon {
                                             dbId, tableId, partitionId, indexId, tabletId, backendId, replica.getId());
                                     backendTabletsInfo.addReplicaInfo(replicaPersistInfo);
                                 }
-                                break;
-                            }
-
-                            if (replica.getVersion() > tTabletInfo.getVersion()) {
-                                LOG.warn("recover for replica {} of tablet {} on backend {}",
-                                        replica.getId(), tabletId, backendId);
-                                if (replica.getVersion() == tTabletInfo.getVersion() + 1) {
-                                    // this missing version is the last version of this replica
-                                    replica.updateVersionInfoForRecovery(
-                                            tTabletInfo.getVersion(), /* set version to BE report version */
-                                            replica.getVersion(), /* set LFV to current FE version */
-                                            tTabletInfo.getVersion()); /* set LSV to BE report version */
-                                } else {
-                                    // this missing version is a hole
-                                    replica.updateVersionInfoForRecovery(
-                                            tTabletInfo.getVersion(), /* set version to BE report version */
-                                            tTabletInfo.getVersion() + 1, /* LFV */
-                                            /* remain LSV unchanged, which should be equal to replica.version */
-                                            replica.getLastSuccessVersion());
-                                }
-                                // no need to write edit log, if FE crashed, this will be recovered again
                                 break;
                             }
                         }

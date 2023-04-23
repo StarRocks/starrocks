@@ -5,6 +5,7 @@ package com.starrocks.sql.optimizer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -97,8 +98,9 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
                 return false;
             }
 
-            ColocateTableIndex.GroupId groupId = colocateIndex.getGroup(leftTableId);
-            if (colocateIndex.isGroupUnstable(groupId)) {
+            ColocateTableIndex.GroupId leftGroupId = colocateIndex.getGroup(leftTableId);
+            ColocateTableIndex.GroupId rightGroupId = colocateIndex.getGroup(rightTableId);
+            if (colocateIndex.isGroupUnstable(leftGroupId) || colocateIndex.isGroupUnstable(rightGroupId)) {
                 return false;
             }
 
@@ -346,7 +348,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             HashDistributionDesc rightDistributionDesc = rightDistributionSpec.getHashDistributionDesc();
 
             // 2.1 respect the hint
-            if ("SHUFFLE".equalsIgnoreCase(hint)) {
+            if (JoinOperator.HINT_SHUFFLE.equals(hint)) {
                 if (leftDistributionDesc.isLocal()) {
                     enforceChildShuffleDistribution(leftShuffleColumns, leftChild, leftChildOutputProperty, 0);
                 }
@@ -371,7 +373,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
 
             if (leftDistributionDesc.isLocal() && rightDistributionDesc.isLocal()) {
                 // colocate join
-                if ("BUCKET".equalsIgnoreCase(hint) ||
+                if (JoinOperator.HINT_BUCKET.equals(hint) ||
                         !canColocateJoin(leftDistributionSpec, rightDistributionSpec, leftShuffleColumns,
                                 rightShuffleColumns)) {
                     transToBucketShuffleJoin(leftDistributionSpec, leftShuffleColumns, rightShuffleColumns);

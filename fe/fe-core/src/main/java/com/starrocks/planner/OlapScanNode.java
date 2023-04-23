@@ -41,6 +41,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -85,6 +86,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -196,6 +198,10 @@ public class OlapScanNode extends ScanNode {
         this.bucketColumns = bucketColumns;
     }
 
+    public List<Expr> getBucketExprs() {
+        return bucketExprs;
+    }
+
     public void setBucketExprs(List<Expr> bucketExprs) {
         this.bucketExprs = bucketExprs;
     }
@@ -302,7 +308,7 @@ public class OlapScanNode extends ScanNode {
             MaterializedIndex table,
             DistributionInfo distributionInfo) throws AnalysisException {
         DistributionPruner distributionPruner;
-        if(DistributionInfo.DistributionInfoType.HASH == distributionInfo.getType()) {
+        if (DistributionInfo.DistributionInfoType.HASH == distributionInfo.getType()) {
             HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
             distributionPruner = new HashDistributionPruner(table.getTabletIdsInOrder(),
                     info.getDistributionColumns(),
@@ -626,12 +632,21 @@ public class OlapScanNode extends ScanNode {
         List<String> keyColumnNames = new ArrayList<String>();
         List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
         if (selectedIndexId != -1) {
-            for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
-                if (!col.isKey()) {
-                    break;
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
+            if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
+                for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+                    Column col = indexMeta.getSchema().get(sortKeyIdx);
+                    keyColumnNames.add(col.getName());
+                    keyColumnTypes.add(col.getPrimitiveType().toThrift());
                 }
-                keyColumnNames.add(col.getName());
-                keyColumnTypes.add(col.getPrimitiveType().toThrift());
+            } else {
+                for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
+                    if (!col.isKey()) {
+                        break;
+                    }
+                    keyColumnNames.add(col.getName());
+                    keyColumnTypes.add(col.getPrimitiveType().toThrift());
+                }
             }
         }
 
@@ -639,6 +654,7 @@ public class OlapScanNode extends ScanNode {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
             msg.lake_scan_node =
                     new TLakeScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
+            msg.olap_scan_node.setSort_key_column_names(keyColumnNames);
             msg.lake_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
             if (!conjuncts.isEmpty()) {
                 msg.lake_scan_node.setSql_predicates(getExplainString(conjuncts));
@@ -659,6 +675,7 @@ public class OlapScanNode extends ScanNode {
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
                     new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
+            msg.olap_scan_node.setSort_key_column_names(keyColumnNames);
             msg.olap_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
             if (!conjuncts.isEmpty()) {
                 msg.olap_scan_node.setSql_predicates(getExplainString(conjuncts));
@@ -669,6 +686,8 @@ public class OlapScanNode extends ScanNode {
             if (ConnectContext.get() != null) {
                 msg.olap_scan_node.setEnable_column_expr_predicate(
                         ConnectContext.get().getSessionVariable().isEnableColumnExprPredicate());
+                msg.olap_scan_node.setMax_parallel_scan_instance_num(
+                        ConnectContext.get().getSessionVariable().getMaxParallelScanInstanceNum());
             }
             msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 
@@ -788,34 +807,35 @@ public class OlapScanNode extends ScanNode {
         return partitions.subList(numPartitions - numHotIds, numPartitions).stream().map(Map.Entry::getKey)
                 .collect(Collectors.toSet());
     }
-    private List<Expr> decomposeRangePredicates(FragmentNormalizer normalizer, TNormalPlanNode planNode, RangePartitionInfo rangePartitionInfo, List<Expr> conjuncts) {
-        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-        Set<Long> selectedPartIdSet = new HashSet<>(selectedPartitionIds);
-        selectedPartIdSet.removeAll(getHotPartitionIds(rangePartitionInfo));
 
-        Column column = partitionColumns.get(0);
+    private Optional<SlotId> associateSlotIdsWithColumns(FragmentNormalizer normalizer, TNormalPlanNode planNode,
+                                                         Optional<Column> optPartitionColumn) {
         List<SlotDescriptor> slots = normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleIds.get(0)).getSlots();
         List<Pair<SlotId, String>> slotIdToColNames =
                 slots.stream().map(s -> new Pair<>(s.getId(), s.getColumn().getName()))
                         .collect(Collectors.toList());
 
-        SlotId slotId = slotIdToColNames.stream()
-                .filter(s -> s.second.equalsIgnoreCase(column.getName()))
-                .findFirst().map(s -> s.first).orElse(new SlotId(-1));
-
-        // slotId.isValid means that whereClause contains no predicates involving partition columns. so the query
-        // is equivalent to the query with a superset of all the partitions, so we needs add a fake slotId that
-        // represents the partition column to the slot remapping. for an example:
-        // table t0 is partition by dt and has there partitions:
-        //  p0=[2022-01-01, 2022-01-02),
-        //  p1=[2022-01-02, 2022-01-03),
-        //  p2=[2022-01-03, 2022-01-04).
-        // Q1: select count(*) from t0 will be performed p0,p1,p2. but dt is absent from OlapScanNode.
-        // Q2: select count(*) from t0 where dt between and '2022-01-01' and '2022-01-01' should use the partial result
-        // of Q1 on p0. but Q1 and Q2 has different SlotId re-mappings, so Q2's cache key cannot match the Q1's. so
-        // we should add a fake slotId represents the partition column when we re-map slotIds.
-        if (!slotId.isValid()) {
-            slotIdToColNames.add(new Pair<>(slotId, column.getName()));
+        Optional<SlotId> optPartitionSlotId = Optional.empty();
+        if (optPartitionColumn.isPresent()) {
+            Column column = optPartitionColumn.get();
+            SlotId slotId = slotIdToColNames.stream()
+                    .filter(s -> s.second.equalsIgnoreCase(column.getName()))
+                    .findFirst().map(s -> s.first).orElse(new SlotId(-1));
+            optPartitionSlotId = Optional.of(slotId);
+            // slotId.isValid means that whereClause contains no predicates involving partition columns. so the query
+            // is equivalent to the query with a superset of all the partitions, so we needs add a fake slotId that
+            // represents the partition column to the slot remapping. for an example:
+            // table t0 is partition by dt and has there partitions:
+            //  p0=[2022-01-01, 2022-01-02),
+            //  p1=[2022-01-02, 2022-01-03),
+            //  p2=[2022-01-03, 2022-01-04).
+            // Q1: select count(*) from t0 will be performed p0,p1,p2. but dt is absent from OlapScanNode.
+            // Q2: select count(*) from t0 where dt between and '2022-01-01' and '2022-01-01' should use the partial result
+            // of Q1 on p0. but Q1 and Q2 has different SlotId re-mappings, so Q2's cache key cannot match the Q1's. so
+            // we should add a fake slotId represents the partition column when we re-map slotIds.
+            if (!slotId.isValid()) {
+                slotIdToColNames.add(new Pair<>(slotId, column.getName()));
+            }
         }
         slotIdToColNames.sort(Pair.comparingBySecond());
         List<SlotId> slotIds = slotIdToColNames.stream().map(s -> s.first).collect(Collectors.toList());
@@ -824,13 +844,24 @@ public class OlapScanNode extends ScanNode {
         planNode.olap_scan_node.setRemapped_slot_ids(remappedSlotIds);
         planNode.olap_scan_node.setSelected_column(
                 slotIdToColNames.stream().map(c -> c.second).collect(Collectors.toList()));
+        return optPartitionSlotId;
+    }
 
+    private List<Expr> decomposeRangePredicates(FragmentNormalizer normalizer, TNormalPlanNode planNode,
+                                                RangePartitionInfo rangePartitionInfo, List<Expr> conjuncts) {
+        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
+        Set<Long> selectedPartIdSet = new HashSet<>(selectedPartitionIds);
+        selectedPartIdSet.removeAll(getHotPartitionIds(rangePartitionInfo));
+
+        Column column = partitionColumns.get(0);
+        Optional<SlotId> optSlotId = associateSlotIdsWithColumns(normalizer, planNode, Optional.of(column));
         List<Map.Entry<Long, Range<PartitionKey>>> rangeMap = Lists.newArrayList();
         try {
             rangeMap = rangePartitionInfo.getSortedRangeMap(selectedPartIdSet);
         } catch (AnalysisException ignored) {
         }
-        return normalizer.getPartitionRangePredicates(conjuncts, rangeMap, rangePartitionInfo, slotId);
+        Preconditions.checkState(optSlotId.isPresent());
+        return normalizer.getPartitionRangePredicates(conjuncts, rangeMap, rangePartitionInfo, optSlotId.get());
     }
 
     @Override
@@ -845,6 +876,7 @@ public class OlapScanNode extends ScanNode {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             conjuncts = decomposeRangePredicates(normalizer, planNode, rangePartitionInfo, conjuncts);
         } else {
+            associateSlotIdsWithColumns(normalizer, planNode, Optional.empty());
             normalizer.createSimpleRangeMap(getSelectedPartitionIds());
         }
         planNode.setConjuncts(normalizer.normalizeExprs(conjuncts));

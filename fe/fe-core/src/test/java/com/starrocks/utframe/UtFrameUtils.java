@@ -53,6 +53,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -218,6 +219,7 @@ public class UtFrameUtils {
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
             startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
+
             addMockBackend(10001);
 
             // sleep to wait first heartbeat
@@ -371,11 +373,23 @@ public class UtFrameUtils {
             }
 
             validatePlanConnectedness(execPlan);
-            return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
+            return new Pair<>(printPhysicalPlan(execPlan.getPhysicalPlan()), execPlan);
         } finally {
             // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
         }
+    }
+
+    public static String printPhysicalPlan(OptExpression execPlan) {
+        return LogicalPlanPrinter.print(execPlan, isPrintPlanTableNames());
+    }
+
+    public static boolean isPrintPlanTableNames() {
+        return false;
+    }
+
+    public static String printPlan(ExecPlan plan) {
+        return Explain.toString(plan.getPhysicalPlan(), plan.getOutputColumns());
     }
 
     public static String getStmtDigest(ConnectContext connectContext, String originStmt) throws Exception {
@@ -447,7 +461,7 @@ public class UtFrameUtils {
                 starRocksAssert.withDatabase(dbName);
             }
             starRocksAssert.useDatabase(dbName);
-            starRocksAssert.withTable(entry.getValue());
+            starRocksAssert.withSingleReplicaTable(entry.getValue());
         }
         // create view
         for (Map.Entry<String, String> entry : replayDumpInfo.getCreateViewStmtMap().entrySet()) {

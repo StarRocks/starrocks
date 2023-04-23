@@ -190,6 +190,24 @@ vectorized_functions = [
     [20043, 'bitnot', 'BIGINT', ['BIGINT'], "BitFunctions::bitNot<TYPE_BIGINT>"],
     [20044, 'bitnot', 'LARGEINT', ['LARGEINT'], "BitFunctions::bitNot<TYPE_LARGEINT>"],
 
+    [20050, 'bit_shift_left', 'TINYINT', ['TINYINT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_TINYINT>"],
+    [20051, 'bit_shift_left', 'SMALLINT', ['SMALLINT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_SMALLINT>"],
+    [20052, 'bit_shift_left', 'INT', ['INT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_INT>"],
+    [20053, 'bit_shift_left', 'BIGINT', ['BIGINT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_BIGINT>"],
+    [20054, 'bit_shift_left', 'LARGEINT', ['LARGEINT', 'BIGINT'], "BitFunctions::bitShiftLeft<TYPE_LARGEINT>"],
+
+    [20060, 'bit_shift_right', 'TINYINT', ['TINYINT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_TINYINT>"],
+    [20061, 'bit_shift_right', 'SMALLINT', ['SMALLINT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_SMALLINT>"],
+    [20062, 'bit_shift_right', 'INT', ['INT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_INT>"],
+    [20063, 'bit_shift_right', 'BIGINT', ['BIGINT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_BIGINT>"],
+    [20064, 'bit_shift_right', 'LARGEINT', ['LARGEINT', 'BIGINT'], "BitFunctions::bitShiftRight<TYPE_LARGEINT>"],
+
+    [20070, 'bit_shift_right_logical', 'TINYINT', ['TINYINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_TINYINT>"],
+    [20071, 'bit_shift_right_logical', 'SMALLINT', ['SMALLINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_SMALLINT>"],
+    [20072, 'bit_shift_right_logical', 'INT', ['INT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_INT>"],
+    [20073, 'bit_shift_right_logical', 'BIGINT', ['BIGINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_BIGINT>"],
+    [20074, 'bit_shift_right_logical', 'LARGEINT', ['LARGEINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_LARGEINT>"],
+
     # 30xxx: string functions
     [30010, 'substr', 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::substring', 'StringFunctions::sub_str_prepare', 'StringFunctions::sub_str_close'],
     [30011, 'substr', 'VARCHAR', ['VARCHAR', 'INT', 'INT'], 'StringFunctions::substring', 'StringFunctions::sub_str_prepare', 'StringFunctions::sub_str_close'],
@@ -227,9 +245,20 @@ vectorized_functions = [
     [30151, 'ucase', 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper'],
 
     [30160, 'reverse', 'VARCHAR', ['VARCHAR'], 'StringFunctions::reverse'],
-    [30170, 'trim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::trim'],
-    [30180, 'ltrim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::ltrim'],
-    [30190, 'rtrim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::rtrim'],
+    
+    [30170, 'trim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::trim', 
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30171, 'trim', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::trim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30180, 'ltrim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::ltrim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30181, 'ltrim', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ltrim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30190, 'rtrim', 'VARCHAR', ['VARCHAR'], 'StringFunctions::rtrim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    [30191, 'rtrim', 'VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::rtrim',
+        'StringFunctions::trim_prepare', 'StringFunctions::trim_close'],
+    
     [30200, 'ascii', 'INT', ['VARCHAR'], 'StringFunctions::ascii'],
     [30500, 'char', 'VARCHAR', ['INT'], "StringFunctions::get_char"],
     [30210, 'instr', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::instr'],
@@ -326,6 +355,7 @@ vectorized_functions = [
     [50201, 'current_timestamp', 'DATETIME', [], 'TimeFunctions::now'],
     [50202, 'localtime', 'DATETIME', [], 'TimeFunctions::now'],
     [50203, 'localtimestamp', 'DATETIME', [], 'TimeFunctions::now'],
+    [50204, 'now', 'DATETIME', ['INT'], 'TimeFunctions::now'],
     [50210, 'curtime', 'TIME', [], 'TimeFunctions::curtime'],
     [50211, 'current_time', 'TIME', [], 'TimeFunctions::curtime'],
     [50220, 'curdate', 'DATE', [], 'TimeFunctions::curdate'],
@@ -462,6 +492,9 @@ vectorized_functions = [
     [80020, 'hll_hash', 'HLL', ['VARCHAR'], 'HyperloglogFunction::hll_hash'],
     [80030, 'hll_empty', 'HLL', [], 'HyperloglogFunction::hll_empty'],
 
+    [80040, 'hll_serialize', 'VARCHAR', ['HLL'], 'HyperloglogFunction::hll_serialize'],
+    [80041, 'hll_deserialize', 'HLL', ['VARCHAR'], 'HyperloglogFunction::hll_deserialize'],
+
     # bitmap function
     [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap', False],
     [90020, 'bitmap_hash', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::bitmap_hash', False],
@@ -528,11 +561,13 @@ vectorized_functions = [
     [110010, "json_object", "JSON", [], "JsonFunctions::json_object_empty", False],
     [110011, "json_array", "JSON", [], "JsonFunctions::json_array_empty", False],
     [110016, "json_length", "INT", ["JSON"], "JsonFunctions::json_length", False],
-    [110017, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length", 
+    [110017, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length",
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110018, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
     [110019, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys", 
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+    [110100, "to_json", "JSON", ["ANY_MAP"], "JsonFunctions::to_json", False],
+    [110101, "to_json", "JSON", ["ANY_STRUCT"], "JsonFunctions::to_json", False],
 
     # aes and base64 function
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt", False],

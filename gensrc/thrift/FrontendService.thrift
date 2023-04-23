@@ -485,6 +485,7 @@ struct TMasterOpRequest {
     14: optional Types.TUserIdentity current_user_ident
     15: optional i32 stmtIdx  // the idx of the sql in multi statements
     16: optional InternalService.TQueryOptions query_options
+    17: optional string catalog
 
     // Following is added by StarRocks
     // TODO(zc): Should forward all session variables and connection context
@@ -1030,6 +1031,37 @@ struct TGetTablesInfoResponse {
     1: optional list<TTableInfo> tables_infos
 }
 
+struct TTabletSchedule {
+    1: optional i64 table_id
+    2: optional i64 partition_id
+    3: optional i64 tablet_id
+    4: optional string type
+    5: optional string priority
+    6: optional string state
+    7: optional string tablet_status
+    8: optional double create_time
+    9: optional double schedule_time
+    10: optional double finish_time
+    11: optional i64 clone_src
+    12: optional i64 clone_dest
+    13: optional i64 clone_bytes
+    14: optional double clone_duration
+    15: optional string error_msg
+}
+
+struct TGetTabletScheduleRequest {
+    1: optional i64 table_id
+    2: optional i64 partition_id
+    3: optional i64 tablet_id
+    4: optional string type
+    5: optional string state
+    6: optional i64 limit
+}
+
+struct TGetTabletScheduleResponse {
+    1: optional list<TTabletSchedule> tablet_schedules
+}
+
 struct TUpdateResourceUsageRequest {
     1: optional i64 backend_id 
     2: optional ResourceUsage.TResourceUsage resource_usage
@@ -1119,5 +1151,7 @@ service FrontendService {
     TSetConfigResponse setConfig(1: TSetConfigRequest request)
 
     TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
+
+    TGetTabletScheduleResponse getTabletSchedule(1: TGetTabletScheduleRequest request)
 }
 

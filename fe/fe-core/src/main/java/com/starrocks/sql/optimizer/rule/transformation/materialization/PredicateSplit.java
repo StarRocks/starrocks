@@ -12,15 +12,15 @@ import java.util.List;
 public class PredicateSplit {
     // column equality predicates conjuncts
     // a column equality predicate of the form (Ti.Cp =Tj.Cq)
-    private ScalarOperator equalPredicates;
+    private final ScalarOperator equalPredicates;
     // range predicates conjuncts
     // a range predicate is any atomic predicate of the form (Ti.Cp op c)
     // where c is a constant and op is one of the operators “<”, “≤”, “=”, “≥”, “>”
-    private ScalarOperator rangePredicates;
+    private final ScalarOperator rangePredicates;
     // residual predicates conjuncts
     // residual predicates containing all conjuncts except the two types above
     // eg: Ti.Cp like "%abc%"
-    private ScalarOperator residualPredicates;
+    private final ScalarOperator residualPredicates;
 
     private PredicateSplit(ScalarOperator equalPredicates,
                            ScalarOperator rangePredicates,
@@ -50,6 +50,10 @@ public class PredicateSplit {
 
     public ScalarOperator toScalarOperator() {
         return Utils.compoundAnd(equalPredicates, rangePredicates, residualPredicates);
+    }
+
+    public List<ScalarOperator> getPredicates() {
+        return Lists.newArrayList(equalPredicates, rangePredicates, residualPredicates);
     }
 
     // split predicate into three parts: equal columns predicates, range predicates, and residual predicates

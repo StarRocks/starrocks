@@ -24,10 +24,12 @@
 # --job param for *make*
 # support macos
 if [[ $(uname) == "Darwin" ]]; then
-    PARALLEL=$[$(sysctl -n hw.physicalcpu)/4+1]
+    default_parallel=$[$(sysctl -n hw.physicalcpu)/4+1]
 else
-    PARALLEL=$[$(nproc)/4+1]
+    default_parallel=$[$(nproc)/4+1]
 fi
+# use the value if $PARALEL is already set, otherwise use $default_parallel
+PARALLEL=${PARALLEL:-$default_parallel}
 
 ###################################################
 # DO NOT change variables bellow unless you known
@@ -291,12 +293,13 @@ MARIADB_NAME="mariadb-connector-c-3.1.14.tar.gz"
 MARIADB_SOURCE="mariadb-connector-c-3.1.14"
 MARIADB_MD5SUM="86c4052adeb8447900bf33b4e2ddd1f9"
 
-# aliyun_oss_jars
-ALIYUN_OSS_JARS_DOWNLOAD="http://cdn-thirdparty.starrocks.com/aliyun-oss-sdk-3.7.2.tar.gz"
-ALIYUN_OSS_JARS_NAME="aliyun-oss-sdk-3.7.2.tar.gz"
-ALIYUN_OSS_JARS_SOURCE="aliyun-oss-sdk-3.7.2"
-ALIYUN_OSS_JARS_MD5SUM="1e37382831598f4ed049eb276b8e8b29"
+# jindosdk for Aliyun OSS
+JINDOSDK_DOWNLOAD="https://jindodata-binary.oss-cn-shanghai.aliyuncs.com/release/4.6.2/jindosdk-4.6.2.tar.gz"
+JINDOSDK_NAME="jindosdk-4.6.2.tar.gz"
+JINDOSDK_SOURCE="jindosdk-4.6.2"
+JINDOSDK_MD5SUM="7288ffb8f2fbdde6b907d15041a0f79c"
 
+# aws-sdk-cpp
 AWS_SDK_CPP_DOWNLOAD="https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.9.179.tar.gz"
 AWS_SDK_CPP_NAME="aws-sdk-cpp-1.9.179.tar.gz"
 AWS_SDK_CPP_SOURCE="aws-sdk-cpp-1.9.179"
@@ -327,10 +330,10 @@ FAST_FLOAT_SOURCE="fast-float-3.5.1"
 FAST_FLOAT_MD5SUM="adb3789b99f47e0cd971b4d90727d4d0"
 
 # cachelib
-CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20230117.tar.gz"
+CACHELIB_DOWNLOAD="https://cdn-thirdparty.starrocks.com/cachelib/cachelib-20230130.tar.gz"
 CACHELIB_NAME="cachelib.tar.gz"
 CACHELIB_SOURCE="cachelib"
-CACHELIB_MD5SUM="9ed7137220d25b6c591966fdcb03208e"
+CACHELIB_MD5SUM="7cc245be5cb10afa6aeea0121ec77e9e"
 
 # streamvbyte
 STREAMVBYTE_DOWNLOAD="https://github.com/lemire/streamvbyte/archive/refs/tags/v0.5.1.tar.gz"
@@ -342,10 +345,16 @@ STREAMVBYTE_MD5SUM="251d9200d27dda9120653b4928a23a86"
 BROKER_THIRDPARTY_JARS_DOWNLOAD="http://cdn-thirdparty.starrocks.com/broker_thirdparty_jars.tar.gz"
 BROKER_THIRDPARTY_JARS_NAME="broker_thirdparty_jars.tar.gz"
 BROKER_THIRDPARTY_JARS_SOURCE="broker_thirdparty_jars"
-BROKER_THIRDPARTY_JARS_MD5SUM="87433dd5e54091d8eb63fbdb35622ea9"
+BROKER_THIRDPARTY_JARS_MD5SUM="8e9a8c2ef3b19709dd0cc37e26a60c83"
+
+# lzo
+LZO2_DOWNLOAD="http://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz"
+LZO2_NAME=lzo-2.10.tar.gz
+LZO2_SOURCE=lzo-2.10
+LZO2_MD5SUM="39d3f3f9c55c87b1e5d6888e1420f4b5"
 
 # all thirdparties which need to be downloaded is set in array TP_ARCHIVES
 TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
-            JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB ALIYUN_OSS_JARS AWS_SDK_CPP VPACK OPENTELEMETRY \
-            BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS"
+            JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
+            BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS LZO2"

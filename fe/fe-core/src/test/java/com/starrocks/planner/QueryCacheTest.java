@@ -364,6 +364,23 @@ public class QueryCacheTest {
                 "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");";
+
+        String createTbl9StmtStr = "" +
+                "CREATE TABLE if not exists t9(\n" +
+                "REGION_CODE VARCHAR NOT NULL,\n" +
+                "REGION_NAME VARCHAR NOT NULL,\n" +
+                "v1 INT NOT NULL,\n" +
+                "v2 DECIMAL(7,2) NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`REGION_CODE`, `REGION_NAME`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`REGION_CODE`, `REGION_NAME`) BUCKETS 10\n" +
+                "PROPERTIES(\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"default\"\n" +
+                ");";
+
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.getSessionVariable().setEnablePipelineEngine(true);
         ctx.getSessionVariable().setEnableQueryCache(true);
@@ -382,6 +399,7 @@ public class QueryCacheTest {
         starRocksAssert.withTable(createTbl6StmtStr);
         starRocksAssert.withTable(createTbl7StmtStr);
         starRocksAssert.withTable(createTbl8StmtStr);
+        starRocksAssert.withTable(createTbl9StmtStr);
         starRocksAssert.withTable(hits);
     }
 
@@ -1179,5 +1197,15 @@ public class QueryCacheTest {
             Assert.assertTrue(optFrag.isPresent());
             Assert.assertTrue(optFrag.get().getCacheParam().isCan_use_multiversion());
         }
+    }
+
+    @Test
+    public void testGroupByDifferentColumnsOnUnpartitionedTable() {
+        String sql0 = "SELECT REGION_CODE, count(*) from t9 group by 1;";
+        String sql1 = "SELECT REGION_NAME, count(*) from t9 group by 1;";
+        Optional<PlanFragment> frag0 = getCachedFragment(sql0);
+        Optional<PlanFragment> frag1 = getCachedFragment(sql1);
+        Assert.assertTrue(frag0.isPresent() && frag1.isPresent());
+        Assert.assertNotEquals(frag0.get().getCacheParam().digest, frag1.get().getCacheParam().digest);
     }
 }

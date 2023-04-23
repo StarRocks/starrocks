@@ -21,6 +21,10 @@
 
 package com.starrocks.clone;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
@@ -33,11 +37,13 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.RangeUtils;
@@ -53,6 +59,7 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -154,13 +161,11 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
 
         int idx;
         int start = dynamicPartitionProperty.getStart();
+        int historyPartitionNum = dynamicPartitionProperty.getHistoryPartitionNum();
 
-        /// If specify start, create history partitions automatically
-        if (start != DynamicPartitionProperty.MIN_START_OFFSET) {
-            idx = start;
-        } else {
-            idx = 0;
-        }
+        // start < 0 , historyPartitionNum >= 0
+        idx = Math.max(start, -historyPartitionNum);
+
         for (; idx <= dynamicPartitionProperty.getEnd(); idx++) {
             String prevBorder =
                     DynamicPartitionUtil.getPartitionRangeString(dynamicPartitionProperty, now, idx, partitionFormat);
@@ -439,7 +444,16 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
                 continue;
             }
 
-            ArrayList<DropPartitionClause> dropPartitionClauses = getDropPartitionClauseByTTL(olapTable, ttlNumber);
+            ArrayList<DropPartitionClause> dropPartitionClauses = null;
+            try {
+                dropPartitionClauses = getDropPartitionClauseByTTL(olapTable, ttlNumber);
+            } catch (AnalysisException e) {
+                LOG.warn("database={}, table={} Failed to generate drop statement.", dbId, tableId, e);
+            }
+            if (dropPartitionClauses == null) {
+                continue;
+            }
+
             String tableName = olapTable.getName();
             for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
                 db.writeLock();
@@ -456,20 +470,49 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         }
     }
 
-    private ArrayList<DropPartitionClause> getDropPartitionClauseByTTL(OlapTable olapTable, int ttlNumber) {
+    private ArrayList<DropPartitionClause> getDropPartitionClauseByTTL(OlapTable olapTable, int ttlNumber)
+            throws AnalysisException {
+
         ArrayList<DropPartitionClause> dropPartitionClauses = new ArrayList<>();
-        RangePartitionInfo info = (RangePartitionInfo) (olapTable.getPartitionInfo());
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) (olapTable.getPartitionInfo());
+        List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
 
-        List<Map.Entry<Long, Range<PartitionKey>>> idToRanges = new ArrayList<>(info.getIdToRange(false).entrySet());
-        idToRanges.sort(Comparator.comparing(o -> o.getValue().upperEndpoint()));
+        // Currently, materialized views and automatically created partition tables
+        // only support single-column partitioning.
+        Preconditions.checkArgument(partitionColumns.size() == 1);
+        Type partitionType = partitionColumns.get(0).getType();
+        List<Map.Entry<Long, Range<PartitionKey>>> candidatePartitionList = Lists.newArrayList();
 
-        int allPartitionNumber = idToRanges.size();
+        if (partitionType.isDateType()) {
+            LocalDateTime currentDateTime = LocalDateTime.now();
+            PartitionValue currentPartitionValue = new PartitionValue(currentDateTime.format(DateUtils.DATE_FORMATTER_UNIX));
+            PartitionKey currentPartitionKey = PartitionKey.createPartitionKey(
+                    ImmutableList.of(currentPartitionValue), partitionColumns);
+
+
+            Map<Long, Range<PartitionKey>> idToRange = rangePartitionInfo.getIdToRange(false);
+            for (Map.Entry<Long, Range<PartitionKey>> partitionRange : idToRange.entrySet()) {
+                PartitionKey lowerPartitionKey = partitionRange.getValue().lowerEndpoint();
+
+                if (lowerPartitionKey.compareTo(currentPartitionKey) <= 0) {
+                    candidatePartitionList.add(partitionRange);
+                }
+            }
+        } else if (partitionType.isNumericType()) {
+            candidatePartitionList = new ArrayList<>(rangePartitionInfo.getIdToRange(false).entrySet());
+        } else {
+            throw new AnalysisException("Partition ttl does not support type:" + partitionType);
+        }
+
+        candidatePartitionList.sort(Comparator.comparing(o -> o.getValue().upperEndpoint()));
+
+        int allPartitionNumber = candidatePartitionList.size();
         if (allPartitionNumber <= ttlNumber) {
             return dropPartitionClauses;
         } else {
             int dropSize = allPartitionNumber - ttlNumber;
             for (int i = 0; i < dropSize; i++) {
-                Long checkDropPartitionId = idToRanges.get(i).getKey();
+                Long checkDropPartitionId = candidatePartitionList.get(i).getKey();
                 String dropPartitionName = olapTable.getPartition(checkDropPartitionId).getName();
                 dropPartitionClauses.add(new DropPartitionClause(false, dropPartitionName, false, true));
             }
@@ -520,6 +563,11 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
             }
         }
         initialize = true;
+    }
+
+    @VisibleForTesting
+    public void runOnceForTest() {
+        runAfterCatalogReady();
     }
 
     @Override

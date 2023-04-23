@@ -81,6 +81,7 @@ public:
     void insert_column(size_t idx, ColumnPtr column, const FieldPtr& field);
 
     void update_column(ColumnPtr column, SlotId slot_id);
+    void update_column_by_index(ColumnPtr column, size_t idx);
 
     void append_tuple_column(const ColumnPtr& column, TupleId tuple_id);
 
@@ -113,6 +114,7 @@ public:
     bool is_slot_exist(SlotId id) const { return _slot_id_to_index.contains(id); }
     bool is_tuple_exist(TupleId id) const { return _tuple_id_to_index.contains(id); }
     void reset_slot_id_to_index() { _slot_id_to_index.clear(); }
+    size_t get_index_by_slot_id(SlotId slot_id) { return _slot_id_to_index[slot_id]; }
 
     void set_columns(const Columns& columns) { _columns = columns; }
 
@@ -210,6 +212,12 @@ public:
     size_t bytes_usage(size_t from, size_t size) const;
 
     bool has_const_column() const;
+
+    void materialized_nullable() {
+        for (ColumnPtr& c : _columns) {
+            c->materialized_nullable();
+        }
+    }
 
 #ifndef NDEBUG
     // check whether the internal state is consistent, abort the program if check failed.

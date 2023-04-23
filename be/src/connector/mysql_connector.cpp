@@ -51,6 +51,7 @@ Status MySQLDataSource::_init_params(RuntimeState* state) {
 
     _columns = _provider->_mysql_scan_node.columns;
     _filters = _provider->_mysql_scan_node.filters;
+    _temporal_clause = _provider->_mysql_scan_node.temporal_clause;
 
     _table_name = _provider->_mysql_scan_node.table_name;
 
@@ -177,8 +178,8 @@ Status MySQLDataSource::open(RuntimeState* state) {
         }
     }
 
-    RETURN_IF_ERROR(
-            _mysql_scanner->query(_table_name, _columns, _filters, filters_in, filters_null_in_set, _read_limit));
+    RETURN_IF_ERROR(_mysql_scanner->query(_table_name, _columns, _filters, filters_in, filters_null_in_set, _read_limit,
+                                          _temporal_clause));
     // check materialize slot num
     int materialize_num = 0;
 

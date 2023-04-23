@@ -51,6 +51,7 @@ private:
 
     Status _parse_csv(Chunk* chunk);
     StatusOr<ChunkPtr> _materialize(ChunkPtr& src_chunk);
+    void _materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk);
     void _report_error(const std::string& line, const std::string& err_msg);
 
     using ConverterPtr = std::unique_ptr<csv::Converter>;
@@ -64,6 +65,7 @@ private:
     int _curr_file_index = -1;
     CSVReaderPtr _curr_reader;
     std::vector<ConverterPtr> _converters;
+    CSVReader::Fields fields;
 };
 
 } // namespace starrocks::vectorized

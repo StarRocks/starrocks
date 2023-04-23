@@ -265,6 +265,14 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitSetCatalogStatement(SetCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowCreateExternalCatalogStatement(ShowCreateExternalCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ------------------------------------------- DML Statement -------------------------------------------------------
 
     public R visitInsertStatement(InsertStmt statement, C context) {
@@ -316,7 +324,6 @@ public abstract class AstVisitor<R, C> {
     public R visitShowStreamLoadStatement(ShowStreamLoadStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
-
 
     // ------------------------------------------- Admin Statement -----------------------------------------------------
 
@@ -418,6 +425,10 @@ public abstract class AstVisitor<R, C> {
 
     public R visitKillAnalyzeStatement(KillAnalyzeStmt statement, C context) {
         return visitStatement(statement, context);
+    }
+
+    public R visitDropAnalyzeStatement(DropAnalyzeJobStmt statement, C context) {
+        return visitDDLStatement(statement, context);
     }
 
     // ---------------------------------------- Resource Group Statement -----------------------------------------------
@@ -608,6 +619,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitExecuteScriptStatement(ExecuteScriptStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // --------------------------------------- Export Statement --------------------------------------------------------
 
     public R visitExportStatement(ExportStmt statement, C context) {
@@ -675,6 +690,10 @@ public abstract class AstVisitor<R, C> {
     //Alter system clause
 
     public R visitFrontendClause(FrontendClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitCreateImageClause(CreateImageClause clause, C context) {
         return visitNode(clause, context);
     }
 

@@ -151,7 +151,18 @@ public class StructType extends Type {
     }
 
     @Override
-    public void setSelectedField(int pos, boolean needSetChildren) {
+    public void setSelectedField(ComplexTypeAccessPath accessPath, boolean needSetChildren) {
+        if (accessPath.getAccessPathType() == ComplexTypeAccessPathType.ALL_SUBFIELDS) {
+            //  ALL_SUBFIELDS access path must be the last access path in access paths,
+            //  so it's must need to set needSetChildren.
+            Preconditions.checkArgument(needSetChildren);
+            selectAllFields();
+            return;
+        }
+
+        Preconditions.checkArgument(accessPath.getAccessPathType() == ComplexTypeAccessPathType.STRUCT_SUBFIELD);
+        Preconditions.checkArgument(accessPath.getStructSubfieldName() != null);
+        int pos = getFieldPos(accessPath.getStructSubfieldName());
         selectedFields[pos] = true;
         if (needSetChildren) {
             StructField structField = fields.get(pos);

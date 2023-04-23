@@ -40,7 +40,7 @@ size_t fill_null_column(const arrow::Array* array, size_t array_start_idx, size_
 // fill filter's range [column_start_idx, column_start_idx + num_elements) with
 // array's range [array_start, array_start_idx + num_elements).
 void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column::Filter* filter,
-                 size_t column_start_idx);
+                 size_t column_start_idx, ArrowConvertContext* ctx);
 
 // ConvertFunc is used to fill column's range [column_start_idx, column_start_idx + num_elements)
 // with array's range [array_start_idx, array_start_idx + num_elements). A slot is null if
@@ -54,9 +54,12 @@ typedef Status (*ConvertFunc)(const arrow::Array* array, size_t array_start_idx,
 // 1. depth_limit is used to prevent a ListArray has too many nested layers.
 // 2. type_desc is used to guide ArrayColumn to unfold its layers and we can utilize directly copying
 // or simd optimization to speed up construction of each layer.
-typedef Status (*ListConvertFunc)(const arrow::Array*, size_t array_start_idx, size_t num_elements, size_t depth_limit,
-                                  const TypeDescriptor* type_desc, Column* column, size_t column_start_idx,
-                                  uint8_t* null_data, ArrowConvertContext* ctx);
+typedef Status (*ListConvertFunc)(const arrow::Array* array, size_t array_start_idx, size_t num_elements,
+                                  Column* column, size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
+                                  Column::Filter* column_filter, ArrowConvertContext* ctx,
+                                  const TypeDescriptor* type_desc);
+
+typedef Status (*ListCheckDepthFunc)(const arrow::Array* array, size_t expected_depth);
 
 // invoked when a arrow type fail to convert to StarRocks type.
 Status illegal_converting_error(const std::string& arrow_type_name, const std::string& type_name);
@@ -67,6 +70,8 @@ ConvertFunc get_arrow_converter(ArrowTypeId at, PrimitiveType pt, bool is_nullab
 
 // get list converter, it is used to convert a ListArray in arrow to ArrayColumn in StarRocks.
 ListConvertFunc get_arrow_list_converter();
+
+ListCheckDepthFunc get_arrow_list_check_depth();
 
 // if there is no converter for a triple [at, pt, is_nullable], then call get_strict_type to obtain
 // strict pt0, and converting is decomposed into two phases:

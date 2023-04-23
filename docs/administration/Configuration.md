@@ -30,7 +30,7 @@ After your FE is started, you can run the ADMIN SHOW FRONTEND CONFIG command on 
 
 ### Configure FE dynamic parameters
 
-You can configure or modify the settings of FE dynamic parameters by running the following command:
+You can configure or modify the settings of FE dynamic parameters using [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN%20SET%20CONFIG.md).
 
 ```SQL
 ADMIN SET FRONTEND CONFIG ("key" = "value");
@@ -74,6 +74,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | statistic_auto_collect_ratio             | -    | 0.8          | The threshold for determining whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
 | statistic_max_full_collect_data_size     | GB   | 100          | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_collect_interval_sec           | s    | 300          | The interval for checking data updates during automatic collection. Unit: seconds. |
+| statistic_auto_analyze_start_time | STRING      | 00:00:00   | The start time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
+| statistic_auto_analyze_end_time | STRING      | 23:59:59  | The end time of automatic collection. Value range: `00:00:00` - `23:59:59`. |
 | statistic_sample_collect_rows            | -    | 200000       | The minimum number of rows to collect for sampled collection. If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
 | histogram_buckets_size                   | -    | 64           | The default bucket number for a histogram.                   |
 | histogram_mcv_size                       | -    | 100          | The number of most common values (MCV) for a histogram.      |
@@ -136,7 +138,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | tablet_create_timeout_second                  | s    | 1                      | The timeout duration for creating a tablet, in seconds.       |
 | tablet_delete_timeout_second                  | s    | 2                      | The timeout duration for deleting a tablet, in seconds.      |
 | check_consistency_default_timeout_second      | s    | 600                    | The timeout duration for a replica consistency check. You can set this parameter based on the size of your tablet. |
-| tablet_sched_slot_num_per_path                | -    | 2                      | The maximum number of tablet-related tasks that can run concurrently in a BE storage directory. The alias is `schedule_slot_num_per_path`. |
+| tablet_sched_slot_num_per_path                | -    | 8                      | The maximum number of tablet-related tasks that can run concurrently in a BE storage directory. The alias is `schedule_slot_num_per_path`. From v2.5 onwards, the default value of this parameter is changed from `4` to `8`.|
 | tablet_sched_max_scheduling_tablets           | -    | 2000                   | The maximum number of tablets that can be scheduled at the same time. If the value is exceeded, tablet balancing and repair checks will be skipped. |
 | tablet_sched_disable_balance                  | -    | FALSE                  | Whether to disable tablet balancing. `TRUE` indicates that tablet balancing is disabled. `FALSE` indicates that tablet balancing is enabled. The alias is `disable_balance`. |
 | tablet_sched_disable_colocate_balance         | -    | FALSE                  | Whether to disable replica balancing for Colocate Table. `TRUE` indicates replica balancing is disabled. `FALSE` indicates replica balancing is enabled. The alias is `disable_colocate_balance`. |
@@ -157,7 +159,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 | agent_task_resend_wait_time_ms           | ms   | 5000        | The duration the FE must wait before it can resend an agent task. An agent task can be resent only when the gap between the task creation time and the current time exceeds the value of this parameter. This parameter is used to prevent repetitive sending of agent tasks. Unit: ms. |
 | backup_job_default_timeout_ms            | ms   | 86400*1000  | The timeout duration of a backup job, in ms. If this value is exceeded, the backup job fails. |
 | report_queue_size                        | -    | 100         | The maximum number of jobs that can wait in a report queue. <br>The report is about disk, task, and tablet information of BEs. If too many report jobs are piling up in a queue, OOM will occur. |
-| enable_experimental_mv                   | -    | FALSE       | Whether to enable the asynchronous materialized view feature. `TRUE` indicates this feature is enabled.|
+| enable_experimental_mv                   | -    | TRUE       | Whether to enable the asynchronous materialized view feature. `TRUE` indicates this feature is enabled. From v2.5.2 onwards, this feature is enabled by default. For versions earlier than v2.5.2, this feature is disabled by default. |
 | authentication_ldap_simple_bind_base_dn  | -  | Empty string | The base DN, which is the point from which the LDAP server starts to search for users' authentication information.|
 | authentication_ldap_simple_bind_root_dn  |  -  | Empty string | The administrator DN used to search for users' authentication information.|
 | authentication_ldap_simple_bind_root_pwd |  -  | Empty string | The password of the administrator used to search for users' authentication information.|
@@ -204,7 +206,8 @@ This section provides an overview of the static parameters that you can configur
 | thrift_backlog_num                   | 1024              | The length of the backlog queue held by the Thrift server in the FE node. |
 | thrift_server_type                   | THREAD_POOL       | The service model that is used by the Thrift server in the FE node. Valid values: `SIMPLE`, `THREADED`, and `THREAD_POOL`. |
 | thrift_server_max_worker_threads     | 4096              | The maximum number of worker threads that are supported by the Thrift server in the FE node. |
-| thrift_client_timeout_ms             | 0                 | The length of time after which requests from clients time out. Unit: ms. The default value `0` specifies that requests from clients never time out. |
+| thrift_client_timeout_ms             | 5000                 | The length of time after which idle client connections time out. Unit: ms. |
+| thrift_server_queue_size             | 4096              | The length of queue where requests are pending. If the number of threads that are being processed in the thrift server exceeds the value specified in `thrift_server_max_worker_threads`, new requests are added to the pending queue. |
 | brpc_idle_wait_max_time              | 10000             | The maximum length of time for which BRPC clients wait as in the idle state. Unit: ms. |
 | query_port                           | 9030              | The port on which the MySQL server in the FE node listens.   |
 | mysql_service_nio_enabled            | TRUE              | Specifies whether asynchronous I/O is enabled for the FE node. |
@@ -309,9 +312,6 @@ BE dynamic parameters are as follows.
 
 | Configuration item | Default | Unit | Description |
 | ------------------ | ------- | ---- | ----------- |
-| tc_use_memory_min | 0 | Byte | The minimum size of the TCMalloc-reserved memory. StarRocks does not return the released memory resource to the operating system if the size of the memory resource is less than this value. |
-| tc_free_memory_rate | 0 | % | The maximum ratio of the TCMalloc-reserved memory size to the total memory size occupied by TCMalloc. StarRocks does not return the released memory resource to the operating system if the size ratio of the released memory to the total memory used by TCMalloc is less than this value. Range: [0,100]. |
-| tc_gc_period | 60 | Second | The duration of a TCMalloc garbage collection (GC) cycle. |
 | report_task_interval_seconds | 10 | Second | The time interval at which to report the state of a task. A task can be creating a table, dropping a table, loading data, or changing a table schema. |
 | report_disk_state_interval_seconds | 60 | Second | The time interval at which to report the storage volume state, which includes the size of data within the volume. |
 | report_tablet_interval_seconds | 60 | Second | The time interval at which to report the most updated version of all tablets. |
@@ -371,6 +371,12 @@ BE dynamic parameters are as follows.
 | tablet_max_pending_versions | 1000 | N/A | The maximum number of pending versions that are tolerable in a Primary Key table. Pending versions refer to versions that are committed but not applied yet. |
 | max_hdfs_file_handle | 1000 | N/A | The maximum number of HDFS file descriptors that can be opened. |
 | parquet_buffer_stream_reserve_size | 1048576 | Byte | The size of buffer that Parquet reader reserves for each column while reading data. |
+| be_exit_after_disk_write_hang_second | 60 | second | The length of time that the BE waits to exit after the disk hangs. |
+| min_cumulative_compaction_failure_interval_sec | 30 | second | The minimum time interval at which Cumulative Compaction retries upon failures. |
+| size_tiered_level_num | 7 | N/A | The number of levels for the Size-tiered Compaction strategy. At most one rowset is reserved for each level. Therefore, under a stable condition, there are, at most, as many rowsets as the level number specified in this configuration item. |
+| size_tiered_level_multiple | 5 | N/A | The multiple of data size between two contiguous levels in the Size-tiered Compaction strategy. |
+| size_tiered_min_level_size | 131072 | Byte | The data size of the minimum level in the Size-tiered Compaction strategy. Rowsets smaller than this value immediately trigger the data compaction. |
+| storage_page_cache_limit | 20% | N/A | The PageCache size. STRING. It can be specified as size, for example, `20G`, `20480M`, `20971520K`, or `21474836480B`. It can also be specified as the ratio (percentage) to the memory size, for example, `20%`. It takes effect only when `disable_storage_page_cache` is set to `false`. |
 
 ### Configure BE static parameters
 
@@ -390,7 +396,7 @@ BE static parameters are as follows.
 | drop_tablet_worker_count | 3 | N/A | The number of threads used to drop a tablet. |
 | push_worker_count_normal_priority | 3 | N/A | The number of threads used to handle a load task with NORMAL priority. |
 | push_worker_count_high_priority | 3 | N/A | The number of threads used to handle a load task with HIGH priority. |
-| transaction_publish_version_worker_count | 8 | N/A | The number of threads used to publish a version. |
+| transaction_publish_version_worker_count | 0 | N/A | The maximum number of threads used to publish a version. When this value is set to less than or equal to `0`, the system uses half of the CPU core count as the value, so as to avoid insufficient thread resources when import concurrency is high but only a fixed number of threads are used. From v2.5, the default value has been changed from `8` to `0`.  |
 | clear_transaction_task_worker_count | 1 | N/A | The number of threads used for clearing transaction. |
 | alter_tablet_worker_count | 3 | N/A | The number of threads used for schema change. |
 | clone_worker_count | 3 | N/A | The number of threads used for clone. |
@@ -416,8 +422,7 @@ BE static parameters are as follows.
 | file_descriptor_cache_capacity | 16384 | N/A | The number of file descriptors that can be cached. |
 | min_file_descriptor_number | 60000 | N/A | The minimum number of file descriptors in the BE process. |
 | index_stream_cache_capacity | 10737418240 | Byte | The cache capacity for the statistical information of BloomFilter, Min, and Max. |
-| storage_page_cache_limit | 0 | | The capacity of page cache. You can set it as a percentage ("20%") or a physical value ("100MB"). |
-| disable_storage_page_cache | TRUE | N/A | The boolean value to control if to disable the Page Cache. The value true indicates to disable the Page Cache. The value false indicates to enable the Page Cache. |
+| disable_storage_page_cache | FALSE | N/A | The boolean value to control if to disable PageCache. When PageCache is enabled, StarRocks caches the query results. PageCache can significantly improve the query performance when similar queries are repeated frequently. `true` indicates to disable PageCache. The value of this item has been changed from `true` to `false` since StarRocks v2.4.|
 | base_compaction_num_threads_per_disk | 1 | N/A | The number of threads used for Base Compaction on each storage volume. |
 | base_cumulative_delta_ratio | 0.3 | N/A | The ratio of cumulative file size to base file size. The ratio reaching this value is one of the conditions that trigger the Base Compaction. |
 | max_compaction_concurrency | -1 | N/A | The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency. |
@@ -442,12 +447,17 @@ BE static parameters are as follows.
 | enable_bitmap_union_disk_format_with_set | FALSE | N/A | The boolean value to control if to enable the new storage format of the BITMAP type, which can improve the performance of bitmap_union. The value true indicates to enable the new storage format. The value false indicates to disable the new storage format. |
 | mem_limit | 90% | N/A | BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100GB"). |
 | flush_thread_num_per_store | 2 | N/A | Number of threads that are used for flushing MemTable in each store. |
-| block_cache_enable  | false | N/A   | Whether to enable block cache.<ul><li>`true`: Block cache is enabled.</li><li>`false`: Block cache is disabled. </li></ul>To enable block cache, set the value of this parameter to `true`. |
+| block_cache_enable  | false | N/A   | Whether to enable Local Cache.<ul><li>`true`: Local Cache is enabled.</li><li>`false`: Local Cache is disabled. </li></ul>To enable Local Cache, set the value of this parameter to `true`. |
 | block_cache_disk_path | N/A | N/A  | The paths of disks. We recommend that the number of paths you configured for this parameter is the same as the number of disks of your BE machine. Multiple paths need to be separated with semicolons (;). After you add this parameter, StarRocks automatically creates a file named **cachelib_data** to cache blocks. |
 | block_cache_meta_path | N/A  | N/A   | The storage path of block metadata. You can customize the storage path. We recommend that you store the metadata under the **$STARROCKS_HOME** path. |
-| block_cache_block_size | 1048576  | Bytes | The size of each block. Unit: bytes. The default value is `1048576`, which is 1 MB. |
-| block_cache_mem_size   | 2147483648 | Bytes | The maximum amount of data that can be cached in the memory. Unit: bytes. The default value is `2147483648`, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after block cache is enabled, consider increasing the value. |
+| block_cache_mem_size   | 2147483648 | Bytes | The maximum amount of data that can be cached in the memory. Unit: bytes. The default value is `2147483648`, which is 2 GB. We recommend that you set the value of this parameter to at least 20 GB. If StarRocks reads a large amount of data from disks after Local Cache is enabled, consider increasing the value. |
 | block_cache_disk_size  | 0 | Bytes | The maximum amount of data that can be cached in a single disk. For example, if you configure two disk paths for the `block_cache_disk_path` parameter and set the value of the `block_cache_disk_size` parameter as `21474836480` (20 GB), a maximum of 40 GB data can be cached in these two disks. The default value is `0`, which indicates that only the memory is used to cache data. Unit: bytes. |
+| jdbc_connection_pool_size  | 8 | The JDBC connection pool size. On each BE node, queries which access the external table with the same `jdbc_url` share the same connection pool. |
+| jdbc_minimum_idle_connections  | 1 | The minimum number of idle connections in the JDBC connection pool. |
+| jdbc_connection_idle_timeout_ms  | 600000 | The length of time after which an idle connection in the JDBC connection pool expires. If the connection idle time in the JDBC connection pool exceeds this value, the connection pool closes idle connections of more than the number specified in the configuration item `jdbc_minimum_idle_connections`. |
+| query_cache_capacity  | 536870912 | The size of the query cache in the BE. Unit: bytes. The default size is 512 MB. The size cannot be less than 4 MB. If the memory capacity of the BE is insufficient to provision your expected query cache size, you can increase the memory capacity of the BE. |
+| enable_event_based_compaction_framework  | TRUE | Whether to enable Event-based Compaction Framework.<ul><li>`true`: Event-based Compaction Framework is enabled.</li><li>`false`: Event-based Compaction Framework is disabled. </li></ul> Enabling Event-based Compaction Framework can greatly reduce the overhead of compaction in scenarios where there are many tablets or a single tablet has a large amount of data. |
+| enable_size_tiered_compaction_strategy  | TRUE |  Whether to enable the Size-tiered Compaction strategy.<ul><li>`true`: The size-tiered Compaction strategy is enabled.</li><li>`false`: The size-tiered Compaction strategy is disabled. </li></ul> |
 
 <!--| aws_sdk_logging_trace_enabled | 0 | N/A | |
 | be_exit_after_disk_write_hang_second | 60 | N/A | |
@@ -544,7 +554,7 @@ BE static parameters are as follows.
 | meta_threshold_to_manual_compact | 10737418240 | N/A | |
 | metric_late_materialization_ratio | 1000 | N/A | |
 | min_base_compaction_size | 21474836480 | N/A | |
-| min_cmumulative_compaction_failure_interval_sec | 30 | N/A | |
+| min_cumulative_compaction_failure_interval_sec | 30 | N/A | |
 | min_cumulative_compaction_num_singleton_deltas | 5 | N/A | |
 | min_cumulative_compaction_size | 5368709120 | N/A | |
 | mmap_buffers | 0 | N/A | |
@@ -569,7 +579,7 @@ BE static parameters are as follows.
 | path_gc_check | 1 | N/A | |
 | path_gc_check_interval_second | 86400 | N/A | |
 | pipeline_exec_thread_pool_thread_num | 0 | N/A | |
-| pipeline_hdfs_scan_thread_pool_thread_num | 48 | N/A | |
+| pipeline_connector_scan_thread_num_per_cpu | 8 | N/A | The thread number per cpu of connector scanner  |
 | pipeline_max_num_drivers_per_exec_thread | 10240 | N/A | |
 | pipeline_prepare_thread_pool_queue_size | 102400 | N/A | |
 | pipeline_prepare_thread_pool_thread_num | 0 | N/A | |

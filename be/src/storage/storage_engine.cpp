@@ -121,6 +121,14 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
         threads.emplace_back([data_dir] {
+            auto res = data_dir->load();
+            if (!res.ok()) {
+                LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
+            }
+        });
+        Thread::set_thread_name(threads.back(), "load_data_dir");
+
+        threads.emplace_back([data_dir] {
             if (config::manual_compact_before_data_dir_load) {
                 uint64_t live_sst_files_size_before = 0;
                 if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
@@ -140,12 +148,8 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
                               << data_dir->get_meta()->get_stats();
                 }
             }
-            auto res = data_dir->load();
-            if (!res.ok()) {
-                LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
-            }
         });
-        Thread::set_thread_name(threads.back(), "load_data_dir");
+        Thread::set_thread_name(threads.back(), "compact_data_dir");
     }
     for (auto& thread : threads) {
         thread.join();
@@ -408,6 +412,17 @@ Status StorageEngine::set_cluster_id(int32_t cluster_id) {
     return Status::OK();
 }
 
+std::vector<string> StorageEngine::get_store_paths() {
+    std::vector<string> paths;
+    {
+        std::lock_guard<std::mutex> l(_store_lock);
+        for (auto& it : _store_map) {
+            paths.push_back(it.first);
+        }
+    }
+    return paths;
+}
+
 std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium::type storage_medium) {
     std::vector<DataDir*> stores;
     {
@@ -415,14 +430,21 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
         for (auto& it : _store_map) {
             if (it.second->is_used()) {
                 if (_available_storage_medium_type_count == 1 || it.second->storage_medium() == storage_medium) {
-                    stores.push_back(it.second);
+                    if (it.second->available_bytes() > config::storage_flood_stage_left_capacity_bytes) {
+                        stores.push_back(it.second);
+                    }
                 }
             }
         }
     }
+
+    std::sort(stores.begin(), stores.end(),
+              [](const auto& a, const auto& b) { return a->available_bytes() > b->available_bytes(); });
+
+    const int mid = stores.size() / 2 + 1;
     //  TODO(lingbin): should it be a global util func?
     std::srand(std::random_device()());
-    std::shuffle(stores.begin(), stores.end(), std::mt19937(std::random_device()()));
+    std::shuffle(stores.begin(), stores.begin() + mid, std::mt19937(std::random_device()()));
     return stores;
 }
 
@@ -1100,6 +1122,27 @@ bool StorageEngine::check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id)
     std::lock_guard lock(_gc_mutex);
     auto search = _unused_rowsets.find(rowset_id.to_string());
     return search != _unused_rowsets.end();
+}
+
+void StorageEngine::increase_update_compaction_thread(const int num_threads_per_disk) {
+    // convert store map to vector
+    std::vector<DataDir*> data_dirs;
+    for (auto& tmp_store : _store_map) {
+        data_dirs.push_back(tmp_store.second);
+    }
+    const auto data_dir_num = static_cast<int32_t>(data_dirs.size());
+    const int32_t cur_threads_per_disk = _update_compaction_threads.size() / data_dir_num;
+    if (num_threads_per_disk <= cur_threads_per_disk) {
+        LOG(WARNING) << fmt::format("not support decrease update compaction thread, from {} to {}",
+                                    cur_threads_per_disk, num_threads_per_disk);
+        return;
+    }
+    for (uint32_t i = 0; i < data_dir_num * (num_threads_per_disk - cur_threads_per_disk); ++i) {
+        _update_compaction_threads.emplace_back([this, data_dir_num, data_dirs, i] {
+            _update_compaction_thread_callback(nullptr, data_dirs[i % data_dir_num]);
+        });
+        Thread::set_thread_name(_update_compaction_threads.back(), "update_compact");
+    }
 }
 
 DummyStorageEngine::DummyStorageEngine(const EngineOptions& options)

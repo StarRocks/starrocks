@@ -4,11 +4,11 @@ grammar StarRocks;
 import StarRocksLex;
 
 sqlStatements
-    : singleStatement* EOF
+    : singleStatement+ EOF
     ;
 
 singleStatement
-    : statement (MINUS_SYMBOL MINUS_SYMBOL)? SEMICOLON? | emptyStatement
+    : (statement (SEMICOLON | EOF)) | emptyStatement
     ;
 
 emptyStatement
@@ -22,6 +22,7 @@ statement
     // Database Statement
     | useDatabaseStatement
     | useCatalogStatement
+    | setCatalogStatement
     | showDatabasesStatement
     | alterDbQuotaStatement
     | createDbStatement
@@ -77,6 +78,7 @@ statement
     | createExternalCatalogStatement
     | dropExternalCatalogStatement
     | showCatalogsStatement
+    | showCreateExternalCatalogStatement
 
     // DML Statement
     | insertStatement
@@ -106,6 +108,7 @@ statement
     | adminCheckTabletsStatement
     | killStatement
     | syncStatement
+    | executeScriptStatement
 
     // Cluster Management Statement
     | alterSystemStatement
@@ -162,6 +165,7 @@ statement
     | showPluginsStatement
     | showRepositoriesStatement
     | showOpenTableStatement
+    | showPrivilegesStatement
     | showProcedureStatement
     | showProcStatement
     | showProcesslistStatement
@@ -240,6 +244,10 @@ useCatalogStatement
     : USE CATALOG identifierOrString
     ;
 
+setCatalogStatement
+    : SET CATALOG identifierOrString
+    ;
+
 showDatabasesStatement
     : SHOW DATABASES ((FROM | IN) catalog=qualifiedName)? ((LIKE pattern=string) | (WHERE expression))?
     | SHOW SCHEMAS ((LIKE pattern=string) | (WHERE expression))?
@@ -251,7 +259,7 @@ alterDbQuotaStatement
     ;
 
 createDbStatement
-    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier
+    : CREATE (DATABASE | SCHEMA) (IF NOT EXISTS)? identifier charsetDesc? collateDesc?
     ;
 
 dropDbStatement
@@ -299,6 +307,7 @@ columnDesc
 charsetName
     : CHAR SET identifier
     | CHARSET identifier
+    | CHARACTER SET identifier
     ;
 
 defaultDesc
@@ -314,9 +323,12 @@ engineDesc
     ;
 
 charsetDesc
-    : DEFAULT? CHARSET EQ? identifierOrString
+    : DEFAULT? (CHAR SET | CHARSET | CHARACTER SET) EQ? identifierOrString
     ;
 
+collateDesc
+    : DEFAULT? COLLATE EQ? identifierOrString
+    ;
 
 keyDesc
     : (AGGREGATE | UNIQUE | PRIMARY | DUPLICATE) KEY identifierList
@@ -397,7 +409,7 @@ showCreateTableStatement
     ;
 
 showColumnStatement
-    : SHOW FULL? COLUMNS ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
+    : SHOW FULL? (COLUMNS | FIELDS) ((FROM | IN) table=qualifiedName) ((FROM | IN) db=qualifiedName)?
         ((LIKE pattern=string) | (WHERE expression))?
     ;
 
@@ -572,6 +584,10 @@ createExternalCatalogStatement
     : CREATE EXTERNAL CATALOG catalogName=identifierOrString comment? properties
     ;
 
+showCreateExternalCatalogStatement
+    : SHOW CREATE CATALOG catalogName=identifierOrString
+    ;
+
 dropExternalCatalogStatement
     : DROP CATALOG catalogName=identifierOrString
     ;
@@ -596,6 +612,7 @@ alterClause
     | dropComputeNodeClause
     | modifyBrokerClause
     | alterLoadErrorUrlClause
+    | createImageClause
 
     //Alter table clause
     | createIndexClause
@@ -667,6 +684,10 @@ modifyBrokerClause
 
 alterLoadErrorUrlClause
     : SET LOAD ERRORS HUB properties?
+    ;
+
+createImageClause
+    : CREATE IMAGE
     ;
 
 // ---------Alter table clause---------
@@ -983,6 +1004,7 @@ dataDesc
         INTO TABLE dstTableName=identifier
         partitions=partitionNames?
         (COLUMNS TERMINATED BY colSep=string)?
+        (ROWS TERMINATED BY rowSep=string)?
         format=fileFormat?
         colList=columnAliases?
         (COLUMNS FROM PATH AS colFromPath=identifierList)?
@@ -1038,7 +1060,7 @@ showBrokerStatement
     ;
 
 showCharsetStatement
-    : SHOW (CHAR SET | CHARSET) ((LIKE pattern=string) | (WHERE expression))?
+    : SHOW (CHAR SET | CHARSET | CHARACTER SET) ((LIKE pattern=string) | (WHERE expression))?
     ;
 
 showCollationStatement
@@ -1076,9 +1098,12 @@ showRepositoriesStatement
 showOpenTableStatement
     : SHOW OPEN TABLES
     ;
+showPrivilegesStatement
+    : SHOW PRIVILEGES
+    ;
 
 showProcedureStatement
-    : SHOW PROCEDURE STATUS ((LIKE pattern=string) | (WHERE where=expression))?
+    : SHOW (PROCEDURE | FUNCTION) STATUS ((LIKE pattern=string) | (WHERE where=expression))?
     ;
 
 showProcStatement
@@ -1383,7 +1408,7 @@ setStatement
     ;
 
 setVar
-    : (CHAR SET | CHARSET) (identifierOrString | DEFAULT)                                       #setNames
+    : (CHAR SET | CHARSET | CHARACTER SET) (identifierOrString | DEFAULT)                       #setNames
     | NAMES (charset = identifierOrString | DEFAULT)
         (COLLATE (collate = identifierOrString | DEFAULT))?                                     #setNames
     | PASSWORD '=' (string | PASSWORD '(' string ')')                                           #setPassword
@@ -1391,7 +1416,7 @@ setVar
     | varType? identifier '=' setExprOrDefault                                                  #setVariable
     | userVariable '=' expression                                                               #setVariable
     | systemVariable '=' setExprOrDefault                                                       #setVariable
-    | TRANSACTION transaction_characteristics                                                   #setTransaction
+    | varType? TRANSACTION transaction_characteristics                                          #setTransaction
     ;
 
 transaction_characteristics
@@ -1437,11 +1462,27 @@ setRoleStatement
     | SET ROLE ALL (EXCEPT roleList)?  #setRoleAll
     ;
 
+
+executeScriptStatement
+    : ADMIN EXECUTE ON (FRONTEND | INTEGER_VALUE) string
+    ;
+
 unsupportedStatement
     : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
     | BEGIN WORK?
     | COMMIT WORK? (AND NO? CHAIN)? (NO? RELEASE)?
     | ROLLBACK WORK? (AND NO? CHAIN)? (NO? RELEASE)?
+    | LOCK TABLES lock_item (',' lock_item)*
+    | UNLOCK TABLES
+    ;
+
+lock_item
+    : identifier (AS? alias=identifier)? lock_type
+    ;
+
+lock_type
+    : READ LOCAL?
+    | LOW_PRIORITY? WRITE
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
@@ -1459,6 +1500,14 @@ withClause
 
 queryNoWith
     : queryPrimary (ORDER BY sortItem (',' sortItem)*)? (limitElement)?
+    ;
+
+temporalClause
+    : AS OF expression
+    | FOR SYSTEM_TIME AS OF TIMESTAMP string
+    | FOR SYSTEM_TIME BETWEEN expression AND expression
+    | FOR SYSTEM_TIME FROM expression TO expression
+    | FOR SYSTEM_TIME ALL
     ;
 
 queryPrimary
@@ -1534,7 +1583,7 @@ relation
     ;
 
 relationPrimary
-    : qualifiedName partitionNames? tabletList? (
+    : qualifiedName temporalClause? partitionNames? tabletList? (
         AS? alias=identifier columnAliases?)? bracketHint?                              #tableAtom
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
@@ -1650,8 +1699,8 @@ predicate
     ;
 
 predicateOperations [ParserRuleContext value]
-    : NOT? IN '(' expressionList ')'                                                      #inList
-    | NOT? IN '(' queryRelation ')'                                                       #inSubquery
+    : NOT? IN '(' queryRelation ')'                                                       #inSubquery
+    | NOT? IN '(' expressionList ')'                                                      #inList
     | NOT? BETWEEN lower = valueExpression AND upper = predicate                          #between
     | NOT? (LIKE | RLIKE | REGEXP) pattern=valueExpression                                #like
     ;
@@ -1670,6 +1719,9 @@ valueExpression
         right = valueExpression                                                           #arithmeticBinary
     | left = valueExpression operator = BITAND right = valueExpression                    #arithmeticBinary
     | left = valueExpression operator = BITOR right = valueExpression                     #arithmeticBinary
+    | left = valueExpression operator = BIT_SHIFT_LEFT right = valueExpression              #arithmeticBinary
+    | left = valueExpression operator = BIT_SHIFT_RIGHT right = valueExpression             #arithmeticBinary
+    | left = valueExpression operator = BIT_SHIFT_RIGHT_LOGICAL right = valueExpression     #arithmeticBinary
     ;
 
 primaryExpression
@@ -1723,7 +1775,7 @@ functionCall
 aggregationFunction
     : AVG '(' DISTINCT? expression ')'
     | COUNT '(' ASTERISK_SYMBOL? ')'
-    | COUNT '(' DISTINCT? (expression (',' expression)*)? ')'
+    | COUNT '(' (DISTINCT bracketHint?)? (expression (',' expression)*)? ')'
     | MAX '(' DISTINCT? expression ')'
     | MIN '(' DISTINCT? expression ')'
     | SUM '(' DISTINCT? expression ')'
@@ -1747,6 +1799,7 @@ informationFunctionExpression
     | name = USER '(' ')'
     | name = CONNECTION_ID '(' ')'
     | name = CURRENT_USER ('(' ')')?
+    | name = CURRENT_CATALOG ('(' ')')?
     ;
 
 specialDateTimeExpression
@@ -1789,8 +1842,8 @@ windowFunction
     | name = NTILE  '(' expression? ')'
     | name = LEAD  '(' (expression (',' expression)*)? ')'
     | name = LAG '(' (expression (',' expression)*)? ')'
-    | name = FIRST_VALUE '(' (expression (',' expression)*)? ')'
-    | name = LAST_VALUE '(' (expression (',' expression)*)? ')'
+    | name = FIRST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
+    | name = LAST_VALUE '(' (expression ignoreNulls? (',' expression)*)? ')'
     ;
 
 whenClause
@@ -1803,6 +1856,10 @@ over
         (ORDER BY sortItem (',' sortItem)*)?
         windowFrame?
       ')'
+    ;
+
+ignoreNulls
+    : IGNORE NULLS
     ;
 
 windowFrame
@@ -2088,25 +2145,25 @@ nonReserved
     | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
-    | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
+    | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
-    | IDENTIFIED | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
+    | IDENTIFIED | IMAGE | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
-    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
+    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL | LOW_PRIORITY | LOCK
     | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
-    | OBSERVER | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
+    | OBSERVER | OF | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
     | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP
-    | STORAGE| STRING | STATS | SUBMIT | SYNC
+    | STORAGE| STRING | STATS | SUBMIT | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES
-    | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER
+    | UNBOUNDED | UNCOMMITTED | UNINSTALL | USER | UNLOCK
     | VALUE | VARIABLES | VIEW | VERBOSE
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE
     | YEAR

@@ -159,9 +159,9 @@ public:
     template <typename SizeT>
     Status do_visit(const BinaryColumnBase<SizeT>& _) {
         using ColumnType = const BinaryColumnBase<SizeT>;
-        using Container = typename ColumnType::Container;
-        auto& left_data = down_cast<ColumnType*>(_left_col)->get_data();
-        auto& right_data = down_cast<ColumnType*>(_right_col)->get_data();
+        using Container = typename BinaryColumnBase<SizeT>::BinaryDataProxyContainer;
+        auto& left_data = down_cast<const ColumnType*>(_left_col)->get_proxy_data();
+        auto& right_data = down_cast<const ColumnType*>(_right_col)->get_proxy_data();
         return merge_ordinary_column<Container, Slice>(left_data, right_data);
     }
 
@@ -282,7 +282,7 @@ SortedRun::SortedRun(const ChunkPtr& ichunk, const std::vector<ExprContext*>* ex
 }
 
 void SortedRun::reset() {
-    chunk->reset();
+    chunk.reset();
     orderby.clear();
     range = {};
 }
@@ -456,7 +456,7 @@ Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& 
 }
 
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, SortedRuns* output) {
+                           std::vector<ChunkUniquePtr>& chunks, SortedRuns* output) {
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> cursors;
     std::vector<size_t> chunk_index(chunks.size(), 0);
 
@@ -474,7 +474,7 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
                         return false;
                     }
                     chunk_index[i]++;
-                    *output = chunks[i]->clone_unique();
+                    *output = std::move(chunks[i]);
                     return true;
                 },
                 sort_exprs));

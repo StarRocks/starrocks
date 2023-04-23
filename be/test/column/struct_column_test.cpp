@@ -30,10 +30,10 @@ TEST(StructColumnTest, test_create) {
     column->append_datum(struct2);
 
     ASSERT_EQ(column->size(), 2);
-    ASSERT_EQ("{id: 1, name: 'smith'}", column->debug_item(0));
-    ASSERT_EQ("{id: 2, name: 'cruise'}", column->debug_item(1));
+    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(1));
 
-    ASSERT_EQ("{id: 1, name: 'smith'}, {id: 2, name: 'cruise'}", column->debug_string());
+    ASSERT_EQ("{id:1,name:'smith'}, {id:2,name:'cruise'}", column->debug_string());
 }
 
 TEST(StructColumnTest, test_update_if_overflow) {
@@ -146,9 +146,9 @@ TEST(StructColumnTest, test_append_null) {
         column->append_datum(struct3);
 
         ASSERT_EQ(column->size(), 3);
-        ASSERT_EQ("{id: 1, name: 'smith'}", column->debug_item(0));
-        ASSERT_EQ("{id: NULL, name: NULL}", column->debug_item(1));
-        ASSERT_EQ("{id: 3, name: 'cruise'}", column->debug_item(2));
+        ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
+        ASSERT_EQ("{id:NULL,name:NULL}", column->debug_item(1));
+        ASSERT_EQ("{id:3,name:'cruise'}", column->debug_item(2));
     }
 
     {
@@ -168,8 +168,8 @@ TEST(StructColumnTest, test_append_null) {
         column->append_datum(struct3);
 
         ASSERT_EQ(column->size(), 2);
-        ASSERT_EQ("{id: 1, name: 'smith'}", column->debug_item(0));
-        ASSERT_EQ("{id: 3, name: 'cruise'}", column->debug_item(1));
+        ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
+        ASSERT_EQ("{id:3,name:'cruise'}", column->debug_item(1));
     }
 }
 
@@ -184,12 +184,12 @@ TEST(StructColumnTest, test_append_defaults) {
 
     column->append_default();
     ASSERT_EQ(1, column->size());
-    ASSERT_EQ("{id: NULL, name: NULL}", column->debug_item(0));
+    ASSERT_EQ("{id:NULL,name:NULL}", column->debug_item(0));
 
     column->append_default(2);
     ASSERT_EQ(3, column->size());
-    ASSERT_EQ("{id: NULL, name: NULL}", column->debug_item(1));
-    ASSERT_EQ("{id: NULL, name: NULL}", column->debug_item(2));
+    ASSERT_EQ("{id:NULL,name:NULL}", column->debug_item(1));
+    ASSERT_EQ("{id:NULL,name:NULL}", column->debug_item(2));
 }
 
 TEST(StructColumnTest, test_resize) {
@@ -211,7 +211,7 @@ TEST(StructColumnTest, test_resize) {
     column->resize(1);
 
     ASSERT_EQ(1, column->size());
-    ASSERT_EQ("{id: 1, name: 'smith'}", column->debug_item(0));
+    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
 }
 
 TEST(StructColumnTest, test_reset_column) {
@@ -269,16 +269,16 @@ TEST(StructColumnTest, test_swap_column) {
     }
     ASSERT_EQ(1, column1->size());
     ASSERT_EQ(2, column2->size());
-    ASSERT_EQ("{id: 1, name: 'smith'}", column1->debug_item(0));
-    ASSERT_EQ("{id: 2, name: 'smith cruise'}", column2->debug_item(0));
-    ASSERT_EQ("{id: 3, name: 'cruise smith'}", column2->debug_item(1));
+    ASSERT_EQ("{id:1,name:'smith'}", column1->debug_item(0));
+    ASSERT_EQ("{id:2,name:'smith cruise'}", column2->debug_item(0));
+    ASSERT_EQ("{id:3,name:'cruise smith'}", column2->debug_item(1));
 
     column1->swap_column(*column2);
     ASSERT_EQ(2, column1->size());
     ASSERT_EQ(1, column2->size());
-    ASSERT_EQ("{id: 2, name: 'smith cruise'}", column1->debug_item(0));
-    ASSERT_EQ("{id: 3, name: 'cruise smith'}", column1->debug_item(1));
-    ASSERT_EQ("{id: 1, name: 'smith'}", column2->debug_item(0));
+    ASSERT_EQ("{id:2,name:'smith cruise'}", column1->debug_item(0));
+    ASSERT_EQ("{id:3,name:'cruise smith'}", column1->debug_item(1));
+    ASSERT_EQ("{id:1,name:'smith'}", column2->debug_item(0));
 }
 
 TEST(StructColumnTest, test_copy_construtor) {
@@ -304,15 +304,15 @@ TEST(StructColumnTest, test_copy_construtor) {
     column->append_datum(struct2);
 
     ASSERT_EQ(column->size(), 2);
-    ASSERT_EQ("{id: 1, name: 'smith'}", column->debug_item(0));
-    ASSERT_EQ("{id: 2, name: 'cruise'}", column->debug_item(1));
+    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(1));
 
     StructColumn copy(*column);
     column->reset_column();
     ASSERT_EQ(0, column->size());
     ASSERT_EQ(2, copy.size());
-    ASSERT_EQ("{id: 1, name: 'smith'}", copy.debug_item(0));
-    ASSERT_EQ("{id: 2, name: 'cruise'}", copy.debug_item(1));
+    ASSERT_EQ("{id:1,name:'smith'}", copy.debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", copy.debug_item(1));
 
     ASSERT_TRUE(copy.field_names_column().unique());
     ASSERT_TRUE(copy.fields().at(0).unique());
@@ -342,13 +342,13 @@ TEST(StructColumnTest, test_move_construtor) {
     column->append_datum(struct2);
 
     ASSERT_EQ(column->size(), 2);
-    ASSERT_EQ("{id: 1, name: 'smith'}", column->debug_item(0));
-    ASSERT_EQ("{id: 2, name: 'cruise'}", column->debug_item(1));
+    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(1));
 
     StructColumn copy(std::move(*column));
     ASSERT_EQ(2, copy.size());
-    ASSERT_EQ("{id: 1, name: 'smith'}", copy.debug_item(0));
-    ASSERT_EQ("{id: 2, name: 'cruise'}", copy.debug_item(1));
+    ASSERT_EQ("{id:1,name:'smith'}", copy.debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", copy.debug_item(1));
 
     ASSERT_TRUE(copy.field_names_column().unique());
     ASSERT_TRUE(copy.fields().at(0).unique());
@@ -378,14 +378,14 @@ TEST(StructColumnTest, test_clone) {
     column->append_datum(struct2);
 
     ASSERT_EQ(column->size(), 2);
-    ASSERT_EQ("{id: 1, name: 'smith'}", column->debug_item(0));
-    ASSERT_EQ("{id: 2, name: 'cruise'}", column->debug_item(1));
+    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(1));
 
     auto copy = column->clone();
     column->reset_column();
     ASSERT_EQ(2, copy->size());
-    ASSERT_EQ("{id: 1, name: 'smith'}", copy->debug_item(0));
-    ASSERT_EQ("{id: 2, name: 'cruise'}", copy->debug_item(1));
+    ASSERT_EQ("{id:1,name:'smith'}", copy->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", copy->debug_item(1));
 
     ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->field_names_column().unique());
     ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->fields().at(0).unique());
@@ -415,14 +415,14 @@ TEST(StructColumnTest, test_clone_shared) {
     column->append_datum(struct2);
 
     ASSERT_EQ(column->size(), 2);
-    ASSERT_EQ("{id: 1, name: 'smith'}", column->debug_item(0));
-    ASSERT_EQ("{id: 2, name: 'cruise'}", column->debug_item(1));
+    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(1));
 
     auto copy = column->clone_shared();
     column->reset_column();
     ASSERT_EQ(2, copy->size());
-    ASSERT_EQ("{id: 1, name: 'smith'}", copy->debug_item(0));
-    ASSERT_EQ("{id: 2, name: 'cruise'}", copy->debug_item(1));
+    ASSERT_EQ("{id:1,name:'smith'}", copy->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", copy->debug_item(1));
 
     ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->field_names_column().unique());
     ASSERT_TRUE(down_cast<StructColumn*>(copy.get())->fields().at(0).unique());
@@ -452,8 +452,8 @@ TEST(StructColumnTest, test_clone_empty) {
     column->append_datum(struct2);
 
     ASSERT_EQ(2, column->size());
-    ASSERT_EQ("{id: 1, name: 'smith'}", column->debug_item(0));
-    ASSERT_EQ("{id: 2, name: 'cruise'}", column->debug_item(1));
+    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(1));
 
     auto copy = column->clone_empty();
     column->reset_column();
@@ -490,9 +490,9 @@ TEST(StructColumnTest, test_update_rows) {
     ASSERT_TRUE(column->update_rows(*copy.get(), replace_indexes.data()).ok());
 
     ASSERT_EQ(3, column->size());
-    ASSERT_EQ("{id: 2, name: 'cruise'}", column->debug_item(0));
-    ASSERT_EQ("{id: 2, name: 'cruise'}", column->debug_item(1));
-    ASSERT_EQ("{id: 4, name: 'world'}", column->debug_item(2));
+    ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(0));
+    ASSERT_EQ("{id:2,name:'cruise'}", column->debug_item(1));
+    ASSERT_EQ("{id:4,name:'world'}", column->debug_item(2));
 }
 
 TEST(StructColumnTest, test_assign) {
@@ -514,8 +514,35 @@ TEST(StructColumnTest, test_assign) {
     column->assign(2, 0);
 
     ASSERT_EQ(2, column->size());
-    ASSERT_EQ("{id: 1, name: 'smith'}", column->debug_item(0));
-    ASSERT_EQ("{id: 1, name: 'smith'}", column->debug_item(1));
+    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(0));
+    ASSERT_EQ("{id:1,name:'smith'}", column->debug_item(1));
+}
+
+TEST(StructColumnTest, test_element_memory_usage) {
+    auto field_name = BinaryColumn::create();
+    field_name->append_string("id");
+    field_name->append_string("name");
+    auto id = NullableColumn::create(UInt64Column::create(), NullColumn::create());
+    auto name = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    Columns fields{id, name};
+    auto column = StructColumn::create(fields, field_name);
+
+    column->append_datum(DatumStruct{uint64_t(1), Slice("2")});
+    column->append_datum(DatumStruct{uint64_t(1), Slice("4")});
+    column->append_datum(DatumStruct{uint64_t(1), Slice("6")});
+
+    ASSERT_EQ(45, column->Column::element_memory_usage());
+
+    std::vector<size_t> element_mem_usages = {15, 15, 15};
+    size_t element_num = element_mem_usages.size();
+    for (size_t start = 0; start < element_num; start++) {
+        size_t expected_usage = 0;
+        ASSERT_EQ(0, column->element_memory_usage(start, 0));
+        for (size_t size = 1; start + size <= element_num; size++) {
+            expected_usage += element_mem_usages[start + size - 1];
+            ASSERT_EQ(expected_usage, column->element_memory_usage(start, size));
+        }
+    }
 }
 
 } // namespace starrocks::vectorized

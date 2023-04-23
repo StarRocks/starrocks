@@ -19,6 +19,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class RemoteFileOperations {
+    public static final String HMS_PARTITIONS_REMOTE_FILES = "HMS.PARTITIONS.LIST_FS_PARTITIONS";
     protected CachingRemoteFileIO remoteFileIO;
     private final ExecutorService executor;
     private final boolean isRecursive;
@@ -55,9 +56,9 @@ public class RemoteFileOperations {
         List<Future<Map<RemotePathKey, List<RemoteFileDesc>>>> futures = Lists.newArrayList();
         List<Map<RemotePathKey, List<RemoteFileDesc>>> result = Lists.newArrayList();
 
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getRemoteFiles", String.format("%s partitions", cacheMissSize));
+        PlannerProfile.addCustomProperties(HMS_PARTITIONS_REMOTE_FILES, String.format("%s", cacheMissSize));
 
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getRemoteFiles")) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer(HMS_PARTITIONS_REMOTE_FILES)) {
             for (Partition partition : partitions) {
                 RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
                 Future<Map<RemotePathKey, List<RemoteFileDesc>>> future = executor.submit(() ->

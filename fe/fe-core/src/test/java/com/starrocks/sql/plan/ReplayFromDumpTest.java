@@ -3,6 +3,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
@@ -44,6 +45,7 @@ public class ReplayFromDumpTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
+        Config.tablet_sched_disable_colocate_overall_balance = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
@@ -685,5 +687,43 @@ public class ReplayFromDumpTest {
         Assert.assertTrue(replayPair.second, replayPair.second.contains("1110:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  equal join conjunct: [3807: ref_id, BIGINT, true] = [3680: deal_id, BIGINT, true]"));
+    }
+
+    @Test
+    public void testGroupByDistinctColumnSkewHint() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_skew_hint"), null,
+                        TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  9:Project\n" +
+                "  |  <slot 39> : 39: year\n" +
+                "  |  <slot 42> : 42: case\n" +
+                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)" +
+                ""));
+    }
+
+    @Test
+    public void testGroupByDistinctColumnOptimization() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_optimize"), null,
+                        TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  9:Project\n" +
+                "  |  <slot 39> : 39: year\n" +
+                "  |  <slot 42> : 42: case\n" +
+                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)" +
+                ""));
+    }
+
+    @Test
+    public void testTPCH11() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            Pair<QueryDumpInfo, String> replayPair =
+                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
+            Assert.assertTrue(replayPair.second, replayPair.second.contains(
+                    "n_name,[<place-holder> = 'GERMANY'])\n" +
+                            "     dict_col=n_name"));
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
     }
 }

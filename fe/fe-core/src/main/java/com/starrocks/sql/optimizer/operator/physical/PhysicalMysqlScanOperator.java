@@ -15,12 +15,23 @@ import java.util.Map;
 
 public class PhysicalMysqlScanOperator extends PhysicalScanOperator {
 
+    // Optional temporal clause for querying historical data
+    private String temporalClause;
+
     public PhysicalMysqlScanOperator(Table table,
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                      long limit,
                                      ScalarOperator predicate,
                                      Projection projection) {
         super(OperatorType.PHYSICAL_MYSQL_SCAN, table, colRefToColumnMetaMap, limit, predicate, projection);
+    }
+
+    public String getTemporalClause() {
+        return temporalClause;
+    }
+
+    public void setTemporalClause(String temporalClause) {
+        this.temporalClause = temporalClause;
     }
 
     @Override

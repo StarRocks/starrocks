@@ -18,7 +18,8 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
           _mem_tracker(fragment_ctx->runtime_state()->instance_mem_tracker()),
           _brpc_timeout_ms(std::min(3600, fragment_ctx->runtime_state()->query_options().query_timeout) * 1000),
           _is_dest_merge(is_dest_merge),
-          _num_uncancelled_sinkers(num_sinkers) {
+          _num_uncancelled_sinkers(num_sinkers),
+          _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()) {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
         // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
@@ -354,20 +355,56 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
 
         closure->cntl.Reset();
         closure->cntl.set_timeout_ms(_brpc_timeout_ms);
-        closure->cntl.request_attachment().append(request.attachment);
 
+        Status st;
         if (bthread_self()) {
-            request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+            st = _send_rpc(closure, request);
         } else {
             // When the driver worker thread sends request and creates the protobuf request,
             // also use process_mem_tracker to record the memory of the protobuf request.
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-            request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+            // must in the same scope following the above
+            st = _send_rpc(closure, request);
         }
-
-        return Status::OK();
+        return st;
     }
-
     return Status::OK();
 }
+
+Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure,
+                             const TransmitChunkInfo& request) {
+    auto expected_iobuf_size = request.attachment.size() + request.params->ByteSizeLong() + sizeof(size_t) * 2;
+    if (UNLIKELY(expected_iobuf_size > _rpc_http_min_size)) {
+        butil::IOBuf iobuf;
+        butil::IOBufAsZeroCopyOutputStream wrapper(&iobuf);
+        request.params->SerializeToZeroCopyStream(&wrapper);
+        // append params to iobuf
+        size_t params_size = iobuf.size();
+        closure->cntl.request_attachment().append(&params_size, sizeof(params_size));
+        closure->cntl.request_attachment().append(iobuf);
+        // append attachment
+        size_t attachment_size = request.attachment.size();
+        closure->cntl.request_attachment().append(&attachment_size, sizeof(attachment_size));
+        closure->cntl.request_attachment().append(request.attachment);
+        VLOG_ROW << "issue a http rpc, attachment's size = " << attachment_size
+                 << " , total size = " << closure->cntl.request_attachment().size();
+
+        if (UNLIKELY(expected_iobuf_size != closure->cntl.request_attachment().size())) {
+            LOG(WARNING) << "http rpc expected iobuf size " << expected_iobuf_size << " != "
+                         << " real iobuf size " << closure->cntl.request_attachment().size();
+        }
+        closure->cntl.http_request().set_content_type("application/proto");
+        // create http_stub as needed
+        auto res = BrpcStubCache::create_http_stub(request.brpc_addr);
+        if (!res.ok()) {
+            return res.status();
+        }
+        res.value()->transmit_chunk_via_http(&closure->cntl, NULL, &closure->result, closure);
+    } else {
+        closure->cntl.request_attachment().append(request.attachment);
+        request.brpc_stub->transmit_chunk(&closure->cntl, request.params.get(), &closure->result, closure);
+    }
+    return Status::OK();
+}
+
 } // namespace starrocks::pipeline

@@ -66,7 +66,7 @@ public class LogicalDeltaLakeScanOperator extends LogicalScanOperator {
         public LogicalDeltaLakeScanOperator.Builder withOperator(LogicalDeltaLakeScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.predicates = scanOperator.predicates;
+            this.predicates = scanOperator.predicates.clone();
             return this;
         }
     }

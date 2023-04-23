@@ -81,6 +81,11 @@ inline bool is_enumeration_type(PrimitiveType type) {
     }
 }
 
+constexpr bool is_object_type(PrimitiveType type) {
+    return type == PrimitiveType::TYPE_HLL || type == PrimitiveType::TYPE_OBJECT || type == PrimitiveType::TYPE_JSON ||
+           type == PrimitiveType::TYPE_PERCENTILE;
+}
+
 inline bool is_type_compatible(PrimitiveType lhs, PrimitiveType rhs) {
     if (lhs == TYPE_FUNCTION || rhs == TYPE_FUNCTION) {
         return false;
@@ -175,7 +180,7 @@ UNION_VALUE_GUARD(PrimitiveType, NumericPTGuard, pt_is_numeric, pt_is_number_str
 UNION_VALUE_GUARD(PrimitiveType, FixedLengthPTGuard, pt_is_fixedlength, pt_is_arithmetic_struct, pt_is_decimalv2_struct,
                   pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct, pt_is_time_struct)
 UNION_VALUE_GUARD(PrimitiveType, AggregatePTGuard, pt_is_aggregate, pt_is_arithmetic_struct, pt_is_decimalv2_struct,
-                  pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct)
+                  pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct, pt_is_string_struct)
 
 TExprOpcode::type to_in_opcode(PrimitiveType t);
 PrimitiveType thrift_to_type(TPrimitiveType::type ttype);
@@ -192,5 +197,8 @@ PrimitiveType scalar_field_type_to_primitive_type(FieldType field_type);
 
 // Return length of fixed-length type, return 0 for dynamic length type
 size_t get_size_of_fixed_length_type(PrimitiveType ptype);
+
+// return types that can be sorted
+const std::vector<PrimitiveType>& sortable_types();
 
 } // namespace starrocks

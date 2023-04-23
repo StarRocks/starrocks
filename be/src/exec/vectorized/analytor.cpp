@@ -159,13 +159,18 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             // For nullable aggregate function(sum, max, min, avg),
             // we should always use nullable aggregate function.
             is_input_nullable = true;
-            VLOG_ROW << "try get function " << fn.name.function_name << " arg_type.type " << arg_type.type
-                     << " return_type.type " << return_type.type;
-            auto* func = vectorized::get_window_function(fn.name.function_name, arg_type.type, return_type.type,
-                                                         is_input_nullable, fn.binary_type, state->func_version());
+            const starrocks::vectorized::AggregateFunction* func = nullptr;
+            std::string real_fn_name = fn.name.function_name;
+            if (fn.ignore_nulls) {
+                DCHECK(fn.name.function_name == "first_value" || fn.name.function_name == "last_value");
+                // "in" means "ignore nulls", we use first_value_in/last_value_in instead of first_value/last_value
+                // to find right AggregateFunction to support ignore nulls.
+                real_fn_name += "_in";
+            }
+            func = vectorized::get_window_function(real_fn_name, arg_type.type, return_type.type, is_input_nullable,
+                                                   fn.binary_type, state->func_version());
             if (func == nullptr) {
-                return Status::InternalError(
-                        strings::Substitute("Invalid window function plan: $0", fn.name.function_name));
+                return Status::InternalError(strings::Substitute("Invalid window function plan: $0", real_fn_name));
             }
             _agg_functions[i] = func;
             _agg_fn_types[i] = {return_type, is_input_nullable, desc.nodes[0].is_nullable};

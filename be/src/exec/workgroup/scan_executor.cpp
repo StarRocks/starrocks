@@ -31,12 +31,19 @@ void ScanExecutor::change_num_threads(int32_t num_threads) {
 }
 
 void ScanExecutor::worker_thread() {
+    auto current_thread = Thread::current_thread();
     while (true) {
         if (_num_threads_setter.should_shrink()) {
             break;
         }
 
+        if (current_thread != nullptr) {
+            current_thread->set_idle(true);
+        }
         auto maybe_task = _task_queue->take();
+        if (current_thread != nullptr) {
+            current_thread->set_idle(false);
+        }
         if (maybe_task.status().is_cancelled()) {
             return;
         }
@@ -46,6 +53,9 @@ void ScanExecutor::worker_thread() {
         {
             SCOPED_RAW_TIMER(&time_spent_ns);
             task.work_function();
+        }
+        if (current_thread != nullptr) {
+            current_thread->inc_finished_tasks();
         }
         _task_queue->update_statistics(task.workgroup, time_spent_ns);
     }

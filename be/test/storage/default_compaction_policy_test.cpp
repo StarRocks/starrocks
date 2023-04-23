@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "storage/cumulative_compaction.h"
+#include "storage/default_compaction_policy.h"
 
 #include <fmt/format.h>
 #include <gtest/gtest.h>
@@ -16,7 +16,7 @@
 #include "storage/compaction_context.h"
 #include "storage/compaction_manager.h"
 #include "storage/compaction_utils.h"
-#include "storage/default_compaction_policy.h"
+#include "storage/cumulative_compaction.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -213,6 +213,7 @@ public:
         config::min_base_compaction_num_singleton_deltas = 10;
         Compaction::init(config::max_compaction_concurrency);
 
+        _default_storage_root_path = config::storage_root_path;
         config::storage_root_path = std::filesystem::current_path().string() + "/data_test_cumulative_compaction";
         fs::remove_all(config::storage_root_path);
         ASSERT_TRUE(fs::create_directories(config::storage_root_path).ok());
@@ -246,6 +247,7 @@ public:
         if (fs::path_exist(config::storage_root_path)) {
             ASSERT_TRUE(fs::remove_all(config::storage_root_path).ok());
         }
+        config::storage_root_path = _default_storage_root_path;
     }
 
 protected:
@@ -255,6 +257,7 @@ protected:
     std::unique_ptr<MemTracker> _metadata_mem_tracker;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
     std::unique_ptr<MemPool> _mem_pool;
+    std::string _default_storage_root_path;
 
     int64_t _rowset_id;
     int64_t _version;
@@ -325,6 +328,42 @@ TEST_F(DefaultCompactionPolicyTest, test_max_cumulative_compaction) {
     init_compaction_context(tablet);
 
     auto res = compact(tablet);
+    ASSERT_TRUE(res.ok());
+
+    ASSERT_EQ(2, tablet->version_count());
+    ASSERT_EQ(5, tablet->cumulative_layer_point());
+    std::vector<Version> versions;
+    tablet->list_versions(&versions);
+    ASSERT_EQ(2, versions.size());
+    ASSERT_EQ(0, versions[0].first);
+    ASSERT_EQ(4, versions[0].second);
+    ASSERT_EQ(5, versions[1].first);
+    ASSERT_EQ(5, versions[1].second);
+}
+
+TEST_F(DefaultCompactionPolicyTest, test_tablet_not_running) {
+    LOG(INFO) << "test_tablet_not_running";
+    create_tablet_schema(UNIQUE_KEYS);
+
+    TabletMetaSharedPtr tablet_meta = std::make_shared<TabletMeta>();
+    create_tablet_meta(tablet_meta.get());
+
+    for (int i = 0; i < 6; ++i) {
+        write_new_version(tablet_meta);
+    }
+
+    TabletSharedPtr tablet =
+            Tablet::create_tablet_from_meta(tablet_meta, starrocks::StorageEngine::instance()->get_stores()[0]);
+    tablet->init();
+    tablet->set_tablet_state(TABLET_NOTREADY);
+    init_compaction_context(tablet);
+
+    auto res = compact(tablet);
+    ASSERT_FALSE(res.ok());
+
+    tablet->set_tablet_state(TABLET_RUNNING);
+
+    res = compact(tablet);
     ASSERT_TRUE(res.ok());
 
     ASSERT_EQ(2, tablet->version_count());

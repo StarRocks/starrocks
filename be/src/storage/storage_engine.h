@@ -91,6 +91,7 @@ public:
 
     Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
+    std::vector<string> get_store_paths();
     // get root path for creating tablet. The returned vector of root path should be random,
     // for avoiding that all the tablet would be deployed one disk.
     std::vector<DataDir*> get_stores_for_create_tablet(TStorageMedium::type storage_medium);
@@ -194,6 +195,8 @@ public:
 
     void do_manual_compact(bool force_compact);
 
+    void increase_update_compaction_thread(const int num_threads_per_disk);
+
 protected:
     static StorageEngine* _s_instance;
 
@@ -226,6 +229,8 @@ private:
     // All these xxx_callback() functions are for Background threads
     // update cache expire thread
     void* _update_cache_expire_thread_callback(void* arg);
+    // update cache evict thread
+    void* _update_cache_evict_thread_callback(void* arg);
 
     // unused rowset monitor thread
     void* _unused_rowset_monitor_thread_callback(void* arg);
@@ -304,6 +309,7 @@ private:
     std::atomic<bool> _bg_worker_stopped{false};
     // thread to expire update cache;
     std::thread _update_cache_expire_thread;
+    std::thread _update_cache_evict_thread;
     std::thread _unused_rowset_monitor_thread;
     // thread to monitor snapshot expiry
     std::thread _garbage_sweeper_thread;

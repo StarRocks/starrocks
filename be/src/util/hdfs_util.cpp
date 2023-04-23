@@ -51,25 +51,4 @@ Status get_namenode_from_path(const std::string& path, std::string* namenode) {
     return Status::OK();
 }
 
-std::string get_bucket_from_namenode(const std::string& namenode) {
-    auto n = namenode.find("://");
-    if (n == std::string::npos) return "";
-    n += 3;
-    auto n2 = namenode.find('/', n);
-    if (n2 == std::string::npos) return "";
-    return namenode.substr(n, n2 - n);
-}
-
-std::string get_endpoint_from_oss_bucket(const std::string& default_bucket, std::string* bucket) {
-    auto endpoint_start_index = bucket->find('.');
-    if (endpoint_start_index == std::string::npos) {
-        return default_bucket;
-    }
-    endpoint_start_index = endpoint_start_index + 1;
-    auto endpoint_end_index = bucket->size();
-    std::string endpoint = bucket->substr(endpoint_start_index, endpoint_end_index - endpoint_start_index + 1);
-    *bucket = bucket->substr(0, endpoint_start_index - 1);
-    return endpoint;
-}
-
 } // namespace starrocks

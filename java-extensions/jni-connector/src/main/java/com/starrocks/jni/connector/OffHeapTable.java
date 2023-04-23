@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.jni.connector;
 
@@ -60,68 +72,27 @@ package com.starrocks.jni.connector;
 
 public class OffHeapTable {
     public OffHeapColumnVector[] vectors;
-    public OffHeapColumnVector.OffHeapColumnType[] types;
+    public String[] fields;
     public OffHeapColumnVector meta;
     public int numRows;
     public boolean[] released;
 
-    public OffHeapTable(OffHeapColumnVector.OffHeapColumnType[] types, int capacity) {
-        this.types = types;
+    public OffHeapTable(ColumnType[] types, String[] fields, int capacity) {
+        this.fields = fields;
         this.vectors = new OffHeapColumnVector[types.length];
         this.released = new boolean[types.length];
         int metaSize = 0;
         for (int i = 0; i < types.length; i++) {
             vectors[i] = new OffHeapColumnVector(capacity, types[i]);
-            if (OffHeapColumnVector.isArray(types[i])) {
-                metaSize += 3;
-            } else {
-                metaSize += 2;
-            }
+            metaSize += types[i].computeColumnSize();
             released[i] = false;
         }
-        this.meta = new OffHeapColumnVector(metaSize, OffHeapColumnVector.OffHeapColumnType.LONG);
+        this.meta = new OffHeapColumnVector(metaSize, new ColumnType("#meta", ColumnType.TypeValue.LONG));
         this.numRows = 0;
     }
 
-    public void appendData(int fieldId, Object o) {
-        OffHeapColumnVector column = vectors[fieldId];
-        if (o == null) {
-            column.appendNull();
-            return;
-        }
-
-        OffHeapColumnVector.OffHeapColumnType type = types[fieldId];
-        switch (type) {
-            case BOOLEAN:
-                column.appendBoolean((boolean) o);
-                break;
-            case SHORT:
-                column.appendShort((short) o);
-                break;
-            case INT:
-                column.appendInt((int) o);
-                break;
-            case FLOAT:
-                column.appendFloat((float) o);
-                break;
-            case LONG:
-                column.appendLong((long) o);
-                break;
-            case DOUBLE:
-                column.appendDouble((double) o);
-                break;
-            case BINARY:
-                column.appendBinary((byte[]) o);
-                break;
-            case STRING:
-            case DATE:
-            case DATETIME:
-            case DECIMAL:
-                column.appendString(o.toString());
-                break;
-            default:
-                throw new RuntimeException("Unsupported type: " + type);
-        }
+    public void appendData(int fieldId, ColumnValue o) {
+        vectors[fieldId].appendValue(o);
     }
 
     public void releaseOffHeapColumnVector(int fieldId) {
@@ -135,72 +106,16 @@ public class OffHeapTable {
         this.numRows = numRows;
     }
 
-    public long getMetaNativeAddress() {
-        meta.appendLong(numRows);
-        for (int i = 0; i < types.length; i++) {
-            OffHeapColumnVector.OffHeapColumnType type = types[i];
-            OffHeapColumnVector column = vectors[i];
-            if (OffHeapColumnVector.isArray(type)) {
-                meta.appendLong(column.nullsNativeAddress());
-                meta.appendLong(column.arrayOffsetNativeAddress());
-                meta.appendLong(column.arrayDataNativeAddress());
-            } else {
-                meta.appendLong(column.nullsNativeAddress());
-                meta.appendLong(column.valuesNativeAddress());
-            }
-        }
-        return meta.valuesNativeAddress();
+    public int getNumRows() {
+        return this.numRows;
     }
 
-    /**
-     * For test only
-     */
-    public void show(int limit) {
-        StringBuilder sb = new StringBuilder();
-        System.out.println("numRows = " + numRows);
-        for (int i = 0; i < limit && i < numRows; i++) {
-            for (int fieldId = 0; fieldId < types.length; fieldId++) {
-                OffHeapColumnVector column = vectors[fieldId];
-                if (column.isNullAt(i)) {
-                    sb.append("NULL").append(", ");
-                    continue;
-                }
-                OffHeapColumnVector.OffHeapColumnType type = types[fieldId];
-                switch (type) {
-                    case BOOLEAN:
-                        sb.append(column.getBoolean(i)).append(", ");
-                        break;
-                    case SHORT:
-                        sb.append(column.getShort(i)).append(", ");
-                        break;
-                    case INT:
-                        sb.append(column.getInt(i)).append(", ");
-                        break;
-                    case FLOAT:
-                        sb.append(column.getFloat(i)).append(", ");
-                        break;
-                    case LONG:
-                        sb.append(column.getLong(i)).append(", ");
-                        break;
-                    case DOUBLE:
-                        sb.append(column.getDouble(i)).append(", ");
-                        break;
-                    case BINARY:
-                        sb.append("<binary>").append(", ");
-                        break;
-                    case STRING:
-                    case DATE:
-                    case DATETIME:
-                    case DECIMAL:
-                        sb.append(column.getUTF8String(i)).append(", ");
-                        break;
-                    default:
-                        throw new RuntimeException("Unhandled " + type);
-                }
-            }
-            sb.append("\n");
+    public long getMetaNativeAddress() {
+        meta.appendLong(numRows);
+        for (OffHeapColumnVector v : vectors) {
+            v.updateMeta(meta);
         }
-        System.out.println(sb);
+        return meta.valuesNativeAddress();
     }
 
     public void close() {
@@ -209,4 +124,66 @@ public class OffHeapTable {
         }
         meta.close();
     }
+
+    // for test only.
+    public String dump(int rowLimit) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < rowLimit && i < numRows; i++) {
+            sb.append("row" + i + ": [");
+            for (int j = 0; j < vectors.length; j++) {
+                if (j != 0) {
+                    sb.append(',');
+                }
+                sb.append(fields[j]).append(':');
+                vectors[j].dump(sb, i);
+            }
+            sb.append("]\n");
+        }
+        return sb.toString();
+    }
+
+    public void show(int rowLimit) {
+        System.out.println("OffHeapTable: numRows = " + numRows);
+        System.out.println(dump(rowLimit));
+    }
+
+    // for test only.
+    public static class MetaChecker {
+        private OffHeapColumnVector meta;
+        int offset;
+        boolean verbose;
+
+        public MetaChecker(OffHeapColumnVector meta, int offset) {
+            this.meta = meta;
+            this.offset = offset;
+        }
+
+        public void setVerbose(boolean v) {
+            verbose = v;
+        }
+
+        public void check(String context, long expected) {
+            if (meta.getLong(offset) != expected) {
+                throw new RuntimeException(
+                        "meta check failed at offset: " + offset + ", current = " + meta.getLong(offset) +
+                                ", expected = " +
+                                expected + ", context = " + context);
+            }
+            if (verbose) {
+                System.out.println("meta check ok: " + context);
+            }
+            offset += 1;
+        }
+    }
+
+    // for test only.
+    public void checkTableMeta(boolean verbose) {
+        MetaChecker checker = new MetaChecker(meta, 0);
+        checker.setVerbose(verbose);
+        checker.check("numRows", numRows);
+        for (OffHeapColumnVector c : vectors) {
+            c.checkMeta(checker);
+        }
+    }
+
 }

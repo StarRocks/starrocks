@@ -107,11 +107,15 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.StatisticUtils;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -548,20 +552,67 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         if (table.isNativeTable()) {
             OlapTable olapTable = (OlapTable) table;
             List<Partition> selectedPartitions;
+            Column smallColumn = table.getColumns().stream().filter(Column::isKey).findAny().orElse(null);
             if (node.isLogical()) {
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) node;
                 selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
                         olapTable::getPartition).collect(Collectors.toList());
+                smallColumn =
+                        olapScanOperator.getColRefToColumnMetaMap().values().stream().findAny().orElse(smallColumn);
             } else {
                 PhysicalOlapScanOperator olapScanOperator = (PhysicalOlapScanOperator) node;
                 selectedPartitions = olapScanOperator.getSelectedPartitionId().stream().map(
                         olapTable::getPartition).collect(Collectors.toList());
+                smallColumn =
+                        olapScanOperator.getColRefToColumnMetaMap().values().stream().findAny().orElse(smallColumn);
             }
             long rowCount = 0;
-            for (Partition partition : selectedPartitions) {
-                rowCount += partition.getBaseIndex().getRowCount();
-                optimizerContext.getDumpInfo()
-                        .addPartitionRowCount(table, partition.getName(), partition.getBaseIndex().getRowCount());
+
+            BasicStatsMeta basicStatsMeta =
+                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
+            if (basicStatsMeta != null && basicStatsMeta.getType().equals(StatsConstants.AnalyzeType.FULL)) {
+                Preconditions.checkNotNull(smallColumn);
+                // The basicStatsMeta.getUpdateRows() interface can get the number of
+                // loaded rows in the table since the last statistics update. But this number is at the table level.
+                // So here we can count the number of partitions that have changed since the last statistics update,
+                // and then evenly distribute the number of updated rows at the table level to the partition boundaries
+                // The purpose of this is to make the statistics of the number of rows more accurate.
+                // For example, a large amount of data LOAD may cause the number of rows to change greatly.
+                // This leads to very inaccurate row counts.
+                int partitionCountModifiedAfterLastAnalyze = 0;
+                int partitionCount = 0;
+                for (Partition partition : ((OlapTable) table).getPartitions()) {
+                    LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
+                    if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
+                        partitionCountModifiedAfterLastAnalyze++;
+                    }
+
+                    partitionCount++;
+                }
+
+                ColumnStatistic cs =
+                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(table, smallColumn.getName());
+                long avgRowCount = (long) (cs.getRowCount() / Math.max(partitionCount, 1));
+                for (Partition partition : selectedPartitions) {
+                    long partitionRowCount = cs.isUnknown() ? partition.getRowCount() : avgRowCount;
+                    if (partitionCountModifiedAfterLastAnalyze > 0) {
+                        LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
+                        if (updateDatetime.isAfter(basicStatsMeta.getUpdateTime())) {
+                            partitionRowCount +=
+                                    basicStatsMeta.getUpdateRows() / partitionCountModifiedAfterLastAnalyze;
+                        }
+                    }
+
+                    rowCount += partitionRowCount;
+                    optimizerContext.getDumpInfo()
+                            .addPartitionRowCount(table, partition.getName(), partitionRowCount);
+                }
+            } else {
+                for (Partition partition : selectedPartitions) {
+                    rowCount += partition.getRowCount();
+                    optimizerContext.getDumpInfo()
+                            .addPartitionRowCount(table, partition.getName(), partition.getRowCount());
+                }
             }
             // Currently, after FE just start, the row count of table is always 0.
             // Explicitly set table row count to 1 to make our cost estimate work.
@@ -720,7 +771,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         crossBuilder.addColumnStatistics(rightStatistics.getOutputColumnsStatistics(context.getChildOutputColumns(1)));
         double leftRowCount = leftStatistics.getOutputRowCount();
         double rightRowCount = rightStatistics.getOutputRowCount();
-        double crossRowCount = leftRowCount * rightRowCount;
+        double crossRowCount = StatisticUtils.multiplyRowCount(leftRowCount, rightRowCount);
         crossBuilder.setOutputRowCount(crossRowCount);
 
         List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(leftStatistics.getUsedColumns(),
@@ -1119,9 +1170,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             ColumnRefSet leftChildColumns = predicateOperator.getChild(0).getUsedColumns();
             ColumnRefSet rightChildColumns = predicateOperator.getChild(1).getUsedColumns();
             Set<Integer> leftChildRelationIds =
-                    leftChildColumns.getStream().mapToObj(columnRefFactory::getRelationId).collect(Collectors.toSet());
+                    leftChildColumns.getStream().map(columnRefFactory::getRelationId).collect(Collectors.toSet());
             Set<Integer> rightChildRelationIds =
-                    rightChildColumns.getStream().mapToObj(columnRefFactory::getRelationId)
+                    rightChildColumns.getStream().map(columnRefFactory::getRelationId)
                             .collect(Collectors.toSet());
 
             // Check that the predicate is complex, such as t1.a + t2.b = t3.c is complex predicate

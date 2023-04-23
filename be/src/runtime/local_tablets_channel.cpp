@@ -378,12 +378,14 @@ void LocalTabletsChannel::_commit_tablets(const PTabletWriterAddChunkRequest& re
 }
 
 int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
-    int n = _num_remaining_senders.fetch_sub(1);
-    DCHECK_GE(n, 1);
     std::lock_guard l(_partitions_ids_lock);
     for (int i = 0; i < partitions_size; i++) {
         _partition_ids.insert(partitions[i]);
     }
+    // when replicated storage is true, the partitions of each sender will be different
+    // So we need to make sure that all partitions are added to _partition_ids when committing
+    int n = _num_remaining_senders.fetch_sub(1);
+    DCHECK_GE(n, 1);
     return n - 1;
 }
 

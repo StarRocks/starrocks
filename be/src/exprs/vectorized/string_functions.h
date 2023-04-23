@@ -338,6 +338,9 @@ public:
     template <PrimitiveType Type>
     static ColumnPtr money_format_decimal(FunctionContext* context, const starrocks::vectorized::Columns& columns);
 
+    static Status trim_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status trim_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     // parse's auxiliary method
     static Status parse_url_prepare(starrocks_udf::FunctionContext* context,
                                     starrocks_udf::FunctionContext::FunctionStateScope scope);

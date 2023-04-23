@@ -4,6 +4,7 @@
 
 #include <runtime/types.h>
 
+#include "column/adaptive_nullable_column.h"
 #include "column/array_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
@@ -188,6 +189,41 @@ ColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
     return ConstColumn::create(nullable_column, chunk_size);
 }
 
+size_t ColumnHelper::find_nonnull(const Column* col, size_t start, size_t end) {
+    DCHECK_LE(start, end);
+
+    if (!col->has_null()) {
+        return start;
+    }
+    auto& null = as_raw_column<NullableColumn>(col)->immutable_null_column_data();
+    return SIMD::find_zero(null, start, end - start);
+}
+
+size_t ColumnHelper::last_nonnull(const Column* col, size_t start, size_t end) {
+    DCHECK_LE(start, end);
+    DCHECK_LE(end, col->size());
+
+    if (!col->has_null()) {
+        return end - 1;
+    }
+
+    if (start == end) {
+        return end;
+    }
+
+    auto& null = as_raw_column<NullableColumn>(col)->immutable_null_column_data();
+    for (size_t i = end - 1;;) {
+        if (null[i] == 0) {
+            return i;
+        }
+        if (i == start) {
+            break;
+        }
+        i--;
+    }
+    return end;
+}
+
 // expression trees' return column should align return type when some return columns maybe diff from the required
 // return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
 // Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
@@ -239,12 +275,17 @@ struct ColumnBuilder {
     }
 };
 
-ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size) {
+ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size,
+                                      bool use_adaptive_nullable_column) {
     auto type = type_desc.type;
     if (is_const && (nullable || type == TYPE_NULL)) {
         return ColumnHelper::create_const_null_column(size);
     } else if (type == TYPE_NULL) {
-        return NullableColumn::create(BooleanColumn::create(size), NullColumn::create(size, DATUM_NULL));
+        if (use_adaptive_nullable_column) {
+            return AdaptiveNullableColumn::create(BooleanColumn::create(size), NullColumn::create(size, DATUM_NULL));
+        } else {
+            return NullableColumn::create(BooleanColumn::create(size), NullColumn::create(size, DATUM_NULL));
+        }
     }
 
     ColumnPtr p;
@@ -286,8 +327,11 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
         return ConstColumn::create(p, size);
     }
     if (nullable) {
-        // Default value is null
-        return NullableColumn::create(p, NullColumn::create(size, DATUM_NULL));
+        if (use_adaptive_nullable_column) {
+            return AdaptiveNullableColumn::create(p, NullColumn::create(size, DATUM_NULL));
+        } else {
+            return NullableColumn::create(p, NullColumn::create(size, DATUM_NULL));
+        }
     }
     return p;
 }

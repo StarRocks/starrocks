@@ -18,6 +18,7 @@
 package com.starrocks.common;
 
 import com.google.common.collect.Sets;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -114,9 +115,21 @@ public class ThriftServer {
                 new SRTThreadPoolServer.Args(new TServerSocket(socketTransportArgs)).protocolFactory(
                         new TBinaryProtocol.Factory()).processor(processor);
         ThreadPoolExecutor threadPoolExecutor = ThreadPoolManager
-                .newDaemonCacheThreadPool(Config.thrift_server_max_worker_threads, "thrift-server-pool", true);
+                .newDaemonFixedThreadPool(Config.thrift_server_max_worker_threads,
+                        Config.thrift_server_queue_size,
+                        "thrift-server-pool", true);
+        // allow core thread time out so that the thread can be released
+        // if not used for ThreadPoolManager.KEEP_ALIVE_TIME
+        threadPoolExecutor.allowCoreThreadTimeOut(true);
         serverArgs.executorService(threadPoolExecutor);
         server = new SRTThreadPoolServer(serverArgs);
+
+        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+            if (threadPoolExecutor.getMaximumPoolSize() != Config.thrift_server_max_worker_threads) {
+                threadPoolExecutor.setCorePoolSize(Config.thrift_server_max_worker_threads);
+                threadPoolExecutor.setMaximumPoolSize(Config.thrift_server_max_worker_threads);
+            }
+        });
     }
 
     public void start() throws IOException {

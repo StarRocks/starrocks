@@ -1,6 +1,8 @@
 # StarRocks
 
-StarRocks is a next-gen, high-performance analytical data warehouse that enables real-time, multi-dimensional, and highly concurrent data analysis. StarRocks has an MPP architecture and it is equipped with a fully vectorized execution engine, a columnar storage engine that supports real-time updates, and is powered by a rich set of features including a fully-customized cost-based optimizer (CBO), intelligent materialized view and more. StarRocks is also compatible with MySQL protocols and can be easily connected using MySQL clients and popular BI tools. StarRocks is highly scalable, available, and easy to maintain. It is widely adopted in the industry, powering a variety of OLAP scenarios, such as real-time analytics, ad-hoc queries, data lake analytics and more.
+StarRocks is a next-gen, high-performance analytical data warehouse that enables real-time, multi-dimensional, and highly concurrent data analysis. StarRocks has an MPP architecture and is equipped with a fully vectorized execution engine, a columnar storage engine that supports real-time updates, and is powered by a rich set of features including a fully-customized cost-based optimizer (CBO), intelligent materialized view and more. StarRocks supports real-time and batch data ingestion from a variety of data sources. It also allows you to directly analyze data stored in data lakes with zero data migration.
+
+StarRocks is also compatible with MySQL protocols and can be easily connected using MySQL clients and popular BI tools. StarRocks is highly scalable, available, and easy to maintain. It is widely adopted in the industry, powering a variety of OLAP scenarios, such as real-time analytics, ad-hoc queries, data lake analytics and more.
 
 Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg) for live support, discussion, or latest community news. You can also follow us on [LinkedIn](https://www.linkedin.com/company/starrocks) to get first-hand updates on new features, events, and sharing.
 
@@ -18,7 +20,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPart title="Get started​">
 <NavBoxPartItem>
 
-- [Deploy StarRocks](../quick_start/Deploy.md)
+- [Deploy with docker](../quick_start/deploy_in_docker.md)
 - [Create a table](../quick_start/create_table.md)
 - [Ingest and query data](../quick_start/Import_and_query.md)
 
@@ -47,7 +49,7 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Continuously load data from Apache Kafka®](../loading/RoutineLoad.md)
 - [Bulk load using Apache Spark™](../loading/SparkLoad.md)
 - [Load data using INSERT](../loading/InsertInto.md)
-- [Realtime synchronization from MySQL](../loading/Flink_cdc_load.md)
+- [Synchronize data from MySQL in real time](../loading/Flink_cdc_load.md)
 - [Continuously load data from Apache Flink®](../loading/Flink-connector-starrocks.md)
 
 </NavBoxPartItem>
@@ -59,14 +61,16 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 <NavBoxPartItem title="Query acceleration">
 
 - [Cost-based optimizer](../using_starrocks/Cost_based_optimizer.md)
-- [Materialized view](../using_starrocks/Materialized_view.md)
+- [Synchronous materialized view](../using_starrocks/Materialized_view-single_table.md)
+- [Asynchronous materialized views](../using_starrocks/Materialized_view.md)
 - [Colocate Join](../using_starrocks/Colocate_join.md)
+- [Query cache](../using_starrocks/query_cache.md)
 
 </NavBoxPartItem>
 <NavBoxPartItem title="Query semi-structured data">
 
 - [JSON](../sql-reference/sql-statements/data-types/JSON.md)
-- [ARRAY](../using_starrocks/Array.md)
+- [ARRAY](../sql-reference/sql-statements/data-types/Array.md)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -77,9 +81,10 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 - [Apache Hive™](../data_source/catalog/hive_catalog.md)
 - [Apache Hudi](../data_source/catalog/hudi_catalog.md)
 - [Apache Iceberg](../data_source/catalog/iceberg_catalog.md)
-- [MySQL](../using_starrocks/External_table#mysql-external-table.md)
-- [Elasticsearch](../using_starrocks/External_table#elasticsearch-external-table.md)
-- [JDBC-compatible database](../using_starrocks/External_table#external-table-for-a-jdbc-compatible-database.md)
+- [Delta Lake](../data_source/catalog/deltalake_catalog.md)
+- [MySQL](../data_source/External_table.md#mysql-external-table)
+- [Elasticsearch](../data_source/External_table.md#elasticsearch-external-table)
+- [JDBC-compatible database](../data_source/External_table.md#create-a-jdbc-external-table)
 
 </NavBoxPartItem>
 </NavBoxPart>
@@ -91,8 +96,9 @@ Join our [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-z5z
 
 - [Manage a cluster](../administration/Cluster_administration.md)
 - [Scale in and out a cluster](../administration/Scale_up_down.md)
+- [Resource group](../administration/resource_group.md)
+- [Data recovery](../administration/Data_recovery.md)
 - [Tune query performance](../administration/Query_planning.md)
-- [Manage workloads](../administration//resource_group.md)
 
 </NavBoxPartItem>
 </NavBoxPart>

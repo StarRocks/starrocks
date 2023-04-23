@@ -208,8 +208,10 @@ public class FileSystemManager {
         } else if (scheme.equals(OBS_SCHEME)) {
             brokerFileSystem = getOBSFileSystem(path, properties);
         } else {
-            throw new BrokerException(TBrokerOperationStatusCode.INVALID_INPUT_FILE_PATH,
-                    "invalid path. scheme is not supported");
+            // If all above match fails, then we will read the settings from hdfs-site.xml, core-site.xml of FE,
+            // and try to create a universal file system. The reason why we can do this is because hadoop/s3 
+            // SDK is compatible with nearly all file/object storage system
+            brokerFileSystem = getUniversalFileSystem(path, properties);
         }
         return brokerFileSystem;
     }
@@ -606,6 +608,67 @@ public class FileSystemManager {
                 conf.set(FS_OBS_IMPL_DISABLE_CACHE, disableCache);
                 FileSystem obsFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(obsFileSystem);
+            }
+            return fileSystem;
+        } catch (Exception e) {
+            logger.error("errors while connect to " + path, e);
+            throw new BrokerException(TBrokerOperationStatusCode.NOT_AUTHORIZED, e);
+        } finally {
+            fileSystem.getLock().unlock();
+        }
+    }
+
+    /**
+     * visible for test
+     * <p>
+     * file system handle is cached, the identity is endpoint + bucket + accessKey_secretKey
+     *
+     * @param path
+     * @param properties
+     * @return
+     * @throws URISyntaxException
+     * @throws Exception
+     */
+    public BrokerFileSystem getUniversalFileSystem(String path, Map<String, String> properties) {
+        String disableCacheHDFS = properties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
+        String disableCacheS3 = properties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
+
+        // skip xxx:// first
+        int bucketEndIndex = path.indexOf("://", 0);
+
+        // find the end of bucket, for example for xxx://abc/def, we will take xxx://abc as host
+        if (bucketEndIndex != -1) {
+            bucketEndIndex = path.indexOf("/", bucketEndIndex + 3);
+        }
+        String host = path;
+        if (bucketEndIndex != -1) {
+            host = path.substring(0, bucketEndIndex);
+        }
+
+        FileSystemIdentity fileSystemIdentity = new FileSystemIdentity(host, "");
+        cachedFileSystem.putIfAbsent(fileSystemIdentity, new BrokerFileSystem(fileSystemIdentity));
+        BrokerFileSystem fileSystem = cachedFileSystem.get(fileSystemIdentity);
+
+        if (fileSystem == null) {
+            // it means it is removed concurrently by checker thread
+            return null;
+        }
+        fileSystem.getLock().lock();
+        try {
+            if (!cachedFileSystem.containsKey(fileSystemIdentity)) {
+                // this means the file system is closed by file system checker thread
+                // it is a corner case
+                return null;
+            }
+
+            if (fileSystem.getDFSFileSystem() == null) {
+                logger.info("could not find file system for path " + path + " create a new one");
+                // create a new filesystem
+                Configuration conf = new Configuration();
+                conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCacheHDFS);
+                conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCacheS3);
+                FileSystem genericFileSystem = FileSystem.get(new Path(path).toUri(), conf);
+                fileSystem.setFileSystem(genericFileSystem);
             }
             return fileSystem;
         } catch (Exception e) {

@@ -2,11 +2,11 @@
 
 ## Background
 
-The window function is a special class of built-in functions. Similar to the aggregation function, it also does calculations on multiple input rows to get a single data value. The difference is that the window function processes the input data within a specific window, rather than using the “group by” method. The data in each window can be sorted and grouped using the over() clause. The window function **computes a separate value for each row**, rather than computing one value for each group. This flexibility allows users to add additional columns to the select clause and further filter the result set. The window function can only appear in the select list and the outermost position of a clause. It takes effect at the end of the query, that is, after the `join`, `where`, and `group by` operations are performed. The window function is often used to analyze trends, calculate outliers, and perform bucketing analyses on large-scale data.
+The window function is a special class of built-in functions. Similar to the aggregation function, it also does calculations on multiple input rows to get a single data value. The difference is that the window function processes the input data within a specific window, rather than using the "group by" method. The data in each window can be sorted and grouped using the over() clause. The window function **computes a separate value for each row**, rather than computing one value for each group. This flexibility allows users to add additional columns to the select clause and further filter the result set. The window function can only appear in the select list and the outermost position of a clause. It takes effect at the end of the query, that is, after the `join`, `where`, and `group by` operations are performed. The window function is often used to analyze trends, calculate outliers, and perform bucketing analyses on large-scale data.
 
 ## Usage
 
-Syntax of the window function：
+Syntax of the window function:
 
 ~~~SQL
 function(args) OVER(partition_by_clause order_by_clause [window_clause])
@@ -120,7 +120,7 @@ This section describes the window functions supported in StarRocks.
 Syntax:
 
 ~~~SQL
-AVG([DISTINCT | ALL] *expression*) [OVER (*analytic_clause*)]
+AVG(expression) [OVER (*analytic_clause*)]
 ~~~
 
 Example:
@@ -161,7 +161,7 @@ where property in ('odd','even');
 Syntax:
 
 ~~~SQL
-COUNT([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+COUNT(expression) [OVER (analytic_clause)]
 ~~~
 
 Example:
@@ -301,8 +301,10 @@ FIRST_VALUE() returns the **first** value of the window range.
 Syntax:
 
 ~~~SQL
-FIRST_VALUE(expr) OVER(partition_by_clause order_by_clause [window_clause])
+FIRST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
 ~~~
+
+`IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the first value in the filtered result is NULL. If you specify IGNORE NULLS, the first non-null value in the filtered result is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
 
 Example:
 
@@ -415,8 +417,10 @@ LAST_VALUE() returns the **last** value of the window range. It is the opposite 
 Syntax:
 
 ~~~SQL
-LAST_VALUE(expr) OVER(partition_by_clause order_by_clause [window_clause])
+LAST_VALUE(expr [IGNORE NULLS]) OVER(partition_by_clause order_by_clause [window_clause])
 ~~~
+
+`IGNORE NULLS` is supported from v2.5.0. It is used to determine whether NULL values of `expr` are eliminated from the calculation. By default, NULL values are included, which means NULL is returned if the last value in the filtered result is NULL. If you specify IGNORE NULLS, the last non-null value in the filtered result is returned. If all the values are NULL, NULL is returned even if you specify IGNORE NULLS.
 
 Use the data from the example:
 
@@ -449,20 +453,20 @@ Returns the value of the row that leads the current row by `offset` rows. This f
 
 Data types that can be queried by `lead()` are the same as those supported by [lag()](#lag).
 
-Syntax：
+Syntax
 
 ~~~Haskell
 LEAD(expr[, offset[, default]])
 OVER([<partition_by_clause>] [<order_by_clause>])
 ~~~
 
-Parameters：
+Parameters:
 
 * `expr`: the field you want to compute.
 * `offset`: the offset. It must be a positive integer. If this parameter is not specified, 1 is the default.
 * `default`: the default value returned if no matching row is found. If this parameter is not specified, NULL is the default. `default` supports any expression whose type is compatible with `expr`.
 
-Example：
+Example:
 
 Calculate the trending of closing prices between two days, that is, whether the price of the next day is higher or lower. `default` is set to 0, which means 0 is returned if no matching row is found.
 
@@ -498,10 +502,10 @@ Output
 
 Returns the maximum value of the specified rows in the current window.
 
-Syntax：
+Syntax
 
 ~~~SQL
-MAX([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+MAX(expression) [OVER (analytic_clause)]
 ~~~
 
 Example:
@@ -551,10 +555,10 @@ where property in ('prime','square');
 
 Returns the minimum value of the specified rows in the current window.
 
-Syntax：
+Syntax:
 
 ~~~SQL
-MIN([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+MIN(expression) [OVER (analytic_clause)]
 ~~~
 
 Example:
@@ -670,7 +674,7 @@ from int_t;
 
 ### QUALIFY()
 
-The QUALIFY clause filters the results of window functions. In a SELECT statement, you can use the QUALIFY clause to apply conditions to a column to filter results. QUALIFY is analogous to the HAVING clause in aggregate functions.
+The QUALIFY clause filters the results of window functions. In a SELECT statement, you can use the QUALIFY clause to apply conditions to a column to filter results. QUALIFY is analogous to the HAVING clause in aggregate functions. This function is supported from v2.5.
 
 QUALIFY simplifies the writing of SELECT statements.
 
@@ -806,10 +810,10 @@ The execution order of clauses in a query with QUALIFY is evaluated in the follo
 
 ### SUM()
 
-Syntax：
+Syntax:
 
 ~~~SQL
-SUM([DISTINCT | ALL] expression) [OVER (analytic_clause)]
+SUM(expression) [OVER (analytic_clause)]
 ~~~
 
 Example:

@@ -73,11 +73,16 @@ size_t fill_null_column(const arrow::Array* array, size_t array_start_idx, size_
 }
 
 void fill_filter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column::Filter* filter,
-                 size_t column_start_idx) {
+                 size_t column_start_idx, ArrowConvertContext* ctx) {
     DCHECK_EQ(filter->size(), column_start_idx + num_elements);
     auto* filter_data = (&filter->front()) + column_start_idx;
+    bool all_invalid = true;
     for (size_t i = 0; i < num_elements; ++i) {
         filter_data[i] = array->IsValid(array_start_idx + i);
+        all_invalid &= filter_data[i];
+    }
+    if (UNLIKELY(!all_invalid)) {
+        ctx->report_error_message("column type is not null but data is null", "");
     }
 }
 // A general arrow converter for fixed length type
@@ -674,6 +679,19 @@ constexpr int32_t convert_idx(ArrowTypeId at, PrimitiveType pt, bool is_nullable
     return (at << 17) | (pt << 2) | (is_nullable ? 2 : 0) | (is_strict ? 1 : 0);
 }
 
+// Convert Arrow null to any types
+Status null_converter(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                      size_t column_start_idx, uint8_t* null_data, uint8_t* filter_data, ArrowConvertContext* ctx) {
+    if (null_data == nullptr) {
+        return Status::InvalidArgument(fmt::format("The column ({}) must be nullable", ctx->current_slot->col_name()));
+    }
+    for (size_t i = 0; i < num_elements; i++) {
+        null_data[column_start_idx + i] = 1;
+    }
+    column->append_default(num_elements);
+    return {};
+}
+
 #define ARROW_CONV_SINGLE_ENTRY_CTOR(a, b, t0, t1) \
     { convert_idx(a, b, t0, t1), &ArrowConverter<a, b, t0, t1>::apply }
 
@@ -740,8 +758,11 @@ static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_con
         ARROW_CONV_ENTRY(ArrowTypeId::STRUCT, TYPE_JSON),
 };
 
-ConvertFunc get_arrow_converter(ArrowTypeId at, PrimitiveType pt, bool is_nullable, bool is_strict) {
-    auto optimized_idx = convert_idx(at, pt, is_nullable, is_strict);
+ConvertFunc get_arrow_converter(ArrowTypeId at, PrimitiveType lt, bool is_nullable, bool is_strict) {
+    if (at == ArrowTypeId::NA) {
+        return null_converter;
+    }
+    auto optimized_idx = convert_idx(at, lt, is_nullable, is_strict);
     auto it = global_optimized_arrow_conv_table.find(optimized_idx);
     if (it != global_optimized_arrow_conv_table.end()) {
         return it->second;
@@ -765,181 +786,221 @@ struct ArrowListConverter {
     }
     static bool is_list(ArrowTypeId t) { return t == ArrowTypeId::LIST; }
     static bool is_large_list(ArrowTypeId t) { return t == ArrowTypeId::LARGE_LIST; }
-    static bool is_any_list(ArrowTypeId t) { return is_list(t) || is_large_list(t); }
-
-    template <ArrowTypeId AT>
-    static void unfold(std::vector<const arrow::Array*>* layers, std::vector<std::pair<size_t, size_t>>* ranges,
-                       const arrow::Array** last_layer, std::pair<size_t, size_t>* last_range) {
-        using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
-        layers->push_back(*last_layer);
-        ranges->push_back(*last_range);
-        auto concrete_array = down_cast<const ArrowArrayType*>(*last_layer);
-        *last_layer = concrete_array->values().get();
-        *last_range = {concrete_array->value_offset(last_range->first),
-                       concrete_array->value_offset(last_range->second)};
-    }
-
-    static Status layer_depth_exceeds_limit_error(const std::string& name, const size_t depth_limit) {
-        return Status::InternalError(strings::Substitute("Layer depth of $0 exceeds limit($1)", name, depth_limit));
-    }
-    static Status flatten_and_verify_list(const arrow::Array* array, size_t array_start_idx, size_t num_elements,
-                                          const size_t depth_limit, std::vector<const arrow::Array*>* layers,
-                                          std::vector<std::pair<size_t, size_t>>* ranges) {
-        layers->clear();
-        ranges->clear();
-        layers->reserve(depth_limit + 1);
-        ranges->reserve(depth_limit + 1);
-        const auto* last_layer = array;
-        auto last_range = std::make_pair(array_start_idx, array_start_idx + num_elements);
-        for (auto i = 0; i < depth_limit + 1; ++i) {
-            auto id = last_layer->type_id();
-            if (id == ArrowTypeId::LIST) {
-                unfold<ArrowTypeId::LIST>(layers, ranges, &last_layer, &last_range);
-                continue;
-            }
-            if (id == ArrowTypeId::LARGE_LIST) {
-                unfold<ArrowTypeId::LARGE_LIST>(layers, ranges, &last_layer, &last_range);
-                continue;
-            }
-            if (is_non_nested(id)) {
-                layers->push_back(last_layer);
-                ranges->push_back(last_range);
-                break;
-            }
-            return Status::InternalError(strings::Substitute("Illegal type($0 in list)", last_layer->type()->name()));
-        }
-        if (layers->size() > depth_limit && is_any_list(last_layer->type()->id())) {
-            return layer_depth_exceeds_limit_error("arrow list", depth_limit);
-        }
-        return Status::OK();
-    }
-
-    static Status flatten_and_verify_column(Column* array_column, const TypeDescriptor* type_desc,
-                                            const size_t depth_limit, std::vector<UInt32ColumnPtr>* offsets_layers,
-                                            std::vector<NullColumnPtr>* nulls_layers, Column** last_layer,
-                                            const TypeDescriptor** last_type_desc) {
-        offsets_layers->clear();
-        nulls_layers->clear();
-        Column* current_layer = array_column;
-        const TypeDescriptor* current_type = type_desc;
-        while (current_type->type == TYPE_ARRAY && offsets_layers->size() < depth_limit) {
-            auto* current_concrete_layer = down_cast<ArrayColumn*>(current_layer);
-            offsets_layers->push_back(current_concrete_layer->offsets_column());
-            current_layer = current_concrete_layer->elements_column().get();
-            if (current_layer->is_constant() || current_layer->only_null() || !current_layer->is_nullable()) {
-                return Status::InternalError("ArrayColumn in construction has no const or const_null layer");
-            }
-            auto* nullable_column = down_cast<NullableColumn*>(current_layer);
-            nulls_layers->push_back(nullable_column->null_column());
-            current_layer = nullable_column->data_column().get();
-            current_type = &current_type->children[0];
-        }
-        if (current_type->type == TYPE_ARRAY) {
-            return layer_depth_exceeds_limit_error("column", depth_limit);
-        }
-        *last_layer = current_layer;
-        *last_type_desc = current_type;
-        return Status::OK();
-    }
+    static bool is_fixed_size_list(ArrowTypeId t) { return t == ArrowTypeId::FIXED_SIZE_LIST; }
+    static bool is_any_list(ArrowTypeId t) { return is_list(t) || is_large_list(t) || is_fixed_size_list(t); }
 
     template <typename T>
-    static void list_offsets_copy(const arrow::Array* layer, const size_t layer_start_idx,
-                                  const size_t layer_num_elements, const UInt32ColumnPtr& offsets_layer) {
+    static void list_offsets_copy(const arrow::Array* layer, const size_t array_start_idx, const size_t num_elements,
+                                  UInt32Column* col_offsets) {
         using ArrowArrayType = typename arrow::TypeTraits<T>::ArrayType;
         using OffsetsType = typename T::offset_type;
         auto* concrete_array = down_cast<const ArrowArrayType*>(layer);
-        auto* arrow_offsets_data = concrete_array->raw_value_offsets() + layer_start_idx;
+        auto* arrow_offsets_data = concrete_array->raw_value_offsets() + array_start_idx;
         auto arrow_base_offset = arrow_offsets_data[0];
         arrow_offsets_data += 1;
-        auto start_idx = offsets_layer->size() - 1;
-        offsets_layer->resize(offsets_layer->size() + layer_num_elements);
-        auto* offsets_data = &offsets_layer->get_data().front() + start_idx;
+        auto start_idx = col_offsets->size() - 1;
+        col_offsets->resize(col_offsets->size() + num_elements);
+        auto* offsets_data = &col_offsets->get_data().front() + start_idx;
         auto base_offset = offsets_data[0];
         offsets_data += 1;
-        offsets_copy<OffsetsType>(arrow_offsets_data, arrow_base_offset, layer_num_elements, offsets_data, base_offset);
+        offsets_copy<OffsetsType>(arrow_offsets_data, arrow_base_offset, num_elements, offsets_data, base_offset);
     }
 
-    static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, size_t depth_limit,
-                        const TypeDescriptor* type_desc, Column* column, size_t column_start_idx,
-                        [[maybe_unused]] uint8_t* null_data, ArrowConvertContext* ctx) {
-        std::vector<const arrow::Array*> list_layers;
-        std::vector<std::pair<size_t, size_t>> layer_ranges;
-        list_layers.reserve(depth_limit + 1);
-        layer_ranges.reserve(depth_limit + 1);
-        Status status;
-        status =
-                flatten_and_verify_list(array, array_start_idx, num_elements, depth_limit, &list_layers, &layer_ranges);
-        if (!status.ok()) {
-            return status;
+    static void fixed_size_list_offsets_copy(const arrow::Array* layer, const size_t array_start_idx,
+                                             const size_t num_elements, UInt32Column* col_offsets) {
+        using ArrowArrayType = typename arrow::TypeTraits<arrow::FixedSizeListType>::ArrayType;
+        using OffsetsType = typename arrow::FixedSizeListType::offset_type;
+        auto* concrete_array = down_cast<const ArrowArrayType*>(layer);
+        auto arrow_base_offset = concrete_array->value_offset(array_start_idx);
+        auto start_idx = col_offsets->size() - 1;
+        col_offsets->resize(col_offsets->size() + num_elements);
+        auto* offsets_data = &col_offsets->get_data().front() + start_idx;
+        auto base_offset = offsets_data[0];
+        offsets_data += 1;
+
+        for (auto i = 0; i < num_elements; ++i) {
+            // never change following code to
+            // base_offsets - arrow_base_offset + arrow_offsets_data[i],
+            // that would cause underflow for unsigned int;
+            offsets_data[i] = base_offset + (concrete_array->value_offset(array_start_idx + i + 1) - arrow_base_offset);
+        }
+    }
+
+    template <typename T>
+    static arrow::Array* get_list_array_child(const arrow::Array* array, size_t array_start_idx = 0,
+                                              size_t num_elements = 0, size_t* child_array_start_idx = nullptr,
+                                              size_t* child_array_num_elements = nullptr) {
+        using ArrowArrayType = typename arrow::TypeTraits<T>::ArrayType;
+        using OffsetsType = typename T::offset_type;
+        if (child_array_start_idx && child_array_num_elements) {
+            auto child_array = down_cast<const ArrowArrayType*>(array);
+            *child_array_start_idx = child_array->value_offset(array_start_idx),
+            *child_array_num_elements =
+                    child_array->value_offset(array_start_idx + num_elements) - *child_array_start_idx;
+            return child_array->values().get();
+        }
+        return down_cast<const ArrowArrayType*>(array)->values().get();
+    }
+
+    static arrow::Array* unnest_list_array(const arrow::Array* array) {
+        auto type_id = array->type_id();
+        if (is_list(type_id)) {
+            return get_list_array_child<arrow::ListType>(array);
+        } else if (is_large_list(type_id)) {
+            return get_list_array_child<arrow::LargeListType>(array);
+        } else if (is_fixed_size_list(type_id)) {
+            return get_list_array_child<arrow::FixedSizeListType>(array);
+        } else {
+            return nullptr;
+        }
+    }
+
+    static arrow::Array* get_child_array_position(const arrow::Array* array, size_t array_start_idx,
+                                                  size_t num_elements, size_t* child_array_start_idx,
+                                                  size_t* child_array_num_elements) {
+        auto type_id = array->type_id();
+        if (is_list(type_id)) {
+            return get_list_array_child<arrow::ListType>(array, array_start_idx, num_elements, child_array_start_idx,
+                                                         child_array_num_elements);
+        } else if (is_large_list(type_id)) {
+            return get_list_array_child<arrow::LargeListType>(array, array_start_idx, num_elements,
+                                                              child_array_start_idx, child_array_num_elements);
+        } else if (is_fixed_size_list(type_id)) {
+            return get_list_array_child<arrow::FixedSizeListType>(array, array_start_idx, num_elements,
+                                                                  child_array_start_idx, child_array_num_elements);
+        } else {
+            return nullptr;
+        }
+    }
+
+    static Status convert_list(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                               size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
+                               Column::Filter* column_filter, ArrowConvertContext* ctx,
+                               const TypeDescriptor* type_desc) {
+        auto* col_array = down_cast<ArrayColumn*>(column);
+        UInt32Column* col_offsets = col_array->offsets_column().get();
+
+        auto type_id = array->type_id();
+        if (is_list(type_id)) {
+            list_offsets_copy<arrow::ListType>(array, array_start_idx, num_elements, col_offsets);
+        } else if (is_large_list(type_id)) {
+            list_offsets_copy<arrow::LargeListType>(array, array_start_idx, num_elements, col_offsets);
+        } else if (is_fixed_size_list(type_id)) {
+            fixed_size_list_offsets_copy(array, array_start_idx, num_elements, col_offsets);
+        } else {
+            return Status::InternalError(strings::Substitute("Invalid arrow list type($0)", array->type()->name()));
         }
 
-        std::vector<UInt32ColumnPtr> offsets_layers;
-        std::vector<NullColumnPtr> nulls_layers;
-        Column* last_column = nullptr;
-        const TypeDescriptor* last_type_desc = nullptr;
-        status = flatten_and_verify_column(column, type_desc, depth_limit, &offsets_layers, &nulls_layers, &last_column,
-                                           &last_type_desc);
-        if (!status.ok()) {
-            return status;
+        Column* col_elements = col_array->elements_column().get();
+        const TypeDescriptor& child_type = type_desc->children[0];
+        size_t child_array_start_idx;
+        size_t child_array_num_elements;
+        const auto* child_array = get_child_array_position(array, array_start_idx, num_elements, &child_array_start_idx,
+                                                           &child_array_num_elements);
+        if (!child_array) {
+            return Status::InternalError(strings::Substitute("Unnest arrow list type($0) fail", array->type()->name()));
         }
-
-        if (list_layers.size() - 1 != offsets_layers.size()) {
-            return Status::InternalError(
-                    strings::Substitute("Different layer depth between arrow list($0) and column$($1)",
-                                        list_layers.size() - 1, offsets_layers.size()));
-        }
-
-        auto last_arrow_type = list_layers.back()->type();
-        // for timestamp type, state->timezone is specified by user. convert function
-        // obtains timezone from array. thus timezone in array should be rectified to
-        // state->timezone.
-        if (list_layers.back()->type_id() == ArrowTypeId::TIMESTAMP) {
-            auto* timestamp_type = down_cast<arrow::TimestampType*>(last_arrow_type.get());
-            auto& mutable_timezone = (std::string&)timestamp_type->timezone();
-            mutable_timezone = ctx->state->timezone();
-        }
-        auto conv_func = get_arrow_converter(last_arrow_type->id(), last_type_desc->type, true, false);
-        if (conv_func == nullptr) {
-            return illegal_converting_error(last_arrow_type->name(), last_type_desc->debug_string());
-        }
-
-        const auto depth = offsets_layers.size();
-        for (auto d = 0; d < depth; ++d) {
-            auto& layer = list_layers[d];
-            auto& range = layer_ranges[d];
-            auto& offsets_layer = offsets_layers[d];
-            auto type_id = layer->type_id();
-            auto layer_start_idx = range.first;
-            auto layer_num_elements = range.second - range.first;
-            if (is_list(type_id)) {
-                list_offsets_copy<arrow::ListType>(layer, layer_start_idx, layer_num_elements, offsets_layer);
-            } else if (is_large_list(type_id)) {
-                list_offsets_copy<arrow::LargeListType>(layer, layer_start_idx, layer_num_elements, offsets_layer);
-            } else {
-                return Status::InternalError(strings::Substitute("Invalid arrow list type($0)", layer->type()->name()));
+        if (child_type.type == TYPE_ARRAY) {
+            return ArrowListConverter::apply(child_array, child_array_start_idx, child_array_num_elements, col_elements,
+                                             column_start_idx, null_data, column_filter, ctx, &child_type);
+        } else {
+            auto conv_func = get_arrow_converter(child_array->type()->id(), child_type.type, true, false);
+            if (!conv_func) {
+                return illegal_converting_error(child_array->type()->name(), child_type.debug_string());
             }
+            if (child_array->type_id() == ArrowTypeId::TIMESTAMP) {
+                auto* timestamp_type = down_cast<arrow::TimestampType*>(child_array->type().get());
+                auto& mutable_timezone = (std::string&)timestamp_type->timezone();
+                mutable_timezone = ctx->state->timezone();
+            }
+            uint8_t* null_data;
+            Column* data_column;
+            column_start_idx = col_elements->size();
+            if (col_elements->is_nullable()) {
+                auto nullable_column = down_cast<NullableColumn*>(col_elements);
+                auto null_column = nullable_column->mutable_null_column();
+                size_t null_count = fill_null_column(child_array, child_array_start_idx, child_array_num_elements,
+                                                     null_column, column_start_idx);
+                nullable_column->set_has_null(null_count != 0);
+                null_data = &null_column->get_data().front() + column_start_idx;
+                data_column = nullable_column->data_column().get();
+            } else {
+                null_data = nullptr;
+                // Fill nullable array into not-nullable column, positions of NULLs is marked as 1
+                fill_filter(child_array, child_array_start_idx, child_array_num_elements, column_filter,
+                            column_start_idx, ctx);
+                data_column = col_elements;
+            }
+            auto* filter_data = (&column_filter->front()) + column_start_idx;
+            auto st = conv_func(child_array, child_array_start_idx, child_array_num_elements, data_column,
+                                column_start_idx, null_data, filter_data, ctx);
+            if (st.ok()) {
+                // in some scene such as string length exceeds limit, the column will be set NULL, so we need reset has_null
+                if (col_elements->is_nullable()) {
+                    down_cast<NullableColumn*>(col_elements)->update_has_null();
+                }
+            }
+            return st;
         }
+    }
 
-        auto& last_layer = list_layers.back();
-        auto& last_range = layer_ranges.back();
-        auto& last_nulls_layer = nulls_layers.back();
+    static Status convert_list_with_null(const arrow::Array* array, size_t array_start_idx, size_t num_elements,
+                                         Column* column, size_t column_start_idx, [[maybe_unused]] uint8_t* null_data,
+                                         Column::Filter* column_filter, ArrowConvertContext* ctx,
+                                         const TypeDescriptor* type_desc) {
+        auto nullable_column = down_cast<NullableColumn*>(column);
+        auto null_column = nullable_column->mutable_null_column();
+        size_t null_count = fill_null_column(array, array_start_idx, num_elements, null_column, column_start_idx);
+        nullable_column->set_has_null(null_count != 0);
+        return convert_list(array, array_start_idx, num_elements, nullable_column->data_column().get(),
+                            column_start_idx, null_data, column_filter, ctx, type_desc);
+    }
 
-        auto layer_start_idx = last_range.first;
-        auto layer_num_elements = last_range.second - last_range.first;
+    static Status apply(const arrow::Array* array, size_t array_start_idx, size_t num_elements, Column* column,
+                        size_t column_start_idx, [[maybe_unused]] uint8_t* null_data, Column::Filter* column_filter,
+                        ArrowConvertContext* ctx, const TypeDescriptor* type_desc) {
+        if (column->is_nullable()) {
+            return convert_list_with_null(array, array_start_idx, num_elements, column, column_start_idx, null_data,
+                                          column_filter, ctx, type_desc);
+        } else {
+            return convert_list(array, array_start_idx, num_elements, column, column_start_idx, null_data,
+                                column_filter, ctx, type_desc);
+        }
+    }
 
-        fill_null_column(last_layer, layer_start_idx, layer_num_elements, last_nulls_layer.get(),
-                         last_nulls_layer->size());
-
-        auto* last_null_data = (&last_nulls_layer->get_data().front()) + last_nulls_layer->size() - layer_num_elements;
-
-        conv_func(last_layer, layer_start_idx, layer_num_elements, last_column, last_column->size(), last_null_data,
-                  nullptr, ctx);
-
+    static Status check_arrow_list_depth(const arrow::Array* array, size_t expected_depth) {
+        size_t array_list_depth = 1;
+        while (true) {
+            auto type_id = array->type_id();
+            if (is_list(type_id) || is_large_list(type_id)) {
+                array = unnest_list_array(array);
+                if (!array) {
+                    return Status::InternalError(
+                            strings::Substitute("Unnest arrow list type($0) fail", array->type()->name()));
+                }
+                array_list_depth++;
+                continue;
+            }
+            if (is_non_nested(type_id)) {
+                break;
+            }
+            return Status::InternalError(strings::Substitute("Illegal type($0 in list)", array->type()->name()));
+        }
+        if (expected_depth != array_list_depth) {
+            return Status::InternalError(
+                    strings::Substitute("Nested parquet array depth $0 doesn't equal to expected depth $1",
+                                        array_list_depth, expected_depth));
+        }
         return Status::OK();
     }
 };
+
 ListConvertFunc get_arrow_list_converter() {
     return &ArrowListConverter::apply;
+}
+
+ListCheckDepthFunc get_arrow_list_check_depth() {
+    return &ArrowListConverter::check_arrow_list_depth;
 }
 
 static const int MAX_ERROR_MESSAGE_COUNTER = 100;

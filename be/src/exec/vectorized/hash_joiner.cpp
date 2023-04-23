@@ -38,7 +38,6 @@ HashJoiner::HashJoiner(const HashJoinerParam& param, const std::vector<HashJoine
           _build_conjunct_ctxs_is_empty(param._build_conjunct_ctxs_is_empty),
           _output_slots(param._output_slots),
           _build_runtime_filters(param._build_runtime_filters.begin(), param._build_runtime_filters.end()),
-          _is_buildable(param._is_buildable),
           _read_only_join_probers(read_only_join_probers) {
     _is_push_down = param._hash_join_node.is_push_down;
     if (_join_type == TJoinOp::LEFT_ANTI_JOIN && param._hash_join_node.is_rewritten_from_not_in) {
@@ -52,8 +51,6 @@ HashJoiner::HashJoiner(const HashJoinerParam& param, const std::vector<HashJoine
 }
 
 Status HashJoiner::prepare_builder(RuntimeState* state, RuntimeProfile* runtime_profile) {
-    DCHECK(_is_buildable);
-
     if (_runtime_state == nullptr) {
         _runtime_state = state;
     }
@@ -130,7 +127,7 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
         expr_context->root()->get_slot_ids(&expr_slots);
         predicate_slots.insert(expr_slots.begin(), expr_slots.end());
     }
-    param->predicate_slots = predicate_slots;
+    param->predicate_slots = std::move(predicate_slots);
 
     for (auto i = 0; i < _build_expr_ctxs.size(); i++) {
         Expr* expr = _build_expr_ctxs[i]->root();

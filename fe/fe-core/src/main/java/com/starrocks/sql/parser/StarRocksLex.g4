@@ -1,7 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 lexer grammar StarRocksLex;
-@parser::members {public static long sqlMode;}
+@members {
+private long sqlMode = com.starrocks.qe.SqlModeHelper.MODE_DEFAULT;
+public void setSqlMode(long newSqlMode) {
+    sqlMode = newSqlMode;
+}
+}
 tokens {
     CONCAT
 }
@@ -44,6 +49,7 @@ CATALOGS: 'CATALOGS';
 CEIL: 'CEIL';
 CHAIN: 'CHAIN';
 CHAR: 'CHAR';
+CHARACTER: 'CHARACTER';
 CHARSET: 'CHARSET';
 CHECK: 'CHECK';
 COLLATE: 'COLLATE';
@@ -110,6 +116,7 @@ EXTERNAL: 'EXTERNAL';
 EXTRACT: 'EXTRACT';
 EVERY: 'EVERY';
 FALSE: 'FALSE';
+FIELDS: 'FIELDS';
 FILE: 'FILE';
 FILTER: 'FILTER';
 FIRST: 'FIRST';
@@ -149,6 +156,7 @@ IDENTIFIED: 'IDENTIFIED';
 IF: 'IF';
 IMPERSONATE: 'IMPERSONATE';
 IGNORE: 'IGNORE';
+IMAGE: 'IMAGE';
 IN: 'IN';
 INDEX: 'INDEX';
 INDEXES: 'INDEXES';
@@ -215,6 +223,7 @@ NOT: 'NOT';
 NULL: 'NULL';
 NULLS: 'NULLS';
 OBSERVER: 'OBSERVER';
+OF: 'OF';
 OFFSET: 'OFFSET';
 ON: 'ON';
 ONLY: 'ONLY';
@@ -237,6 +246,7 @@ PLUGIN: 'PLUGIN';
 PLUGINS: 'PLUGINS';
 PRECEDING: 'PRECEDING';
 PRIMARY: 'PRIMARY';
+PRIVILEGES: 'PRIVILEGES';
 PROC: 'PROC';
 PROCEDURE: 'PROCEDURE';
 PROCESSLIST: 'PROCESSLIST';
@@ -306,6 +316,7 @@ SUBMIT: 'SUBMIT';
 SUM: 'SUM';
 SYNC: 'SYNC';
 SYSTEM: 'SYSTEM';
+SYSTEM_TIME: 'SYSTEM_TIME';
 SWAP: 'SWAP';
 STRUCT: 'STRUCT';
 TABLE: 'TABLE';
@@ -354,6 +365,10 @@ WITH: 'WITH';
 WORK: 'WORK';
 WRITE: 'WRITE';
 YEAR: 'YEAR';
+CURRENT_CATALOG: 'CURRENT_CATALOG';
+LOCK: 'LOCK';
+UNLOCK: 'UNLOCK';
+LOW_PRIORITY: 'LOW_PRIORITY';
 
 EQ  : '=';
 NEQ : '<>' | '!=';
@@ -369,7 +384,7 @@ ASTERISK_SYMBOL: '*';
 SLASH_SYMBOL: '/';
 PERCENT_SYMBOL: '%';
 
-LOGICAL_OR: '||' {setType((StarRocksParser.sqlMode & com.starrocks.qe.SqlModeHelper.MODE_PIPES_AS_CONCAT) == 0 ? LOGICAL_OR : StarRocksParser.CONCAT);};
+LOGICAL_OR: '||' {setType((sqlMode & com.starrocks.qe.SqlModeHelper.MODE_PIPES_AS_CONCAT) == 0 ? LOGICAL_OR : StarRocksParser.CONCAT);};
 LOGICAL_AND: '&&';
 LOGICAL_NOT: '!';
 
@@ -378,6 +393,9 @@ BITAND: '&';
 BITOR: '|';
 BITXOR: '^';
 BITNOT: '~';
+BIT_SHIFT_LEFT: 'BITSHIFTLEFT';
+BIT_SHIFT_RIGHT: 'BITSHIFTRIGHT';
+BIT_SHIFT_RIGHT_LOGICAL: 'BITSHIFTRIGHTLOGICAL';
 
 ARROW: '->';
 AT: '@';

@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 public class PhysicalOlapScanOperator extends PhysicalScanOperator {
@@ -35,9 +36,6 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     protected boolean needSortedByKeyPerTablet = false;
 
     private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-    // For the simple predicate k1 = "olap", could apply global dict optimization,
-    // need to store the string column k1 and generate the string slot in plan fragment builder
-    private List<ColumnRefOperator> globalDictStringColumns = Lists.newArrayList();
     // TODO: remove this
     private Map<Integer, Integer> dictStringIdToIntIds = Maps.newHashMap();
 
@@ -94,15 +92,6 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         this.globalDicts = globalDicts;
     }
 
-    public List<ColumnRefOperator> getGlobalDictStringColumns() {
-        return globalDictStringColumns;
-    }
-
-    public void setGlobalDictStringColumns(
-            List<ColumnRefOperator> globalDictStringColumns) {
-        this.globalDictStringColumns = globalDictStringColumns;
-    }
-
     public Map<Integer, Integer> getDictStringIdToIntIds() {
         return dictStringIdToIntIds;
     }
@@ -139,6 +128,30 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalOlapScan(optExpression, context);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), selectedIndexId, selectedPartitionId,
+                selectedTabletId);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        PhysicalOlapScanOperator that = (PhysicalOlapScanOperator) o;
+        return selectedIndexId == that.selectedIndexId &&
+                Objects.equals(hashDistributionSpec, that.hashDistributionSpec) &&
+                Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
+                Objects.equals(selectedTabletId, that.selectedTabletId);
     }
 
     public HashDistributionSpec getDistributionSpec() {

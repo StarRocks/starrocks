@@ -150,6 +150,17 @@ public class AggregateFunction extends Function {
         returnsNonNullOnEmpty = false;
     }
 
+    public AggregateFunction(AggregateFunction other) {
+        super(other);
+        intermediateType = other.intermediateType;
+        ignoresDistinct = other.ignoresDistinct;
+        isAnalyticFn = other.isAnalyticFn;
+        isAggregateFn = other.isAggregateFn;
+        returnsNonNullOnEmpty = other.returnsNonNullOnEmpty;
+        symbolName = other.symbolName;
+
+    }
+
     public String getSymbolName() {
         return symbolName == null ? Strings.EMPTY : symbolName;
     }
@@ -334,6 +345,11 @@ public class AggregateFunction extends Function {
         properties.put(CreateFunctionStmt.SYMBOL_KEY, symbolName == null ? "" : symbolName);
         properties.put(CreateFunctionStmt.TYPE_KEY, getBinaryType().name());
         return new Gson().toJson(properties);
+    }
+
+    @Override
+    public Function copy() {
+        return new AggregateFunction(this);
     }
 }
 

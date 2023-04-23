@@ -29,8 +29,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TreeNode;
@@ -52,6 +50,7 @@ import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprOpcode;
+import com.starrocks.thrift.TFunction;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -59,6 +58,7 @@ import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -177,12 +177,17 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // Set in analyze().
     protected Function fn;
 
+    // Ignore nulls.
+    private boolean ignoreNulls = false;
+
     // Cached value of IsConstant(), set during analyze() and valid if isAnalyzed_ is true.
     private boolean isConstant_;
 
     // Flag to indicate whether to wrap this expr's toSql() in parenthesis. Set by parser.
     // Needed for properly capturing expr precedences in the SQL string.
     protected boolean printSqlInParens = false;
+
+    private List<String> hints = Collections.emptyList();
 
     protected Expr() {
         super();
@@ -208,6 +213,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         fn = other.fn;
         printSqlInParens = other.printSqlInParens;
         children = Expr.cloneList(other.children);
+        hints = Lists.newArrayList(hints);
     }
 
     @SuppressWarnings("unchecked")
@@ -416,6 +422,10 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     public static Expr compoundAnd(Collection<Expr> conjuncts) {
         return createCompound(CompoundPredicate.Operator.AND, conjuncts);
+    }
+
+    public static Expr compoundOr(Collection<Expr> conjuncts) {
+        return createCompound(CompoundPredicate.Operator.OR, conjuncts);
     }
 
     // Build a compound tree by bottom up
@@ -733,21 +743,17 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     final void treeToThriftHelper(TExpr container, ExprVisitor visitor) {
         TExprNode msg = new TExprNode();
 
-        if (type.isNull()) {
-            // Hack to ensure BE never sees TYPE_NULL. If an expr makes it this far without
-            // being cast to a non-NULL type, the type doesn't matter and we can cast it
-            // arbitrarily.
-            NullLiteral l = NullLiteral.create(ScalarType.BOOLEAN);
-            l.treeToThriftHelper(container, visitor);
-            return;
-        }
+        Preconditions.checkState(!type.isNull(), "NULL_TYPE is illegal in thrift stage");
+        Preconditions.checkState(!Objects.equal(Type.ARRAY_NULL, type), "Array<NULL_TYPE> is illegal in thrift stage");
 
         msg.type = type.toThrift();
         msg.num_children = children.size();
         msg.setHas_nullable_child(hasNullableChild());
         msg.setIs_nullable(isNullable());
         if (fn != null) {
-            msg.setFn(fn.toThrift());
+            TFunction tfn = fn.toThrift();
+            tfn.setIgnore_nulls(getIgnoreNulls());
+            msg.setFn(tfn);
             if (fn.hasVarArgs()) {
                 msg.setVararg_start_idx(fn.getNumArgs() - 1);
             }
@@ -755,10 +761,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         msg.output_scale = getOutputScale();
         msg.setIs_monotonic(isMonotonic());
         visitor.visit(this, msg);
-        // Echoes the above hack process
-        if (PrimitiveType.NULL_TYPE.toThrift().equals(msg.child_type)) {
-            msg.child_type = PrimitiveType.BOOLEAN.toThrift();
-        }
         container.addToNodes(msg);
         for (Expr child : children) {
             child.treeToThriftHelper(container, visitor);
@@ -1171,7 +1173,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 // otherwise we may recurse infinitely.
                 Method m = root.getChild(0).getClass().getDeclaredMethod(NEGATE_FN);
                 return pushNegationToOperands(root.getChild(0).negate());
-            } catch (NoSuchMethodException e) {
+            } catch (NoSuchMethodException | IllegalStateException e) {
                 // The 'negate' function is not implemented. Break the recursion.
                 return root;
             }
@@ -1330,6 +1332,14 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         this.fn = fn;
     }
 
+    public void setIgnoreNulls(boolean ignoreNulls) {
+        this.ignoreNulls = ignoreNulls;
+    }
+
+    public boolean getIgnoreNulls() {
+        return ignoreNulls;
+    }
+
     // only the first/last one can be lambda functions.
     public boolean hasLambdaFunction(Expr expression) {
         int pos = -1, num = 0;
@@ -1391,4 +1401,13 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             return expr;
         }
     }
+
+    public void setHints(List<String> hints) {
+        this.hints = hints;
+    }
+
+    public List<String> getHints() {
+        return hints;
+    }
+
 }

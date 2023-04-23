@@ -150,6 +150,9 @@ public:
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakePercentileContAggregateFunction();
 
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakePercentileDiscAggregateFunction();
+
     // Windows functions:
     static AggregateFunctionPtr MakeDenseRankWindowFunction();
 
@@ -159,14 +162,14 @@ public:
 
     static AggregateFunctionPtr MakeNtileWindowFunction();
 
-    template <PrimitiveType PT>
+    template <PrimitiveType PT, bool ignoreNulls>
     static AggregateFunctionPtr MakeFirstValueWindowFunction() {
-        return std::make_shared<FirstValueWindowFunction<PT>>();
+        return std::make_shared<FirstValueWindowFunction<PT, ignoreNulls>>();
     }
 
-    template <PrimitiveType PT>
+    template <PrimitiveType PT, bool ignoreNulls>
     static AggregateFunctionPtr MakeLastValueWindowFunction() {
-        return std::make_shared<LastValueWindowFunction<PT>>();
+        return std::make_shared<LastValueWindowFunction<PT, ignoreNulls>>();
     }
 
     template <PrimitiveType PT>
@@ -301,6 +304,11 @@ AggregateFunctionPtr AggregateFactory::MakeHllRawAggregateFunction() {
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
     return std::make_shared<PercentileContAggregateFunction<PT>>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakePercentileDiscAggregateFunction() {
+    return std::make_shared<PercentileDiscAggregateFunction<PT>>();
 }
 
 } // namespace starrocks::vectorized

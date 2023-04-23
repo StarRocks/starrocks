@@ -30,7 +30,7 @@ public:
     void SetUp() override { _runtime_state = _pool.add(new RuntimeState(TQueryGlobals())); }
     void TearDown() override {}
 
-private:
+protected:
     std::unique_ptr<RandomAccessFile> _create_file(const std::string& file_path);
 
     HdfsScannerContext* _create_scan_context();
@@ -184,11 +184,11 @@ private:
     std::string _file_struct_null_path =
             "./be/test/exec/test_data/parquet_scanner/file_reader_test_struct_null.parquet";
 
-    std::string _file_col_not_null_path =
-            "./be/test/exec/test_data/parquet_scanner/col_not_null.parquet";
+    std::string _file_col_not_null_path = "./be/test/exec/test_data/parquet_scanner/col_not_null.parquet";
 
-    std::string _file_map_null_path =
-            "./be/test/exec/test_data/parquet_scanner/map_null.parquet";
+    std::string _file_map_null_path = "./be/test/exec/test_data/parquet_scanner/map_null.parquet";
+
+    std::string _file_array_map_path = "./be/test/exec/test_data/parquet_scanner/hudi_array_map.parquet";
 
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     RuntimeState* _runtime_state = nullptr;
@@ -574,7 +574,7 @@ HdfsScannerContext* FileReaderTest::_create_file_map_partial_materialize_context
             {"c3", type_map_map},
             {"c4", type_map_array},
             {""},
-        };
+    };
     ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(_file_map_path));
@@ -1088,11 +1088,11 @@ TEST_F(FileReaderTest, TestReadArray2dColumn) {
     for (int i = 0; i < chunk->num_rows(); ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
-    EXPECT_EQ(chunk->debug_row(0), "[1, [[1, 2]]]");
-    EXPECT_EQ(chunk->debug_row(1), "[2, [[1, 2], [3, 4]]]");
-    EXPECT_EQ(chunk->debug_row(2), "[3, [[1, 2, 3], [4]]]");
-    EXPECT_EQ(chunk->debug_row(3), "[4, [[1, 2, 3], [4], [5]]]");
-    EXPECT_EQ(chunk->debug_row(4), "[5, [[1, 2, 3], [4, 5]]]");
+    EXPECT_EQ(chunk->debug_row(0), "[1, [[1,2]]]");
+    EXPECT_EQ(chunk->debug_row(1), "[2, [[1,2],[3,4]]]");
+    EXPECT_EQ(chunk->debug_row(2), "[3, [[1,2,3],[4]]]");
+    EXPECT_EQ(chunk->debug_row(3), "[4, [[1,2,3],[4],[5]]]");
+    EXPECT_EQ(chunk->debug_row(4), "[5, [[1,2,3],[4,5]]]");
 }
 
 TEST_F(FileReaderTest, TestReadRequiredArrayColumns) {
@@ -1157,7 +1157,7 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     for (int i = 0; i < chunk->num_rows(); ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
-    EXPECT_EQ(chunk->debug_row(0), "[0, ['abc'->123], ['def'->456]]");
+    EXPECT_EQ(chunk->debug_row(0), "[0, {'abc':123}, {'def':456}]");
 }
 
 TEST_F(FileReaderTest, TestReadMapColumn) {
@@ -1208,17 +1208,15 @@ TEST_F(FileReaderTest, TestReadMapColumn) {
     for (int i = 0; i < chunk->num_rows(); ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
-    EXPECT_EQ(chunk->debug_row(0), "[1, ['k1'->0, 'k2'->1], ['e1'->['f1'->1, 'f2'->2]], ['g1'->[1, 2]]]");
+    EXPECT_EQ(chunk->debug_row(0), "[1, {'k1':0,'k2':1}, {'e1':{'f1':1,'f2':2}}, {'g1':[1,2]}]");
     EXPECT_EQ(chunk->debug_row(1),
-              "[2, ['k1'->1, 'k3'->2, 'k4'->3], ['e1'->['f1'->1, 'f2'->2], 'e2'->['f1'->1, 'f2'->2]], ['g1'->[1], "
-              "'g3'->[2]]]");
-    EXPECT_EQ(chunk->debug_row(2),
-              "[3, ['k2'->2, 'k3'->3, 'k5'->4], ['e1'->['f1'->1, 'f2'->2, 'f3'->3]], ['g1'->[1, 2, 3]]]");
-    EXPECT_EQ(chunk->debug_row(3), "[4, ['k1'->3, 'k2'->4, 'k3'->5], ['e2'->['f2'->2]], ['g1'->[1]]]");
-    EXPECT_EQ(chunk->debug_row(4), "[5, ['k3'->4], ['e2'->['f2'->2]], ['g1'->[NULL]]]");
-    EXPECT_EQ(chunk->debug_row(5), "[6, ['k1'->NULL], ['e2'->['f2'->NULL]], ['g1'->[1]]]");
-    EXPECT_EQ(chunk->debug_row(6), "[7, ['k1'->1, 'k2'->2], ['e2'->['f2'->2]], ['g1'->[1, 2, 3]]]");
-    EXPECT_EQ(chunk->debug_row(7), "[8, ['k3'->4], ['e1'->['f1'->1, 'f2'->2, 'f3'->3]], ['g2'->[1], 'g3'->[2]]]");
+              "[2, {'k1':1,'k3':2,'k4':3}, {'e1':{'f1':1,'f2':2},'e2':{'f1':1,'f2':2}}, {'g1':[1],'g3':[2]}]");
+    EXPECT_EQ(chunk->debug_row(2), "[3, {'k2':2,'k3':3,'k5':4}, {'e1':{'f1':1,'f2':2,'f3':3}}, {'g1':[1,2,3]}]");
+    EXPECT_EQ(chunk->debug_row(3), "[4, {'k1':3,'k2':4,'k3':5}, {'e2':{'f2':2}}, {'g1':[1]}]");
+    EXPECT_EQ(chunk->debug_row(4), "[5, {'k3':4}, {'e2':{'f2':2}}, {'g1':[NULL]}]");
+    EXPECT_EQ(chunk->debug_row(5), "[6, {'k1':NULL}, {'e2':{'f2':NULL}}, {'g1':[1]}]");
+    EXPECT_EQ(chunk->debug_row(6), "[7, {'k1':1,'k2':2}, {'e2':{'f2':2}}, {'g1':[1,2,3]}]");
+    EXPECT_EQ(chunk->debug_row(7), "[8, {'k3':4}, {'e1':{'f1':1,'f2':2,'f3':3}}, {'g2':[1],'g3':[2]}]");
 }
 
 TEST_F(FileReaderTest, TestReadStruct) {
@@ -1286,26 +1284,16 @@ TEST_F(FileReaderTest, TestReadStruct) {
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1024, chunk->num_rows());
 
-    EXPECT_EQ("[0, {f2: 'a', f1: 0, f3: [0, 1, 2]}, 'a', [{e1: 0, e2: 'a'}, {e1: 1, e2: 'a'}], 'A']",
-              chunk->debug_row(0));
-    EXPECT_EQ("[1, {f2: 'a', f1: 1, f3: [1, 2, 3]}, 'a', [{e1: 1, e2: 'a'}, {e1: 2, e2: 'a'}], 'A']",
-              chunk->debug_row(1));
-    EXPECT_EQ("[2, {f2: 'a', f1: 2, f3: [2, 3, 4]}, 'a', [{e1: 2, e2: 'a'}, {e1: 3, e2: 'a'}], 'A']",
-              chunk->debug_row(2));
-    EXPECT_EQ("[3, {f2: 'c', f1: 3, f3: [3, 4, 5]}, 'c', [{e1: 3, e2: 'c'}, {e1: 4, e2: 'c'}], 'C']",
-              chunk->debug_row(3));
-    EXPECT_EQ("[4, {f2: 'c', f1: 4, f3: [4, 5, 6]}, 'c', [{e1: 4, e2: 'c'}, {e1: 5, e2: 'c'}], 'C']",
-              chunk->debug_row(4));
-    EXPECT_EQ("[5, {f2: 'c', f1: 5, f3: [5, 6, 7]}, 'c', [{e1: 5, e2: 'c'}, {e1: 6, e2: 'c'}], 'C']",
-              chunk->debug_row(5));
-    EXPECT_EQ("[6, {f2: 'a', f1: 6, f3: [6, 7, 8]}, 'a', [{e1: 6, e2: 'a'}, {e1: 7, e2: 'a'}], 'A']",
-              chunk->debug_row(6));
-    EXPECT_EQ("[7, {f2: 'a', f1: 7, f3: [7, 8, 9]}, 'a', [{e1: 7, e2: 'a'}, {e1: 8, e2: 'a'}], 'A']",
-              chunk->debug_row(7));
-    EXPECT_EQ("[8, {f2: 'a', f1: 8, f3: [8, 9, 10]}, 'a', [{e1: 8, e2: 'a'}, {e1: 9, e2: 'a'}], 'A']",
-              chunk->debug_row(8));
-    EXPECT_EQ("[9, {f2: 'a', f1: 9, f3: [9, 10, 11]}, 'a', [{e1: 9, e2: 'a'}, {e1: 10, e2: 'a'}], 'A']",
-              chunk->debug_row(9));
+    EXPECT_EQ("[0, {f2:'a',f1:0,f3:[0,1,2]}, 'a', [{e1:0,e2:'a'},{e1:1,e2:'a'}], 'A']", chunk->debug_row(0));
+    EXPECT_EQ("[1, {f2:'a',f1:1,f3:[1,2,3]}, 'a', [{e1:1,e2:'a'},{e1:2,e2:'a'}], 'A']", chunk->debug_row(1));
+    EXPECT_EQ("[2, {f2:'a',f1:2,f3:[2,3,4]}, 'a', [{e1:2,e2:'a'},{e1:3,e2:'a'}], 'A']", chunk->debug_row(2));
+    EXPECT_EQ("[3, {f2:'c',f1:3,f3:[3,4,5]}, 'c', [{e1:3,e2:'c'},{e1:4,e2:'c'}], 'C']", chunk->debug_row(3));
+    EXPECT_EQ("[4, {f2:'c',f1:4,f3:[4,5,6]}, 'c', [{e1:4,e2:'c'},{e1:5,e2:'c'}], 'C']", chunk->debug_row(4));
+    EXPECT_EQ("[5, {f2:'c',f1:5,f3:[5,6,7]}, 'c', [{e1:5,e2:'c'},{e1:6,e2:'c'}], 'C']", chunk->debug_row(5));
+    EXPECT_EQ("[6, {f2:'a',f1:6,f3:[6,7,8]}, 'a', [{e1:6,e2:'a'},{e1:7,e2:'a'}], 'A']", chunk->debug_row(6));
+    EXPECT_EQ("[7, {f2:'a',f1:7,f3:[7,8,9]}, 'a', [{e1:7,e2:'a'},{e1:8,e2:'a'}], 'A']", chunk->debug_row(7));
+    EXPECT_EQ("[8, {f2:'a',f1:8,f3:[8,9,10]}, 'a', [{e1:8,e2:'a'},{e1:9,e2:'a'}], 'A']", chunk->debug_row(8));
+    EXPECT_EQ("[9, {f2:'a',f1:9,f3:[9,10,11]}, 'a', [{e1:9,e2:'a'},{e1:10,e2:'a'}], 'A']", chunk->debug_row(9));
 
     //    for (int i = 0; i < 10; ++i) {
     //        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
@@ -1372,16 +1360,16 @@ TEST_F(FileReaderTest, TestReadStructSubField) {
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1024, chunk->num_rows());
 
-    EXPECT_EQ("[0, {f1: 0, f3: [0, 1, 2]}, 'a', [{e2: 'a'}, {e2: 'a'}], 'A']", chunk->debug_row(0));
-    EXPECT_EQ("[1, {f1: 1, f3: [1, 2, 3]}, 'a', [{e2: 'a'}, {e2: 'a'}], 'A']", chunk->debug_row(1));
-    EXPECT_EQ("[2, {f1: 2, f3: [2, 3, 4]}, 'a', [{e2: 'a'}, {e2: 'a'}], 'A']", chunk->debug_row(2));
-    EXPECT_EQ("[3, {f1: 3, f3: [3, 4, 5]}, 'c', [{e2: 'c'}, {e2: 'c'}], 'C']", chunk->debug_row(3));
-    EXPECT_EQ("[4, {f1: 4, f3: [4, 5, 6]}, 'c', [{e2: 'c'}, {e2: 'c'}], 'C']", chunk->debug_row(4));
-    EXPECT_EQ("[5, {f1: 5, f3: [5, 6, 7]}, 'c', [{e2: 'c'}, {e2: 'c'}], 'C']", chunk->debug_row(5));
-    EXPECT_EQ("[6, {f1: 6, f3: [6, 7, 8]}, 'a', [{e2: 'a'}, {e2: 'a'}], 'A']", chunk->debug_row(6));
-    EXPECT_EQ("[7, {f1: 7, f3: [7, 8, 9]}, 'a', [{e2: 'a'}, {e2: 'a'}], 'A']", chunk->debug_row(7));
-    EXPECT_EQ("[8, {f1: 8, f3: [8, 9, 10]}, 'a', [{e2: 'a'}, {e2: 'a'}], 'A']", chunk->debug_row(8));
-    EXPECT_EQ("[9, {f1: 9, f3: [9, 10, 11]}, 'a', [{e2: 'a'}, {e2: 'a'}], 'A']", chunk->debug_row(9));
+    EXPECT_EQ("[0, {f1:0,f3:[0,1,2]}, 'a', [{e2:'a'},{e2:'a'}], 'A']", chunk->debug_row(0));
+    EXPECT_EQ("[1, {f1:1,f3:[1,2,3]}, 'a', [{e2:'a'},{e2:'a'}], 'A']", chunk->debug_row(1));
+    EXPECT_EQ("[2, {f1:2,f3:[2,3,4]}, 'a', [{e2:'a'},{e2:'a'}], 'A']", chunk->debug_row(2));
+    EXPECT_EQ("[3, {f1:3,f3:[3,4,5]}, 'c', [{e2:'c'},{e2:'c'}], 'C']", chunk->debug_row(3));
+    EXPECT_EQ("[4, {f1:4,f3:[4,5,6]}, 'c', [{e2:'c'},{e2:'c'}], 'C']", chunk->debug_row(4));
+    EXPECT_EQ("[5, {f1:5,f3:[5,6,7]}, 'c', [{e2:'c'},{e2:'c'}], 'C']", chunk->debug_row(5));
+    EXPECT_EQ("[6, {f1:6,f3:[6,7,8]}, 'a', [{e2:'a'},{e2:'a'}], 'A']", chunk->debug_row(6));
+    EXPECT_EQ("[7, {f1:7,f3:[7,8,9]}, 'a', [{e2:'a'},{e2:'a'}], 'A']", chunk->debug_row(7));
+    EXPECT_EQ("[8, {f1:8,f3:[8,9,10]}, 'a', [{e2:'a'},{e2:'a'}], 'A']", chunk->debug_row(8));
+    EXPECT_EQ("[9, {f1:9,f3:[9,10,11]}, 'a', [{e2:'a'},{e2:'a'}], 'A']", chunk->debug_row(9));
 
     //    for (int i = 0; i < 10; ++i) {
     //        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
@@ -1416,7 +1404,9 @@ TEST_F(FileReaderTest, TestReadStructAbsentSubField) {
     c2.field_names.emplace_back("not_existed");
 
     SlotDesc slot_descs[] = {
-            {"c1", c1}, {"c2", c2}, {""},
+            {"c1", c1},
+            {"c2", c2},
+            {""},
     };
     ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
@@ -1436,11 +1426,11 @@ TEST_F(FileReaderTest, TestReadStructAbsentSubField) {
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1024, chunk->num_rows());
 
-    EXPECT_EQ("[0, {f1: 0, f2: 'a', f3: [0, 1, 2], not_existed: NULL}]", chunk->debug_row(0));
-    EXPECT_EQ("[1, {f1: 1, f2: 'a', f3: [1, 2, 3], not_existed: NULL}]", chunk->debug_row(1));
-    EXPECT_EQ("[2, {f1: 2, f2: 'a', f3: [2, 3, 4], not_existed: NULL}]", chunk->debug_row(2));
-    EXPECT_EQ("[3, {f1: 3, f2: 'c', f3: [3, 4, 5], not_existed: NULL}]", chunk->debug_row(3));
-    EXPECT_EQ("[4, {f1: 4, f2: 'c', f3: [4, 5, 6], not_existed: NULL}]", chunk->debug_row(4));
+    EXPECT_EQ("[0, {f1:0,f2:'a',f3:[0,1,2],not_existed:NULL}]", chunk->debug_row(0));
+    EXPECT_EQ("[1, {f1:1,f2:'a',f3:[1,2,3],not_existed:NULL}]", chunk->debug_row(1));
+    EXPECT_EQ("[2, {f1:2,f2:'a',f3:[2,3,4],not_existed:NULL}]", chunk->debug_row(2));
+    EXPECT_EQ("[3, {f1:3,f2:'c',f3:[3,4,5],not_existed:NULL}]", chunk->debug_row(3));
+    EXPECT_EQ("[4, {f1:4,f2:'c',f3:[4,5,6],not_existed:NULL}]", chunk->debug_row(4));
 }
 
 TEST_F(FileReaderTest, TestReadStructCaseSensitive) {
@@ -1489,7 +1479,7 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitive) {
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(1024, chunk->num_rows());
 
-    EXPECT_EQ("[0, {F1: 0, F2: 'a', F3: [0, 1, 2]}]", chunk->debug_row(0));
+    EXPECT_EQ("[0, {F1:0,F2:'a',F3:[0,1,2]}]", chunk->debug_row(0));
 
     //    for (int i = 0; i < 1; ++i) {
     //        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
@@ -1587,20 +1577,12 @@ TEST_F(FileReaderTest, TestReadStructNull) {
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(4, chunk->num_rows());
 
-    EXPECT_EQ("[1, {c1_0: 1, c1_1: [1, 2, 3]}, [{c2_0: 1, c2_1: 1}, {c2_0: 2, c2_1: 2}, {c2_0: 3, c2_1: 3}]]",
-              chunk->debug_row(0));
-    EXPECT_EQ("[2, {c1_0: NULL, c1_1: [2, 3, 4]}, [{c2_0: NULL, c2_1: 2}, {c2_0: NULL, c2_1: 3}]]",
-              chunk->debug_row(1));
-    EXPECT_EQ(
-            "[3, {c1_0: 3, c1_1: [NULL]}, [{c2_0: NULL, c2_1: NULL}, {c2_0: NULL, c2_1: NULL}, {c2_0: NULL, c2_1: "
-            "NULL}]]",
-            chunk->debug_row(2));
-    EXPECT_EQ("[4, {c1_0: 4, c1_1: [4, 5, 6]}, [{c2_0: 4, c2_1: NULL}, {c2_0: 5, c2_1: NULL}, {c2_0: 6, c2_1: 4}]]",
+    EXPECT_EQ("[1, {c1_0:1,c1_1:[1,2,3]}, [{c2_0:1,c2_1:1},{c2_0:2,c2_1:2},{c2_0:3,c2_1:3}]]", chunk->debug_row(0));
+    EXPECT_EQ("[2, {c1_0:NULL,c1_1:[2,3,4]}, [{c2_0:NULL,c2_1:2},{c2_0:NULL,c2_1:3}]]", chunk->debug_row(1));
+    EXPECT_EQ("[3, {c1_0:3,c1_1:[NULL]}, [{c2_0:NULL,c2_1:NULL},{c2_0:NULL,c2_1:NULL},{c2_0:NULL,c2_1:NULL}]]",
+              chunk->debug_row(2));
+    EXPECT_EQ("[4, {c1_0:4,c1_1:[4,5,6]}, [{c2_0:4,c2_1:NULL},{c2_0:5,c2_1:NULL},{c2_0:6,c2_1:4}]]",
               chunk->debug_row(3));
-
-    //    for (int i = 0; i < 4; ++i) {
-    //        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-    //    }
 }
 
 TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
@@ -1653,17 +1635,17 @@ TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
     for (int i = 0; i < chunk->num_rows(); ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
-    EXPECT_EQ(chunk->debug_row(0),
-              "[1, ['k1'->NULL, 'k2'->NULL], [NULL->['f1'->NULL, 'f2'->NULL]], [NULL->[1, 2]]]");
+    EXPECT_EQ(chunk->debug_row(0), "[1, {'k1':NULL,'k2':NULL}, {NULL:{'f1':NULL,'f2':NULL}}, {NULL:[1,2]}]");
     EXPECT_EQ(chunk->debug_row(1),
-              "[2, ['k1'->NULL, 'k3'->NULL, 'k4'->NULL], [NULL->['f1'->NULL, 'f2'->NULL], NULL->['f1'->NULL, 'f2'->NULL]], [NULL->[1], NULL->[2]]]");
+              "[2, {'k1':NULL,'k3':NULL,'k4':NULL}, {NULL:{'f1':NULL,'f2':NULL},NULL:{'f1':NULL,'f2':NULL}}, "
+              "{NULL:[1],NULL:[2]}]");
     EXPECT_EQ(chunk->debug_row(2),
-              "[3, ['k2'->NULL, 'k3'->NULL, 'k5'->NULL], [NULL->['f1'->NULL, 'f2'->NULL, 'f3'->NULL]], [NULL->[1, 2, 3]]]");
-    EXPECT_EQ(chunk->debug_row(3), "[4, ['k1'->NULL, 'k2'->NULL, 'k3'->NULL], [NULL->['f2'->NULL]], [NULL->[1]]]");
-    EXPECT_EQ(chunk->debug_row(4), "[5, ['k3'->NULL], [NULL->['f2'->NULL]], [NULL->[NULL]]]");
-    EXPECT_EQ(chunk->debug_row(5), "[6, ['k1'->NULL], [NULL->['f2'->NULL]], [NULL->[1]]]");
-    EXPECT_EQ(chunk->debug_row(6), "[7, ['k1'->NULL, 'k2'->NULL], [NULL->['f2'->NULL]], [NULL->[1, 2, 3]]]");
-    EXPECT_EQ(chunk->debug_row(7), "[8, ['k3'->NULL], [NULL->['f1'->NULL, 'f2'->NULL, 'f3'->NULL]], [NULL->[1], NULL->[2]]]");
+              "[3, {'k2':NULL,'k3':NULL,'k5':NULL}, {NULL:{'f1':NULL,'f2':NULL,'f3':NULL}}, {NULL:[1,2,3]}]");
+    EXPECT_EQ(chunk->debug_row(3), "[4, {'k1':NULL,'k2':NULL,'k3':NULL}, {NULL:{'f2':NULL}}, {NULL:[1]}]");
+    EXPECT_EQ(chunk->debug_row(4), "[5, {'k3':NULL}, {NULL:{'f2':NULL}}, {NULL:[NULL]}]");
+    EXPECT_EQ(chunk->debug_row(5), "[6, {'k1':NULL}, {NULL:{'f2':NULL}}, {NULL:[1]}]");
+    EXPECT_EQ(chunk->debug_row(6), "[7, {'k1':NULL,'k2':NULL}, {NULL:{'f2':NULL}}, {NULL:[1,2,3]}]");
+    EXPECT_EQ(chunk->debug_row(7), "[8, {'k3':NULL}, {NULL:{'f1':NULL,'f2':NULL,'f3':NULL}}, {NULL:[1],NULL:[2]}]");
 }
 
 TEST_F(FileReaderTest, TestReadNotNull) {
@@ -1680,7 +1662,6 @@ TEST_F(FileReaderTest, TestReadNotNull) {
     type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
 
-
     TypeDescriptor type_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
     type_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_struct.field_names.emplace_back("a");
@@ -1689,7 +1670,10 @@ TEST_F(FileReaderTest, TestReadNotNull) {
     type_struct.field_names.emplace_back("b");
 
     SlotDesc slot_descs[] = {
-        {"col_int", type_int}, {"col_map", type_map}, {"col_struct", type_struct}, {""},
+            {"col_int", type_int},
+            {"col_map", type_map},
+            {"col_struct", type_struct},
+            {""},
     };
 
     ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
@@ -1707,26 +1691,85 @@ TEST_F(FileReaderTest, TestReadNotNull) {
     chunk->append_column(vectorized::ColumnHelper::create_column(type_map, true), chunk->num_columns());
     chunk->append_column(vectorized::ColumnHelper::create_column(type_struct, true), chunk->num_columns());
 
-
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(3, chunk->num_rows());
 
-    EXPECT_EQ("[1, ['a'->1], {a: 'a', b: 1}]", chunk->debug_row(0));
-    EXPECT_EQ("[2, ['b'->2, 'c'->3], {a: 'b', b: 2}]", chunk->debug_row(1));
-    EXPECT_EQ("[3, ['c'->3], {a: 'c', b: 3}]", chunk->debug_row(2));
-
-    for (int i = 0; i < 3; ++i) {
-        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
-    }
-
+    EXPECT_EQ("[1, {'a':1}, {a:'a',b:1}]", chunk->debug_row(0));
+    EXPECT_EQ("[2, {'b':2,'c':3}, {a:'b',b:2}]", chunk->debug_row(1));
+    EXPECT_EQ("[3, {'c':3}, {a:'c',b:3}]", chunk->debug_row(2));
 }
 
+TEST_F(FileReaderTest, TestTwoNestedLevelArray) {
+    // format:
+    // id: INT, b: ARRAY<ARRAY<INT>>
+    const std::string filepath = "./be/test/exec/test_data/parquet_data/two_level_nested_array.parquet";
+    auto file = _create_file(filepath);
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_int = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
+
+    TypeDescriptor type_array = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
+
+    TypeDescriptor type_array_array = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
+    type_array_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+    type_array.children.emplace_back(type_array_array);
+
+    SlotDesc slot_descs[] = {
+            {"id", type_int},
+            {"b", type_array},
+            {""},
+    };
+
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file_col_not_null_path));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<vectorized::Chunk>();
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_int, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_array, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+
+    chunk->check_or_die();
+
+    EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
+    EXPECT_EQ("[2, [NULL]]", chunk->debug_row(1));
+    EXPECT_EQ("[3, [NULL,NULL,NULL]]", chunk->debug_row(2));
+    EXPECT_EQ("[4, [[1,2,3,4],NULL,[1,2,3,4]]]", chunk->debug_row(3));
+    EXPECT_EQ("[5, [[1,2,3,4,5]]]", chunk->debug_row(4));
+
+    size_t total_row_nums = 0;
+    total_row_nums += chunk->num_rows();
+
+    {
+        while (!status.is_end_of_file()) {
+            chunk->reset();
+            status = file_reader->get_next(&chunk);
+            chunk->check_or_die();
+            total_row_nums += chunk->num_rows();
+        }
+    }
+
+    EXPECT_EQ(163840, total_row_nums);
+}
 
 TEST_F(FileReaderTest, TestReadMapNull) {
     auto file = _create_file(_file_map_null_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                std::filesystem::file_size(_file_map_null_path));
+                                                    std::filesystem::file_size(_file_map_null_path));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -1738,7 +1781,9 @@ TEST_F(FileReaderTest, TestReadMapNull) {
     type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
 
     SlotDesc slot_descs[] = {
-        {"uuid", type_int}, {"c1", type_map}, {""},
+            {"uuid", type_int},
+            {"c1", type_map},
+            {""},
     };
 
     ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
@@ -1762,11 +1807,314 @@ TEST_F(FileReaderTest, TestReadMapNull) {
     EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
     EXPECT_EQ("[2, NULL]", chunk->debug_row(1));
     EXPECT_EQ("[3, NULL]", chunk->debug_row(2));
+}
 
-    for (int i = 0; i < 3; ++i) {
-        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+TEST_F(FileReaderTest, TestReadArrayMap) {
+    // optional group col_array_map (LIST) {
+    //     repeated group array (MAP) {
+    //         repeated group map (MAP_KEY_VALUE) {
+    //             required binary key (UTF8);
+    //             optional int32 value;
+    //         }
+    //     }
+    // }
+
+    auto file = _create_file(_file_array_map_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file_array_map_path));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_string = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR);
+
+    TypeDescriptor type_map(PrimitiveType::TYPE_MAP);
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+    TypeDescriptor type_array_map(PrimitiveType::TYPE_ARRAY);
+    type_array_map.children.emplace_back(type_map);
+
+    SlotDesc slot_descs[] = {
+            {"uuid", type_string},
+            {"col_array_map", type_array_map},
+            {""},
+    };
+
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file_array_map_path));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<vectorized::Chunk>();
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_string, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_array_map, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(2, chunk->num_rows());
+
+    EXPECT_EQ("['0', [{'def':11,'abc':10},{'ghi':12},{'jkl':13}]]", chunk->debug_row(0));
+    EXPECT_EQ("['1', [{'happy new year':11,'hello world':10},{'vary happy':12},{'ok':13}]]", chunk->debug_row(1));
+}
+
+TEST_F(FileReaderTest, TestStructArrayNull) {
+    // message table {
+    //  optional int32 id = 1;
+    //  optional group col = 2 {
+    //    optional int32 a = 3;
+    //    optional group b (LIST) = 4 {
+    //      repeated group list {
+    //        optional group element = 5 {
+    //          optional int32 c = 6;
+    //          optional binary d (STRING) = 7;
+    //        }
+    //      }
+    //    }
+    //  }
+    // }
+    std::string filepath = "./be/test/exec/test_data/parquet_data/struct_array_null.parquet";
+
+    // With config's vector chunk size
+    {
+        auto file = _create_file(filepath);
+        auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                        std::filesystem::file_size(filepath));
+
+        // --------------init context---------------
+        auto ctx = _create_scan_context();
+
+        TypeDescriptor type_int = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
+
+        TypeDescriptor type_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+        type_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+        type_struct.field_names.emplace_back("a");
+
+        TypeDescriptor type_array = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
+
+        TypeDescriptor type_array_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+        type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+        type_array_struct.field_names.emplace_back("c");
+        type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+        type_array_struct.field_names.emplace_back("d");
+
+        type_array.children.emplace_back(type_array_struct);
+
+        type_struct.children.emplace_back(type_array);
+        type_struct.field_names.emplace_back("b");
+
+        SlotDesc slot_descs[] = {
+                {"id", type_int},
+                {"col", type_struct},
+                {""},
+        };
+
+        ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        ctx->scan_ranges.emplace_back(_create_scan_range(_file_col_not_null_path));
+        // --------------finish init context---------------
+
+        Status status = file_reader->init(ctx);
+        ASSERT_TRUE(status.ok());
+
+        EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+        auto chunk = std::make_shared<vectorized::Chunk>();
+        chunk->append_column(vectorized::ColumnHelper::create_column(type_int, true), chunk->num_columns());
+        chunk->append_column(vectorized::ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+
+        status = file_reader->get_next(&chunk);
+        ASSERT_TRUE(status.ok());
+
+        EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
+        EXPECT_EQ("[2, {a:2,b:NULL}]", chunk->debug_row(1));
+        EXPECT_EQ("[3, {a:NULL,b:[NULL]}]", chunk->debug_row(2));
+        EXPECT_EQ("[4, {a:4,b:[NULL]}]", chunk->debug_row(3));
+        EXPECT_EQ("[5, {a:5,b:[NULL,{c:5,d:'hello'},{c:5,d:'world'},NULL,{c:5,d:NULL}]}]", chunk->debug_row(4));
+        EXPECT_EQ("[6, {a:NULL,b:[{c:6,d:'hello'},NULL,{c:NULL,d:'world'}]}]", chunk->debug_row(5));
+        EXPECT_EQ("[7, {a:7,b:[NULL,NULL,NULL,NULL]}]", chunk->debug_row(6));
+        EXPECT_EQ("[8, {a:8,b:[{c:8,d:'hello'},{c:NULL,d:'danny'},{c:8,d:'world'}]}]", chunk->debug_row(7));
+
+        size_t total_row_nums = 0;
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+
+        {
+            while (!status.is_end_of_file()) {
+                chunk->reset();
+                status = file_reader->get_next(&chunk);
+                chunk->check_or_die();
+                total_row_nums += chunk->num_rows();
+            }
+        }
+        EXPECT_EQ(524288, total_row_nums);
     }
 
+    // With 1024 chunk size
+    {
+        auto file = _create_file(filepath);
+        auto file_reader = std::make_shared<FileReader>(1024, file.get(), std::filesystem::file_size(filepath));
+
+        // --------------init context---------------
+        auto ctx = _create_scan_context();
+
+        TypeDescriptor type_int = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
+
+        TypeDescriptor type_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+        type_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+        type_struct.field_names.emplace_back("a");
+
+        TypeDescriptor type_array = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
+
+        TypeDescriptor type_array_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+        type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+        type_array_struct.field_names.emplace_back("c");
+        type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+        type_array_struct.field_names.emplace_back("d");
+
+        type_array.children.emplace_back(type_array_struct);
+
+        type_struct.children.emplace_back(type_array);
+        type_struct.field_names.emplace_back("b");
+
+        SlotDesc slot_descs[] = {
+                {"id", type_int},
+                {"col", type_struct},
+                {""},
+        };
+
+        ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        ctx->scan_ranges.emplace_back(_create_scan_range(_file_col_not_null_path));
+        // --------------finish init context---------------
+
+        Status status = file_reader->init(ctx);
+        ASSERT_TRUE(status.ok());
+
+        EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+        auto chunk = std::make_shared<vectorized::Chunk>();
+        chunk->append_column(vectorized::ColumnHelper::create_column(type_int, true), chunk->num_columns());
+        chunk->append_column(vectorized::ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+
+        status = file_reader->get_next(&chunk);
+        ASSERT_TRUE(status.ok());
+
+        EXPECT_EQ("[1, NULL]", chunk->debug_row(0));
+        EXPECT_EQ("[2, {a:2,b:NULL}]", chunk->debug_row(1));
+        EXPECT_EQ("[3, {a:NULL,b:[NULL]}]", chunk->debug_row(2));
+        EXPECT_EQ("[4, {a:4,b:[NULL]}]", chunk->debug_row(3));
+        EXPECT_EQ("[5, {a:5,b:[NULL,{c:5,d:'hello'},{c:5,d:'world'},NULL,{c:5,d:NULL}]}]", chunk->debug_row(4));
+        EXPECT_EQ("[6, {a:NULL,b:[{c:6,d:'hello'},NULL,{c:NULL,d:'world'}]}]", chunk->debug_row(5));
+        EXPECT_EQ("[7, {a:7,b:[NULL,NULL,NULL,NULL]}]", chunk->debug_row(6));
+        EXPECT_EQ("[8, {a:8,b:[{c:8,d:'hello'},{c:NULL,d:'danny'},{c:8,d:'world'}]}]", chunk->debug_row(7));
+
+        size_t total_row_nums = 0;
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+
+        {
+            while (!status.is_end_of_file()) {
+                chunk->reset();
+                status = file_reader->get_next(&chunk);
+                chunk->check_or_die();
+                total_row_nums += chunk->num_rows();
+            }
+        }
+        EXPECT_EQ(524288, total_row_nums);
+    }
+}
+
+TEST_F(FileReaderTest, TestComplexTypeNotNull) {
+    // message table {
+    //  optional int32 id = 1;
+    //  optional group col = 2 {
+    //    optional int32 a = 3;
+    //    optional group b (LIST) = 4 {
+    //      repeated group list {
+    //        optional group element = 5 {
+    //          optional int32 c = 6;
+    //          optional binary d (STRING) = 7;
+    //        }
+    //      }
+    //    }
+    //  }
+    // }
+
+    std::string filepath = "./be/test/exec/test_data/parquet_data/complex_subfield_not_null.parquet";
+    auto file = _create_file(filepath);
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_int = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
+
+    TypeDescriptor type_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+    type_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_struct.field_names.emplace_back("a");
+
+    TypeDescriptor type_array = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
+
+    TypeDescriptor type_array_struct = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+    type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_array_struct.field_names.emplace_back("c");
+    type_array_struct.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_array_struct.field_names.emplace_back("d");
+
+    type_array.children.emplace_back(type_array_struct);
+
+    type_struct.children.emplace_back(type_array);
+    type_struct.field_names.emplace_back("b");
+
+    SlotDesc slot_descs[] = {
+            {"id", type_int},
+            {"col", type_struct},
+            {""},
+    };
+
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file_col_not_null_path));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<vectorized::Chunk>();
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_int, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_struct, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ("[1, {a:1,b:[{c:1,d:'hello'}]}]", chunk->debug_row(0));
+    EXPECT_EQ("[2, {a:2,b:[{c:2,d:'hello'},NULL,{c:2,d:NULL}]}]", chunk->debug_row(1));
+    EXPECT_EQ("[3, {a:3,b:[NULL,NULL]}]", chunk->debug_row(2));
+    EXPECT_EQ("[4, {a:4,b:[NULL,{c:4,d:NULL}]}]", chunk->debug_row(3));
+
+    size_t total_row_nums = 0;
+    chunk->check_or_die();
+    total_row_nums += chunk->num_rows();
+
+    {
+        while (!status.is_end_of_file()) {
+            chunk->reset();
+            status = file_reader->get_next(&chunk);
+            chunk->check_or_die();
+            total_row_nums += chunk->num_rows();
+        }
+    }
+
+    EXPECT_EQ(262144, total_row_nums);
 }
 
 } // namespace starrocks::parquet

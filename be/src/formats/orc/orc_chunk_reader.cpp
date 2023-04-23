@@ -1231,8 +1231,8 @@ Status OrcChunkReader::_slot_to_orc_column_name(const SlotDescriptor* desc,
                                                 const std::unordered_map<int, std::string>& column_id_to_orc_name,
                                                 std::string* orc_column_name) {
     auto col_name = format_column_name(desc->col_name(), _case_sensitive);
-    auto it = _name_to_column_id.find(col_name);
-    if (it == _name_to_column_id.end()) {
+    auto it = _formatted_slot_name_to_column_id.find(col_name);
+    if (it == _formatted_slot_name_to_column_id.end()) {
         auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found, file = $1",
                                      desc->col_name(), _current_file_name);
         return Status::NotFound(s);
@@ -1249,7 +1249,8 @@ Status OrcChunkReader::_slot_to_orc_column_name(const SlotDescriptor* desc,
 
 Status OrcChunkReader::_init_include_columns(const std::unique_ptr<OrcMapping>& mapping) {
     // TODO(SmithCruise) delete _name_to_column_id, _hive_column_names when develop subfield lazy load.
-    build_column_name_to_id_mapping(&_name_to_column_id, _hive_column_names, _reader->getType(), _case_sensitive);
+    build_column_name_to_id_mapping(&_formatted_slot_name_to_column_id, _hive_column_names, _reader->getType(),
+                                    _case_sensitive);
 
     std::list<uint64_t> include_column_id;
 
@@ -1358,8 +1359,8 @@ Status OrcChunkReader::_init_position_in_orc() {
 
         if (slot_desc == nullptr) continue;
         std::string col_name = format_column_name(slot_desc->col_name(), _case_sensitive);
-        auto it = _name_to_column_id.find(col_name);
-        if (it == _name_to_column_id.end()) {
+        auto it = _formatted_slot_name_to_column_id.find(col_name);
+        if (it == _formatted_slot_name_to_column_id.end()) {
             auto s = strings::Substitute(
                     "OrcChunkReader::init_position_in_orc. failed to find position. col_name = $0, file = $1", col_name,
                     _current_file_name);
@@ -1397,26 +1398,32 @@ Status OrcChunkReader::_init_position_in_orc() {
 static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, const orc::Type* orc_type,
                                              const OrcMappingPtr& mapping, TypeDescriptor* result) {
     orc::TypeKind kind = orc_type->getKind();
+    switch (kind) {
+    case orc::LIST:
+        [[fallthrough]];
+    case orc::MAP:
+        [[fallthrough]];
+    case orc::STRUCT:
+        if (mapping == nullptr) {
+            return Status::InvalidArgument(strings::Substitute("orc mapping is null in $0", orc_type->toString()));
+        }
+        break;
+    default:
+        break;
+    }
+
     if (kind == orc::LIST) {
-        DCHECK(mapping != nullptr);
         result->type = TYPE_ARRAY;
         DCHECK_EQ(0, result->children.size());
         result->children.emplace_back();
 
         TypeDescriptor& element_type = result->children.back();
-        if (mapping == nullptr) {
-            return Status::InvalidArgument(strings::Substitute("orc mapping is null in $0", orc_type->toString()));
-        }
         RETURN_IF_ERROR(_create_type_descriptor_by_orc(origin_type.children.at(0), orc_type->getSubtype(0),
                                                        mapping->get_column_id_or_child_mapping(0).orc_mapping,
                                                        &element_type));
     } else if (kind == orc::MAP) {
-        DCHECK(mapping != nullptr);
         result->type = TYPE_MAP;
         DCHECK_EQ(0, result->children.size());
-        if (mapping == nullptr) {
-            return Status::InvalidArgument(strings::Substitute("orc mapping is null in $0", orc_type->toString()));
-        }
         TypeDescriptor& key_type = result->children.emplace_back();
         if (origin_type.children[0].is_unknown_type()) {
             key_type.type = INVALID_TYPE;
@@ -1435,7 +1442,6 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
                                                            &value_type));
         }
     } else if (kind == orc::STRUCT) {
-        DCHECK(mapping != nullptr);
         DCHECK_EQ(0, result->children.size());
 
         result->type = TYPE_STRUCT;
@@ -1447,9 +1453,6 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
             result->field_names.emplace_back(origin_type.field_names[index]);
             TypeDescriptor& sub_field_type = result->children.emplace_back();
             size_t column_id = mapping->get_column_id_or_child_mapping(index).orc_column_id;
-            if (mapping == nullptr) {
-                return Status::InvalidArgument(strings::Substitute("orc mapping is null in $0", orc_type->toString()));
-            }
             RETURN_IF_ERROR(_create_type_descriptor_by_orc(
                     origin_type.children.at(index), orc_type->getSubtypeByColumnId(column_id),
                     mapping->get_column_id_or_child_mapping(index).orc_mapping, &sub_field_type));
@@ -1550,7 +1553,7 @@ Status OrcChunkReader::_init_cast_exprs() {
         // For example, if we assume column A is an integer column, but it's stored as string in orc file
         // then min/max of A is almost unusable. Think that there are values ["10", "10000", "100001", "11"]
         // min/max will be "10" and "11", and we expect min/max is 10/100001
-        if (!_broker_load_mode && !starrocks_type.is_implicit_castable(orc_type)) {
+        if (!_broker_load_mode && !is_implicit_castable(starrocks_type, orc_type)) {
             return Status::NotSupported(strings::Substitute("Type mismatch: orc $0 to native $1. file = $2",
                                                             orc_type.debug_string(), starrocks_type.debug_string(),
                                                             _current_file_name));
@@ -1760,12 +1763,30 @@ StatusOr<ChunkPtr> OrcChunkReader::get_lazy_chunk() {
     return ret;
 }
 
-void OrcChunkReader::lazy_read_next(size_t numValues) {
-    _row_reader->lazyLoadNext(*_batch, numValues);
+Status OrcChunkReader::lazy_read_next(size_t numValues) {
+    try {
+        // It may throw orc::ParseError exception
+        _row_reader->lazyLoadNext(*_batch, numValues);
+    } catch (std::exception& e) {
+        auto s = strings::Substitute("OrcChunkReader::lazy_read_next failed. reason = $0, file = $1", e.what(),
+                                     _current_file_name);
+        LOG(WARNING) << s;
+        return Status::InternalError(s);
+    }
+    return Status::OK();
 }
 
-void OrcChunkReader::lazy_seek_to(size_t rowInStripe) {
-    _row_reader->lazyLoadSeekTo(rowInStripe);
+Status OrcChunkReader::lazy_seek_to(size_t rowInStripe) {
+    try {
+        // It may throw orc::ParseError exception
+        _row_reader->lazyLoadSeekTo(rowInStripe);
+    } catch (std::exception& e) {
+        auto s = strings::Substitute("OrcChunkReader::lazy_seek_to failed. reason = $0, file = $1", e.what(),
+                                     _current_file_name);
+        LOG(WARNING) << s;
+        return Status::InternalError(s);
+    }
+    return Status::OK();
 }
 
 void OrcChunkReader::set_row_reader_filter(std::shared_ptr<orc::RowReaderFilter> filter) {
@@ -2445,9 +2466,10 @@ void OrcChunkReader::report_error_message(const std::string& error_msg) {
     _state->append_error_msg_to_file("", error_msg);
 }
 
-int OrcChunkReader::get_column_id_by_name(const std::string& name) const {
-    const auto& it = _name_to_column_id.find(name);
-    if (it != _name_to_column_id.end()) {
+int OrcChunkReader::get_column_id_by_slot_name(const std::string& slot_name) const {
+    const std::string& formatted_slot_name = format_column_name(slot_name, _case_sensitive);
+    const auto& it = _formatted_slot_name_to_column_id.find(formatted_slot_name);
+    if (it != _formatted_slot_name_to_column_id.end()) {
         return it->second;
     }
     return -1;
@@ -2541,4 +2563,10 @@ void ORCHdfsFileStream::setIORanges(std::vector<orc::InputStream::IORange>& io_r
     }
 }
 
+bool OrcChunkReader::is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type) {
+    if (starrocks_type.is_decimal_type() && orc_type.is_decimal_type()) {
+        return true;
+    }
+    return false;
+}
 } // namespace starrocks::vectorized

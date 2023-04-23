@@ -63,12 +63,11 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
+
         if (!super.equals(o)) {
             return false;
         }
+
         PhysicalJoinOperator that = (PhysicalJoinOperator) o;
         return joinType == that.joinType && Objects.equals(onPredicate, that.onPredicate);
     }
@@ -81,10 +80,7 @@ public abstract class PhysicalJoinOperator extends PhysicalOperator {
     @Override
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
         Preconditions.checkState(!childDictColumns.isEmpty());
-        ColumnRefSet dictSet = new ColumnRefSet();
-        for (Integer id : childDictColumns) {
-            dictSet.union(id);
-        }
+        ColumnRefSet dictSet = ColumnRefSet.createByIds(childDictColumns);
 
         if (predicate != null && predicate.getUsedColumns().isIntersect(dictSet)) {
             return false;

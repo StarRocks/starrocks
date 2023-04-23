@@ -213,6 +213,7 @@ public class FunctionSet {
     public static final String MIN = "min";
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_CONT = "percentile_cont";
+    public static final String PERCENTILE_DISC = "percentile_disc";
     public static final String RETENTION = "retention";
     public static final String STDDEV = "stddev";
     public static final String STDDEV_POP = "stddev_pop";
@@ -293,6 +294,9 @@ public class FunctionSet {
     public static final String BITNOT = "bitnot";
     public static final String BITOR = "bitor";
     public static final String BITXOR = "bitxor";
+    public static final String BIT_SHIFT_LEFT = "bit_shift_left";
+    public static final String BIT_SHIFT_RIGHT = "bit_shift_right";
+    public static final String BIT_SHIFT_RIGHT_LOGICAL = "bit_shift_right_logical";
 
     // Hash functions:
     public static final String MURMUR_HASH3_32 = "murmur_hash3_32";
@@ -437,6 +441,28 @@ public class FunctionSet {
                     .add(Type.CHAR)
                     .add(Type.VARCHAR)
                     .build();
+
+    private static final Set<Type> SORTABLE_TYPES =
+            ImmutableSet.<Type>builder()
+                    .add(Type.BOOLEAN)
+                    .add(Type.TINYINT)
+                    .add(Type.SMALLINT)
+                    .add(Type.INT)
+                    .add(Type.BIGINT)
+                    .add(Type.LARGEINT)
+                    .add(Type.FLOAT)
+                    .add(Type.DOUBLE)
+                    .add(Type.DATE)
+                    .add(Type.DATETIME)
+                    .add(Type.DECIMAL32)
+                    .add(Type.DECIMAL64)
+                    .add(Type.DECIMAL128)
+                    .add(Type.DECIMALV2)
+                    .add(Type.CHAR)
+                    .add(Type.VARCHAR)
+                    .build();
+
+
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
      * need to check whether the expression tree can use vectorized function from bottom to
@@ -931,6 +957,13 @@ public class FunctionSet {
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_CONT,
                 Lists.newArrayList(Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARCHAR,
                 false, false, false));
+                
+        // PercentileDisc
+        for (Type type : SORTABLE_TYPES) {
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.PERCENTILE_DISC,
+                    Lists.newArrayList(type, Type.DOUBLE), type, Type.VARCHAR,
+                    false, false, false));
+        }
 
         // Avg
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available
@@ -1161,6 +1194,7 @@ public class FunctionSet {
         ArrayType typeArray = null;
         Type typeElement = null;
         MapType typeMap = null;
+        StructType typeStruct = null;
         Type retType = fn.getReturnType();
         for (int i = 0; i < declTypes.length; i++) {
             Type declType = declTypes[i];
@@ -1183,6 +1217,16 @@ public class FunctionSet {
                     typeMap = (MapType) realType;
                 } else {
                     LOGGER.warn("could not determine polymorphic type because input has two map types");
+                    return null;
+                }
+            } else if (declType instanceof AnyStructType) {
+                if (realType.isNull()) {
+                    continue;
+                }
+                if (typeStruct == null) {
+                    typeStruct = (StructType) realType;
+                } else {
+                    LOGGER.warn("could not determine polymorphic type because input has two struct types");
                     return null;
                 }
             } else if (declType instanceof AnyElementType) {

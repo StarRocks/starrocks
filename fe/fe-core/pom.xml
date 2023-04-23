@@ -434,7 +434,22 @@ under the License.
                     <artifactId>zookeeper</artifactId>
                     <groupId>org.apache.zookeeper</groupId>
                 </exclusion>
+                <exclusion>
+                    <artifactId>ivy</artifactId>
+                    <groupId>org.apache.ivy</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>log4j</artifactId>
+                    <groupId>log4j</groupId>
+                </exclusion>
             </exclusions>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.ivy/ivy -->
+        <dependency>
+            <groupId>org.apache.ivy</groupId>
+            <artifactId>ivy</artifactId>
+            <version>2.5.1</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-launcher_2.12 -->
@@ -549,6 +564,12 @@ under the License.
         <dependency>
             <groupId>org.apache.hudi</groupId>
             <artifactId>hudi-common</artifactId>
+            <exclusions>
+                <exclusion>
+                    <artifactId>log4j</artifactId>
+                    <groupId>log4j</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-hadoop-mr -->
@@ -617,6 +638,13 @@ under the License.
             <artifactId>commons-dbcp2</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.groovy/groovy-groovysh -->
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy-groovysh</artifactId>
+        </dependency>
+
     </dependencies>
 
     <build>

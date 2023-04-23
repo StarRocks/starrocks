@@ -31,7 +31,7 @@ StarRocks 2.3 and later provide an internal catalog to manage the internal data 
       Or
 
       ```SQL
-      USE default_catalog.db_name；
+      USE default_catalog.db_name;
       ```
 
 4. Query internal data. For more usages of the SELECT statement, see [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md).

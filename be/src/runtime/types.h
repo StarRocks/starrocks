@@ -202,13 +202,6 @@ struct TypeDescriptor {
         }
     }
 
-    bool is_implicit_castable(const TypeDescriptor& from) const {
-        if (is_decimal_type()) {
-            return precision == from.precision && scale == from.scale;
-        }
-        return false;
-    }
-
     bool operator==(const TypeDescriptor& o) const {
         if (type != o.type) {
             return false;
@@ -301,6 +294,8 @@ struct TypeDescriptor {
     /// Recursive implementation of ToThrift() that populates 'thrift_type' with the
     /// TTypeNodes for this type and its children.
     void to_thrift(TTypeDesc* thrift_type) const;
+
+    size_t get_array_depth_limit() const;
 
 private:
     /// Used to create a possibly nested type from the flattened Thrift representation.

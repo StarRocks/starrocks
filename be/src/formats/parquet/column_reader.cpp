@@ -38,6 +38,7 @@ static void def_rep_to_offset(const LevelInfo& level_info, const level_t* def_le
             continue;
         }
 
+        // Start for a new row
         offset_pos++;
         offsets[offset_pos] = offsets[offset_pos - 1];
         if (def_levels[i] >= level_info.max_def_level) {
@@ -64,11 +65,13 @@ public:
 
     Status init(const ParquetField* field, const TypeDescriptor& col_type,
                 const tparquet::ColumnChunk* chunk_metadata) {
+        _field = field;
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, col_type, _opts.timezone, &converter));
         return StoredColumnReader::create(_opts, field, chunk_metadata, &_reader);
     }
 
     Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
+        DCHECK(_field->is_nullable ? dst->is_nullable() : true);
         if (!converter->need_convert) {
             return _reader->read_records(num_records, content_type, dst);
         } else {
@@ -102,10 +105,13 @@ public:
         return _reader->get_dict_codes(dict_values, dict_codes);
     }
 
+    void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }
+
 private:
     const ColumnReaderOptions& _opts;
 
     std::unique_ptr<StoredColumnReader> _reader;
+    const ParquetField* _field = nullptr;
 };
 
 class ListColumnReader : public ColumnReader {
@@ -128,6 +134,7 @@ public:
             array_column = down_cast<vectorized::ArrayColumn*>(nullable_column->mutable_data_column());
         } else {
             DCHECK(dst->is_array());
+            DCHECK(!_field->is_nullable);
             array_column = down_cast<vectorized::ArrayColumn*>(dst);
         }
         auto* child_column = array_column->elements_column().get();
@@ -164,6 +171,10 @@ public:
         _element_reader->get_levels(def_levels, rep_levels, num_levels);
     }
 
+    void set_need_parse_levels(bool need_parse_levels) override {
+        _element_reader->set_need_parse_levels(need_parse_levels);
+    }
+
 private:
     const ParquetField* _field = nullptr;
     std::unique_ptr<ColumnReader> _element_reader;
@@ -197,6 +208,7 @@ public:
             map_column = down_cast<vectorized::MapColumn*>(nullable_column->mutable_data_column());
         } else {
             DCHECK(dst->is_map());
+            DCHECK(!_field->is_nullable);
             map_column = down_cast<vectorized::MapColumn*>(dst);
         }
         auto* key_column = map_column->keys_column().get();
@@ -274,6 +286,16 @@ public:
         }
     }
 
+    void set_need_parse_levels(bool need_parse_levels) override {
+        if (_key_reader != nullptr) {
+            _key_reader->set_need_parse_levels(need_parse_levels);
+        }
+
+        if (_value_reader != nullptr) {
+            _value_reader->set_need_parse_levels(need_parse_levels);
+        }
+    }
+
 private:
     const ParquetField* _field = nullptr;
     std::unique_ptr<ColumnReader> _key_reader;
@@ -293,8 +315,9 @@ public:
             return Status::InternalError("No avaliable parquet subfield column reader in StructColumn");
         }
 
-        for (auto& child_reader : _child_readers) {
+        for (const auto& child_reader : _child_readers) {
             if (child_reader != nullptr) {
+                _def_rep_level_child_reader = &child_reader;
                 return Status::OK();
             }
         }
@@ -311,6 +334,7 @@ public:
             struct_column = down_cast<vectorized::StructColumn*>(nullable_column->mutable_data_column());
         } else {
             DCHECK(dst->is_struct());
+            DCHECK(!_field->is_nullable);
             struct_column = down_cast<vectorized::StructColumn*>(dst);
         }
 
@@ -336,17 +360,23 @@ public:
 
         if (dst->is_nullable()) {
             DCHECK(nullable_column != nullptr);
-            // Assume all rows are not null in struct level.
-            // Use subfield's NullableColumn instead.
-            vectorized::NullColumn null_column(fields_column[0]->size(), 0);
+            size_t row_nums = fields_column[0]->size();
+            vectorized::NullColumn null_column(row_nums, 0);
+            auto& is_nulls = null_column.get_data();
+            bool has_null = false;
+            _handle_null_rows(is_nulls.data(), &has_null, row_nums);
+
             nullable_column->mutable_null_column()->swap_column(null_column);
-            nullable_column->set_has_null(false);
+            nullable_column->set_has_null(has_null);
         }
         return Status::OK();
     }
 
     Status finish_batch() override { return Status::OK(); }
 
+    // get_levels functions only called by complex type
+    // If parent is a struct type, only def_levels has value.
+    // If parent is list or map type, def_levels & rep_levels both have value.
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
         for (const auto& reader : _child_readers) {
             // Considering not existed subfield, we will not create its ColumnReader
@@ -358,15 +388,83 @@ public:
         }
     }
 
+    void set_need_parse_levels(bool need_parse_levels) override {
+        for (const auto& reader : _child_readers) {
+            if (reader != nullptr) {
+                reader->set_need_parse_levels(need_parse_levels);
+            }
+        }
+    }
+
 private:
+    void _handle_null_rows(uint8_t* is_nulls, bool* has_null, size_t num_rows) {
+        level_t* def_levels = nullptr;
+        level_t* rep_levels = nullptr;
+        size_t num_levels = 0;
+        (*_def_rep_level_child_reader)->get_levels(&def_levels, &rep_levels, &num_levels);
+
+        // OptionalStoredColumnReader & RepeatedStoredColumnReader must have def_levels
+        DCHECK(def_levels != nullptr);
+        if (def_levels == nullptr) {
+            *has_null = false;
+            return;
+        }
+
+        LevelInfo level_info = _field->level_info;
+
+        if (rep_levels != nullptr) {
+            // It's a RepeatedStoredColumnReader
+            size_t rows = 0;
+            for (size_t i = 0; i < num_levels; i++) {
+                if (def_levels[i] < level_info.immediate_repeated_ancestor_def_level ||
+                    rep_levels[i] > level_info.max_rep_level) {
+                    continue;
+                }
+
+                // Start for a new row
+                if (def_levels[i] >= level_info.max_def_level) {
+                    is_nulls[rows] = 0;
+                } else {
+                    is_nulls[rows] = 1;
+                    *has_null = true;
+                }
+                rows++;
+            }
+            DCHECK_EQ(num_rows, rows);
+        } else {
+            // For OptionalStoredColumnReader, num_levels is equal to num_rows
+            DCHECK(num_rows == num_levels);
+            for (size_t i = 0; i < num_levels; i++) {
+                if (def_levels[i] >= level_info.max_def_level) {
+                    is_nulls[i] = 0;
+                } else {
+                    is_nulls[i] = 1;
+                    *has_null = true;
+                }
+            }
+        }
+    }
+
     // _field is generated by parquet format, so it's child order may different from _child_readers.
     const ParquetField* _field = nullptr;
     // _children_readers order is the same as TypeDescriptor children order.
     std::vector<std::unique_ptr<ColumnReader>> _child_readers;
+    // First non-nullptr child ColumnReader, used to get def & rep levels
+    const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
 };
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             std::unique_ptr<ColumnReader>* output) {
+    RETURN_IF_ERROR(do_create(opts, field, col_type, output));
+    if (col_type.is_complex_type()) {
+        // For complex type columns, we need parse def & rep levels.
+        output->get()->set_need_parse_levels(true);
+    }
+    return Status::OK();
+}
+
+Status ColumnReader::do_create(const ColumnReaderOptions& opts, const ParquetField* field,
+                               const TypeDescriptor& col_type, std::unique_ptr<ColumnReader>* output) {
     if (field->type.type == PrimitiveType::TYPE_ARRAY) {
         std::unique_ptr<ColumnReader> child_reader;
         RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[0], col_type.children[0], &child_reader));

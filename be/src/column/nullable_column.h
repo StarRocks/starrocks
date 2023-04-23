@@ -16,7 +16,7 @@ using NullValueType = NullColumn::ValueType;
 static constexpr NullValueType DATUM_NULL = NullValueType(1);
 static constexpr NullValueType DATUM_NOT_NULL = NullValueType(0);
 
-class NullableColumn final : public ColumnFactory<Column, NullableColumn> {
+class NullableColumn : public ColumnFactory<Column, NullableColumn> {
     friend class ColumnFactory<Column, NullableColumn>;
 
 public:
@@ -45,6 +45,8 @@ public:
         return *this;
     }
 
+    NullableColumn() = default;
+
     ~NullableColumn() override = default;
 
     bool has_null() const override { return _has_null; }
@@ -64,8 +66,6 @@ public:
         DCHECK_EQ(_null_column->size(), _data_column->size());
         return _has_null && immutable_null_column_data()[index];
     }
-
-    bool low_cardinality() const override { return false; }
 
     const uint8_t* raw_data() const override { return _data_column->raw_data(); }
 
@@ -120,7 +120,7 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
 
     bool append_nulls(size_t count) override;
 
@@ -290,10 +290,10 @@ public:
 
     void check_or_die() const override;
 
-private:
+protected:
     ColumnPtr _data_column;
     NullColumnPtr _null_column;
-    bool _has_null;
+    mutable bool _has_null;
 };
 
 } // namespace starrocks::vectorized

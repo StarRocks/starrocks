@@ -149,12 +149,12 @@ void StructColumn::append_selective(const Column& src, const uint32_t* indexes, 
     }
 }
 
-void StructColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
+void StructColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) {
     DCHECK(src.is_struct());
     const auto& src_column = down_cast<const StructColumn&>(src);
     DCHECK_EQ(_fields.size(), src_column._fields.size());
     for (size_t i = 0; i < _fields.size(); i++) {
-        _fields[i]->append_value_multiple_times(*src_column._fields[i], index, size);
+        _fields[i]->append_value_multiple_times(*src_column._fields[i], index, size, deep_copy);
     }
 }
 
@@ -333,11 +333,11 @@ std::string StructColumn::debug_item(uint32_t idx) const {
     for (size_t i = 0; i < _fields.size(); i++) {
         const auto& field = _fields[i];
         ss << _field_names->get_slice(i).to_string();
-        ss << ": ";
+        ss << ":";
         ss << field->debug_item(idx);
         if (i < _fields.size() - 1) {
             // Add struct field separator, last field don't need ','.
-            ss << ", ";
+            ss << ",";
         }
     }
     ss << '}';

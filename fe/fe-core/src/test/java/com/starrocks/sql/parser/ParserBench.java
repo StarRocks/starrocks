@@ -92,7 +92,6 @@ public class ParserBench {
         StarRocksLexer lexer = new StarRocksLexer(new CaseInsensitiveStream(CharStreams.fromString(sql)));
         CommonTokenStream tokenStream = new CommonTokenStream(lexer);
         StarRocksParser parser = new StarRocksParser(tokenStream);
-        StarRocksParser.sqlMode = SqlModeHelper.MODE_DEFAULT;
         parser.removeErrorListeners();
         parser.addErrorListener(new BaseErrorListener());
         parser.removeParseListeners();

@@ -97,7 +97,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String expectString = "fn:TFunction(name:TFunctionName(function_name:coalesce), binary_type:BUILTIN, " +
                 "arg_types:[TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))])], " +
                 "ret_type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))]), " +
-                "has_var_args:true, signature:coalesce(DOUBLE...), scalar_fn:TScalarFunction(symbol:), " +
+                "has_var_args:false, signature:coalesce(DOUBLE), scalar_fn:TScalarFunction(symbol:), " +
                 "id:0, fid:70407";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift.contains(expectString));
@@ -111,12 +111,9 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = " select  if(1, cast('3.14' AS decimal32(9, 2)), cast('1.9999' AS decimal32(5, 4))) " +
                 "AS res0 from db1.decimal_table;";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
-        Assert.assertTrue(thrift.contains(
-                "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
-
-        thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
-        Assert.assertTrue(thrift.contains(
-                "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
+        Assert.assertTrue(thrift, thrift.contains(
+                "type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
+                        "scalar_type:TScalarType(type:DECIMAL64, precision:11, scale:4))"));
     }
 
     @Test
@@ -810,6 +807,25 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
 
         ctx.getSessionVariable().setNewPlanerAggStage(oldStage);
         ctx.getSessionVariable().setCboCteReuse(oldCboCteReUse);
+    }
+
+    @Test
+    public void testDecimalTypedWhenClausesOfCaseWhenWithoutCaseClause() throws Exception {
+        String sql = "select case when col_decimal64p13s0 then col_decimal64p13s0 else 0 end from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan, plan.contains("  |  6 <-> if[(cast([3: col_decimal64p13s0, DECIMAL64(13,0), false]" +
+                " as BOOLEAN), [3: col_decimal64p13s0, DECIMAL64(13,0), false], 0); " +
+                "args: BOOLEAN,DECIMAL64,DECIMAL64; result: DECIMAL64(13,0); args nullable: true;" +
+                " result nullable: true]\n"));
+    }
+
+    @Test
+    public void testFirstArgOfIfIsDecimal() throws Exception {
+        String sql = "select if(col_decimal64p13s0, col_decimal64p13s0, 0) from db1.decimal_table";
+        String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
+        Assert.assertTrue(plan, plan.contains("if[(cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as BOOLEAN), " +
+                "[3: col_decimal64p13s0, DECIMAL64(13,0), false], 0); args: BOOLEAN,DECIMAL64,DECIMAL64; " +
+                "result: DECIMAL64(13,0); args nullable: true; result nullable: true]"));
     }
 }
 

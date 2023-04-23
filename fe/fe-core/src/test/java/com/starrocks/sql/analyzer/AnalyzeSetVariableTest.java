@@ -136,6 +136,10 @@ public class AnalyzeSetVariableTest {
         analyzeSuccess(sql);
         sql = "SET CHAR SET 'utf8mb4'";
         analyzeSuccess(sql);
+        sql = "show character set where charset = 'utf8mb4'";
+        analyzeSuccess(sql);
+        sql = "SET CHARACTER SET utf8";
+        analyzeSuccess(sql);
     }
 
     @Test
@@ -213,6 +217,18 @@ public class AnalyzeSetVariableTest {
         analyzeFail(sql, "resource group not exists");
 
         sql = "SET resource_group_id = 0";
+        analyzeSuccess(sql);
+    }
+
+    @Test
+    public void testSetTran() {
+        String sql = "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE";
+        analyzeSuccess(sql);
+
+        sql = "SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE";
+        analyzeSuccess(sql);
+
+        sql = "SET GLOBAL TRANSACTION ISOLATION LEVEL SERIALIZABLE";
         analyzeSuccess(sql);
     }
 }

@@ -473,7 +473,6 @@ vectorized::ChunkPtr ChunkAccumulator::pull() {
         _accumulate_count = 0;
         return res;
     }
-    _accumulate_count = 0;
     return nullptr;
 }
 

@@ -67,6 +67,8 @@ public class AnalyzeSingleTest {
                 "(\"broker.name\" = \"my_broker\"," +
                 "\"broker.hadoop.security.authentication\" = \"kerberos\"," +
                 "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
+
+        analyzeSuccess("select v1 as location from t0");
     }
 
     @Test
@@ -113,11 +115,11 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select v1 from t0 where v1 = 1");
         analyzeSuccess("select v1 from t0 where v2 = 1 and v3 = 5");
         analyzeSuccess("select v1 from t0 where v1 = v2");
+        analyzeSuccess("select v1 from t0 where v2");
 
         analyzeFail("select v1 from t0 where sum(v2) > 1");
         analyzeFail("select v1 from t0 where error = 5");
         analyzeFail("select v1 from t0 where error = v1");
-        analyzeFail("select v1 from t0 where v2");
     }
 
     @Test
@@ -410,8 +412,7 @@ public class AnalyzeSingleTest {
     @Test
     public void testSqlMode() {
         ConnectContext connectContext = getConnectContext();
-        analyzeFail("select 'a' || 'b' from t0",
-                "Operand ''a' OR 'b'' part of predicate ''a'' should return type 'BOOLEAN'");
+        analyzeSuccess("select 'a' || 'b' from t0");
 
         StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select true || false from t0",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
@@ -441,8 +442,7 @@ public class AnalyzeSingleTest {
                 "SELECT * FROM test.tall WHERE (test.tall.ta LIKE (concat('h', 'a', 'i'))) OR TRUE",
                 AstToStringBuilder.toString(statementBase));
 
-        analyzeFail("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
-                "LIKE (concat('h', 'a', 'i'))) OR '%'' part of predicate ''%'' should return type 'BOOLEAN'");
+        analyzeSuccess("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'");
 
         connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_SORT_NULLS_LAST);
         statementBase = SqlParser.parse("select * from  tall order by ta",

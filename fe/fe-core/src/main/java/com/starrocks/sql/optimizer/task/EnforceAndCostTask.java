@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
@@ -32,6 +33,8 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -65,6 +68,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
     //
     private final List<GroupExpression> childrenBestExprList = Lists.newArrayList();
     private final List<PhysicalPropertySet> childrenOutputProperties = Lists.newArrayList();
+
+    private static final Logger LOG = LogManager.getLogger(EnforceAndCostTask.class);
 
     EnforceAndCostTask(TaskContext context, GroupExpression expression) {
         super(context);
@@ -254,8 +259,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         PhysicalJoinOperator node = (PhysicalJoinOperator) groupExpression.getOp();
         // If broadcast child has hint, need to change the cost to zero
         double childCost = childBestExpr.getCost(inputProperty);
-        if (node.getJoinHint().equalsIgnoreCase("BROADCAST")
-                && childCost == Double.POSITIVE_INFINITY) {
+        if (JoinOperator.HINT_BROADCAST.equals(node.getJoinHint()) && childCost == Double.POSITIVE_INFINITY) {
             List<PhysicalPropertySet> childInputProperties =
                     childBestExpr.getInputProperties(inputProperty);
             childBestExpr.updatePropertyWithCost(inputProperty, childInputProperties, 0);
@@ -329,6 +333,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
         if (curTotalCost < context.getUpperBoundCost()) {
             // update context upperbound cost
+            LOG.debug("Update upperBoundCost: prev={} curr={}", context.getUpperBoundCost(), curTotalCost);
             context.setUpperBoundCost(curTotalCost);
         }
     }
@@ -361,6 +366,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         // 1. check the agg node is global aggregation without split and child expr is PhysicalDistributionOperator
         if (aggregate.getType().isGlobal() && !aggregate.isSplit() &&
                 childBestExpr.getOp() instanceof PhysicalDistributionOperator) {
+            // 1.0 if distinct column is skew, optimization is permitted
+            if (aggregate.getDistinctColumnDataSkew() != null) {
+                return true;
+            }
             // 1.1 check default column statistics or child output row may not be accurate
             if (groupExpression.getGroup().getStatistics().getColumnStatistics().values().stream()
                     .anyMatch(ColumnStatistic::isUnknown) ||

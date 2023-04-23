@@ -817,6 +817,21 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
+            if (rowsets_to_change.back() == nullptr) {
+                std::vector<Version> base_tablet_versions;
+                base_tablet->list_versions(&base_tablet_versions);
+                std::stringstream ss;
+                ss << " rs_version_map: ";
+                for (auto& ver : base_tablet_versions) {
+                    ss << ver << ",";
+                }
+                ss << " versions_to_be_changed: ";
+                for (auto& ver : versions_to_be_changed) {
+                    ss << ver << ",";
+                }
+                LOG(WARNING) << "fail to get rowset by version: " << version << ". " << ss.str();
+                return Status::InternalError("fail to get rowset by version");
+            }
             // prepare tablet reader to prevent rowsets being compacted
             std::unique_ptr<TabletReader> tablet_reader =
                     std::make_unique<TabletReader>(base_tablet, version, base_schema);
@@ -845,7 +860,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
         }
         VLOG(3) << "rowsets_to_delete size is:" << rowsets_to_delete.size()
                 << " version is:" << max_rowset->end_version();
-        new_tablet->modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete);
+        new_tablet->modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete, nullptr);
         new_tablet->set_cumulative_layer_point(-1);
         new_tablet->save_meta();
         for (auto& rowset : rowsets_to_delete) {
@@ -1009,6 +1024,11 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             break;
         }
         LOG(INFO) << "new rowset has " << (*new_rowset)->num_segments() << " segments";
+        if (sc_params.rowsets_to_change[i]->rowset_meta()->has_delete_predicate()) {
+            (*new_rowset)
+                    ->mutable_delete_predicate()
+                    ->CopyFrom(sc_params.rowsets_to_change[i]->rowset_meta()->delete_predicate());
+        }
         status = sc_params.new_tablet->add_rowset(*new_rowset, false);
         if (status.is_already_exist()) {
             LOG(WARNING) << "version already exist, version revert occurred. "

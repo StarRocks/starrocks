@@ -597,6 +597,7 @@ set(STARROCKS_LINK_LIBS
     Types
     Udf
     Util
+    Script
     StarRocksGen
     Webserver
     TestUtil
@@ -625,13 +626,10 @@ set_target_properties(jvm PROPERTIES IMPORTED_LOCATION ${LIB_JVM})
 include_directories(${JAVA_HOME}/include)
 include_directories(${JAVA_HOME}/include/linux)
 
-
-
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
     ${AWSSDK_LINK_LIBRARIES}
-    ${AWSSDK_PLATFORM_DEPS}
-    )
-
+)
+set_target_properties(aws-cpp-sdk-core PROPERTIES INTERFACE_LINK_LIBRARIES AWS::aws-crt-cpp)
 
 # Set thirdparty libraries
 set(STARROCKS_DEPENDENCIES
@@ -840,6 +838,7 @@ add_subdirectory(${SRC_DIR}/udf)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)
+add_subdirectory(${SRC_DIR}/script)
 
 if (WITH_BENCH STREQUAL "ON")
      message(STATUS "Build binary with bench")

@@ -11,6 +11,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
+#include "column/vectorized_fwd.h"
 #include "common/config.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
@@ -272,7 +273,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Primiti
         }
         ASSERT_TRUE(eos);
         ASSERT_EQ(expected_rows, actual_rows);
-        sorter->finish(suite._runtime_state.get());
+        sorter->done(suite._runtime_state.get());
     }
     state.counters["rows_sorted"] += item_processed;
     state.counters["data_size"] += data_size;
@@ -401,13 +402,13 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
     int64_t num_rows = 0;
     SortDescs sort_desc(std::vector<int>{1, 1, 1}, std::vector<int>{-1, -1, -1});
     for (auto _ : state) {
-        std::vector<ChunkPtr> inputs;
+        std::vector<ChunkUniquePtr> inputs;
         size_t input_rows = num_runs * chunk1->num_rows();
         for (int i = 0; i < num_runs; i++) {
             if (i % 2 == 0) {
-                inputs.push_back(chunk1);
+                inputs.push_back(chunk1->clone_unique());
             } else {
-                inputs.push_back(chunk2);
+                inputs.push_back(chunk2->clone_unique());
             }
         }
         SortedRuns merged;

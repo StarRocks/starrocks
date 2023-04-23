@@ -84,8 +84,6 @@ public:
 
     virtual bool is_struct() const { return false; }
 
-    virtual bool low_cardinality() const { return false; }
-
     virtual const uint8_t* raw_data() const = 0;
 
     virtual uint8_t* mutable_raw_data() = 0;
@@ -152,7 +150,11 @@ public:
     // The type of |src| and |this| must be exactly matched.
     virtual void append(const Column& src, size_t offset, size_t count) = 0;
 
+    virtual void append_shallow_copy(const Column& src, size_t offset, size_t count) { append(src, offset, count); }
+
     virtual void append(const Column& src) { append(src, 0, src.size()); }
+
+    virtual void append_shallow_copy(const Column& src) { append_shallow_copy(src, 0, src.size()); }
 
     // replicate a column to align with an array's offset, used for captured columns in lambda functions
     // for example: column(1,2)->replicate({0,2,5}) = column(1,1,2,2,2)
@@ -164,7 +166,7 @@ public:
         DCHECK(this->size() >= dest_size) << "The size of the source column is less when duplicating it.";
         dest->reserve(offsets.back());
         for (int i = 0; i < dest_size; ++i) {
-            dest->append_value_multiple_times(*this, i, offsets[i + 1] - offsets[i]);
+            dest->append_value_multiple_times(*this, i, offsets[i + 1] - offsets[i], true);
         }
         return dest;
     }
@@ -192,12 +194,22 @@ public:
     // This function will copy the [3, 2] row of src to this column.
     virtual void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
 
+    virtual void append_selective_shallow_copy(const Column& src, const uint32_t* indexes, uint32_t from,
+                                               uint32_t size) {
+        return append_selective(src, indexes, from, size);
+    }
+
     void append_selective(const Column& src, const Buffer<uint32_t>& indexes) {
         return append_selective(src, indexes.data(), 0, indexes.size());
     }
 
+    void append_selective_shallow_copy(const Column& src, const Buffer<uint32_t>& indexes) {
+        return append_selective_shallow_copy(src, indexes.data(), 0, static_cast<uint32_t>(indexes.size()));
+    }
+
     // This function will get row through 'from' index from src, and copy size elements to this column.
-    virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) = 0;
+    // Currently only `ObjectColumn<BitmapValue>` support shallow copy
+    virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) = 0;
 
     // Append multiple `null` values into this column.
     // Return false if this is a non-nullable column, i.e, if `is_nullable` return false.
@@ -364,7 +376,7 @@ public:
     virtual size_t memory_usage() const { return container_memory_usage() + element_memory_usage(); }
     virtual size_t container_memory_usage() const = 0;
     virtual size_t element_memory_usage() const { return element_memory_usage(0, size()); }
-    virtual size_t element_memory_usage(size_t from, size_t size) const { return 0; }
+    virtual size_t element_memory_usage(size_t from, size_t size) const = 0;
 
     virtual void swap_column(Column& rhs) = 0;
 
@@ -377,6 +389,9 @@ public:
     virtual Status accept_mutable(ColumnVisitorMutable* visitor) = 0;
 
     virtual void check_or_die() const = 0;
+
+    // current only used by adaptive_nullable_column
+    virtual void materialized_nullable() const {}
 
 protected:
     static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr* col);

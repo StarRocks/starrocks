@@ -114,8 +114,8 @@ PARALLEL_TEST(ArrayColumnTest, test_get_elements) {
     elements->append(6);
     offsets->append(6);
 
-    ASSERT_EQ("[1, 2, 3]", column->debug_item(0));
-    ASSERT_EQ("[4, 5, 6]", column->debug_item(1));
+    ASSERT_EQ("[1,2,3]", column->debug_item(0));
+    ASSERT_EQ("[4,5,6]", column->debug_item(1));
 }
 
 // NOLINTNEXTLINE
@@ -421,7 +421,7 @@ PARALLEL_TEST(ArrayColumnTest, test_append_array) {
     elements->append(9);
     offsets->append(9);
 
-    ASSERT_EQ("[7, 8, 9]", column->debug_item(2));
+    ASSERT_EQ("[7,8,9]", column->debug_item(2));
 }
 
 // NOLINTNEXTLINE
@@ -449,7 +449,7 @@ PARALLEL_TEST(ArrayColumnTest, test_append_nulls) {
 
     ASSERT_EQ(3, nullable_column->size());
     ASSERT_TRUE(nullable_column->is_null(0));
-    ASSERT_EQ("[4, 5, 6]", nullable_column->debug_item(2));
+    ASSERT_EQ("[4,5,6]", nullable_column->debug_item(2));
 }
 
 // NOLINTNEXTLINE
@@ -547,8 +547,8 @@ PARALLEL_TEST(ArrayColumnTest, test_multi_dimension_array) {
     offsets->append(9);
     offsets_1->append(5);
 
-    ASSERT_EQ("[[1, 2, 3], [4, 5, 6]]", column->debug_item(0));
-    ASSERT_EQ("[[7], [8], [9]]", column->debug_item(1));
+    ASSERT_EQ("[[1,2,3],[4,5,6]]", column->debug_item(0));
+    ASSERT_EQ("[[7],[8],[9]]", column->debug_item(1));
 }
 
 // NOLINTNEXTLINE
@@ -575,7 +575,7 @@ PARALLEL_TEST(ArrayColumnTest, test_resize) {
 
     column->resize(1);
     ASSERT_EQ(1, column->size());
-    ASSERT_EQ("[1, 2, 3]", column->debug_item(0));
+    ASSERT_EQ("[1,2,3]", column->debug_item(0));
 }
 
 // NOLINTNEXTLINE
@@ -637,8 +637,8 @@ PARALLEL_TEST(ArrayColumnTest, test_swap_column) {
     offsets_2->append(6);
 
     column->swap_column(*column_2);
-    ASSERT_EQ("[4, 5, 6]", column->debug_item(0));
-    ASSERT_EQ("[7, 8, 9]", column->debug_item(1));
+    ASSERT_EQ("[4,5,6]", column->debug_item(0));
+    ASSERT_EQ("[7,8,9]", column->debug_item(1));
 }
 
 // NOLINTNEXTLINE
@@ -661,8 +661,8 @@ PARALLEL_TEST(ArrayColumnTest, test_copy_constructor) {
 
     ArrayColumn c1(*c0);
     c0->reset_column();
-    ASSERT_EQ("[1, 2, 3]", c1.debug_item(0));
-    ASSERT_EQ("[4, 5, 6]", c1.debug_item(1));
+    ASSERT_EQ("[1,2,3]", c1.debug_item(0));
+    ASSERT_EQ("[4,5,6]", c1.debug_item(1));
     ASSERT_TRUE(c1.elements_column().unique());
     ASSERT_TRUE(c1.offsets_column().unique());
 }
@@ -686,8 +686,8 @@ PARALLEL_TEST(ArrayColumnTest, test_move_constructor) {
     offsets->append(6);
 
     ArrayColumn c1(std::move(*c0));
-    ASSERT_EQ("[1, 2, 3]", c1.debug_item(0));
-    ASSERT_EQ("[4, 5, 6]", c1.debug_item(1));
+    ASSERT_EQ("[1,2,3]", c1.debug_item(0));
+    ASSERT_EQ("[4,5,6]", c1.debug_item(1));
     ASSERT_TRUE(c1.elements_column().unique());
     ASSERT_TRUE(c1.offsets_column().unique());
 }
@@ -713,8 +713,8 @@ PARALLEL_TEST(ArrayColumnTest, test_copy_assignment) {
     ArrayColumn c1(Int32Column::create(), UInt32Column::create());
     c1 = *c0;
     c0->reset_column();
-    ASSERT_EQ("[1, 2, 3]", c1.debug_item(0));
-    ASSERT_EQ("[4, 5, 6]", c1.debug_item(1));
+    ASSERT_EQ("[1,2,3]", c1.debug_item(0));
+    ASSERT_EQ("[4,5,6]", c1.debug_item(1));
     ASSERT_TRUE(c1.elements_column().unique());
     ASSERT_TRUE(c1.offsets_column().unique());
 }
@@ -739,8 +739,8 @@ PARALLEL_TEST(ArrayColumnTest, test_move_assignment) {
 
     ArrayColumn c1(Int32Column ::create(), UInt32Column::create());
     c1 = std::move(*c0);
-    ASSERT_EQ("[1, 2, 3]", c1.debug_item(0));
-    ASSERT_EQ("[4, 5, 6]", c1.debug_item(1));
+    ASSERT_EQ("[1,2,3]", c1.debug_item(0));
+    ASSERT_EQ("[4,5,6]", c1.debug_item(1));
     ASSERT_TRUE(c1.elements_column().unique());
     ASSERT_TRUE(c1.offsets_column().unique());
 }
@@ -765,8 +765,8 @@ PARALLEL_TEST(ArrayColumnTest, test_clone) {
 
     auto c1 = c0->clone();
     c0->reset_column();
-    ASSERT_EQ("[1, 2, 3]", c1->debug_item(0));
-    ASSERT_EQ("[4, 5, 6]", c1->debug_item(1));
+    ASSERT_EQ("[1,2,3]", c1->debug_item(0));
+    ASSERT_EQ("[4,5,6]", c1->debug_item(1));
     ASSERT_TRUE(down_cast<ArrayColumn*>(c1.get())->elements_column().unique());
     ASSERT_TRUE(down_cast<ArrayColumn*>(c1.get())->offsets_column().unique());
 }
@@ -791,8 +791,8 @@ PARALLEL_TEST(ArrayColumnTest, test_clone_shared) {
 
     auto c1 = c0->clone_shared();
     c0->reset_column();
-    ASSERT_EQ("[1, 2, 3]", c1->debug_item(0));
-    ASSERT_EQ("[4, 5, 6]", c1->debug_item(1));
+    ASSERT_EQ("[1,2,3]", c1->debug_item(0));
+    ASSERT_EQ("[4,5,6]", c1->debug_item(1));
     ASSERT_TRUE(c1.unique());
     ASSERT_TRUE(down_cast<ArrayColumn*>(c1.get())->elements_column().unique());
     ASSERT_TRUE(down_cast<ArrayColumn*>(c1.get())->offsets_column().unique());
@@ -960,10 +960,10 @@ PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
     ASSERT_TRUE(column->update_rows(*replace_col1.get(), replace_idxes.data()).ok());
 
     ASSERT_EQ(4, column->size());
-    ASSERT_EQ("[1, 2, 3]", column->debug_item(0));
-    ASSERT_EQ("[101, 102]", column->debug_item(1));
-    ASSERT_EQ("[7, 8, 9]", column->debug_item(2));
-    ASSERT_EQ("[103, 104]", column->debug_item(3));
+    ASSERT_EQ("[1,2,3]", column->debug_item(0));
+    ASSERT_EQ("[101,102]", column->debug_item(1));
+    ASSERT_EQ("[7,8,9]", column->debug_item(2));
+    ASSERT_EQ("[103,104]", column->debug_item(3));
 
     auto offset_col2 = UInt32Column::create();
     auto element_col2 = Int32Column::create();
@@ -981,10 +981,10 @@ PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
     ASSERT_TRUE(column->update_rows(*replace_col2.get(), replace_idxes.data()).ok());
 
     ASSERT_EQ(4, column->size());
-    ASSERT_EQ("[1, 2, 3]", column->debug_item(0));
-    ASSERT_EQ("[201, 202]", column->debug_item(1));
-    ASSERT_EQ("[7, 8, 9]", column->debug_item(2));
-    ASSERT_EQ("[203, 204]", column->debug_item(3));
+    ASSERT_EQ("[1,2,3]", column->debug_item(0));
+    ASSERT_EQ("[201,202]", column->debug_item(1));
+    ASSERT_EQ("[7,8,9]", column->debug_item(2));
+    ASSERT_EQ("[203,204]", column->debug_item(3));
 }
 
 PARALLEL_TEST(ArrayColumnTest, test_assign) {
@@ -1007,10 +1007,10 @@ PARALLEL_TEST(ArrayColumnTest, test_assign) {
     // assign
     column->assign(4, 0);
     ASSERT_EQ(4, column->size());
-    ASSERT_EQ("[1, 2, 3]", column->debug_item(0));
-    ASSERT_EQ("[1, 2, 3]", column->debug_item(1));
-    ASSERT_EQ("[1, 2, 3]", column->debug_item(2));
-    ASSERT_EQ("[1, 2, 3]", column->debug_item(3));
+    ASSERT_EQ("[1,2,3]", column->debug_item(0));
+    ASSERT_EQ("[1,2,3]", column->debug_item(1));
+    ASSERT_EQ("[1,2,3]", column->debug_item(2));
+    ASSERT_EQ("[1,2,3]", column->debug_item(3));
 
     /// test assign [null]
     elements = Int32Column::create();
@@ -1063,15 +1063,15 @@ PARALLEL_TEST(ArrayColumnTest, test_empty_null_array) {
     auto res = column->empty_null_array(null_map);
     ASSERT_FALSE(res);
     ASSERT_EQ(2, column->size());
-    ASSERT_EQ("[1, 2, 3]", column->debug_item(0));
-    ASSERT_EQ("[4, 5, 6]", column->debug_item(1));
+    ASSERT_EQ("[1,2,3]", column->debug_item(0));
+    ASSERT_EQ("[4,5,6]", column->debug_item(1));
 
     null_map->get_data()[0] = 1;
     res = column->empty_null_array(null_map);
     ASSERT_TRUE(res);
     ASSERT_EQ(2, column->size());
     ASSERT_EQ("[]", column->debug_item(0));
-    ASSERT_EQ("[4, 5, 6]", column->debug_item(1));
+    ASSERT_EQ("[4,5,6]", column->debug_item(1));
 
     null_map->get_data()[1] = 1;
     res = column->empty_null_array(null_map);
@@ -1106,13 +1106,52 @@ PARALLEL_TEST(ArrayColumnTest, test_replicate) {
 
     auto res = column->replicate(off);
 
-    ASSERT_EQ("[1, 2, 3]", res->debug_item(0));
-    ASSERT_EQ("[1, 2, 3]", res->debug_item(1));
-    ASSERT_EQ("[1, 2, 3]", res->debug_item(2));
-    ASSERT_EQ("[4, 5, 6]", res->debug_item(3));
-    ASSERT_EQ("[4, 5, 6]", res->debug_item(4));
+    ASSERT_EQ("[1,2,3]", res->debug_item(0));
+    ASSERT_EQ("[1,2,3]", res->debug_item(1));
+    ASSERT_EQ("[1,2,3]", res->debug_item(2));
+    ASSERT_EQ("[4,5,6]", res->debug_item(3));
+    ASSERT_EQ("[4,5,6]", res->debug_item(4));
     ASSERT_EQ("[]", res->debug_item(5));
     ASSERT_EQ("[]", res->debug_item(6));
+}
+
+PARALLEL_TEST(ArrayColumnTest, test_element_memory_usage) {
+    auto offsets = UInt32Column::create();
+    auto elements = Int32Column::create();
+    auto column = ArrayColumn::create(elements, offsets);
+
+    // insert [],[1],[2, 3],[4, 5, 6]
+    offsets->append(0);
+
+    elements->append(1);
+    offsets->append(1);
+
+    elements->append(2);
+    elements->append(3);
+    offsets->append(3);
+
+    elements->append(4);
+    elements->append(5);
+    elements->append(6);
+    offsets->append(6);
+
+    ASSERT_EQ("[]", column->debug_item(0));
+    ASSERT_EQ("[1]", column->debug_item(1));
+    ASSERT_EQ("[2,3]", column->debug_item(2));
+    ASSERT_EQ("[4,5,6]", column->debug_item(3));
+
+    ASSERT_EQ(40, column->Column::element_memory_usage());
+
+    std::vector<size_t> element_mem_usages = {4, 8, 12, 16};
+    size_t element_num = element_mem_usages.size();
+    for (size_t start = 0; start < element_num; start++) {
+        size_t expected_usage = 0;
+        ASSERT_EQ(expected_usage, column->element_memory_usage(start, 0));
+        for (size_t size = 1; start + size <= element_num; size++) {
+            expected_usage += element_mem_usages[start + size - 1];
+            ASSERT_EQ(expected_usage, column->element_memory_usage(start, size));
+        }
+    }
 }
 
 } // namespace starrocks::vectorized

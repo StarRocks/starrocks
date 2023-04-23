@@ -2,12 +2,12 @@
 
 #pragma once
 
+#include <cstring>
 #include <vector>
 
 #include "util/slice.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 // SIZE: 256 * uint8_t
 static const uint8_t UTF8_BYTE_LENGTH_TABLE[256] = {
@@ -104,7 +104,7 @@ static inline const char* skip_trailing_utf8(const char* p, const char* begin, s
 // is to say, counting bytes which do not match 10xx_xxxx pattern.
 // All 0xxx_xxxx, 110x_xxxx, 1110_xxxx and 1111_0xxx are greater than 1011_1111 when use int8_t arithmetic,
 // so just count bytes greater than 1011_1111 in a byte string as the result of utf8_length.
-static int utf8_len(const char* begin, const char* end) {
+inline static int utf8_len(const char* begin, const char* end) {
     int len = 0;
     const char* p = begin;
 #if defined(__AVX2__)
@@ -141,5 +141,27 @@ static int utf8_len(const char* begin, const char* end) {
     return len;
 }
 
-} // namespace vectorized
-} // namespace starrocks
+// Check if the string contains a utf-8 character
+static inline bool utf8_contains(const std::string& str, const std::vector<size_t>& utf8_index, Slice utf8_char) {
+    for (int i = 0; i < utf8_index.size(); i++) {
+        size_t char_idx = utf8_index[i];
+        // TODO: optimize the utf8-index, add a length guard at the tail
+        size_t char_len = i < utf8_index.size() - 1 ? utf8_index[i + 1] - char_idx : str.length() - char_idx;
+        if (memcmp(str.data() + char_idx, utf8_char.data, char_len) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Find the start of utf8 character
+// NOTE: it must be a valid utf-8 string
+static inline Slice utf8_char_start(const char* end) {
+    const char* p = end;
+    size_t count = 1;
+    for (; (*p & 0xC0) == 0x80; p--, count++) {
+    }
+    return {p, count};
+}
+
+} // namespace starrocks::vectorized

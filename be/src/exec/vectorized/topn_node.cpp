@@ -72,6 +72,47 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     _materialized_tuple_desc = _row_descriptor.tuple_descriptors()[0];
     DCHECK(_materialized_tuple_desc != nullptr);
 
+    bool all_slot_ref = true;
+    std::unordered_set<SlotId> early_materialized_slots;
+    for (ExprContext* expr_ctx : _sort_exec_exprs.lhs_ordering_expr_ctxs()) {
+        auto* expr = expr_ctx->root();
+        if (expr->is_slotref()) {
+            early_materialized_slots.insert(down_cast<ColumnRef*>(expr)->slot_id());
+        } else {
+            all_slot_ref = false;
+        }
+    }
+
+    // In lazy materialization of cascading merging, an extra ordinal column of type FixedLengthColumn<uint32_t>(in
+    // very rare cases, data skew is drastic, maybe FixedLengthColumn<uint64_t>) is added to participate permutation
+    // in cascading merging phase. so only if the cost of permuting ordinal column is less that the permuting
+    // no-group-by output columns, then cascading can benefit from lazy materialization. for an example:
+    // select c0, c1, c2 from t group by c1,c2
+    // if c0 is bigint, the byte width of the element of c0 is 8, permuting c0 costs more than permuting ordinal column,
+    // but if c0 is tinyint, the byte width of the element of c0 is 1, obviously permuting ordinal column costs more.
+    // The permutation cost is proportion of the total size of bytes of the elements of non-group-by columns.
+    int materialized_cost = 0;
+    for (auto* slot : _materialized_tuple_desc->slots()) {
+        if (early_materialized_slots.count(slot->id())) {
+            continue;
+        }
+        // nullable column always contribute 1 byte to materialized cost.
+        materialized_cost += slot->is_nullable();
+        if (slot->type().is_string_type()) {
+            // Slice is 16 bytes
+            materialized_cost += 16;
+        } else {
+            materialized_cost += std::max<int>(1, slot->type().get_slot_size());
+        }
+    }
+    // The ordinal column is almost always FixedLengthColumn<uint32_t>, so cost is sizeof(uint32_t) + 4(margin)
+    static constexpr auto ORDINAL_SORT_COST = 8;
+    auto late_materialization = _tnode.sort_node.__isset.late_materialization && _tnode.sort_node.late_materialization;
+    if (late_materialization && all_slot_ref && materialized_cost > ORDINAL_SORT_COST) {
+        _early_materialized_slots.insert(_early_materialized_slots.begin(), early_materialized_slots.begin(),
+                                         early_materialized_slots.end());
+    }
+
     _runtime_profile->add_info_string("SortKeys", _sort_keys);
     _runtime_profile->add_info_string("SortType", tnode.sort_node.use_top_n ? "TopN" : "All");
     return Status::OK();
@@ -165,11 +206,12 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
 
     } else {
         _chunks_sorter = std::make_unique<ChunksSorterFullSort>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                &_is_asc_order, &_is_null_first, _sort_keys);
+                                                                &_is_asc_order, &_is_null_first, _sort_keys, 1024000,
+                                                                16 * 1024 * 1024, _early_materialized_slots);
     }
 
     bool eos = false;
-    _chunks_sorter->setup_runtime(runtime_profile());
+    _chunks_sorter->setup_runtime(runtime_profile(), runtime_state()->instance_mem_tracker());
     do {
         RETURN_IF_CANCELLED(state);
         ChunkPtr chunk;
@@ -193,7 +235,6 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
 
 pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-
     OpFactories ops_sink_with_sort = _children[0]->decompose_to_pipeline(context);
     bool is_partition = _tnode.sort_node.__isset.partition_exprs && !_tnode.sort_node.partition_exprs.empty();
     bool is_rank_topn_type = _tnode.sort_node.__isset.topn_type && _tnode.sort_node.topn_type != TTopNType::ROW_NUMBER;
@@ -210,8 +251,6 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
     }
 
     auto degree_of_parallelism = context->source_operator(ops_sink_with_sort)->degree_of_parallelism();
-    auto could_local_shuffle = context->source_operator(ops_sink_with_sort)->could_local_shuffle();
-    auto partition_type = context->source_operator(ops_sink_with_sort)->partition_type();
     std::any context_factory;
     if (is_partition) {
         context_factory = std::make_shared<LocalPartitionTopnContextFactory>(
@@ -233,11 +272,18 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
         sink_operator = std::make_shared<LocalPartitionTopnSinkOperatorFactory>(context->next_operator_id(), id(),
                                                                                 local_partition_topn_context_factory);
     } else {
+        int64_t max_buffered_rows = 1024000;
+        int64_t max_buffered_bytes = 16 * 1024 * 1024;
+        if (_tnode.sort_node.__isset.max_buffered_bytes) {
+            max_buffered_rows = _tnode.sort_node.max_buffered_rows;
+            max_buffered_bytes = _tnode.sort_node.max_buffered_bytes;
+        }
         const auto& sort_context_factory = std::any_cast<std::shared_ptr<SortContextFactory>>(context_factory);
         sink_operator = std::make_shared<PartitionSortSinkOperatorFactory>(
                 context->next_operator_id(), id(), sort_context_factory, _sort_exec_exprs, _is_asc_order,
-                _is_null_first, _sort_keys, _offset, _limit, _tnode.sort_node.topn_type, _order_by_types,
-                _materialized_tuple_desc, child(0)->row_desc(), _row_descriptor, _analytic_partition_exprs);
+                _is_null_first, _sort_keys, _offset, _limit, max_buffered_rows, max_buffered_bytes,
+                _tnode.sort_node.topn_type, _order_by_types, _materialized_tuple_desc, child(0)->row_desc(),
+                _row_descriptor, _analytic_partition_exprs, _early_materialized_slots);
     }
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(sink_operator.get(), context, rc_rf_probe_collector);
@@ -259,22 +305,13 @@ pipeline::OpFactories TopNNode::decompose_to_pipeline(pipeline::PipelineBuilderC
 
     ops_sink_with_sort.emplace_back(std::move(sink_operator));
     context->add_pipeline(ops_sink_with_sort);
-    if (is_merging) {
-        if (is_partition) {
-            source_operator->set_degree_of_parallelism(degree_of_parallelism);
-            source_operator->set_could_local_shuffle(could_local_shuffle);
-            source_operator->set_partition_type(partition_type);
-        } else {
-            // source_operator's instance count must be 1
-            source_operator->set_degree_of_parallelism(1);
-            source_operator->set_could_local_shuffle(true);
-            source_operator->set_partition_type(partition_type);
-        }
-    } else {
-        // Each PartitionSortSinkOperator has an independent LocalMergeSortSinkOperator respectively
-        source_operator->set_degree_of_parallelism(degree_of_parallelism);
-        source_operator->set_could_local_shuffle(could_local_shuffle);
-        source_operator->set_partition_type(partition_type);
+
+    auto* upstream_source_op = context->source_operator(ops_sink_with_sort);
+    context->inherit_upstream_source_properties(source_operator.get(), upstream_source_op);
+    if (is_merging && !is_partition) {
+        // source_operator's instance count must be 1
+        source_operator->set_degree_of_parallelism(1);
+        source_operator->set_could_local_shuffle(true);
     }
     operators_source_with_sort.emplace_back(std::move(source_operator));
 

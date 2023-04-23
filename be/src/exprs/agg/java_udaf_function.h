@@ -256,7 +256,6 @@ public:
         LOCAL_REF_GUARD_ENV(env, state_array);
 
         // prepare buffer
-        DCHECK(column->is_binary());
         auto serialized_column =
                 ColumnHelper::get_binary_column(const_cast<Column*>(ColumnHelper::get_data_column(column)));
 

@@ -129,6 +129,14 @@ Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
             .build(&_flush_pool);
 }
 
+Status MemTableFlushExecutor::update_max_threads(int max_threads) {
+    if (_flush_pool != nullptr) {
+        return _flush_pool->update_max_threads(max_threads);
+    } else {
+        return Status::InternalError("Thread pool not exist");
+    }
+}
+
 std::unique_ptr<FlushToken> MemTableFlushExecutor::create_flush_token(ThreadPool::ExecutionMode execution_mode) {
     return std::make_unique<FlushToken>(_flush_pool->new_token(execution_mode));
 }

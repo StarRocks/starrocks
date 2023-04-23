@@ -18,6 +18,7 @@ import com.starrocks.alter.AlterJobV2Test;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import org.jetbrains.annotations.TestOnly;
@@ -30,6 +31,7 @@ public class CTASAutoTabletTest {
     @BeforeClass
     public static void setUp() throws Exception {
         // set some parameters to speedup test
+        Config.enable_auto_tablet_distribution = true;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
         PseudoCluster cluster = PseudoCluster.getInstance();

@@ -103,7 +103,7 @@ public class EsNodeInfo {
     public EsNodeInfo(String id, String seed) {
         this.id = id;
         String[] scratch = seed.split(":");
-        int port = 80;
+        int port = seed.startsWith("https") ? 443 : 80;
         if (scratch.length == 3) {
             port = Integer.parseInt(scratch[2]);
         }

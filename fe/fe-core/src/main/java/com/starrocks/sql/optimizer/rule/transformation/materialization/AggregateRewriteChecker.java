@@ -9,7 +9,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import java.util.List;
 
 public class AggregateRewriteChecker {
-    private List<ScalarOperator> targetAggregates;
+    private final List<ScalarOperator> targetAggregates;
     private boolean distinct;
 
     public AggregateRewriteChecker(List<ScalarOperator> targetAggregates) {
@@ -50,20 +50,7 @@ public class AggregateRewriteChecker {
         }
 
         boolean isMatched(ScalarOperator scalarOperator) {
-            // judge child first
-            boolean allChildMatched = !scalarOperator.getChildren().isEmpty() && scalarOperator.isVariable();
-            for (int i = 0; i < scalarOperator.getChildren().size(); i++) {
-                if (scalarOperator.getChild(i).isVariable()) {
-                    Boolean matched = scalarOperator.getChild(i).accept(this, null);
-                    if (!Boolean.TRUE.equals(matched)) {
-                        allChildMatched = false;
-                    }
-                }
-            }
-            if (targetAggregates.contains(scalarOperator)) {
-                return true;
-            }
-            return allChildMatched;
+            return targetAggregates.contains(scalarOperator);
         }
     }
 }

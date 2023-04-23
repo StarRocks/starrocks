@@ -100,6 +100,13 @@ set(EXEC_FILES
     vectorized/table_function_node.cpp
     vectorized/schema_scanner.cpp
     vectorized/schema_scan_node.cpp
+    vectorized/schema_scanner/schema_be_metrics_scanner.cpp
+    vectorized/schema_scanner/schema_be_tablets_scanner.cpp
+    vectorized/schema_scanner/schema_be_txns_scanner.cpp
+    vectorized/schema_scanner/schema_be_configs_scanner.cpp
+    vectorized/schema_scanner/schema_be_threads_scanner.cpp
+    vectorized/schema_scanner/schema_be_logs_scanner.cpp
+    vectorized/schema_scanner/schema_fe_tablet_schedules_scanner.cpp
     vectorized/schema_scanner/schema_tables_scanner.cpp
     vectorized/schema_scanner/schema_dummy_scanner.cpp
     vectorized/schema_scanner/schema_schemata_scanner.cpp

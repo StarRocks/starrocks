@@ -246,6 +246,10 @@ public class Table extends MetaObject implements Writable {
         return nameToColumn.get(name);
     }
 
+    public boolean containColumn(String columnName) {
+        return nameToColumn.containsKey(columnName);
+    }
+
     public List<Column> getColumns() {
         return new ArrayList<>(nameToColumn.values());
     }
@@ -533,5 +537,9 @@ public class Table extends MetaObject implements Writable {
 
     public List<String> getPartitionColumnNames() {
         return Lists.newArrayList();
+    }
+
+    public boolean supportsUpdate() {
+        return false;
     }
 }

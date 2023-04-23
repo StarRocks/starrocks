@@ -378,7 +378,7 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
   curl --location-trusted -u root: \
       -H "label:label4" \
       -H "column_separator:," \
-      -H "columns: id, name, score, temp, __op = 'temp'" \
+      -H "columns: id, name, score, temp, __op = temp" \
       -T example3.csv -XPUT\
       http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
   ```
@@ -406,7 +406,7 @@ Run a load job to delete the record whose `id` is `101` in `example3.csv` from `
 
   ```SQL
   CREATE ROUTINE LOAD test_db.table3 ON table3
-  COLUMNS(id, name, score, temp, __op)
+  COLUMNS(id, name, score, temp, __op = temp)
   PROPERTIES
   (
       "desired_concurrent_number" = "3",
@@ -562,7 +562,7 @@ As shown in the preceding query result, the record whose `id` is `101` in `examp
 
 ## Conditional updates
 
-From StarRocks v2.5 onwards, tables of the Primary Key model support conditional updates. You can specify a non-primary key column as the condition to determine whether updates can take effect. As such, the update from a source record to a destination record takes effect only when the source data record has a larger value than the destination data record in the specified column.
+From StarRocks v2.5 onwards, tables of the Primary Key model support conditional updates. You can specify a non-primary key column as the condition to determine whether updates can take effect. As such, the update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column.
 
 The conditional update feature is designed to resolve data disorder. If the source data is disordered, you can use this feature to ensure that new data will not be overwritten by old data.
 
@@ -571,6 +571,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 > - You cannot specify different columns as update conditions for the same batch of data.
 > - DELETE operations do not support conditional updates.
 > - Partial updates and conditional updates cannot be used simultaneously.
+> - Only Stream Load and Routine Load support conditional updates.
 
 ### Data examples
 
@@ -610,7 +611,7 @@ The conditional update feature is designed to resolve data disorder. If the sour
 
 ### Load data
 
-Run a load to update the records whose `id` values are `101` and `102`, respectively, from `example5.csv` into `table5`, and specify that the updates take effect only when the `verion` value in each of the two records is greater than their current `version` values.
+Run a load to update the records whose `id` values are `101` and `102`, respectively, from `example5.csv` into `table5`, and specify that the updates take effect only when the `verion` value in each of the two records is greater or equal to their current `version` values.
 
 - Run a Stream Load job:
 
@@ -621,23 +622,6 @@ Run a load to update the records whose `id` values are `101` and `102`, respecti
       -H "merge_condition:version" \
       -T example5.csv -XPUT\
       http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
-  ```
-
-- Run a Broker Load job:
-
-  ```SQL
-  LOAD LABEL test_db.table10
-  (
-      data infile("hdfs://<hdfs_host>:<hdfs_port>/example5.csv")
-      into table table5
-      format as "csv"
-      (id, version, score)
-  )
-  with broker
-  properties
-  (
-      "merge_condition" = "version"
-  );
   ```
 
 - Run a Routine Load job:

@@ -116,7 +116,7 @@ void MapColumn::append_selective(const Column& src, const uint32_t* indexes, uin
     }
 }
 
-void MapColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
+void MapColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) {
     for (uint32_t i = 0; i < size; i++) {
         append(src, index, 1);
     }
@@ -463,15 +463,21 @@ size_t MapColumn::get_map_size(size_t idx) const {
     return _offsets->get_data()[idx + 1] - _offsets->get_data()[idx];
 }
 
+std::pair<size_t, size_t> MapColumn::get_map_offset_size(size_t idx) const {
+    DCHECK_LT(idx + 1, _offsets->size());
+    return {_offsets->get_data()[idx], _offsets->get_data()[idx + 1] - _offsets->get_data()[idx]};
+}
+
 bool MapColumn::set_null(size_t idx) {
     return false;
 }
 
 size_t MapColumn::element_memory_usage(size_t from, size_t size) const {
     DCHECK_LE(from + size, this->size()) << "Range error";
-    return _keys->element_memory_usage(_offsets->get_data()[from], _offsets->get_data()[from + size]) +
-           _values->element_memory_usage(_offsets->get_data()[from], _offsets->get_data()[from + size]) +
-           _offsets->Column::element_memory_usage(from, size);
+    size_t start_offset = _offsets->get_data()[from];
+    size_t elements_num = _offsets->get_data()[from + size] - start_offset;
+    return _keys->element_memory_usage(start_offset, elements_num) +
+           _values->element_memory_usage(start_offset, elements_num) + _offsets->element_memory_usage(from, size);
 }
 
 void MapColumn::swap_column(Column& rhs) {
@@ -494,16 +500,16 @@ std::string MapColumn::debug_item(uint32_t idx) const {
     size_t map_size = _offsets->get_data()[idx + 1] - offset;
 
     std::stringstream ss;
-    ss << "[";
+    ss << "{";
     for (size_t i = 0; i < map_size; ++i) {
         if (i > 0) {
-            ss << ", ";
+            ss << ",";
         }
         ss << _keys->debug_item(offset + i);
-        ss << "->";
+        ss << ":";
         ss << _values->debug_item(offset + i);
     }
-    ss << "]";
+    ss << "}";
     return ss.str();
 }
 

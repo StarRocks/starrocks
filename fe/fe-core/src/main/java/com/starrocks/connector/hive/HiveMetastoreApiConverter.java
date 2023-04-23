@@ -26,7 +26,6 @@ import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
@@ -49,11 +48,11 @@ import static com.starrocks.catalog.HudiTable.HUDI_TABLE_INPUT_FOAMT;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_SERDE_LIB;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_TYPE;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
+import static com.starrocks.connector.ColumnTypeConverter.fromHudiTypeToHiveTypeString;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
 import static java.util.Objects.requireNonNull;
 import static org.apache.hadoop.hive.common.StatsSetupConst.ROW_COUNT;
 import static org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE;
-import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils.getTypeInfoFromTypeString;
 
 public class HiveMetastoreApiConverter {
     private static final Logger LOG = LogManager.getLogger(HiveMetastoreApiConverter.class);
@@ -258,16 +257,17 @@ public class HiveMetastoreApiConverter {
                 columnTypesBuilder.append("#");
             }
 
+            String columnName = hudiField.name().toLowerCase(Locale.ROOT);
             Optional<FieldSchema> field = allFields.stream()
-                    .filter(f -> f.getName().equals(hudiField.name().toLowerCase(Locale.ROOT))).findFirst();
+                    .filter(f -> f.getName().equals(columnName)).findFirst();
             if (!field.isPresent()) {
                 throw new StarRocksConnectorException(
                         "Hudi column [" + hudiField.name() + "] not exists in hive metastore.");
             }
+            columnNamesBuilder.append(columnName);
+            String columnType = fromHudiTypeToHiveTypeString(hudiField.schema());
+            columnTypesBuilder.append(columnType);
 
-            TypeInfo fieldInfo = getTypeInfoFromTypeString(field.get().getType());
-            columnNamesBuilder.append(field.get().getName());
-            columnTypesBuilder.append(fieldInfo.getTypeName());
             isFirst = false;
         }
         hudiProperties.put(HUDI_TABLE_COLUMN_NAMES, columnNamesBuilder.toString());

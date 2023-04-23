@@ -1602,7 +1602,7 @@ const char* DateTimeValue::day_name() const {
 
 DateTimeValue DateTimeValue::local_time() {
     DateTimeValue value;
-    value.from_unixtime(time(nullptr), TimezoneUtils::default_time_zone);
+    value.from_unixtime(time(nullptr), TimezoneUtils::local_time_zone());
     return value;
 }
 

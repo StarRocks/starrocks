@@ -33,6 +33,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -157,6 +158,19 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (statementBase instanceof  CreateTableStmt) {
+            CreateTableStmt createTableStmt = (CreateTableStmt) statementBase;
+            createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+            return this.withTable(sql);
+        } else if (statementBase instanceof CreateMaterializedViewStatement) {
+            return this.withMaterializedView(sql, true);
+        } else {
+            throw new AnalysisException("Sql is not supported in withSingleReplicaTable:" + sql);
+        }
+    }
+
     public StarRocksAssert withView(String sql) throws Exception {
         CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().createView(createTableStmt);
@@ -191,32 +205,32 @@ public class StarRocksAssert {
         return this;
     }
 
-    // Add materialized view to the schema (use cup)
+    // Add materialized view to the schema
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
-        CreateMaterializedViewStmt createMaterializedViewStmt =
-                (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
+        return withMaterializedView(sql, false);
+    }
+
+    public StarRocksAssert withMaterializedView(String sql, boolean isOnlySingleReplica) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (stmt instanceof CreateMaterializedViewStmt) {
+            CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
+            if (isOnlySingleReplica) {
+                createMaterializedViewStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+            }
+            GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
+        } else {
+            Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
+            CreateMaterializedViewStatement createMaterializedViewStatement =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            if (isOnlySingleReplica) {
+                createMaterializedViewStatement.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
+            }
+            GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+        }
         checkAlterJob();
         return this;
     }
-
-    // Add materialized view to the schema (use antlr)
-    public StarRocksAssert withMaterializedStatementView(String sql) throws Exception {
-        CreateMaterializedViewStatement createMaterializedViewStmt =
-                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStmt);
-        checkAlterJob();
-        return this;
-    }
-
-    // why create this ? because query statement before property in old mv grammar
-    public StarRocksAssert withNewMaterializedView(String sql) throws Exception {
-        CreateMaterializedViewStatement createMaterializedViewStatement =
-                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
-        return this;
-    }
-
+    
     // Add rollup
     public StarRocksAssert withRollup(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);

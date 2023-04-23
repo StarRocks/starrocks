@@ -5,6 +5,7 @@
 #include "column/nullable_column.h"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "runtime/primitive_type.h"
+#include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 
 namespace starrocks::vectorized {
@@ -42,9 +43,7 @@ SchemaTablesScanner::SchemaTablesScanner()
 SchemaTablesScanner::~SchemaTablesScanner() = default;
 
 Status SchemaTablesScanner::start(RuntimeState* state) {
-    if (!_is_init) {
-        return Status::InternalError("used before initialized.");
-    }
+    RETURN_IF_ERROR(SchemaScanner::start(state));
     TAuthInfo auth_info;
     if (nullptr != _param->db) {
         auth_info.__set_pattern(*(_param->db));
@@ -259,7 +258,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
                         nullable_column->append_nulls(1);
                     } else {
                         DateTimeValue t;
-                        t.from_unixtime(create_time, TimezoneUtils::default_time_zone);
+                        t.from_unixtime(create_time, _runtime_state->timezone_obj());
                         fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
                     }
                 } else {
@@ -279,7 +278,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
                         nullable_column->append_nulls(1);
                     } else {
                         DateTimeValue t;
-                        t.from_unixtime(create_time, TimezoneUtils::default_time_zone);
+                        t.from_unixtime(create_time, _runtime_state->timezone_obj());
                         fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
                     }
                 } else {
@@ -299,7 +298,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
                         nullable_column->append_nulls(1);
                     } else {
                         DateTimeValue t;
-                        t.from_unixtime(check_time, TimezoneUtils::default_time_zone);
+                        t.from_unixtime(check_time, _runtime_state->timezone_obj());
                         fill_column_with_slot<TYPE_DATETIME>(column.get(), (void*)&t);
                     }
                 } else {

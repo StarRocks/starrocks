@@ -67,8 +67,10 @@ public class ArrayTypeTest extends PlanTestBase {
                 "  |  \n" +
                 "  1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
-                "  |  <slot 4> : 3: v3[1] + CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT)\n" +
-                "  |  <slot 5> : 3: v3[1]\n"));
+                "  |  <slot 4> : 7: expr + CAST(ARRAY<tinyint(4)>[1,2,3][1] AS BIGINT)\n" +
+                "  |  <slot 5> : 7: expr\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 7> : 3: v3[1]"));
     }
 
     @Test
@@ -106,15 +108,15 @@ public class ArrayTypeTest extends PlanTestBase {
 
         sql = "select [][1]";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+        Assert.assertTrue(plan.contains("ARRAY<boolean>[][1]"));
 
         sql = "select [][1] from t0";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+        Assert.assertTrue(plan.contains("ARRAY<boolean>[][1]"));
 
         sql = "select [][1] from (values(1,2,3), (4,5,6)) t";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("ARRAY<unknown type: NULL_TYPE>[][1]"));
+        Assert.assertTrue(plan.contains("ARRAY<boolean>[][1]"));
 
         sql = "select [v1,v2] from t0";
         plan = getFragmentPlan(sql);
@@ -199,6 +201,104 @@ public class ArrayTypeTest extends PlanTestBase {
             expectedEx.expectMessage(
                     String.format("No matching function with signature: %s(ARRAY<bigint(20)>)", fnName.toLowerCase()));
             getFragmentPlan(sql);
+        }
+    }
+
+    @Test
+    public void testNestedArrayLambdaFunctions() throws Exception {
+        String sql = "WITH `CASE_006` AS\n" +
+                "  (SELECT array_map((arg_001) -> (arg_001), `c1`) AS `argument_003`,\n" +
+                "          array_map((arg_002) -> (CAST(1 AS BIGINT)), `c1`) AS `argument_004`\n" +
+                "   FROM test_array)\n" +
+                "\n" +
+                "select argument_004, ARRAY_FILTER((x, y) -> y IS NOT NULL, " +
+                "`argument_003`, `argument_004`) AS `source_target_005` from CASE_006;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 14> : array_map(<slot 5> -> 1, 8: c1)");
+
+        sql = "WITH `CASE_006` AS\n" +
+                "  (SELECT array_map((arg_001) -> (arg_001), `c1`) AS `argument_003`,\n" +
+                "          array_map((arg_002) -> (arg_002 + 1), `c1`) AS `argument_004`\n" +
+                "   FROM test_array)\n" +
+                "\n" +
+                "select argument_004, ARRAY_FILTER((x, y) -> y IS NOT NULL, " +
+                "`argument_003`, `argument_004`) AS `source_target_005` from CASE_006;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 14> : array_map(<slot 5> -> CAST(<slot 5> AS DOUBLE) + 1.0, 8: c1)");
+    }
+
+    @Test
+    public void testEmptyArray() throws Exception {
+        {
+            String sql = "select cast([] as array<varchar(200)>)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 2> : CAST(ARRAY<boolean>[] AS ARRAY<VARCHAR(200)>)\n" +
+                    "  |  \n" +
+                    "  0:UNION\n" +
+                    "     constant exprs: \n" +
+                    "         NULL");
+
+            String thriftPlan = getThriftPlan(sql);
+            assertNotContains(thriftPlan, "NULL_TYPE");
+        }
+        {
+            String sql = "select cast(null as array<varchar(200)>)";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:Project\n" +
+                    "  |  <slot 2> : NULL\n" +
+                    "  |  \n" +
+                    "  0:UNION\n" +
+                    "     constant exprs: \n" +
+                    "         NULL");
+        }
+        {
+            String sql = "select array_append([[1,2,3]], [])";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "<slot 2> : array_append(ARRAY<ARRAY<tinyint(4)>>[[1,2,3]], ARRAY<tinyint(4)>[])");
+        }
+        {
+            String sql = "select array_append([[1,2,3]], [null])";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan,
+                    "<slot 2> : array_append(ARRAY<ARRAY<tinyint(4)>>[[1,2,3]], ARRAY<tinyint(4)>[NULL])");
+        }
+        {
+            starRocksAssert.withTable("create table test_literal_array_insert_t0(" +
+                    "c0 bigint, " +
+                    "c1 ARRAY<ARRAY<bigint>> not null, " +
+                    "c2 array<Array<bigint>> not null" +
+                    ")" +
+                    "duplicate key(c0) " +
+                    "distributed by hash(c0) " +
+                    "buckets 1 properties('replication_num'='1');\n");
+
+            String sql = "insert into test_literal_array_insert_t0 values " +
+                    "(4,[],[])";
+            getFragmentPlan(sql);
+
+            sql = "insert into test_literal_array_insert_t0 values " +
+                    "(4,[],[]), " +
+                    "(9223372036854775807,[[9223372036854775807]],[[9223372036854775807]]);\n";
+            getFragmentPlan(sql);
+        }
+        {
+            String sql = "select array_append([],null)";
+            getThriftPlan(sql);
+        }
+        {
+            String sql = "select [][1]";
+            getThriftPlan(sql);
+        }
+        {
+            String sql = "select array_append([], [])";
+            getThriftPlan(sql);
+        }
+        {
+            String sql = "select array_append([[]], [])";
+            getThriftPlan(sql);
         }
     }
 }

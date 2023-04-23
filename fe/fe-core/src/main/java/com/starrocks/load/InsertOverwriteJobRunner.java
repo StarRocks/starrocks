@@ -4,6 +4,7 @@ package com.starrocks.load;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -27,6 +28,8 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.load.InsertOverwriteJobState.OVERWRITE_FAILED;
@@ -230,7 +233,7 @@ public class InsertOverwriteJobRunner {
             }
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable targetTable = (OlapTable) table;
-            List<Long> sourceTabletIds = Lists.newArrayList();
+            Map<Long, Set<Long>> sourceTabletIds = Maps.newHashMap();
             if (job.getTmpPartitionIds() != null) {
                 for (long pid : job.getTmpPartitionIds()) {
                     LOG.info("drop temp partition:{}", pid);
@@ -239,7 +242,9 @@ public class InsertOverwriteJobRunner {
                     if (partition != null) {
                         for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                             for (Tablet tablet : index.getTablets()) {
-                                sourceTabletIds.add(tablet.getId());
+                                if (!sourceTabletIds.containsKey(tablet.getId())) {
+                                    sourceTabletIds.put(tablet.getId(), tablet.getBackendIds());
+                                }
                             }
                         }
                         targetTable.dropTempPartition(partition.getName(), true);
@@ -252,8 +257,8 @@ public class InsertOverwriteJobRunner {
                 // mark all source tablet ids force delete to drop it directly on BE,
                 // not to move it to trash
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-                for (long tabletId : sourceTabletIds) {
-                    invertedIndex.markTabletForceDelete(tabletId);
+                for (long tabletId : sourceTabletIds.keySet()) {
+                    invertedIndex.markTabletForceDelete(tabletId, sourceTabletIds.get(tabletId));
                 }
 
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
@@ -277,12 +282,14 @@ public class InsertOverwriteJobRunner {
             List<String> tmpPartitionNames = job.getTmpPartitionIds().stream()
                     .map(partitionId -> targetTable.getPartition(partitionId).getName())
                     .collect(Collectors.toList());
-            List<Long> sourceTabletIds = Lists.newArrayList();
+            Map<Long, Set<Long>> sourceTabletIds = Maps.newHashMap();
             sourcePartitionNames.forEach(name -> {
                 Partition partition = targetTable.getPartition(name);
                 for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                     for (Tablet tablet : index.getTablets()) {
-                        sourceTabletIds.add(tablet.getId());
+                        if (!sourceTabletIds.containsKey(tablet.getId())) {
+                            sourceTabletIds.put(tablet.getId(), tablet.getBackendIds());
+                        }
                     }
                 }
             });
@@ -296,8 +303,8 @@ public class InsertOverwriteJobRunner {
                 // mark all source tablet ids force delete to drop it directly on BE,
                 // not to move it to trash
                 TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-                for (long tabletId : sourceTabletIds) {
-                    invertedIndex.markTabletForceDelete(tabletId);
+                for (long tabletId : sourceTabletIds.keySet()) {
+                    invertedIndex.markTabletForceDelete(tabletId, sourceTabletIds.get(tabletId));
                 }
 
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),

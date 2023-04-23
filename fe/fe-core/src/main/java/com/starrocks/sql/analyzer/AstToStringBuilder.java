@@ -35,10 +35,12 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.mysql.privilege.Privilege;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
@@ -100,11 +102,16 @@ public class AstToStringBuilder {
             List<String> setVarList = new ArrayList<>();
             for (SetVar setVar : stmt.getSetVars()) {
                 if (setVar instanceof SetPassVar) {
-                    StringBuilder tmp = new StringBuilder();
-                    tmp.append("PASSWORD FOR ")
-                            .append(((SetPassVar) setVar).getUserIdent().toString())
-                            .append(" = PASSWORD('***')");
-                    setVarList.add(tmp.toString());
+                    SetPassVar setPassVar = (SetPassVar) setVar;
+                    UserIdentity userIdentity = setPassVar.getUserIdent();
+                    String setPassSql = "";
+                    if (userIdentity == null) {
+                        setPassSql += "PASSWORD";
+                    } else {
+                        setPassSql += "PASSWORD FOR " + userIdentity;
+                    }
+                    setPassSql += " = PASSWORD('***')";
+                    setVarList.add(setPassSql);
                     continue;
                 }
                 String setVarSql = "";
@@ -124,7 +131,11 @@ public class AstToStringBuilder {
                     setVarSql += "cast (" + visit(setVar.getResolvedExpression())
                             + " as " + setVar.getResolvedExpression().getType().toSql() + ")";
                 } else {
-                    setVarSql += visit(setVar.getExpression());
+                    if (setVar.getResolvedExpression() == null) {
+                        setVarSql += VariableMgr.getDefaultValue(setVar.getVariable());
+                    } else {
+                        setVarSql += visit(setVar.getResolvedExpression());
+                    }
                 }
 
                 setVarList.add(setVarSql);

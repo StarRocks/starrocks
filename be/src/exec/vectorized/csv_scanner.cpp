@@ -2,6 +2,7 @@
 
 #include "exec/vectorized/csv_scanner.h"
 
+#include "column/adaptive_nullable_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/hash_set.h"
@@ -120,13 +121,22 @@ Status CSVScanner::open() {
     return Status::OK();
 }
 
+void CSVScanner::_materialize_src_chunk_adaptive_nullable_column(ChunkPtr& chunk) {
+    chunk->materialized_nullable();
+    for (int i = 0; i < chunk->num_columns(); i++) {
+        AdaptiveNullableColumn* adaptive_column =
+                down_cast<AdaptiveNullableColumn*>(chunk->get_column_by_index(i).get());
+        chunk->update_column_by_index(NullableColumn::create(adaptive_column->materialized_raw_data_column(),
+                                                             adaptive_column->materialized_raw_null_column()),
+                                      i);
+    }
+}
+
 StatusOr<ChunkPtr> CSVScanner::get_next() {
     SCOPED_RAW_TIMER(&_counter->total_ns);
 
     ChunkPtr chunk;
-    const int chunk_capacity = _state->chunk_size();
     auto src_chunk = _create_chunk(_src_slot_descriptors);
-    src_chunk->reserve(chunk_capacity);
 
     do {
         if (_curr_reader == nullptr && ++_curr_file_index < _scan_range.ranges.size()) {
@@ -163,7 +173,6 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
 
         src_chunk->set_num_rows(0);
         Status status = _parse_csv(src_chunk.get());
-
         if (!status.ok()) {
             if (status.is_end_of_file()) {
                 _curr_reader = nullptr;
@@ -179,10 +188,15 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
             }
         }
 
-        fill_columns_from_path(src_chunk, _num_fields_in_csv, _scan_range.ranges[_curr_file_index].columns_from_path,
-                               src_chunk->num_rows());
-        ASSIGN_OR_RETURN(chunk, materialize(nullptr, src_chunk));
-    } while ((chunk)->num_rows() == 0);
+        if (src_chunk->num_rows() > 0) {
+            _materialize_src_chunk_adaptive_nullable_column(src_chunk);
+        }
+    } while ((src_chunk)->num_rows() == 0);
+
+    fill_columns_from_path(src_chunk, _num_fields_in_csv, _scan_range.ranges[_curr_file_index].columns_from_path,
+                           src_chunk->num_rows());
+    ASSIGN_OR_RETURN(chunk, materialize(nullptr, src_chunk));
+
     return std::move(chunk);
 }
 
@@ -191,7 +205,6 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
     DCHECK_EQ(0, chunk->num_rows());
     Status status;
     CSVReader::Record record;
-    CSVReader::Fields fields;
 
     int num_columns = chunk->num_columns();
     _column_raw_ptrs.resize(num_columns);
@@ -240,7 +253,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
             }
             const Slice& field = fields[j];
             options.type_desc = &(slot->type());
-            if (!_converters[k]->read_string(_column_raw_ptrs[k], field, options)) {
+            if (!_converters[k]->read_string_for_adaptive_null_column(_column_raw_ptrs[k], field, options)) {
                 chunk->set_num_rows(num_rows);
                 if (_counter->num_rows_filtered++ < 50) {
                     std::stringstream error_msg;
@@ -255,6 +268,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
         }
         num_rows += !has_error;
     }
+    fields.clear();
     return chunk->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
 }
 
@@ -268,7 +282,9 @@ ChunkPtr CSVScanner::_create_chunk(const std::vector<SlotDescriptor*>& slots) {
         }
         // NOTE: Always create a nullable column, even if |slot->is_nullable()| is false.
         // See the comment in `CSVScanner::Open` for reference.
-        auto column = ColumnHelper::create_column(slots[i]->type(), true);
+        // here we optimize it through adaptive nullable column
+        auto column = ColumnHelper::create_column(slots[i]->type(), true, false, 0, true);
+
         chunk->append_column(std::move(column), slots[i]->id());
     }
     return chunk;

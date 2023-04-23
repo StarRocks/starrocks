@@ -90,6 +90,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
 /**
@@ -678,6 +679,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return partitionInfo;
     }
 
+    public List<Column> getKeyColumns() {
+        return getColumns().stream().filter(Column::isKey).collect(Collectors.toList());
+    }
+
     // partition Name -> Range
     public Map<String, Range<PartitionKey>> getRangePartitionMap() {
         Preconditions.checkArgument(partitionInfo.getType() == PartitionType.RANGE);
@@ -1035,7 +1040,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         throw new RuntimeException("Don't support anymore");
     }
 
-    public int getSignature(int signatureVersion, List<String> partNames) {
+    public int getSignature(int signatureVersion, List<String> partNames, boolean isRestore) {
         Adler32 adler32 = new Adler32();
         adler32.update(signatureVersion);
 
@@ -1055,8 +1060,12 @@ public class OlapTable extends Table implements GsonPostProcessable {
             LOG.debug("signature. index name: {}", indexName);
             MaterializedIndexMeta indexMeta = indexIdToMeta.get(indexId);
             // schema hash
-            adler32.update(indexMeta.getSchemaHash());
-            LOG.debug("signature. index schema hash: {}", indexMeta.getSchemaHash());
+            // schema hash will change after finish schema change. It is make no sense
+            // that check the schema hash here when doing restore
+            if (!isRestore) {
+                adler32.update(indexMeta.getSchemaHash());
+                LOG.debug("signature. index schema hash: {}", indexMeta.getSchemaHash());
+            }
             // short key column count
             adler32.update(indexMeta.getShortKeyColumnCount());
             LOG.debug("signature. index short key: {}", indexMeta.getShortKeyColumnCount());
@@ -1271,6 +1280,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
             partitionInfo = RangePartitionInfo.read(in);
         } else if (partType == PartitionType.LIST) {
             partitionInfo = ListPartitionInfo.read(in);
+        } else if (partType == PartitionType.EXPR_RANGE) {
+            partitionInfo = ExpressionRangePartitionInfo.read(in);
         } else {
             throw new IOException("invalid partition type: " + partType);
         }
@@ -1480,7 +1491,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     + "Do not allow create materialized view");
         }
         // check if all tablets are healthy, and no tablet is in tablet scheduler
-        long unhealthyTabletId  = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
+        long unhealthyTabletId = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
                 GlobalStateMgr.getCurrentState().getTabletScheduler());
         if (unhealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
             throw new DdlException("Table [" + name + "] is not stable. "
@@ -1579,21 +1590,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return keysNum;
     }
 
-    public boolean convertRandomDistributionToHashDistribution() {
-        boolean hasChanged = false;
-        List<Column> baseSchema = getBaseSchema();
-        if (defaultDistributionInfo.getType() == DistributionInfoType.RANDOM) {
-            defaultDistributionInfo =
-                    ((RandomDistributionInfo) defaultDistributionInfo).toHashDistributionInfo(baseSchema);
-            hasChanged = true;
-        }
-
-        for (Partition partition : idToPartition.values()) {
-            if (partition.convertRandomDistributionToHashDistribution(baseSchema)) {
-                hasChanged = true;
-            }
-        }
-        return hasChanged;
+    public boolean isKeySet(Set<String> keyColumns) {
+        Set<String> tableKeyColumns = getKeyColumns().stream()
+                .map(column -> column.getName().toLowerCase()).collect(Collectors.toSet());
+        return tableKeyColumns.equals(keyColumns);
     }
 
     public void setReplicationNum(Short replicationNum) {
@@ -1899,6 +1899,47 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getCompressionType();
     }
 
+    public boolean hasUniqueConstraints() {
+        List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
+        return uniqueConstraint != null;
+    }
+
+    public List<UniqueConstraint> getUniqueConstraints() {
+        if (tableProperty == null) {
+            return null;
+        }
+        return tableProperty.getUniqueConstraints();
+    }
+
+    public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        Map<String, String> properties = Maps.newHashMap();
+        String newProperty = uniqueConstraints.stream().map(UniqueConstraint::toString).collect(Collectors.joining(";"));
+        properties.put(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, newProperty);
+        tableProperty.modifyTableProperties(properties);
+        tableProperty.setUniqueConstraints(uniqueConstraints);
+    }
+
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        if (tableProperty == null) {
+            return null;
+        }
+        return tableProperty.getForeignKeyConstraints();
+    }
+
+    public void setForeignKeyConstraint(List<ForeignKeyConstraint> foreignKeyConstraints) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        Map<String, String> properties = Maps.newHashMap();
+        String newProperty = foreignKeyConstraints
+                .stream().map(ForeignKeyConstraint::toString).collect(Collectors.joining(";"));
+        properties.put(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, newProperty);
+        tableProperty.modifyTableProperties(properties);
+        tableProperty.setForeignKeyConstraints(foreignKeyConstraints);
+    }
 
     @Override
     public void onCreate() {
@@ -1914,6 +1955,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
             if (tmpTable != null) {
                 MaterializedView mv = (MaterializedView) tmpTable;
                 mv.setActive(false);
+                LOG.warn("Setting the materialized view {}({}}) to invalid because " +
+                        "the table {} was dropped.", mv.getName(), mv.getId(), getName());
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
             }
@@ -2010,4 +2053,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
         }
         return properties;
     }
+
+    @Override
+    public boolean supportsUpdate() {
+        return getKeysType() == KeysType.PRIMARY_KEYS;
+    }
+
 }

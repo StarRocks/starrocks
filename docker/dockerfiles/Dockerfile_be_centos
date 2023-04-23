@@ -1,0 +1,15 @@
+FROM centos:7
+
+ENV LANG='en_US.UTF-8' LANGUAGE='en_US:en' LC_ALL='en_US.UTF-8'
+
+RUN yum install -y tzdata openssl curl vim ca-certificates fontconfig gzip tar mysql java-11-openjdk less
+
+COPY output/be /opt/starrocks/be/
+Copy docker/dockerfiles/be/be_entrypoint.sh docker/dockerfiles/be/be_prestop.sh /opt/starrocks/
+
+ENV JAVA_HOME=/usr/lib/jvm/jre-11-openjdk/ \
+    PATH="/usr/local/bin/jdk-11.0.16/bin:$PATH"
+
+ENV STARROCKS_ROOT=/opt/starrocks
+USER root
+Workdir /opt/starrocks

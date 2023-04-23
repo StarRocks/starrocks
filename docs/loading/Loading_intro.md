@@ -110,13 +110,13 @@ StarRocks provides five loading methods to help you load data in various busines
 
 You can determine the loading method of your choice based on your business scenario, data volume, data source, data file format, and loading frequency. Additionally, take note of the following points when you select a loading method:
 
-- If you load data from Kafka and the data requires multi-table joins and extract, transform and load (ETL), you can use Apache Flink® to pre-process the data and then use the [flink-connector-starrocks](../loading/Flink-connector-starrocks.md) plug-in to perform a Stream Load job to load the data into StarRocks.
+- When you load data from Kafka, we recommend that you use [Routine Load](../loading/RoutineLoad.md). If the data requires multi-table joins and extract, transform and load (ETL) operations, we recommend that you use Apache Flink® to read and pre-process the data and then use the [flink-connector-starrocks](../loading/Flink-connector-starrocks.md) plug-in developed by StarRocks to load the pre-processed data into StarRocks.
 
-- If you load data from Hive, you can use [Broker Load](../loading/BrokerLoad.md) or [Spark Load](../loading/SparkLoad.md) to load the data. However, we recommend that you create an [external Hive table](../data_source/External_table.md#hive-external-table) and then use the INSERT INTO SELECT statement to load the data into the external Hive table.
+- When you load data from Hive, we recommend that you create a [Hive catalog](../data_source/catalog/hive_catalog.md) and then use [INSERT](../loading/InsertInto.md). Alternatively, you can run a [Broker Load](../loading/BrokerLoad.md) job to load the data.
 
-- If you load data from MySQL databases, you can use [starrockswriter](../loading/DataX-starrocks-writer.md) to load the data. However, we recommend that you create an [external MySQL table](../data_source/External_table.md#mysql-external-table) and then load the data into the external MySQL table.
+- When you load data from MySQL databases, we recommend that you create a [MySQL external table](../data_source/External_table.md#mysql-external-table) and then use [INSERT](../loading/InsertInto.md). Alternatively, you can use [DataX](../loading/DataX-starrocks-writer.md) to load the data. If you want to load data in real time, we recommend that you follow the instructions provided in [Synchronize data from MySQL in real time](../loading/Flink_cdc_load.md).
 
-- If you load data from other data sources such as Oracle and PostgreSQL, we recommend that you use [starrockswriter](../loading/DataX-starrocks-writer.md).
+- When you load data from other data sources such as Oracle and PostgreSQL, we recommend that you create a [JDBC external table](../data_source/External_table.md#external-table-for-a-jdbc-compatible-database) and then use [INSERT](../loading/InsertInto.md). Alternatively, you can use [DataX](../loading/DataX-starrocks-writer.md) to load the data.
 
 The following figure provides an overview of various data sources supported by StarRocks and the loading methods that you can use to load data from these data sources.
 
@@ -154,9 +154,9 @@ When you load data, you can choose not to load the data from a specific field of
 
 For information about the usage of `NOT NULL` and `DEFAULT`, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
-### [Preview] Set write quorum for data loading
+### Set write quorum for data loading
 
-If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md), or add this property to an existing table using [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
+If your StarRocks cluster has multiple data replicas, you can set different write quorum for tables, that is, how many replicas are required to return loading success before StarRocks can determine the loading task is successful. You can specify write quorum by adding the property `write_quorum` when you [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md), or add this property to an existing table using [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md). This property is supported from v2.5.
 
 ## System configurations
 

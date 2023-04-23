@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
@@ -22,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -45,6 +47,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -139,6 +142,25 @@ public class Utils {
 
     public static void extractOlapScanOperator(GroupExpression groupExpression, List<LogicalOlapScanOperator> list) {
         extractOperator(groupExpression, list, p -> OperatorType.LOGICAL_OLAP_SCAN.equals(p.getOpType()));
+    }
+
+    public static List<PhysicalOlapScanOperator> extractPhysicalOlapScanOperator(OptExpression root) {
+        List<PhysicalOlapScanOperator> list = Lists.newArrayList();
+        extractOperator(root, list, op -> OperatorType.PHYSICAL_OLAP_SCAN.equals(op.getOpType()));
+        return list;
+    }
+
+    private static <E extends Operator> void extractOperator(OptExpression root, List<E> list,
+                                                             Predicate<Operator> lambda) {
+        if (lambda.test(root.getOp())) {
+            list.add((E) root.getOp());
+            return;
+        }
+
+        List<OptExpression> inputs = root.getInputs();
+        for (OptExpression input : inputs) {
+            extractOperator(input, list, lambda);
+        }
     }
 
     private static <E extends Operator> void extractOperator(GroupExpression root, List<E> list,
@@ -265,59 +287,29 @@ public class Utils {
         return link.remove();
     }
 
-    public static boolean isInnerOrCrossJoin(Operator operator) {
-        if (operator instanceof LogicalJoinOperator) {
-            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
-            return joinOperator.isInnerOrCrossJoin();
-        }
-        return false;
-    }
-
-    public static int countInnerJoinNodeSize(OptExpression root) {
+    public static int countJoinNodeSize(OptExpression root, Set<JoinOperator> joinTypes) {
         int count = 0;
         Operator operator = root.getOp();
         for (OptExpression child : root.getInputs()) {
-            if (isInnerOrCrossJoin(operator) && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
-                count += countInnerJoinNodeSize(child);
+            if (isSuitableJoin(operator, joinTypes)) {
+                count += countJoinNodeSize(child, joinTypes);
             } else {
-                count = Math.max(count, countInnerJoinNodeSize(child));
+                count = Math.max(count, countJoinNodeSize(child, joinTypes));
             }
         }
 
-        if (isInnerOrCrossJoin(operator) && ((LogicalJoinOperator) operator).getJoinHint().isEmpty()) {
+        if (isSuitableJoin(operator, joinTypes)) {
             count += 1;
         }
         return count;
     }
 
-    public static boolean capableSemiReorder(OptExpression root, boolean hasSemi, int joinNum, int maxJoin) {
-        Operator operator = root.getOp();
-
+    private static boolean isSuitableJoin(Operator operator, Set<JoinOperator> joinTypes) {
         if (operator instanceof LogicalJoinOperator) {
-            if (((LogicalJoinOperator) operator).getJoinType().isSemiAntiJoin()) {
-                hasSemi = true;
-            } else {
-                joinNum = joinNum + 1;
-            }
-
-            if (joinNum > maxJoin && hasSemi) {
-                return false;
-            }
+            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+            return joinTypes.contains(joinOperator.getJoinType()) && joinOperator.getJoinHint().isEmpty();
         }
-
-        for (OptExpression child : root.getInputs()) {
-            if (operator instanceof LogicalJoinOperator) {
-                if (!capableSemiReorder(child, hasSemi, joinNum, maxJoin)) {
-                    return false;
-                }
-            } else {
-                if (!capableSemiReorder(child, false, 0, maxJoin)) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
+        return false;
     }
 
     public static boolean hasUnknownColumnsStats(OptExpression root) {
@@ -452,6 +444,7 @@ public class Utils {
                 }
             }
         } catch (Exception ignored) {
+            LOG.debug("invalid value: {} to type {}", op, descType);
         }
         return Optional.empty();
     }

@@ -2,6 +2,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
@@ -18,6 +19,11 @@ public class TableRelation extends Relation {
     private PartitionNames partitionNames;
     private final List<Long> tabletIds;
     private boolean isMetaQuery;
+
+    // optional temporal clause for external MySQL tables that support this syntax
+    private String temporalClause;
+
+    private Expr partitionPredicate;
 
     public TableRelation(TableName name) {
         this.name = name;
@@ -51,6 +57,10 @@ public class TableRelation extends Relation {
         this.partitionNames = partitionNames;
     }
 
+    public boolean getHasHintsPartitionNames() {
+        return partitionNames != null;
+    }
+
     public List<Long> getTabletIds() {
         return tabletIds;
     }
@@ -65,6 +75,14 @@ public class TableRelation extends Relation {
 
     public Map<Field, Column> getColumns() {
         return columns;
+    }
+
+    public Expr getPartitionPredicate() {
+        return this.partitionPredicate;
+    }
+
+    public void setPartitionPredicate(Expr partitionPredicate) {
+        this.partitionPredicate = partitionPredicate;
     }
 
     @Override
@@ -100,5 +118,13 @@ public class TableRelation extends Relation {
     @Override
     public String toString() {
         return name.toString();
+    }
+
+    public void setTemporalClause(String temporalClause) {
+        this.temporalClause = temporalClause;
+    }
+
+    public String getTemporalClause() {
+        return this.temporalClause;
     }
 }

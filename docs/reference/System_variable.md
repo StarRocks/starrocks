@@ -2,13 +2,13 @@
 
 ## Variable Settings and Viewing
 
-This section describes the variables supported by the StarRocks system. They can be viewed with the `SHOW VARIABLES` command. These variables can take effect globally on the system or only on the current session.
+This section describes the variables supported by StarRocks. You can view these variables by using the `SHOW VARIABLES` command. These variables can take effect globally on the entire system or only on the current session.
 
 The variables in StarRocks refer to the variable sets in MySQL, but **some variables are only compatible with the MySQL client protocol and do not function on the MySQL database**.
 
-### View
+### View variables
 
-You can view all or some variables by `SHOW VARIABLES [LIKE 'xxx']`;. For example:
+You can view all or some variables by using `SHOW VARIABLES [LIKE 'xxx']`. Example:
 
 ```SQL
 SHOW VARIABLES;
@@ -16,9 +16,9 @@ SHOW VARIABLES;
 SHOW VARIABLES LIKE '%time_zone%';
 ```
 
-### Settings
+### Set variables
 
-Variables can generally be set to take effect **globally** or **only on the current session**. When set to global, a new value will be used in subsequent new sessions without affecting the current session. When set to “current session only”, the variable will only take effect on the current session.
+Variables can generally be set to take effect **globally** or **only on the current session**. When set to global, a new value will be used in subsequent new sessions without affecting the current session. When set to "current session only", the variable will only take effect on the current session.
 
 A variable set by `SET var_name=xxx;` only takes effect for the current session. For example:
 
@@ -55,6 +55,7 @@ Variables that can be set both globally or partially effective include:
 * use_compute_nodes
 * vectorized_engine_enable
 * wait_timeout
+* sql_dialect
 
 Variables that can only be set globally effective include:
 
@@ -70,9 +71,9 @@ SET exec_mem_limit = 10 * 1024 * 1024 * 1024;
 SET forward_to_master = concat('tr', 'u', 'e');
 ```
 
-### Setting variables in query statements
+### Set variables in a single query statement
 
-In some scenarios, we may need to set variables specifically for certain queries. By using `SET_VAR`, it is possible to set session variables that will only take effect within a single statement. For example:
+In some scenarios, you may need to set variables specifically for certain queries. By using the `SET_VAR` hint, you can set session variables that will take effect only within a single statement. Example:
 
 ```sql
 SELECT /*+ SET_VAR(exec_mem_limit = 8589934592) */ name FROM people ORDER BY name;
@@ -80,9 +81,25 @@ SELECT /*+ SET_VAR(exec_mem_limit = 8589934592) */ name FROM people ORDER BY nam
 SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 ```
 
-> Note: It must start with `/*+` and can only be followed by the `SELECT` keyword.
+> **NOTE**
+>
+> * `SET_VAR` is supported only in MySQL 8.0 and later.
+> * It can only be placed after the `SELECT` keyword and enclosed in `/*+...*/`.
 
-## Supported Variables
+You can also set multiple variables in a single statement. Example:
+
+```sql
+SELECT /*+ SET_VAR
+  (
+  exec_mem_limit = 515396075520,
+  query_timeout=10000000,
+  batch_size=4096,
+  parallel_fragment_exec_instance_num=32
+  )
+  */ * FROM TABLE;
+```
+
+## Descriptions of variables
 
 * SQL_AUTO_IS_NULL
 
@@ -102,7 +119,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * default_rowset_type
 
-  Used to set the default storage format used by the storage engine of the computing node. The currently supported storage formats are `alpha` and `beta`.
+  Global variable. Used to set the default storage format used by the storage engine of the computing node. The currently supported storage formats are `alpha` and `beta`.
 
 * disable_colocate_join
 
@@ -110,8 +127,8 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * streaming_preaggregation_mode
 
-  Used to specify the preaggregation mode for the first phase of GROUP BY. If the preaggregation effect in the first phase is not satisfactory, you can use the streaming mode, which performs simple data serialization before streaming data to the destination。Valid values:
-  * `auto`：The system first tries local preaggregation. If the effect is not satisfactory, it switches to the streaming mode. This is the default value.
+  Used to specify the preaggregation mode for the first phase of GROUP BY. If the preaggregation effect in the first phase is not satisfactory, you can use the streaming mode, which performs simple data serialization before streaming data to the destination. Valid values:
+  * `auto`: The system first tries local preaggregation. If the effect is not satisfactory, it switches to the streaming mode. This is the default value.
   * `force_preaggregation`: The system directly performs local preaggregation.
   * `force_streaming`: The system directly performs streaming.
 
@@ -125,7 +142,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * enable_insert_strict
 
-  Used to enable the strict mode when importing data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Load data using INSERT](../loading/InsertInto.md)".
+  Used to enable the strict mode when importing data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md)".
 
 * enable_spilling
 
@@ -153,39 +170,31 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * forward_to_master
 
-  Used to set whether some commands will be forwarded to the leader FE node for execution. The default value is false, meaning no forwarding. There are multiple FE nodes in StarRocks, one of which is the leader node. Normally, users can connect to any FE node for full-featured operation. However, some information is only available from the leader FE node.
+  Used to specify whether some commands will be forwarded to the leader FE for execution. The default value is `false`, meaning not forwarding to the leader FE. There are multiple FEs in a StarRocks cluster, one of which is the leader FE. Normally, users can connect to any FE for full-featured operations. However, some information is only available on the leader FE.
 
-  For example, if the `SHOW BACKENDS;` commend is not forwarded to the leader FE node, only basic information (e.g., whether the node is alive or not) can be seen. Forwarding to the leader FE can get more detailed information including the node start time, last heartbeat time, etc.
+  For example, if the SHOW BACKENDS command is not forwarded to the leader FE, only basic information (for example, whether the node is alive) can be viewed. Forwarding to the leader FE can get more detailed information including the node start time and last heartbeat time.
 
   The commands affected by this parameter are as follows:
 
-* SHOW FRONTENDS;
+  * SHOW FRONTENDS: Forwarding to the leader FE allows users to view the last heartbeat message.
 
-  Forwarding to leader allows users to view the last heartbeat message.
+  * SHOW BACKENDS: Forwarding to the leader FE allows users to view the boot time, last heartbeat information, and disk capacity information.
 
-* SHOW BACKENDS;
+  * SHOW BROKER: Forwarding to the leader FE allows users to view the boot time and last heartbeat information.
 
-  Forwarding to leader allows users to view the boot time, last heartbeat information, and disk capacity information.
+  * SHOW TABLET
 
-* SHOW BROKER;
+  * ADMIN SHOW REPLICA DISTRIBUTION
 
-  Forwarding to leader allows users to view the boot time and last heartbeat information.
+  * ADMIN SHOW REPLICA STATUS: Forwarding to the leader FE allows users to view the tablet information stored in the metadata of the leader FE. Normally, the tablet information should be the same in the metadata of different FEs. If an error occurs, you can use this method to compare the metadata of the current FE and the leader FE.
 
-* SHOW TABLET;
-* ADMIN SHOW REPLICA DISTRIBUTION;
-* ADMIN SHOW REPLICA STATUS;
-
-  Forwarding to leader allows users to view the tablet information stored in the leader FE metadata. Normally, the tablet information in the different FE metadata should be the same. In case of a problem, you can use this method to compare the differences in metadata of the current FE and the leader FE.
-
-* Show PROC;
-
-  Forwarding to leader allows users to view the PROC information stored in the metadata. This is mainly used for metadata comparison.
+  * Show PROC: Forwarding to the leader FE allows users to view the PROC information stored in the metadata. This is mainly used for metadata comparison.
 
 * hash_join_push_down_right_table
 
   Used to control whether the data of the left table can be filtered by using the filter condition against the right table in the Join query. If so, it can reduce the amount of data that needs to be processed during the query.
 
-  If “true”, indicating the operation is allowed and the system will decide whether the left table can be filtered. If “false”, indicating the operation is disabled. The default value is true.
+  `true` indicates the operation is allowed and the system decides whether the left table can be filtered. `false` indicates the operation is disabled. The default value is `true`.
 
 * init_connect
 
@@ -195,13 +204,13 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   Used for MySQL client compatibility. No practical usage.
 
-* enable_materialized_view_union_rewrite
+* enable_materialized_view_union_rewrite (2.5 and later)
 
-  Boolean value to control if to enable materialized view Union query rewrite. Default: `true`.
+  Boolean value to control whether to enable materialized view Union query rewrite. Default: `true`.
 
-* enable_rule_based_materialized_view_rewrite
+* enable_rule_based_materialized_view_rewrite (2.5 and later)
 
-  Boolean value to control if to enable rule-based materialized view query rewrite. This variable is mainly used in single-table query rewrite. Default: `true`.
+  Boolean value to control whether to enable rule-based materialized view query rewrite. This variable is mainly used in single-table query rewrite. Default: `true`.
 
 * enable_profile
 
@@ -223,15 +232,49 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
   Boolean value to enable query queues for statistics queries.
 
-* enable_scan_block_cache
+* enable_scan_block_cache (2.5 and later)
   
-  Whether to enable the Block Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Block cache](../data_source/Block_cache.md).
+  Specifies whether to enable the Local Cache feature. After this feature is enabled, StarRocks caches hot data read from external storage systems into blocks, which accelerates queries and analysis. For more information, see [Local Cache](../data_source/Block_cache.md).
 
-  This feature is supported in v2.5.
-
-* enable_populate_block_cache
+* enable_populate_block_cache (2.5 and later)
   
-  Whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5.
+  Specifies whether to cache data blocks read from external storage systems in StarRocks. If you do not want to cache data blocks read from external storage systems, set this variable to `false`. Default value: true. This variable is supported from 2.5.
+
+* enable_query_cache (2.5 and later)
+
+  Specifies whether to enable the Query Cache feature. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. When this feature is enabled, it works only for queries that meet the conditions specified in the application scenarios of [Query Cache](../using_starrocks/query_cache.md#application-scenarios).
+
+* query_cache_entry_max_bytes (2.5 and later)
+
+  The threshold for triggering the Passthrough mode. Valid values: 0 to 9223372036854775807. When the number of bytes or rows from the computation results of a specific tablet accessed by a query exceeds the threshold specified by the `query_cache_entry_max_bytes` or `query_cache_entry_max_rows` parameter, the query is switched to Passthrough mode.
+
+* group_concat_max_len
+
+  Used for compatibility with MySQL. No practical usage. Default value: 65535.
+
+* query_cache_entry_max_rows (2.5 and later)
+
+  The upper limit of rows that can be cached. See the description in `query_cache_entry_max_bytes`. Default value: 409600.
+
+* query_cache_agg_cardinality_limit (2.5 and later)
+
+  The upper limit of cardinality for GROUP BY in Query Cache. Query Cache is not enabled if the rows generated by GROUP BY exceeds this value. Default value: 5000000. If the `query_cache_entry_max_bytes` or `query_cache_entry_max_rows` parameter is set to 0, the Passthrough mode is used even when no computation results are generated from the involved tablets.
+
+* enable_adaptive_sink_dop (2.5 and later)
+
+  Specifies whether to enable adaptive parallelism for data loading. After this feature is enabled, the system automatically sets load parallelism for INSERT INTO and Broker Load jobs, which is equivalent to the mechanism of `pipeline_dop`. For a newly deployed v2.5 StarRocks cluster, the value is `true` by default. For a v2.5 cluster upgraded from v2.4, the value is `false`.
+
+* enable_pipeline_engine
+
+  Specifies whether to enable the pipeline execution engine. `true` indicates enabled and `false` indicates the opposite. Default value: `true`.
+
+* pipeline_dop
+
+  The parallelism of a pipeline instance, which is used to adjust the query concurrency. Default value: 0, indicating the system automatically adjusts the parallelism of each pipeline instance. You can also set this parameter to a value greater than 0. Generally, set the value to half the number of physical CPU cores.
+
+* enable_sort_aggregate (2.5 and later)
+
+  Specifies whether to enable sorted streaming. `true` indicates sorted streaming is enabled to sort data in data streams.
 
 * language
 
@@ -299,7 +342,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * prefer_compute_node
 
-  Whether the FEs distribute query execution plans to CN nodes. Valid values:
+  Specifies whether the FEs distribute query execution plans to CN nodes. Valid values:
 
   * true: indicates that the FEs distribute query execution plans to CN nodes.
   * false: indicates that the FEs do not distribute query execution plans to CN nodes.
@@ -400,3 +443,36 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 * wait_timeout
 
   Used to set the connection timeout for idle connections. When an idle connection does not interact with StarRocks for that length of time, StarRocks will actively disconnect the link. The default value is 8 hours, in seconds.
+
+* enable_global_runtime_filter
+
+  Whether to enable global runtime filter (RF for short). RF filters data at runtime. Data filtering often occurs in the Join stage. During multi-table joins, optimizations such as predicate pushdown are used to filter data, in order to reduce the number of scanned rows for Join and the I/O in the Shuffle stage, thereby speeding up the query.
+
+  StarRocks offers two types of RF: Local RF and Global RF. Local RF is suitable for Broadcast Hash Join and Global RF is suitable for Shuffle Join.
+
+  Default value: `true`, which means global RF is enabled. If this feature is disabled, global RF does not take effect. Local RF can still work.
+
+* enable_multicolumn_global_runtime_filter
+
+  Whether to enable multi-column global runtime filter. Default value: `false`, which means multi-column global RF is disabled.
+
+  If a Join (other than Broadcast Join and Replicated Join) has multiple equi-join conditions:
+
+  * If this feature is disabled, only Local RF works.
+  * If this feature is enabled, multi-column Global RF takes effect and carries `multi-column` in the partition by clause.
+
+* runtime_filter_on_exchange_node
+
+  Whether to place GRF on Exchange Node after GRF is pushed down across the Exchange operator to a lower-level operator. The default value is `false`, which means GRF will not be placed on Exchange Node after it is pushed down across the Exchange operator to a lower-level operator. This prevents repetitive use of GRF and reduces the computation time.
+
+  However, GRF delivery is a "try-best" process. If the lower-level operator fails to receive the GRF but the GRF is not placed on Exchange Node, data cannot be filtered, which compromises filter performance. `true` means GRF will still be placed on Exchange Node even after it is pushed down across the Exchange operator to a lower-level operator.
+
+* runtime_join_filter_push_down_limit
+
+  The maximum number of rows allowed for the Hash table based on which Bloom filter Local RF is generated. Local RF will not be generated if this value is exceeded. This variable prevents the generation of an excessively long Local RF.
+
+  The value is an integer. Default value: 1024000.
+
+* sql_dialect
+
+  The SQL dialect that is used. For example, you can run the `set sql_dialect = 'trino';` command to set the SQL dialect to Trino, so you can use Trino-specific SQL syntax and functions in your queries.

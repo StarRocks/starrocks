@@ -49,6 +49,7 @@ public class MysqlScanNode extends ScanNode {
     private final List<String> columns = new ArrayList<String>();
     private final List<String> filters = new ArrayList<String>();
     private final String tblName;
+    private String temporalClause; // optional temporal clause for historical queries
 
     /**
      * Constructs node to scan given data files of table 'tbl'.
@@ -56,6 +57,14 @@ public class MysqlScanNode extends ScanNode {
     public MysqlScanNode(PlanNodeId id, TupleDescriptor desc, MysqlTable tbl) {
         super(id, desc, "SCAN MYSQL");
         tblName = "`" + tbl.getMysqlTableName() + "`";
+    }
+
+    public void setTemporalClause(String temporalClause) {
+        this.temporalClause = temporalClause;
+    }
+
+    public String getTemporalClause() {
+        return temporalClause;
     }
 
     @Override
@@ -90,6 +99,12 @@ public class MysqlScanNode extends ScanNode {
             sql.append(Joiner.on(") AND (").join(filters));
             sql.append(")");
         }
+
+        if (temporalClause != null && !temporalClause.isEmpty()) {
+            sql.append(" ");
+            sql.append(temporalClause);
+        }
+
         return sql.toString();
     }
 
@@ -133,6 +148,9 @@ public class MysqlScanNode extends ScanNode {
         msg.node_type = TPlanNodeType.MYSQL_SCAN_NODE;
         msg.mysql_scan_node = new TMySQLScanNode(desc.getId().asInt(), tblName, columns, filters);
         msg.mysql_scan_node.setLimit(limit);
+        if (temporalClause != null && !temporalClause.isEmpty()) {
+            msg.mysql_scan_node.setTemporal_clause(temporalClause);
+        }
     }
 
     /**

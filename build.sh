@@ -120,8 +120,11 @@ if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
     USE_SSE4_2=OFF
 fi
 
-if [[ -z ${WITH_BLOCK_CACHE} ]]; then
-	WITH_BLOCK_CACHE=ON
+if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
+    # force turn off block cache on arm platform
+    WITH_BLOCK_CACHE=OFF
+elif [[ -z ${WITH_BLOCK_CACHE} ]]; then
+    WITH_BLOCK_CACHE=ON
 fi
 
 if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
@@ -334,7 +337,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
-        cp -r -p ${STARROCKS_THIRDPARTY}/installed/aliyun_oss_jars/* ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/fe/lib/
 
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
@@ -375,6 +378,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
 
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
+
     if [ "${WITH_BLOCK_CACHE}" == "ON"  ]; then
         mkdir -p ${STARROCKS_OUTPUT}/be/lib/cachelib
         cp -r -p ${CACHELIB_DIR}/deps/lib64 ${STARROCKS_OUTPUT}/be/lib/cachelib/
@@ -386,8 +392,10 @@ if [ ${BUILD_BE} -eq 1 ]; then
     else
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/open_jdk/jre/lib/amd64 ${STARROCKS_OUTPUT}/be/lib/jvm/
     fi
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/aliyun_oss_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/
+    cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/be/lib/hudi-reader-lib/
 fi
 
 

@@ -195,6 +195,10 @@ public class ConnectProcessor {
     }
 
     public String computeStatementDigest(StatementBase queryStmt) {
+        if (queryStmt == null) {
+            return "";
+        }
+
         String digest = SqlDigestBuilder.build(queryStmt);
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
@@ -238,7 +242,13 @@ public class ConnectProcessor {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
-        String sql = parsedStmt.getOrigStmt().originStmt;
+        String sql;
+        if (!ctx.getState().isQuery() && parsedStmt.needAuditEncryption()) {
+            sql = AstToStringBuilder.toString(parsedStmt);
+        } else {
+            sql = parsedStmt.getOrigStmt().originStmt;
+        }
+
         boolean isQuery = parsedStmt instanceof QueryStatement;
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(ctx.getQueryId()),
@@ -331,21 +341,21 @@ public class ConnectProcessor {
             LOG.warn("Process one query failed because IOException: ", e);
             ctx.getState().setError("StarRocks process failed");
         } catch (UserException e) {
-            LOG.warn("Process one query failed because.", e);
+            LOG.warn("Process one query failed. SQL: " + originStmt + ", because.", e);
             ctx.getState().setError(e.getMessage());
             // set is as ANALYSIS_ERR so that it won't be treated as a query failure.
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
         } catch (Throwable e) {
             // Catch all throwable.
             // If reach here, maybe StarRocks bug.
-            LOG.warn("Process one query failed because unknown reason: ", e);
+            LOG.warn("Process one query failed. SQL: " + originStmt + ", because unknown reason: ", e);
             ctx.getState().setError("Unexpected exception: " + e.getMessage());
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)
                 ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
         }
-
+        
         // audit after exec
         // replace '\n' to '\\n' to make string in one line
         // TODO(cmy): when user send multi-statement, the executor is the last statement's executor.
@@ -524,6 +534,18 @@ public class ConnectProcessor {
     }
 
     public TMasterOpResult proxyExecute(TMasterOpRequest request) {
+        ctx.setCurrentCatalog(request.catalog);
+        if (ctx.getCurrentCatalog() == null) {
+            // if we upgrade Master FE first, the request from old FE does not set "catalog".
+            // so ctx.getCurrentCatalog() will get null,
+            // return error directly.
+            TMasterOpResult result = new TMasterOpResult();
+            ctx.getState().setError(
+                    "Missing current catalog. You need to upgrade this Frontend to the same version as Leader Frontend.");
+            result.setMaxJournalId(GlobalStateMgr.getCurrentState().getMaxJournalId());
+            result.setPacket(getResultPacket());
+            return result;
+        }
         ctx.setDatabase(request.db);
         ctx.setQualifiedUser(request.user);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());

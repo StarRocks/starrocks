@@ -4,6 +4,8 @@
 
 Creates a resource group.
 
+For more information, see [Resource group](../../../administration/resource_group.md).
+
 ## Syntax
 
 ```SQL
@@ -24,7 +26,7 @@ WITH resource_limit
     | ------------- | ------------ | ------------------------------------------------------------ |
     | user          | No           | The name of user.                                            |
     | role          | No           | The role of user.                                            |
-    | query_type    | No           | The type of query. Currently, only `SELECT` is supported.    |
+    | query_type    | No           | The type of query. `SELECT` and `INSERT` (from v2.5) are supported. When INSERT tasks hit a resource group with `query_type` as `insert`, the BE node reserves the specified CPU resources for the tasks.   |
     | source_ip     | No           | The CIDR block from which the query is initiated.            |
     | db            | No           | The database which the query accesses. It can be specified by strings separated by commas (,). |
 
@@ -40,7 +42,7 @@ WITH resource_limit
     | big_query_cpu_second_limit | No           | The upper time limit of CPU occupation for a big query. Concurrent queries add up the time. The unit is second. |
     | big_query_scan_rows_limit  | No           | The upper limit of row counts that can be scanned by a big query. |
     | big_query_mem_limit        | No           | The upper limit of memory usage of a big query. The unit is byte. |
-    | type                       | No           | The type of resource group. Valid values:`short_query`: When queries from the `short_query` resource group are executing, the BE node reserves the CPU cores defined in `short_query.cpu_core_limit`. CPU cores for all `normal` resource groups are limited to "the total CPU cores - `short_query.cpu_core_limit`".`normal`: when no query from the `short_query` resource group is executing, the CPU core limit above is not imposed on the `normal` resource groups.Note that you can only create ONE `short_query` resource group in a cluster. |
+    | type                       | No           | The type of resource group. Valid values: <br>`short_query`: When queries from the `short_query` resource group are running, the BE node reserves the CPU cores defined in `short_query.cpu_core_limit`. CPU cores for all `normal` resource groups are limited to "the total CPU cores - `short_query.cpu_core_limit`". <br>`normal`: When no query from the `short_query` resource group is running, the CPU core limit above is not imposed on the `normal` resource groups. <br>Note that you can create only ONE `short_query` resource group in a cluster. |
 
 ## Example
 

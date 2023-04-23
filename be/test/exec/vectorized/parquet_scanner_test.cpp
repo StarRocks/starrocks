@@ -212,6 +212,9 @@ class ParquetScannerTest : public ::testing::Test {
                 {"col_decimal_p14s5", TypeDescriptor::from_primtive_type(TYPE_DECIMAL64, -1, 14, 5)},
                 {"col_decimal_p27s9", TypeDescriptor::from_primtive_type(TYPE_DECIMALV2, -1, 27, 9)},
 
+                {"col_int_null", TypeDescriptor::from_primtive_type(TYPE_INT)},
+                {"col_string_null", TypeDescriptor::from_primtive_type(TYPE_VARCHAR)},
+
                 {"col_json_int8", TypeDescriptor::create_json_type()},
                 {"col_json_int16", TypeDescriptor::create_json_type()},
                 {"col_json_int32", TypeDescriptor::create_json_type()},
@@ -560,6 +563,19 @@ TEST_F(ParquetScannerTest, test_selected_parquet_data) {
         }
     };
     validate(scanner, 36865, check);
+}
+
+TEST_F(ParquetScannerTest, test_arrow_null) {
+    std::vector<std::string> column_names{"col_int_null", "col_string_null"};
+    std::string parquet_file_name = test_exec_dir + "/test_data/parquet_data/data_null.parquet";
+    std::vector<std::string> file_names{parquet_file_name};
+
+    auto slot_infos = select_columns(column_names, true);
+    auto ranges = generate_ranges(file_names, column_names.size(), {});
+    auto* desc_tbl = generate_desc_tbl(slot_infos, slot_infos);
+    auto scanner = create_parquet_scanner("UTC", desc_tbl, {}, ranges);
+    auto check = [](const ChunkPtr& chunk) {};
+    validate(scanner, 3, check);
 }
 
 } // namespace starrocks::vectorized

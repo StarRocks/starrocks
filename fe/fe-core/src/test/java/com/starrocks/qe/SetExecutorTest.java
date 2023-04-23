@@ -37,6 +37,8 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
@@ -193,5 +195,13 @@ public class SetExecutorTest {
         Type type = Type.JSON;
         String sql = String.format("set @var = cast(%s as %s)", json, type.toSql());
         UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+    }
+
+    @Test
+    public void testSetDefault() throws Exception {
+        String sql = "set query_timeout=DEFAULT";
+        SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetStmtAnalyzer.analyze(stmt, ctx);
+        Assert.assertEquals("SET `query_timeout` = 300", AstToSQLBuilder.toSQL(stmt));
     }
 }

@@ -208,9 +208,6 @@ Status ReplicateToken::submit(std::unique_ptr<SegmentPB> segment, bool eos) {
 }
 
 void ReplicateToken::cancel(const Status& st) {
-    for (auto& channel : _replicate_channels) {
-        channel->cancel();
-    }
     set_status(st);
 }
 
@@ -305,6 +302,14 @@ Status SegmentReplicateExecutor::init(const std::vector<DataDir*>& data_dirs) {
             .set_min_threads(min_threads)
             .set_max_threads(max_threads)
             .build(&_replicate_pool);
+}
+
+Status SegmentReplicateExecutor::update_max_threads(int max_threads) {
+    if (_replicate_pool != nullptr) {
+        return _replicate_pool->update_max_threads(max_threads);
+    } else {
+        return Status::InternalError("Thread pool not exist");
+    }
 }
 
 std::unique_ptr<ReplicateToken> SegmentReplicateExecutor::create_replicate_token(

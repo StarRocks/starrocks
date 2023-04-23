@@ -13,6 +13,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.LocalMetastore;
@@ -40,7 +41,7 @@ public class ReplayMetadataMgr extends MetadataMgr {
                              ConnectorMgr connectorMgr,
                              Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> externalTableInfoMap,
                              Map<String, Map<String, ColumnStatistic>> identifyToColumnStats) {
-        super(localMetastore, connectorMgr);
+        super(localMetastore, connectorMgr, new ConnectorTblMetaInfoMgr());
         init(externalTableInfoMap, identifyToColumnStats);
     }
 

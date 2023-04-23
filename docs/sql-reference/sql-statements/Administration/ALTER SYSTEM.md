@@ -65,6 +65,14 @@ This statement is used to operate nodes in a system. (Administrator only!)
    ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES ("key" = "value"[, ...])
    ```
 
+10. Create an image (metadata snapshot) file.
+
+   ```sql
+   ALTER SYSTEM CREATE IMAGE
+   ```
+
+   Executing this statement triggers the Leader FE to create a new image (metadata snapshot) file. It is an asynchronous operation. You can check the start time and end time of the operation by viewing the FE log file **fe.log**. "Triggering a new checkpoint manually..." indicates that the operation has started, and "finished save image..." indicates that the image is created.
+
 Note:
 
 1. host could be a host name and an ip address.
@@ -86,12 +94,12 @@ Note:
      Hub of Mysql type needs to specify the following parameters:
 
    ```plain text
-   host：mysql host
-   port：mysql port
-   user：mysql user
-   password：mysql password
-   database：mysql database
-   table：mysql table
+   host: mysql host
+   port: mysql port
+   user: mysql user
+   password: mysql password
+   database: mysql database
+   table: mysql table
    ```
 
    - When using the Broker type, import errors will be generated into a file and be written into a designated remote storage system through Broker. Please make sure that corresponding broker is already deployed in the remote system.

@@ -8,6 +8,7 @@
 #include "exec/vectorized/sorting/sorting.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
@@ -91,28 +92,25 @@ public:
                                                                         const SortExecExprs& sort_exec_exprs,
                                                                         const std::vector<OrderByType>& order_by_types);
 
-    virtual void setup_runtime(RuntimeProfile* profile);
+    virtual void setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker);
 
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
-    // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
-    virtual Status done(RuntimeState* state) = 0;
+
+    Status done(RuntimeState* state);
+
     // get_next only works after done().
     virtual Status get_next(ChunkPtr* chunk, bool* eos) = 0;
-
-    // Return sorted data in multiple runs(Avoid merge them into a big chunk)
-    virtual SortedRuns get_sorted_runs() = 0;
 
     // Return accurate output rows of this operator
     virtual size_t get_output_rows() const = 0;
 
-    Status finish(RuntimeState* state);
-
-    bool sink_complete();
-
     virtual int64_t mem_usage() const = 0;
 
 protected:
+    // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
+    virtual Status do_done(RuntimeState* state) = 0;
+
     size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
 
     RuntimeState* _state;
@@ -129,8 +127,6 @@ protected:
     RuntimeProfile::Counter* _sort_timer = nullptr;
     RuntimeProfile::Counter* _merge_timer = nullptr;
     RuntimeProfile::Counter* _output_timer = nullptr;
-
-    std::atomic<bool> _is_sink_complete = false;
 };
 
 } // namespace starrocks::vectorized

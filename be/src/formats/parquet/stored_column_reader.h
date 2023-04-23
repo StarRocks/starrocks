@@ -38,12 +38,17 @@ public:
     // If need_levels is not set, read_records may not records levels information, this will
     // improve performance. So set this flag when you only needs it.
     // TODO(zc): to recosiderate to move this flag to StoredColumnReaderOptions
-    virtual void set_needs_levels(bool need_levels) {}
+    // StoredColumnReaderOptions is shared by all StoredColumnReader, but we only want set StoredColumnReader specifically,
+    // so currently we can't put need_parse_levels into StoredColumnReaderOptions.
+    virtual void set_need_parse_levels(bool need_parse_levels) {}
 
     // Try to read values that can assemble up to num_rows rows. For example if we want to read
     // an array type, and stored value is [1, 2, 3], [4], [5, 6], when the input num_rows is 3,
     // this function will fill (1, 2, 3, 4, 5, 6) into 'dst'.
-    virtual Status read_records(size_t* num_rows, ColumnContentType content_type, vectorized::Column* dst) = 0;
+    Status read_records(size_t* num_rows, ColumnContentType content_type, vectorized::Column* dst) {
+        reset();
+        return do_read_records(num_rows, content_type, dst);
+    }
 
     // This function can only be called after calling read_values. This function returns the
     // levels for last read_values.
@@ -61,6 +66,8 @@ public:
 
 protected:
     virtual bool page_selected(size_t num_values);
+
+    virtual Status do_read_records(size_t* num_rows, ColumnContentType content_type, vectorized::Column* dst) = 0;
 
     Status next_page(size_t records_to_read, ColumnContentType content_type, size_t* records_read,
                      vectorized::Column* dst);

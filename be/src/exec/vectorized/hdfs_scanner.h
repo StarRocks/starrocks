@@ -78,6 +78,8 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* block_cache_write_counter = nullptr;
     RuntimeProfile::Counter* block_cache_write_bytes = nullptr;
     RuntimeProfile::Counter* block_cache_write_timer = nullptr;
+    RuntimeProfile::Counter* block_cache_write_fail_counter = nullptr;
+    RuntimeProfile::Counter* block_cache_write_fail_bytes = nullptr;
 };
 
 struct HdfsScannerParams {
@@ -203,6 +205,7 @@ struct HdfsScannerContext {
 
     void append_not_existed_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
     void append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
+    Status evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter);
 };
 
 // if *lvalue == expect, swap(*lvalue,*rvalue)

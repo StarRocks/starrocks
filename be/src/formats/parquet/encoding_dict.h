@@ -200,6 +200,7 @@ public:
     }
 
     Status next_batch(size_t count, ColumnContentType content_type, vectorized::Column* dst) override {
+        _indexes.reserve(count);
         _index_batch_decoder.GetBatch(&_indexes[0], count);
 
         switch (content_type) {

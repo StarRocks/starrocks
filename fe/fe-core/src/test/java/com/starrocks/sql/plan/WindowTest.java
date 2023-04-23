@@ -177,21 +177,23 @@ public class WindowTest extends PlanTestBase {
     public void testWindowPartitionAndSortSameColumn() throws Exception {
         String sql = "SELECT k3, avg(k3) OVER (partition by k3 order by k3) AS sum FROM baseall;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  3:ANALYTIC\n" +
+        assertContains(plan, "  2:ANALYTIC\n" +
                 "  |  functions: [, avg(3: k3), ]\n" +
                 "  |  partition by: 3: k3\n" +
-                "  |  order by: 3: k3 ASC");
-        assertContains(plan, "  2:SORT\n" +
-                "  |  order by: <slot 3> 3: k3 ASC");
+                "  |  order by: 3: k3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+        assertContains(plan, "  1:SORT\n" +
+                "  |  order by: <slot 3> 3: k3 ASC\n" +
+                "  |  offset: 0");
     }
 
     @Test
     public void testWindowDuplicatePartition() throws Exception {
         String sql = "select max(v3) over (partition by v2,v2,v2 order by v2,v2) from t0;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:SORT\n"
-                + "  |  order by: <slot 2> 2: v2 ASC\n"
-                + "  |  offset: 0");
+        assertContains(plan, "  1:SORT\n" +
+                "  |  order by: <slot 2> 2: v2 ASC\n" +
+                "  |  offset: 0");
 
     }
 
@@ -259,16 +261,11 @@ public class WindowTest extends PlanTestBase {
         // Normal case.
         sql = "select v1, v2, NTILE(2) over (partition by v1 order by v2) as j1 from t0";
         String plan = getFragmentPlan(sql);
-        assertContains(plan,
-                "  3:ANALYTIC\n" +
-                        "  |  functions: [, ntile(2), ]\n" +
-                        "  |  partition by: 1: v1\n" +
-                        "  |  order by: 2: v2 ASC\n" +
-                        "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
-                        "  |  \n" +
-                        "  2:SORT\n" +
-                        "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC\n" +
-                        "  |  offset: 0");
+        assertContains(plan, "  2:ANALYTIC\n" +
+                "  |  functions: [, ntile(2), ]\n" +
+                "  |  partition by: 1: v1\n" +
+                "  |  order by: 2: v2 ASC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT RO");
     }
 
     @Test
@@ -486,7 +483,7 @@ public class WindowTest extends PlanTestBase {
                     "  1:EXCHANGE");
         }
         {
-            // Do not support multi partition by right now, this test need to be updated when supported
+            // Support multi partition by.
             String sql = "select * from (\n" +
                     "    select *, " +
                     "        row_number() over (partition by v2, v3 order by v1) as rk " +
@@ -494,11 +491,24 @@ public class WindowTest extends PlanTestBase {
                     ") sub_t0\n" +
                     "where rk <= 4;";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:SORT\n" +
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 2: v2 , 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
                     "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
-                    "  |  offset: 0\n" +
-                    "  |  \n" +
-                    "  1:EXCHANGE");
+                    "  |  offset: 0");
+
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v2, v3 order by v1) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "order by rk limit 4;";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 2: v2 , 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC, <slot 1> 1: v1 ASC\n" +
+                    "  |  offset: 0");
         }
         FeConstants.runningUnitTest = false;
     }
@@ -640,7 +650,7 @@ public class WindowTest extends PlanTestBase {
                 "(select v1 from t0 where v1 = 1) b " +
                 "where a.v1 = b.v1";
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "  2:SORT\n" +
+        assertContains(plan, "  1:SORT\n" +
                 "  |  order by: [1, BIGINT, true] ASC, [2, BIGINT, true] DESC\n" +
                 "  |  offset: 0\n" +
                 "  |  cardinality: 1\n" +
@@ -656,7 +666,7 @@ public class WindowTest extends PlanTestBase {
                 "where a.v1 = b.v1";
 
         String plan = getVerboseExplain(sql);
-        assertContains(plan, "3:ANALYTIC\n" +
+        assertContains(plan, "  2:ANALYTIC\n" +
                 "  |  functions: [, sum[([2: v2, BIGINT, true]); args: BIGINT; " +
                 "result: BIGINT; args nullable: true; result nullable: true], ]\n" +
                 "  |  partition by: [3: v3, BIGINT, true]\n" +
@@ -665,5 +675,71 @@ public class WindowTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  probe runtime filters:\n" +
                 "  |  - filter_id = 0, probe_expr = (1: v1)");
+    }
+
+    @Test
+    public void testOneTablet() throws Exception {
+        {
+            String sql = "select v1 from (" +
+                    "select v1, dense_rank() over (partition by v1 order by v3) rk from t0" +
+                    ") temp " +
+                    "where rk = 1 " +
+                    "group by v1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:ANALYTIC\n" +
+                    "  |  functions: [, dense_rank(), ]\n" +
+                    "  |  partition by: 1: v1\n" +
+                    "  |  order by: 3: v3 ASC\n" +
+                    "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  1:SORT\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC, <slot 3> 3: v3 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: t0");
+            assertContains(plan, "  5:AGGREGATE (update finalize)\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  4:Project\n" +
+                    "  |  <slot 1> : 1: v1");
+        }
+        {
+            String sql = "select v1 from (" +
+                    "select v1, dense_rank() over (partition by v1, v2 order by v3) rk from t0" +
+                    ") temp " +
+                    "where rk = 1 " +
+                    "group by v1";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:ANALYTIC\n" +
+                    "  |  functions: [, dense_rank(), ]\n" +
+                    "  |  partition by: 1: v1, 2: v2\n" +
+                    "  |  order by: 3: v3 ASC\n" +
+                    "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  1:SORT\n" +
+                    "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 ASC, <slot 3> 3: v3 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode\n" +
+                    "     TABLE: t0");
+            assertContains(plan, "  7:AGGREGATE (merge finalize)\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  6:EXCHANGE");
+        }
+    }
+
+
+    @Test
+    public void testWindowWithHaving() throws Exception {
+        String sql =
+                "    select *, " +
+                        "        row_number() over (PARTITION BY v1 order by v2) as rk " +
+                        "    from t0 where v1 > 1 and v2 > 1 having rk = 1;\n";
+
+        expectedEx.expect(SemanticException.class);
+        expectedEx.expectMessage("HAVING clause cannot contain window function");
+        String plan = getFragmentPlan(sql);
     }
 }

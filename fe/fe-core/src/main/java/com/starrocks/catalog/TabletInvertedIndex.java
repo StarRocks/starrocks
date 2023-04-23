@@ -77,7 +77,8 @@ public class TabletInvertedIndex {
     // replica id -> tablet id
     private Map<Long, Long> replicaToTabletMap = Maps.newHashMap();
 
-    private Set<Long> forceDeleteTablets = Sets.newHashSet();
+    // tablet id -> backend set
+    private Map<Long, Set<Long>> forceDeleteTablets = Maps.newHashMap();
 
     // tablet id -> (backend id -> replica)
     private Table<Long, Long, Replica> replicaMetaTable = HashBasedTable.create();
@@ -151,6 +152,9 @@ public class TabletInvertedIndex {
                         TTablet backendTablet = backendTablets.get(tabletId);
                         Replica replica = entry.getValue();
                         for (TTabletInfo backendTabletInfo : backendTablet.getTablet_infos()) {
+                            if (backendTabletInfo.isSetIs_error_state()) {
+                                replica.setIsErrorState(backendTabletInfo.is_error_state);
+                            }
                             if (tabletMeta.containsSchemaHash(backendTabletInfo.getSchema_hash())) {
                                 foundTabletsWithValidSchema.add(tabletId);
                                 // 1. (intersection)
@@ -411,20 +415,60 @@ public class TabletInvertedIndex {
     }
 
     @VisibleForTesting
-    public Set<Long> getForceDeleteTablets() {
-        return forceDeleteTablets;
+    public Map<Long, Set<Long>> getForceDeleteTablets() {
+        readLock();
+        try {
+            return forceDeleteTablets;
+        } finally {
+            readUnlock();
+        }
     }
 
-    public boolean tabletForceDelete(long tabletId) {
-        return forceDeleteTablets.contains(tabletId);
+    public boolean tabletForceDelete(long tabletId, long backendId) {
+        readLock();
+        try {
+            if (forceDeleteTablets.containsKey(tabletId)) {
+                return forceDeleteTablets.get(tabletId).contains(backendId);
+            }
+            return false;
+        } finally {
+            readUnlock();
+        }
     }
 
-    public void markTabletForceDelete(long tabletId) {
-        forceDeleteTablets.add(tabletId);
+    public void markTabletForceDelete(long tabletId, long backendId) {
+        writeLock();
+        try {
+            if (forceDeleteTablets.containsKey(tabletId)) {
+                forceDeleteTablets.get(tabletId).add(tabletId);
+            } else {
+                Set<Long> backendIds = Sets.newHashSet();
+                backendIds.add(tabletId);
+                forceDeleteTablets.put(tabletId, backendIds);
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    public void markTabletForceDelete(long tabletId, Set<Long> backendIds) {
+        writeLock();
+        forceDeleteTablets.put(tabletId, backendIds);
+        writeUnlock();
     }
     
-    public void eraseTabletForceDelete(long tabletId) {
-        forceDeleteTablets.remove(tabletId);
+    public void eraseTabletForceDelete(long tabletId, long backendId) {
+        writeLock();
+        try {
+            if (forceDeleteTablets.containsKey(tabletId)) {
+                forceDeleteTablets.get(tabletId).remove(backendId);
+                if (forceDeleteTablets.get(tabletId).size() == 0) {
+                    forceDeleteTablets.remove(tabletId);
+                }
+            }
+        } finally {
+            writeUnlock();
+        }
     }
 
     public void deleteTablet(long tabletId) {

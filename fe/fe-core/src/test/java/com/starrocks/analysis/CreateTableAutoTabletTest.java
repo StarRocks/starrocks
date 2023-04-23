@@ -2,13 +2,18 @@
 package com.starrocks.analysis;
 
 import com.starrocks.alter.AlterJobV2Test;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.clone.DynamicPartitionScheduler;
+import com.starrocks.common.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
+import java.util.ArrayList;
+import java.util.List;
 import org.jetbrains.annotations.TestOnly;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -19,6 +24,7 @@ public class CreateTableAutoTabletTest {
     @BeforeClass
     public static void setUp() throws Exception {
         // set some parameters to speedup test
+        Config.enable_auto_tablet_distribution = true;
         PseudoCluster.getOrCreateWithRandomPort(true, 10);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
         PseudoCluster cluster = PseudoCluster.getInstance();
@@ -52,7 +58,7 @@ public class CreateTableAutoTabletTest {
         } finally {
             db.readUnlock();
         }
-        Assert.assertEquals(bucketNum, 12);
+        Assert.assertEquals(bucketNum, 20);
     }
 
     private static void checkTableStateToNormal(OlapTable tb) throws InterruptedException {
@@ -99,7 +105,96 @@ public class CreateTableAutoTabletTest {
         } finally {
             db.readUnlock();
         }
-        Assert.assertEquals(bucketNum, 12);
+        Assert.assertEquals(GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size(), 10);
+        Assert.assertEquals(bucketNum, 20);
+    }
+
+    @Test
+    public void test1AutoTabletWithDynamicPartition() throws Exception {
+        PseudoCluster cluster = PseudoCluster.getInstance();
+        cluster.runSql("db_for_auto_tablets",
+                " CREATE TABLE test_auto_tablets_of_dynamic_partition (" +
+                     "    k1 date," +
+                     "    k2 int(11)," +
+                     "    k3 smallint(6)," +
+                     "    v1 varchar(2048)," +
+                     "    v2 datetime" +
+                     "  ) ENGINE=OLAP" +
+                     "  DUPLICATE KEY(k1, k2, k3) " +
+                     "  PARTITION BY RANGE(k1)" +
+                     "  (PARTITION p20230306 VALUES [('2023-03-06'), ('2023-03-07')))" +
+                     "  DISTRIBUTED BY HASH(k2) BUCKETS 10" +
+                     "  PROPERTIES (" +
+                     "   'replication_num' = '1'," +
+                     "   'dynamic_partition.enable' = 'true'," +
+                     "   'dynamic_partition.time_unit' = 'DAY'," +
+                     "   'dynamic_partition.time_zone' = 'Asia/Shanghai'," +
+                     "   'dynamic_partition.start' = '-3'," +
+                     "   'dynamic_partition.end' = '3'," +
+                     "   'dynamic_partition.prefix' = 'p');");
+        DynamicPartitionScheduler dynamicPartitionScheduler = GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler();
+        dynamicPartitionScheduler.runOnceForTest();
+        Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+        if (db == null) {
+            return;
+        }
+
+        OlapTable table = (OlapTable) db.getTable("test_auto_tablets_of_dynamic_partition");
+        if (table == null) {
+            return;
+        }
+
+        int bucketNum = 0;
+        db.readLock();
+        try {
+            List<Partition> partitions = (List<Partition>) table.getRecentPartitions(2);
+            bucketNum = partitions.get(0).getDistributionInfo().getBucketNum();
+        } finally {
+            db.readUnlock();
+        }
+        Assert.assertEquals(bucketNum, 20);
+    }
+
+    @Test
+    public void test1AutoTabletWithColocate() throws Exception {
+        PseudoCluster cluster = PseudoCluster.getInstance();
+        cluster.runSql("db_for_auto_tablets",
+                " CREATE TABLE colocate_partition (" +
+                     "    k1 date," +
+                     "    k2 int(11)," +
+                     "    k3 smallint(6)," +
+                     "    v1 varchar(2048)," +
+                     "    v2 datetime" +
+                     "  ) ENGINE=OLAP" +
+                     "  DUPLICATE KEY(k1, k2, k3) " +
+                     "  PARTITION BY RANGE(k1)" +
+                     "  (PARTITION p20230306 VALUES [('2023-03-06'), ('2023-03-07')))" +
+                     "  DISTRIBUTED BY HASH(k2) BUCKETS 10" +
+                     "  PROPERTIES (" +
+                     "   'replication_num' = '1'," +
+                     "   'colocate_with' = 'g1');");
+        Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+        if (db == null) {
+            return;
+        }
+
+        OlapTable table = (OlapTable) db.getTable("colocate_partition");
+        if (table == null) {
+            return;
+        }
+
+        cluster.runSql("db_for_auto_tablets", "ALTER TABLE colocate_partition ADD PARTITION p20230312 VALUES [('2023-03-12'), ('2023-03-13'))");
+        checkTableStateToNormal(table);
+
+        int bucketNum = 0;
+        db.readLock();
+        try {
+            Partition partition = table.getPartition("p20230312");
+            bucketNum = partition.getDistributionInfo().getBucketNum();
+        } finally {
+            db.readUnlock();
+        }
+        Assert.assertEquals(bucketNum, 10);
     }
 
 

@@ -59,8 +59,8 @@ PARALLEL_TEST(MapColumnTest, test_map_column_update_if_overflow) {
     ASSERT_TRUE(ret.ok());
     ASSERT_TRUE(ret.value() == nullptr);
     ASSERT_EQ(column->size(), 2);
-    ASSERT_EQ("['a'->'hello', 'b'->' ', 'c'->'world']", column->debug_item(0));
-    ASSERT_EQ("['def'->'haha', 'g h'->'let's dance']", column->debug_item(1));
+    ASSERT_EQ("{'a':'hello','b':' ','c':'world'}", column->debug_item(0));
+    ASSERT_EQ("{'def':'haha','g h':'let's dance'}", column->debug_item(1));
 
 #ifdef NDEBUG
     /*
@@ -162,8 +162,8 @@ PARALLEL_TEST(MapColumnTest, test_get_kvs) {
     map1[(int32_t)6] = (int32_t)66;
     column->append_datum(map1);
 
-    ASSERT_EQ("[1->11, 2->22, 3->33]", column->debug_item(0));
-    ASSERT_EQ("[4->44, 5->55, 6->66]", column->debug_item(1));
+    ASSERT_EQ("{1:11,2:22,3:33}", column->debug_item(0));
+    ASSERT_EQ("{4:44,5:55,6:66}", column->debug_item(1));
 }
 
 // NOLINTNEXTLINE
@@ -488,7 +488,7 @@ PARALLEL_TEST(MapColumnTest, test_append_datumMap_with_null_value) {
     map2[(int32_t)8] = Datum();
     column->append_datum(map2);
 
-    ASSERT_EQ("[7->77, 8->NULL]", column->debug_item(2));
+    ASSERT_EQ("{7:77,8:NULL}", column->debug_item(2));
 }
 
 // NOLINTNEXTLINE
@@ -518,8 +518,8 @@ PARALLEL_TEST(MapColumnTest, test_append_nulls) {
     column->append_datum(map1);
 
     ASSERT_EQ(3, column->size());
-    ASSERT_EQ("[]", column->debug_item(0));
-    ASSERT_EQ("[4->44, 5->55, 6->66]", column->debug_item(2));
+    ASSERT_EQ("{}", column->debug_item(0));
+    ASSERT_EQ("{4:44,5:55,6:66}", column->debug_item(2));
 }
 
 // NOLINTNEXTLINE
@@ -550,8 +550,8 @@ PARALLEL_TEST(MapColumnTest, test_append_defaults) {
     column->append_default(2);
 
     ASSERT_EQ(4, column->size());
-    ASSERT_EQ("[]", column->debug_item(2));
-    ASSERT_EQ("[]", column->debug_item(3));
+    ASSERT_EQ("{}", column->debug_item(2));
+    ASSERT_EQ("{}", column->debug_item(3));
 }
 
 // NOLINTNEXTLINE
@@ -577,8 +577,8 @@ PARALLEL_TEST(MapColumnTest, test_string_key) {
     map1[(Slice) "g h"] = (int32_t)5;
     column->append_datum(map1);
 
-    ASSERT_EQ("['a'->1, 'b'->2, 'c'->3]", column->debug_item(0));
-    ASSERT_EQ("['def'->4, 'g h'->5]", column->debug_item(1));
+    ASSERT_EQ("{'a':1,'b':2,'c':3}", column->debug_item(0));
+    ASSERT_EQ("{'def':4,'g h':5}", column->debug_item(1));
 }
 
 // NOLINTNEXTLINE
@@ -604,8 +604,8 @@ PARALLEL_TEST(MapColumnTest, test_string_value) {
     map1[(Slice) "g h"] = (Slice) "let's dance";
     column->append_datum(map1);
 
-    ASSERT_EQ("['a'->'hello', 'b'->' ', 'c'->'world']", column->debug_item(0));
-    ASSERT_EQ("['def'->'haha', 'g h'->'let's dance']", column->debug_item(1));
+    ASSERT_EQ("{'a':'hello','b':' ','c':'world'}", column->debug_item(0));
+    ASSERT_EQ("{'def':'haha','g h':'let's dance'}", column->debug_item(1));
 }
 
 // NOLINTNEXTLINE
@@ -652,8 +652,8 @@ PARALLEL_TEST(MapColumnTest, test_array_value) {
     map1[(Slice) "g h"] = array_e;
     column->append_datum(map1);
 
-    ASSERT_EQ("['a'->[1, 2, 3], 'b'->[2, 3, 4], 'c'->[3]]", column->debug_item(0));
-    ASSERT_EQ("['def'->[4, 5, 6, 7], 'g h'->[5]]", column->debug_item(1));
+    ASSERT_EQ("{'a':[1,2,3],'b':[2,3,4],'c':[3]}", column->debug_item(0));
+    ASSERT_EQ("{'def':[4,5,6,7],'g h':[5]}", column->debug_item(1));
 }
 
 // NOLINTNEXTLINE
@@ -688,7 +688,7 @@ PARALLEL_TEST(MapColumnTest, test_resize) {
 
     column->resize(1);
     ASSERT_EQ(1, column->size());
-    ASSERT_EQ("[1->11, 2->22, 3->33]", column->debug_item(0));
+    ASSERT_EQ("{1:11,2:22,3:33}", column->debug_item(0));
     ASSERT_EQ(3, column->keys_column()->size());
     ASSERT_EQ(3, column->values_column()->size());
 }
@@ -772,10 +772,10 @@ PARALLEL_TEST(MapColumnTest, test_swap_column) {
 
     column->swap_column(*column2);
     ASSERT_EQ(1, column->size());
-    ASSERT_EQ("[7->77, 8->88, 9->99]", column->debug_item(0));
+    ASSERT_EQ("{7:77,8:88,9:99}", column->debug_item(0));
     ASSERT_EQ(2, column2->size());
-    ASSERT_EQ("[1->11, 2->22, 3->33]", column2->debug_item(0));
-    ASSERT_EQ("[4->44, 5->55, 6->66]", column2->debug_item(1));
+    ASSERT_EQ("{1:11,2:22,3:33}", column2->debug_item(0));
+    ASSERT_EQ("{4:44,5:55,6:66}", column2->debug_item(1));
 }
 
 // NOLINTNEXTLINE
@@ -799,8 +799,8 @@ PARALLEL_TEST(MapColumnTest, test_copy_constructor) {
 
     MapColumn c1(*c0);
     c0->reset_column();
-    ASSERT_EQ("[1->11, 2->22, 3->33]", c1.debug_item(0));
-    ASSERT_EQ("[4->44, 5->55, 6->66]", c1.debug_item(1));
+    ASSERT_EQ("{1:11,2:22,3:33}", c1.debug_item(0));
+    ASSERT_EQ("{4:44,5:55,6:66}", c1.debug_item(1));
     ASSERT_TRUE(c1.keys_column().unique());
     ASSERT_TRUE(c1.values_column().unique());
     ASSERT_TRUE(c1.offsets_column().unique());
@@ -826,8 +826,8 @@ PARALLEL_TEST(MapColumnTest, test_move_constructor) {
     c0->append_datum(map1);
 
     MapColumn c1(std::move(*c0));
-    ASSERT_EQ("[1->11, 2->22, 3->33]", c1.debug_item(0));
-    ASSERT_EQ("[4->44, 5->55, 6->66]", c1.debug_item(1));
+    ASSERT_EQ("{1:11,2:22,3:33}", c1.debug_item(0));
+    ASSERT_EQ("{4:44,5:55,6:66}", c1.debug_item(1));
     ASSERT_TRUE(c1.keys_column().unique());
     ASSERT_TRUE(c1.values_column().unique());
     ASSERT_TRUE(c1.offsets_column().unique());
@@ -856,8 +856,8 @@ PARALLEL_TEST(MapColumnTest, test_copy_assignment) {
                  NullableColumn::create(Int32Column::create(), NullColumn::create()), UInt32Column::create());
     c1 = *c0;
     c0->reset_column();
-    ASSERT_EQ("[1->11, 2->22, 3->33]", c1.debug_item(0));
-    ASSERT_EQ("[4->44, 5->55, 6->66]", c1.debug_item(1));
+    ASSERT_EQ("{1:11,2:22,3:33}", c1.debug_item(0));
+    ASSERT_EQ("{4:44,5:55,6:66}", c1.debug_item(1));
     ASSERT_TRUE(c1.keys_column().unique());
     ASSERT_TRUE(c1.values_column().unique());
     ASSERT_TRUE(c1.offsets_column().unique());
@@ -885,8 +885,8 @@ PARALLEL_TEST(MapColumnTest, test_move_assignment) {
     MapColumn c1(NullableColumn::create(Int32Column::create(), NullColumn::create()),
                  NullableColumn::create(Int32Column::create(), NullColumn::create()), UInt32Column::create());
     c1 = std::move(*c0);
-    ASSERT_EQ("[1->11, 2->22, 3->33]", c1.debug_item(0));
-    ASSERT_EQ("[4->44, 5->55, 6->66]", c1.debug_item(1));
+    ASSERT_EQ("{1:11,2:22,3:33}", c1.debug_item(0));
+    ASSERT_EQ("{4:44,5:55,6:66}", c1.debug_item(1));
     ASSERT_TRUE(c1.keys_column().unique());
     ASSERT_TRUE(c1.values_column().unique());
     ASSERT_TRUE(c1.offsets_column().unique());
@@ -913,8 +913,8 @@ PARALLEL_TEST(MapColumnTest, test_clone) {
 
     auto c1 = c0->clone();
     c0->reset_column();
-    ASSERT_EQ("[1->11, 2->22, 3->33]", down_cast<MapColumn*>(c1.get())->debug_item(0));
-    ASSERT_EQ("[4->44, 5->55, 6->66]", down_cast<MapColumn*>(c1.get())->debug_item(1));
+    ASSERT_EQ("{1:11,2:22,3:33}", down_cast<MapColumn*>(c1.get())->debug_item(0));
+    ASSERT_EQ("{4:44,5:55,6:66}", down_cast<MapColumn*>(c1.get())->debug_item(1));
     ASSERT_TRUE(down_cast<MapColumn*>(c1.get())->keys_column().unique());
     ASSERT_TRUE(down_cast<MapColumn*>(c1.get())->values_column().unique());
     ASSERT_TRUE(down_cast<MapColumn*>(c1.get())->offsets_column().unique());
@@ -941,8 +941,8 @@ PARALLEL_TEST(MapColumnTest, test_clone_shared) {
 
     auto c1 = c0->clone_shared();
     c0->reset_column();
-    ASSERT_EQ("[1->11, 2->22, 3->33]", down_cast<MapColumn*>(c1.get())->debug_item(0));
-    ASSERT_EQ("[4->44, 5->55, 6->66]", down_cast<MapColumn*>(c1.get())->debug_item(1));
+    ASSERT_EQ("{1:11,2:22,3:33}", down_cast<MapColumn*>(c1.get())->debug_item(0));
+    ASSERT_EQ("{4:44,5:55,6:66}", down_cast<MapColumn*>(c1.get())->debug_item(1));
     ASSERT_TRUE(c1.unique());
     ASSERT_TRUE(down_cast<MapColumn*>(c1.get())->keys_column().unique());
     ASSERT_TRUE(down_cast<MapColumn*>(c1.get())->values_column().unique());
@@ -1114,10 +1114,10 @@ PARALLEL_TEST(MapColumnTest, test_update_rows) {
     ASSERT_TRUE(c0->update_rows(*c1.get(), replace_idxes.data()).ok());
 
     ASSERT_EQ(4, c0->size());
-    ASSERT_EQ("[1->11, 2->22, 3->33]", c0->debug_item(0));
-    ASSERT_EQ("[101->111, 102->112]", c0->debug_item(1));
-    ASSERT_EQ("[]", c0->debug_item(2));
-    ASSERT_EQ("[103->113, 104->114]", c0->debug_item(3));
+    ASSERT_EQ("{1:11,2:22,3:33}", c0->debug_item(0));
+    ASSERT_EQ("{101:111,102:112}", c0->debug_item(1));
+    ASSERT_EQ("{}", c0->debug_item(2));
+    ASSERT_EQ("{103:113,104:114}", c0->debug_item(3));
 
     auto c2 = MapColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
                                 NullableColumn::create(Int32Column::create(), NullColumn::create()),
@@ -1138,10 +1138,10 @@ PARALLEL_TEST(MapColumnTest, test_update_rows) {
     ASSERT_TRUE(c0->update_rows(*c2.get(), replace_idxes_new.data()).ok());
 
     ASSERT_EQ(4, c0->size());
-    ASSERT_EQ("[1->11, 2->22, 3->33]", c0->debug_item(0));
-    ASSERT_EQ("[201->211, 202->212]", c0->debug_item(1));
-    ASSERT_EQ("[203->213, 204->214]", c0->debug_item(2));
-    ASSERT_EQ("[103->113, 104->114]", c0->debug_item(3));
+    ASSERT_EQ("{1:11,2:22,3:33}", c0->debug_item(0));
+    ASSERT_EQ("{201:211,202:212}", c0->debug_item(1));
+    ASSERT_EQ("{203:213,204:214}", c0->debug_item(2));
+    ASSERT_EQ("{103:113,104:114}", c0->debug_item(3));
 }
 
 PARALLEL_TEST(MapColumnTest, test_assign) {
@@ -1165,10 +1165,10 @@ PARALLEL_TEST(MapColumnTest, test_assign) {
     // assign
     c0->assign(4, 0);
     ASSERT_EQ(4, c0->size());
-    ASSERT_EQ("[1->11, 2->22, 3->33]", c0->debug_item(0));
-    ASSERT_EQ("[1->11, 2->22, 3->33]", c0->debug_item(1));
-    ASSERT_EQ("[1->11, 2->22, 3->33]", c0->debug_item(2));
-    ASSERT_EQ("[1->11, 2->22, 3->33]", c0->debug_item(3));
+    ASSERT_EQ("{1:11,2:22,3:33}", c0->debug_item(0));
+    ASSERT_EQ("{1:11,2:22,3:33}", c0->debug_item(1));
+    ASSERT_EQ("{1:11,2:22,3:33}", c0->debug_item(2));
+    ASSERT_EQ("{1:11,2:22,3:33}", c0->debug_item(3));
 
     /// test assign [key->null]
     c0->reset_column();
@@ -1195,4 +1195,27 @@ PARALLEL_TEST(MapColumnTest, test_assign) {
     ASSERT_EQ(0, c0->values_column()->size());
 }
 
+PARALLEL_TEST(MapColumnTest, test_element_memory_usage) {
+    auto column = MapColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                    NullableColumn::create(Int32Column::create(), NullColumn::create()),
+                                    UInt32Column::create());
+
+    // {}, {1:2},{3:4,5:6}
+    column->append_datum(DatumMap{});
+    column->append_datum(DatumMap{{1, 2}});
+    column->append_datum(DatumMap{{3, 4}, {5, 6}});
+
+    ASSERT_EQ(42, column->Column::element_memory_usage());
+
+    std::vector<size_t> element_mem_usages = {4, 14, 24};
+    size_t element_num = element_mem_usages.size();
+    for (size_t start = 0; start < element_num; start++) {
+        size_t expected_usage = 0;
+        ASSERT_EQ(0, column->element_memory_usage(start, 0));
+        for (size_t size = 1; start + size <= element_num; size++) {
+            expected_usage += element_mem_usages[start + size - 1];
+            ASSERT_EQ(expected_usage, column->element_memory_usage(start, size));
+        }
+    }
+}
 } // namespace starrocks::vectorized

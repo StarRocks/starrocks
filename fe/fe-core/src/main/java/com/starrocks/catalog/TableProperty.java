@@ -112,13 +112,20 @@ public class TableProperty implements Writable, GsonPostProcessable {
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
     // 2. Before checkpoint, we relay delete job journal log to persist.
     //    After checkpoint, we relay TableProperty::write to persist.
+    @SerializedName(value = "hasDelete")
     private boolean hasDelete = false;
-
+    @SerializedName(value = "hasForbitGlobalDict")
     private boolean hasForbitGlobalDict = false;
 
     @SerializedName(value = "storageInfo")
     private StorageInfo storageInfo;
 
+    // unique constraints for mv rewrite
+    // a table may have multi unique constraints
+    private List<UniqueConstraint> uniqueConstraints;
+
+    // foreign key constraint for mv rewrite
+    private List<ForeignKeyConstraint> foreignKeyConstraints;
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
     }
@@ -154,6 +161,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 buildReplicatedStorage();
+                break;
+            case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
+                buildConstraint();
                 break;
             default:
                 break;
@@ -265,6 +275,15 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildConstraint() {
+        uniqueConstraints = UniqueConstraint.parse(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
+
+        foreignKeyConstraints = ForeignKeyConstraint.parse(
+                properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
+        return this;
+    }
+
     public void modifyTableProperties(Map<String, String> modifyProperties) {
         properties.putAll(modifyProperties);
     }
@@ -373,6 +392,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return storageInfo;
     }
 
+    public List<UniqueConstraint> getUniqueConstraints() {
+        return uniqueConstraints;
+    }
+
+    public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
+        this.uniqueConstraints = uniqueConstraints;
+    }
+
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        return foreignKeyConstraints;
+    }
+
+    public void setForeignKeyConstraints(List<ForeignKeyConstraint> foreignKeyConstraints) {
+        this.foreignKeyConstraints = foreignKeyConstraints;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
@@ -397,5 +432,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildExcludedTriggerTables();
         buildReplicatedStorage();
         buildForceExternalTableQueryRewrite();
+        buildConstraint();
     }
 }

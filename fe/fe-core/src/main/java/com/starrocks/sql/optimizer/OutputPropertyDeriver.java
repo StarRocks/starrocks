@@ -211,7 +211,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                     (rightDistributionDesc.isShuffle()) || rightDistributionDesc.isShuffleEnforce()) {
                 // shuffle join
                 return computeHashJoinDistributionPropertyInfo(node,
-                        computeShuffleJoinOutputProperty(leftShuffleColumns),
+                        computeShuffleJoinOutputProperty(leftDistributionDesc.getColumns()),
                         leftOnPredicateColumns,
                         rightOnPredicateColumns, context);
             } else if (leftDistributionDesc.isShuffle() && rightDistributionDesc.isLocal()) {
@@ -311,8 +311,17 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             } else {
                 outputProperty = new PhysicalPropertySet(new SortProperty(topN.getOrderSpec()));
             }
-        } else {
+        } else if (topN.getPartitionByColumns() == null) {
             outputProperty = PhysicalPropertySet.EMPTY;
+        } else {
+            List<Integer> partitionColumnRefSet = topN.getPartitionByColumns().stream()
+                    .flatMap(c -> Arrays.stream(c.getUsedColumns().getColumnIds()).boxed())
+                    .collect(Collectors.toList());
+            if (partitionColumnRefSet.isEmpty()) {
+                outputProperty = PhysicalPropertySet.EMPTY;
+            } else {
+                outputProperty = new PhysicalPropertySet(childrenOutputProperties.get(0).getDistributionProperty());
+            }
         }
         return mergeCTEProperty(outputProperty);
     }
@@ -370,6 +379,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         Preconditions.checkState(childrenOutputProperties.size() == 2);
         PhysicalPropertySet output = childrenOutputProperties.get(1).copy();
         CTEProperty cteProperty = childrenOutputProperties.get(1).getCteProperty().removeCTE(node.getCteId());
+        cteProperty.merge(childrenOutputProperties.get(0).getCteProperty());
         output.setCteProperty(cteProperty);
         return output;
     }

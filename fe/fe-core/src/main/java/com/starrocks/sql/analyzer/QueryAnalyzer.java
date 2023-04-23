@@ -250,6 +250,13 @@ public class QueryAnalyzer {
                     viewRelation.setAlias(tableRelation.getAlias());
                     return viewRelation;
                 } else {
+                    if (tableRelation.getTemporalClause() != null) {
+                        if (table.getType() != Table.TableType.MYSQL) {
+                            throw unsupportedException("unsupported table type for temporal clauses: " + table.getType() +
+                                    "; only external MYSQL tables support temporal clauses");
+                        }
+                    }
+
                     if (table.isSupported()) {
                         tableRelation.setTable(table);
                         return tableRelation;
@@ -432,24 +439,24 @@ public class QueryAnalyzer {
         }
 
         private void analyzeJoinHints(JoinRelation join) {
-            if (join.getJoinHint().equalsIgnoreCase("BROADCAST")) {
+            if (JoinOperator.HINT_BROADCAST.equals(join.getJoinHint())) {
                 if (join.getJoinOp() == JoinOperator.RIGHT_OUTER_JOIN
                         || join.getJoinOp() == JoinOperator.FULL_OUTER_JOIN
                         || join.getJoinOp() == JoinOperator.RIGHT_SEMI_JOIN
                         || join.getJoinOp() == JoinOperator.RIGHT_ANTI_JOIN) {
                     throw new SemanticException(join.getJoinOp().toString() + " does not support BROADCAST.");
                 }
-            } else if (join.getJoinHint().equalsIgnoreCase("SHUFFLE")) {
+            } else if (JoinOperator.HINT_SHUFFLE.equals(join.getJoinHint())) {
                 if (join.getJoinOp() == JoinOperator.CROSS_JOIN ||
                         (join.getJoinOp() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
                     throw new SemanticException("CROSS JOIN does not support SHUFFLE.");
                 }
-            } else if ("BUCKET".equalsIgnoreCase(join.getJoinHint()) ||
-                    "COLOCATE".equalsIgnoreCase(join.getJoinHint())) {
+            } else if (JoinOperator.HINT_BUCKET.equals(join.getJoinHint()) ||
+                    JoinOperator.HINT_COLOCATE.equals(join.getJoinHint())) {
                 if (join.getJoinOp() == JoinOperator.CROSS_JOIN) {
                     throw new SemanticException("CROSS JOIN does not support " + join.getJoinHint() + ".");
                 }
-            } else {
+            } else if (!JoinOperator.HINT_UNREORDER.equals(join.getJoinHint())) {
                 throw new SemanticException("JOIN hint not recognized: " + join.getJoinHint());
             }
         }

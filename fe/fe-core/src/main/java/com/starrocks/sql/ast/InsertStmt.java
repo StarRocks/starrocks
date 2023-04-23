@@ -31,8 +31,6 @@ import java.util.Map;
  * User can check the load info by show load stmt.
  */
 public class InsertStmt extends DmlStmt {
-    public static final String SHUFFLE_HINT = "SHUFFLE";
-    public static final String NOSHUFFLE_HINT = "NOSHUFFLE";
     public static final String STREAMING = "STREAMING";
 
     private final TableName tblName;

@@ -24,6 +24,17 @@ public:
 
     using Container = Buffer<Slice>;
 
+    struct BinaryDataProxyContainer {
+        BinaryDataProxyContainer(const BinaryColumnBase& column) : _column(column) {}
+
+        Slice operator[](size_t index) const { return _column.get_slice(index); }
+
+        size_t size() { return _column.size(); }
+
+    private:
+        const BinaryColumnBase& _column;
+    };
+
     // TODO(kks): when we create our own vector, we could let vector[-1] = 0,
     // and then we don't need explicitly emplace_back zero value
     BinaryColumnBase<T>() { _offsets.emplace_back(0); }
@@ -68,7 +79,6 @@ public:
         }
     }
 
-    bool low_cardinality() const override { return false; }
     bool is_binary() const override { return std::is_same_v<T, uint32_t> != 0; }
     bool is_large_binary() const override { return std::is_same_v<T, uint64_t> != 0; }
 
@@ -156,7 +166,7 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
 
     bool append_nulls(size_t count) override { return false; }
 
@@ -249,6 +259,8 @@ public:
         return _slices;
     }
 
+    const BinaryDataProxyContainer& get_proxy_data() const { return _immuable_container; }
+
     Bytes& get_bytes() { return _bytes; }
 
     const Bytes& get_bytes() const { return _bytes; }
@@ -262,6 +274,10 @@ public:
 
     size_t container_memory_usage() const override {
         return _bytes.capacity() + _offsets.capacity() * sizeof(_offsets[0]) + _slices.capacity() * sizeof(_slices[0]);
+    }
+
+    size_t element_memory_usage(size_t from, size_t size) const override {
+        return _offsets[from + size] - _offsets[from] + size * sizeof(T);
     }
 
     void swap_column(Column& rhs) override {
@@ -315,6 +331,7 @@ private:
 
     mutable Container _slices;
     mutable bool _slices_cache = false;
+    BinaryDataProxyContainer _immuable_container = BinaryDataProxyContainer(*this);
 };
 
 using Offsets = BinaryColumnBase<uint32_t>::Offsets;

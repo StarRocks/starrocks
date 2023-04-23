@@ -18,7 +18,7 @@ From StarRocks v2.5 onwards, Spark Load no longer needs to depend on Broker proc
 
 > **NOTE**
 >
-> Loading without Broker process may not work in certain circumstances, such as when you configure multiple HA systems or have multiple Kerberos configurations. In this situation, you can still load data by using Broker process.
+> Loading without Broker process may not work in certain circumstances, such as when you have multiple HDFS clusters or multiple Kerberos users. In this situation, you can still load data by using Broker process.
 
 ## Fundamentals
 
@@ -108,7 +108,7 @@ REVOKE USAGE_PRIV ON RESOURCE resource_name FROM user_identityREVOKE USAGE_PRIV 
 
 * Create resource
 
-**For example**：
+**For example**:
 
 ~~~sql
 -- yarn cluster mode

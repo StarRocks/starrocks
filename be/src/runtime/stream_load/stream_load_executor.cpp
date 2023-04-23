@@ -39,7 +39,6 @@
 namespace starrocks {
 
 #ifdef BE_TEST
-std::string k_response_str;
 TLoadTxnBeginResult k_stream_load_begin_result;
 TLoadTxnCommitResult k_stream_load_commit_result;
 TLoadTxnRollbackResult k_stream_load_rollback_result;
@@ -269,6 +268,7 @@ Status StreamLoadExecutor::rollback_txn(StreamLoadContext* ctx) {
     TLoadTxnRollbackRequest request;
     set_request_auth(&request, ctx->auth);
     request.db = ctx->db;
+    request.tbl = ctx->table;
     request.txnId = ctx->txn_id;
     request.failInfos = std::move(ctx->fail_infos);
     request.__set_reason(ctx->status.get_error_msg());

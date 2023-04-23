@@ -27,6 +27,7 @@ class MemTracker;
 class RowsetReadOptions;
 class SnapshotMeta;
 class Tablet;
+class TabletBasicInfo;
 class TTabletInfo;
 
 namespace vectorized {
@@ -43,6 +44,30 @@ struct CompactionInfo {
     EditVersion start_version;
     std::vector<uint32_t> inputs;
     uint32_t output = UINT32_MAX;
+};
+
+struct EditVersionInfo {
+    EditVersion version;
+    int64_t creation_time;
+    std::vector<uint32_t> rowsets;
+    // used for rowset commit
+    std::vector<uint32_t> deltas;
+    // used for compaction commit
+    std::unique_ptr<CompactionInfo> compaction;
+    EditVersionInfo() = default;
+    // add a copy constructor to better expose to scripting engine
+    EditVersionInfo(const EditVersionInfo& rhs) {
+        version = rhs.version;
+        creation_time = rhs.creation_time;
+        rowsets = rhs.rowsets;
+        deltas = rhs.deltas;
+        if (rhs.compaction) {
+            compaction = std::make_unique<CompactionInfo>();
+            *compaction = *rhs.compaction;
+        }
+    }
+    // add method to better expose to scripting engine
+    CompactionInfo* get_compaction() { return compaction.get(); }
 };
 
 // maintain all states for updatable tablets
@@ -249,6 +274,15 @@ public:
 
     Status check_and_remove_rowset();
 
+    void get_basic_info_extra(TabletBasicInfo& info);
+
+    // methods used by scripting engine
+    std::vector<std::string> get_version_list() const;
+
+    std::shared_ptr<EditVersionInfo> get_edit_version(const string& version) const;
+
+    std::shared_ptr<std::unordered_map<uint32_t, RowsetSharedPtr>> get_rowset_map() const;
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -257,16 +291,6 @@ private:
 
     template <typename K, typename V>
     using OrderedMap = std::map<K, V>;
-
-    struct EditVersionInfo {
-        EditVersion version;
-        int64_t creation_time;
-        std::vector<uint32_t> rowsets;
-        // used for rowset commit
-        std::vector<uint32_t> deltas;
-        // used for compaction commit
-        std::unique_ptr<CompactionInfo> compaction;
-    };
 
     struct RowsetStats {
         size_t num_segments = 0;

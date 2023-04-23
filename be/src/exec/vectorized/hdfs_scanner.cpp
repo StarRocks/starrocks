@@ -2,8 +2,6 @@
 
 #include "exec/vectorized/hdfs_scanner.h"
 
-#include <boost/algorithm/string.hpp>
-
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
 #include "io/compressed_input_stream.h"
@@ -150,7 +148,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         if (_scanner_params.open_limit != nullptr) {
             _scanner_params.open_limit->fetch_add(1, std::memory_order_relaxed);
         }
-        LOG(INFO) << "open file success: " << _scanner_params.path;
+        VLOG_FILE << "open file success: " << _scanner_params.path;
     }
     return status;
 }
@@ -261,6 +259,8 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->block_cache_write_counter, stats.write_cache_count);
         COUNTER_UPDATE(profile->block_cache_write_bytes, stats.write_cache_bytes);
         COUNTER_UPDATE(profile->block_cache_write_timer, stats.write_cache_ns);
+        COUNTER_UPDATE(profile->block_cache_write_fail_counter, stats.write_cache_fail_count);
+        COUNTER_UPDATE(profile->block_cache_write_fail_bytes, stats.write_cache_fail_bytes);
     }
     // update scanner private profile.
     do_update_counter(profile);
@@ -303,6 +303,23 @@ void HdfsScannerContext::append_not_existed_columns_to_chunk(vectorized::ChunkPt
         }
         ck->append_column(std::move(col), slot_desc->id());
     }
+}
+
+Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Filter* filter) {
+    size_t chunk_size = (*chunk)->num_rows();
+    if (conjunct_ctxs_by_slot.size()) {
+        filter->assign(chunk_size, 1);
+        for (auto& it : conjunct_ctxs_by_slot) {
+            ASSIGN_OR_RETURN(chunk_size, ExecNode::eval_conjuncts_into_filter(it.second, chunk->get(), filter));
+            if (chunk_size == 0) {
+                break;
+            }
+        }
+        if (chunk_size != 0 && chunk_size != (*chunk)->num_rows()) {
+            (*chunk)->filter(*filter);
+        }
+    }
+    return Status::OK();
 }
 
 StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots() {

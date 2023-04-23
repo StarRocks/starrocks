@@ -1,4 +1,4 @@
-# Realtime synchronization from MySQL
+# Synchronize data from MySQL in real time
 
 StarRocks supports real-time data synchronization from MySQL within seconds, delivering ultra-low latency real-time analytics at scale and enabling users to query real-time data as they happen.
 
@@ -64,7 +64,7 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
 
    ```Bash
       # Download Flink.
-      wget https://dlcdn.apache.org/flink/flink-1.14.5/flink-1.14.5-bin-scala_2.11.tgz
+      wget https://archive.apache.org/dist/flink/flink-1.14.5/flink-1.14.5-bin-scala_2.11.tgz
       # Decompress Flink.  
       tar -xzf flink-1.14.5-bin-scala_2.11.tgz
       # Go to the Flink directory.

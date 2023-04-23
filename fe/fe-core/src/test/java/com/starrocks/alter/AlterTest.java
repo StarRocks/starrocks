@@ -250,8 +250,8 @@ public class AlterTest {
         try {
             GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .refreshMaterializedView(refreshMaterializedViewStatement.getMvName().getDb(),
-                            refreshMaterializedViewStatement.getMvName().getTbl(),
-                            Constants.TaskRunPriority.LOWEST.value());
+                            refreshMaterializedViewStatement.getMvName().getTbl(), false, null,
+                            Constants.TaskRunPriority.LOWEST.value(), false, true);
         } catch (Exception e) {
             e.printStackTrace();
             Assert.fail();
@@ -1201,9 +1201,9 @@ public class AlterTest {
         Table table = GlobalStateMgr.getCurrentState().getDb("test")
                 .getTable("test_partition_week");
 
+        Assert.assertNotNull(table.getPartition("p2017_12"));
         Assert.assertNotNull(table.getPartition("p2017_13"));
         Assert.assertNotNull(table.getPartition("p2017_14"));
-        Assert.assertNotNull(table.getPartition("p2017_15"));
 
         String dropSQL = "drop table test_partition_week";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);

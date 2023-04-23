@@ -479,6 +479,19 @@ public class VariableMgr {
         return "";
     }
 
+    public static String getDefaultValue(String variable) {
+        VarContext ctx = getVarContext(variable);
+        if (ctx == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_SYSTEM_VARIABLE, variable);
+        }
+
+        String value = ctx.getDefaultValue();
+        if (value == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DEFAULT, variable);
+        }
+        return value;
+    }
+
     // Dump all fields. Used for `show variables`, but note `sessionVar` would be null.
     public static List<List<String>> dump(SetType type, SessionVariable sessionVar, PatternMatcher matcher) {
         List<List<String>> rows = Lists.newArrayList();

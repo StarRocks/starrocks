@@ -305,13 +305,14 @@ void RuntimeProfile::add_child_unlock(RuntimeProfile* child, bool indent, ChildV
 }
 
 RuntimeProfile::Counter* RuntimeProfile::add_counter_unlock(const std::string& name, TUnit::type type,
-                                                            const std::string& parent_name, bool skip_merge) {
+                                                            const std::string& parent_name, bool skip_merge,
+                                                            int64_t threshold) {
     if (auto iter = _counter_map.find(name); iter != _counter_map.end()) {
         return iter->second.first;
     }
 
     DCHECK(parent_name == ROOT_COUNTER || _counter_map.find(parent_name) != _counter_map.end());
-    Counter* counter = _pool->add(new Counter(type, 0, skip_merge));
+    Counter* counter = _pool->add(new Counter(type, 0, skip_merge, threshold));
     _counter_map[name] = std::make_pair(counter, parent_name);
     _child_counter_map[parent_name].insert(name);
     return counter;
@@ -422,9 +423,10 @@ ADD_COUNTER_IMPL(AddHighWaterMarkCounter, HighWaterMarkCounter)
 //ADD_COUNTER_IMPL(AddConcurrentTimerCounter, ConcurrentTimerCounter);
 
 RuntimeProfile::Counter* RuntimeProfile::add_child_counter(const std::string& name, TUnit::type type,
-                                                           const std::string& parent_name, bool skip_merge) {
+                                                           const std::string& parent_name, bool skip_merge,
+                                                           int64_t threshold) {
     std::lock_guard<std::mutex> l(_counter_lock);
-    return add_counter_unlock(name, type, parent_name, skip_merge);
+    return add_counter_unlock(name, type, parent_name, skip_merge, threshold);
 }
 
 RuntimeProfile::DerivedCounter* RuntimeProfile::add_derived_counter(const std::string& name, TUnit::type type,
@@ -980,9 +982,13 @@ void RuntimeProfile::print_child_counters(const std::string& prefix, const std::
         for (const std::string& child_counter : child_counters) {
             auto iter = counter_map.find(child_counter);
             DCHECK(iter != counter_map.end());
-            stream << prefix << "   - " << iter->first << ": "
-                   << PrettyPrinter::print(iter->second.first->value(), iter->second.first->type()) << std::endl;
-            RuntimeProfile::print_child_counters(prefix + "  ", child_counter, counter_map, child_counter_map, s);
+            auto value = iter->second.first->value();
+            auto display_threshold = iter->second.first->display_threshold();
+            if (display_threshold == 0 || (display_threshold > 0 && value > display_threshold)) {
+                stream << prefix << "   - " << iter->first << ": "
+                       << PrettyPrinter::print(iter->second.first->value(), iter->second.first->type()) << std::endl;
+                RuntimeProfile::print_child_counters(prefix + "  ", child_counter, counter_map, child_counter_map, s);
+            }
         }
     }
 }

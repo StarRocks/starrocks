@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -23,6 +24,9 @@ public class LogicalLimitOperator extends LogicalOperator {
 
     public LogicalLimitOperator(long limit, long offset, Phase phase) {
         super(OperatorType.LOGICAL_LIMIT);
+        Preconditions.checkState(limit < 0 || limit + offset >= 0,
+                String.format("limit(%d) + offset(%d) is too large and yields an overflow result(%d)", limit, offset,
+                        limit + offset));
         this.limit = limit;
         this.offset = offset;
         this.phase = phase;

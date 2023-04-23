@@ -28,6 +28,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
@@ -38,6 +39,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BackupHandler;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.CatalogIdGenerator;
@@ -52,6 +54,7 @@ import com.starrocks.catalog.DomainResolver;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.FileTable;
+import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveMetaStoreTable;
@@ -59,12 +62,14 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -89,6 +94,7 @@ import com.starrocks.clone.TabletSchedulerStat;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigRefreshDaemon;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -109,13 +115,16 @@ import com.starrocks.common.util.Util;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorTableInfo;
+import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
+import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
-import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
@@ -190,7 +199,6 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.TaskManager;
-import com.starrocks.scheduler.mv.MVActiveChecker;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
@@ -236,6 +244,7 @@ import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.StatisticAutoCollector;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
@@ -244,6 +253,8 @@ import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TNodeInfo;
+import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TResourceUsage;
@@ -282,6 +293,7 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 public class GlobalStateMgr {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
@@ -329,6 +341,7 @@ public class GlobalStateMgr {
     private StarRocksRepository starRocksRepository;
     private IcebergRepository icebergRepository;
     private MetastoreEventsProcessor metastoreEventsProcessor;
+    private ConnectorTableMetadataProcessor connectorTableMetadataProcessor;
 
     // set to true after finished replay all meta and ready to serve
     // set to false when globalStateMgr is not ready.
@@ -407,8 +420,6 @@ public class GlobalStateMgr {
 
     private RoutineLoadTaskScheduler routineLoadTaskScheduler;
 
-    private MVActiveChecker mvActiveChecker;
-
     private SmallFileMgr smallFileMgr;
 
     private DynamicPartitionScheduler dynamicPartitionScheduler;
@@ -436,6 +447,8 @@ public class GlobalStateMgr {
     private MetadataMgr metadataMgr;
     private CatalogMgr catalogMgr;
     private ConnectorMgr connectorMgr;
+    private ConnectorTblMetaInfoMgr connectorTblMetaInfoMgr;
+
     private TaskManager taskManager;
     private InsertOverwriteJobManager insertOverwriteJobManager;
 
@@ -451,6 +464,8 @@ public class GlobalStateMgr {
     // For LakeTable
     private CompactionManager compactionManager;
 
+    private ConfigRefreshDaemon configRefreshDaemon;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -465,6 +480,16 @@ public class GlobalStateMgr {
 
     public SystemInfoService getOrCreateSystemInfo(Integer clusterId) {
         return nodeMgr.getOrCreateSystemInfo(clusterId);
+    }
+
+    public TNodesInfo createNodesInfo(Integer clusterId) {
+        TNodesInfo nodesInfo = new TNodesInfo();
+        SystemInfoService systemInfoService = getOrCreateSystemInfo(clusterId);
+        for (Long id : systemInfoService.getBackendIds(false)) {
+            Backend backend = systemInfoService.getBackend(id);
+            nodesInfo.addToNodes(new TNodeInfo(backend.getId(), 0, backend.getHost(), backend.getBrpcPort()));
+        }
+        return nodesInfo;
     }
 
     public SystemInfoService getClusterInfo() {
@@ -511,6 +536,10 @@ public class GlobalStateMgr {
 
     public CompactionManager getCompactionManager() {
         return compactionManager;
+    }
+
+    public ConfigRefreshDaemon getConfigRefreshDaemon() {
+        return configRefreshDaemon;
     }
 
     private static class SingletonHolder {
@@ -566,6 +595,7 @@ public class GlobalStateMgr {
         this.starRocksRepository = new StarRocksRepository();
         this.icebergRepository = new IcebergRepository();
         this.metastoreEventsProcessor = new MetastoreEventsProcessor();
+        this.connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
 
         this.metaContext = new MetaContext();
         this.metaContext.setThreadLocalInfo();
@@ -590,7 +620,6 @@ public class GlobalStateMgr {
         this.loadLoadingChecker = new LoadLoadingChecker(loadManager);
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
-        this.mvActiveChecker = new MVActiveChecker();
 
         this.smallFileMgr = new SmallFileMgr();
 
@@ -609,12 +638,15 @@ public class GlobalStateMgr {
 
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
         this.connectorMgr = new ConnectorMgr();
-        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr);
+        this.connectorTblMetaInfoMgr = new ConnectorTblMetaInfoMgr();
+        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr, connectorTblMetaInfoMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
+
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
         this.shardManager = new ShardManager();
         this.compactionManager = new CompactionManager();
+        this.configRefreshDaemon = new ConfigRefreshDaemon();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -768,6 +800,10 @@ public class GlobalStateMgr {
         return getCurrentState().statisticStorage;
     }
 
+    public static TabletStatMgr getCurrentTabletStatMgr() {
+        return getCurrentState().tabletStatMgr;
+    }
+
     // Only used in UT
     public void setStatisticStorage(StatisticStorage statisticStorage) {
         this.statisticStorage = statisticStorage;
@@ -817,6 +853,14 @@ public class GlobalStateMgr {
 
     public InsertOverwriteJobManager getInsertOverwriteJobManager() {
         return insertOverwriteJobManager;
+    }
+
+    public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
+        return connectorTblMetaInfoMgr;
+    }
+
+    public ConnectorTableMetadataProcessor getConnectorTableMetadataProcessor() {
+        return connectorTableMetadataProcessor;
     }
 
     // Use tryLock to avoid potential dead lock
@@ -1174,17 +1218,19 @@ public class GlobalStateMgr {
         // ES state store
         esRepository.start();
         starRocksRepository.start();
-        // materialized view active checker
-        mvActiveChecker.start();
 
         if (Config.enable_hms_events_incremental_sync) {
             metastoreEventsProcessor.start();
         }
+
+        connectorTableMetadataProcessor.start();
+
         // domain resolver
         domainResolver.start();
         if (Config.use_staros) {
             compactionManager.start();
         }
+        configRefreshDaemon.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -1205,17 +1251,6 @@ public class GlobalStateMgr {
         }
 
         // transfer from INIT/UNKNOWN to OBSERVER/FOLLOWER
-
-        // add helper sockets
-        if (Config.edit_log_type.equalsIgnoreCase("BDB")) {
-            for (Frontend fe : nodeMgr.getFrontends().values()) {
-                if (fe.getRole() == FrontendNodeType.FOLLOWER) {
-                    if (getHaProtocol() instanceof BDBHA) {
-                        ((BDBHA) getHaProtocol()).addHelperSocket(fe.getHost(), fe.getEditLogPort());
-                    }
-                }
-            }
-        }
 
         if (replayer == null) {
             createReplayer();
@@ -1310,9 +1345,58 @@ public class GlobalStateMgr {
             domainResolver = new DomainResolver(auth);
         }
 
+        try {
+            postLoadImage();
+        } catch (Exception t) {
+            LOG.warn("there is an exception during processing after load image. exception:", t);
+        }
+
         long loadImageEndTime = System.currentTimeMillis();
         this.imageJournalId = storage.getImageJournalId();
         LOG.info("finished to load image in " + (loadImageEndTime - loadImageStartTime) + " ms");
+    }
+
+    private void postLoadImage() {
+        processMvRelatedMeta();
+    }
+
+    private void processMvRelatedMeta() {
+        List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
+
+        long startMillis = System.currentTimeMillis();
+        for (String dbName : dbNames) {
+            Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
+            for (MaterializedView mv : db.getMaterializedViews()) {
+                for (BaseTableInfo baseTableInfo : mv.getBaseTableInfos()) {
+                    Table table = baseTableInfo.getTable();
+                    if (table == null) {
+                        LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                "the table {} was not exist.", mv.getName(), mv.getId(), baseTableInfo.getTableName());
+                        mv.setActive(false);
+                        continue;
+                    }
+                    if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+                        MaterializedView baseMv = (MaterializedView) table;
+                        LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                        "the materialized view{}({}) is invalid.", mv.getName(), mv.getId(),
+                                baseMv.getName(), baseMv.getId());
+                        mv.setActive(false);
+                        continue;
+                    }
+                    MvId mvId = new MvId(db.getId(), mv.getId());
+                    table.addRelatedMaterializedView(mvId);
+                    if (!table.isLocalTable()) {
+                        connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
+                                baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
+                                ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                        Sets.newHashSet(mvId)).build());
+                    }
+                }
+            }
+        }
+
+        long duration = System.currentTimeMillis() - startMillis;
+        LOG.info("finish processing all tables' related materialized views in {}ms", duration);
     }
 
     public long loadHeader(DataInputStream dis, long checksum) throws IOException {
@@ -1972,8 +2056,8 @@ public class GlobalStateMgr {
         localMetastore.replayRenameDatabase(dbName, newDbName);
     }
 
-    public void createTable(CreateTableStmt stmt) throws DdlException {
-        localMetastore.createTable(stmt);
+    public boolean createTable(CreateTableStmt stmt) throws DdlException {
+        return localMetastore.createTable(stmt);
     }
 
     public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
@@ -2236,6 +2320,53 @@ public class GlobalStateMgr {
                 sb.append(olapTable.enableReplicatedStorage()).append("\"");
 
             }
+            // storage media
+            Map<String, String> properties = olapTable.getTableProperty().getProperties();
+
+            // unique constraint
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                    && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT))) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)
+                        .append("\" = \"");
+                sb.append(properties.get(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)).append("\"");
+            }
+
+            // foreign key constraint
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                    && !Strings.isNullOrEmpty(properties.get(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT))) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)
+                        .append("\" = \"");
+                List<ForeignKeyConstraint> constraints = olapTable.getForeignKeyConstraints();
+                List<String> constraintStrs = Lists.newArrayList();
+                for (ForeignKeyConstraint constraint : constraints) {
+                    BaseTableInfo parentTableInfo = constraint.getParentTableInfo();
+                    StringBuilder constraintSb = new StringBuilder();
+                    constraintSb.append("(");
+                    String baseColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
+                            .stream().map(pair -> pair.first).collect(Collectors.toList()));
+                    constraintSb.append(baseColumns);
+                    constraintSb.append(")");
+                    constraintSb.append(" REFERENCES ");
+                    if (parentTableInfo.getCatalogName().equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
+                        Database parentDb = GlobalStateMgr.getCurrentState().getDb(parentTableInfo.getDbId());
+                        constraintSb.append(parentDb.getFullName());
+                        constraintSb.append(".");
+                        Table parentTable = parentDb.getTable(parentTableInfo.getTableId());
+                        constraintSb.append(parentTable.getName());
+                    } else {
+                        constraintSb.append(parentTableInfo);
+                    }
+
+                    constraintSb.append("(");
+                    String parentColumns = Joiner.on(",").join(constraint.getColumnRefPairs()
+                            .stream().map(pair -> pair.second).collect(Collectors.toList()));
+                    constraintSb.append(parentColumns);
+                    constraintSb.append(")");
+                    constraintStrs.add(constraintSb.toString());
+                }
+
+                sb.append(Joiner.on(";").join(constraintStrs)).append("\"");
+            }
 
             // compression type
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
@@ -2247,9 +2378,6 @@ public class GlobalStateMgr {
             } else {
                 sb.append(olapTable.getCompressionType()).append("\"");
             }
-
-            // storage media
-            Map<String, String> properties = olapTable.getTableProperty().getProperties();
 
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
@@ -2363,11 +2491,13 @@ public class GlobalStateMgr {
             sb.append("\n)");
         } else if (table.getType() == TableType.FILE) {
             FileTable fileTable = (FileTable) table;
+            Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
+            CloudCredentialUtil.maskCloudCredential(clonedFileProperties);
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
             sb.append("\nPROPERTIES (\n");
-            sb.append(new PrintableMap<>(fileTable.getFileProperties(), " = ", true, true, false).toString());
+            sb.append(new PrintableMap<>(clonedFileProperties, " = ", true, true, false).toString());
             sb.append("\n)");
         } else if (table.getType() == TableType.HUDI) {
             HudiTable hudiTable = (HudiTable) table;
@@ -2580,7 +2710,7 @@ public class GlobalStateMgr {
         return journal;
     }
 
-    // Get the next available, need't lock because of nextId is atomic.
+    // Get the next available, lock-free because nextId is atomic.
     public long getNextId() {
         return idGenerator.getNextId();
     }
@@ -2709,12 +2839,12 @@ public class GlobalStateMgr {
         return this.feType;
     }
 
-    public int getLeaderRpcPort() {
-        return nodeMgr.getLeaderRpcPort();
+    public Pair<String, Integer> getLeaderIpAndRpcPort() {
+        return nodeMgr.getLeaderIpAndRpcPort();
     }
 
-    public int getLeaderHttpPort() {
-        return nodeMgr.getLeaderHttpPort();
+    public Pair<String, Integer> getLeaderIpAndHttpPort() {
+        return nodeMgr.getLeaderIpAndHttpPort();
     }
 
     public String getLeaderIp() {
@@ -2982,6 +3112,10 @@ public class GlobalStateMgr {
         localMetastore.modifyTableMeta(db, table, properties, metaType);
     }
 
+    public void modifyTableConstraint(Database db, String tableName, Map<String, String> properties) throws DdlException {
+        localMetastore.modifyTableConstraint(db, tableName, properties);
+    }
+
     public void setHasForbitGlobalDict(String dbName, String tableName, boolean isForbit) throws DdlException {
         localMetastore.setHasForbitGlobalDict(dbName, tableName, isForbit);
     }
@@ -3035,6 +3169,11 @@ public class GlobalStateMgr {
             ctx.setCurrentCatalog(newCatalogName);
         }
 
+        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
+            LOG.debug("Unknown catalog {} and db {}", ctx.getCurrentCatalog(), dbName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
         // Check auth for internal catalog.
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
@@ -3052,11 +3191,6 @@ public class GlobalStateMgr {
             }
         }
 
-        if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
-            LOG.debug("Unknown catalog '%s' and db '%s'", ctx.getCurrentCatalog(), dbName);
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
-
         ctx.setDatabase(dbName);
     }
 
@@ -3068,6 +3202,10 @@ public class GlobalStateMgr {
 
     public void createView(CreateViewStmt stmt) throws DdlException {
         localMetastore.createView(stmt);
+    }
+
+    public void triggerNewImage() {
+        journalWriter.setForceRollJournal();
     }
 
     /**
@@ -3192,7 +3330,7 @@ public class GlobalStateMgr {
             catalogName = hmsTable.getCatalogName();
         }
 
-        metadataMgr.refreshTable(catalogName, dbName, table, partitions);
+        metadataMgr.refreshTable(catalogName, dbName, table, partitions, true);
     }
 
     public void initDefaultCluster() {
@@ -3456,6 +3594,16 @@ public class GlobalStateMgr {
             streamLoadManager.cleanOldStreamLoadTasks();
         } catch (Throwable t) {
             LOG.warn("delete handler remove old delete info failed", t);
+        }
+        try {
+            taskManager.removeExpiredTasks();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean expire tasks failed", t);
+        }
+        try {
+            taskManager.removeExpiredTaskRuns();
+        } catch (Throwable t) {
+            LOG.warn("task manager clean expire task runs history failed", t);
         }
     }
 

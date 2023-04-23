@@ -1,4 +1,4 @@
-# Import and query data
+# Load and query data
 
 This QuickStart tutorial will lead you step by step in loading data into the table you created (see [Create a table](../quick_start/Create_table.md) for more instruction), and running a query on the data.
 
@@ -15,6 +15,7 @@ You can insert additional rows of data using INSERT. See [INSERT](../sql-referen
 Log in to StarRocks via your MySQL client, and execute the following statements to insert the following rows of data into the `sr_member` table you have created.
 
 ```SQL
+use sr_hub
 INSERT INTO sr_member
 WITH LABEL insertDemo
 VALUES
@@ -77,11 +78,31 @@ StarRocks is compatible with SQL-92.
   +-------+----------+
   | sr_id | name     |
   +-------+----------+
-  |     1 | tom |
+  |     1 | tom      |
   |     3 | maruko   |
   |     2 | johndoe  |
   +-------+----------+
   3 rows in set (0.01 sec)
+  ```
+
+- Run a query on a specified partition.
+
+  ```SQL
+  SELECT sr_id, name 
+  FROM sr_member 
+  PARTITION (p2);
+  ```
+
+  The returned results are as follows:
+
+  ```Plain
+  +-------+---------+
+  | sr_id | name    |
+  +-------+---------+
+  |     3 | maruko  |
+  |     2 | johndoe |
+  +-------+---------+
+  2 rows in set (0.01 sec)
   ```
 
 ## What to do next

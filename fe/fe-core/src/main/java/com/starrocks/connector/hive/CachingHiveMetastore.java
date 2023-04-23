@@ -9,6 +9,7 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Streams;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.catalog.Database;
@@ -23,8 +24,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.function.Function;
@@ -46,6 +51,8 @@ public class CachingHiveMetastore implements IHiveMetastore {
     public static final long NEVER_REFRESH = -1;
     private final boolean enableListNameCache;
     protected final IHiveMetastore metastore;
+
+    private Map<HiveTableName, Long> lastAccessTimeMap;
 
     protected LoadingCache<String, List<String>> databaseNamesCache;
     protected LoadingCache<String, List<String>> tableNamesCache;
@@ -81,6 +88,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
                                    long refreshIntervalSec, long maxSize, boolean enableListNamesCache) {
         this.metastore = metastore;
         this.enableListNameCache = enableListNamesCache;
+        this.lastAccessTimeMap = Maps.newConcurrentMap();
 
         databaseNamesCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
                 .build(asyncReloading(CacheLoader.from(this::loadAllDatabaseNames), executor));
@@ -160,12 +168,33 @@ public class CachingHiveMetastore implements IHiveMetastore {
         return get(tableNamesCache, dbName);
     }
 
+    public Set<HiveTableName> getCachedTableNames() {
+        // use partition cache to get all cached table names because partition cache is more accurate,
+        // table cache will be cached when user use `use catalog.db` command.
+        return partitionCache.asMap().keySet().stream().map(hivePartitionName ->
+                HiveTableName.of(hivePartitionName.getDatabaseName(), hivePartitionName.getTableName())).collect(
+                Collectors.toSet());
+    }
+
+    @Override
+    public Map<HivePartitionName, Partition> getCachedPartitions(List<HivePartitionName> hivePartitionName) {
+        return partitionCache.getAllPresent(hivePartitionName);
+    }
+
+    @Override
+    public Map<HivePartitionName, Partition> getAllCachedPartitions() {
+        return Maps.newHashMap(partitionCache.asMap());
+    }
+
     private List<String> loadAllTableNames(String dbName) {
         return metastore.getAllTableNames(dbName);
     }
 
     public List<String> getPartitionKeys(String dbName, String tableName) {
-        return get(partitionKeysCache, HiveTableName.of(dbName, tableName));
+        HiveTableName hiveTableName = HiveTableName.of(dbName, tableName);
+        // update last access time
+        lastAccessTimeMap.put(hiveTableName, System.currentTimeMillis());
+        return get(partitionKeysCache, hiveTableName);
     }
 
     private List<String> loadPartitionKeys(HiveTableName hiveTableName) {
@@ -284,34 +313,76 @@ public class CachingHiveMetastore implements IHiveMetastore {
         ));
     }
 
-    public synchronized void refreshTable(String hiveDbName, String hiveTblName) {
+    @Override
+    public synchronized List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName,
+                                                             boolean onlyCachedPartitions) {
         HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveTblName);
         Table updatedTable = loadTable(hiveTableName);
         tableCache.put(hiveTableName, updatedTable);
+
+        List<String> updatedPartitionKeys = loadPartitionKeys(hiveTableName);
         if (enableListNameCache) {
-            partitionKeysCache.put(hiveTableName, loadPartitionKeys(hiveTableName));
+            partitionKeysCache.put(hiveTableName, updatedPartitionKeys);
         }
 
         HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) updatedTable;
+        List<HivePartitionName> refreshPartitionNames = Lists.newArrayList();
         if (hmsTable.isUnPartitioned()) {
             HivePartitionName hivePartitionName = HivePartitionName.of(hiveDbName, hiveTblName, Lists.newArrayList());
             Partition updatedPartition = loadPartition(hivePartitionName);
             partitionCache.put(hivePartitionName, updatedPartition);
             tableStatsCache.put(hiveTableName, loadTableStatistics(hiveTableName));
         } else {
-            List<String> existNames = loadPartitionKeys(hiveTableName);
+            List<HivePartitionName> allPartitionsInHms = updatedPartitionKeys.stream()
+                    .map(key -> HivePartitionName.of(hiveDbName, hiveTblName, key))
+                    .collect(Collectors.toList());
 
-            List<HivePartitionName> presentPartitionNames = getPresentPartitionNames(
-                    partitionCache, hiveDbName, hiveTblName);
-            refreshPartitions(presentPartitionNames, existNames, this::loadPartitionsByNames, partitionCache);
+            List<HivePartitionName> presentPartitionNames = Lists.newArrayList();
+            List<HivePartitionName> presentPartitionStatistics = Lists.newArrayList();
 
-            List<HivePartitionName> presentPartitionStatistics = getPresentPartitionNames(
-                    partitionStatsCache, hiveDbName, hiveTblName);
-            refreshPartitions(presentPartitionStatistics, existNames, this::loadPartitionsStatistics, partitionStatsCache);
+            if (onlyCachedPartitions) {
+                for (HivePartitionName name : allPartitionsInHms) {
+                    if (partitionCache.asMap().containsKey(name)) {
+                        presentPartitionNames.add(name);
+                    }
+
+                    if (partitionStatsCache.asMap().containsKey(name)) {
+                        presentPartitionStatistics.add(name);
+                    }
+                }
+            } else {
+                presentPartitionNames = presentPartitionStatistics = allPartitionsInHms;
+            }
+
+            refreshPartitionNames = refreshPartitions(presentPartitionNames, updatedPartitionKeys,
+                    this::loadPartitionsByNames, partitionCache);
+            if (Config.enable_refresh_hive_partitions_statistics) {
+                refreshPartitions(presentPartitionStatistics, updatedPartitionKeys,
+                        this::loadPartitionsStatistics, partitionStatsCache);
+            }
         }
+        return refreshPartitionNames;
     }
 
-    private <T> void refreshPartitions(List<HivePartitionName> presentInCache,
+    @Override
+    public List<HivePartitionName> refreshTableBackground(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {
+        HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveTblName);
+        if (lastAccessTimeMap.containsKey(hiveTableName)) {
+            long lastAccessTime = lastAccessTimeMap.get(hiveTableName);
+            long intervalSec = (System.currentTimeMillis() - lastAccessTime) / 1000;
+            if (intervalSec > Config.background_refresh_metadata_time_secs_since_last_access_secs) {
+                LOG.info("{}.{} skip refresh because of the last access time is {}", hiveDbName, hiveTblName,
+                        LocalDateTime.ofInstant(Instant.ofEpochMilli(lastAccessTime), ZoneId.systemDefault()));
+                return null;
+            }
+        }
+
+        List<HivePartitionName> refreshPartitionNames = refreshTable(hiveDbName, hiveTblName, onlyCachedPartitions);
+        lastAccessTimeMap.keySet().removeIf(tableName -> !getCachedTableNames().contains(tableName));
+        return refreshPartitionNames;
+    }
+
+    private <T> List<HivePartitionName> refreshPartitions(List<HivePartitionName> presentInCache,
                                        List<String> partitionNamesInHMS,
                                        Function<List<HivePartitionName>, Map<HivePartitionName, T>> reload,
                                        LoadingCache<HivePartitionName, T> cache) {
@@ -334,6 +405,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
             }
         }
         cache.invalidateAll(needToInvalidate);
+        return needToRefresh;
     }
 
     public synchronized void refreshPartition(List<HivePartitionName> partitionNames) {

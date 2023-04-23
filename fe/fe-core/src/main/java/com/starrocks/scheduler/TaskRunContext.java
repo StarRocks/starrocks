@@ -11,6 +11,7 @@ public class TaskRunContext {
     String remoteIp;
     int priority;
     Map<String, String> properties;
+    Constants.TaskType type;
 
     public ConnectContext getCtx() {
         return ctx;
@@ -50,5 +51,13 @@ public class TaskRunContext {
 
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
+    }
+
+    public Constants.TaskType getTaskType() {
+        return this.type;
+    }
+
+    public void setTaskType(Constants.TaskType type) {
+        this.type = type;
     }
 }

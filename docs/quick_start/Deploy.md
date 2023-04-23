@@ -6,6 +6,7 @@ Following these steps, you can deploy a StarRocks instance with only one fronten
 
 > **CAUTION**
 >
+> - If you want to run StarRocks on Ubuntu 22.04 or with ARM-arch processors, you must download and run the specific Docker image by the tag from [StarRocks' Docker Hub](https://hub.docker.com/r/starrocks/allin1-ubuntu/tags), and copy the binaries from the Docker container (Directory: **/data/starrocks**) to your host machine.
 > - To guarantee the high availability and performance **in the production environment**, we recommend that you deploy at least three FE nodes and three BE nodes in your StarRocks cluster.
 > - You can deploy an FE node and a BE node on one machine. However, deploying multiple nodes of the same kind on one machine is not allowed, because the same kinds of nodes cannot share a same IP address.
 > - By default, FE nodes in a new cluster are started via IP address access. To start a new cluster with FQDN access, see [Set up a new cluster with FQDN access](../administration/enable_fqdn.md#set-up-a-new-cluster-with-fqdn-access).
@@ -213,7 +214,7 @@ After the FE node and BE node are started properly, you can set up the StarRocks
 1. Log in to StarRocks via your MySQL client. You can log in with the default user `root`, and the password is empty by default.
 
     ```Plain
-    mysql -h <fe_ip> -P<fe_http_port> -uroot
+    mysql -h <fe_ip> -P<fe_query_port> -uroot
     ```
 
     > **NOTE**
@@ -254,7 +255,7 @@ After the FE node and BE node are started properly, you can set up the StarRocks
 
     - If the field `Alive` is `true`, this FE node is properly started and added to the cluster.
     - If the field `Role` is `FOLLOWER`, this FE node is eligible to be elected as the Leader node.
-    - If the field `IsMaster` is `true`, this FE node is the Leader node.
+    - If the field `Role` is `LEADER`, this FE node is the Leader node.
 
 3. Add the BE node to the cluster.
 
@@ -348,8 +349,8 @@ Having deployed StarRocks, you can continue the QuickStart tutorials on [creatin
 
 You can also:
 
-- [Compile StarRocks from source code](../administration/Build_in_docker.md)
-- [Deploy StarRocks in Docker container](../administration/deploy_with_docker.md)
+- [Compile StarRocks from source code in Docker](../developers/build-starrocks/Build_in_docker.md)
+- [Deploy StarRocks in Docker](../quick_start/deploy_in_docker.md)
 - [Deploy StarRocks with StarGo](../administration/stargo.md), a StarRocks cluster management tool
 - [Scale your StarRocks cluster](../administration/Scale_up_down.md)
 - [Upgrade your StarRocks cluster](../administration/Cluster_administration.md)

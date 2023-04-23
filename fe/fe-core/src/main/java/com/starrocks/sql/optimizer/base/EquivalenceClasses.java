@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.base;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -9,25 +10,42 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
-public class EquivalenceClasses {
+public class EquivalenceClasses implements Cloneable {
     private final Map<ColumnRefOperator, Set<ColumnRefOperator>> columnToEquivalenceClass;
+
+    private List<Set<ColumnRefOperator>> cacheColumnToEquivalenceClass;
 
     public EquivalenceClasses() {
         columnToEquivalenceClass = Maps.newHashMap();
     }
 
+    @Override
+    public EquivalenceClasses clone() {
+        final EquivalenceClasses ec = new EquivalenceClasses();
+        for (Map.Entry<ColumnRefOperator, Set<ColumnRefOperator>> entry :
+                this.columnToEquivalenceClass.entrySet()) {
+            ec.columnToEquivalenceClass.put(entry.getKey(), Sets.newLinkedHashSet(entry.getValue()));
+        }
+        ec.cacheColumnToEquivalenceClass = null;
+        return ec;
+    }
+
     public void addEquivalence(ColumnRefOperator left, ColumnRefOperator right) {
+        cacheColumnToEquivalenceClass = null;
+
         Set<ColumnRefOperator> s1 = columnToEquivalenceClass.get(left);
         Set<ColumnRefOperator> s2 = columnToEquivalenceClass.get(right);
 
         if (s1 != null && s2 != null) {
-            Set<ColumnRefOperator> shortSet = s1.size() < s2.size() ? s1 : s2;
-            Set<ColumnRefOperator> longSet = s1.size() < s2.size() ? s2 : s1;
-            longSet.addAll(shortSet);
-            for (ColumnRefOperator columnRefOperator : shortSet) {
-                columnToEquivalenceClass.put(columnRefOperator, longSet);
+            if (s1.size() < s2.size()) {
+                Set<ColumnRefOperator> tmpSet = s2;
+                s2 = s1;
+                s1 = tmpSet;
+            }
+            for (ColumnRefOperator columnRefOperator : s2) {
+                s1.add(columnRefOperator);
+                columnToEquivalenceClass.put(columnRefOperator, s1);
             }
         } else if (s1 != null) {
             s1.add(right);
@@ -49,6 +67,23 @@ public class EquivalenceClasses {
     }
 
     public List<Set<ColumnRefOperator>> getEquivalenceClasses() {
-        return columnToEquivalenceClass.values().stream().collect(Collectors.toList());
+        // Remove redundant equal classes, eg:
+        // a,b are equal calsses:
+        // cacheColumnToEquivalenceClass:
+        // a -> set(a, b)
+        // b -> set(a, b)
+        // cacheColumnToEquivalenceClass will only return:
+        // set(a, b)
+        if (cacheColumnToEquivalenceClass == null) {
+            cacheColumnToEquivalenceClass = Lists.newArrayList();
+            Set<ColumnRefOperator> visited = Sets.newHashSet();
+            for (Set<ColumnRefOperator> columnRefOperators : columnToEquivalenceClass.values()) {
+                if (!visited.containsAll(columnRefOperators)) {
+                    visited.addAll(columnRefOperators);
+                    cacheColumnToEquivalenceClass.add(columnRefOperators);
+                }
+            }
+        }
+        return cacheColumnToEquivalenceClass;
     }
 }

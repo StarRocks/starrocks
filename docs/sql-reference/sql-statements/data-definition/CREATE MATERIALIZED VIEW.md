@@ -2,20 +2,20 @@
 
 ## Description
 
-Creates a materialized view. Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of the materialized view in a database via [SHOW ALTER](..//data-manipulation/SHOW%20ALTER.md) command. For usage information about materialized views, see [materialized view](../../../using_starrocks/Materialized_view.md).
+Creates a materialized view. Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of Sync Refresh synchronous materialized views in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) command. For usage information about materialized views, see [materialized view](../../../using_starrocks/Materialized_view.md).
 
 > **CAUTION**
 >
 > Only users with the `CREATE_PRIV` privilege in the database where the base table resides can create a materialized view.
 
-StarRocks supports multi-table materialized views from v2.4. The major differences between multi-table materialized views and single-table materialized views in previous versions are as follows:
+StarRocks supports asynchronous materialized views from v2.4. The major differences between asynchronous materialized views and synchronous materialized views in previous versions are as follows:
 
 |                              | **ASYNC and MANUAL Refresh** | **Aggregated Column** | **Partitioning and Bucketing Changes** | **JOIN, WHERE, and GROUP BY clause** |
 | ---------------------------- | ---------------------------- | ------------ | -------------------- | ------------------------------ |
-| **Single-table materialized view** | No (Materialized view in v2.3 and earlier only supports SYNC refresh)| No | No  | No |
-| **Multi-table materialized view** | Yes | Yes | Yes  | Yes  |
+| **Synchronous materialized view** | No (Materialized view in v2.3 and earlier only supports SYNC refresh)| No | No  | No |
+| **Asynchronous materialized view** | Yes | Yes | Yes  | Yes  |
 
-In StarRocks v2.5, multi-table async refresh materialized views support query rewrite, nested materialized views, and creating materialized views based on Hive catalog, Hudi catalog, and Iceberg catalog.
+In StarRocks v2.5, asynchronous async refresh materialized views support query rewrite, nested materialized views, and creating materialized views based on Hive catalog, Hudi catalog, and Iceberg catalog.
 
 ## Syntax
 
@@ -58,7 +58,7 @@ SELECT select_expr[, select_expr ...]
 
   All columns in the query statement, that is, all columns in the materialized view schema. This parameter supports the following values:
 
-  - Single column or aggregated column: a statement in the form of `SELECT a, b, c FROM table_a` (applicable to creating a single table materialized view) or `SELECT table_a.a, table_a.b, table_b.d,` (applicable to creating a multi-table materialized view in StarRocks 2.4 or above only), where `a`, `b`, `c`, and `d` are the column names of the base tables. If you do not specify column names for the materialized view in the statement, the column names in the materialized view are also `a`, `b`, `c`, and `d`.
+  - Single column or aggregated column: a statement in the form of `SELECT a, b, c FROM table_a` (applicable to creating a single table materialized view) or `SELECT table_a.a, table_a.b, table_b.d,` (applicable to creating an asynchronous materialized view in StarRocks 2.4 or above only), where `a`, `b`, `c`, and `d` are the column names of the base tables. If you do not specify column names for the materialized view in the statement, the column names in the materialized view are also `a`, `b`, `c`, and `d`.
   - Expression: an expression in the form of `SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a`, where `a+1`, `b+2` and `c*c` are expressions that contain the column names of the base tables, and `x`, `y` and `z` are the new column names of the materialized view.
 
   > **CAUTION**
@@ -110,10 +110,10 @@ Properties of the materialized view.
 
 - `replication_num`: The number of materialized view replicas to create.
 - `storage_medium`: Storage medium type. `HDD` and `SSD` are supported.
-- `partition_ttl_number`: The number of most recent materialized view partitions to keep. After the number of partitions exceeds this value, expired partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_enable`, and automatically delete expired partitions. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
+- `partition_ttl_number`: The number of most recent materialized view partitions to keep. After the number of partitions exceeds this value, expired partitions will be deleted. StarRocks will periodically check materialized view partitions according to the time interval specified in the FE configuration item `dynamic_partition_check_interval_seconds`, and automatically delete expired partitions. When the value is `-1`, all partitions of the materialized view will be preserved. Default: `-1`.
 - `partition_refresh_number`: In a single refresh, the maximum number of partitions to refresh. If the number of partitions to be refreshed exceeds this value, StarRocks will split the refresh task and complete it in batches. Only when the previous batch of partitions is refreshed successfully, StarRocks will continue to refresh the next batch of partitions until all partitions are refreshed. If any of the partitions fails to be refreshed, no subsequent refresh tasks will be generated. When the value is `-1`, the refresh task will not be split. Default: `-1`.
 - `excluded_trigger_tables`: If a base table of the materialized view is listed here, automatic refresh task will not be triggered when the data in the base table is changed. This parameter only applies to load-triggered refresh strategy, and is usually used together with the property `auto_refresh_partitions_limit`. Format: `[db_name.]table_name`. When the value is an empty string, any data change in all base tables triggers the refresh of the corresponding materialized view. Default is an empty string.
-- `auto_refresh_partitions_limit`: The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. When the value is `-1`, all partitions will be flushed. Default: `-1`.
+- `auto_refresh_partitions_limit`: The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. Default: `-1`. When the value is `-1`, all partitions will be refreshed. When the value is a positive integer N, StarRocks sorts the existing partitions in chronological order, and refreshes N partitions from the most recent partition. If the number of partitions is less than N, StarRocks refreshes all existing partitions. If there are dynamic partitions created in advance in your materialized view, StarRocks refreshes the pre-created partitions first, and then the existing partitions. Therefore, when setting this parameter, make sure that you have reserved margins for pre-created dynamic partitions.
 
 ### Correspondence of aggregate functions
 
@@ -138,7 +138,7 @@ When a query is executed with a materialized view, the original query statement 
 
 - A materialized view supports only one aggregate function for each column of the base table. Query statements such as `select sum(a), min(a) from table` are not supported.
 
-- When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you need to ensure that all materialized views of the base table contain the dropped column, otherwise the drop operation cannot be performed. If you have to drop the column, you need to first drop all materialized views that do not contain the column, and then drop the column.
+- When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you must ensure that all materialized views of the base table contain the dropped column, otherwise the drop operation will fail. Before you drop the column, you must first drop all materialized views that contain the column.
 
 - Creating too many materialized views for a table will affect the data load efficiency. When data is being loaded to the base table, the data in materialized view and base table will be updated synchronously. If a base table contains `n` materialized views, the efficiency of loading data into the base table is about the same as the efficiency of loading data into `n` tables.
 
@@ -315,7 +315,7 @@ from lineorder
 group by lo_orderkey, lo_orderdate, lo_custkey
 order by lo_orderkey;
 
-# 使用 date_trunc 函数将 `dt` 列截断至以月为单位进行分区。
+-- Use the date_trunc() function to partition the materialized view by month.
 CREATE MATERIALIZED VIEW order_mv1
 PARTITION BY date_trunc('month', `dt`)
 DISTRIBUTED BY HASH(`order_id`) BUCKETS 10
@@ -332,7 +332,7 @@ from orders
 group by dt, order_id, user_id;
 ```
 
-Example 3: Create a multi-table materialized view.
+Example 3: Create an asynchronous materialized view.
 
 ```SQL
 CREATE MATERIALIZED VIEW flat_lineorder
@@ -383,7 +383,7 @@ INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY
 INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY;
 ```
 
-Example 5: Create a single-table sync materialized views.
+Example 5: Create a synchronous sync materialized views.
 
 Base table schema is as follows:
 

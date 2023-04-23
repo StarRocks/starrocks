@@ -82,22 +82,25 @@ public class PhysicalTopNOperator extends PhysicalOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(sortPhase, orderSpec);
+        return Objects.hash(super.hashCode(), orderSpec, offset, sortPhase, topNType, isSplit);
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!(obj instanceof PhysicalTopNOperator)) {
-            return false;
-        }
-
-        PhysicalTopNOperator rhs = (PhysicalTopNOperator) obj;
-        if (this == rhs) {
+    public boolean equals(Object o) {
+        if (this == o) {
             return true;
         }
 
-        return sortPhase.equals(rhs.sortPhase) &&
-                orderSpec.equals(rhs.orderSpec);
+        if (!super.equals(o)) {
+            return false;
+        }
+
+        PhysicalTopNOperator that = (PhysicalTopNOperator) o;
+
+        return partitionLimit == that.partitionLimit && offset == that.offset && isSplit == that.isSplit &&
+                Objects.equals(partitionByColumns, that.partitionByColumns) &&
+                Objects.equals(orderSpec, that.orderSpec) &&
+                sortPhase == that.sortPhase && topNType == that.topNType;
     }
 
     @Override
@@ -116,10 +119,7 @@ public class PhysicalTopNOperator extends PhysicalOperator {
 
     public boolean couldApplyStringDict(Set<Integer> childDictColumns) {
         Preconditions.checkState(!childDictColumns.isEmpty());
-        ColumnRefSet dictSet = new ColumnRefSet();
-        for (Integer id : childDictColumns) {
-            dictSet.union(id);
-        }
+        ColumnRefSet dictSet = ColumnRefSet.createByIds(childDictColumns);
 
         for (Ordering orderDesc : orderSpec.getOrderDescs()) {
             if (orderDesc.getColumnRef().getUsedColumns().isIntersect(dictSet)) {

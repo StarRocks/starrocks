@@ -17,6 +17,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -36,8 +37,10 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -208,13 +211,68 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
-            if (!needGenerateOneStageAggNode(context) && !node.isSplit() && node.getType().isGlobal()) {
+            if (!needGenerateOneStageAggNode(context) && node.getDistinctColumnDataSkew() == null && !node.isSplit() &&
+                    node.getType().isGlobal()) {
                 return CostEstimate.infinite();
             }
 
             Statistics statistics = context.getStatistics();
             Statistics inputStatistics = context.getChildStatistics(0);
-            return CostEstimate.of(inputStatistics.getComputeSize(), statistics.getComputeSize(), 0);
+            double penalty = 1.0;
+            if (node.getDistinctColumnDataSkew() != null) {
+                penalty = computeDataSkewPenaltyOfGroupByCountDistinct(node, inputStatistics);
+            }
+
+            return CostEstimate.of(inputStatistics.getComputeSize() * penalty, statistics.getComputeSize() * penalty,
+                    0);
+        }
+
+        // Compute penalty factor for GroupByCountDistinctDataSkewEliminateRule
+        // Reward good cases(give a penaltyFactor=0.5) while punish bad cases(give a penaltyFactor=1.5)
+        // Good cases as follows:
+        // 1. distinct cardinality of group-by column is less than 100
+        // 2. distinct cardinality of group-by column is less than 10000 and avgDistValuesPerGroup > 100
+        // Bad cases as follows: this Rule is conservative, the cases except good cases are all bad cases.
+        private double computeDataSkewPenaltyOfGroupByCountDistinct(PhysicalHashAggregateOperator node,
+                                                            Statistics inputStatistics) {
+            DataSkewInfo skewInfo = node.getDistinctColumnDataSkew();
+            if (skewInfo.getStage() != 1) {
+                return skewInfo.getPenaltyFactor();
+            }
+
+            if (inputStatistics.isTableRowCountMayInaccurate()) {
+                return 1.5;
+            }
+
+            ColumnStatistic distColStat = inputStatistics.getColumnStatistic(skewInfo.getSkewColumnRef());
+            List<ColumnStatistic> groupByStats = node.getGroupBys().subList(0, node.getGroupBys().size() - 1)
+                    .stream().map(inputStatistics::getColumnStatistic).collect(Collectors.toList());
+
+            if (distColStat.isUnknownValue() || distColStat.isUnknown() ||
+                    groupByStats.stream().anyMatch(groupStat -> groupStat.isUnknown() || groupStat.isUnknownValue())) {
+                return 1.5;
+            }
+            double groupByColDistinctValues = 1.0;
+            for (ColumnStatistic groupStat : groupByStats) {
+                groupByColDistinctValues *= groupStat.getDistinctValuesCount();
+            }
+            groupByColDistinctValues =
+                    Math.max(1.0, Math.min(groupByColDistinctValues, inputStatistics.getOutputRowCount()));
+
+            final double groupByColDistinctHighWaterMark = 10000;
+            final double groupByColDistinctLowWaterMark = 100;
+            final double distColDistinctValuesCountWaterMark = 10000000;
+            final double distColDistinctValuesCount = distColStat.getDistinctValuesCount();
+            final double avgDistValuesPerGroup = distColDistinctValuesCount / groupByColDistinctValues;
+
+            if (distColDistinctValuesCount > distColDistinctValuesCountWaterMark &&
+                    ((groupByColDistinctValues <= groupByColDistinctLowWaterMark) ||
+                            (groupByColDistinctValues < groupByColDistinctHighWaterMark &&
+                                    avgDistValuesPerGroup > 100))) {
+                return 0.5;
+            } else {
+                return 1.5;
+            }
         }
 
         @Override
@@ -229,6 +287,15 @@ public class CostModel {
             SessionVariable sessionVariable = ctx.getSessionVariable();
             DistributionSpec distributionSpec = node.getDistributionSpec();
             double outputSize = statistics.getOutputSize(outputColumns);
+            double penalty = 1.0;
+            Operator childOp = context.getChildOperator(0);
+            if (childOp instanceof PhysicalHashAggregateOperator) {
+                PhysicalHashAggregateOperator childAggOp = (PhysicalHashAggregateOperator) childOp;
+                DataSkewInfo skewInfo = childAggOp.getDistinctColumnDataSkew();
+                if (skewInfo != null && skewInfo.getStage() == 3) {
+                    penalty = skewInfo.getPenaltyFactor();
+                }
+            }
             // set network start cost 1 at least
             // avoid choose network plan when the cost is same as colocate plans
             switch (distributionSpec.getType()) {
@@ -258,7 +325,7 @@ public class CostModel {
                             && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
                     double networkCost = ignoreNetworkCost ? 0 : Math.max(outputSize, 1);
 
-                    result = CostEstimate.of(outputSize, 0, networkCost);
+                    result = CostEstimate.of(outputSize * penalty, 0, networkCost * penalty);
                     break;
                 case GATHER:
                     result = CostEstimate.of(outputSize, 0,
@@ -326,8 +393,10 @@ public class CostModel {
 
             double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
             double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-            double cpuCost = leftSize * rightSize * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY;
-            double memCost = rightSize * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY * 100D;
+            double cpuCost = StatisticUtils.multiplyOutputSize(leftSize, StatisticUtils.multiplyOutputSize(rightSize,
+                    StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY));
+            double memCost = StatisticUtils.multiplyOutputSize(rightSize,
+                    StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY * 100D);
 
             // Right cross join could not be parallelized, so apply more punishment
             if (join.getJoinType().isRightJoin()) {

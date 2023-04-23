@@ -3,11 +3,13 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateFunction;
@@ -32,18 +34,22 @@ public class FunctionAnalyzer {
             if (!(functionCallExpr.getChild(0) instanceof StringLiteral)) {
                 throw new SemanticException("date_trunc requires first parameter must be a string constant");
             }
-            final StringLiteral fmtLiteral = (StringLiteral) functionCallExpr.getChild(0);
+
+            // The uppercase parameters stored in the metadata are converted to lowercase parameters,
+            // because BE does not support uppercase parameters
+            final String lowerParam = ((StringLiteral) functionCallExpr.getChild(0)).getValue().toLowerCase();
+            functionCallExpr.setChild(0, new StringLiteral(lowerParam));
 
             if (functionCallExpr.getChild(1).getType().isDatetime()) {
 
                 if (!Lists.newArrayList("year", "quarter", "month", "week", "day", "hour", "minute", "second")
-                        .contains(fmtLiteral.getStringValue())) {
+                        .contains(lowerParam)) {
                     throw new SemanticException("date_trunc function can't support argument other than " +
                             "year|quarter|month|week|day|hour|minute|second");
                 }
             } else if (functionCallExpr.getChild(1).getType().isDate()) {
                 if (!Lists.newArrayList("year", "quarter", "month", "week", "day")
-                        .contains(fmtLiteral.getStringValue())) {
+                        .contains(lowerParam)) {
                     throw new SemanticException("date_trunc function can't support argument other than " +
                             "year|quarter|month|week|day");
                 }
@@ -206,6 +212,11 @@ public class FunctionAnalyzer {
             } else {
                 throw new SemanticException("window argument must be numerical type");
             }
+
+            Expr timeExpr = functionCallExpr.getChild(1);
+            if (timeExpr.isConstant()) {
+                throw new SemanticException("time arg must be column");
+            }
         }
 
         if (fnName.getFunction().equals(FunctionSet.MAX_BY)) {
@@ -332,6 +343,22 @@ public class FunctionAnalyzer {
                 fnName.getFunction().equals(FunctionSet.EXCHANGE_SPEED)) {
             if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() != 1) {
                 throw new SemanticException(fnName.getFunction() + " should run in new_planner_agg_stage = 1.");
+            }
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.PERCENTILE_DISC) ||
+                fnName.getFunction().equals(FunctionSet.PERCENTILE_CONT)) {
+            if (functionCallExpr.getChildren().size() != 2) {
+                throw new SemanticException(fnName + " requires two parameters");
+            }
+            if (!(functionCallExpr.getChild(1) instanceof DecimalLiteral) &&
+                    !(functionCallExpr.getChild(1) instanceof IntLiteral)) {
+                throw new SemanticException(fnName + " 's second parameter's data type is wrong ");
+            }
+            double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
+            if (rate < 0 || rate > 1) {
+                throw new SemanticException(
+                        fnName + " second parameter'value should be between 0 and 1");
             }
         }
     }

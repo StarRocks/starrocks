@@ -600,7 +600,7 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select SUM(v2) from (select v2, sum(v1) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -608,7 +608,7 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: 2: v2\n");
         sql = "select SUM(v2) from (select v2, sum(distinct v2) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -643,7 +643,7 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select SUM(x1) from (select v2 as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
@@ -905,34 +905,6 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "window_funnel(43: window_funnel, 900, 0)");
         FeConstants.runningUnitTest = false;
-    }
-
-    public void testWindowFunnelWithInvalidModeWindow() throws Exception {
-        FeConstants.runningUnitTest = true;
-        expectedException.expect(SemanticException.class);
-        expectedException.expectMessage("mode argument's range must be [0-7]");
-        String sql =
-                "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 8, [L_PARTKEY = 1]) from lineitem_partition_colocate" +
-                        " group by L_ORDERKEY;";
-        try {
-            getFragmentPlan(sql);
-        } finally {
-            FeConstants.runningUnitTest = false;
-        }
-    }
-
-    @Test
-    public void testWindowFunnelWithNonDecimalWindow() throws Exception {
-        FeConstants.runningUnitTest = true;
-        expectedException.expect(SemanticException.class);
-        expectedException.expectMessage("window argument must be numerical type");
-        String sql = "select L_ORDERKEY,window_funnel('varchar', L_SHIPDATE, 3, [L_PARTKEY = 1]) " +
-                "from lineitem_partition_colocate group by L_ORDERKEY;";
-        try {
-            getFragmentPlan(sql);
-        } finally {
-            FeConstants.runningUnitTest = false;
-        }
     }
 
     @Test
@@ -1499,37 +1471,11 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 15: t1c <=> 20: t1c\n");
-        assertContains(plan, "21:HASH JOIN\n" +
+                "  |  equal join conjunct: 15: t1c <=> 17: t1c\n");
+        assertContains(plan, "20:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 15: t1c <=> 17: t1c");
-
-        sql = "select avg(distinct t1b) as cn_t1b, sum(distinct t1b), " +
-                "count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "1:Project\n" +
-                "  |  <slot 2> : 2: t1b\n" +
-                "  |  <slot 3> : 3: t1c\n" +
-                "  |  <slot 11> : CAST(2: t1b AS INT) + 1");
-        assertContains(plan, "22:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 16: t1c <=> 19: t1c\n" +
-                "  |  equal join conjunct: 17: expr <=> 20: expr");
-
-        sql = "select avg(distinct t1b) as cn_t1b, sum(t1b), " +
-                "count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "26:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: sum(26: t1b)\n" +
-                "  |  group by: 27: t1c, 28: expr\n" +
-                "  |  \n" +
-                "  25:Project\n" +
-                "  |  <slot 26> : 2: t1b\n" +
-                "  |  <slot 27> : 3: t1c\n" +
-                "  |  <slot 28> : 11: expr");
+                "  |  equal join conjunct: 15: t1c <=> 20: t1c");
     }
 
     @Test
@@ -1725,5 +1671,32 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  3:Project\n" +
                 "  |  <slot 3> : -9223372036854775808");
+    }
+
+    @Test
+    public void testDistinctRewrite() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select count(distinct t1a), sum(t1c) from test_all_type group by t1b";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "sum[([13: sum, BIGINT, true]); args: BIGINT; result: BIGINT; args nullable: true;");
+
+        sql = "select multi_distinct_count(t1a), max(t1c) from test_all_type group by t1b, t1c";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "max[([13: max, INT, true]); args: INT;");
+
+        sql = "select sum(distinct v1), hll_union(hll_hash(v3)) from test_object group by v2";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "hll_union[([16: hll_union, HLL, true]); args: HLL; result: HLL; args nullable: true;");
+
+        sql = "select count(distinct v1), BITMAP_UNION(b1) from test_object group by v2, v3";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "bitmap_union[([15: bitmap_union, BITMAP, true]); args: BITMAP; result: BITMAP; " +
+                "args nullable: true;");
+
+        sql = "select count(distinct t1a), PERCENTILE_UNION(PERCENTILE_HASH(t1f)) from test_all_type group by t1c";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "percentile_union[([14: percentile_union, PERCENTILE, true]); args: PERCENTILE; " +
+                "result: PERCENTILE; args nullable: true;");
+        FeConstants.runningUnitTest = false;
     }
 }

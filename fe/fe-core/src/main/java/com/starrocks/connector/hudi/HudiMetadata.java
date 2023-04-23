@@ -105,7 +105,7 @@ public class HudiMetadata implements ConnectorMetadata {
         if (((HiveMetaStoreTable) table).isUnPartitioned()) {
             partitions.add(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList()));
         } else {
-            Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionKeys);
+            Map<String, Partition> existingPartitions = hmsOps.getPartitionByPartitionKeys(table, partitionKeys);
             for (PartitionKey partitionKey : partitionKeys) {
                 String hivePartitionName = toHivePartitionName(hmsTbl.getPartitionColumnNames(), partitionKey);
                 Partition partition = existingPartitions.get(hivePartitionName);
@@ -155,11 +155,11 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void refreshTable(String srDbName, Table table, List<String> partitionNames) {
+    public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
         if (partitionNames != null && partitionNames.size() > 0) {
             cacheUpdateProcessor.ifPresent(processor -> processor.refreshPartition(table, partitionNames));
         } else {
-            cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table));
+            cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table, onlyCachedPartitions));
         }
     }
 

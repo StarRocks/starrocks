@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import com.starrocks.statistic.StatsConstants;
 
 import java.util.BitSet;
 import java.util.HashMap;
@@ -234,11 +235,16 @@ public abstract class JoinOrder {
         double cost = exprInfo.expr.getStatistics().getOutputRowCount();
         exprInfo.rowCount = cost;
         if (exprInfo.leftChildExpr != null) {
-            cost += exprInfo.leftChildExpr.bestExprInfo.cost;
-            cost += exprInfo.rightChildExpr.bestExprInfo.cost;
+            cost = cost > (StatsConstants.MAXIMUM_COST - exprInfo.leftChildExpr.bestExprInfo.cost) ?
+                    StatsConstants.MAXIMUM_COST : cost + exprInfo.leftChildExpr.bestExprInfo.cost;
+
+            cost = cost > (StatsConstants.MAXIMUM_COST - exprInfo.rightChildExpr.bestExprInfo.cost) ?
+                    StatsConstants.MAXIMUM_COST : cost + exprInfo.rightChildExpr.bestExprInfo.cost;
+
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) exprInfo.expr.getOp();
             if (penaltyCross && joinOperator.getJoinType().isCrossJoin()) {
-                cost *= StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY;
+                cost = cost > (StatsConstants.MAXIMUM_COST / StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY) ?
+                        StatsConstants.MAXIMUM_COST : cost * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY;
             }
         }
         exprInfo.cost = cost;
@@ -310,7 +316,7 @@ public abstract class JoinOrder {
         if (exprInfo.expr.getOp().getProjection() != null) {
             projection.putAll(exprInfo.expr.getOp().getProjection().getColumnRefMap());
         } else {
-            exprInfo.expr.getOutputColumns().getStream().mapToObj(context.getColumnRefFactory()::getColumnRef)
+            exprInfo.expr.getOutputColumns().getStream().map(context.getColumnRefFactory()::getColumnRef)
                     .forEach(c -> projection.put(c, c));
         }
 

@@ -53,7 +53,7 @@ public class ExpressionRangePartitionInfoTest {
         SlotRef slotRef = new SlotRef(tableName, "k1");
         partitionExprs.add(slotRef);
         ExpressionRangePartitionInfo expressionRangePartitionInfo = new ExpressionRangePartitionInfo(partitionExprs,
-                Arrays.asList(k1));
+                Arrays.asList(k1), PartitionType.RANGE);
         List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
         Assert.assertEquals(partitionColumns.size(), 1);
         Assert.assertEquals(partitionColumns.get(0), k1);
@@ -63,7 +63,7 @@ public class ExpressionRangePartitionInfoTest {
     public void testInitUseFunction() {
         partitionExprs.add(functionCallExpr);
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
-                new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k2));
+                new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k2), PartitionType.RANGE);
         List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
         Assert.assertEquals(partitionColumns.size(), 1);
         Assert.assertEquals(partitionColumns.get(0), k2);
@@ -76,7 +76,7 @@ public class ExpressionRangePartitionInfoTest {
         partitionExprs.add(slotRef);
         partitionExprs.add(functionCallExpr);
         ExpressionRangePartitionInfo expressionRangePartitionInfo =
-                new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2));
+                new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2), PartitionType.RANGE);
         List<Column> partitionColumns = expressionRangePartitionInfo.getPartitionColumns();
         Assert.assertEquals(partitionColumns.size(), 2);
         Assert.assertEquals(partitionColumns.get(0), k1);
@@ -96,7 +96,7 @@ public class ExpressionRangePartitionInfoTest {
                 new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-128"))),
                 null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1));
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1), PartitionType.RANGE);
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(singleRangePartitionDesc, 20000L, false);
@@ -113,7 +113,7 @@ public class ExpressionRangePartitionInfoTest {
                 new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-32768"))),
                 null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1));
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1), PartitionType.RANGE);
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(singleRangePartitionDesc, 20000L, false);
@@ -130,7 +130,7 @@ public class ExpressionRangePartitionInfoTest {
                 new PartitionKeyDesc(Lists.newArrayList(new PartitionValue("-2147483648"))),
                 null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1));
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1), PartitionType.RANGE);
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(1, null);
             partitionInfo.handleNewSinglePartitionDesc(singleRangePartitionDesc, 20000L, false);
@@ -152,7 +152,7 @@ public class ExpressionRangePartitionInfoTest {
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p4", new PartitionKeyDesc(Lists
                 .newArrayList(new PartitionValue("9223372036854775806"))), null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1));
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1), PartitionType.RANGE);
         ;
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
@@ -176,7 +176,7 @@ public class ExpressionRangePartitionInfoTest {
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p4", new PartitionKeyDesc(Lists
                 .newArrayList(new PartitionValue("9223372036854775806"))), null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1));
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1), PartitionType.RANGE);
         ;
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
@@ -223,7 +223,7 @@ public class ExpressionRangePartitionInfoTest {
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p3", p3, null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p4", p4, null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2));
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2), PartitionType.RANGE);
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
@@ -266,8 +266,8 @@ public class ExpressionRangePartitionInfoTest {
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p2", p2, null));
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p3", p3, null));
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2, k3));
-        ;
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2, k3), PartitionType.RANGE);
+
         PartitionRangeType partitionType = PartitionRangeType.INVALID;
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             // check partitionType
@@ -303,7 +303,7 @@ public class ExpressionRangePartitionInfoTest {
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2));
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2), PartitionType.RANGE);
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
@@ -335,7 +335,7 @@ public class ExpressionRangePartitionInfoTest {
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2));
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2), PartitionType.RANGE);
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
@@ -366,7 +366,7 @@ public class ExpressionRangePartitionInfoTest {
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2));
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2), PartitionType.RANGE);
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
@@ -398,7 +398,7 @@ public class ExpressionRangePartitionInfoTest {
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2));
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2), PartitionType.RANGE);
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);

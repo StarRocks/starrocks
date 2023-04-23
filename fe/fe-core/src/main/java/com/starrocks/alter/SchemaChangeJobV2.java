@@ -579,7 +579,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         // Mark schema changed tablet not to move to trash.
                         long baseTabletId = partitionIndexTabletMap.get(
                                                     partitionId, shadowIdxId).get(shadowTablet.getId());
-                        GlobalStateMgr.getCurrentInvertedIndex().markTabletForceDelete(baseTabletId);
+                        GlobalStateMgr.getCurrentInvertedIndex().
+                                    markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
                         List<Replica> replicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
                         int healthyReplicaNum = 0;
                         for (Replica replica : replicas) {
@@ -649,6 +650,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
             for (Column mvColumn : mv.getColumns()) {
                 if (modifiedColumns.contains(mvColumn.getName())) {
+                    LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                            "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
+                            tbl.getName(), mvColumn.getName());
                     mv.setActive(false);
                 }
             }

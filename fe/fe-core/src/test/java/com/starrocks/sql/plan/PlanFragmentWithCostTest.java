@@ -9,10 +9,14 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Reference;
 import com.starrocks.planner.OlapScanNode;
+import com.starrocks.planner.PlanNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -44,6 +48,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(t0, NUM_TABLE0_ROWS);
+
+        OlapTable colocateT0 = (OlapTable) globalStateMgr.getDb("test").getTable("colocate_t0");
+        setTableStatistics(colocateT0, NUM_TABLE0_ROWS);
 
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withTable("CREATE TABLE test_mv\n" +
@@ -273,13 +280,15 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             }
         };
         String sql = "select count(distinct v2) from t0 group by v3";
-        String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("  3:AGGREGATE (merge serialize)\n"
-                + "  |  group by: 2: v2, 3: v3"));
-        Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n"
-                + "    EXCHANGE ID: 06\n"
-                + "    UNPARTITIONED"));
-
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 2: v2, 3: v3");
+        assertContains(plan, "  PARTITION: HASH_PARTITIONED: 3: v3\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    UNPARTITIONED");
     }
 
     @Test
@@ -883,7 +892,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         }
     }
 
-    @Test
     public void testLimitTabletPrune(@Mocked Replica replica) throws Exception {
         new Expectations() {
             {
@@ -1481,36 +1489,64 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  7:EXCHANGE");
     }
 
+    private boolean containAnyColocateNode(PlanNode root) {
+        if (root.isColocate()) {
+            return true;
+        }
+        for (PlanNode child : root.getChildren()) {
+            if (containAnyColocateNode(child)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Test
-    public void testOnePhaseAggWithLocalShuffle(@Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
-                returns(true, true, true, false, true);
+    public void testOnePhaseAggWithLocalShuffle() throws Exception {
+        final Reference<Boolean> isSingleBackendAndComputeNode = new Reference<>(true);
+        final List<ColumnStatistic> avgHighCardinality = ImmutableList.of(
+                new ColumnStatistic(0.0, NUM_TABLE0_ROWS, 0.0, 10, NUM_TABLE0_ROWS));
+        final List<ColumnStatistic> avgLowCardinality = ImmutableList.of(
+                new ColumnStatistic(0.0, NUM_TABLE0_ROWS, 0.0, 10, 100));
+        final Reference<List<ColumnStatistic>> cardinality = new Reference<>(avgHighCardinality);
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public boolean isSingleBackendAndComputeNode() {
+                return isSingleBackendAndComputeNode.getRef();
             }
-
-            final List<ColumnStatistic> avgHighCardinality = ImmutableList.of(
-                    new ColumnStatistic(0.0, NUM_TABLE0_ROWS, 0.0, 10, NUM_TABLE0_ROWS));
-            final List<ColumnStatistic> avgLowCardinality = ImmutableList.of(
-                    new ColumnStatistic(0.0, NUM_TABLE0_ROWS, 0.0, 10, 100));
-            {
-                mockedStatisticStorage.getColumnStatistics((Table) any, Lists.newArrayList("v2"));
-                returns(avgHighCardinality, avgHighCardinality, avgHighCardinality, avgHighCardinality, avgLowCardinality);
-            }
-
-            {
-                mockedStatisticStorage.getColumnStatistics((Table) any, Lists.newArrayList("v1"));
-                result = avgLowCardinality;
+        };
+        new MockUp<MockTpchStatisticStorage>() {
+            @Mock
+            public List<ColumnStatistic> getColumnStatistics(Table table, List<String> columns) {
+                if (columns.size() == 1) {
+                    if (columns.get(0).equals("v1")) {
+                        return avgLowCardinality;
+                    } else if (columns.get(0).equals("v2")) {
+                        return cardinality.getRef();
+                    }
+                }
+                return avgLowCardinality;
             }
         };
 
         boolean prevEnableLocalShuffleAgg = connectContext.getSessionVariable().isEnableLocalShuffleAgg();
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
 
+        String sql;
+        String plan;
+        ExecPlan execPlan;
+        OlapScanNode olapScanNode;
+
         try {
             // case 1: use one-phase local aggregation with local shuffle for high-cardinality agg and single BE.
-            String sql = "select sum(v2) from t0 group by v2";
-            String plan = getFragmentPlan(sql);
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "select sum(v2) from colocate_t0 group by v2";
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assert.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: 2: v2\n" +
@@ -1519,8 +1555,14 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  0:OlapScanNode");
 
             // case 2: use one-phase local aggregation without local shuffle for high-cardinality agg and single BE.
-            sql = "select sum(v1) from t0 group by v1";
-            plan = getFragmentPlan(sql);
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "select sum(v1) from colocate_t0 group by v1";
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(1, olapScanNode.getBucketExprs().size());
+            Assert.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "1:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(1: v1)\n" +
                     "  |  group by: 1: v1\n" +
@@ -1528,8 +1570,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  0:OlapScanNode");
 
             // case 3: use two-phase aggregation for non-grouping agg.
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
             sql = "select sum(v2) from t0";
-            plan = getFragmentPlan(sql);
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "1:AGGREGATE (update serialize)\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: \n" +
@@ -1542,8 +1589,28 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  2:EXCHANGE");
 
             // case 4: use two-phase aggregation for multiple BEs.
+            isSingleBackendAndComputeNode.setRef(false);
+            cardinality.setRef(avgHighCardinality);
             sql = "select sum(v2) from t0 group by v2";
             plan = getFragmentPlan(sql);
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  \n" +
+                    "  1:EXCHANGE");
+
+            // case 5: use two-phase aggregation for low-cardinality agg.
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgLowCardinality);
+            sql = "select sum(v2) from t0 group by v2";
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "1:AGGREGATE (update serialize)\n" +
                     "  |  STREAMING\n" +
                     "  |  output: sum(2: v2)\n" +
@@ -1556,20 +1623,43 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:EXCHANGE");
 
-            // case 5: use two-phase aggregation for low-cardinality agg.
-            sql = "select sum(v2) from t0 group by v2";
-            plan = getFragmentPlan(sql);
-            assertContains(plan, "1:AGGREGATE (update serialize)\n" +
-                    "  |  STREAMING\n" +
+            // case 6: insert into cannot use one-phase local aggregation with local shuffle.
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "insert into colocate_t0 select v2, v2, sum(v2) from t0 group by v2";
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assert.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
                     "  |  output: sum(2: v2)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
-                    "  0:OlapScanNode");
-            assertContains(plan, "3:AGGREGATE (merge finalize)\n" +
-                    "  |  output: sum(4: sum)\n" +
+                    "  1:EXCHANGE");
+
+            // case 7: Plan with join cannot use one-phase local aggregation with local shuffle.
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "select count(1) from " +
+                    "(select v2, sum(v2) from t0 group by v2) t1 join " +
+                    "(select v2, sum(v2) from t0 group by v2) t2 on t1.v2=t2.v2";
+            execPlan = getExecPlan(sql);
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "  6:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
+                    "  |  colocate: false, reason: \n" +
+                    "  |  equal join conjunct: 2: v2 = 6: v2\n" +
+                    "  |  \n" +
+                    "  |----5:AGGREGATE (update finalize)\n" +
+                    "  |    |  group by: 6: v2\n" +
+                    "  |    |  \n" +
+                    "  |    4:EXCHANGE\n" +
+                    "  |    \n" +
+                    "  2:AGGREGATE (update finalize)\n" +
                     "  |  group by: 2: v2\n" +
                     "  |  \n" +
-                    "  2:EXCHANGE");
+                    "  1:EXCHANGE");
         } finally {
             connectContext.getSessionVariable().setEnableLocalShuffleAgg(prevEnableLocalShuffleAgg);
         }
@@ -1748,7 +1838,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         getFragmentPlan(sql);
     }
 
-    @Test
     public void testPruneLimit() throws Exception {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem_partition");
@@ -1766,5 +1855,243 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         assertContains(plan, "     partitions=7/7\n" +
                 "     rollup: lineitem_partition\n" +
                 "     tabletRatio=1");
+    }
+
+    @Test
+    public void testPruneInvalidPredicate() throws Exception {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem_partition");
+        setTableStatistics(table2, 10);
+
+        new MockUp<LocalTablet>() {
+            @Mock
+            public long getRowCount(long version) {
+                return 10;
+            }
+        };
+
+        String sql = "select * from lineitem_partition where L_SHIPDATE > cast(true as date)";
+        String plan = getFragmentPlan(sql);
+
+        assertContains(plan, "TABLE: lineitem_partition\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 11: L_SHIPDATE > CAST(TRUE AS DATE)");
+    }
+
+    @Test
+    public void testRankWindowOptimization() throws Exception {
+        String sql;
+        String plan;
+
+        // Partition columns include aggregation grouping columns, so needdn't exchange between PartitionTopN and Analytic.
+        {
+            sql = "with " +
+                    "w1 as (select v2, max(v1) as max_v1 from t0 group by v2), " +
+                    "w2 as (select v2, max_v1, row_number() over(partition by v2, max_v1 order by max_v1) as rn from w1) " +
+                    "select * from w2 where rn = 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  6:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 11: v2, 13: max\n" +
+                    "  |  order by: 13: max ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  5:SORT\n" +
+                    "  |  order by: <slot 11> 11: v2 ASC, <slot 13> 13: max ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  4:PARTITION-TOP-N\n" +
+                    "  |  partition by: 11: v2 , 13: max \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 11> 11: v2 ASC, <slot 13> 13: max ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: max(13: max)\n" +
+                    "  |  group by: 11: v2\n" +
+                    "  |  \n" +
+                    "  2:EXCHANGE");
+
+            sql = "with " +
+                    "w1 as (select v2, max(v1) as max_v1 from t0 group by v2), " +
+                    "w2 as (select v2, max_v1, row_number() over(partition by v2, max_v1 order by max_v1) as rn from w1) " +
+                    "select * from w2 order by rn, v2 limit 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "6:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 11: v2, 13: max\n" +
+                    "  |  order by: 13: max ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  5:SORT\n" +
+                    "  |  order by: <slot 11> 11: v2 ASC, <slot 13> 13: max ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  4:PARTITION-TOP-N\n" +
+                    "  |  partition by: 11: v2 , 13: max \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 11> 11: v2 ASC, <slot 13> 13: max ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  3:AGGREGATE (merge finalize)\n" +
+                    "  |  output: max(13: max)\n" +
+                    "  |  group by: 11: v2\n" +
+                    "  |  \n" +
+                    "  2:EXCHANGE");
+        }
+
+        // Partition columns don't include aggregation grouping columns, so need exchange between PartitionTopN and Analytic.
+        {
+            sql = "with " +
+                    "w1 as (select v2, max(v1) as max_v1 from t0 group by v2), " +
+                    "w2 as (select v2, max_v1, row_number() over(partition by max_v1 order by v2) as rn from w1) " +
+                    "select * from w2 where rn = 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 13: max\n" +
+                    "  |  order by: 11: v2 ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  6:SORT\n" +
+                    "  |  order by: <slot 13> 13: max ASC, <slot 11> 11: v2 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  5:EXCHANGE");
+            assertContains(plan, "  4:PARTITION-TOP-N\n" +
+                    "  |  partition by: 13: max \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 13> 13: max ASC, <slot 11> 11: v2 ASC\n" +
+                    "  |  offset: 0");
+
+            sql = "with " +
+                    "w1 as (select v2, max(v1) as max_v1 from t0 group by v2), " +
+                    "w2 as (select v2, max_v1, row_number() over(partition by max_v1 order by v2) as rn from w1) " +
+                    "select * from w2 order by rn, v2 limit 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  7:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 13: max\n" +
+                    "  |  order by: 11: v2 ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  6:SORT\n" +
+                    "  |  order by: <slot 13> 13: max ASC, <slot 11> 11: v2 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  5:EXCHANGE");
+            assertContains("  4:PARTITION-TOP-N\n" +
+                    "  |  partition by: 13: max \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 13> 13: max ASC, <slot 11> 11: v2 ASC\n" +
+                    "  |  offset: 0");
+        }
+
+        // Partition columns include table bucket columns, so needn't exchange between PartitionTopN and Analytic.
+        {
+            sql = "with w1 as (select v1, v2, v3, row_number() over(partition by v1, v2 order by v3) as rn from t0) " +
+                    "select * from w1 where rn = 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:SELECT\n" +
+                    "  |  predicates: 8: row_number() = 2\n" +
+                    "  |  \n" +
+                    "  3:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 5: v1, 6: v2\n" +
+                    "  |  order by: 7: v3 ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  2:SORT\n" +
+                    "  |  order by: <slot 5> 5: v1 ASC, <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 5: v1 , 6: v2 \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 5> 5: v1 ASC, <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            sql = "with w1 as (select v1, v2, v3, row_number() over(partition by v1, v2 order by v3) as rn from t0) " +
+                    "select * from w1 order by rn, v1 limit 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:TOP-N\n" +
+                    "  |  order by: <slot 8> 8: row_number() ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 2\n" +
+                    "  |  \n" +
+                    "  3:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 5: v1, 6: v2\n" +
+                    "  |  order by: 7: v3 ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  2:SORT\n" +
+                    "  |  order by: <slot 5> 5: v1 ASC, <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 5: v1 , 6: v2 \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 5> 5: v1 ASC, <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+        }
+
+        // Partition columns don't include table bucket columns, so need exchange between PartitionTopN and Analytic.
+        {
+            sql = "with w1 as (select v1, v2, v3, row_number() over(partition by v2, v3 order by v1) as rn from t0) " +
+                    "select * from w1 where rn = 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  5:SELECT\n" +
+                    "  |  predicates: 8: row_number() = 2\n" +
+                    "  |  \n" +
+                    "  4:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 6: v2, 7: v3\n" +
+                    "  |  order by: 5: v1 ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  3:SORT\n" +
+                    "  |  order by: <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  2:EXCHANGE\n");
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 6: v2 , 7: v3 \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            sql = "with w1 as (select v1, v2, v3, row_number() over(partition by v2, v3 order by v1) as rn from t0) " +
+                    "select * from w1 order by rn, v1 limit 2";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  5:TOP-N\n" +
+                    "  |  order by: <slot 8> 8: row_number() ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 2\n" +
+                    "  |  \n" +
+                    "  4:ANALYTIC\n" +
+                    "  |  functions: [, row_number(), ]\n" +
+                    "  |  partition by: 6: v2, 7: v3\n" +
+                    "  |  order by: 5: v1 ASC\n" +
+                    "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                    "  |  \n" +
+                    "  3:SORT\n" +
+                    "  |  order by: <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n");
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 6: v2 , 7: v3 \n" +
+                    "  |  partition limit: 2\n" +
+                    "  |  order by: <slot 6> 6: v2 ASC, <slot 7> 7: v3 ASC, <slot 5> 5: v1 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+        }
     }
 }
