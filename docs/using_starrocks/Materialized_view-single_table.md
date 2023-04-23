@@ -22,7 +22,7 @@ The following table compares the asynchronous materialized views (ASYNC MVs) in 
 
   Base tables are the driving tables of a materialized view.
 
-  For StarRocks' synchronous materialized views, base tables must be a single native table from the [default catalog](../data_source/catalog/default_catalog.md). StarRocks supports creating synchronous materialized views on Duplicate Key type, Aggregate Key type, and Unique Key type of tables.
+  For StarRocks' synchronous materialized views, base tables must be a single native table from the [default catalog](../data_source/catalog/default_catalog.md). StarRocks supports creating synchronous materialized views on Duplicate Key table, Aggregate tables, and Unique Key tables.
 
 - **Refresh**
 

@@ -43,7 +43,7 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
                     .withProperty("password", "xxx")
                     .withProperty("table-name", "xxx")
                     .withProperty("database-name", "xxx")
-                    // Since 2.4, StarRocks support partial updates for primary key model. You can specify the columns to be updated by configuring the following two properties.
+                    // Since 2.4, StarRocks support partial updates for Primary Key tables. You can specify the columns to be updated by configuring the following two properties.
                     // .withProperty("sink.properties.partial_update", "true")
                     // .withProperty("sink.properties.columns", "k1,k2,k3")
                     .withProperty("sink.properties.format", "json")
@@ -80,7 +80,7 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
                     .withProperty("password", "xxx")
                     .withProperty("table-name", "xxx")
                     .withProperty("database-name", "xxx")
-                    // Since 2.4, StarRocks support partial updates for primary key model. You can specify the columns to be updated by configuring the following two properties.
+                    // Since 2.4, StarRocks support partial updates for Primary Key tables. You can specify the columns to be updated by configuring the following two properties.
                     // .withProperty("sink.properties.partial_update", "true")
                     // .withProperty("sink.properties.columns", "k1,k2,k3")
                     .withProperty("sink.properties.format", "csv")  
@@ -116,7 +116,7 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
                 "'sink.buffer-flush.max-rows' = '1000000'," +
                 "'sink.buffer-flush.max-bytes' = '300000000'," +
                 "'sink.buffer-flush.interval-ms' = '5000'," +
-                // Since 2.4, StarRocks support partial updates for primary key model. You can specify
+                // Since 2.4, StarRocks support partial updates for Primary Key tables. You can specify
                 // the columns to be updated by configuring the following two properties, and the '__op'
                 // column must be specified at the end of 'sink.properties.columns'.
                 // "'sink.properties.partial_update' = 'true'," +
@@ -147,7 +147,7 @@ The following table describes the `sink` options that you can configure when you
 | sink.buffer-flush.interval-ms | No           | 300000            | STRING        | The interval at which data is flushed. Valid values: 1000 to 3600000. Unit: ms. |
 | sink.max-retries              | No           | 3                 | STRING        | The number of times that the system retries to perform the Stream Load. Valid values: 0 to 10. |
 | sink.connect.timeout-ms       | No           | 1000              | STRING        | The period of time after which the stream load times out. Valid values: 100 to 60000. Unit: ms. |
-| sink.properties.*             | No           | NONE              | STRING        | The properties of the stream load. The properties include k1, k2, and k3. Since 2.4, the flink-connector-starrocks supports partial updates for Primary Key model. |
+| sink.properties.*             | No           | NONE              | STRING        | The properties of the stream load. The properties include k1, k2, and k3. Since 2.4, the flink-connector-starrocks supports partial updates for Primary Key tables. |
 
 ## Usage notes
 

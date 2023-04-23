@@ -10,7 +10,7 @@ From 2.5 onwards, StarRocks provides the Local Cache feature, which accelerates 
 
 ## MySQL external table
 
-In the star schema, data is generally divided into dimension tables and fact tables. Dimension tables have less data but involve UPDATE operations. Currently, StarRocks does not support direct UPDATE operations (update can be implemented by using the unique key model). In some scenarios, you can store dimension tables in MySQL for direct data read.
+In the star schema, data is generally divided into dimension tables and fact tables. Dimension tables have less data but involve UPDATE operations. Currently, StarRocks does not support direct UPDATE operations (update can be implemented by using the Unique Key table). In some scenarios, you can store dimension tables in MySQL for direct data read.
 
 To query MySQL data, you must create an external table in StarRocks and map it to the table in your MySQL database. You need to specify the MySQL connection information when creating the table.
 

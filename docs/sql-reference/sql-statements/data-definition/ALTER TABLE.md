@@ -222,8 +222,8 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 Note:
 
 ```plain text
-1. If you add a value column to aggregation model, you need to specify agg_type.
-2. If you add a key column to non-aggregation models (such as DUPLICATE KEY) , you need to specify the KEY keyword.
+1. If you add a value column to an Aggregate table, you need to specify agg_type.
+2. If you add a key column to a non-Aggregate table (such as a Duplicate Key table), you need to specify the KEY keyword.
 3. You cannot add a column that already exists in the base index to the rollup index. (You can recreate a rollup index if needed.)
 ```
 

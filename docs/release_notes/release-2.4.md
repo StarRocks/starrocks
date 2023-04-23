@@ -175,7 +175,7 @@ Release date: October 20, 2022
 
 ### New Features
 
-- Supports creating asynchronous materialized views based on multiple base tables to accelerate queries with JOIN operations. Asynchronous materialized views support all [Data Models](../table_design/Data_model.md). For more information, see [Materialized View](../using_starrocks/Materialized_view.md).
+- Supports creating asynchronous materialized views based on multiple base tables to accelerate queries with JOIN operations. Asynchronous materialized views support all [table types](../table_design/table_types/table_types.md). For more information, see [Materialized View](../using_starrocks/Materialized_view.md).
 
 - Supports overwriting data via INSERT OVERWRITE. For more information, see [Load data using INSERT](../loading/InsertInto.md).
 
@@ -193,7 +193,7 @@ Release date: October 20, 2022
 
 - Supports FDQN access: now you can use domain name or the combination of hostname and port as the unique identification of a BE or an FE node. This prevents access failures caused by changing IP addresses. For more information, see [Enable FQDN Access](../administration/enable_fqdn.md).
 
-- flink-connector-starrocks supports Primary Key model partial update. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
+- flink-connector-starrocks supports Primary Key table partial update. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
 
 - Provides the following new functions:
 
@@ -202,7 +202,7 @@ Release date: October 20, 2022
 
 ### Improvements
 
-- The Primary Key model supports flushing VARCHAR-type primary key indexes to disks. From version 2.4.0, the Primary Key model supports the same data types for primary key indexes regardless of whether persistent primary key index is turned on or not.
+- The Primary Key table supports flushing VARCHAR-type primary key indexes to disks. From version 2.4.0, the Primary Key table supports the same data types for primary key indexes regardless of whether persistent primary key index is turned on or not.
 
 - Optimized the query performance on external tables.
 
@@ -221,7 +221,7 @@ Release date: October 20, 2022
 
 - Adjusted the mechanisms of default PageCache size calculation and memory consistency check to avoid OOM issues during multi-instance deployments.
 
-- Improved the performance of large-size batch load on PRIMARY KEY model up to two times by removing final_merge operations.
+- Improved the performance of large-size batch load on Primary Key tables up to two times by removing final_merge operations.
 
 - Supports a Stream Load transaction interface to implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Apache Flink® and Apache Kafka®, improving the performance of highly concurrent stream loads.
 

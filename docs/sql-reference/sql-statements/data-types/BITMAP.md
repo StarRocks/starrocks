@@ -6,7 +6,7 @@ This topic provides a simple example on how to create a BITMAP column and use bi
 
 ## Create a table
 
-- Create an Aggregate Key table, in which the data type of the `user_id` column is BITMAP and the bitmap_union() function is used to aggregate data.
+- Create an Aggregate table, in which the data type of the `user_id` column is BITMAP and the bitmap_union() function is used to aggregate data.
 
     ```SQL
     CREATE TABLE `pv_bitmap` (
