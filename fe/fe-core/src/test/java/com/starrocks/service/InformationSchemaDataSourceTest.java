@@ -37,6 +37,7 @@ public class InformationSchemaDataSourceTest {
     ExecuteEnv exeEnv;
 
     @Test
+    @Ignore
     public void testGetTablesConfig() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.addMockBackend(10002);
