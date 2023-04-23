@@ -121,6 +121,18 @@ public class SchemaScanNode extends ScanNode {
         this.jobId = jobId;
     }
 
+    public String getLabel() {
+        return label;
+    }
+
+    public Long getJobId() {
+        return jobId;
+    }
+
+    public String getTableName() {
+        return tableName;
+    }
+
     /**
      * Constructs node to scan given data files of table 'tbl'.
      */
