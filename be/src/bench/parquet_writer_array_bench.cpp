@@ -37,9 +37,34 @@ namespace starrocks {
 namespace parquet {
 namespace {
 
+const int null_prop = 5;
+const int max_array_len = 50;
+
 inline std::shared_ptr<Chunk> make_chunk(int num_rows) {
     auto chunk = std::make_shared<Chunk>();
-    auto col = Bench::create_series_column(TypeDescriptor::from_logical_type(TYPE_INT), num_rows);
+
+    auto type_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    type_array.children.push_back(type_int);
+    auto col = ColumnHelper::create_column(type_array, /*nullable*/ true);
+
+    for (int i = 0; i < num_rows; i++) {
+        Datum datum;
+        if ((rand() % 100) < null_prop) {
+            datum.set_null();
+        } else {
+            std::vector<Datum> datum_array;
+            int len = (rand() % max_array_len) + 1;
+            for (int j = 0; j < len; j++) {
+                Datum datum_element;
+                datum_element.set_int32(rand());
+                datum_array.push_back(datum);
+            }
+            datum.set_array(datum_array);
+        }
+        col->append_datum(datum);
+    }
+
     chunk->append_column(col, 0);
     return chunk;
 }
@@ -59,22 +84,20 @@ inline std::shared_ptr<arrow::Table> make_arrow_table(int num_rows) {
 
 inline std::shared_ptr<::parquet::WriterProperties> make_property() {
     ::parquet::WriterProperties::Builder builder;
-//    builder.version(::parquet::ParquetVersion::PARQUET_2_0);
     builder.disable_dictionary();
-//    builder.compression(::parquet::DEFAULT_COMPRESSION_TYPE);
-//    builder.encoding(::parquet::DEFAULT_ENCODING);
-//    builder.max_row_group_length(::parquet::DEFAULT_MAX_ROW_GROUP_LENGTH);
     return builder.build();
-    return ::parquet::default_writer_properties();
 }
 
 inline std::vector<TypeDescriptor> make_type_descs() {
-    return {TypeDescriptor::from_logical_type(TYPE_INT)};
+    auto type_array = TypeDescriptor::from_logical_type(TYPE_ARRAY);
+    auto type_int = TypeDescriptor::from_logical_type(TYPE_INT);
+    type_array.children.push_back(type_int);
+    return {type_array};
 }
 
 inline std::shared_ptr<::parquet::schema::GroupNode> make_schema() {
     auto type_descs = make_type_descs();
-    std::vector<std::string> type_names{"int32"};
+    std::vector<std::string> type_names{"array"};
     auto ret = ParquetBuildHelper::make_schema(type_names, type_descs);
     EXPECT_TRUE(ret.ok());
     auto schema = ret.ValueOrDie();
@@ -106,7 +129,7 @@ inline std::unique_ptr<::parquet::arrow::FileWriter> make_arrow_writer(std::shar
 }
 
 static void Benchmark_ParquetWriterArgs(benchmark::internal::Benchmark* b) {
-    std::vector<int64_t> bm_num_rows = {100000, 1000000, 10000000, 100000000};
+    std::vector<int64_t> bm_num_rows = {100000, 1000000, 10000000};
     for (auto& num_rows : bm_num_rows) {
         b->Args({num_rows});
     }
@@ -213,7 +236,7 @@ BENCHMARK(Benchmark_StarRocksParquetWriter)
         ->Apply(Benchmark_ParquetWriterArgs)
         ->Unit(benchmark::kMillisecond)
         ->MinTime(30);
-BENCHMARK(Benchmark_ArrowParquetWriter)->Apply(Benchmark_ParquetWriterArgs)->Unit(benchmark::kMillisecond)->MinTime(30);
+//BENCHMARK(Benchmark_ArrowParquetWriter)->Apply(Benchmark_ParquetWriterArgs)->Unit(benchmark::kMillisecond)->MinTime(30);
 
 } // namespace
 } // namespace parquet

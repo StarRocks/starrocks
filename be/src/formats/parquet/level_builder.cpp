@@ -486,22 +486,24 @@ Status LevelBuilder::_write_array_column_chunkV3(const LevelBuilderContext& ctx,
             auto def_level = ctx._def_levels ? (*ctx._def_levels)[ctx_ptr] : 0;
             auto rep_level = ctx._rep_levels ? (*ctx._rep_levels)[ctx_ptr] : 0;
 
-            bool null_in_parent_column = def_level != ctx._max_def_level;
-            bool null_in_current_column = null_col[offset] == 1;
-            bool empty_array = offsets[offset + 1] == offsets[offset];
+            uint8_t null_in_parent_column = def_level != ctx._max_def_level;
+            uint8_t null_in_current_column = null_col[offset] == 1;
+            uint8_t empty_array = offsets[offset + 1] == offsets[offset];
+            uint8_t is_optional = node->is_optional();
             auto array_size = offsets[offset + 1] - offsets[offset];
 
             // set def_level back for null in parent column
             (*def_levels)[num_levels] += null_in_parent_column * (def_level - (*def_levels)[num_levels]);
             // decrement 1 for empty array
-            (*def_levels)[num_levels] -= (!null_in_parent_column && !null_in_current_column && empty_array);
+            (*def_levels)[num_levels] -= ((1 - null_in_parent_column) & (1 - null_in_current_column) & empty_array);
             // decrement node->is_optional for null in current column
-            (*def_levels)[num_levels] -= (!null_in_parent_column && null_in_current_column && node->is_optional());
+            (*def_levels)[num_levels] -= ((1 - null_in_parent_column) & null_in_current_column & is_optional);
             (*rep_levels)[num_levels] = rep_level;
 
             // update pointers
-            num_levels += (null_in_parent_column || null_in_current_column || empty_array) ? 1 : array_size;
-            offset += !null_in_parent_column;
+            uint8_t advance_one_step = null_in_parent_column | null_in_current_column | empty_array;
+            num_levels += advance_one_step + (1 - advance_one_step) * array_size;
+            offset += (1 - null_in_parent_column);
             ctx_ptr++;
         }
     } else {
@@ -509,19 +511,20 @@ Status LevelBuilder::_write_array_column_chunkV3(const LevelBuilderContext& ctx,
             auto def_level = ctx._def_levels ? (*ctx._def_levels)[ctx_ptr] : 0;
             auto rep_level = ctx._rep_levels ? (*ctx._rep_levels)[ctx_ptr] : 0;
 
-            bool null_in_parent_column = def_level != ctx._max_def_level;
-            bool empty_array = offsets[offset + 1] == offsets[offset];
+            uint8_t null_in_parent_column = def_level != ctx._max_def_level;
+            uint8_t empty_array = offsets[offset + 1] == offsets[offset];
             auto array_size = offsets[offset + 1] - offsets[offset];
 
             // set def_level back for null in parent column
-            (*def_levels)[num_levels] = null_in_parent_column ? def_level : (*def_levels)[num_levels];
+            (*def_levels)[num_levels] = null_in_parent_column * def_level + (1 - null_in_parent_column) * (*def_levels)[num_levels];
             // decrement 1 for empty array
-            (*def_levels)[num_levels] -= (!null_in_parent_column && empty_array);
+            (*def_levels)[num_levels] -= ((1 - null_in_parent_column) & empty_array);
             (*rep_levels)[num_levels] = rep_level;
 
             // update pointers
-            num_levels += (null_in_parent_column || empty_array) ? 1 : array_size;
-            offset += !null_in_parent_column;
+            uint8_t advance_one_step = null_in_parent_column | empty_array;
+            num_levels += advance_one_step + (1 - advance_one_step) * array_size;
+            offset += (1 - null_in_parent_column);
             ctx_ptr++;
         }
     }
