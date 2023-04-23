@@ -21,4 +21,5 @@ add_library(ServiceCN
     compute_service.cpp
     http_service.cpp
     starrocks_cn.cpp
+    internal_service.cpp
 )

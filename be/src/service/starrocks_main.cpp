@@ -128,7 +128,7 @@ int main(int argc, char** argv) {
             as_cn = true;
         }
     }
-    bool without_storage = as_cn;
+    // bool without_storage = as_cn;
 
     if (getenv("STARROCKS_HOME") == nullptr) {
         fprintf(stderr, "you need set STARROCKS_HOME environment variable.\n");
@@ -244,32 +244,37 @@ int main(int argc, char** argv) {
     Aws::InitAPI(aws_sdk_options);
 
     std::vector<starrocks::StorePath> paths;
-    if (!without_storage) {
-        auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
-        if (!olap_res.ok()) {
-            LOG(FATAL) << "parse config storage path failed, path=" << starrocks::config::storage_root_path;
-            exit(-1);
-        }
-        auto it = paths.begin();
-        for (; it != paths.end();) {
-            if (!starrocks::check_datapath_rw(it->path)) {
-                if (starrocks::config::ignore_broken_disk) {
-                    LOG(WARNING) << "read write test file failed, path=" << it->path;
-                    it = paths.erase(it);
-                } else {
-                    LOG(FATAL) << "read write test file failed, path=" << it->path;
-                    exit(-1);
-                }
-            } else {
-                ++it;
-            }
-        }
+    // if (!without_storage) {
+    auto olap_res = starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths);
+    if (!olap_res.ok()) {
+        LOG(FATAL) << "parse config storage path failed, path=" << starrocks::config::storage_root_path;
+        exit(-1);
+    }
 
-        if (paths.empty()) {
-            LOG(FATAL) << "All disks are broken, exit.";
-            exit(-1);
+    auto it = paths.begin();
+    for (; it != paths.end();) {
+        if (!starrocks::check_datapath_rw(it->path)) {
+            if (starrocks::config::ignore_broken_disk) {
+                LOG(WARNING) << "read write test file failed, path=" << it->path;
+                it = paths.erase(it);
+            } else {
+                LOG(FATAL) << "read write test file failed, path=" << it->path;
+                exit(-1);
+            }
+        } else {
+            ++it;
         }
     }
+
+#ifndef USE_STAROS
+
+    if (paths.empty()) {
+        LOG(FATAL) << "All disks are broken, exit.";
+        exit(-1);
+    }
+    // }
+
+#endif
 
     // Initilize libcurl here to avoid concurrent initialization.
     auto curl_ret = curl_global_init(CURL_GLOBAL_ALL);
@@ -303,18 +308,24 @@ int main(int argc, char** argv) {
     options.conf_path = string(getenv("STARROCKS_HOME")) + "/conf/";
     starrocks::StorageEngine* engine = nullptr;
 
-    if (without_storage) {
-        auto st = starrocks::DummyStorageEngine::open(options, &engine);
-        if (!st.ok()) {
-            LOG(FATAL) << "fail to open StorageEngine, res=" << st.get_error_msg();
-            exit(-1);
-        }
-    } else {
-        auto st = starrocks::StorageEngine::open(options, &engine);
-        if (!st.ok()) {
-            LOG(FATAL) << "fail to open StorageEngine, res=" << st.get_error_msg();
-            exit(-1);
-        }
+    // if (without_storage) {
+    //     auto st = starrocks::DummyStorageEngine::open(options, &engine);
+    //     if (!st.ok()) {
+    //         LOG(FATAL) << "fail to open StorageEngine, res=" << st.get_error_msg();
+    //         exit(-1);
+    //     }
+    // } else {
+    //     auto st = starrocks::StorageEngine::open(options, &engine);
+    //     if (!st.ok()) {
+    //         LOG(FATAL) << "fail to open StorageEngine, res=" << st.get_error_msg();
+    //         exit(-1);
+    //     }
+    // }
+
+    auto st = starrocks::StorageEngine::open(options, &engine);
+    if (!st.ok()) {
+        LOG(FATAL) << "fail to open StorageEngine, res=" << st.get_error_msg();
+        exit(-1);
     }
 
     // Init exec env.

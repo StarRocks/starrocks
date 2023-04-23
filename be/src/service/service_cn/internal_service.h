@@ -31,6 +31,28 @@ template <typename T>
 class ComputeNodeInternalServiceImpl : public PInternalServiceImplBase<T> {
 public:
     ComputeNodeInternalServiceImpl(ExecEnv* exec_env) : PInternalServiceImplBase<T>(exec_env) {}
+
+    void tablet_writer_open(google::protobuf::RpcController* controller, const PTabletWriterOpenRequest* request,
+                            PTabletWriterOpenResult* response, google::protobuf::Closure* done) override;
+
+    void tablet_writer_add_batch(google::protobuf::RpcController* controller,
+                                 const PTabletWriterAddBatchRequest* request, PTabletWriterAddBatchResult* response,
+                                 google::protobuf::Closure* done) override;
+
+    void tablet_writer_add_chunk(google::protobuf::RpcController* controller,
+                                 const PTabletWriterAddChunkRequest* request, PTabletWriterAddBatchResult* response,
+                                 google::protobuf::Closure* done) override;
+
+    void tablet_writer_add_chunks(google::protobuf::RpcController* controller,
+                                  const PTabletWriterAddChunksRequest* request, PTabletWriterAddBatchResult* response,
+                                  google::protobuf::Closure* done) override;
+
+    void tablet_writer_add_segment(google::protobuf::RpcController* controller,
+                                   const PTabletWriterAddSegmentRequest* request,
+                                   PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) override;
+
+    void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
+                              PTabletWriterCancelResult* response, google::protobuf::Closure* done) override;
 };
 
 } // namespace starrocks

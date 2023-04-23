@@ -178,24 +178,24 @@ void AgentServer::Impl::init_or_die() {
     BUILD_DYNAMIC_TASK_THREAD_POOL("drop", config::drop_tablet_worker_count, config::drop_tablet_worker_count,
                                    std::numeric_limits<int>::max(), _thread_pool_drop);
 
-    if (!_is_compute_node) {
-// The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
-// But it seems that there's no limit for the number of tablets of a partition.
-// Since a large queue size brings a little overhead, a big one is chosen here.
 #ifdef BE_TEST
-        BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", 1, 1, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
-                                       _thread_pool_publish_version);
+    BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", 1, 1, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                   _thread_pool_publish_version);
 #else
-        int max_publish_version_worker_count = config::transaction_publish_version_worker_count;
-        if (max_publish_version_worker_count <= 0) {
-            max_publish_version_worker_count = CpuInfo::num_cores();
-        }
-        max_publish_version_worker_count =
-                std::max(max_publish_version_worker_count, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
-        BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
-                                       max_publish_version_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
-                                       _thread_pool_publish_version);
+    int max_publish_version_worker_count = config::transaction_publish_version_worker_count;
+    if (max_publish_version_worker_count <= 0) {
+        max_publish_version_worker_count = CpuInfo::num_cores();
+    }
+    max_publish_version_worker_count = std::max(max_publish_version_worker_count, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
+    BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
+                                   max_publish_version_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                   _thread_pool_publish_version);
 #endif
+
+    if (!_is_compute_node) {
+        // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
+        // But it seems that there's no limit for the number of tablets of a partition.
+        // Since a large queue size brings a little overhead, a big one is chosen here.
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("alter_tablet", config::alter_tablet_worker_count,
                                        config::alter_tablet_worker_count, std::numeric_limits<int>::max(),
@@ -267,12 +267,12 @@ void AgentServer::Impl::init_or_die() {
 void AgentServer::Impl::stop() {
     _thread_pool_create_tablet->shutdown();
     _thread_pool_drop->shutdown();
+    _thread_pool_publish_version->shutdown();
 
 #ifndef BE_TEST
     _thread_pool_clone->shutdown();
 
     if (!_is_compute_node) {
-        _thread_pool_publish_version->shutdown();
         _thread_pool_alter_tablet->shutdown();
         _thread_pool_clear_transaction->shutdown();
         _thread_pool_storage_medium_migrate->shutdown();
