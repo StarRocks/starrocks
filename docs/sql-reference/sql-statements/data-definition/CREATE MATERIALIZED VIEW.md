@@ -138,7 +138,7 @@ SELECT select_expr[, select_expr ...]
   - If this parameter is not specified, the system will automatically supplement the ORDER BY column according to relevant rules. If the materialized view is the AGGREGATE type, all GROUP BY columns are automatically used as sort keys. If the materialized view is not the AGGREGATE type, the system automatically chooses sort keys based on the prefix columns.
   - If the query statement contains a GROUP BY clause, the ORDER BY columns must be identical to the GROUP BY columns.
 
-### Supported data type
+### Supported data types
 
 - Asynchronous materialized views created based on the StarRocks default catalog support the following data types:
 
