@@ -377,6 +377,9 @@ public class TabletScheduler extends LeaderDaemon {
     private void updateClusterLoadStatisticsAndPriority() {
         updateClusterLoadStatistic();
         rebalancer.updateLoadStatistic(loadStatistic);
+
+        adjustPriorities();
+
         lastStatUpdateTime = System.currentTimeMillis();
     }
 
@@ -398,6 +401,30 @@ public class TabletScheduler extends LeaderDaemon {
 
     public ClusterLoadStatistic getLoadStatistic() {
         return loadStatistic;
+    }
+
+    /**
+     * adjust priorities of all tablet infos
+     */
+    private synchronized void adjustPriorities() {
+        int size = pendingTablets.size();
+        int changedNum = 0;
+        TabletSchedCtx tabletCtx;
+        for (int i = 0; i < size; i++) {
+            tabletCtx = pendingTablets.poll();
+            if (tabletCtx == null) {
+                break;
+            }
+
+            if (tabletCtx.adjustPriority(stat)) {
+                changedNum++;
+            }
+            pendingTablets.add(tabletCtx);
+        }
+
+        if (changedNum != 0) {
+            LOG.info("adjust priority for all tablets. changed: {}, total: {}", changedNum, size);
+        }
     }
 
     private void debugLogPendingTabletsStats() {

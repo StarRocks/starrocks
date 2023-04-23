@@ -105,18 +105,18 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         HIGH,
         VERY_HIGH;
 
-        // VERY_HIGH can only be downgraded to NORMAL
+        // try to upgrade the priority
         // LOW can only be upgraded to HIGH
-        public Priority adjust(Priority origPriority, boolean isUp) {
+        public Priority adjust(Priority origPriority) {
             switch (this) {
                 case VERY_HIGH:
-                    return isUp ? VERY_HIGH : HIGH;
+                    return VERY_HIGH;
                 case HIGH:
-                    return isUp ? (origPriority == LOW ? HIGH : VERY_HIGH) : NORMAL;
+                    return origPriority == LOW ? HIGH : VERY_HIGH;
                 case NORMAL:
-                    return isUp ? HIGH : (origPriority == Priority.VERY_HIGH ? NORMAL : LOW);
+                    return HIGH;
                 default:
-                    return isUp ? NORMAL : LOW;
+                    return NORMAL;
             }
         }
 
@@ -1066,6 +1066,34 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
         return String.format("version:%d min_readable_version:%d", reportedTablet.getVersion(),
                 reportedTablet.getMin_readable_version());
+    }
+
+    /**
+     * try to upgrade the priority if this tablet has not been scheduled by long time
+     */
+    public boolean adjustPriority(TabletSchedulerStat stat) {
+        long currentTime = System.currentTimeMillis();
+        if (lastAdjustPrioTime == 0) {
+            // skip the first time we adjust this priority
+            lastAdjustPrioTime = currentTime;
+            return false;
+        } else {
+            if (currentTime - lastAdjustPrioTime < Config.tablet_sched_max_not_being_scheduled_interval_ms) {
+                return false;
+            }
+        }
+
+        lastAdjustPrioTime = System.currentTimeMillis();
+
+        Priority originDynamicPriority = dynamicPriority;
+        dynamicPriority = dynamicPriority.adjust(origPriority);
+        if (originDynamicPriority != dynamicPriority) {
+            LOG.debug("upgrade dynamic priority from {} to {}, origin: {}, tablet: {}",
+                    originDynamicPriority.name(), dynamicPriority.name(), origPriority.name(), tabletId);
+            stat.counterTabletPrioUpgraded.incrementAndGet();
+            return true;
+        }
+        return false;
     }
 
     public boolean isTimeout() {
