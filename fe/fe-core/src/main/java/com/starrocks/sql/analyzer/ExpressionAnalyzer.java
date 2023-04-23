@@ -899,6 +899,32 @@ public class ExpressionAnalyzer {
                             fnName + " requires second parameter must be greater than 0");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            } else if (FunctionSet.CONCAT.equals(fnName) && node.getChildren().stream().anyMatch(child ->
+                    child.getType().isArrayType())) {
+                List<Type> arrayTypes = Arrays.stream(argumentTypes).map(argumentType -> {
+                    if (argumentType.isArrayType()) {
+                        return argumentType;
+                    } else {
+                        return new ArrayType(argumentType);
+                    }
+                }).collect(Collectors.toList());
+                // check if all array types are compatible
+                TypeManager.getCommonSuperType(arrayTypes);
+                for (int i = 0; i < argumentTypes.length; ++i) {
+                    if (!argumentTypes[i].isArrayType()) {
+                        node.setChild(i, new ArrayExpr(new ArrayType(argumentTypes[i]),
+                                Lists.newArrayList(node.getChild(i))));
+                    }
+                }
+
+                argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+                node.resetFnName(null, FunctionSet.ARRAY_CONCAT);
+                if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV3(FunctionSet.ARRAY_CONCAT, argumentTypes)) {
+                    fn = getDecimalV3Function(node, argumentTypes);
+                } else {
+                    fn = Expr.getBuiltinFunction(FunctionSet.ARRAY_CONCAT, argumentTypes,
+                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                }
             } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
                     Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
                 // Since the priority of decimal version is higher than double version (according functionId),
