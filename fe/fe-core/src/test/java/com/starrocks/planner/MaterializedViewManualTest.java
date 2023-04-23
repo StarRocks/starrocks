@@ -47,7 +47,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
 
     @Test
     public void testDistinct2() throws Exception {
-        String tableSQL = "CREATE TABLE `test_partition_expr_tbl1` (\n" +
+        String tableSQL = "CREATE TABLE `test_distinct2` (\n" +
                 "  `order_id` bigint(20) NOT NULL DEFAULT \"-1\" COMMENT \"\",\n" +
                 "  `dt` datetime NOT NULL DEFAULT \"1996-01-01 00:00:00\" COMMENT \"\",\n" +
                 "  `k1`bigint,\n" +
@@ -71,7 +71,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "\"replication_num\" = \"1\"" +
                 ");";
         starRocksAssert.withTable(tableSQL);
-        String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
+        String mv = "CREATE MATERIALIZED VIEW `test_distinct2_mv`\n" +
                 "COMMENT \"MATERIALIZED_VIEW\"\n" +
                 "PARTITION BY (date_trunc('hour', `dt`))\n" +
                 "DISTRIBUTED BY HASH(`dt`) BUCKETS 10\n" +
@@ -83,13 +83,13 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "k1, " +
                 "count(DISTINCT `order_id`) AS `order_num`, \n" +
                 "`dt`\n" +
-                "FROM `test_partition_expr_tbl1`\n" +
+                "FROM `test_distinct2`\n" +
                 "group by dt, k1;";
         starRocksAssert.withMaterializedView(mv);
         sql("select dt, count(distinct order_id) " +
                 "from test_partition_expr_tbl1 group by dt")
                 .nonMatch("test_partition_expr_mv1");
-        starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
+        starRocksAssert.dropMaterializedView("test_distinct2_mv");
     }
 
     @Test
@@ -113,5 +113,70 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "test_limit_1 where dt >= '2022-07-01' and dt <= '2022-10-01' group by dt";
         testRewriteOK(mv, "SELECT dt, count(DISTINCT id) from test_limit_1 where " +
                 "dt >= '2022-07-01' and dt <= '2022-10-01' group by dt limit 10");
+    }
+
+    @Test
+    public void testPartitionColumnExpr1() throws Exception {
+        String tableSQL = "CREATE TABLE `test_partition_expr_tbl1` (\n" +
+                "  `order_id` bigint(20) NOT NULL DEFAULT \"-1\" COMMENT \"\",\n" +
+                "  `dt` datetime NOT NULL DEFAULT \"1996-01-01 00:00:00\" COMMENT \"\",\n" +
+                "  `value` varchar(256) NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`order_id`, `dt`)\n" +
+                "PARTITION BY RANGE(`dt`)\n" +
+                "(\n" +
+                "PARTITION p2023041017 VALUES [(\"2023-04-10 17:00:00\"), (\"2023-04-10 18:00:00\")),\n" +
+                "PARTITION p2023041021 VALUES [(\"2023-04-10 21:00:00\"), (\"2023-04-10 22:00:00\"))\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(`order_id`) BUCKETS 9\n" +
+                "PROPERTIES (\n" +
+                "\"dynamic_partition.enable\" = \"true\",\n" +
+                "\"dynamic_partition.time_unit\" = \"HOUR\",\n" +
+                "\"dynamic_partition.time_zone\" = \"Asia/Shanghai\",\n" +
+                "\"dynamic_partition.start\" = \"-240\",\n" +
+                "\"dynamic_partition.end\" = \"2\",\n" +
+                "\"dynamic_partition.prefix\" = \"p\",\n" +
+                "\"dynamic_partition.buckets\" = \"9\"," +
+                "\"replication_num\" = \"1\"" +
+                ");";
+        starRocksAssert.withTable(tableSQL);
+        String mv = "CREATE MATERIALIZED VIEW `test_partition_expr_mv1`\n" +
+                "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                "PARTITION BY (date_trunc('hour', ds))\n" +
+                "DISTRIBUTED BY HASH(`order_num`) BUCKETS 10\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"" +
+                ")\n" +
+                "AS\n" +
+                "SELECT \n" +
+                "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                "time_slice(`dt`, INTERVAL 5 minute) AS ds\n" +
+                "FROM `test_partition_expr_tbl1`\n" +
+                "group by ds;";
+        starRocksAssert.withMaterializedView(mv);
+
+        sql("SELECT \n" +
+                "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                "time_slice(`dt`, INTERVAL 5 minute) AS ds \n" +
+                "FROM `test_partition_expr_tbl1`\n" +
+                "WHERE time_slice(`dt`, INTERVAL 5 minute) BETWEEN '2023-04-11' AND '2023-04-12'\n" +
+                "group by ds")
+                .match("test_partition_expr_mv1");
+
+        sql("SELECT \n" +
+                "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                "time_slice(`dt`, INTERVAL 5 minute) AS `ts`\n" +
+                "FROM `test_partition_expr_tbl1`\n" +
+                "WHERE time_slice(dt, interval 5 minute) >= '2023-04-10 17:00:00' and time_slice(dt, interval 5 minute) < '2023-04-10 18:00:00'\n" +
+                "group by ts")
+                .match("test_partition_expr_mv1");
+
+        sql("SELECT \n" +
+                "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                "time_slice(`dt`, INTERVAL 5 minute) AS `ts`\n" +
+                "FROM `test_partition_expr_tbl1`\n" +
+                "WHERE `dt` >= '2023-04-10 17:00:00' and `dt` < '2023-04-10 18:00:00'\n" +
+                "group by ts").nonMatch("test_partition_expr_mv1");
+        starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
     }
 }

@@ -25,7 +25,6 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.BaseTableInfo;
@@ -270,8 +269,10 @@ public class MaterializedViewAnalyzer {
                 // check partition expression all in column list and
                 // write the expr into partitionExpDesc if partition expression exists
                 checkExpInColumn(statement, columnExprMap);
+                // check partition expression is supported
+                checkPartitionColumnExprs(statement, columnExprMap);
                 // check whether partition expression functions are allowed if it exists
-                checkPartitionExpParams(statement);
+                checkPartitionExpPatterns(statement);
                 // check partition column must be base table's partition column
                 checkPartitionColumnWithBaseTable(statement, aliasTableMap);
             }
@@ -449,18 +450,43 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Materialized view partition exp column:"
                         + slotRef.getColumnName() + " is not found in query statement");
             }
-            checkExpWithRefExpr(statement, columnExprMap);
         }
 
-        private void checkExpWithRefExpr(CreateMaterializedViewStatement statement,
-                                         Map<Column, Expr> columnExprMap) {
+        private boolean isValidPartitionExpr(Expr partitionExpr) {
+            if (partitionExpr instanceof FunctionCallExpr) {
+                FunctionCallExpr partitionColumnExpr = (FunctionCallExpr) partitionExpr;
+                // support time_slice(dt, 'minute')
+                if (partitionColumnExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
+                    if (!(partitionColumnExpr.getChild(0) instanceof SlotRef)) {
+                        return false;
+                    }
+                    return true;
+                }
+            }
+            if (!(partitionExpr instanceof SlotRef)) {
+                return false;
+            }
+            return true;
+        }
+
+        private void checkPartitionColumnExprs(CreateMaterializedViewStatement statement,
+                                               Map<Column, Expr> columnExprMap) {
             ExpressionPartitionDesc expressionPartitionDesc = statement.getPartitionExpDesc();
             Column partitionColumn = statement.getPartitionColumn();
-            Expr refExpr = columnExprMap.get(partitionColumn);
+
+            // partition column expr from input query
+            Expr partitionColumnExpr = columnExprMap.get(partitionColumn);
             if (expressionPartitionDesc.isFunction()) {
-                // e.g. partition by date_trunc('month', ss)
+                // e.g. partition by date_trunc('month', dt)
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) expressionPartitionDesc.getExpr();
-                if (!(refExpr instanceof SlotRef)) {
+                String functionName = functionCallExpr.getFnName().getFunction();
+                if (!MaterializedViewPartitionFunctionChecker.FN_NAME_TO_PATTERN.containsKey(functionName)) {
+                    throw new SemanticException("Materialized view partition function " +
+                            functionCallExpr.getFnName().getFunction() +
+                            " is not supported yet.", functionCallExpr.getPos());
+                }
+
+                if (!isValidPartitionExpr(partitionColumnExpr)) {
                     throw new SemanticException("Materialized view partition function " +
                             functionCallExpr.getFnName().getFunction() +
                             " must related with column", functionCallExpr.getPos());
@@ -472,14 +498,14 @@ public class MaterializedViewAnalyzer {
                 List<Expr> children = partitionRefTableExpr.getChildren();
                 for (int i = 0; i < children.size(); i++) {
                     if (children.get(i) instanceof SlotRef) {
-                        partitionRefTableExpr.setChild(i, refExpr);
+                        partitionRefTableExpr.setChild(i, partitionColumnExpr);
                     }
                 }
                 statement.setPartitionRefTableExpr(partitionRefTableExpr);
             } else {
-                // e.g. partition by date_trunc('day',ss) or partition by ss
-                if (refExpr instanceof FunctionCallExpr || refExpr instanceof SlotRef) {
-                    statement.setPartitionRefTableExpr(refExpr);
+                // e.g. partition by date_trunc('day',ss) or time_slice(dt, interval 1 day) or partition by ss
+                if (partitionColumnExpr instanceof FunctionCallExpr || partitionColumnExpr instanceof SlotRef) {
+                    statement.setPartitionRefTableExpr(partitionColumnExpr);
                 } else {
                     throw new SemanticException(
                             "Materialized view partition function must related with column",
@@ -488,13 +514,13 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-        private void checkPartitionExpParams(CreateMaterializedViewStatement statement) {
+        private void checkPartitionExpPatterns(CreateMaterializedViewStatement statement) {
             Expr expr = statement.getPartitionRefTableExpr();
             if (expr instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = ((FunctionCallExpr) expr);
                 String functionName = functionCallExpr.getFnName().getFunction();
-                CheckPartitionFunction checkPartitionFunction =
-                        PartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
+                MaterializedViewPartitionFunctionChecker.CheckPartitionFunction checkPartitionFunction =
+                        MaterializedViewPartitionFunctionChecker.FN_NAME_TO_PATTERN.get(functionName);
                 if (checkPartitionFunction == null) {
                     throw new SemanticException("Materialized view partition function " +
                             functionName + " is not support", functionCallExpr.getPos());
@@ -843,46 +869,4 @@ public class MaterializedViewAnalyzer {
             return null;
         }
     }
-
-    @FunctionalInterface
-    public interface CheckPartitionFunction {
-
-        boolean check(Expr expr);
-    }
-
-    static class PartitionFunctionChecker {
-
-        public static final Map<String, CheckPartitionFunction> FN_NAME_TO_PATTERN;
-
-        static {
-            FN_NAME_TO_PATTERN = Maps.newHashMap();
-            // can add some other functions
-            FN_NAME_TO_PATTERN.put("date_trunc", PartitionFunctionChecker::checkDateTrunc);
-        }
-
-        public static boolean checkDateTrunc(Expr expr) {
-            if (!(expr instanceof FunctionCallExpr)) {
-                return false;
-            }
-            FunctionCallExpr fnExpr = (FunctionCallExpr) expr;
-            String fnNameString = fnExpr.getFnName().getFunction();
-            if (!fnNameString.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
-                return false;
-            }
-            if (fnExpr.getChild(0) instanceof StringLiteral && fnExpr.getChild(1) instanceof SlotRef) {
-                String fmt = ((StringLiteral) fnExpr.getChild(0)).getValue();
-                if (fmt.equalsIgnoreCase("week")) {
-                    throw new SemanticException("The function date_trunc used by the materialized view for partition" +
-                            " does not support week formatting", expr.getPos());
-                }
-                SlotRef slotRef = (SlotRef) fnExpr.getChild(1);
-                PrimitiveType primitiveType = slotRef.getType().getPrimitiveType();
-                // must check slotRef type, because function analyze don't check it.
-                return primitiveType == PrimitiveType.DATETIME || primitiveType == PrimitiveType.DATE;
-            } else {
-                return false;
-            }
-        }
-    }
-
 }
