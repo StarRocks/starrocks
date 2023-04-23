@@ -12,6 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
+// The code in this file was modified from the RocksDB project at the following URL:
+// https://github.com/facebook/rocksdb/blob/fb63d9b4ee26afc81810bd5398bda4f2b351b26b/test_util/sync_point.h
+//
 //  Copyright (c) 2011-present, Facebook, Inc.  All rights reserved.
 //  This source code is licensed under both the GPLv2 (found in the
 //  COPYING file in the root directory) and Apache 2.0 License
