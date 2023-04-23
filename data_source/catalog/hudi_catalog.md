@@ -347,6 +347,12 @@ StarRocks 访问 Hudi 集群文件存储的相关参数配置。
   "gcp.gcs.use_compute_engine_service_account" = "true"
   ```
 
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                                   | **默认值** | **取值样例** | **说明**                                                 |
+  | ------------------------------------------ | ---------- | ------------ | -------------------------------------------------------- |
+  | gcp.gcs.use_compute_engine_service_account | false      | true         | 是否直接使用 Compute Engine 上面绑定的 Service Account。 |
+
 - 基于 Service Account 进行认证和鉴权
 
   ```SQL
@@ -355,16 +361,31 @@ StarRocks 访问 Hudi 集群文件存储的相关参数配置。
   "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
   ```
 
-- 基于 Impersonating 进行认证和鉴权
+  `StorageCredentialParams` 包含如下参数。
 
-  - 使用 VM Instance 模拟服务账号
+  | **参数**                               | **默认值** | **取值样例**                                                 | **说明**                                                     |
+  | -------------------------------------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | gcp.gcs.service_account_email          | ""         | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | 创建 Service Account 时生成的 JSON 文件中的 Email。          |
+  | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 创建 Service Account 时生成的 JSON 文件中的 Private Key ID。 |
+  | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Service Account 时生成的 JSON 文件中的 Private Key。    |
+
+- 基于 Impersonation 进行认证和鉴权
+
+  - 使用 VM Instance 模拟 Service Account
 
     ```SQL
     "gcp.gcs.use_compute_engine_service_account" = "true"
     "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
     ```
 
-  - 使用一个服务账号（即“Meta 服务账号”）模拟另一个服务账号（即“Data 服务账号”）
+    `StorageCredentialParams` 包含如下参数。
+
+    | **参数**                                   | **默认值** | **取值样例** | **说明**                                                     |
+    | ------------------------------------------ | ---------- | ------------ | ------------------------------------------------------------ |
+    | gcp.gcs.use_compute_engine_service_account | false      | true         | 是否直接使用 Compute Engine 上面绑定的 Service Account。     |
+    | gcp.gcs.impersonation_service_account      | ""         | "hello"      | 需要模拟的目标 Service Account。 |
+
+  - 使用一个 Service Account（即“Meta Service Account”）模拟另一个 Service Account（即“Data Service Account”）
 
     ```SQL
     "gcp.gcs.service_account_email" = "<google_service_account_email>"
@@ -372,6 +393,15 @@ StarRocks 访问 Hudi 集群文件存储的相关参数配置。
     "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>"
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
+
+    `StorageCredentialParams` 包含如下参数。
+
+    | **参数**                               | **默认值** | **取值样例**                                                 | **说明**                                                     |
+    | -------------------------------------- | ---------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+    | gcp.gcs.service_account_email          | ""         | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | 创建 Meta Service Account 时生成的 JSON 文件中的 Email。     |
+    | gcp.gcs.service_account_private_key_id | ""         | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key ID。 |
+    | gcp.gcs.service_account_private_key    | ""         | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | 创建 Meta Service Account 时生成的 JSON 文件中的 Private Key。 |
+    | gcp.gcs.impersonation_service_account  | ""         | "hello"                                                      | 需要模拟的目标 Data Service Account。 |
 
 #### `MetadataUpdateParams`
 
