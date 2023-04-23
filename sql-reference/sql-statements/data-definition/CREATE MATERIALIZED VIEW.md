@@ -135,6 +135,79 @@ SELECT select_expr[, select_expr ...]
   - 如果不指定排序列，则系统根据规则自动补充排序列。如果物化视图是聚合类型，则所有的分组列自动补充为排序列。如果物化视图是非聚合类型，则系统根据前缀列自动选择排序列。
   - 如果查询语句中包含分组列，则排序列必须和分组列一致。
 
+### 支持数据类型
+
+- 基于 StarRocks 内部数据目录（Default Catalog）创建的异步物化视图支持以下数据类型：
+
+  - DATE
+  - DATETIME
+  - CHAR
+  - VARCHAR
+  - BOOLEAN
+  - TINYINT
+  - SMALLINT
+  - INT
+  - BIGINT
+  - LARGEINT
+  - FLOAT
+  - DOUBLE
+  - DECIMAL
+  - ARRAY
+  - JSON
+  - BITMAP
+  - HLL
+  - PERCENTILE
+
+> **说明**
+>
+> 自 v2.4.5 起支持 BITMAP、HLL 以及 PERCENTILE。
+
+- 基于 StarRocks 外部数据目录（External Catalog）创建的异步物化视图支持以下数据类型：
+
+  - Hive Catalog
+
+    - INT/INTEGER
+    - BIGINT
+    - TIMESTAMP
+    - STRING
+    - VARCHAR
+    - CHAR
+    - DOUBLE
+    - FLOAT
+    - DECIMAL
+    - ARRAY
+
+  - Hudi Catalog
+
+    - BOOLEAN
+    - INT
+    - DATE
+    - TimeMillis/TimeMicros
+    - TimestampMillis/TimestampMicros
+    - LONG
+    - FLOAT
+    - DOUBLE
+    - STRING
+    - ARRAY
+    - DECIMAL
+
+  - Iceberg Catalog
+
+    - BOOLEAN
+    - INT
+    - LONG
+    - FLOAT
+    - DOUBLE
+    - DECIMAL(P, S)
+    - DATE
+    - TIME
+    - TIMESTAMP
+    - STRING
+    - UUID
+    - FIXED(L)
+    - BINARY
+    - LIST
+
 ### 聚合函数匹配关系
 
 使用物化视图搜索时，原始查询语句将会被自动改写并用于查询物化视图中保存的中间结果。下表展示了原始查询聚合函数和构建物化视图用到的聚合函数的匹配关系。您可以根据您的业务场景选择对应的聚合函数构建物化视图。
