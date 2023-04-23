@@ -306,6 +306,12 @@ If you choose Google GCS as your storage system, take one of the following actio
   "gcp.gcs.use_compute_engine_service_account" = "true"
   ```
 
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+  | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
+  | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
+
 - To choose the service account-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
@@ -314,16 +320,31 @@ If you choose Google GCS as your storage system, take one of the following actio
   "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
   ```
 
-- To choose the impersonating-based authentication method, configure `StorageCredentialParams` as follows:
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
 
-  - Make the VM instance to assume the service account:
+  | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+  | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+  | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | The email address in the JSON file generated at the creation of the service account. |
+  | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the service account. |
+  | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the service account. |
+
+- To choose the impersonation-based authentication method, configure `StorageCredentialParams` as follows:
+
+  - Make the VM instance impersonate the service account:
 
     ```SQL
     "gcp.gcs.use_compute_engine_service_account" = "true"
     "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
     ```
 
-  - Make a service account (named as meta service account) to assume another service account (named as data service account):
+    The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+    | **Parameter**                              | **Default value** | **Value** **example** | **Description**                                              |
+    | ------------------------------------------ | ----------------- | --------------------- | ------------------------------------------------------------ |
+    | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
+    | gcp.gcs.impersonation_service_account      | ""                | "hello"               | The service account that you want to impersonate.            |
+
+  - Make a service account (named as meta service account) impersonate another service account (named as data service account):
 
     ```SQL
     "gcp.gcs.service_account_email" = "<google_service_account_email>"
@@ -331,6 +352,15 @@ If you choose Google GCS as your storage system, take one of the following actio
     "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>"
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
+
+    The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+    | **Parameter**                          | **Default value** | **Value** **example**                                        | **Description**                                              |
+    | -------------------------------------- | ----------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
+    | gcp.gcs.service_account_email          | ""                | "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" | The email address in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.service_account_private_key_id | ""                | "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   | The private key ID in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.service_account_private_key    | ""                | "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  | The private key in the JSON file generated at the creation of the meta service account. |
+    | gcp.gcs.impersonation_service_account  | ""                | "hello"                                                      | The data service account that you want to impersonate.       |
 
 #### Other S3-compatible storage system
 
