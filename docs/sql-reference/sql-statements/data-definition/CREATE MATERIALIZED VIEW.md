@@ -142,6 +142,52 @@ Properties of the materialized view.
 >
 > BITMAP, HLL, and PERCENTILE have been supported since v2.4.5.
 
+- Asynchronous materialized views created based on the StarRocks external catalogs support the following data types:
+
+  - Hive Catalog
+
+    - INT/INTEGER
+    - BIGINT
+    - TIMESTAMP
+    - STRING
+    - VARCHAR
+    - CHAR
+    - DOUBLE
+    - FLOAT
+    - DECIMAL
+    - ARRAY
+
+  - Hudi Catalog
+
+    - BOOLEAN
+    - INT
+    - DATE
+    - TimeMillis/TimeMicros
+    - TimestampMillis/TimestampMicros
+    - LONG
+    - FLOAT
+    - DOUBLE
+    - STRING
+    - ARRAY
+    - DECIMAL
+
+  - Iceberg Catalog
+
+    - BOOLEAN
+    - INT
+    - LONG
+    - FLOAT
+    - DOUBLE
+    - DECIMAL(P, S)
+    - DATE
+    - TIME
+    - TIMESTAMP
+    - STRING
+    - UUID
+    - FIXED(L)
+    - BINARY
+    - LIST
+
 ### Correspondence of aggregate functions
 
 When a query is executed with a materialized view, the original query statement will be automatically rewritten and used to query the intermediate results stored in the materialized view. The following table shows the correspondence between the aggregate function in the original query and the aggregate function used to construct the materialized view. You can select the corresponding aggregate function to build a materialized view according to your business scenario.
