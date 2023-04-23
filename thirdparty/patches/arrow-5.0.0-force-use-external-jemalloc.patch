@@ -1,0 +1,185 @@
+diff --git a/cpp/cmake_modules/Findjemalloc.cmake b/cpp/cmake_modules/Findjemalloc.cmake
+index 84bb81f..a129718 100644
+--- a/cpp/cmake_modules/Findjemalloc.cmake
++++ b/cpp/cmake_modules/Findjemalloc.cmake
+@@ -46,11 +46,6 @@ if(_jemalloc_roots)
+             PATHS ${_jemalloc_roots}
+             NO_DEFAULT_PATH
+             PATH_SUFFIXES "include")
+-  find_library(JEMALLOC_SHARED_LIB
+-               NAMES ${LIBJEMALLOC_NAMES}
+-               PATHS ${_jemalloc_roots}
+-               NO_DEFAULT_PATH
+-               PATH_SUFFIXES "lib")
+   find_library(JEMALLOC_STATIC_LIB
+                NAMES jemalloc_pic
+                PATHS ${_jemalloc_roots}
+@@ -59,13 +54,11 @@ if(_jemalloc_roots)
+ else()
+   find_path(JEMALLOC_INCLUDE_DIR NAMES jemalloc/jemalloc.h)
+   message(STATUS ${JEMALLOC_INCLUDE_DIR})
+-  find_library(JEMALLOC_SHARED_LIB NAMES ${LIBJEMALLOC_NAMES})
+-  message(STATUS ${JEMALLOC_SHARED_LIB})
+   find_library(JEMALLOC_STATIC_LIB NAMES jemalloc_pic)
+   message(STATUS ${JEMALLOC_STATIC_LIB})
+ endif()
+ 
+-if(JEMALLOC_INCLUDE_DIR AND JEMALLOC_SHARED_LIB)
++if(JEMALLOC_INCLUDE_DIR AND JEMALLOC_STATIC_LIB)
+   set(JEMALLOC_FOUND TRUE)
+ else()
+   set(JEMALLOC_FOUND FALSE)
+@@ -91,4 +84,10 @@ else()
+   endif()
+ endif()
+ 
+-mark_as_advanced(JEMALLOC_INCLUDE_DIR JEMALLOC_SHARED_LIB)
++mark_as_advanced(JEMALLOC_INCLUDE_DIR JEMALLOC_STATIC_LIB)
++if(JEMALLOC_FOUND)
++  add_library(jemalloc::jemalloc UNKNOWN IMPORTED)
++  set_target_properties(jemalloc::jemalloc
++                        PROPERTIES IMPORTED_LOCATION "${JEMALLOC_STATIC_LIB}"
++                                   INTERFACE_INCLUDE_DIRECTORIES "${JEMALLOC_INCLUDE_DIR}")
++endif()
+diff --git a/cpp/cmake_modules/ThirdpartyToolchain.cmake b/cpp/cmake_modules/ThirdpartyToolchain.cmake
+index e6852d9..39536c9 100644
+--- a/cpp/cmake_modules/ThirdpartyToolchain.cmake
++++ b/cpp/cmake_modules/ThirdpartyToolchain.cmake
+@@ -1490,60 +1490,8 @@ if(ARROW_JEMALLOC)
+   # Also our build of jemalloc is specially prefixed so that it will not
+   # conflict with the default allocator as well as other jemalloc
+   # installations.
+-  # find_package(jemalloc)
+-
++  find_package(jemalloc)
+   set(ARROW_JEMALLOC_USE_SHARED OFF)
+-  set(JEMALLOC_PREFIX
+-      "${CMAKE_CURRENT_BINARY_DIR}/jemalloc_ep-prefix/src/jemalloc_ep/dist/")
+-  set(JEMALLOC_LIB_DIR "${JEMALLOC_PREFIX}/lib")
+-  set(JEMALLOC_STATIC_LIB
+-      "${JEMALLOC_LIB_DIR}/libjemalloc_pic${CMAKE_STATIC_LIBRARY_SUFFIX}")
+-  set(JEMALLOC_CONFIGURE_COMMAND ./configure "AR=${CMAKE_AR}" "CC=${CMAKE_C_COMPILER}")
+-  if(CMAKE_OSX_SYSROOT)
+-    list(APPEND JEMALLOC_CONFIGURE_COMMAND "SDKROOT=${CMAKE_OSX_SYSROOT}")
+-  endif()
+-  list(APPEND
+-       JEMALLOC_CONFIGURE_COMMAND
+-       "--prefix=${JEMALLOC_PREFIX}"
+-       "--libdir=${JEMALLOC_LIB_DIR}"
+-       "--with-jemalloc-prefix=je_arrow_"
+-       "--with-private-namespace=je_arrow_private_"
+-       "--without-export"
+-       "--disable-shared"
+-       # Don't override operator new()
+-       "--disable-cxx"
+-       "--disable-libdl"
+-       # See https://github.com/jemalloc/jemalloc/issues/1237
+-       "--disable-initial-exec-tls"
+-       ${EP_LOG_OPTIONS})
+-  set(JEMALLOC_BUILD_COMMAND ${MAKE} ${MAKE_BUILD_ARGS})
+-  if(CMAKE_OSX_SYSROOT)
+-    list(APPEND JEMALLOC_BUILD_COMMAND "SDKROOT=${CMAKE_OSX_SYSROOT}")
+-  endif()
+-  externalproject_add(jemalloc_ep
+-                      URL ${JEMALLOC_SOURCE_URL}
+-                      PATCH_COMMAND touch doc/jemalloc.3 doc/jemalloc.html
+-                                    # The prefix "je_arrow_" must be kept in sync with the value in memory_pool.cc
+-                      CONFIGURE_COMMAND ${JEMALLOC_CONFIGURE_COMMAND}
+-                      BUILD_IN_SOURCE 1
+-                      BUILD_COMMAND ${JEMALLOC_BUILD_COMMAND}
+-                      BUILD_BYPRODUCTS "${JEMALLOC_STATIC_LIB}"
+-                      INSTALL_COMMAND ${MAKE} -j1 install)
+-
+-  # Don't use the include directory directly so that we can point to a path
+-  # that is unique to our codebase.
+-  include_directories(SYSTEM "${CMAKE_CURRENT_BINARY_DIR}/jemalloc_ep-prefix/src/")
+-  # The include directory must exist before it is referenced by a target.
+-  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/jemalloc_ep-prefix/src/")
+-  add_library(jemalloc::jemalloc STATIC IMPORTED)
+-  set_target_properties(jemalloc::jemalloc
+-                        PROPERTIES INTERFACE_LINK_LIBRARIES Threads::Threads
+-                                   IMPORTED_LOCATION "${JEMALLOC_STATIC_LIB}"
+-                                   INTERFACE_INCLUDE_DIRECTORIES
+-                                   "${CMAKE_CURRENT_BINARY_DIR}/jemalloc_ep-prefix/src")
+-  add_dependencies(jemalloc::jemalloc jemalloc_ep)
+-
+-  list(APPEND ARROW_BUNDLED_STATIC_LIBS jemalloc::jemalloc)
+ endif()
+ 
+ # ----------------------------------------------------------------------
+diff --git a/cpp/src/arrow/CMakeLists.txt b/cpp/src/arrow/CMakeLists.txt
+index d2f80ce..cb106b1 100644
+--- a/cpp/src/arrow/CMakeLists.txt
++++ b/cpp/src/arrow/CMakeLists.txt
+@@ -314,9 +314,6 @@ set(ARROW_TESTING_SRCS
+ # (see https://gitlab.kitware.com/cmake/cmake/issues/19677)
+ 
+ set(_allocator_dependencies "") # Empty list
+-if(ARROW_JEMALLOC)
+-  list(APPEND _allocator_dependencies jemalloc_ep)
+-endif()
+ if(ARROW_MIMALLOC)
+   list(APPEND _allocator_dependencies mimalloc_ep)
+ endif()
+diff --git a/cpp/src/arrow/memory_pool.cc b/cpp/src/arrow/memory_pool.cc
+index c80e8f6..25b5213 100644
+--- a/cpp/src/arrow/memory_pool.cc
++++ b/cpp/src/arrow/memory_pool.cc
+@@ -48,7 +48,7 @@
+ // Needed to support jemalloc 3 and 4
+ #define JEMALLOC_MANGLE
+ // Explicitly link to our version of jemalloc
+-#include "jemalloc_ep/dist/include/jemalloc/jemalloc.h"
++#include "jemalloc/jemalloc.h"
+ #endif
+ 
+ #ifdef ARROW_MIMALLOC
+@@ -283,7 +283,7 @@ class JemallocAllocator {
+       return Status::OK();
+     }
+     *out = reinterpret_cast<uint8_t*>(
+-        mallocx(static_cast<size_t>(size), MALLOCX_ALIGN(kAlignment)));
++        jemallocx(static_cast<size_t>(size), MALLOCX_ALIGN(kAlignment)));
+     if (*out == NULL) {
+       return Status::OutOfMemory("malloc of size ", size, " failed");
+     }
+@@ -302,7 +302,7 @@ class JemallocAllocator {
+       return Status::OK();
+     }
+     *ptr = reinterpret_cast<uint8_t*>(
+-        rallocx(*ptr, static_cast<size_t>(new_size), MALLOCX_ALIGN(kAlignment)));
++        jerallocx(*ptr, static_cast<size_t>(new_size), MALLOCX_ALIGN(kAlignment)));
+     if (*ptr == NULL) {
+       *ptr = previous_ptr;
+       return Status::OutOfMemory("realloc of size ", new_size, " failed");
+@@ -314,12 +314,12 @@ class JemallocAllocator {
+     if (ptr == zero_size_area) {
+       DCHECK_EQ(size, 0);
+     } else {
+-      dallocx(ptr, MALLOCX_ALIGN(kAlignment));
++      jedallocx(ptr, MALLOCX_ALIGN(kAlignment));
+     }
+   }
+ 
+   static void ReleaseUnused() {
+-    mallctl("arena." ARROW_STRINGIFY(MALLCTL_ARENAS_ALL) ".purge", NULL, NULL, NULL, 0);
++    jemallctl("arena." ARROW_STRINGIFY(MALLCTL_ARENAS_ALL) ".purge", NULL, NULL, NULL, 0);
+   }
+ };
+ 
+@@ -565,10 +565,10 @@ Status jemalloc_set_decay_ms(int ms) {
+ #ifdef ARROW_JEMALLOC
+   ssize_t decay_time_ms = static_cast<ssize_t>(ms);
+ 
+-  int err = mallctl("arenas.dirty_decay_ms", nullptr, nullptr, &decay_time_ms,
++  int err = jemallctl("arenas.dirty_decay_ms", nullptr, nullptr, &decay_time_ms,
+                     sizeof(decay_time_ms));
+   RETURN_IF_JEMALLOC_ERROR(err);
+-  err = mallctl("arenas.muzzy_decay_ms", nullptr, nullptr, &decay_time_ms,
++  err = jemallctl("arenas.muzzy_decay_ms", nullptr, nullptr, &decay_time_ms,
+                 sizeof(decay_time_ms));
+   RETURN_IF_JEMALLOC_ERROR(err);
+ 
+-- 
+2.37.3
+
