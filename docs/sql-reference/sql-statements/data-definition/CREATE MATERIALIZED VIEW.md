@@ -106,6 +106,9 @@ Comment on the materialized view.
 
 Properties of the materialized view.
 
+- `replication_num`: The number of materialized view replicas to create.
+- `storage_medium`: Storage medium type. `HDD` and `SSD` are supported.
+
 ### Supported data types
 
 - Asynchronous materialized views created based on the StarRocks default catalog support the following data types:
