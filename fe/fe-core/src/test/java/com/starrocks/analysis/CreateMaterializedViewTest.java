@@ -2615,7 +2615,6 @@ public class CreateMaterializedViewTest {
             starRocksAssert.dropMaterializedView(mvName);
         }
     }
-
     @Test
     public void testExprAlias() throws Exception {
         testMVColumnAlias("c_1_9 + 1");
@@ -2697,6 +2696,65 @@ public class CreateMaterializedViewTest {
 
         starRocksAssert.dropTable("emps");
         starRocksAssert.dropTable("depts");
+	}
+
+    @Test
+    public void testCreateAsyncDateTruncAndTimeSLice() throws Exception {
+        LocalDateTime startTime = LocalDateTime.now().plusSeconds(3);
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by date_trunc('month', k11)\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                    "') EVERY(INTERVAL 3 DAY)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as select time_slice(tb1.k1, interval 5 minute) as k11, k2 s2 from tbl1 tb1;";
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        }
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by date_trunc('month', k11)\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                    "') EVERY(INTERVAL 3 DAY)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as select time_slice(tb1.k1, interval 5 year) as k11, k2 s2 from tbl1 tb1;";
+            Assert.assertThrows(AnalysisException.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        }
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by date_trunc('month', k11)\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                    "') EVERY(INTERVAL 3 DAY)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as select time_slice(tb1.k1, interval 5 month) as k11, k2 s2 from tbl1 tb1;";
+            Assert.assertThrows(AnalysisException.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        }
+
+        {
+            String sql = "create materialized view mv1\n" +
+                    "partition by date_trunc('month', k11)\n" +
+                    "distributed by hash(s2) buckets 10\n" +
+                    "refresh async START('" + startTime.format(DateUtils.DATE_TIME_FORMATTER) +
+                    "') EVERY(INTERVAL 3 DAY)\n" +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ")\n" +
+                    "as select time_slice(tb1.k1, interval 5 month, 'ceil') as k11, k2 s2 from tbl1 tb1;";
+            Assert.assertThrows(AnalysisException.class,
+                    () -> UtFrameUtils.parseStmtWithNewParser(sql, connectContext));
+        }
     }
 }
 

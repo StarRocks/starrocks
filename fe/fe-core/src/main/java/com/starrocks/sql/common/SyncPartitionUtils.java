@@ -60,19 +60,19 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.common.TimeUnitUtils.DAY;
+import static com.starrocks.sql.common.TimeUnitUtils.HOUR;
+import static com.starrocks.sql.common.TimeUnitUtils.MINUTE;
+import static com.starrocks.sql.common.TimeUnitUtils.MONTH;
+import static com.starrocks.sql.common.TimeUnitUtils.QUARTER;
+import static com.starrocks.sql.common.TimeUnitUtils.YEAR;
+
 /**
  * Process lower bound and upper bound for Expression Partition,
  * only support SlotRef and FunctionCallExpr
  */
 public class SyncPartitionUtils {
     private static final Logger LOG = LogManager.getLogger(SyncPartitionUtils.class);
-
-    public static final String MINUTE = "minute";
-    public static final String HOUR = "hour";
-    public static final String DAY = "day";
-    public static final String MONTH = "month";
-    public static final String QUARTER = "quarter";
-    public static final String YEAR = "year";
 
     private SyncPartitionUtils() throws IllegalAccessException {
         throw new IllegalAccessException("Utility class");
