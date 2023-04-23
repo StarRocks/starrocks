@@ -828,8 +828,8 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select approx_percentile(2.25, 1.79E-10)";
         assertPlanContains(sql, "percentile_approx(2.25, 1.79E-10)");
 
-        sql = "select approx_percentile(2.25, 1.79E+10)";
-        assertPlanContains(sql, "percentile_approx(2.25, 1.79E10)");
+        sql = "select approx_percentile(2.25, 0.4)";
+        assertPlanContains(sql, "percentile_approx(2.25, 0.4)");
     }
 
     @Test
