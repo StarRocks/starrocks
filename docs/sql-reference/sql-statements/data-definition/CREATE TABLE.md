@@ -53,9 +53,15 @@ Range: -2^7 + 1 ~ 2^7 - 1
 
 * SMALLINT (2 bytes )
 
+<<<<<<< HEAD
 Range: -2^15 + 1 ~ 2^15 - 1
 
 * INT (4 bytes)
+=======
+This aggregation type applies ONLY to the Aggregate table whose key_desc type is AGGREGATE KEY.
+
+**NULL | NOT NULL**: Whether the column is allowed to be `NULL`. By default, `NULL` is specified for all columns in a table that uses the Duplicate Key, Aggregate, or Unique Key table. In a table that uses the Primary Key table, by default, value columns are specified with `NULL`, whereas key columns are specified with `NOT NULL`. If `NULL` values are included in the raw data, present them with `\N`. StarRocks treats `\N` as `NULL` during data loading.
+>>>>>>> 6cfbdcb12 ([Doc] Split data model and update related proper names (#22007))
 
 Range: -2^31 + 1 ~ 2^31 - 1
 
@@ -340,7 +346,31 @@ Note:
 
 Please use specified key columns for Hash bucketing. The default bucket number is 10.
 
+<<<<<<< HEAD
 It is recommended to use Hash bucketing method.
+=======
+If such a column does not exist, you can determine the bucketing column according to the complexity of queries.
+
+- If the query is complex, we recommend that you select a high cardinality column as the bucketing column to ensure balanced data distribution among buckets and improve cluster resource utilization.
+- If the query is relatively simple, we recommend that you select the column that is often used as the query condition as the bucketing column to improve query efficiency.
+
+If partition data cannot be evenly distributed into each tablet by using one bucketing column, you can choose multiple bucketing columns (at most three). For more information, see [Choose bucketing columns](../../../table_design/Data_distribution.md).
+
+**Precautions**:
+
+- **When a table is created, you must specify the bucketing columns**.
+- The values of bucketing columns cannot be updated.
+- Bucketing columns cannot be modified after they are specified.
+- Since StarRocks 2.5, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
+
+### ORDER BY
+
+Since version 3.0, the primary key and sort key are decoupled in the Primary Key table. The sort key is specified by the `ORDER BY` keyword and can be the permutation and combination of any columns.
+
+> **NOTICE**
+>
+> If the sort key is specified, the prefix index is built according to the sort key; if the sort key is not specified, the prefix index is built according to the primary key.
+>>>>>>> 6cfbdcb12 ([Doc] Split data model and update related proper names (#22007))
 
 ### PROPERTIES
 
@@ -374,7 +404,7 @@ If the Engine type is olap, you can specify a column to adopt bloom filter index
 
 The following limits apply when you use bloom filter index:
 
-- You can create bloom filter indexes for all columns of a Duplicate Key or Primary Key table. For an Aggregate Key or Unique Key table, you can only create bloom filter indexes for key columns.
+- You can create bloom filter indexes for all columns of a Duplicate Key or Primary Key table. For an Aggregate table or Unique Key table, you can only create bloom filter indexes for key columns.
 - TINYINT, FLOAT, DOUBLE, and DECIMAL columns do not support creating bloom filter indexes.
 - Bloom filter indexes can only improve the performance of queries that contain the `in` and `=` operators, such as `Select xxx from table where x in {}` and `Select xxx from table where column = xxx`. More discrete values in this column will result in more precise queries.
 
@@ -437,7 +467,11 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 
 ## Examples
 
+<<<<<<< HEAD
 ### Create an Aggregate Key table that uses Hash bucketing and column-based storage
+=======
+### Create an Aggregate table that uses Hash bucketing and columnar storage
+>>>>>>> 6cfbdcb12 ([Doc] Split data model and update related proper names (#22007))
 
 ```SQL
 CREATE TABLE example_db.table_hash
@@ -454,7 +488,7 @@ DISTRIBUTED BY HASH(k1) BUCKETS 10
 PROPERTIES ("storage_type"="column");
 ```
 
-### Create an Aggregate Key table and set the storage medium and cooldown time
+### Create an Aggregate table and set the storage medium and cooldown time
 
 ```SQL
 CREATE TABLE example_db.table_hash
