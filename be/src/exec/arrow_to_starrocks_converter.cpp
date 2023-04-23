@@ -198,12 +198,12 @@ void offsets_copy(const T* arrow_offsets_data, T arrow_base_offset, size_t num_e
     }
 }
 
-template <LogicalType LT, typename = StringLTGuard<LT>>
+template <LogicalType LT, typename = StringOrBinaryGaurd<LT>>
 static inline constexpr uint32_t binary_max_length = (LT == TYPE_VARCHAR) ? TypeDescriptor::MAX_VARCHAR_LENGTH
                                                                           : TypeDescriptor::MAX_CHAR_LENGTH;
 
 template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
-struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringLTGuard<LT>> {
+struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringOrBinaryGaurd<LT>> {
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
     using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using CppType = RunTimeCppType<LT>;
@@ -891,8 +891,9 @@ static const std::unordered_map<ArrowTypeId, LogicalType> global_strict_arrow_co
         STRICT_ARROW_CONV_ENTRY_R(TYPE_BIGINT, ArrowTypeId::INT64, ArrowTypeId::UINT64),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_FLOAT, ArrowTypeId::HALF_FLOAT, ArrowTypeId::FLOAT),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DOUBLE, ArrowTypeId::DOUBLE),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_VARCHAR, ArrowTypeId::BINARY, ArrowTypeId::STRING, ArrowTypeId::LARGE_BINARY,
-                                  ArrowTypeId::LARGE_STRING, ArrowTypeId::FIXED_SIZE_BINARY),
+        STRICT_ARROW_CONV_ENTRY_R(TYPE_VARCHAR, ArrowTypeId::STRING, ArrowTypeId::LARGE_STRING),
+        STRICT_ARROW_CONV_ENTRY_R(TYPE_VARBINARY, ArrowTypeId::BINARY, ArrowTypeId::LARGE_BINARY,
+                                  ArrowTypeId::FIXED_SIZE_BINARY),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DATE, ArrowTypeId::DATE32),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DATETIME, ArrowTypeId::DATE64, ArrowTypeId::TIMESTAMP),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL128, ArrowTypeId::DECIMAL),
@@ -920,9 +921,9 @@ static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_con
         ARROW_CONV_ENTRY(ArrowTypeId::FLOAT, TYPE_FLOAT, TYPE_DOUBLE, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::DOUBLE, TYPE_DOUBLE, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::STRING, TYPE_CHAR, TYPE_VARCHAR, TYPE_JSON),
-        ARROW_CONV_ENTRY(ArrowTypeId::BINARY, TYPE_CHAR, TYPE_VARCHAR),
-        ARROW_CONV_ENTRY(ArrowTypeId::FIXED_SIZE_BINARY, TYPE_CHAR, TYPE_VARCHAR),
-        ARROW_CONV_ENTRY(ArrowTypeId::LARGE_BINARY, TYPE_CHAR, TYPE_VARCHAR),
+        ARROW_CONV_ENTRY(ArrowTypeId::BINARY, TYPE_VARBINARY),
+        ARROW_CONV_ENTRY(ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY),
+        ARROW_CONV_ENTRY(ArrowTypeId::LARGE_BINARY, TYPE_VARBINARY),
         ARROW_CONV_ENTRY(ArrowTypeId::LARGE_STRING, TYPE_CHAR, TYPE_VARCHAR),
         ARROW_CONV_ENTRY(ArrowTypeId::DATE32, TYPE_DATE, TYPE_DATETIME, TYPE_JSON),
         ARROW_CONV_ENTRY(ArrowTypeId::DATE64, TYPE_DATE, TYPE_DATETIME, TYPE_JSON),
