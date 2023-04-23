@@ -77,6 +77,33 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testDateExpression() throws Exception {
+        String sql = "select current_date";
+        analyzeSuccess(sql);
+
+        sql = "select current_time";
+        analyzeSuccess(sql);
+
+        sql = "select current_timestamp";
+        analyzeSuccess(sql);
+
+        sql = "select localtimestamp";
+        analyzeSuccess(sql);
+
+        sql = "select localtime";
+        analyzeSuccess(sql);
+
+        sql = "select timestamp '2021-01-01 00:00:00'";
+        assertPlanContains(sql, "'2021-01-01 00:00:00'");
+
+        sql = "select timestamp '2021-01-01 10:01:02.123456'";
+        assertPlanContains(sql, "'2021-01-01 10:01:02.123456'");
+
+        sql = "select date '2021-01-01'";
+        assertPlanContains(sql, "'2021-01-01'");
+    }
+
+    @Test
     public void testCastExpression() throws Exception {
         String sql = "select cast(tb as varchar(10)) from tall";
         assertPlanContains(sql, "<slot 11> : CAST(2: tb AS VARCHAR(10))");

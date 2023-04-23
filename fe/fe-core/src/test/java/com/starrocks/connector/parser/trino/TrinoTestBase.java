@@ -292,6 +292,19 @@ public class TrinoTestBase {
         connectContext.getSessionVariable().setSqlDialect("trino");
     }
 
+    public static StatementBase analyzeSuccess(String originStmt) {
+        try {
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
+                    connectContext.getSessionVariable()).get(0);
+            Analyzer.analyze(statementBase, connectContext);
+            return statementBase;
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            Assert.fail();
+            throw ex;
+        }
+    }
+
     public static void analyzeFail(String originStmt) {
         analyzeFail(originStmt, "");
     }
