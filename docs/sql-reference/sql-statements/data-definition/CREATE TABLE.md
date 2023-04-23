@@ -70,9 +70,9 @@ If specified, it is value column. The aggregation types supported are as follows
 > - When the column of aggregation type BITMAP_UNION is imported, its original data types must be TINYINT, SMALLINT, INT, and BIGINT.
 > - If NOT NULL is specified by REPLACE_IF_NOT_NULL column when the table was created, StarRocks will still convert the data to NULL without sending an error report to the user. With this, the user can import selected columns.
 
-This aggregation type applies ONLY to the aggregation model whose key_desc type is AGGREGATE KEY.
+This aggregation type applies ONLY to the Aggregate table whose key_desc type is AGGREGATE KEY.
 
-**NULL | NOT NULL**: Whether the column is allowed to be `NULL`. By default, `NULL` is specified for all columns in a table that uses the Duplicate Key, Aggregate Key, or Unique Key model. In a table that uses the Primary Key model, by default, value columns are specified with `NULL`, whereas key columns are specified with `NOT NULL`. If `NULL` values are included in the raw data, present them with `\N`. StarRocks treats `\N` as `NULL` during data loading.
+**NULL | NOT NULL**: Whether the column is allowed to be `NULL`. By default, `NULL` is specified for all columns in a table that uses the Duplicate Key, Aggregate, or Unique Key table. In a table that uses the Primary Key table, by default, value columns are specified with `NULL`, whereas key columns are specified with `NOT NULL`. If `NULL` values are included in the raw data, present them with `\N`. StarRocks treats `\N` as `NULL` during data loading.
 
 **DEFAULT "default_value"**: the default value of a column. When you load data into StarRocks, if the source field mapped onto the column is empty, StarRocks automatically fills the default value in the column. You can specify a default value in one of the following ways:
 
@@ -292,6 +292,17 @@ If partition data cannot be evenly distributed into each tablet by using one buc
 - Bucketing columns cannot be modified after they are specified.
 - Since StarRocks 2.5, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of tablets](../../../table_design/Data_distribution.md#determine-the-number-of-tablets).
 
+<<<<<<< HEAD
+=======
+### ORDER BY
+
+Since version 3.0, the primary key and sort key are decoupled in the Primary Key table. The sort key is specified by the `ORDER BY` keyword and can be the permutation and combination of any columns.
+
+> **NOTICE**
+>
+> If the sort key is specified, the prefix index is built according to the sort key; if the sort key is not specified, the prefix index is built according to the primary key.
+
+>>>>>>> 6cfbdcb12 ([Doc] Split data model and update related proper names (#22007))
 ### PROPERTIES
 
 #### Specify storage medium, storage cooldown time, replica number
@@ -329,7 +340,7 @@ If the Engine type is olap, you can specify a column to adopt bloom filter index
 
 The following limits apply when you use bloom filter index:
 
-- You can create bloom filter indexes for all columns of a Duplicate Key or Primary Key table. For an Aggregate Key or Unique Key table, you can only create bloom filter indexes for key columns.
+- You can create bloom filter indexes for all columns of a Duplicate Key or Primary Key table. For an Aggregate table or Unique Key table, you can only create bloom filter indexes for key columns.
 - TINYINT, FLOAT, DOUBLE, and DECIMAL columns do not support creating bloom filter indexes.
 - Bloom filter indexes can only improve the performance of queries that contain the `in` and `=` operators, such as `Select xxx from table where x in {}` and `Select xxx from table where column = xxx`. More discrete values in this column will result in more precise queries.
 
@@ -433,7 +444,11 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 
 ## Examples
 
+<<<<<<< HEAD
 ### Create an Aggregate Key table that uses Hash bucketing and column-based storage
+=======
+### Create an Aggregate table that uses Hash bucketing and columnar storage
+>>>>>>> 6cfbdcb12 ([Doc] Split data model and update related proper names (#22007))
 
 ```SQL
 CREATE TABLE example_db.table_hash
@@ -450,7 +465,7 @@ DISTRIBUTED BY HASH(k1) BUCKETS 10
 PROPERTIES ("storage_type"="column");
 ```
 
-### Create an Aggregate Key table and set the storage medium and cooldown time
+### Create an Aggregate table and set the storage medium and cooldown time
 
 ```SQL
 CREATE TABLE example_db.table_hash

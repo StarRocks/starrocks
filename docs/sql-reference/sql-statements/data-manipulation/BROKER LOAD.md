@@ -91,7 +91,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
 
   > **NOTE**
   >
-  > This parameter is valid only when the StarRocks table uses the Aggregate Key model and all its value columns are computed by the `sum` function.
+  > This parameter is valid only when the StarRocks table uses the Aggregate table and all its value columns are computed by the `sum` function.
 
 - `PARTITION`
 
