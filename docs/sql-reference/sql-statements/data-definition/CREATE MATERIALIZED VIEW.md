@@ -76,7 +76,6 @@ SELECT select_expr[, select_expr ...]
   - If this parameter is not specified, the system will automatically supplement the ORDER BY column according to relevant rules. If the materialized view is created with the AGGREGATE KEY model, all GROUP BY columns are automatically used as sort columns. If the materialized view is not created with the AGGREGATE KEY model, the first 36 bytes are automatically used as the ORDER BY columns. If the number of auto-assigned ORDER BY columns is less than 3, the first three columns are used as ORDER BY columns.
   - If the query statement contains a GROUP BY clause, the ORDER BY columns must be identical to the GROUP BY columns.
 
-<<<<<<< HEAD
 **distribution_desc** (**required** when creating async refresh materialized view)
 
 The bucketing strategy of the materialized view, in the form of `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`.
@@ -107,9 +106,6 @@ Comment on the materialized view.
 
 Properties of the materialized view.
 
-- `replication_num`: The number of materialized view replicas to create.
-- `storage_medium`: Storage medium type. `HDD` and `SSD` are supported.
-=======
 ### Supported data types
 
 - Asynchronous materialized views created based on the StarRocks default catalog support the following data types:
@@ -136,53 +132,6 @@ Properties of the materialized view.
 > **NOTE**
 >
 > BITMAP, HLL, and PERCENTILE have been supported since v2.4.5.
-
-- Asynchronous materialized views created based on the StarRocks external catalogs support the following data types:
-
-  - Hive Catalog
-
-    - INT/INTEGER
-    - BIGINT
-    - TIMESTAMP
-    - STRING
-    - VARCHAR
-    - CHAR
-    - DOUBLE
-    - FLOAT
-    - DECIMAL
-    - ARRAY
-
-  - Hudi Catalog
-
-    - BOOLEAN
-    - INT
-    - DATE
-    - TimeMillis/TimeMicros
-    - TimestampMillis/TimestampMicros
-    - LONG
-    - FLOAT
-    - DOUBLE
-    - STRING
-    - ARRAY
-    - DECIMAL
-
-  - Iceberg Catalog
-
-    - BOOLEAN
-    - INT
-    - LONG
-    - FLOAT
-    - DOUBLE
-    - DECIMAL(P, S)
-    - DATE
-    - TIME
-    - TIMESTAMP
-    - STRING
-    - UUID
-    - FIXED(L)
-    - BINARY
-    - LIST
->>>>>>> 464ecf539 ([Doc] Add MV data types (#22255))
 
 ### Correspondence of aggregate functions
 
