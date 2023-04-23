@@ -65,6 +65,13 @@ public class CTEContext {
 
     private double inlineCTERatio = 2.0;
 
+<<<<<<< HEAD
+=======
+    private int maxCTELimit = 10;
+
+    private int cteIdSequence = 0;
+
+>>>>>>> f292aa47c ([BugFix] ensure cteId auto increment (#22267))
     public CTEContext() {
         forceCTEList = Lists.newArrayList();
     }
@@ -76,9 +83,14 @@ public class CTEContext {
         consumePredicates = Maps.newHashMap();
         consumeLimits = Maps.newHashMap();
 
+<<<<<<< HEAD
         consumeInlineCosts = Maps.newHashMap();
         produceCosts = Maps.newHashMap();
         produceComplexityScores = Maps.newHashMap();
+=======
+        produceStatistics = Maps.newHashMap();
+        cteIdSequence = 0;
+>>>>>>> f292aa47c ([BugFix] ensure cteId auto increment (#22267))
     }
 
     public void setEnableCTE(boolean enableCTE) {
@@ -89,8 +101,18 @@ public class CTEContext {
         this.inlineCTERatio = ratio;
     }
 
+<<<<<<< HEAD
     public void addCTEProduce(int cteId, OptExpression produce) {
         this.produces.put(cteId, produce);
+=======
+    public void addCTEProduce(int cteId) {
+        this.produces.add(cteId);
+        cteIdSequence = Math.max(cteId, cteIdSequence);
+    }
+
+    public void setMaxCTELimit(int maxCTELimit) {
+        this.maxCTELimit = maxCTELimit;
+>>>>>>> f292aa47c ([BugFix] ensure cteId auto increment (#22267))
     }
 
     public void addCTEConsume(int cteId) {
@@ -243,4 +265,37 @@ public class CTEContext {
     public void addForceCTE(int cteId) {
         this.forceCTEList.add(cteId);
     }
+<<<<<<< HEAD
+=======
+
+    public boolean isForceCTE(int cteId) {
+        // 1. rewrite to CTE rule, force CTE
+        if (this.forceCTEList.contains(cteId)) {
+            return true;
+        }
+
+        // 2. ratio is zero, force CTE reuse
+        if (inlineCTERatio == 0) {
+            return true;
+        }
+
+        if (inlineCTERatio < 0) {
+            return false;
+        }
+
+        // 3. limit cte num strategy
+        // when actual CTE > maxCTELimit
+        // actual CTE refs > CTE num * every CTE refs: force CTE
+        // actual CTE refs < CTE num * every CTE refs: force inline
+        if (produces.size() > maxCTELimit) {
+            return consumeNums.get(cteId) >= MIN_EVERY_CTE_REFS;
+        }
+
+        return false;
+    }
+
+    public int getNextCteId() {
+        return ++cteIdSequence;
+    }
+>>>>>>> f292aa47c ([BugFix] ensure cteId auto increment (#22267))
 }
