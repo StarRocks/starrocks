@@ -1345,6 +1345,15 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testMultiCountDistinctWithNoneGroup1() throws Exception {
+        String sql = "with tmp1 as (select 'a' as a from dual), tmp2 as (select 'b' as b from dual) " +
+                "select count(distinct t1b), count(distinct t1c), count(distinct t1.a), count(distinct t2.b) " +
+                "from test_all_type join tmp1 t1 join tmp2 t2 join tmp1 t3 join tmp2 t4";
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        assertContains(pair.first, "CTEAnchor(cteid=3)");
+    }
+
+    @Test
     public void testMultiCountDistinctWithNoneGroup2() throws Exception {
         String sql = "select count(distinct t1b), count(distinct t1c), sum(t1c), max(t1b) from test_all_type";
         String plan = getFragmentPlan(sql);
