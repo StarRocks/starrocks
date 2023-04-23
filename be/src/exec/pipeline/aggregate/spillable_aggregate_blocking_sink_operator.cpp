@@ -39,10 +39,6 @@ bool SpillableAggregateBlockingSinkOperator::is_finished() const {
 }
 
 Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
-    if (_spill_strategy == spill::SpillStrategy::NO_SPILL) {
-        RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
-        return Status::OK();
-    }
     // ugly code
     // TODO: fixme
     auto io_executor = _aggregator->spill_channel()->io_executor();
@@ -52,6 +48,7 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
     };
     auto set_call_back_function = [this](RuntimeState* state, auto io_executor) {
         _aggregator->spill_channel()->set_finishing();
+        RETURN_IF_ERROR(AggregateBlockingSinkOperator::set_finishing(state));
         return _aggregator->spiller()->set_flush_all_call_back(
                 [this]() {
                     _is_finished = true;

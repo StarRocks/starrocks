@@ -696,6 +696,8 @@ public:
     Status probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos);
 
     void append_chunk(RuntimeState* state, const ChunkPtr& chunk, const Columns& key_columns);
+    // convert input column to serialize format for spill
+    StatusOr<ChunkPtr> convert_to_serialize_format(const ChunkPtr& chunk) const;
 
     const ChunkPtr& get_build_chunk() const { return _table_items->build_chunk; }
     Columns& get_key_columns() { return _table_items->key_columns; }
