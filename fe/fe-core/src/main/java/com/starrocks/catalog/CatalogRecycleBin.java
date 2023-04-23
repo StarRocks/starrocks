@@ -386,11 +386,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         for (Map<Long, RecycleTableInfo> tableEntry : idToTableInfo.rowMap().values()) {
             for (Map.Entry<Long, RecycleTableInfo> entry : tableEntry.entrySet()) {
                 RecycleTableInfo tableInfo = entry.getValue();
-                Table table = tableInfo.getTable();
-                long tableId = table.getId();
 
-                // 1. time expired
-                // 2. the db have been dropped force, this table can never be recovered
                 if (canEraseTable(tableInfo, currentTimeMs)
                         || GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(tableInfo.dbId) == null) {
                     tableToRemove.add(tableInfo);
