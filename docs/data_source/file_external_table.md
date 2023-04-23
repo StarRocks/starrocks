@@ -114,8 +114,8 @@ If you need to access a data file stored in AWS S3, configure the following auth
 | aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile and assumed role as credential methods for authentication when you access AWS S3. Valid values: true and false. Default value: false. |
 | aws.s3.iam_role_arn         | Yes      | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses the target data file. |
 | aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: us-west-1. |
-| aws.s3.access_key           | No       | The access key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses the target data file. |
-| aws.s3.secret_key           | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this user when it accesses the target data fila. |
+| aws.s3.access_key           | No       | The access key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses the target data file. |
+| aws.s3.secret_key           | No       | The secret key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this user when it accesses the target data fila. |
 
 For information about how to choose a credential method for accessing AWS S3 and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS S3](../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
@@ -138,8 +138,8 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.enable_ssl               | Yes      | Specifies whether to enable SSL connection. Valid values: true and false. Default value: true. |
 | aws.s3.enable_path_style_access | Yes      | Specifies whether to enable path-style URL access. Valid values: true and false. Default value: false. |
 | aws.s3.endpoint                 | Yes      | The endpoint used to connect to an S3-compatible storage system instead of AWS S3. |
-| aws.s3.access_key               | Yes      | The access key of your AWS IAM user.                         |
-| aws.s3.secret_key               | Yes      | The secret key of your AWS IAM user.                         |
+| aws.s3.access_key               | Yes      | The access key of your IAM user.                         |
+| aws.s3.secret_key               | Yes      | The secret key of your IAM user.                         |
 
 #### Mapping of column types
 
