@@ -103,7 +103,7 @@ If you need to access a data file stored in AWS S3, configure the following auth
 - You use IAM user as the credential method for accessing AWS S3.
 
 ```JavaScript
-"aws.s3.use_instance_profile" = 'false',
+"aws.s3.use_instance_profile" = "false",
 "aws.s3.access_key" = "<iam_user_access_key>",
 "aws.s3.secret_key" = "<iam_user_secret_key>",
 "aws.s3.region" = "<aws_s3_region>"
