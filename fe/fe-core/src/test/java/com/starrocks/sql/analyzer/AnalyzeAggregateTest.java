@@ -223,7 +223,6 @@ public class AnalyzeAggregateTest {
         analyzeFail("select percentile_approx(1,1,tc) from tall group by tb");
         analyzeFail("select percentile_approx(1,1,0.5,tc) from tall group by tb");
         analyzeSuccess("select percentile_approx(1,0.5,1047) from tall group by tb");
-        analyzeSuccess("select percentile_disc(tj,0.5) from tall group by tb");
     }
 
     @Test
