@@ -396,10 +396,10 @@ Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     RETURN_IF_ERROR(write_orphan_list_file(orphan_datafiles, orphan_list_file.get()));
     // Delete orphan segment files and del files
     for (auto& file : orphan_datafiles) {
-        LOG(INFO) << "Deleting orphan data file: " << file;
         auto location = join_path(segment_root_location, file);
+        LOG(INFO) << "Deleting orphan data file: " << location;
         auto st = fs->delete_file(location);
-        LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << file << ": " << st;
+        LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << location << ": " << st;
     }
     return Status::OK();
 }
