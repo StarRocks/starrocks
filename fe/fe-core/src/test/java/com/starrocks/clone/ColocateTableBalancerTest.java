@@ -37,6 +37,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -166,6 +167,7 @@ public class ColocateTableBalancerTest {
 
         // 1. balance an imbalanced group
         // [[1, 2, 3], [4, 1, 2], [3, 4, 1], [2, 3, 4], [1, 2, 3]]
+        FeConstants.runningUnitTest = true;
         ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,
                 Lists.newArrayList(1L, 2L, 3L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L, 4L, 1L, 2L, 3L), 3);
         Deencapsulation.setField(colocateTableIndex, "group2Schema", group2Schema);
@@ -915,6 +917,8 @@ public class ColocateTableBalancerTest {
                 result = "192.168.0.115";
             }
         };
+
+        FeConstants.runningUnitTest = true;
 
         GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
         GroupId groupId = new GroupId(10005, 10006);
