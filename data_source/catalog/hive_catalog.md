@@ -219,7 +219,7 @@ StarRocks 访问 Hive 集群文件存储的相关参数配置。
 | -------------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.enable_ssl                | Yes      | 是否开启 SSL 连接。取值范围：`true` 和 `false`。默认值：`true`。 |
 | aws.s3.enable_path_style_access  | Yes      | 是否开启路径类型 URL 访问 (Path-Style URL Access)。取值范围：`true` 和 `false`。默认值：`false`。 |
-| aws.s3.endpoint                  | Yes      | 用于访问 AWS S3 Bucket 的 Endpoint。 |
+| aws.s3.endpoint                  | Yes      | 用于访问兼容 S3 协议的对象存储的 Endpoint。 |
 | aws.s3.access_key                | Yes      | IAM User 的 Access Key。 |
 | aws.s3.secret_key                | Yes      | IAM User 的 Secret Key。 |
 
