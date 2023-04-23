@@ -1000,7 +1000,7 @@ public class ExpressionAnalyzer {
             } else if (FunctionSet.ARRAY_GENERATE.equals(fnName)) {
                 fn = getArrayGenerateFunction(node);
                 argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
-            }  else {
+            } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
 
