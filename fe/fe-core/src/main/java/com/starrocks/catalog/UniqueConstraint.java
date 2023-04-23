@@ -16,8 +16,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import org.spark_project.guava.base.Strings;
 
 import java.util.Arrays;
 import java.util.List;

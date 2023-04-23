@@ -14,7 +14,8 @@
 
 package com.starrocks.catalog;
 
-import jersey.repackaged.com.google.common.collect.Lists;
+
+import com.google.common.collect.Lists;
 import org.junit.Assert;
 import org.junit.Test;
 
