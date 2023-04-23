@@ -1040,11 +1040,9 @@ public class DecodeRewriteTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "  3:Project\n" +
                 "  |  <slot 20> : 9: S_ADDRESS\n" +
-                "  |  <slot 21> : 24: cast\n" +
+                "  |  <slot 21> : CAST(15: expr AS VARCHAR)\n" +
                 "  |  <slot 22> : CAST(15: expr AS VARCHAR)\n" +
                 "  |  <slot 23> : CAST(16: expr AS VARCHAR)\n" +
-                "  |  common expressions:\n" +
-                "  |  <slot 24> : CAST(15: expr AS VARCHAR)\n" +
                 "  |  \n" +
                 "  2:AGGREGATE (update finalize)\n" +
                 "  |  group by: 9: S_ADDRESS, 15: expr, 16: expr");
@@ -1058,7 +1056,7 @@ public class DecodeRewriteTest extends PlanTestBase {
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
         String sql =
                 "with v1 as( select S_ADDRESS a, count(*) b from supplier group by S_ADDRESS) select x1.a, x1.b from v1 x1" +
-		"join v1 x2 on x1.a=x2.a";
+		" join v1 x2 on x1.a=x2.a";
         String plan = getThriftPlan(sql);
         Assert.assertTrue(
                 plan.contains("query_global_dicts:[TGlobalDict(columnId:28, strings:[6D 6F 63 6B], ids:[1])"));
