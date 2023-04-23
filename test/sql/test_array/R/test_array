@@ -7,8 +7,8 @@ select ARRAY<INT>[], [], ARRAY<STRING>['abc'], [123, NULL, 1.0], ['abc', NULL];
 CREATE TABLE array_data_type
     (c1 int,
     c2  array<bigint>, 
-    c3  array<bigint> not null,
-    c4  array<bigint>, 
+    c3  array<bigint>,
+    c4  array<bigint> not null, 
     c5  array<bigint> not null)
     PRIMARY KEY(c1) 
     DISTRIBUTED BY HASH(c1) 
@@ -17,39 +17,63 @@ CREATE TABLE array_data_type
 -- result:
 -- !result
 insert into array_data_type (c1, c2, c3, c4,c5) values 
-    (1,[22, 11, 33],[22, 11, 33],[22, 11, 33],[22, 11, 33]),
-    (2,[22, 11, 33],[22, 11, 33],[22, 11, 33],[22, 11, 33]),
-    (3,[22, 11, 33],[22, 11, 33],[22, 11, 33],[22, 11, 33]);
+    (1,NULL,NULL,[22, 11, 33],[22, 11, 33]);
 -- result:
 -- !result
-insert into array_data_type(c1,c3,c5) values (4,[22, 11, 33],[22, 11, 33]);
+select c2 = c3 from array_data_type;   
+
+insert into array_data_type (c1, c2, c3, c4,c5) values 
+    (2,NULL,[22, 11, 33],[22, 11, 33],[22, 11, 33]),
+    (3,[22, 11, 33],[22, 11, 33],[22, 11, 33],[22, 11, 33]),
+    (4,[22, 11, 33],NULL,[22, 11, 33],[22, 11, 33]);
 -- result:
+None
+-- !result
+select c2 <=> c3 from array_data_type;
+-- result:
+1
+0
+1
+0
 -- !result
 select c2 = c3 from array_data_type;
 -- result:
+None
+None
 1
+None
+-- !result
+select c3 = c4 from array_data_type;
+-- result:
+None
 1
 1
 None
 -- !result
-select c3 = c2 from array_data_type;
+select c4 = c5 from array_data_type;
 -- result:
 1
 1
 1
-None
+1
 -- !result
-select c2 = c4 from array_data_type;
+insert into array_data_type (c1, c2, c3, c4,c5) values 
+    (5,[22, 11, 33],[22, 11, 33],[22, 11, 44],[22, 11, 33]);
 -- result:
-1
-1
-1
-None
 -- !result
-select c3 = c5 from array_data_type;
+select c4 = c5 from array_data_type;
 -- result:
 1
 1
 1
+1
+0
+-- !result
+select c4 > c5 from array_data_type;
+-- result:
+0
+0
+0
+0
 1
 -- !result
