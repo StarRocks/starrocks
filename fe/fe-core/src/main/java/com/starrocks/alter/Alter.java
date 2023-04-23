@@ -385,6 +385,7 @@ public class Alter {
                     materializedView.getId(), propClone);
             GlobalStateMgr.getCurrentState().getEditLog().logAlterMaterializedViewProperties(log);
         }
+        LOG.info("debug");
         LOG.info("alter materialized view properties {}, id: {}", propClone, materializedView.getId());
     }
 
