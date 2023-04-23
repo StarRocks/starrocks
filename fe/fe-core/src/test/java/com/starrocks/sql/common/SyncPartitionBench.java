@@ -47,13 +47,21 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 /**
+ * Before:
+ * Benchmark                          (diffRatio)  (times)  Mode  Cnt     Score       Error  Units
+ * SyncPartitionBench.diffRangeBench          0.0    10000  avgt    3     9.707 ±    28.411  ms/op
+ * SyncPartitionBench.diffRangeBench          0.2    10000  avgt    3  1065.355 ±  2022.494  ms/op
+ * SyncPartitionBench.diffRangeBench          0.5    10000  avgt    3  3559.056 ±  3291.629  ms/op
+ * SyncPartitionBench.diffRangeBench          0.8    10000  avgt    3  8779.244 ± 44517.617  ms/op
+ * SyncPartitionBench.diffRangeBench          1.0    10000  avgt    3  3225.946 ±  2554.938  ms/op
  *
- Benchmark                          (diffRatio)  (times)  Mode  Cnt  Score    Error  Units
- SyncPartitionBench.diffRangeBench          0.0    10000  avgt    3  0.539 ±  1.183  ms/op
- SyncPartitionBench.diffRangeBench          0.2    10000  avgt    3  0.875 ±  1.059  ms/op
- SyncPartitionBench.diffRangeBench          0.5    10000  avgt    3  1.007 ±  2.012  ms/op
- SyncPartitionBench.diffRangeBench          0.8    10000  avgt    3  1.219 ±  2.082  ms/op
- SyncPartitionBench.diffRangeBench          1.0    10000  avgt    3  6.453 ± 15.021  ms/op
+ * After(Optimize):
+ * Benchmark                          (diffRatio)  (times)  Mode  Cnt  Score    Error  Units
+ *  SyncPartitionBench.diffRangeBench          0.0    10000  avgt    3  0.539 ±  1.183  ms/op
+ *  SyncPartitionBench.diffRangeBench          0.2    10000  avgt    3  0.875 ±  1.059  ms/op
+ *  SyncPartitionBench.diffRangeBench          0.5    10000  avgt    3  1.007 ±  2.012  ms/op
+ *  SyncPartitionBench.diffRangeBench          0.8    10000  avgt    3  1.219 ±  2.082  ms/op
+ *  SyncPartitionBench.diffRangeBench          1.0    10000  avgt    3  6.453 ± 15.021  ms/op
  */
 
 @BenchmarkMode(Mode.AverageTime)
@@ -77,20 +85,19 @@ public class SyncPartitionBench {
     @Param({"0.0", "0.2", "0.5", "0.8", "1.0"})
     public float diffRatio;
 
-    private Date startDate = TimeUtils.getTimeAsDate("2000-01-01 00:00:00");
-
-    private final static SimpleDateFormat DATETIME_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private static final Date START_DATETIME = TimeUtils.getTimeAsDate("2000-01-01 00:00:00");
+    private static final SimpleDateFormat DATETIME_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+    private static final Column PARTITION_COLUMN = new Column("k1", ScalarType.DATETIME);
 
     private final Map<String, Range<PartitionKey>> srcRangeMap = Maps.newHashMap();
     private final Map<String, Range<PartitionKey>> dstRangeMap = Maps.newHashMap();
-    private final static Column partitionColumn = new Column("k1", ScalarType.DATETIME) ;
 
     private static Range<PartitionKey> createRangeImpl(PartitionValue lowerValue, PartitionValue upperValue)
             throws AnalysisException {
         PartitionKey lowerBoundPartitionKey = PartitionKey.createPartitionKey(Collections.singletonList(lowerValue),
-                Collections.singletonList(partitionColumn));
+                Collections.singletonList(PARTITION_COLUMN));
         PartitionKey upperBoundPartitionKey = PartitionKey.createPartitionKey(Collections.singletonList(upperValue),
-                Collections.singletonList(partitionColumn));
+                Collections.singletonList(PARTITION_COLUMN));
         return Range.closedOpen(lowerBoundPartitionKey, upperBoundPartitionKey);
     }
 
@@ -113,13 +120,13 @@ public class SyncPartitionBench {
 
     @Setup
     public void setup() throws Exception {
-        Date curDate = startDate;
+        Date curDate = START_DATETIME;
         Date nextDate = nextHour(curDate, 1);
         for (int i = 0; i < times; i++) {
             String curDateFormat = dateToString(curDate);
             String nextDateFormat = dateToString(nextDate);
             srcRangeMap.put(curDateFormat, createRange(curDateFormat, nextDateFormat));
-            if ( (double)i / times < diffRatio) {
+            if (((double) i / times) < diffRatio) {
                 dstRangeMap.put(curDateFormat, createRange(curDateFormat, nextDateFormat));
             }
 
@@ -135,6 +142,6 @@ public class SyncPartitionBench {
 
     @Benchmark
     public void diffRangeBench() {
-        Map<String, Range<PartitionKey>> diffRangePartitions = SyncPartitionUtils.diffRange(srcRangeMap, dstRangeMap);
+        SyncPartitionUtils.diffRange(srcRangeMap, dstRangeMap);
     }
 }
