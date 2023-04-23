@@ -484,20 +484,8 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         for (auto& tablet_id : failed_tablet_ids) {
             ss << tablet_id << ",";
         }
-        if (_is_incremental_channel) {
-            ss << " on incremental channel";
-        }
-        ss << " _num_remaining_senders: " << _num_remaining_senders;
         LOG(INFO) << ss.str();
     }
-<<<<<<< HEAD
-    ss << " failed_tablets: ";
-    for (auto& tablet_id : failed_tablet_ids) {
-        ss << tablet_id << ",";
-    }
-    LOG(INFO) << ss.str();
-=======
->>>>>>> 0d2ba4f49 ([Refactor] Reduce log when disable replicated storage (#20304))
     return Status::OK();
 }
 
