@@ -110,6 +110,21 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testIfExpression() throws Exception {
+        String sql = "select if(1, 2, 3)";
+        assertPlanContains(sql, "<slot 2> : 2");
+
+        sql = "select if(v1, v2, v3) from t0";
+        assertPlanContains(sql, "<slot 4> : if(CAST(1: v1 AS BOOLEAN), 2: v2, 3: v3)");
+
+        sql = "select if(v1, v2) from t0";
+        assertPlanContains(sql, "<slot 4> : if(CAST(1: v1 AS BOOLEAN), 2: v2, NULL)");
+
+        sql = "select * from t0 where if (v1, v2, v3) = 2";
+        assertPlanContains(sql, "PREDICATES: if(CAST(1: v1 AS BOOLEAN), 2: v2, 3: v3) = 2");
+    }
+
+    @Test
     public void testDecimal() throws Exception {
         String sql = "select cast(tj as decimal32) from tall";
         analyzeFail(sql, "Unknown type: decimal32");
