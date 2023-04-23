@@ -63,7 +63,12 @@ public class SqlParser {
             }
         } catch (ParsingException e) {
             // we only support trino partial syntax, use StarRocks parser to parse now
-            LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
+            if (sql.toLowerCase().contains("select")) {
+                LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
+            }
+            return parseWithStarRocksDialect(sql, sessionVariable);
+        } catch (UnsupportedOperationException e) {
+            // For unsupported statement, use StarRocks parser to parse
             return parseWithStarRocksDialect(sql, sessionVariable);
         }
         if (statements.isEmpty() || statements.stream().anyMatch(Objects::isNull)) {
