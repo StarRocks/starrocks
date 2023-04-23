@@ -129,6 +129,9 @@ public class EsTable extends Table {
 
     // record the latest and recently exception when sync ES table metadata (mapping, shard location)
     private Throwable lastMetaDataSyncException = null;
+    // used for catalog to identify the remote table.
+    private String catalogName = null;
+    private String dbName = null;
 
     public EsTable() {
         super(TableType.ELASTICSEARCH);
@@ -138,6 +141,15 @@ public class EsTable extends Table {
                    Map<String, String> properties, PartitionInfo partitionInfo) throws DdlException {
         super(id, name, TableType.ELASTICSEARCH, schema);
         this.partitionInfo = partitionInfo;
+        validate(properties);
+    }
+
+    public EsTable(long id, String catalogName, String dbName, String name, List<Column> schema, Map<String, String> properties,
+                    PartitionInfo partitionInfo) throws DdlException {
+        super(id, name, TableType.ELASTICSEARCH, schema);
+        this.partitionInfo = partitionInfo;
+        this.catalogName = catalogName;
+        this.dbName = dbName;
         validate(properties);
     }
 
@@ -306,6 +318,16 @@ public class EsTable extends Table {
                 fullSchema.size(), 0, getName(), "");
         tTableDescriptor.setEsTable(tEsTable);
         return tTableDescriptor;
+    }
+
+    // TODO, identify the remote table that created after deleted
+    @Override
+    public String getUUID() {
+        if (!Strings.isNullOrEmpty(catalogName)) {
+            return String.join(".", catalogName, dbName, name);
+        } else {
+            return Long.toString(id);
+        }
     }
 
     @Override
