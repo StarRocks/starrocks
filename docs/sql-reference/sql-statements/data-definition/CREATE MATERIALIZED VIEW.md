@@ -161,7 +161,7 @@ SELECT select_expr[, select_expr ...]
   - HLL
   - PERCENTILE
 
-- Asynchronous materialized views created based on the StarRocks external catalog support the following data types:
+- Asynchronous materialized views created based on the StarRocks external catalogs support the following data types:
 
   - Hive Catalog
 
