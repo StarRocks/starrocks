@@ -267,14 +267,16 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
         stats->num_rows = rowset->num_rows();
         stats->byte_size = rowset->data_disk_size();
         stats->num_dels = 0;
-        for (int i = 0; i < rowset->num_segments(); i++) {
-            auto itr = del_vector_cardinality_by_rssid.find(rsid + i);
-            if (itr != del_vector_cardinality_by_rssid.end() && itr->second != -1) {
-                stats->num_dels += itr->second;
-            } else {
-                std::string msg = strings::Substitute("delvec not found for rowset $0 segment $1", rsid, i);
-                LOG(ERROR) << msg;
-                DCHECK(false);
+        if (unapplied_rowsets.find(rsid) == unapplied_rowsets.end()) {
+            for (int i = 0; i < rowset->num_segments(); i++) {
+                auto itr = del_vector_cardinality_by_rssid.find(rsid + i);
+                if (itr != del_vector_cardinality_by_rssid.end() && itr->second != -1) {
+                    stats->num_dels += itr->second;
+                } else {
+                    std::string msg = strings::Substitute("delvec not found for rowset $0 segment $1", rsid, i);
+                    LOG(ERROR) << msg;
+                    DCHECK(false);
+                }
             }
         }
         DCHECK_LE(stats->num_dels, stats->num_rows) << " tabletid:" << _tablet.tablet_id() << " rowset:" << rsid;
@@ -1791,7 +1793,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         std::lock_guard lg(_rowset_stats_lock);
         auto iter = _rowset_stats.find(rowset_id);
         if (iter == _rowset_stats.end()) {
-            string msg = strings::Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rowsetid=$1 $2",
+            string msg = strings::Substitute("inconsistent rowset_stats, rowset not found tablet=$0 rowsetid=$1",
                                              _tablet.tablet_id(), rowset_id);
             DCHECK(false) << msg;
             LOG(ERROR) << msg;
