@@ -35,7 +35,8 @@
       ```
 
 2. Use the default **[values.yaml](https://github.com/StarRocks/helm-charts/blob/main/charts/kube-starrocks/values.yaml)** of the Helm Chart to deploy the StarRocks Operator and StarRocks cluster, or create a YAML file to customize your deployment configurations.
-   1. Deploy with default configurations Run the following command to deploy the StarRocks Operator and the StarRocks cluster that consists of one FE and one BE:
+   1. Deploy with default configurations
+      Run the following command to deploy the StarRocks Operator and the StarRocks cluster that consists of one FE and one BE:
 
       ```Bash
       $ helm install starrocks starrocks-community/kube-starrocks
@@ -95,6 +96,6 @@ You can access the StarRocks cluster from inside and outside the Kubernetes clus
 - If you need to update the configurations of the StarRocks operator and StarRocks cluster, see [Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/).
 - If you need to uninstall the StarRocks Operator and StarRocks cluster, run the following command:
 
-```bash
-helm uninstall starrocks
-```
+  ```bash
+  helm uninstall starrocks
+  ```
