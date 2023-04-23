@@ -405,6 +405,7 @@ vectorized_functions = [
     [50311, 'monthname', 'VARCHAR', ['DATETIME'], 'TimeFunctions::month_name'],
     [50320, 'convert_tz', 'DATETIME', ['DATETIME', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::convert_tz', 'TimeFunctions::convert_tz_prepare', 'TimeFunctions::convert_tz_close'],
     [50330, 'utc_timestamp', 'DATETIME', [], 'TimeFunctions::utc_timestamp'],
+    [50331, 'utc_time', 'TIME', [], 'TimeFunctions::utc_time'],
     [50340, 'date_trunc', 'DATETIME', ['VARCHAR', 'DATETIME'], 'TimeFunctions::datetime_trunc', 'TimeFunctions::datetime_trunc_prepare', 'TimeFunctions::datetime_trunc_close'],
     [50350, 'date_trunc', 'DATE', ['VARCHAR', 'DATE'], 'TimeFunctions::date_trunc', 'TimeFunctions::date_trunc_prepare', 'TimeFunctions::date_trunc_close'],
     [50360, 'timestamp', 'DATETIME', ['DATETIME'], 'TimeFunctions::timestamp'],
@@ -514,6 +515,9 @@ vectorized_functions = [
     [80011, 'hll_cardinality', 'BIGINT', ['VARCHAR'], 'HyperloglogFunctions::hll_cardinality_from_string'],
     [80020, 'hll_hash', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_hash'],
     [80030, 'hll_empty', 'HLL', [], 'HyperloglogFunctions::hll_empty'],
+
+    [80040, 'hll_serialize', 'VARCHAR', ['HLL'], 'HyperloglogFunctions::hll_serialize'],
+    [80041, 'hll_deserialize', 'HLL', ['VARCHAR'], 'HyperloglogFunctions::hll_deserialize'],
 
     # bitmap function
     [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap', False],

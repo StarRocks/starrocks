@@ -37,7 +37,7 @@ array_sortby(<lambda function>, array0 [, array1...])
 
 - `array0`: the array you want to sort. It must be an array, array expression, or `null`. Elements in the array must be sortable.
 - `array1`: the sorting array used to sort `array0`. It must be an array, array expression, or `null`.
-- `lambda function`：the lambda expression used to generate the sorting array.
+- `lambda function`: the lambda expression used to generate the sorting array.
 
 ## Return value
 

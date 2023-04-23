@@ -19,8 +19,19 @@
 namespace starrocks::io {
 
 SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream,
-                                                     const std::string& filename, size_t size)
-        : _stream(stream), _size(size) {}
+                                                     const std::string& filename, size_t file_size)
+        : _stream(stream), _filename(filename), _file_size(file_size) {}
+
+void SharedBufferedInputStream::SharedBuffer::align(int64_t align_size, int64_t file_size) {
+    if (align_size != 0) {
+        offset = raw_offset / align_size * align_size;
+        int64_t end = std::min((raw_offset + raw_size + align_size - 1) / align_size * align_size, file_size);
+        size = end - offset;
+    } else {
+        offset = raw_offset;
+        size = raw_size;
+    }
+}
 
 Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& ranges) {
     if (ranges.size() == 0) {
@@ -36,26 +47,6 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
         }
         return a.size < b.size;
     });
-    if (_align_size != 0) {
-        const int64_t sz = _align_size;
-        // do alignment and compaction
-        for (int i = 0; i < check.size(); i++) {
-            int64_t start = check[i].offset / sz * sz;
-            int64_t end = std::min((check[i].offset + check[i].size + sz - 1) / sz * sz, _size);
-            check[i].offset = start;
-            check[i].size = end - start;
-        }
-        int j = 0;
-        for (int i = 1; i < check.size(); i++) {
-            if (check[i].offset <= (check[j].offset + check[j].size)) {
-                check[j].size = (check[i].offset + check[i].size - check[j].offset);
-            } else {
-                j++;
-                check[j] = check[i];
-            }
-        }
-        check.resize(j + 1);
-    }
 
     // check io range is not overlapped.
     for (size_t i = 1; i < check.size(); i++) {
@@ -67,8 +58,9 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
     std::vector<IORange> small_ranges;
     for (const IORange& r : check) {
         if (r.size > _options.max_buffer_size) {
-            SharedBuffer sb = SharedBuffer{.offset = r.offset, .size = r.size, .ref_count = 1};
-            _map.insert(std::make_pair(r.offset + r.size, sb));
+            SharedBuffer sb = SharedBuffer{.raw_offset = r.offset, .raw_size = r.size, .ref_count = 1};
+            sb.align(_align_size, _file_size);
+            _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
         } else {
             small_ranges.emplace_back(r);
         }
@@ -79,10 +71,11 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
             // merge from [unmerge, i-1]
             int64_t ref_count = (to - from + 1);
             int64_t end = (small_ranges[to].offset + small_ranges[to].size);
-            SharedBuffer sb = SharedBuffer{.offset = small_ranges[from].offset,
-                                           .size = end - small_ranges[from].offset,
+            SharedBuffer sb = SharedBuffer{.raw_offset = small_ranges[from].offset,
+                                           .raw_size = end - small_ranges[from].offset,
                                            .ref_count = ref_count};
-            _map.insert(std::make_pair(sb.offset + sb.size, sb));
+            sb.align(_align_size, _file_size);
+            _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
         };
 
         size_t unmerge = 0;
@@ -117,8 +110,8 @@ StatusOr<SharedBufferedInputStream::SharedBuffer*> SharedBufferedInputStream::_f
     return &sb;
 }
 
-Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) {
-    ASSIGN_OR_RETURN(auto ret, _find_shared_buffer(offset, *nbytes));
+Status SharedBufferedInputStream::_get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes) {
+    ASSIGN_OR_RETURN(auto ret, _find_shared_buffer(offset, nbytes));
     SharedBuffer& sb = *ret;
     if (sb.buffer.capacity() == 0) {
         SCOPED_RAW_TIMER(&_shared_io_timer);
@@ -127,7 +120,6 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
         sb.buffer.reserve(sb.size);
         RETURN_IF_ERROR(_stream->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
     }
-
     *buffer = sb.buffer.data() + offset - sb.offset;
     return Status::OK();
 }
@@ -154,14 +146,13 @@ Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64
     }
 
     const uint8_t* buffer = nullptr;
-    size_t nbytes = count;
-    RETURN_IF_ERROR(get_bytes(&buffer, offset, &nbytes));
+    RETURN_IF_ERROR(_get_bytes(&buffer, offset, count));
     strings::memcpy_inlined(out, buffer, count);
     return Status::OK();
 }
 
 StatusOr<int64_t> SharedBufferedInputStream::get_size() {
-    return _size;
+    return _file_size;
 }
 
 StatusOr<int64_t> SharedBufferedInputStream::read(void* data, int64_t count) {
@@ -175,8 +166,7 @@ StatusOr<std::string_view> SharedBufferedInputStream::peek(int64_t count) {
     ASSIGN_OR_RETURN(auto ret, _find_shared_buffer(_offset, count));
     if (ret->buffer.capacity() == 0) return Status::NotSupported("peek shared buffer empty");
     const uint8_t* buf = nullptr;
-    size_t nbytes = count;
-    RETURN_IF_ERROR(get_bytes(&buf, _offset, &nbytes));
+    RETURN_IF_ERROR(_get_bytes(&buf, _offset, count));
     return std::string_view((const char*)buf, count);
 }
 

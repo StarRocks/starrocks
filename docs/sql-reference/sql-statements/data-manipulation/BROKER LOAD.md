@@ -298,39 +298,39 @@ For information about how to choose a credential method for accessing AWS S3 and
 
 #### Google GCS
 
-If you choose Google GCS as your storage system, configure `StorageCredentialParams` as follows:
+If you choose Google GCS as your storage system, take one of the following actions:
 
-```SQL
-"fs.s3a.access.key" = "<gcs_access_key>",
-"fs.s3a.secret.key" = "<gcs_secret_key>",
-"fs.s3a.endpoint" = "<gcs_endpoint>"
-```
+- To choose the VM-based authentication method, configure `StorageCredentialParams` as follows:
 
-The following table describes the parameters you need to configure in `StorageCredentialParams`.
+  ```SQL
+  "gcp.gcs.use_compute_engine_service_account" = "true"
+  ```
 
-| Parameter         | Description                                                  |
-| ----------------- | ------------------------------------------------------------ |
-| fs.s3a.access.key | The Access Key that you can use to access your Google GCS bucket. |
-| fs.s3a.secret.key | The Secret Key that you can use to access your Google GCS bucket. |
-| fs.s3a.endpoint   | The endpoint that you can use to access your Google GCS bucket. |
+- To choose the service account-based authentication method, configure `StorageCredentialParams` as follows:
 
-> **NOTE**
->
-> Broker Load supports accessing Google GCS only according to the S3A protocol. Therefore, when you load data from Google GCS, you must replace the prefix in the GCS URI you pass as a file path into `DATA INFILE` with `s3a://`.
+  ```SQL
+  "gcp.gcs.service_account_email" = "<google_service_account_email>"
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>"
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
+  ```
 
-To create an Access/Secret key pair to access your Google GCS bucket, follow these steps:
+- To choose the impersonating-based authentication method, configure `StorageCredentialParams` as follows:
 
-1. Log in to [Google GCP](https://console.cloud.google.com/storage/settings).
+  - Make the VM instance to assume the service account:
 
-2. In the left-side navigation pane, choose **Google Cloud Storage** and then **Settings**.
+    ```SQL
+    "gcp.gcs.use_compute_engine_service_account" = "true"
+    "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
+    ```
 
-3. Click the **Interoperability** tab.
+  - Make a service account (named as meta service account) to assume another service account (named as data service account):
 
-4. (Optional.) If you have not enabled the Interoperability feature, click **Interoperable Access**.
-
-   ![img](../../../assets/BROKERLOAD-1.png)
-
-5. Click the **Create new Key** button to create an Access/Secret key pair.
+    ```SQL
+    "gcp.gcs.service_account_email" = "<google_service_account_email>"
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>"
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>"
+    "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
+    ```
 
 #### Other S3-compatible storage system
 
@@ -353,6 +353,131 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your AWS S3 bucket. |
 | aws.s3.access_key                | Yes      | The access key of your AWS IAM user. |
 | aws.s3.secret_key                | Yes      | The secret key of your AWS IAM user. |
+
+#### Microsoft Azure Storage
+
+##### Azure Blob Storage
+
+If you choose Blob Storage as your storage system, take one of the following actions:
+
+> **NOTE**
+>
+> When you load data from Blob Storage, you need to add a prefix to the file path (`DATA INFILE`). The prefix varies depending on the protocol that is used to access your storage account:
+>
+> - If your Blob Storage allows access only through HTTP, use `wasb` as the prefix, for example, `wasb://<container>@<storage_account>.``blob.core.windows.net/<path>/<file_name>/*`.
+> - If your Blob Storage allows access only through HTTPS, use `wasbs` as the prefix, for example, `wasbs://<container>@<storage_account>.``blob.core.windows.net/<path>/<file_name>/*`.
+
+- To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.blob.storage_account" = "<blob_storage_account_name>",
+  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**              | **Required** | **Description**                              |
+  | -------------------------- | ------------ | -------------------------------------------- |
+  | azure.blob.storage_account | Yes          | The username of your Blob Storage account.   |
+  | azure.blob.shared_key      | Yes          | The shared key of your Blob Storage account. |
+
+- To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.blob.account_name" = "<blob_storage_account_name>",
+  "azure.blob.container_name" = "<blob_container_name>",
+  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**             | **Required** | **Description**                                              |
+  | ------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.blob.account_name   | Yes          | The username of your Blob Storage account.                   |
+  | azure.blob.container_name | Yes          | The name of the blob container that stores your data.        |
+  | azure.blob.sas_token      | Yes          | The SAS token that is used to access your Blob Storage account. |
+
+##### Azure Data Lake Storage Gen1
+
+If you choose Data Lake Storage Gen1 as your storage system, take one of the following actions:
+
+- To choose the Managed Service Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls1.use_managed_service_identity" = "true"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                            | **Required** | **Description**                                              |
+  | ---------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.use_managed_service_identity | Yes          | Specifies whether to enable the Managed Service Identity authentication method. Set the value to `true`. |
+
+- To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls1.oauth2_client_id" = "<application_client_id>"
+  "azure.adls1.oauth2_credential" = "<application_client_credential>"
+  "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                 | **Required** | **Description**                                              |
+  | ----------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls1.oauth2_client_id  | Yes          | The client (application) ID of the .                         |
+  | azure.adls1.oauth2_credential | Yes          | The value of the new client (application) secret created.    |
+  | azure.adls1.oauth2_endpoint   | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
+
+##### Azure Data Lake Storage Gen2
+
+If you choose Data Lake Storage Gen2 as your storage system, take one of the following actions:
+
+- To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true"
+  "azure.adls2.oauth2_tenant_id" = "<service_principle_tenant_id>"
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_use_managed_identity | Yes          | Specifies whether to enable the Managed Identity authentication method. Set the value to `true`. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client (application) ID of the managed identity.         |
+
+- To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>"
+  "azure.adls2.shared_key" = "<shared_key>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**               | **Required** | **Description**                                              |
+  | --------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.storage_account | Yes          | The username of your Data Lake Storage Gen2 storage account. |
+  | azure.adls2.shared_key      | Yes          | The shared key of your Data Lake Storage Gen2 storage account. |
+
+- To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  "azure.adls2.oauth2_client_secret" = "<service_principle_client_secret>"
+  "azure.adls2.oauth2_client_endpoint" = "<service_principle_client_endpoint>"
+  ```
+
+  The following table describes the parameters you need to configure `in StorageCredentialParams`.
+
+  | **Parameter**                      | **Required** | **Description**                                              |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | Yes          | The client (application) ID of the service principal.        |
+  | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
+  | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
 
 ### `opt_properties`
 
@@ -384,7 +509,7 @@ The following parameters are supported:
 
   Suppose that you want to load a 1-GB data file on which two materialized views are created into a StarRocks cluster whose average load speed is 10 MB/s and maximum number of concurrent instances allowed per task is 3. The amount of time required for the data load is approximately 102 seconds.
 
-  (1 x 1024 x 3)/(10 x 3) = 102（second）
+  (1 x 1024 x 3)/(10 x 3) = 102 (second)
 
   For this example, we recommend that you set the timeout period to a value greater than 102 seconds.
 

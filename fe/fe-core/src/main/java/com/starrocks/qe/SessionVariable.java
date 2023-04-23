@@ -262,6 +262,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
 
+    public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
+
+
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -873,6 +876,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
     private boolean enableRewriteSimpleAggToMetaScan = false;
+
+    @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
+    private boolean enableStrictType = false;
 
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;
@@ -1919,6 +1925,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean getHDFSBackendSelectorScanRangeShuffle() {
         return hdfsBackendSelectorScanRangeShuffle;
+    }
+
+    public boolean isEnableStrictType() {
+        return enableStrictType;
+    }
+
+    public void setEnableStrictType(boolean val) {
+        this.enableStrictType = val;
     }
 
     // Serialize to thrift object

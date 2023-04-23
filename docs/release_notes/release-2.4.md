@@ -22,7 +22,7 @@ The following bugs are fixed:
 - Memory leak caused by a materialized view QeProcessorImpl issue. [#15699](https://github.com/StarRocks/starrocks/pull/15699)
 - The results of queries with `limit`  are inconsistent. [#13574](https://github.com/StarRocks/starrocks/pull/13574)
 - Memory leak caused by INSERT. [#14718](https://github.com/StarRocks/starrocks/pull/14718)
-- Primary Key tables executes Tablet Migration。[#13720](https://github.com/StarRocks/starrocks/pull/13720)
+- Primary Key tables executes Tablet Migration.[#13720](https://github.com/StarRocks/starrocks/pull/13720)
 - Broker Kerberos tickets timeout during Broker Load. [#16149](https://github.com/StarRocks/starrocks/pull/16149)
 - The `nullable` information is inferred incorrectly in the view of a table. [#15744](https://github.com/StarRocks/starrocks/pull/15744)
 

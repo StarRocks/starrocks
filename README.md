@@ -67,7 +67,7 @@ Learn more 👉🏻 [Introduction to StarRocks](https://www.starrocks.io/blog/in
    </a>
 </p>
 
-StarRocks’s streamlined architecture is mainly composed of two modules：Frontend (FE) and Backend (BE).  The entire system eliminates single points of failure through seamless and horizontal scaling of FE and BE, as well as replication of metadata and data. 
+StarRocks’s streamlined architecture is mainly composed of two modules: Frontend (FE) and Backend (BE).  The entire system eliminates single points of failure through seamless and horizontal scaling of FE and BE, as well as replication of metadata and data.
 
 <br>
 

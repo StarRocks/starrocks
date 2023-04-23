@@ -12,25 +12,24 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "types/bitmap_value.h"
+package com.starrocks.common.proc;
 
-#include <gtest/gtest.h>
+import com.starrocks.catalog.Database;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.server.GlobalStateMgr;
 
-#include "util/phmap/phmap.h"
+public class ProcUtils {
 
-namespace starrocks {
-
-class BitmapTest : public testing::Test {};
-
-TEST_F(BitmapTest, Constructor) {
-    BitmapValue bitmap;
-    for (size_t i = 0; i < 64; i++) {
-        bitmap.add(i);
+    static long getDbId(String dbIdOrName) throws AnalysisException {
+        try {
+            return Long.parseLong(dbIdOrName);
+        } catch (NumberFormatException e) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbIdOrName);
+            if (db == null) {
+                throw new AnalysisException("Unknown database id or name \"" + dbIdOrName + "\"");
+            }
+            return db.getId();
+        }
     }
 
-    BitmapValue shallow_bitmap(bitmap, false);
-    shallow_bitmap.add(64);
-    ASSERT_EQ(bitmap.cardinality(), 65);
 }
-
-} // namespace starrocks
