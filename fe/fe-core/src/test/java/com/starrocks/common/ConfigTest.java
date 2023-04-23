@@ -41,7 +41,7 @@ public class ConfigTest {
     }
 
     @Test
-    public void testGetConfigFromPropertyFile() throws DdlException {
+    public void testGetConfigFromPropertyFile() throws Exception {
         PatternMatcher matcher = PatternMatcher.createMysqlPattern("tablet_sched_slot_num_per_path", false);
         List<List<String>> configs = Config.getConfigInfo(matcher);
         Assert.assertEquals("3", configs.get(0).get(2));
