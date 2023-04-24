@@ -59,9 +59,9 @@
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
-    + [Deploy StarRocks in Docker](./administration/deploy_with_docker.md)
-    + [Compile StarRocks](./administration/Build_in_docker.md)
-    + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/sr_operator.md)
+    + Deploy StarRocks on Kubernetes
+      + [Deploy StarRocks with Operator](./administration/sr_operator.md)
+      + [Deploy StarRocks with Helm](./administration/helm.md)
     + [Deploy CN](./administration/deploy_cn.md)
     + [Deploy Broker](./administration/deploy_broker.md)
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
