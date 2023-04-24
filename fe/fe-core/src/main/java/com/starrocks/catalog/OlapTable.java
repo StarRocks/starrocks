@@ -1104,6 +1104,15 @@ public class OlapTable extends Table {
         return Sets.newHashSet(nameToPartition.keySet());
     }
 
+    public Set<String> getValidPartitionNames(int partitionTTLNumber) {
+        // ess than 0 means not set
+        if (partitionTTLNumber < 0) {
+            return getPartitionNames();
+        }
+        int startIndex = Math.max(0, nameToPartition.size() - partitionTTLNumber);
+        return nameToPartition.keySet().stream().skip(startIndex).collect(Collectors.toSet());
+    }
+
     public Set<String> getBfColumns() {
         return bfColumns;
     }
