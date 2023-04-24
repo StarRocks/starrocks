@@ -191,7 +191,9 @@ static Status do_writev_at(int fd, const string& filename, uint64_t offset, cons
 class PosixWritableFile : public WritableFile {
 public:
     PosixWritableFile(std::string filename, int fd, uint64_t filesize, bool sync_on_close)
-            : _filename(std::move(filename)), _fd(fd), _sync_on_close(sync_on_close), _filesize(filesize) {}
+            : _filename(std::move(filename)), _fd(fd), _sync_on_close(sync_on_close), _filesize(filesize) {
+        FileSystem::on_file_write_open(this);
+    }
 
     ~PosixWritableFile() override { WARN_IF_ERROR(close(), "Failed to close file, file=" + _filename); }
 
@@ -232,6 +234,7 @@ public:
         if (_closed) {
             return Status::OK();
         }
+        FileSystem::on_file_write_close(this);
         Status s;
 
         // If we've allocated more space than we used, truncate to the
