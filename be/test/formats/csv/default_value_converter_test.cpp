@@ -48,7 +48,7 @@ TEST(DefaultValueConverterTest, test_array_nested_with_map) {
     t.children[0].children.emplace_back(TYPE_INT);
 
     auto conv = csv::get_converter(t, true);
-    EXPECT_EQ(nullptr, conv);
+    EXPECT_TRUE(nullptr != conv);
 }
 
 } // namespace starrocks::csv
