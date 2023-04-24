@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -88,5 +87,9 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
         return "LogicalCTEProduceOperator{" +
                 "cteId='" + cteId + '\'' +
                 '}';
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalCTEProduceOperator, LogicalValuesOperator.Builder> {
     }
 }

@@ -50,17 +50,8 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
         partitionColumns.addAll(hiveTable.getPartitionColumnNames());
     }
 
-    private LogicalHiveScanOperator(LogicalHiveScanOperator.Builder builder) {
-        super(OperatorType.LOGICAL_HIVE_SCAN,
-                builder.table,
-                builder.colRefToColumnMetaMap,
-                builder.columnMetaToColRefMap,
-                builder.getLimit(),
-                builder.getPredicate(),
-                builder.getProjection());
-
-        this.predicates = builder.predicates;
-        this.partitionColumns = builder.partitionColumns;
+    private LogicalHiveScanOperator() {
+        super(OperatorType.LOGICAL_HIVE_SCAN);
     }
 
     @Override
@@ -88,20 +79,13 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalHiveScanOperator, LogicalHiveScanOperator.Builder> {
-        private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
-        private Set<String> partitionColumns = Sets.newHashSet();
-
-        @Override
-        public LogicalHiveScanOperator build() {
-            return new LogicalHiveScanOperator(this);
-        }
 
         @Override
         public LogicalHiveScanOperator.Builder withOperator(LogicalHiveScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.predicates = scanOperator.predicates.clone();
-            this.partitionColumns = scanOperator.partitionColumns;
+            builder.predicates = scanOperator.predicates.clone();
+            builder.partitionColumns = scanOperator.partitionColumns;
             return this;
         }
     }

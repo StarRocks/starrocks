@@ -42,6 +42,9 @@ public abstract class LogicalSetOperator extends LogicalOperator {
         this.childOutputColumns = childOutputColumns;
     }
 
+    public LogicalSetOperator(OperatorType opType) {
+        super(opType);
+    }
     public List<ColumnRefOperator> getOutputColumnRefOp() {
         return outputColumnRefOp;
     }
@@ -86,25 +89,21 @@ public abstract class LogicalSetOperator extends LogicalOperator {
 
     public abstract static class Builder<O extends LogicalSetOperator, B extends LogicalSetOperator.Builder>
             extends Operator.Builder<O, B> {
-        protected List<ColumnRefOperator> outputColumnRefOp;
-        protected List<List<ColumnRefOperator>> childOutputColumns;
-
         @Override
         public B withOperator(O setOperator) {
             super.withOperator(setOperator);
-            this.outputColumnRefOp = setOperator.outputColumnRefOp;
-            this.childOutputColumns = setOperator.childOutputColumns;
+            builder.outputColumnRefOp = setOperator.outputColumnRefOp;
+            builder.childOutputColumns = setOperator.childOutputColumns;
             return (B) this;
         }
 
-        public B setOutputColumnRefOp(
-                List<ColumnRefOperator> outputColumnRefOp) {
-            this.outputColumnRefOp = outputColumnRefOp;
+        public B setOutputColumnRefOp(List<ColumnRefOperator> outputColumnRefOp) {
+            builder.outputColumnRefOp = outputColumnRefOp;
             return (B) this;
         }
 
         public B setChildOutputColumns(List<List<ColumnRefOperator>> childOutputColumns) {
-            this.childOutputColumns = childOutputColumns;
+            builder.childOutputColumns = childOutputColumns;
             return (B) this;
         }
     }

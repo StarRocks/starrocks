@@ -43,14 +43,14 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public abstract class LogicalScanOperator extends LogicalOperator {
-    protected final Table table;
+    protected Table table;
 
     /**
      * colRefToColumnMetaMap is the map from column reference to StarRocks column in meta
      * The ColumnRefMap contains Scan output columns and predicate used columns
      */
-    protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
-    protected final ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap;
+    protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
+    protected ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap;
     protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
     protected Set<String> partitionColumns = Sets.newHashSet();
 
@@ -67,6 +67,10 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
         this.columnMetaToColRefMap = ImmutableMap.copyOf(columnMetaToColRefMap);
         buildColumnFilters(predicate);
+    }
+
+    protected LogicalScanOperator(OperatorType type) {
+        super(type);
     }
 
     public Table getTable() {
@@ -162,34 +166,28 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     public abstract static class Builder<O extends LogicalScanOperator, B extends LogicalScanOperator.Builder>
             extends Operator.Builder<O, B> {
-        protected Table table;
-        protected ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
-        protected ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap;
-        protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
-
         @Override
         public B withOperator(O scanOperator) {
             super.withOperator(scanOperator);
-
-            this.table = scanOperator.table;
-            this.colRefToColumnMetaMap = scanOperator.colRefToColumnMetaMap;
-            this.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
-            this.columnFilters = scanOperator.columnFilters;
+            builder.table = scanOperator.table;
+            builder.colRefToColumnMetaMap = scanOperator.colRefToColumnMetaMap;
+            builder.columnMetaToColRefMap = scanOperator.columnMetaToColRefMap;
+            builder.columnFilters = scanOperator.columnFilters;
             return (B) this;
         }
 
         public B setColRefToColumnMetaMap(ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-            this.colRefToColumnMetaMap = colRefToColumnMetaMap;
+            builder.colRefToColumnMetaMap = colRefToColumnMetaMap;
             return (B) this;
         }
 
         public B setColumnMetaToColRefMap(ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap) {
-            this.columnMetaToColRefMap = columnMetaToColRefMap;
+            builder.columnMetaToColRefMap = columnMetaToColRefMap;
             return (B) this;
         }
 
         public B setTable(Table table) {
-            this.table = table;
+            builder.table = table;
             return (B) this;
         }
     }

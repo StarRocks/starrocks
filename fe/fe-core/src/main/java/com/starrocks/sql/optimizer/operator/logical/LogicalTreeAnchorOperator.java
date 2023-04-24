@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -51,5 +50,9 @@ public class LogicalTreeAnchorOperator extends LogicalOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitLogicalTreeAnchor(optExpression, context);
+    }
+
+    public static class Builder
+            extends LogicalOperator.Builder<LogicalTreeAnchorOperator, LogicalAggregationOperator.Builder> {
     }
 }

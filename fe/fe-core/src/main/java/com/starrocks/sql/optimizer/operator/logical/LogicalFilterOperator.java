@@ -32,8 +32,8 @@ public class LogicalFilterOperator extends LogicalOperator {
         this.predicate = predicate;
     }
 
-    private LogicalFilterOperator(Builder builder) {
-        super(OperatorType.LOGICAL_FILTER, builder.getLimit(), builder.getPredicate(), builder.getProjection());
+    private LogicalFilterOperator() {
+        super(OperatorType.LOGICAL_FILTER);
     }
 
     public ScalarOperator getPredicate() {
@@ -80,15 +80,5 @@ public class LogicalFilterOperator extends LogicalOperator {
 
     public static class Builder
             extends LogicalOperator.Builder<LogicalFilterOperator, LogicalFilterOperator.Builder> {
-        @Override
-        public LogicalFilterOperator build() {
-            return new LogicalFilterOperator(this);
-        }
-
-        @Override
-        public LogicalFilterOperator.Builder withOperator(LogicalFilterOperator operator) {
-            super.withOperator(operator);
-            return this;
-        }
     }
 }

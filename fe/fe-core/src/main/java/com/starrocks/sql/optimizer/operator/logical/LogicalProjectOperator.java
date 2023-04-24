@@ -32,7 +32,7 @@ import java.util.Map;
 import java.util.Objects;
 
 public final class LogicalProjectOperator extends LogicalOperator {
-    private final Map<ColumnRefOperator, ScalarOperator> columnRefMap;
+    private Map<ColumnRefOperator, ScalarOperator> columnRefMap;
 
     public LogicalProjectOperator(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
         super(OperatorType.LOGICAL_PROJECT);
@@ -43,6 +43,10 @@ public final class LogicalProjectOperator extends LogicalOperator {
         super(OperatorType.LOGICAL_PROJECT);
         this.columnRefMap = columnRefMap;
         this.limit = limit;
+    }
+
+    public LogicalProjectOperator() {
+        super(OperatorType.LOGICAL_PROJECT);
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {
@@ -103,17 +107,16 @@ public final class LogicalProjectOperator extends LogicalOperator {
     }
 
     public static class Builder extends Operator.Builder<LogicalProjectOperator, LogicalProjectOperator.Builder> {
-        private Map<ColumnRefOperator, ScalarOperator> columnRefMap;
 
         @Override
         public Builder withOperator(LogicalProjectOperator operator) {
             super.withOperator(operator);
-            this.columnRefMap = operator.getColumnRefMap();
+            builder.columnRefMap = operator.getColumnRefMap();
             return this;
         }
 
         public Builder setColumnRefMap(Map<ColumnRefOperator, ScalarOperator> columnRefMap) {
-            this.columnRefMap = columnRefMap;
+            builder.columnRefMap = columnRefMap;
             return this;
         }
 
@@ -121,11 +124,6 @@ public final class LogicalProjectOperator extends LogicalOperator {
         public Builder setProjection(Projection projection) {
             Preconditions.checkState(false, "Shouldn't set projection to Project Operator");
             return this;
-        }
-
-        @Override
-        public LogicalProjectOperator build() {
-            return new LogicalProjectOperator(columnRefMap, this.limit);
         }
     }
 }

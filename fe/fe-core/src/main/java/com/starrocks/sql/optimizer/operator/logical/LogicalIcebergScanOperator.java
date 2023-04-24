@@ -45,16 +45,8 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         Preconditions.checkState(table instanceof IcebergTable);
     }
 
-    private LogicalIcebergScanOperator(LogicalIcebergScanOperator.Builder builder) {
-        super(OperatorType.LOGICAL_ICEBERG_SCAN,
-                builder.table,
-                builder.colRefToColumnMetaMap,
-                builder.columnMetaToColRefMap,
-                builder.getLimit(),
-                builder.getPredicate(),
-                builder.getProjection());
-
-        this.predicates = builder.predicates;
+    private LogicalIcebergScanOperator() {
+        super(OperatorType.LOGICAL_ICEBERG_SCAN);
     }
 
     @Override
@@ -74,18 +66,12 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalIcebergScanOperator, LogicalIcebergScanOperator.Builder> {
-        private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
-
-        @Override
-        public LogicalIcebergScanOperator build() {
-            return new LogicalIcebergScanOperator(this);
-        }
 
         @Override
         public LogicalIcebergScanOperator.Builder withOperator(LogicalIcebergScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.predicates = scanOperator.predicates.clone();
+            builder.predicates = scanOperator.predicates.clone();
             return this;
         }
     }

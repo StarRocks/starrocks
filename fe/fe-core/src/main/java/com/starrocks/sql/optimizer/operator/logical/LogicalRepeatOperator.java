@@ -31,9 +31,9 @@ import java.util.Map;
 import java.util.Objects;
 
 public class LogicalRepeatOperator extends LogicalOperator {
-    private final List<ColumnRefOperator> outputGrouping;
-    private final List<List<ColumnRefOperator>> repeatColumnRefList;
-    private final List<List<Long>> groupingIds;
+    private List<ColumnRefOperator> outputGrouping;
+    private List<List<ColumnRefOperator>> repeatColumnRefList;
+    private List<List<Long>> groupingIds;
 
     public LogicalRepeatOperator(List<ColumnRefOperator> outputGrouping,
                                  List<List<ColumnRefOperator>> repeatColumnRefList,
@@ -44,11 +44,8 @@ public class LogicalRepeatOperator extends LogicalOperator {
         this.groupingIds = groupingIds;
     }
 
-    private LogicalRepeatOperator(LogicalRepeatOperator.Builder builder) {
-        super(OperatorType.LOGICAL_REPEAT, builder.getLimit(), builder.getPredicate(), builder.getProjection());
-        this.outputGrouping = builder.outputGrouping;
-        this.repeatColumnRefList = builder.repeatColumnRefList;
-        this.groupingIds = builder.groupingIds;
+    private LogicalRepeatOperator() {
+        super(OperatorType.LOGICAL_REPEAT);
     }
 
     public List<ColumnRefOperator> getOutputGrouping() {
@@ -116,21 +113,13 @@ public class LogicalRepeatOperator extends LogicalOperator {
 
     public static class Builder
             extends LogicalOperator.Builder<LogicalRepeatOperator, LogicalRepeatOperator.Builder> {
-        private List<ColumnRefOperator> outputGrouping;
-        private List<List<ColumnRefOperator>> repeatColumnRefList;
-        private List<List<Long>> groupingIds;
-
-        @Override
-        public LogicalRepeatOperator build() {
-            return new LogicalRepeatOperator(this);
-        }
 
         @Override
         public LogicalRepeatOperator.Builder withOperator(LogicalRepeatOperator operator) {
             super.withOperator(operator);
-            this.outputGrouping = operator.outputGrouping;
-            this.repeatColumnRefList = operator.repeatColumnRefList;
-            this.groupingIds = operator.groupingIds;
+            builder.outputGrouping = operator.outputGrouping;
+            builder.repeatColumnRefList = operator.repeatColumnRefList;
+            builder.groupingIds = operator.groupingIds;
             return this;
         }
     }
