@@ -75,6 +75,9 @@ jobs:
   thirdparty-update-image:
     runs-on: self-hosted
     name: Thirdparty Update Image
+    if: github.event.pull_request.merged == true &&
+      !contains(github.event.pull_request.title, 'cherry-pick') &&
+      !contains(github.event.pull_request.title, 'backport')
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
