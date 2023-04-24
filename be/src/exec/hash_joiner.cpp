@@ -240,7 +240,6 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
 
     if (_phase == HashJoinPhase::PROBE || !_hash_join_prober->probe_chunk_empty()) {
         ASSIGN_OR_RETURN(chunk, _hash_join_prober->probe_chunk(state, &ht));
-        RETURN_IF_ERROR(_filter_probe_output_chunk(chunk));
         return chunk;
     }
 
@@ -256,8 +255,6 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
         if (!has_remain) {
             enter_eos_phase();
         }
-
-        RETURN_IF_ERROR(_filter_post_probe_output_chunk(chunk));
 
         return chunk;
     }
