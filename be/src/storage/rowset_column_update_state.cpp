@@ -504,8 +504,9 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, const P
         // 4.5 generate delta columngroup
         _rssid_to_delta_column_group[each.first] = std::make_shared<DeltaColumnGroup>();
         // must record unique column id in delta column group
-        _rssid_to_delta_column_group[each.first]->init(latest_applied_version.major() + 1, unique_update_column_ids,
-                                                       delta_column_group_writer[each.first]->segment_path());
+        _rssid_to_delta_column_group[each.first]->init(
+                latest_applied_version.major() + 1, unique_update_column_ids,
+                file_name(delta_column_group_writer[each.first]->segment_path()));
     }
     cost_str << " [generate delta column group] " << watch.elapsed_time();
     watch.reset();

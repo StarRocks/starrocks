@@ -39,10 +39,10 @@ public:
         }
         return -1;
     }
-    std::string column_file() const { return _column_file; }
+    // `_column_file` contains `$1_$2_$3.cols`, $1 is rowsetid, $2 is segment id. $3 is version
+    std::string column_file(const std::string& dir_path) const { return dir_path + "/" + _column_file; }
     std::vector<uint32_t> column_ids() const { return _column_ids; }
     int64_t version() const { return _version; }
-    void rename_column_file(const std::string& dir, RowsetId new_rowset_id, int segment_id);
 
     std::string debug_string() {
         std::stringstream ss;
@@ -56,6 +56,8 @@ public:
     }
 
     size_t memory_usage() const { return _memory_usage; }
+
+    const std::string& relative_column_file() const { return _column_file; }
 
 private:
     void _calc_memory_usage();

@@ -411,7 +411,7 @@ TEST_F(TabletMetaManagerTest, delta_column_group_operations) {
         int segid = (rand() % 20) + 1;
         CHECK(TabletMetaManager::get_delta_column_group(meta, tablet_id, segid, i, &dcgs).ok());
         ASSERT_EQ(dcgs.size(), i);
-        ASSERT_EQ(dcgs[0]->column_file(), "111.cols");
+        ASSERT_EQ(dcgs[0]->column_file("111"), "111/111.cols");
         ASSERT_EQ(dcgs[0]->get_column_idx(10), 1);
         ASSERT_EQ(dcgs[0]->get_column_idx(11), -1);
         ASSERT_EQ(dcgs[0]->version(), i);
@@ -423,7 +423,7 @@ TEST_F(TabletMetaManagerTest, delta_column_group_operations) {
         int segid = (rand() % 20) + 1;
         CHECK(TabletMetaManager::scan_delta_column_group(meta, tablet_id, segid, i, i + len, &dcgs).ok());
         ASSERT_EQ(dcgs.size(), len);
-        ASSERT_EQ(dcgs[0]->column_file(), "111.cols");
+        ASSERT_EQ(dcgs[0]->column_file("111"), "111/111.cols");
         ASSERT_EQ(dcgs[0]->get_column_idx(10), 1);
         ASSERT_EQ(dcgs[0]->get_column_idx(11), -1);
         ASSERT_EQ(dcgs[0]->version(), i + len);

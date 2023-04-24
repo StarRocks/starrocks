@@ -52,6 +52,7 @@
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
+#include "storage/utils.h"
 #include "util/crc32c.h"
 #include "util/slice.h"
 
@@ -375,8 +376,8 @@ Status Segment::new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** it
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg) {
-    return Segment::open(_fs, dcg.column_file(), 0, TabletSchema::create_with_uid(*_tablet_schema, dcg.column_ids()),
-                         nullptr);
+    return Segment::open(_fs, dcg.column_file(parent_name(_fname)), 0,
+                         TabletSchema::create_with_uid(*_tablet_schema, dcg.column_ids()), nullptr);
 }
 
 } // namespace starrocks

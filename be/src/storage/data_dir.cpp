@@ -523,6 +523,12 @@ void DataDir::perform_path_scan() {
                         continue;
                     }
                     for (const auto& rowset_file : rowset_files) {
+                        StringPiece sp(rowset_file);
+                        if (sp.ends_with(".cols")) {
+                            // ".col" isn't gc here, because it links with delta column group,
+                            // So it will be removed when delta column group is removed from rocksdb
+                            continue;
+                        }
                         std::string rowset_file_path = tablet_schema_hash_path + "/" + rowset_file;
                         _all_check_paths.insert(rowset_file_path);
                     }

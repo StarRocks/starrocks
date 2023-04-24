@@ -224,6 +224,8 @@ public:
     // TODO should we rename the method to remove_files() to be more specific?
     Status remove();
 
+    Status remove_delta_column_group();
+
     // close to clear the resource owned by rowset
     // including: open files, indexes and so on
     // NOTICE: can not call this function in multithreads
@@ -366,7 +368,7 @@ private:
 
     Status _remove_delta_column_group_files(std::shared_ptr<FileSystem> fs);
 
-    Status _link_delta_column_group_files(const std::string& dir, RowsetId new_rowset_id);
+    Status _link_delta_column_group_files(const std::string& dir);
 
     std::vector<SegmentSharedPtr> _segments;
 };

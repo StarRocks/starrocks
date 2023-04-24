@@ -650,4 +650,25 @@ TEST_F(RowsetColumnPartialUpdateTest, test_schema_change) {
     }
 }
 
+TEST_F(RowsetColumnPartialUpdateTest, test_full_clone2) {
+    const int N = 100;
+    auto tablet = create_tablet(rand(), rand());
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+    int64_t version = 1;
+    int64_t version_before_partial_update = 1;
+    prepare_tablet(this, tablet, version, version_before_partial_update, N);
+
+    {
+        // clone from _tablet to new_tablet
+        auto new_tablet = create_tablet(rand(), rand());
+        ASSERT_EQ(1, new_tablet->updates()->version_history_count());
+        ASSERT_OK(full_clone(tablet, version, new_tablet));
+        // delete old tablet
+        fs::remove_all(tablet->schema_hash_path());
+        ASSERT_TRUE(check_tablet(new_tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
+            return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+        }));
+    }
+}
+
 } // namespace starrocks
