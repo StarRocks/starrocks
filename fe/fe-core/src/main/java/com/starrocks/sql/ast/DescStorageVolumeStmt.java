@@ -20,7 +20,7 @@ import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 
 public class DescStorageVolumeStmt extends ShowStmt {
-    private final String svName;
+    private final String storageVolumeName;
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
@@ -32,13 +32,13 @@ public class DescStorageVolumeStmt extends ShowStmt {
                     .addColumn(new Column("Comment", ScalarType.createVarchar(20)))
                     .build();
 
-    public DescStorageVolumeStmt(String svName, NodePosition pos) {
+    public DescStorageVolumeStmt(String storageVolumeName, NodePosition pos) {
         super(pos);
-        this.svName = svName;
+        this.storageVolumeName = storageVolumeName;
     }
 
     public String getName() {
-        return svName;
+        return storageVolumeName;
     }
 
     @Override
@@ -49,7 +49,7 @@ public class DescStorageVolumeStmt extends ShowStmt {
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
-        sb.append("DESC STORAGE VOLUME ").append(svName);
+        sb.append("DESC STORAGE VOLUME ").append(storageVolumeName);
         return sb.toString();
     }
 }

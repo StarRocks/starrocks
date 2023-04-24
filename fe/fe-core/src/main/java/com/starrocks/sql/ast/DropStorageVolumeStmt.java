@@ -18,17 +18,17 @@ import com.starrocks.sql.parser.NodePosition;
 
 public class DropStorageVolumeStmt extends DdlStmt {
     private final boolean ifExists;
-    private final String svName;
+    private final String storageVolumeName;
 
     public DropStorageVolumeStmt(boolean ifExists,
-                             String svName, NodePosition pos) {
+                                 String storageVolumeName, NodePosition pos) {
         super(pos);
         this.ifExists = ifExists;
-        this.svName = svName;
+        this.storageVolumeName = storageVolumeName;
     }
 
     public String getName() {
-        return svName;
+        return storageVolumeName;
     }
 
     @Override
@@ -43,7 +43,7 @@ public class DropStorageVolumeStmt extends DdlStmt {
         if (ifExists) {
             sb.append("IF EXISTS ");
         }
-        sb.append("\'" + svName + "\'");
+        sb.append(storageVolumeName);
         return sb.toString();
     }
 }

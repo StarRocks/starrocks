@@ -3212,7 +3212,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         String storageType = ((Identifier) visit(context.typeDesc().identifier())).getValue();
 
-        List<StarRocksParser.StringContext> locationList = context.storageLocationsDesc().stringList().string();
+        List<StarRocksParser.StringContext> locationList = context.locationsDesc().stringList().string();
         List<String> locations = new ArrayList<>();
         for (StarRocksParser.StringContext location : locationList) {
             locations.add(((StringLiteral) visit(location)).getValue());

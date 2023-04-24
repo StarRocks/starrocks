@@ -701,15 +701,15 @@ resumeWarehouseStatement
 
 createStorageVolumeStatement
     : CREATE STORAGE VOLUME (IF NOT EXISTS)? storageVolumeName=identifierOrString typeDesc propertyList
-    storageLocationsDesc enabledDesc? comment?
+    locationsDesc enabledDesc? comment?
     ;
 
 typeDesc
     : TYPE EQ identifier
     ;
 
-storageLocationsDesc
-    : STORAGE_LOCATIONS EQ stringList
+locationsDesc
+    : LOCATIONS EQ stringList
     ;
 
 enabledDesc
@@ -2444,7 +2444,7 @@ nonReserved
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW
     | SAMPLE | SCHEDULER | SECOND | SECURITY | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
-    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME | STORAGE_LOCATION
+    | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION | TRACE
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES

@@ -34,21 +34,21 @@ public class StorageVolumeTest {
     @Test
     public void testCreateStorageVolumeParserAndAnalyzer() {
         String sql = "CREATE STORAGE VOLUME storage_volume_1 type = s3 (\"aws.s3.region\"=\"us-west-2\") " +
-                "STORAGE_LOCATIONS = ('s3://xxx', 's3://yyy')";
+                "LOCATIONS = ('s3://xxx', 's3://yyy')";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof CreateStorageVolumeStmt);
-        Assert.assertEquals("CREATE STORAGE VOLUME 'storage_volume_1' TYPE = s3 (\"aws.s3.region\"" +
-                        " = \"us-west-2\") STORAGE_LOCATIONS = ('s3://xxx', 's3://yyy') ENABLED = true",
+        Assert.assertEquals("CREATE STORAGE VOLUME storage_volume_1 TYPE = s3 (\"aws.s3.region\"" +
+                        " = \"us-west-2\") LOCATIONS = ('s3://xxx', 's3://yyy') ENABLED = true",
                 stmt.toSql());
 
         sql = "CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_1 type = s3 (\"aws.s3.region\"=\"us-west-2\", " +
                 "\"aws.s3.endpoint\"=\"endpoint\") " +
-                "STORAGE_LOCATIONS = ('s3://xxx') ENABLED=FALSE COMMENT 'comment'";
+                "LOCATIONS = ('s3://xxx') ENABLED=FALSE COMMENT 'comment'";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof CreateStorageVolumeStmt);
-        Assert.assertEquals("CREATE STORAGE VOLUME IF NOT EXISTS 'storage_volume_1' " +
+        Assert.assertEquals("CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_1 " +
                 "TYPE = s3 (\"aws.s3.endpoint\" = \"endpoint\", \"aws.s3.region\" = \"us-west-2\") " +
-                "STORAGE_LOCATIONS = ('s3://xxx') " + "ENABLED = false COMMENT = comment", stmt.toSql());
+                "LOCATIONS = ('s3://xxx') " + "ENABLED = false COMMENT = comment", stmt.toSql());
     }
 
     @Test
@@ -84,12 +84,12 @@ public class StorageVolumeTest {
         String sql = "DROP STORAGE VOLUME storage_volume_1";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof DropStorageVolumeStmt);
-        Assert.assertEquals("DROP STORAGE VOLUME 'storage_volume_1'", stmt.toSql());
+        Assert.assertEquals("DROP STORAGE VOLUME storage_volume_1", stmt.toSql());
 
         sql = "DROP STORAGE VOLUME IF EXISTS storage_volume_1";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof DropStorageVolumeStmt);
-        Assert.assertEquals("DROP STORAGE VOLUME IF EXISTS 'storage_volume_1'", stmt.toSql());
+        Assert.assertEquals("DROP STORAGE VOLUME IF EXISTS storage_volume_1", stmt.toSql());
     }
 
     @Test

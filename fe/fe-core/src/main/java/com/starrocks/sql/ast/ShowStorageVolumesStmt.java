@@ -29,7 +29,7 @@ public class ShowStorageVolumesStmt extends ShowStmt {
                     .addColumn(new Column("Name", ScalarType.createVarchar(256)))
                     .addColumn(new Column("Type", ScalarType.createVarchar(20)))
                     .addColumn(new Column("IsDefault", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Location", ScalarType.createVarchar(20)))
+                    .addColumn(new Column("Locations", ScalarType.createVarchar(20)))
                     .addColumn(new Column("Params", ScalarType.createVarchar(256)))
                     .addColumn(new Column("Comment", ScalarType.createVarchar(20)))
                     .build();

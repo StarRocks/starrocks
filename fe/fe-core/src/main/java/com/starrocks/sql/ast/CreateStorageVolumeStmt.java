@@ -73,11 +73,11 @@ public class CreateStorageVolumeStmt extends DdlStmt {
         if (ifNotExists) {
             sb.append("IF NOT EXISTS ");
         }
-        sb.append("'").append(storageVolumeName).append("'");
+        sb.append(storageVolumeName);
         sb.append(" TYPE = ").append(storageVolumeType);
         sb.append(" (").
                 append(new PrintableMap<>(storageParams, "=", true, false)).append(")");
-        sb.append(" STORAGE_LOCATIONS = (");
+        sb.append(" LOCATIONS = (");
         for (int i = 0; i < locations.size(); ++i) {
             if (i == 0) {
                 sb.append("'").append(locations.get(i)).append("'");
