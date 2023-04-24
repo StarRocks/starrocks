@@ -14,11 +14,11 @@
 
 package com.starrocks.storagevolume.credential.aws;
 
-public class AwsAssumeIamRoleCredential implements AWSCredential {
+public class AWSAssumeIamRoleCredential implements AWSCredential {
     private String iamRoleArn;
     private String externalId;
 
-    public AwsAssumeIamRoleCredential(String iamRoleArn, String externalId) {
+    public AWSAssumeIamRoleCredential(String iamRoleArn, String externalId) {
         this.iamRoleArn = iamRoleArn;
         this.externalId = externalId;
     }

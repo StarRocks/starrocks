@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.storagevolume.storageparams;
+package com.starrocks.storagevolume;
 
+import com.starrocks.storagevolume.HDFSStorageParams;
 import com.starrocks.storagevolume.credential.hdfs.HDFSCredential;
 import com.starrocks.storagevolume.credential.hdfs.HDFSKerberosCredential;
 import com.starrocks.storagevolume.credential.hdfs.HDFSSimpleCredential;

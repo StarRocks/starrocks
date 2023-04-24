@@ -12,9 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.storagevolume.storageparams;
+package com.starrocks.storagevolume;
 
-import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.storagevolume.credential.hdfs.HDFSCredential;
 import com.starrocks.storagevolume.credential.hdfs.HDFSKerberosCredential;
 import com.starrocks.storagevolume.credential.hdfs.HDFSSimpleCredential;
@@ -42,6 +41,7 @@ public class HDFSStorageParams implements StorageParams {
     }
 
     private HDFSCredential buildCredential(Map<String, String> params) {
+        // TODO: validate the params
         String authentication = params.get(HDFS_AUTHENTICATION);
         Map<String, String> haConfigurations = new HashMap<>();
         haConfigurations.putAll(params);

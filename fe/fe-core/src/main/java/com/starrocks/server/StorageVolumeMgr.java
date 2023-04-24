@@ -77,6 +77,8 @@ public class StorageVolumeMgr {
 
     public void setDefaultStorageVolume(String svKey) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
+            Preconditions.checkState(nameToSV.containsKey(svKey),
+                    "Storage Volume '%s' does not exist", svKey);
             defaultSV = svKey;
         }
     }

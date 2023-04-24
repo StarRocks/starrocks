@@ -14,10 +14,6 @@
 
 package com.starrocks.storagevolume;
 
-import com.starrocks.storagevolume.storageparams.HDFSStorageParams;
-import com.starrocks.storagevolume.storageparams.S3StorageParams;
-import com.starrocks.storagevolume.storageparams.StorageParams;
-
 import java.util.List;
 import java.util.Map;
 
@@ -48,7 +44,7 @@ public class StorageVolume {
         this.svt = toStorageVolumeType(svt);
         this.locations = locations;
         this.comment = comment;
-        refCount = 0;
+        this.refCount = 0;
         this.enabled = enabled;
         this.storageParams = toStorageParams(storageParams);
     }
@@ -78,10 +74,10 @@ public class StorageVolume {
     }
 
     private StorageVolumeType toStorageVolumeType(String svt) {
-        switch (svt) {
-            case "S3":
+        switch (svt.toLowerCase()) {
+            case "s3":
                 return StorageVolumeType.S3;
-            case "HDFS":
+            case "hdfs":
                 return StorageVolumeType.HDFS;
             default:
                 return StorageVolumeType.UNKNOWN;

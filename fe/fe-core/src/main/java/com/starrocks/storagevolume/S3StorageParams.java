@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.storagevolume.storageparams;
+package com.starrocks.storagevolume;
 
 import com.starrocks.credential.CloudConfigurationConstants;
-import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.storagevolume.credential.aws.AWSAssumeIamRoleCredential;
 import com.starrocks.storagevolume.credential.aws.AWSCredential;
 import com.starrocks.storagevolume.credential.aws.AWSDefaultCredential;
+import com.starrocks.storagevolume.credential.aws.AWSInstanceProfileCredential;
 import com.starrocks.storagevolume.credential.aws.AWSSimpleCredential;
-import com.starrocks.storagevolume.credential.aws.AwsAssumeIamRoleCredential;
-import com.starrocks.storagevolume.credential.aws.AwsInstanceProfileCredential;
 
 import java.util.Map;
 
@@ -54,10 +53,10 @@ public class S3StorageParams implements StorageParams {
                         CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE, "false"));
         if (useInstanceProfile) {
             if (params.containsKey(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN)) {
-                return new AwsAssumeIamRoleCredential(params.getOrDefault(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, ""),
+                return new AWSAssumeIamRoleCredential(params.getOrDefault(CloudConfigurationConstants.AWS_S3_IAM_ROLE_ARN, ""),
                         params.getOrDefault(CloudConfigurationConstants.AWS_S3_EXTERNAL_ID, ""));
             }
-            return new AwsInstanceProfileCredential();
+            return new AWSInstanceProfileCredential();
         }
 
         return new AWSSimpleCredential(params.getOrDefault(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, ""),

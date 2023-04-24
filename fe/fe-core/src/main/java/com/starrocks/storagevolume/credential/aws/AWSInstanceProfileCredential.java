@@ -14,7 +14,7 @@
 
 package com.starrocks.storagevolume.credential.aws;
 
-public class AwsInstanceProfileCredential implements AWSCredential {
+public class AWSInstanceProfileCredential implements AWSCredential {
     @Override
     public AWSCredentialType type() {
         return AWSCredentialType.INSTANCE_PROFILE;

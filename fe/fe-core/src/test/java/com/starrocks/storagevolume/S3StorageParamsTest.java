@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.storagevolume.storageparams;
+package com.starrocks.storagevolume;
 
+import com.starrocks.storagevolume.credential.aws.AWSAssumeIamRoleCredential;
 import com.starrocks.storagevolume.credential.aws.AWSCredential;
 import com.starrocks.storagevolume.credential.aws.AWSSimpleCredential;
-import com.starrocks.storagevolume.credential.aws.AwsAssumeIamRoleCredential;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -95,7 +95,7 @@ public class S3StorageParamsTest {
         Assert.assertEquals(AWSCredential.AWSCredentialType.ASSUME_ROLE, credential.type());
         Assert.assertEquals("region", sp.getRegion());
         Assert.assertEquals("endpoint", sp.getEndpoint());
-        Assert.assertEquals("iam_role_arn", ((AwsAssumeIamRoleCredential) credential).getIamRoleArn());
-        Assert.assertEquals("external_id", ((AwsAssumeIamRoleCredential) credential).getExternalId());
+        Assert.assertEquals("iam_role_arn", ((AWSAssumeIamRoleCredential) credential).getIamRoleArn());
+        Assert.assertEquals("external_id", ((AWSAssumeIamRoleCredential) credential).getExternalId());
     }
 }

@@ -14,8 +14,8 @@
 
 package com.starrocks.server;
 
+import com.starrocks.storagevolume.S3StorageParams;
 import com.starrocks.storagevolume.StorageVolume;
-import com.starrocks.storagevolume.storageparams.S3StorageParams;
 import org.junit.Assert;
 import org.junit.Test;
 
