@@ -1912,7 +1912,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             if (request.isSetJob_id()) {
                 LoadJob job = GlobalStateMgr.getCurrentState().getLoadManager().getLoadJob(request.getJob_id());
-                loads.add(job.toThrift());
+                if (job != null) {
+                    loads.add(job.toThrift());
+                }
             } else if (request.isSetDb()) {
                 long dbId = GlobalStateMgr.getCurrentState().getDb(request.getDb()).getId();
                 if (request.isSetLabel()) {
