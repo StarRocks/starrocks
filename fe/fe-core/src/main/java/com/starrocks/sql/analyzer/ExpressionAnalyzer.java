@@ -219,6 +219,10 @@ public class ExpressionAnalyzer {
             for (int i = 1; i < childSize; ++i) {
                 Expr expr = expression.getChild(i);
                 bottomUpAnalyze(visitor, expr, scope);
+            }
+            // putting lambda inputs should after analyze
+            for (int i = 1; i < childSize; ++i) {
+                Expr expr = expression.getChild(i);
                 if (expr instanceof NullLiteral) {
                     expr.setType(Type.ARRAY_INT); // Let it have item type.
                 }
@@ -288,6 +292,7 @@ public class ExpressionAnalyzer {
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
         rewriteHighOrderFunction(expression, visitor, scope);
+        scope.clearLambdaInputs();
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
