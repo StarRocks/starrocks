@@ -1,4 +1,4 @@
-# [Preview] Java UDFs
+# Java UDFs
 
 StarRocks has started to support user-defined functions (UDFs) since v2.2.0. You can create UDFs based on your business requirements to extend the capabilities of StarRocks. This topic describes the UDF types that are supported by StarRocks and how to create and use UDFs in StarRocks.
 
