@@ -944,10 +944,10 @@ public class Config extends ConfigBase {
     public static int task_runs_queue_length = 500;
     /**
      * Limitation of the running TaskRun.
-     * Default is 20.
+     * Default is 4.
      */
     @ConfField(mutable = true)
-    public static int task_runs_concurrency = 20;
+    public static int task_runs_concurrency = 4;
     /**
      * Default timeout of export jobs.
      */
