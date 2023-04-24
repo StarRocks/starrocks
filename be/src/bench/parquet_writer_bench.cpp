@@ -59,13 +59,8 @@ inline std::shared_ptr<arrow::Table> make_arrow_table(int num_rows) {
 
 inline std::shared_ptr<::parquet::WriterProperties> make_property() {
     ::parquet::WriterProperties::Builder builder;
-//    builder.version(::parquet::ParquetVersion::PARQUET_2_0);
     builder.disable_dictionary();
-//    builder.compression(::parquet::DEFAULT_COMPRESSION_TYPE);
-//    builder.encoding(::parquet::DEFAULT_ENCODING);
-//    builder.max_row_group_length(::parquet::DEFAULT_MAX_ROW_GROUP_LENGTH);
     return builder.build();
-    return ::parquet::default_writer_properties();
 }
 
 inline std::vector<TypeDescriptor> make_type_descs() {
