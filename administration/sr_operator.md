@@ -1,15 +1,6 @@
-# 在 Kubernetes 上部署 StarRocks 集群
+# 使用 Operator 部署 StarRocks 集群
 
 本文介绍如何在 Kubernetes 集群上通过 StarRocks Operator 自动化部署和管理 StarRocks 集群。
-
-## **基本概念**
-
-| 概念         | 解释                                                         |
-| ------------ | ------------------------------------------------------------ |
-| Kubernetes   | 开源的容器编排引擎，自动化部署、 扩缩和管理容器化应用的调度系统。Kubernetes 集群由控制平面的组件和一个或多个 Node 组成。 |
-| 控制平面组件 | 为 Kubernetes 集群做出全局决策，比如调度资源，以及检测和响应集群事件，例如 Pod 不可用时，启动新的 Pod。主要组件如下：<ul><li>[API Sever](https://kubernetes.io/zh-cn/docs/reference/command-line-tools-reference/kube-apiserver/)：控制平面的核心和前端。API Server 公开了 API，供集群中的内部组件相互通信，处理外部用户请求。API Server 是集群内部组件用于数据交互和通信的中心枢纽，并且只有 API Server 才能够直接查询和修改存储集群资源对象状态的后台数据库 etcd。</li><li>[Controller Manager](https://kubernetes.io/docs/reference/command-line-tools-reference/kube-controller-manager/)：资源对象的控制中心，确保资源对象处于期望状态，内置多个 Controller 负责不同资源。Controller 通过 API Server 监听资源对象的当前状态，并与期望状态比较，若不一致则进行调谐工作。除了内置 Controller，用户也可以定制 Controller，例如本文的 StarRocks Operator 是控制 StarRocks 集群资源对象的定制 Controller。</li><li>[Scheduler](https://kubernetes.io/docs/reference/command-line-tools-reference/kube-scheduler/)：通过 API Server 监听未调度的 Pod 并调度到合适的 Node。</li><li>资源、对象、定制资源：Kubernetes 将所有内容抽象成资源，如 Node、Stateful、Deployment。对象是资源的实例，是持久化的实体，如某个具体的 Node、StatefulSet、Deployment。Kubernetes 用这些实体表示整个集群的状态。除了内置资源，用户可以定制资源，例如本文使用的定制资源 StarRocksCluster。</li></ul>|
-| Node         | Kubernetes 集群中资源的实际供给方，是调度 Pod 运行的场所。在生产环境中，一个 Kubernetes 集群通常包含多个 Node，由控制平面管理。 |
-| Pod          | Kubernetes 集群中创建、管理、可部署的最小计算单元。Pod 是一组（一个或多个）[容器](https://kubernetes.io/zh-cn/docs/concepts/overview/what-is-kubernetes/#why-containers)， 这些容器共享存储、网络、以及怎样运行这些容器的声明。本文中一个 Pod 中运行一个容器化的 FE 或者 BE 或者 CN。 |
 
 ## 工作原理
 

@@ -64,7 +64,9 @@
     + [通过 StarGo 部署](/administration/stargo.md)
     + [通过 StarRocks Manager 部署](/administration/deploy_with_manager.md)
     + [通过 Docker 镜像部署](/administration/deploy_with_docker.md)
-    + [在 Kubernetes 上部署](/administration/sr_operator.md)
+    + 在 Kubernetes 上部署
+      + [使用 Operator 部署](/administration/sr_operator.md)
+      + [使用 Helm 部署](/administration/helm.md)
     + [通过源码编译](/administration/Build_in_docker.md)
     + [部署 FE 高可用集群](/administration/Deployment.md)
     + [部署 Broker](/administration/deploy_broker.md)
