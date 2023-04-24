@@ -34,11 +34,7 @@ StarRocks 2.3 and later provide an internal catalog to manage the internal data 
     USE <db_name>;
     ```
 
-<<<<<<< HEAD
-    OR, you can execute the following statement to go to the destination database in the catalog managed in the current session:
-=======
     Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly go to the active database in the destination catalog:
->>>>>>> f592befb0 ([Doc] Update catalog docs & add DBeaver (#21917))
 
     ```SQL
     USE <catalog_name>.<db_name>;
