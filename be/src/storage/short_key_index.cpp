@@ -77,7 +77,7 @@ Status ShortKeyIndexDecoder::parse(const Slice& body, const ShortKeyFooterPB& fo
     }
 
     // set index buffer
-    _key_data = Slice(body.data, _footer.key_bytes());
+    _key_data = Slice(body.data, _footer.key_bytes());Bloom
 
     // parse offset information
     Slice offset_slice(body.data + _footer.key_bytes(), _footer.offset_bytes());
