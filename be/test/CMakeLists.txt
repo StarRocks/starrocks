@@ -316,12 +316,14 @@ set(EXEC_FILES
         ./simd/simd_mulselector_test.cpp
         ./util/phmap_test.cpp
         ./util/aes_util_test.cpp
+        ./util/await_test.cpp
         ./util/bitmap_test.cpp
         ./util/bit_stream_utils_test.cpp
         ./util/bit_util_test.cpp
         ./util/block_compression_test.cpp
         ./util/blocking_queue_test.cpp
         ./util/brpc_stub_cache_test.cpp
+        ./util/bthreads/shared_mutex_test.cpp
         ./util/c_string_test.cpp
         ./util/cidr_test.cpp
         ./util/coding_test.cpp

@@ -22,6 +22,7 @@ set(UTIL_FILES
   arrow/row_batch.cpp
   arrow/starrocks_column_to_arrow.cpp
   arrow/utils.cpp
+  await.cpp
   bfd_parser.cpp
   compression/block_compression.cpp
   compression/compression_context_pool_singletons.cpp
