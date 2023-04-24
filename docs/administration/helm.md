@@ -9,7 +9,7 @@
 
 ## Procedure
 
-> NOTICE
+> **NOTICE**
 >
 > It is not recommended to use Helm to deploy a StarRocks cluster in a production environment.
 
@@ -19,6 +19,10 @@
       ```Bash
       helm repo add starrocks-community https://starrocks.github.io/helm-charts
       ```
+
+      > **NOTE**
+      >
+      > You can also add the [Helm Chart Repo from Artifact Hub](). For detailed information, see https://artifacthub.io/packages/helm/fslstarrocks/kube-starrocks
 
    2. Update the Helm Chart Repo to the latest version.
 
@@ -35,8 +39,9 @@
       ```
 
 2. Use the default **[values.yaml](https://github.com/StarRocks/helm-charts/blob/main/charts/kube-starrocks/values.yaml)** of the Helm Chart to deploy the StarRocks Operator and StarRocks cluster, or create a YAML file to customize your deployment configurations.
-   1. Deploy with default configurations
-      Run the following command to deploy the StarRocks Operator and the StarRocks cluster that consists of one FE and one BE:
+   1. Deployment with default configurations
+
+      Run the following command to deploy the StarRocks Operator and the StarRocks cluster which consists of one FE and one BE:
 
       ```Bash
       $ helm install starrocks starrocks-community/kube-starrocks
@@ -55,7 +60,7 @@
       Visit https://github.com/starrocks for instructions on how to create & configure.
       ```
 
-   2. Deploy with custom configurations
+   2. Deployment with custom configurations
       - Create a YAML file, for example, **my-values.yaml**, and customize the configurations for the StarRocks Operator and StarRocks cluster in the YAML file. For the supported parameters and descriptions, see the comments in the default **[values.yaml](https://github.com/StarRocks/helm-charts/blob/main/charts/kube-starrocks/values.yaml)** of the Helm Chart.
       - Run the following command to deploy the StarRocks Operator and StarRocks cluster with the custom configurations in **my-values.yaml**.
 
@@ -72,7 +77,7 @@
     kube-starrocks   running               running
     ```
 
-    You can also run `kubectl get pods` to check the deployment status. If all Pods are in the`Running` state and all containers within the Pods are `READY`, the deployment has been successfully completed.
+    You can also run `kubectl get pods` to check the deployment status. If all Pods are in the `Running` state and all containers within the Pods are `READY`, the deployment has been successfully completed.
 
     ```Bash
     $ kubectl get pods
@@ -85,6 +90,7 @@
 ## Next steps
 
 **Access StarRocks cluster**
+
 You can access the StarRocks cluster from inside and outside the Kubernetes cluster. For detailed instructions, see [Access StarRocks Cluster](https://chat.openai.com/sr_operator#accessing-the-starrocks-cluster).
 
 > **NOTICE**
@@ -99,3 +105,5 @@ You can access the StarRocks cluster from inside and outside the Kubernetes clus
   ```bash
   helm uninstall starrocks
   ```
+
+- If you need to view the Helm chart for starrocks on artifact hub, see [kube-starrocks](https://artifacthub.io/packages/helm/fslstarrocks/kube-starrocks).
