@@ -2275,6 +2275,7 @@ public class OlapTable extends Table {
         return uniqueConstraint != null;
     }
 
+    @Override
     public List<UniqueConstraint> getUniqueConstraints() {
         if (tableProperty == null) {
             return null;
@@ -2282,6 +2283,7 @@ public class OlapTable extends Table {
         return tableProperty.getUniqueConstraints();
     }
 
+    @Override
     public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
@@ -2293,6 +2295,7 @@ public class OlapTable extends Table {
         tableProperty.setUniqueConstraints(uniqueConstraints);
     }
 
+    @Override
     public List<ForeignKeyConstraint> getForeignKeyConstraints() {
         if (tableProperty == null) {
             return null;
@@ -2300,7 +2303,8 @@ public class OlapTable extends Table {
         return tableProperty.getForeignKeyConstraints();
     }
 
-    public void setForeignKeyConstraint(List<ForeignKeyConstraint> foreignKeyConstraints) {
+    @Override
+    public void setForeignKeyConstraints(List<ForeignKeyConstraint> foreignKeyConstraints) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
