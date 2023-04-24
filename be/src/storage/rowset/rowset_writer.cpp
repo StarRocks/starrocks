@@ -298,6 +298,7 @@ Status RowsetWriter::_flush_delete_file(const SegmentPB& segment_pb, butil::IOBu
     }
     RETURN_IF_ERROR(wfile->close());
 
+    _delfile_idxes.emplace_back(_num_segment + _num_delfile);
     _num_delfile++;
     _num_rows_del += segment_pb.delete_num_rows();
 
