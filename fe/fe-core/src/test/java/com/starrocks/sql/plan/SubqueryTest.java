@@ -1878,5 +1878,4 @@ public class SubqueryTest extends PlanTestBase {
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         assertContains(pair.first, "CTEAnchor(cteid=2)");
     }
-
 }
