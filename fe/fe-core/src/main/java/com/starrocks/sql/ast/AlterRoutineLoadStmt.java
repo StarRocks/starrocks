@@ -209,6 +209,11 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             boolean stripOuterArray = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY));
             analyzedJobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, String.valueOf(stripOuterArray));
         }
+
+        if (jobProperties.containsKey(CreateRoutineLoadStmt.ENABLE_PROFILE)) {
+            boolean enableProfile = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.ENABLE_PROFILE));
+            analyzedJobProperties.put(CreateRoutineLoadStmt.ENABLE_PROFILE, String.valueOf(enableProfile));
+        }
     }
 
     public void checkDataSourceProperties() throws AnalysisException {
