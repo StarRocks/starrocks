@@ -33,6 +33,7 @@
 // under the License.
 package com.starrocks.mysql.nio;
 
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
@@ -76,12 +77,14 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
 
             try {
                 channel.getWorker().execute(() -> {
+                    MysqlProto.NegotiateResult result = null;
                     try {
                         // Set thread local info
                         context.setThreadLocalInfo();
                         context.setConnectScheduler(connectScheduler);
                         // authenticate check failed.
-                        if (!MysqlProto.negotiate(context)) {
+                        result = MysqlProto.negotiate(context);
+                        if (!result.isSuccess()) {
                             throw new AfterConnectedException("mysql negotiate failed");
                         }
                         if (connectScheduler.registerConnection(context)) {
@@ -109,6 +112,8 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         }
                         context.cleanup();
                     } finally {
+                        LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context,
+                                result == null ? null : result.getAuthPacket());
                         ConnectContext.remove();
                     }
                 });
