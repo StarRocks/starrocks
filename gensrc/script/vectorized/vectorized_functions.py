@@ -307,6 +307,7 @@ vectorized_functions = [
     [50040, 'dayofweek', 'INT', ['DATETIME'], 'TimeFunctions::day_of_week'],
     [50050, 'to_date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
     [50051, 'date', 'DATE', ['DATETIME'], 'TimeFunctions::to_date'],
+    [50052, 'matedate', 'DATE', ['INT','INT'], 'TimeFunctions::make_date'],
 
     [50057, 'day', 'TINYINT', ['DATE'], 'TimeFunctions::dayV3'],
     [50058, 'day', 'TINYINT', ['DATETIME'], 'TimeFunctions::dayV2'],

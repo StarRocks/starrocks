@@ -91,6 +91,10 @@ public class ScalarOperatorFunctions {
     private static final Pattern HAS_TIME_PART = Pattern.compile("^.*[HhIiklrSsT]+.*$");
 
     private static final int CONSTANT_128 = 128;
+    private static final int YEAR_MIN = 0;
+    private static final int YEAR_MAX = 9999;
+    private static final int DAY_OF_YEAR_MIN = 1;
+    private static final int DAY_OF_YEAR_MAX = 366;
     private static final BigInteger INT_128_OPENER = BigInteger.ONE.shiftLeft(CONSTANT_128 + 1);
     private static final BigInteger[] INT_128_MASK1_ARR1 = new BigInteger[CONSTANT_128];
 
@@ -365,6 +369,32 @@ public class ScalarOperatorFunctions {
         LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime() / 1000 * 1000)
                 .atZone(ZoneOffset.UTC).toLocalDateTime();
         return ConstantOperator.createDatetime(utcStartTime);
+    }
+
+    @ConstantFunction(name = "makedate", argTypes = {INT, INT}, returnType = DATETIME)
+    public static ConstantOperator makeDate(ConstantOperator year, ConstantOperator dayOfYear) {
+        if (year.isNull() || dayOfYear.isNull()) {
+            return ConstantOperator.createNull(Type.DATE);
+        }
+
+        int yearInt = year.getInt();
+        if (yearInt < YEAR_MIN || yearInt > YEAR_MAX) {
+            return ConstantOperator.createNull(Type.DATE);
+        }
+
+        int dayOfYearInt = dayOfYear.getInt();
+        if (dayOfYearInt < DAY_OF_YEAR_MIN || dayOfYearInt > DAY_OF_YEAR_MAX) {
+            return ConstantOperator.createNull(Type.DATE);
+        }
+
+        LocalDate ld = LocalDate.of(year.getInt(), 0, 0);
+        ld = ld.plusDays(dayOfYear.getInt());
+
+        if (ld.getYear() != year.getInt()) {
+            return ConstantOperator.createNull(Type.DATE);
+        }
+
+        return ConstantOperator.createDate(ld.atTime(0, 0, 0));
     }
 
     /**

@@ -3155,4 +3155,72 @@ TEST_F(TimeFunctionsTest, DateSliceCeilTest) {
     }
 }
 
+TEST_F(TimeFunctionsTest, MakeDateTest) {
+    FunctionContext* ctx = FunctionContext::create_test_context();
+    auto ptr = std::unique_ptr<FunctionContext>(ctx);
+
+    auto year_value = Int32Column::create();
+    auto day_of_year_value = Int32Column::create();
+
+    (void)year_value->append_nulls(2);
+    (void)day_of_year_value->append_nulls(1);
+    day_of_year_value->append(2);
+
+    year_value->append(0);
+    day_of_year_value->append(1);
+
+    year_value->append(2023);
+    day_of_year_value->append(0);
+
+    year_value->append(2023);
+    day_of_year_value->append(32);
+
+    year_value->append(2023);
+    day_of_year_value->append(365);
+
+    year_value->append(2023);
+    day_of_year_value->append(366);
+
+    year_value->append(9999);
+    day_of_year_value->append(1);
+
+    year_value->append(9999);
+    day_of_year_value->append(365);
+
+    year_value->append(9999);
+    day_of_year_value->append(366);
+
+    year_value->append(10000);
+    day_of_year_value->append(1);
+
+    year_value->append(1);
+    day_of_year_value->append(-1);
+
+    year_value->append(1);
+    (void)day_of_year_value->append_nulls(1);
+
+    Columns columns;
+    columns.emplace_back(year_value);
+    columns.emplace_back(day_of_year_value);
+
+    ColumnPtr result = TimeFunctions::make_date(ctx, columns).value();
+    ASSERT_TRUE(result->is_nullable());
+
+    NullableColumn::Ptr nullable_col = ColumnHelper::as_column<NullableColumn>(result);
+
+    ASSERT_TRUE(nullable_col->is_null(0));
+    ASSERT_TRUE(nullable_col->is_null(1));
+    ASSERT_EQ(DateValue::create(0, 1, 1), nullable_col->get(2).get_date());
+    ASSERT_TRUE(nullable_col->is_null(3));
+    ASSERT_EQ(DateValue::create(2023, 2, 1), nullable_col->get(4).get_date());
+    ASSERT_EQ(DateValue::create(2023, 12, 31), nullable_col->get(5).get_date());
+    ASSERT_TRUE(nullable_col->is_null(3));
+    ASSERT_EQ(DateValue::create(9999, 1, 1), nullable_col->get(7).get_date());
+    ASSERT_EQ(DateValue::create(9999, 12, 31), nullable_col->get(8).get_date());
+    ASSERT_TRUE(nullable_col->is_null(9));
+    ASSERT_TRUE(nullable_col->is_null(10));
+    ASSERT_TRUE(nullable_col->is_null(11));
+    ASSERT_TRUE(nullable_col->is_null(12));
+}
+
 } // namespace starrocks
