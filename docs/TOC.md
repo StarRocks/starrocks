@@ -55,7 +55,7 @@
     + [Delta Lake catalog](./data_source/catalog/deltalake_catalog.md)
     + [JDBC catalog](./data_source/catalog/jdbc_catalog.md)
     + [Query external data](./data_source/catalog/query_external_data.md)
-  + [External tables](./data_source/External_table.md)
+  + [External table](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
   + [Local Cache](./data_source/Block_cache.md)
 + Query Acceleration
@@ -87,7 +87,9 @@
   + Deployment
     + [Deploy a shared-data StarRocks cluster](./administration/deploy_shared_data.md)
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
-    + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/sr_operator.md)
+    + Deploy StarRocks on Kubernetes
+      + [Deploy StarRocks with Operator](./administration/sr_operator.md)
+      + [Deploy StarRocks with Helm](./administration/helm.md)
     + [Deploy CN](./administration/deploy_cn.md)
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
   + Management

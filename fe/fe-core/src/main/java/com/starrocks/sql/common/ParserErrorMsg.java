@@ -121,9 +121,6 @@ public interface ParserErrorMsg {
     @BaseMessage("Binary literal can only contain hexadecimal digits and an even number of digits")
     String invalidBinaryFormat();
 
-    @BaseMessage("Refresh start time must be after current time")
-    String invalidStartTime();
-
     @BaseMessage("Invalid map format, which should be key:value")
     String invalidMapFormat();
 

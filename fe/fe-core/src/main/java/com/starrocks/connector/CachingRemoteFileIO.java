@@ -67,7 +67,14 @@ public class CachingRemoteFileIO implements RemoteFileIO {
     }
 
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey) {
+        return getRemoteFiles(pathKey, true);
+    }
+
+    public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey, boolean useCache) {
         try {
+            if (!useCache) {
+                invalidatePartition(pathKey);
+            }
             return ImmutableMap.of(pathKey, cache.getUnchecked(pathKey));
         } catch (UncheckedExecutionException e) {
             LOG.error("Error occurred when getting remote files from cache", e);
@@ -103,7 +110,14 @@ public class CachingRemoteFileIO implements RemoteFileIO {
     }
 
     public void invalidatePartition(RemotePathKey pathKey) {
-        cache.invalidate(pathKey);
+        // fileIO is a CachingRemoteFileIO instance means that the current level is query level metadata,
+        // otherwise it's catalog level metadata. Both of two level metadata should be invalidated.
+        if (fileIO instanceof CachingRemoteFileIO) {
+            ((CachingRemoteFileIO) fileIO).invalidatePartition(pathKey);
+            cache.invalidate(pathKey);
+        } else {
+            cache.invalidate(pathKey);
+        }
     }
 
     private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec, long maximumSize) {

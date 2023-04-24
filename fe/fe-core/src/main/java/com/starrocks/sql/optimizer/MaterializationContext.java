@@ -57,6 +57,11 @@ public class MaterializationContext {
 
     private final ScalarOperator mvPartialPartitionPredicate;
 
+    // THe used count for MV used as the rewrite result in a query.
+    // NOTE: mvUsedCount is a not exact value because MV may be rewritten multi times
+    // in Optimizer Transformation phase but not be really used.
+    private long mvUsedCount = 0;
+
     public MaterializationContext(OptimizerContext optimizerContext,
                                   MaterializedView mv,
                                   OptExpression mvExpression,
@@ -146,5 +151,13 @@ public class MaterializationContext {
 
     public ScalarOperator getMvPartialPartitionPredicate() {
         return mvPartialPartitionPredicate;
+    }
+
+    public long getMVUsedCount() {
+        return mvUsedCount;
+    }
+
+    public void updateMVUsedCount() {
+        this.mvUsedCount += 1;
     }
 }
