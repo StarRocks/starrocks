@@ -110,8 +110,19 @@ std::string memtracker_debug_string(MemTracker& self) {
     return self.debug_string();
 }
 
+<<<<<<< HEAD
 Status update_config(const std::string& key, const std::string& value) {
     return UpdateConfigAction::instance()->update_config(key, value);
+=======
+static std::vector<FileWriteStat> get_file_write_history() {
+    std::vector<FileWriteStat> stats;
+    FileSystem::get_file_write_history(&stats);
+    return stats;
+}
+
+static int64_t unix_seconds() {
+    return UnixSeconds();
+>>>>>>> 4ad6ffa9b ([Enhancement] Collect file write history (#22323))
 }
 
 void bind_exec_env(ForeignModule& m) {
@@ -125,6 +136,13 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcExt<&memtracker_debug_string>("toString");
     }
     {
+        auto& cls = m.klass<FileWriteStat>("FileWriteStat");
+        REG_VAR(FileWriteStat, open_time);
+        REG_VAR(FileWriteStat, close_time);
+        REG_VAR(FileWriteStat, path);
+        REG_VAR(FileWriteStat, size);
+    }
+    {
         auto& cls = m.klass<ExecEnv>("ExecEnv");
         REG_STATIC_METHOD(ExecEnv, GetInstance);
         cls.funcStaticExt<&get_thread_id_list>("get_thread_id_list");
@@ -133,7 +151,12 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&get_stack_trace_for_all_threads>("get_stack_trace_for_all_threads");
         cls.funcStaticExt<&get_stack_trace_for_function>("get_stack_trace_for_function");
         cls.funcStaticExt<&grep_log_as_string>("grep_log_as_string");
+<<<<<<< HEAD
         cls.funcStaticExt<&update_config>("update_config");
+=======
+        cls.funcStaticExt<&get_file_write_history>("get_file_write_history");
+        cls.funcStaticExt<&unix_seconds>("unix_seconds");
+>>>>>>> 4ad6ffa9b ([Enhancement] Collect file write history (#22323))
         REG_METHOD(ExecEnv, process_mem_tracker);
         REG_METHOD(ExecEnv, query_pool_mem_tracker);
         REG_METHOD(ExecEnv, load_mem_tracker);
