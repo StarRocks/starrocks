@@ -773,7 +773,7 @@ public class ReportHandler extends Daemon {
                         // so we do not delete it.
                         List<Replica> replicas = tablet.getImmutableReplicas();
                         if (replicas.size() <= 1) {
-                            LOG.error("backend [{}] invalid situation. tablet[{}] has few replica[{}], "
+                            LOG.debug("backend [{}] invalid situation. tablet[{}] has few replica[{}], "
                                             + "replica num setting is [{}]",
                                     backendId, tabletId, replicas.size(), replicationNum);
                             // there is a replica in FE, but not in BE and there is only one replica in this tablet
