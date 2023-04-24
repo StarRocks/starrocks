@@ -33,7 +33,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.time.Clock;
@@ -184,7 +183,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    @Ignore
     public void testAnalyzeALLDB() {
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new AnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
@@ -205,7 +203,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    @Ignore
     public void testAnalyzeDB() {
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
@@ -533,7 +530,6 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
     
     @Test
-    @Ignore
     public void testCount() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb("stats");
         OlapTable olapTable = (OlapTable) db.getTable("tcount");
