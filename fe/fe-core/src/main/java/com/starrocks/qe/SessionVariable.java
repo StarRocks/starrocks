@@ -296,6 +296,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
+    public static final String ENABLE_HIVE_METADATA_CACHE_WITH_INSERT = "enable_hive_metadata_cache_with_insert";
+
     public static final String DEFAULT_TABLE_COMPRESSION = "default_table_compression";
 
     // In most cases, the partition statistics obtained from the hive metastore are empty.
@@ -858,6 +860,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
 
+    @VariableMgr.VarAttr(name = ENABLE_HIVE_METADATA_CACHE_WITH_INSERT)
+    private boolean enableHiveMetadataCacheWithInsert = false;
+
     @VariableMgr.VarAttr(name = HIVE_PARTITION_STATS_SAMPLE_SIZE)
     private int hivePartitionStatsSampleSize = 3000;
 
@@ -1166,6 +1171,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableHiveColumnStats(boolean enableHiveColumnStats) {
         this.enableHiveColumnStats = enableHiveColumnStats;
+    }
+
+    public boolean isEnableHiveMetadataCacheWithInsert() {
+        return enableHiveMetadataCacheWithInsert;
+    }
+
+    public void setEnableHiveMetadataCacheWithInsert(boolean enableHiveMetadataCacheWithInsert) {
+        this.enableHiveMetadataCacheWithInsert = enableHiveMetadataCacheWithInsert;
     }
 
     public int getHivePartitionStatsSampleSize() {

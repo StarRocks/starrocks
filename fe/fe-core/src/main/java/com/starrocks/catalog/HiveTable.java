@@ -56,6 +56,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -111,6 +112,13 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     private List<String> dataColumnNames = Lists.newArrayList();
     private Map<String, String> hiveProperties = Maps.newHashMap();
 
+    // For `insert into target_table select from hive_table, we set it to false when executing this kind of insert query.
+    // 1. `useMetadataCache` is false means that this query need to list all selected partitions files from hdfs/s3.
+    // 2. Insert into statement could ignore the additional overhead caused by list partitions.
+    // 3. The most import point is that query result may be wrong with cached and expired partition files, causing insert data is wrong.
+    // This error will happen when appending files to an existed partition on user side.
+    private boolean useMetadataCache = true;
+
     public HiveTable() {
         super(TableType.HIVE);
     }
@@ -151,6 +159,20 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public String getTableName() {
         return hiveTableName;
+    }
+
+    public boolean isUseMetadataCache() {
+        if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
+            return true;
+        } else {
+            return useMetadataCache;
+        }
+    }
+
+    public void useMetadataCache(boolean useMetadataCache) {
+        if (!isResourceMappingCatalog(getCatalogName())) {
+            this.useMetadataCache = useMetadataCache;
+        }
     }
 
     @Override
@@ -278,6 +300,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         }
         List<RemoteFileInfo> hivePartitions;
         try {
+            useMetadataCache = true;
             hivePartitions = GlobalStateMgr.getCurrentState().getMetadataMgr()
                     .getRemoteFileInfos(getCatalogName(), this, partitionKeys);
         } catch (StarRocksConnectorException e) {
