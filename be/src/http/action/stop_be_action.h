@@ -34,7 +34,7 @@ public:
 private:
     [[maybe_unused]] ExecEnv* _exec_env;
 
-    std::string construct_response_message(std::string msg);
+    std::string construct_response_message(const std::string& msg);
 };
 
 } // namespace starrocks

@@ -23,14 +23,13 @@
 #include "util/defer_op.h"
 
 namespace starrocks {
-extern std::atomic<bool> k_starrocks_exit;
+extern std::atomic<bool> k_starrocks_exit_quick;
 
-std::string StopBeAction::construct_response_message(std::string msg) {
+std::string StopBeAction::construct_response_message(const std::string& msg) {
     std::stringstream ss;
     ss << "{";
-    ss << "(\"status\": "
-       << "\"" << msg << "\""
-       << ")";
+    ss << "\"status\": "
+       << "\"" << msg << "\"";
     ss << "}";
 
     return ss.str();
@@ -40,13 +39,13 @@ void StopBeAction::handle(HttpRequest* req) {
     LOG(INFO) << "Accept one stop_be request " << req->debug_string();
 
     DeferOp defer([&]() {
-        if (!k_starrocks_exit.load(std::memory_order_acquire)) {
-            k_starrocks_exit.store(true);
+        if (!k_starrocks_exit_quick.load(std::memory_order_acquire)) {
+            k_starrocks_exit_quick.store(true);
         }
     });
 
     std::string response_msg = construct_response_message("OK");
-    if (k_starrocks_exit.load(std::memory_order_acquire)) {
+    if (k_starrocks_exit_quick.load(std::memory_order_acquire)) {
         response_msg = construct_response_message("Be is shutting down");
     }
 
