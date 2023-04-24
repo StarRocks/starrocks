@@ -49,18 +49,17 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
     _properties.set_buffer_size(8 * 1024 * 1024);
     _filename = (reinterpret_cast<ParquetChunkFile*>(_parquet.get()))->filename();
 
-
     const std::string unit_config = config::parquet_coerce_int96_timestamp_unit;
-    std::string unit = unit_config ;
+    std::string unit = unit_config;
     std::transform(unit_config.begin(), unit_config.end(), unit.begin(), ::toupper);
 
-    if(unit == "SECOND") {
+    if (unit == "SECOND") {
         _parquet_int96_timestamp_unit = arrow::TimeUnit::SECOND;
-    } else if(unit == "MILLI") {
+    } else if (unit == "MILLI") {
         _parquet_int96_timestamp_unit = arrow::TimeUnit::MILLI;
-    } else if(unit == "MICRO") {
+    } else if (unit == "MICRO") {
         _parquet_int96_timestamp_unit = arrow::TimeUnit::MICRO;
-    } else if(unit == "NANO") {
+    } else if (unit == "NANO") {
         _parquet_int96_timestamp_unit = arrow::TimeUnit::NANO;
     } else {
         _parquet_int96_timestamp_unit = arrow::TimeUnit::MICRO;
