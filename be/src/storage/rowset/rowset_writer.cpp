@@ -298,6 +298,9 @@ Status RowsetWriter::_flush_delete_file(const SegmentPB& segment_pb, butil::IOBu
     }
     RETURN_IF_ERROR(wfile->close());
 
+    // _delfile_idxes keep the idx for every delete file, so we need to add the idx to _delfile_idxes if we create a
+    // new delete file
+    _delfile_idxes.emplace_back(_num_segment + _num_delfile);
     _num_delfile++;
     _num_rows_del += segment_pb.delete_num_rows();
 
@@ -534,6 +537,8 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const Chunk& upserts, co
             seg_info->set_delete_data_size(content.size());
             seg_info->set_delete_path(wfile->filename());
         }
+        // _delfile_idxes keep the idx for every delete file, so we need to add the idx to _delfile_idxes if we create a
+        // new delete file
         _delfile_idxes.emplace_back(_num_segment + _num_delfile);
         _num_delfile++;
         _num_rows_del += deletes.size();
