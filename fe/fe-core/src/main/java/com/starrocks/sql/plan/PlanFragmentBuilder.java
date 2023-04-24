@@ -1180,6 +1180,11 @@ public class PlanFragmentBuilder {
                 }
             }
 
+            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs") && scanNode.getLabel() == null
+                    && scanNode.getJobId() == null) {
+                throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
+            }
+
             if (scanNode.isBeSchemaTable()) {
                 scanNode.computeBeScanRanges();
             }

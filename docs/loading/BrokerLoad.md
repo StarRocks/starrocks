@@ -52,6 +52,8 @@ Broker Load supports the following storage systems:
 
 - Other S3-compatible storage system such as MinIO
 
+- Microsoft Azure Storage
+
 ## How it works
 
 After you submit a load job to an FE, the FE generates a query plan, splits the query plan into portions based on the number of BEs and the size of the data file you want to load, and then assigns each portion of the query plan to a specific BE. During the load, each BE pulls the data of the data file by using the broker, pre-processes the data, and then loads the data into your StarRocks cluster. After all BEs finish their portions of the query plan, the FE determines whether the load job is successful.
@@ -72,7 +74,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 1. In your StarRocks database `test_db`, create StarRocks tables.
 
-   a. Create a table named `table1` that uses the Primary Key model. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+   a. Create a table named `table1` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table1`
@@ -86,7 +88,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    DISTRIBUTED BY HASH(`id`) BUCKETS 10;
    ```
 
-   b. Create a table named `table2` that uses the Primary Key model. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
+   b. Create a table named `table2` that uses the Primary Key table. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table2`

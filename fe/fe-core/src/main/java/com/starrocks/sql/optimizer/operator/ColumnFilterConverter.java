@@ -16,7 +16,6 @@
 package com.starrocks.sql.optimizer.operator;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BoolLiteral;
@@ -58,6 +57,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import static com.starrocks.sql.common.TimeUnitUtils.TIME_MAP;
+
 /**
  * Convert column predicate to partition column filter
  */
@@ -66,17 +67,6 @@ public class ColumnFilterConverter {
 
     private static final ColumnFilterVisitor COLUMN_FILTER_VISITOR = new ColumnFilterVisitor();
 
-    // "week" can not exist in timeMap due "month" not sure contains week
-    private static final ImmutableMap<String, Integer> TIME_MAP =
-            new ImmutableMap.Builder<String, Integer>()
-                    .put("second", 1)
-                    .put("minute", 2)
-                    .put("hour", 3)
-                    .put("day", 4)
-                    .put("month", 5)
-                    .put("quarter", 6)
-                    .put("year", 7)
-                    .build();
 
     public static Map<String, PartitionColumnFilter> convertColumnFilter(List<ScalarOperator> predicates) {
         return convertColumnFilter(predicates, null);

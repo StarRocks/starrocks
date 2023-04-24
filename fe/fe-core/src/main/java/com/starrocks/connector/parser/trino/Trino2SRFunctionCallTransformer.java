@@ -23,7 +23,6 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.sql.ast.ArrayExpr;
 
 import java.util.List;
 import java.util.Map;
@@ -64,6 +63,7 @@ public class Trino2SRFunctionCallTransformer {
     private static void registerAllFunctionTransformer() {
         registerAggregateFunctionTransformer();
         registerArrayFunctionTransformer();
+        registerDateFunctionTransformer();
         // todo: support more function transform
     }
 
@@ -109,10 +109,6 @@ public class Trino2SRFunctionCallTransformer {
                         new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class)
                 )))));
 
-        // 2. concat -> array_concat
-        registerFunctionTransformerWithVarArgs("concat", "array_concat",
-                ImmutableList.of(ArrayExpr.class));
-
         // 3. contains -> array_contains
         registerFunctionTransformer("contains", 2, "array_contains",
                 ImmutableList.of(Expr.class, Expr.class));
@@ -120,6 +116,36 @@ public class Trino2SRFunctionCallTransformer {
         // 4. slice -> array_slice
         registerFunctionTransformer("slice", 3, "array_slice",
                 ImmutableList.of(Expr.class, Expr.class, Expr.class));
+    }
+
+    private static void registerDateFunctionTransformer() {
+        // to_unixtime -> unix_timestamp
+        registerFunctionTransformer("to_unixtime", 1, "unix_timestamp",
+                ImmutableList.of(Expr.class));
+
+        // date_parse -> str_to_date
+        registerFunctionTransformer("date_parse", 2, "str_to_date",
+                ImmutableList.of(Expr.class, Expr.class));
+
+        // day_of_week -> dayofweek
+        registerFunctionTransformer("day_of_week", 1, "dayofweek",
+                ImmutableList.of(Expr.class));
+
+        // dow -> dayofweek
+        registerFunctionTransformer("dow", 1, "dayofweek",
+                ImmutableList.of(Expr.class));
+
+        // day_of_month -> dayofmonth
+        registerFunctionTransformer("day_of_month", 1, "dayofmonth",
+                ImmutableList.of(Expr.class));
+
+        // day_of_year -> dayofyear
+        registerFunctionTransformer("day_of_year", 1, "dayofyear",
+                ImmutableList.of(Expr.class));
+
+        // doy -> dayofyear
+        registerFunctionTransformer("doy", 1, "dayofyear",
+                ImmutableList.of(Expr.class));
     }
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,
