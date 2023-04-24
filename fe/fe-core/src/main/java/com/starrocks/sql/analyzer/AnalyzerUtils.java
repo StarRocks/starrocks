@@ -418,6 +418,10 @@ public class AnalyzerUtils {
         new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
     }
 
+    public static void collectSpecifyExternalTables(StatementBase statementBase, List<Table> tables, Predicate<Table> filter) {
+        new ExternalTableCollector(tables, filter).visit(statementBase);
+    }
+
     public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
         new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
@@ -507,6 +511,25 @@ public class AnalyzerUtils {
                 // Only copy the necessary olap table meta to avoid the lock when plan query
                 OlapTable copied = table.copyOnlyForQuery();
                 node.setTable(copied);
+            }
+            return null;
+        }
+    }
+
+    private static class ExternalTableCollector extends TableCollector {
+        List<Table> tables;
+        Predicate<Table> predicate;
+
+        public ExternalTableCollector(List<Table> tables, Predicate<Table> filter) {
+            this.tables = tables;
+            this.predicate = filter;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            Table table = node.getTable();
+            if (predicate.test(table)) {
+                tables.add(table);
             }
             return null;
         }
