@@ -75,9 +75,7 @@ jobs:
   thirdparty-update-image:
     runs-on: self-hosted
     name: Thirdparty Update Image
-    if: github.event.pull_request.merged == true &&
-      !contains(github.event.pull_request.title, 'cherry-pick') &&
-      !contains(github.event.pull_request.title, 'backport')
+    if: github.event.pull_request.merged == true
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
@@ -88,6 +86,7 @@ jobs:
           filters: |
             thirdparty:
             - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
       - name: update image
         if: steps.changes.outputs.thirdparty == 'true'
@@ -99,9 +98,7 @@ jobs:
 
   close_msg:
     runs-on: self-hosted
-    if: github.event.pull_request.merged == true &&
-      !contains(github.event.pull_request.title, 'cherry-pick') &&
-      !contains(github.event.pull_request.title, 'backport')
+    if: github.event.pull_request.merged == true
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:

@@ -90,8 +90,10 @@ jobs:
             - 'run-be-ut.sh'
             - 'build.sh'
             - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
             thirdparty:
             - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
       - name: BE CHECK INFO
         id: be-changes-info
