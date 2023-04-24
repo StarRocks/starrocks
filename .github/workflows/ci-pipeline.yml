@@ -177,7 +177,6 @@ jobs:
             sshpass -p ${{ secrets.PASSWORD }} scp -o StrictHostKeyChecking=no -r bin/elastic-build-thirdparty.sh root@$ip:/home/disk1/
             sshpass -p ${{ secrets.PASSWORD }} ssh -o StrictHostKeyChecking=no root@$ip "cd /home/disk1; ./elastic-build-thirdparty.sh $BRANCH $PR_NUMBER"
             image_cache_id=$(python3 lib/eci_imagecache.py create $BRANCH-$PR_NUMBER)
-            echo "create image cache..." && sleep 600
             echo "image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
           fi
 
