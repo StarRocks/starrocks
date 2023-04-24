@@ -214,9 +214,10 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
                                                       ::parquet::Type::DOUBLE);
     }
     case TYPE_CHAR:
-    case TYPE_VARCHAR:
+    case TYPE_VARCHAR: {
         return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::String(),
                                                       ::parquet::Type::BYTE_ARRAY);
+    }
     case TYPE_DATE: {
         return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::Date(),
                                                       ::parquet::Type::INT32);

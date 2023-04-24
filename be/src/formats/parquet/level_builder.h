@@ -38,8 +38,9 @@
 
 namespace starrocks::parquet {
 
-// Intermediate data passed between add_column_chunk functions.
-// Immutable and thread-safe.
+/// Intermediate data passed between add_column_chunk functions.
+/// Example(Int Array): ctx -> writeArrayColumnChunk -> ctx' -> writeIntColumnChunk
+/// Immutable and thread-safe.
 class LevelBuilderContext {
 public:
     LevelBuilderContext(size_t num_levels, std::shared_ptr<std::vector<int16_t>> def_levels = nullptr,
@@ -47,24 +48,26 @@ public:
                         int16_t max_rep_level = 0)
             : _max_def_level(max_def_level),
               _max_rep_level(max_rep_level),
+              _num_levels(num_levels),
               _def_levels(std::move(def_levels)),
-              _rep_levels(std::move(rep_levels)),
-              _num_levels(num_levels) {
+              _rep_levels(std::move(rep_levels)) {
         DCHECK(_max_def_level == 0 || _def_levels != nullptr);
         DCHECK(_max_rep_level == 0 || _rep_levels != nullptr);
         DCHECK(_max_def_level == 0 || _num_levels == _def_levels->size());
         DCHECK(_max_rep_level == 0 || _num_levels == _rep_levels->size());
     }
 
-    int num_levels() const { return _num_levels; }
-
 public:
     const int16_t _max_def_level;
     const int16_t _max_rep_level;
 
+    // count of def/rep levels.
+    // May be larger than values count if there are any undefined values.
+    const int64_t _num_levels;
+
+    // def/rep_levels == nullptr iff max_def/rep_level == 0
     const std::shared_ptr<std::vector<int16_t>> _def_levels;
     const std::shared_ptr<std::vector<int16_t>> _rep_levels;
-    const size_t _num_levels;
 };
 
 struct LevelBuilderResult {
@@ -90,64 +93,60 @@ public:
     void write(const LevelBuilderContext& ctx, const ColumnPtr& col, const CallbackFunction& write_leaf_callback);
 
 private:
-    Status _write_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                               const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                               const CallbackFunction& write_leaf_callback);
+    void _write_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                             const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                             const CallbackFunction& write_leaf_callback);
 
-    Status _write_boolean_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                       const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                       const CallbackFunction& write_leaf_callback);
-
-    template <LogicalType lt, ::parquet::Type::type pt>
-    Status _write_int_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                   const CallbackFunction& write_leaf_callback);
-
-    Status _write_decimal128_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                          const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                          const CallbackFunction& write_leaf_callback);
-
-    Status _write_varchar_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                       const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                       const CallbackFunction& write_leaf_callback);
-
-    Status _write_date_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                    const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                    const CallbackFunction& write_leaf_callback);
-
-    Status _write_datetime_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                        const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                        const CallbackFunction& write_leaf_callback);
-
-    Status _write_array_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+    void _write_boolean_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                      const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                      const CallbackFunction& write_leaf_callback);
 
-    Status _write_array_column_chunkV2(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                       const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                       const CallbackFunction& write_leaf_callback);
+    template <LogicalType lt, ::parquet::Type::type pt>
+    void _write_int_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                 const CallbackFunction& write_leaf_callback);
 
-    Status _write_array_column_chunkV3(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                       const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                       const CallbackFunction& write_leaf_callback);
+    void _write_decimal128_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                        const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                        const CallbackFunction& write_leaf_callback);
 
-    Status _write_map_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                   const CallbackFunction& write_leaf_callback);
+    void _write_varchar_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                     const CallbackFunction& write_leaf_callback);
 
-    Status _write_struct_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+    void _write_date_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                  const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                  const CallbackFunction& write_leaf_callback);
+
+    void _write_datetime_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                       const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                       const CallbackFunction& write_leaf_callback);
 
+    void _write_array_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                   const CallbackFunction& write_leaf_callback);
+
+    void _write_array_column_chunk_branchless(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                              const CallbackFunction& write_leaf_callback);
+
+    void _write_map_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                 const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                 const CallbackFunction& write_leaf_callback);
+
+    void _write_struct_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                    const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                    const CallbackFunction& write_leaf_callback);
+
     std::vector<uint8_t> _make_null_bitset(size_t n, const uint8_t* nulls) const;
 
-    std::shared_ptr<std::vector<int16_t>> _make_def_levelsV2(const LevelBuilderContext& ctx,
-                                                             const ::parquet::schema::NodePtr& node,
-                                                             const uint8_t* nulls) const;
+    std::shared_ptr<std::vector<int16_t>> _make_def_levels(const LevelBuilderContext& ctx,
+                                                           const ::parquet::schema::NodePtr& node,
+                                                           const uint8_t* nulls) const;
 
-    std::shared_ptr<std::vector<int16_t>> _make_def_levelsV3(const LevelBuilderContext& ctx,
-                                                             const ::parquet::schema::NodePtr& node,
-                                                             const uint8_t* nulls) const;
+    //    std::shared_ptr<std::vector<int16_t>> _make_def_levels_branchless(const LevelBuilderContext& ctx,
+    //                                                             const ::parquet::schema::NodePtr& node,
+    //                                                             const uint8_t* nulls) const;
 
 private:
     TypeDescriptor _type_desc;
