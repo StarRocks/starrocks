@@ -144,9 +144,10 @@ private:
                                                            const ::parquet::schema::NodePtr& node,
                                                            const uint8_t* nulls) const;
 
-    //    std::shared_ptr<std::vector<int16_t>> _make_def_levels_branchless(const LevelBuilderContext& ctx,
-    //                                                             const ::parquet::schema::NodePtr& node,
-    //                                                             const uint8_t* nulls) const;
+    std::shared_ptr<std::vector<int16_t>> _make_def_levels_branchless(const LevelBuilderContext& ctx,
+                                                                      const ::parquet::schema::NodePtr& node,
+                                                                      const uint8_t* nulls,
+                                                                      const size_t col_size) const;
 
 private:
     TypeDescriptor _type_desc;
