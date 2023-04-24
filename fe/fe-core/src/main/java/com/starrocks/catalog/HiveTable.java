@@ -444,6 +444,22 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+    public List<UniqueConstraint> getUniqueConstraints() {
+        return uniqueConstraints;
+    }
+
+    @Override
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        return foreignKeyConstraints;
+    }
+
+    public void setColumnAllowNull(String column, boolean allowNull) {
+        if (nameToColumn.containsKey(column)) {
+            nameToColumn.get(column).setIsAllowNull(allowNull);
+        }
+    }
+
+    @Override
     public int hashCode() {
         return Objects.hashCode(getCatalogName(), hiveDbName, getTableIdentifier());
     }
