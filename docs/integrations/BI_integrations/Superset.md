@@ -12,7 +12,7 @@ Make sure that you have finished the following installations:
    pip install starrocks
    ```
 
-2. Install the latest version of Apache Superset. For more information, see [Installing Superset from Scratch](https://superset.apache.org/docs/installation/installing-superset-from-scratch/.)
+2. Install the latest version of Apache Superset. For more information, see [Installing Superset from Scratch](https://superset.apache.org/docs/installation/installing-superset-from-scratch/).
 
 ## Integration
 
