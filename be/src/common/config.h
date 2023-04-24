@@ -108,11 +108,11 @@ CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
 CONF_Int32(alter_tablet_worker_count, "3");
 // The count of parallel clone task per storage path
-CONF_Int32(parallel_clone_task_per_path, "2");
-// The count of thread to clone.
+CONF_mInt32(parallel_clone_task_per_path, "8");
+// The count of thread to clone. Deprecated
 CONF_Int32(clone_worker_count, "3");
 // The count of thread to clone.
-CONF_Int32(storage_medium_migrate_count, "1");
+CONF_Int32(storage_medium_migrate_count, "3");
 // The count of thread to check consistency.
 CONF_Int32(check_consistency_worker_count, "1");
 // The count of thread to upload.

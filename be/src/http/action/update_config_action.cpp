@@ -98,6 +98,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             thread_pool->update_max_threads(
                     std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
         });
+        _config_callback.emplace("parallel_clone_task_per_path", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
+                                                                 config::parallel_clone_task_per_path);
+        });
     });
 
     Status s = config::set_config(name, value);
