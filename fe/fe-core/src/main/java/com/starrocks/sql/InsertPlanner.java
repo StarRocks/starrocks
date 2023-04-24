@@ -62,7 +62,10 @@ import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.OrderSpec;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -81,6 +84,10 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
+import org.apache.iceberg.NullOrder;
+import org.apache.iceberg.SortDirection;
+import org.apache.iceberg.SortField;
+import org.apache.iceberg.SortOrder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -541,6 +548,29 @@ public class InsertPlanner {
             DistributionProperty distributionProperty =
                     new DistributionProperty(new GatherDistributionSpec(queryRelation.getLimit().getLimit()));
             return new PhysicalPropertySet(distributionProperty);
+        }
+
+        if (insertStmt.getTargetTable() instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) insertStmt.getTargetTable();
+            SortOrder sortOrder = icebergTable.getNativeTable().sortOrder();
+
+            if (sortOrder.isUnsorted()) {
+                return new PhysicalPropertySet();
+            } else {
+                List<SortField> sortFields = sortOrder.fields();
+                List<Ordering> orderings = new ArrayList<>();
+                List<Integer> sortKeyIndexes = icebergTable.getSortKeyIndexes();
+                for (int index : sortKeyIndexes) {
+                    ColumnRefOperator columnRef = outputColumns.get(index);
+                    SortField sortField = sortFields.get(sortKeyIndexes.indexOf(index));
+                    boolean isAsc = sortField.direction() == SortDirection.ASC;
+                    boolean isNullFirst = sortField.nullOrder() == NullOrder.NULLS_FIRST;
+                    Ordering ordering = new Ordering(columnRef, isAsc, isNullFirst);
+                    orderings.add(ordering);
+                }
+                SortProperty sortProperty = new SortProperty(new OrderSpec(orderings));
+                return new PhysicalPropertySet(sortProperty);
+            }
         }
 
         if (!(insertStmt.getTargetTable() instanceof OlapTable)) {
