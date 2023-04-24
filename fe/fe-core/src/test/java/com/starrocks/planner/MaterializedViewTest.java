@@ -47,8 +47,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"groupa2\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
-                "    \"unique_constraints\" = \"c_custkey\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"unique_constraints\" = \"c_custkey\"\n" +
                 ")\n");
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `dates` (\n" +
                 "    `d_datekey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -76,8 +75,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
                 "    \"colocate_with\" = \"groupa3\",\n" +
-                "    \"unique_constraints\" = \"d_datekey\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"unique_constraints\" = \"d_datekey\"\n" +
                 ")");
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `part` (\n" +
                 "    `p_partkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -97,8 +95,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"groupa5\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
-                "    \"unique_constraints\" = \"p_partkey\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"unique_constraints\" = \"p_partkey\"\n" +
                 ")");
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `supplier` (\n" +
                 "    `s_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -116,8 +113,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"groupa4\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
-                "    \"unique_constraints\" = \"s_suppkey\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"unique_constraints\" = \"s_suppkey\"\n" +
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder` (\n" +
@@ -157,8 +153,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"in_memory\" = \"false\",\n" +
                 "    \"foreign_key_constraints\" = \"(lo_custkey) REFERENCES customer(c_custkey);" +
                 " (lo_partkey) REFERENCES part(p_partkey);  (lo_suppkey) REFERENCES supplier(s_suppkey);" +
-                "  (lo_orderdate) REFERENCES dates(d_datekey)\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "  (lo_orderdate) REFERENCES dates(d_datekey)\"\n" +
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder_null` (\n" +
@@ -198,8 +193,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"in_memory\" = \"false\",\n" +
                 "    \"foreign_key_constraints\" = \"(lo_custkey) REFERENCES customer(c_custkey);" +
                 " (lo_partkey) REFERENCES part(p_partkey);  (lo_suppkey) REFERENCES supplier(s_suppkey);" +
-                "  (lo_orderdate) REFERENCES dates(d_datekey)\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "  (lo_orderdate) REFERENCES dates(d_datekey)\"\n" +
                 ")");
 
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t2` (\n" +
@@ -214,8 +208,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"groupa4\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
-                "    \"unique_constraints\" = \"c5\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"unique_constraints\" = \"c5\"\n" +
                 ")");
 
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t3` (\n" +
@@ -230,8 +223,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"groupa4\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
-                "    \"unique_constraints\" = \"c5\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"unique_constraints\" = \"c5\"\n" +
                 ")");
 
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t1` (\n" +
@@ -246,8 +238,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"groupa4\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
-                "    \"foreign_key_constraints\" = \"(c2) REFERENCES t2(c5);(c3) REFERENCES t2(c5)\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"foreign_key_constraints\" = \"(c2) REFERENCES t2(c5);(c3) REFERENCES t2(c5)\"\n" +
                 ")");
 
     }
@@ -1643,8 +1634,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"colocate_with\" = \"groupa4\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
                     "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1658,8 +1648,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"colocate_with\" = \"groupa4\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1674,8 +1663,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"colocate_with\" = \"groupa4\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(C5)\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(C5)\"\n" +
                     ");");
 
             String mv = "select c1 as col1, c2, c3, l.c6, r.c7\n" +
@@ -1703,8 +1691,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
                     "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1717,8 +1704,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5, C6, c7\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5, C6, c7\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1732,8 +1718,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"foreign_key_constraints\" = \"(c2, c4, C3) REFERENCES tbl_02(c5, C7, C6)\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"foreign_key_constraints\" = \"(c2, c4, C3) REFERENCES tbl_02(c5, C7, C6)\"\n" +
                     ");");
 
             String mv = "select c1 as col1, c2, c3, l.c6, l.c7\n" +
@@ -1763,8 +1748,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"colocate_with\" = \"groupa4\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
                     "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1777,8 +1761,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"colocate_with\" = \"groupa4\",\n" +
-                    "    \"in_memory\" = \"false\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1793,8 +1776,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"colocate_with\" = \"groupa4\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(c5)\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(c5)\"\n" +
                     ");");
 
             String mv = "select c1 as col1, c2, c3, l.c6, r.c7\n" +
@@ -1822,8 +1804,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
                     "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1835,8 +1816,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "DISTRIBUTED BY HASH(`C5`, `C6`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
-                    "    \"in_memory\" = \"false\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1850,8 +1830,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"foreign_key_constraints\" = \"(c2, C3) REFERENCES tbl_02(c5, C6)\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"foreign_key_constraints\" = \"(c2, C3) REFERENCES tbl_02(c5, C6)\"\n" +
                     ");");
 
             String mv = "select c1 as col1, c2, c3, l.c6, l.c7\n" +
@@ -1881,8 +1860,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
                     "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1894,8 +1872,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "DISTRIBUTED BY HASH(`C5`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
-                    "    \"in_memory\" = \"false\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1909,8 +1886,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(c5)\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(c5)\"\n" +
                     ");");
 
             String mv = "select c1 as col1, c2, c3, l.c6, r.c7\n" +
@@ -1938,8 +1914,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
                     "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1951,8 +1926,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "DISTRIBUTED BY HASH(`C5`, `C6`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
-                    "    \"in_memory\" = \"false\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1966,8 +1940,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"foreign_key_constraints\" = \"(C3, c2) REFERENCES tbl_02(C6, c5)\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"foreign_key_constraints\" = \"(C3, c2) REFERENCES tbl_02(C6, c5)\"\n" +
                     ");");
 
             String mv = "select c1 as col1, c2, c3, l.c6, l.c7\n" +

@@ -93,8 +93,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "`k11` float, `k12` double, `k13` decimal(27,9) ) " +
                 "ENGINE=OLAP DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) " +
                 "COMMENT \"OLAP\" DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) " +
-                "BUCKETS 3 PROPERTIES ( \"replication_num\" = \"1\", " +
-                "\"storage_format\" = \"v2\" );");
+                "BUCKETS 3 PROPERTIES ( \"replication_num\" = \"1\");");
 
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW bitmap_mv\n" +
                 "                             AS\n" +
@@ -126,7 +125,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
         FeConstants.runningUnitTest = true;

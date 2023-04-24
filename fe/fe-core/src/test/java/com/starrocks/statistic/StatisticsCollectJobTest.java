@@ -66,8 +66,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats");
@@ -86,8 +85,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1_stats");
@@ -116,8 +114,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         OlapTable t0p = (OlapTable) globalStateMgr.getDb("test").getTable("t0_stats_partition");
         new ArrayList<>(t0p.getPartitions()).get(0).updateVisibleVersion(2);
@@ -134,8 +131,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         OlapTable tps = (OlapTable) globalStateMgr.getDb("stats").getTable("tprimary_stats");
@@ -151,8 +147,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         OlapTable tus = (OlapTable) globalStateMgr.getDb("stats").getTable("tunique_stats");
@@ -167,8 +162,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         OlapTable tcount = (OlapTable) globalStateMgr.getDb("stats").getTable("tcount");
