@@ -5248,9 +5248,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     dateTimeFormatter = DateUtils.probeFormat(stringLiteral.getStringValue());
                     LocalDateTime tempStartTime = DateUtils.
                             parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
+<<<<<<< HEAD
                     if (tempStartTime.isBefore(LocalDateTime.now())) {
                         throw new IllegalArgumentException("Refresh start must be after current time");
                     }
+=======
+>>>>>>> 2b13bae47 ([Enhancement] Support creating mv:  the refresh start time is before current time (#21842))
                     startTime = tempStartTime;
                     defineStartTime = true;
                 } catch (AnalysisException e) {
