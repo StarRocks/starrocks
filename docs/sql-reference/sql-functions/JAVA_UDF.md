@@ -1,6 +1,6 @@
-# [Preview] Java UDFs
+# Java UDFs
 
-From v2.2.0 onwards, you can compile user-defined functions (UDFs) to suit your specific business needs by using the Java programming language. From v3.0 onwards, StarRocks supports global UDFs, and you only need to add the `GLOBAL` keyword in the related SQL statements.
+From v2.2.0 onwards, you can compile user-defined functions (UDFs) to suit your specific business needs by using the Java programming language. From v3.0 onwards, StarRocks supports global UDFs, and you only need to include the `GLOBAL` keyword in the related SQL statements (CREATE/SHOW/DROP).
 
 This topic how to develop and use various UDFs.
 
@@ -213,8 +213,8 @@ During compilation, you must also use the buffer class `java.nio.ByteBuffer` and
 
 Take note of the following points for the deserialization of intermediate results stored in the `java.nio.ByteBuffer` class:
 
-- The `remaining()` method that is dependent on the `ByteBuffer` class cannot be called to deserialize a state.
-- The `clear()` method cannot be called on the `ByteBuffer` class.
+- The remaining() method that is dependent on the `ByteBuffer` class cannot be called to deserialize a state.
+- The clear() method cannot be called on the `ByteBuffer` class.
 - The value of `serializeLength` must be the same as the length of the written-in data. Otherwise, incorrect results are generated during serialization and deserialization.
 
 #### Compile a UDWF
@@ -280,7 +280,7 @@ public class WindowSumInt {
 }
 ```
 
-The user-defined class must implement the method required by UDAFs (because a UDWF is a special aggregate function) and the `windowUpdate()` method described in the following table.
+The user-defined class must implement the method required by UDAFs (because a UDWF is a special aggregate function) and the windowUpdate() method described in the following table.
 
 > **NOTE**
 >
@@ -354,7 +354,7 @@ StarRocks allows you to create UDFs in two types of namespaces: database namespa
 
 > **NOTICE**
 >
-> Before you create and use a global UDF, you must contact the system administrator to grant you the required permissions. For more information, see [GRANT](../../../docs/sql-reference/sql-statements/account-management/GRANT.md).
+> Before you create and use a global UDF, you must contact the system administrator to grant you the required permissions. For more information, see [GRANT](../sql-statements/account-management/GRANT.md).
 
 After you upload the JAR package, you can create UDFs in StarRocks. For a global UDF, you must include the `GLOBAL` keyword in the creation statement.
 
@@ -510,7 +510,7 @@ SHOW [GLOBAL] FUNCTIONS;
 
 For more information, see [SHOW FUNCTIONS](../sql-statements/data-definition/show-functions.md).
 
-## Drop UDF
+## Drop a UDF
 
 Run the following command to drop a UDF:
 

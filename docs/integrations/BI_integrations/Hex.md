@@ -2,7 +2,7 @@
 
 Hex supports querying and visualizing both internal data and external data in StarRocks.
 
-Add a data connection in Hex. Note that you must select MySQL as the connection type
+Add a data connection in Hex. Note that you must select MySQL as the connection type.
 
 ![Hex](../../assets/BI_hex_1.png)
 

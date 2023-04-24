@@ -1,10 +1,10 @@
-# External tables
+# External table
 
 StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. StarRocks supports the following data sources: MySQL, StarRocks, Elasticsearch, Apache Hive™, Apache Iceberg, and Apache Hudi. **Currently, you can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
 
 > **NOTICE**
 >
-> Since v3.0, we recommend that you use catalogs to query Hive, Iceberg, and Hudi data. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
+> Since v3.0, we recommend that you use catalogs to query data from Hive, Iceberg, Hudi, and JDBC data sources. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), [Hudi catalog](../data_source/catalog/hudi_catalog.md), and [JDBC catalog](../data_source/catalog/jdbc_catalog.md).
 
 From 2.5 onwards, StarRocks provides the Local Cache feature, which accelerates hot data queriers on external data sources. For more information, see [Local Cache](Block_cache.md).
 
@@ -368,7 +368,7 @@ select * from es_table where esquery(k4, ' {
 * Elasticsearch clusters with HTTP basic authentication enabled are supported.
 * Querying data from StarRocks may not be as fast as directly querying data from Elasticsearch, such as count-related queries. The reason is that Elasticsearch directly reads the metadata of target documents without the need to filter the real data, which accelerates the count query.
 
-## External table for a JDBC-compatible database
+## (Deprecated) External table for a JDBC-compatible database
 
 From v2.3.0, StarRocks provides external tables to query JDBC-compatible databases. This way, you can analyze the data of such databases in a blazing fast manner without the need to import the data into StarRocks. This section describes how to create an external table in StarRocks and query data in JDBC-compatible databases.
 

@@ -203,7 +203,7 @@ WITH BROKER
 
 #### Load data from other S3-compatible storage system
 
-Use MinIO as an example. You can execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your MinIO bucket `bucket_gcs` into `table1` and `table2`, respectively:
+Use MinIO as an example. You can execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your MinIO bucket `bucket_minio` into `table1` and `table2`, respectively:
 
 ```SQL
 LOAD LABEL test_db.label7
