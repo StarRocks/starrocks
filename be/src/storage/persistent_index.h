@@ -21,6 +21,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/edit_version.h"
+#include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/rowset.h"
 #include "util/phmap/phmap.h"
 #include "util/phmap/phmap_dump.h"
@@ -437,6 +438,7 @@ private:
 
     std::vector<ShardInfo> _shards;
     std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
+    std::unique_ptr<BloomFilter> _bf;
 };
 
 class ImmutableIndexWriter {
@@ -635,6 +637,8 @@ private:
 
     bool _dump_snapshot = false;
     bool _flushed = false;
+    bool _need_bloom_filter = false;
+    std::unique_ptr<BloomFilter> _bf;
 };
 
 } // namespace starrocks
