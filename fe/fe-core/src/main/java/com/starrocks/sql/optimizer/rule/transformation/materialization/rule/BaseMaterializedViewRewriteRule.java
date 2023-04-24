@@ -111,6 +111,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                     mvContext.addMatchedGroup(currentRootGroupId);
                 }
                 results.add(candidate);
+                mvContext.updateMVUsedCount();
             }
         }
 
