@@ -106,4 +106,4 @@ You can access the StarRocks cluster from inside and outside the Kubernetes clus
   helm uninstall starrocks
   ```
 
-- If you need to view the Helm chart for starrocks on artifact hub, see [kube-starrocks](https://artifacthub.io/packages/helm/fslstarrocks/kube-starrocks).
+- If you need to view the Helm Chart for StarRocks on the Artifact Hub, see [kube-starrocks](https://artifacthub.io/packages/helm/fslstarrocks/kube-starrocks).
