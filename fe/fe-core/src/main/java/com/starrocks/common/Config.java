@@ -2236,4 +2236,11 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static boolean enable_execute_script_on_frontend = true;
+
+
+    /**
+     * The default scheduler interval for alter jobs and routine jobs.
+     */
+    @ConfField(mutable = true)
+    public static int default_scheduler_interval_millisecond = 10000;
 }

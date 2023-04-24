@@ -17,6 +17,7 @@ package com.starrocks.leader;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -51,7 +52,7 @@ public class ReportHandlerTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        FeConstants.default_scheduler_interval_millisecond = 1000;
+        Config.default_scheduler_interval_millisecond = 1000;
         FeConstants.runningUnitTest = true;
 
         UtFrameUtils.createMinStarRocksCluster();
@@ -196,7 +197,7 @@ public class ReportHandlerTest {
         // Don't sync and notify, because this BE doesn't exist.
         ReportHandler.testHandleResourceUsageReport(/* Not Exist */ 1, resourceUsage);
     }
-    
+
     @Test
     public void testHandleReport() throws TException {
         Backend be = new Backend(10001, "host1", 8000);

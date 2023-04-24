@@ -79,7 +79,7 @@ public class PlanTestNoneDBBase {
     public static void beforeClass() throws Exception {
         // disable checking tablets
         Config.tablet_sched_max_scheduling_tablets = -1;
-        FeConstants.default_scheduler_interval_millisecond = 1;
+        Config.default_scheduler_interval_millisecond = 1;
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();

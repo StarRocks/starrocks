@@ -36,6 +36,7 @@ package com.starrocks.load.routineload;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Sets;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
@@ -61,7 +62,7 @@ public class RoutineLoadScheduler extends FrontendDaemon {
     }
 
     public RoutineLoadScheduler(RoutineLoadManager routineLoadManager) {
-        super("Routine load scheduler", FeConstants.default_scheduler_interval_millisecond);
+        super("Routine load scheduler", Config.default_scheduler_interval_millisecond);
         this.routineLoadManager = routineLoadManager;
     }
 
