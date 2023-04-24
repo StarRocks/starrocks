@@ -214,7 +214,11 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
                                                              const std::vector<std::string>& txn_logs) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
     const auto now = std::time(nullptr);
+#ifndef BE_TEST
     const auto expire_seconds = std::max<int64_t>(config::lake_gc_segment_expire_seconds, 86400);
+#else
+    const auto expire_seconds = config::lake_gc_segment_expire_seconds;
+#endif
     const auto metadata_root_location = join_path(root_location, kMetadataDirectoryName);
     const auto txn_log_root_location = join_path(root_location, kTxnLogDirectoryName);
     const auto segment_root_location = join_path(root_location, kSegmentDirectoryName);
