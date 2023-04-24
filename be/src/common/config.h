@@ -913,6 +913,7 @@ CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={capacity=256M;num_shard_bits=0}}");
 
 CONF_mInt64(txn_info_history_size, "20000");
+CONF_mInt64(file_write_history_size, "10000");
 
 CONF_mInt32(update_cache_evict_internal_sec, "11");
 CONF_mBool(enable_auto_evict_update_cache, "true");
