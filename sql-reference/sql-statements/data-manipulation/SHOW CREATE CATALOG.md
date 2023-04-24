@@ -2,7 +2,7 @@
 
 ## 功能
 
-查看某个 External Catalog（如 Hive Catalog、Iceberg Catalog、Hudi Catalog 或 Delta Lake Catalog）的创建语句。参见 [Hive Catalog](/data_source/catalog/hive_catalog.md)、[Iceberg Catalog](/data_source/catalog/iceberg_catalog.md)、[Hudi Catalog](/data_source/catalog/hudi_catalog.md)、[Delta Lake Catalog](/data_source/catalog/deltalake_catalog.md) 和 [JDBC catalog](/data_source/catalog/jdbc_catalog.md)。其中认证相关的密钥信息会进行脱敏展示，无法查看。
+查看某个 External Catalog（如 Hive Catalog、Iceberg Catalog、Hudi Catalog、Delta Lake Catalog 或 JDBC Catalog）的创建语句。参见 [Hive Catalog](/data_source/catalog/hive_catalog.md)、[Iceberg Catalog](/data_source/catalog/iceberg_catalog.md)、[Hudi Catalog](/data_source/catalog/hudi_catalog.md)、[Delta Lake Catalog](/data_source/catalog/deltalake_catalog.md) 和 [JDBC catalog](/data_source/catalog/jdbc_catalog.md)。其中认证相关的密钥信息会进行脱敏展示，无法查看。
 
 该命令自 3.0 版本起支持。
 

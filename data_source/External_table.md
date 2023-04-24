@@ -4,7 +4,7 @@ StarRocks 支持以外部表 (External Table) 的形式，接入其他数据源�
 
 > **NOTICE**
 >
-> 从 3.0 版本起，对于查询 Hive、Iceberg 和 Hudi 数据源的场景，推荐使用 Catalog。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../data_source/catalog/iceberg_catalog.md) 和 [Hudi catalog](../data_source/catalog/hudi_catalog.md)。
+> 从 3.0 版本起，对于查询 Hive、Iceberg、Hudi 和 JDBC 数据源的场景，推荐使用 Catalog。参见 [Hive catalog](../data_source/catalog/hive_catalog.md)、[Iceberg catalog](../data_source/catalog/iceberg_catalog.md)、[Hudi catalog](../data_source/catalog/hudi_catalog.md) 和 [JDBC catalog](../data_source/catalog/jdbc_catalog.md)。
 
 从 2.5 版本开始，查询外部数据源时支持 Local Cache，提升对热数据的查询性能。参见[Local Cache](Block_cache.md)。
 
@@ -370,7 +370,7 @@ StarRocks 支持对 Elasticsearch 表进行谓词下推，把过滤条件推给 
 * 支持查询使用 HTTP Basic 认证的 Elasticsearch 集群。
 * 一些通过 StarRocks 的查询会比直接请求 Elasticsearch 会慢很多，比如 count 相关查询。这是因为 Elasticsearch 内部会直接读取满足条件的文档个数相关的元数据，不需要对真实的数据进行过滤操作，使得 count 的速度非常快。
 
-## 更多数据库（JDBC）的外部表
+## (Deprecated) 更多数据库（JDBC）的外部表
 
 自 2.3.0 版本起，StarRocks 支持通过外部表的方式查询支持 JDBC 的数据库，无需将数据导入至 StarRocks，即可实现对这类数据库的极速分析。本文介绍如何在 StarRocks 创建外部表，查询支持 JDBC 的数据库中的数据。
 

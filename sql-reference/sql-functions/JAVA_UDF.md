@@ -1,4 +1,4 @@
-# Java UDF【公测中】
+# Java UDF
 
 自 2.2.0 版本起，StarRocks 支持使用 Java 语言编写用户定义函数（User Defined Function，简称 UDF）。自 3.0 版本起，StarRocks 支持 Global UDF，您只需要在相关的 SQL 语句（CREATE/SHOW/DROP）中加上 `GLOBAL` 关键字，该语句即可全局生效，无需逐个为每个数据库执行此语句。您可以根据业务场景开发自定义函数，扩展 StarRocks 的函数能力。
 
@@ -212,8 +212,8 @@ public class SumInt {
 >
 > `java.nio.ByteBuffer` 序列化相关事项：
 >
-> - 不支持依赖 ByteBuffer 的 `remaining` 方法来反序列化 State。
-> - 不支持对 ByteBuffer 调用 `clear` 方法。
+> - 不支持依赖 ByteBuffer 的 remaining() 方法来反序列化 State。
+> - 不支持对 ByteBuffer 调用 clear()方法。
 > - `serializeLength` 需要与实际写入数据的长度保持一致，否则序列化和反序列化过程中会造成结果错误。
 
 #### 开发 UDWF
@@ -279,7 +279,7 @@ public class WindowSumInt {
 }
 ```
 
-用户自定义类必须实现 UDAF 所需要的方法（窗口函数是特殊聚合函数)，以及方法 `windowUpdate()`。
+用户自定义类必须实现 UDAF 所需要的方法（窗口函数是特殊聚合函数)、以及 windowUpdate() 方法。
 
 > **说明**
 > 方法中请求参数和返回参数的数据类型，需要和步骤六中的 `CREATE FUNCTION` 语句中声明的相同，且两者的类型映射关系需要符合[类型映射关系](#类型映射关系)。
