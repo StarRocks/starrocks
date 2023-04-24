@@ -64,6 +64,7 @@ public class Trino2SRFunctionCallTransformer {
         registerAggregateFunctionTransformer();
         registerArrayFunctionTransformer();
         registerDateFunctionTransformer();
+        registerStringFunctionTransformer();
         // todo: support more function transform
     }
 
@@ -146,6 +147,18 @@ public class Trino2SRFunctionCallTransformer {
         // doy -> dayofyear
         registerFunctionTransformer("doy", 1, "dayofyear",
                 ImmutableList.of(Expr.class));
+    }
+
+    private static void registerStringFunctionTransformer() {
+        // chr -> char
+        registerFunctionTransformer("chr", 1, "char", ImmutableList.of(Expr.class));
+
+        // codepoint -> ascii
+        registerFunctionTransformer("codepoint", 1, "ascii", ImmutableList.of(Expr.class));
+
+        // strpos -> locate
+        registerFunctionTransformer("strpos", 2, new FunctionCallExpr("locate",
+                ImmutableList.of(new PlaceholderExpr(2, Expr.class), new PlaceholderExpr(1, Expr.class))));
     }
 
     private static void registerFunctionTransformer(String trinoFnName, int trinoFnArgNums, String starRocksFnName,

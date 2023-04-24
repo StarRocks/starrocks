@@ -117,4 +117,19 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select doy(date '2022-03-06');";
         assertPlanContains(sql, "dayofyear('2022-03-06 00:00:00')");
     }
+
+    @Test
+    public void testStringFnTransform() throws Exception {
+        String sql = "select chr(56)";
+        assertPlanContains(sql, "char(56)");
+
+        sql = "select codepoint('a')";
+        assertPlanContains(sql, "ascii('a')");
+
+        sql = "select position('aa' in 'bccaab');";
+        assertPlanContains(sql, "locate('aa', 'bccaab')");
+
+        sql = "select strpos('bccaab', 'aa');";
+        assertPlanContains(sql, "locate('aa', 'bccaab')");
+    }
 }
