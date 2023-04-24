@@ -64,6 +64,7 @@ if [[ ! -z ${STARROCKS_GCC_HOME} ]]; then
     export CC=${STARROCKS_GCC_HOME}/bin/gcc
     export CPP=${STARROCKS_GCC_HOME}/bin/cpp
     export CXX=${STARROCKS_GCC_HOME}/bin/g++
+    export PATH=${STARROCKS_GCC_HOME}/bin:$PATH
 else
     echo "STARROCKS_GCC_HOME environment variable is not set"
     exit 1
@@ -443,7 +444,7 @@ build_boost() {
     cd $TP_SOURCE_DIR/$BOOST_SOURCE
 
     ./bootstrap.sh --prefix=$TP_INSTALL_DIR
-    ./b2 link=static runtime-link=static -j $PARALLEL --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR" install
+    ./b2 link=static runtime-link=static -j $PARALLEL --without-test --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR" install
 }
 
 #leveldb
