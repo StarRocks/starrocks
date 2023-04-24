@@ -161,9 +161,54 @@ public class ExpressionAnalyzer {
             }
             expression.setChild(0, last);
         }
+<<<<<<< HEAD
         // the first child is lambdaFunction, following input arrays
         for (int i = 1; i < childSize; ++i) {
             Expr expr = expression.getChild(i);
+=======
+        if (isArrayHighOrderFunction(expression)) {
+            // the first child is lambdaFunction, following input arrays
+            for (int i = 1; i < childSize; ++i) {
+                Expr expr = expression.getChild(i);
+                bottomUpAnalyze(visitor, expr, scope);
+            }
+            // putting lambda inputs should after analyze
+            for (int i = 1; i < childSize; ++i) {
+                Expr expr = expression.getChild(i);
+                if (expr instanceof NullLiteral) {
+                    expr.setType(Type.ARRAY_INT); // Let it have item type.
+                }
+                if (!expr.getType().isArrayType()) {
+                    throw new SemanticException(i + "th lambda input should be arrays", expr.getPos());
+                }
+                Type itemType = ((ArrayType) expr.getType()).getItemType();
+                scope.putLambdaInput(new PlaceHolderExpr(-1, expr.isNullable(), itemType));
+            }
+        } else {
+            Preconditions.checkState(expression instanceof FunctionCallExpr);
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expression;
+            // map_apply(func, map)
+            if (functionCallExpr.getFnName().getFunction().equals(FunctionSet.MAP_APPLY)) {
+                if (!(expression.getChild(0).getChild(0) instanceof MapExpr)) {
+                    throw new SemanticException("The right part of map lambda function (" +
+                            expression.getChild(0).toSql() + ") should have key and value arguments",
+                            expression.getChild(0).getPos());
+                }
+            } else {
+                if (expression.getChild(0).getChild(0) instanceof MapExpr) {
+                    throw new SemanticException("The right part of map lambda function (" +
+                            expression.getChild(0).toSql() + ") should have only one arguments",
+                            expression.getChild(0).getPos());
+                }
+            }
+            if (expression.getChild(0).getChildren().size() != 3) {
+                Expr child = expression.getChild(0);
+                throw new SemanticException("The left part of map lambda function (" +
+                        child.toSql() + ") should have 2 arguments, but there are "
+                        + (child.getChildren().size() - 1) + " arguments", child.getPos());
+            }
+            Expr expr = expression.getChild(1);
+>>>>>>> 40ba6270d ([BugFix] analyze all nest array_map before set lambda inputs in array_map() (#22260))
             bottomUpAnalyze(visitor, expr, scope);
             if (expr instanceof NullLiteral) {
                 expr.setType(Type.ARRAY_INT); // Let it have item type.
@@ -180,10 +225,15 @@ public class ExpressionAnalyzer {
         }
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
+<<<<<<< HEAD
         Expr res = rewriteHighOrderFunction(expression);
         if (res != null) {
             visitor.visit(res, scope);
         }
+=======
+        rewriteHighOrderFunction(expression, visitor, scope);
+        scope.clearLambdaInputs();
+>>>>>>> 40ba6270d ([BugFix] analyze all nest array_map before set lambda inputs in array_map() (#22260))
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
