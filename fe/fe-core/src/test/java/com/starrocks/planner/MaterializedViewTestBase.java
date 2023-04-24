@@ -26,6 +26,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatsConstants;
@@ -66,6 +67,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+
         FeConstants.runningUnitTest = true;
         starRocksAssert = new StarRocksAssert(connectContext);
 
