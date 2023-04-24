@@ -62,3 +62,9 @@ select * from information_schema.load_tracking_logs where database_name='db_${uu
 -- result:
 E: (1064, 'load_tracking_logs must specify label or job_id')
 -- !result
+select * from information_schema.load_tracking_logs where job_id=0;
+-- result:
+-- !result
+select * from information_schema.load_tracking_logs where label="not exist";
+-- result:
+-- !result
