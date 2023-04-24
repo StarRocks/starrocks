@@ -713,4 +713,5 @@ CONF_String(dependency_librdkafka_debug, "all");
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
 CONF_Int32(internal_service_async_thread_num, "10");
 
+CONF_mBool(enable_pk_value_column_zonemap, "true");
 } // namespace starrocks::config
