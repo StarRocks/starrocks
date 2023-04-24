@@ -67,6 +67,7 @@
 #include "storage/update_manager.h"
 #include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
+#include "util/cpu_info.h"
 #include "util/mem_info.h"
 #include "util/parse_util.h"
 #include "util/pretty_printer.h"
@@ -159,14 +160,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
     if (num_prepare_threads <= 0) {
-        num_prepare_threads = std::thread::hardware_concurrency();
+        num_prepare_threads = CpuInfo::num_cores();
     }
     _pipeline_prepare_pool =
             new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
 
     int num_sink_io_threads = config::pipeline_sink_io_thread_pool_thread_num;
     if (num_sink_io_threads <= 0) {
-        num_sink_io_threads = std::thread::hardware_concurrency();
+        num_sink_io_threads = CpuInfo::num_cores();
     }
     if (config::pipeline_sink_io_thread_pool_queue_size <= 0) {
         return Status::InvalidArgument("pipeline_sink_io_thread_pool_queue_size shoule be greater than 0");
@@ -175,7 +176,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new PriorityThreadPool("pip_sink_io", num_sink_io_threads, config::pipeline_sink_io_thread_pool_queue_size);
 
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
-    _max_executor_threads = std::thread::hardware_concurrency();
+    _max_executor_threads = CpuInfo::num_cores();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
         _max_executor_threads = config::pipeline_exec_thread_pool_thread_num;
     }

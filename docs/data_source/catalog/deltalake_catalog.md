@@ -132,7 +132,7 @@ If you choose AWS Glue as the metastore of your data source, take one of the fol
 - To choose IAM user as the credential method for accessing AWS Glue, configure `MetastoreParams` as follows:
 
   ```SQL
-  "aws.glue.use_instance_profile" = 'false',
+  "aws.glue.use_instance_profile" = "false",
   "aws.glue.access_key" = "<iam_user_access_key>",
   "aws.glue.secret_key" = "<iam_user_secret_key>",
   "aws.glue.region" = "<aws_s3_region>"
@@ -181,7 +181,7 @@ If you choose AWS S3 as storage for your Delta Lake cluster, take one of the fol
 - To choose IAM user as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "aws.s3.use_instance_profile" = 'false',
+  "aws.s3.use_instance_profile" = "false",
   "aws.s3.access_key" = "<iam_user_access_key>",
   "aws.s3.secret_key" = "<iam_user_secret_key>",
   "aws.s3.region" = "<aws_s3_region>"
@@ -204,8 +204,8 @@ For information about how to choose a credential method for accessing AWS S3 and
 If you choose an S3-compatible storage system, such as MinIO, as storage for your Delta Lake cluster, configure `StorageCredentialParams` as follows to ensure a successful integration:
 
 ```SQL
-"aws.s3.enable_ssl" = "<true | false>",
-"aws.s3.enable_path_style_access" = "<true | false>",
+"aws.s3.enable_ssl" = "{true | false}",
+"aws.s3.enable_path_style_access" = "{true | false}",
 "aws.s3.endpoint" = "<s3_endpoint>",
 "aws.s3.access_key" = "<iam_user_access_key>",
 "aws.s3.secret_key" = "<iam_user_secret_key>"

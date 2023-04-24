@@ -95,7 +95,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         // nothing to do
     }
 
-    static auto num_hardware_cores = (int32_t)std::thread::hardware_concurrency();
+    static auto num_hardware_cores = static_cast<int32_t>(CpuInfo::num_cores());
     if (res.ok()) {
         heartbeat_result.backend_info.__set_be_port(config::be_port);
         heartbeat_result.backend_info.__set_http_port(config::webserver_port);
