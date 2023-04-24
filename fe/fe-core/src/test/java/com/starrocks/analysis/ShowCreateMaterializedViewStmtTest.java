@@ -98,6 +98,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
                 "AS SELECT `tbl1`.`k1`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
@@ -126,6 +127,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
                 "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
@@ -154,6 +156,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
                 "AS SELECT `tbl1`.`k1`, `tbl1`.`k2` + `tbl1`.`v1` AS `k3`\n" +
@@ -183,6 +186,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
                 "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
@@ -199,6 +203,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")" +
@@ -216,6 +221,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "REFRESH ASYNC START(\"2122-12-31 00:00:00\") EVERY(INTERVAL 1 HOUR)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")\n" +
@@ -233,6 +239,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "refresh async " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")" +
@@ -250,6 +257,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "REFRESH ASYNC\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")\n" +
@@ -267,6 +275,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "refresh async EVERY(INTERVAL 1 HOUR)" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")" +
@@ -284,6 +293,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "REFRESH ASYNC EVERY(INTERVAL 1 HOUR)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")\n" +
@@ -314,6 +324,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "REFRESH MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
                 "AS SELECT `lineitem`.`l_orderkey`, `lineitem`.`l_partkey`, `lineitem`.`l_shipdate`\n" +
@@ -341,6 +352,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "REFRESH DEFERRED MANUAL\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
                 "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `test`.`tbl1`;");
