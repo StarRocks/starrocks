@@ -26,6 +26,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -78,9 +79,17 @@ public class MetaUtils {
     }
 
     public static Database getDatabase(ConnectContext session, TableName tableName) {
-        Database db = session.getGlobalStateMgr().getDb(tableName.getDb());
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", tableName.getDb());
+        Database db;
+        if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+            db = session.getGlobalStateMgr().getDb(tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getDb());
+            }
+        } else {
+            db = session.getGlobalStateMgr().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
+            }
         }
         return db;
     }
@@ -94,27 +103,45 @@ public class MetaUtils {
     }
 
     public static Table getTable(TableName tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", tableName.getDb());
+        if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getDb());
+            }
+            Table table = db.getTable(tableName.getTbl());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", tableName.getTbl());
+            }
+            return table;
+        } else {
+            Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
+                    tableName.getDb(), tableName.getTbl());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", tableName);
+            }
+            return table;
         }
-        Table table = db.getTable(tableName.getTbl());
-        if (table == null) {
-            throw new SemanticException("Table %s is not found", tableName.getTbl());
-        }
-        return table;
     }
 
     public static Table getTable(ConnectContext session, TableName tableName) {
-        Database db = session.getGlobalStateMgr().getDb(tableName.getDb());
-        if (db == null) {
-            throw new SemanticException("Database %s is not found", tableName.getDb());
+        if (CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+            Database db = session.getGlobalStateMgr().getDb(tableName.getDb());
+            if (db == null) {
+                throw new SemanticException("Database %s is not found", tableName.getDb());
+            }
+            Table table = db.getTable(tableName.getTbl());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", tableName.getTbl());
+            }
+            return table;
+        } else {
+            Table table = session.getGlobalStateMgr().getMetadataMgr().getTable(tableName.getCatalog(),
+                    tableName.getDb(), tableName.getTbl());
+            if (table == null) {
+                throw new SemanticException("Table %s is not found", tableName.toString());
+            }
+            return table;
         }
-        Table table = db.getTable(tableName.getTbl());
-        if (table == null) {
-            throw new SemanticException("Table %s is not found", tableName.getTbl());
-        }
-        return table;
     }
 
     public static Table getTable(String catalogName, String dbName, String tableName) {

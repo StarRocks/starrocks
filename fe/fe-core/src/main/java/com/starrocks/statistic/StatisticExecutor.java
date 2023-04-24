@@ -203,7 +203,8 @@ public class StatisticExecutor {
                 || version == StatsConstants.STATISTIC_DICT_VERSION
                 || version == StatsConstants.STATISTIC_HISTOGRAM_VERSION
                 || version == StatsConstants.STATISTIC_TABLE_VERSION
-                || version == StatsConstants.STATISTIC_BATCH_VERSION) {
+                || version == StatsConstants.STATISTIC_BATCH_VERSION
+                || version == StatsConstants.STATISTIC_EXTERNAL_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
@@ -248,7 +249,14 @@ public class StatisticExecutor {
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
         analyzeStatus.setEndTime(LocalDateTime.now());
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        if (analyzeStatus instanceof ExternalAnalyzeStatus) {
+            GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+            return analyzeStatus;
+        } else {
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        }
+
+        // update StatisticsCache
         if (statsJob.getType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             for (String columnName : statsJob.getColumns()) {
                 HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),

@@ -25,6 +25,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
@@ -105,6 +106,18 @@ public class AnalyzeStmtAnalyzer {
 
             analyzeProperties(statement.getProperties());
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
+
+            if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
+                if (statement.isAsync()) {
+                    throw new SemanticException("External table %s don't support async analyze",
+                            statement.getTableName().toString());
+                }
+                if (statement.isSample()) {
+                    throw new SemanticException("External table %s only support FULL analyze",
+                            statement.getTableName().toString());
+                }
+                statement.setExternal(true);
+            }
             return null;
         }
 

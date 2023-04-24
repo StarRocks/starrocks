@@ -140,6 +140,7 @@ import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.AnalyzeStatus;
+import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
@@ -871,14 +872,23 @@ public class StmtExecutor {
             }
         }
 
-        //Only for send sync command to client
-        AnalyzeStatus analyzeStatus = new AnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                db.getId(), table.getId(), analyzeStmt.getColumnNames(),
-                analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
-        analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
-        GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+        AnalyzeStatus analyzeStatus;
+        if (analyzeStmt.isExternal()) {
+            String catalogName = analyzeStmt.getTableName().getCatalog();
+            analyzeStatus = new ExternalAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                    catalogName, db.getId(), table.getId(), db, table,
+                    analyzeStmt.getColumnNames(),
+                    analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
+        } else {
+            //Only for send sync command to client
+            analyzeStatus = new AnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                    db.getId(), table.getId(), analyzeStmt.getColumnNames(),
+                    analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+            GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+        }
 
         if (analyzeStmt.isAsync()) {
             try {
@@ -918,25 +928,40 @@ public class StmtExecutor {
     private void executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus,
                                 Database db, Table table) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
-            statisticExecutor.collectStatistics(statsConnectCtx,
-                    new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
-                            StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
-                            analyzeStmt.getProperties()),
-                    analyzeStatus,
-                    // Sync load cache, auto-populate column statistic cache after Analyze table manually
-                    false);
-        } else {
+        if (analyzeStmt.isExternal()) {
             StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
                     StatsConstants.AnalyzeType.FULL;
+            // TODO: we should check old statistic and confirm paritionlist
             statisticExecutor.collectStatistics(statsConnectCtx,
-                    StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
+                    StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(
+                            analyzeStmt.getTableName().getCatalog(),
+                            db, table,
                             analyzeStmt.getColumnNames(),
                             analyzeType,
                             StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
                     analyzeStatus,
-                    // Sync load cache, auto-populate column statistic cache after Analyze table manually
                     false);
+        } else {
+            if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
+                statisticExecutor.collectStatistics(statsConnectCtx,
+                        new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
+                                StatsConstants.AnalyzeType.HISTOGRAM, StatsConstants.ScheduleType.ONCE,
+                                analyzeStmt.getProperties()),
+                        analyzeStatus,
+                        // Sync load cache, auto-populate column statistic cache after Analyze table manually
+                        false);
+            } else {
+                StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
+                        StatsConstants.AnalyzeType.FULL;
+                statisticExecutor.collectStatistics(statsConnectCtx,
+                        StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
+                                analyzeStmt.getColumnNames(),
+                                analyzeType,
+                                StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
+                        analyzeStatus,
+                        // Sync load cache, auto-populate column statistic cache after Analyze table manually
+                        false);
+            }
         }
     }
 

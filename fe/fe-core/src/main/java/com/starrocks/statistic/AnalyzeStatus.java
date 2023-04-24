@@ -51,7 +51,7 @@ public class AnalyzeStatus implements Writable {
     private List<String> columns;
 
     @SerializedName("type")
-    private StatsConstants.AnalyzeType type;
+    protected StatsConstants.AnalyzeType type;
 
     @SerializedName("scheduleType")
     private StatsConstants.ScheduleType scheduleType;
@@ -60,7 +60,7 @@ public class AnalyzeStatus implements Writable {
     private Map<String, String> properties;
 
     @SerializedName("status")
-    private StatsConstants.ScheduleStatus status;
+    protected StatsConstants.ScheduleStatus status;
 
     @SerializedName("startTime")
     private LocalDateTime startTime;
@@ -69,7 +69,7 @@ public class AnalyzeStatus implements Writable {
     private LocalDateTime endTime;
 
     @SerializedName("reason")
-    private String reason;
+    protected String reason;
 
     @SerializedName("progress")
     private long progress;
@@ -153,7 +153,7 @@ public class AnalyzeStatus implements Writable {
         this.progress = progress;
     }
 
-    private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
+    protected static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
             .addColumn(new Column("Table", ScalarType.createVarchar(20)))
             .addColumn(new Column("Op", ScalarType.createVarchar(20)))
             .addColumn(new Column("Msg_type", ScalarType.createVarchar(20)))
