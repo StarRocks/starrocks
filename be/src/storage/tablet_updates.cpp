@@ -267,6 +267,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
         stats->num_rows = rowset->num_rows();
         stats->byte_size = rowset->data_disk_size();
         stats->num_dels = 0;
+        // the unapplied rowsets have no delete vector yet, so we only need to check the applied rowsets
         if (unapplied_rowsets.find(rsid) == unapplied_rowsets.end()) {
             for (int i = 0; i < rowset->num_segments(); i++) {
                 auto itr = del_vector_cardinality_by_rssid.find(rsid + i);
@@ -275,7 +276,7 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
                 } else {
                     std::string msg = strings::Substitute("delvec not found for rowset $0 segment $1", rsid, i);
                     LOG(ERROR) << msg;
-                    DCHECK(false);
+                    return Status::InternalError(msg);
                 }
             }
         }
