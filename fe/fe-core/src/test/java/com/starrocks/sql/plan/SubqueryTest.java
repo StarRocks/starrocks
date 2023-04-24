@@ -3,8 +3,10 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -1819,5 +1821,40 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  <slot 14> : 8: v4\n" +
                 "  |  \n" +
                 "  28:EXCHANGE");
+    }
+
+    @Test
+    public void testCaseWhenSubquery1() throws Exception {
+        String sql = "with tmp as (select 8 id, 'season' type1, 'a.season' pretype, 'season' ranktype from dual ) " +
+                "select case when id = abs(0) then 'a' " +
+                "else concat( case when a.pretype is not null then CONCAT(',', a.ranktype) " +
+                "else null end, " +
+                "case when exists (select 1 from tmp) then (select type1 from tmp) " +
+                "else null end) end from tmp a;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "14:Project\n" +
+                "  |  <slot 24> : if(CAST(7: expr AS SMALLINT) = abs(0), " +
+                "'a', concat(if(9: expr IS NOT NULL, concat(',', 10: expr), NULL), if(17: expr, 22: expr, NULL)))");
+    }
+
+    @Test
+    public void testCaseWhenSubquery2() throws Exception {
+        String sql = "with tmp as (select 8 id, 'season' type1, 'a.season' pretype, 'season' ranktype from dual ) " +
+                "select case when id = abs(0) then 'a' else case when exists (select 1 from tmp) " +
+                "then (select type1 from tmp) > (select pretype from tmp) else null end end from tmp a;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "20:Project\n" +
+                "  |  <slot 30> : if(CAST(7: expr AS SMALLINT) = abs(0), 'a', " +
+                "CAST(if(17: expr, 23: expr > 27: expr, NULL) AS VARCHAR))");
+    }
+
+    @Test
+    public void testCaseWhenSubquery3() throws Exception {
+        String sql = "with tmp as (select 8 id, 'season' type1, 'a.season' pretype, 'season' ranktype from dual ) " +
+                "select case when id = abs(0) then 'a' else " +
+                "case when exists (select 1 from tmp) then id in (select id > (select type1 from tmp) from tmp )" +
+                " else null end end from tmp a;";
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        assertContains(pair.first, "CTEAnchor(cteid=2)");
     }
 }

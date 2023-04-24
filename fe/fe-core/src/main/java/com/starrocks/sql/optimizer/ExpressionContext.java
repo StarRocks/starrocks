@@ -119,4 +119,8 @@ public class ExpressionContext {
         rootProperty = new LogicalProperty();
         rootProperty.derive(this);
     }
+
+    public boolean isGroupExprContext() {
+        return groupExpression != null;
+    }
 }
