@@ -102,6 +102,7 @@ protected:
         file_writer->init();
         auto st = file_writer->write(chunk.get());
         if (!st.ok()) {
+            std::cout << st.to_string() << std::endl;
             return st;
         }
         return file_writer->close();
@@ -115,6 +116,7 @@ protected:
 
         auto st = file_reader->init(ctx);
         if (!st.ok()) {
+            std::cout << st.to_string() << std::endl;
             return nullptr;
         }
 
@@ -167,6 +169,241 @@ TEST_F(FileWriterTest, TestWriteIntegralTypes) {
         count = col3->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
         chunk->append_column(col3, chunk->num_columns());
+    }
+
+    // write chunk
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    auto st = _write_chunk(chunk, type_descs, schema);
+    ASSERT_OK(st);
+
+    // read chunk and assert equality
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+TEST_F(FileWriterTest, TestWriteDecimal) {
+    std::vector<TypeDescriptor> type_descs{
+            TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL32, 9, 5),
+            TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 18, 9),
+            TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL128, 20, 10),
+    };
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto col0 = ColumnHelper::create_column(type_descs[0], true);
+        std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
+        auto count = col0->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
+        ASSERT_EQ(4, count);
+        chunk->append_column(col0, chunk->num_columns());
+
+        auto col1 = ColumnHelper::create_column(type_descs[1], true);
+        std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
+        count = col1->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
+        ASSERT_EQ(4, count);
+        chunk->append_column(col1, chunk->num_columns());
+
+        auto col2 = ColumnHelper::create_column(type_descs[2], true);
+        std::vector<int128_t> int128_nums{INT64_MIN, INT64_MAX, 0, 1};
+        count = col2->append_numbers(int128_nums.data(), size(int128_nums) * sizeof(int128_t));
+        ASSERT_EQ(4, count);
+        chunk->append_column(col2, chunk->num_columns());
+    }
+
+    // write chunk
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    auto st = _write_chunk(chunk, type_descs, schema);
+    ASSERT_OK(st);
+
+    // read chunk and assert equality
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+
+TEST_F(FileWriterTest, TestWriteBoolean) {
+    auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
+    std::vector<TypeDescriptor> type_descs{type_bool};
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto data_column = BooleanColumn::create();
+        std::vector<uint8_t> values = {0, 1, 1, 0};
+        data_column->append_numbers(values.data(), values.size() * sizeof(uint8_t));
+        auto null_column = UInt8Column::create();
+        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        null_column->append_numbers(nulls.data(), nulls.size());
+        auto nullable_column = NullableColumn::create(data_column, null_column);
+        chunk->append_column(nullable_column, chunk->num_columns());
+    }
+
+    // write chunk
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    auto st = _write_chunk(chunk, type_descs, schema);
+    ASSERT_OK(st);
+
+    // read chunk and assert equality
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+TEST_F(FileWriterTest, TestWriteFloat) {
+    auto type_float = TypeDescriptor::from_logical_type(TYPE_FLOAT);
+    std::vector<TypeDescriptor> type_descs{type_float};
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // not-null column
+        auto data_column = FloatColumn::create();
+        std::vector<float> values = {0.1, 1.1, 1.2, -99.9};
+        data_column->append_numbers(values.data(), values.size() * sizeof(float));
+        auto null_column = UInt8Column::create();
+        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        null_column->append_numbers(nulls.data(), nulls.size());
+        auto nullable_column = NullableColumn::create(data_column, null_column);
+        chunk->append_column(nullable_column, chunk->num_columns());
+    }
+
+    // write chunk
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    auto st = _write_chunk(chunk, type_descs, schema);
+    ASSERT_OK(st);
+
+    // read chunk and assert equality
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+TEST_F(FileWriterTest, TestWriteDouble) {
+    auto type_float = TypeDescriptor::from_logical_type(TYPE_DOUBLE);
+    std::vector<TypeDescriptor> type_descs{type_float};
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // not-null column
+        auto data_column = DoubleColumn::create();
+        std::vector<double> values = {0.1, 1.1, 1.2, -99.9};
+        data_column->append_numbers(values.data(), values.size() * sizeof(double));
+        auto null_column = UInt8Column::create();
+        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        null_column->append_numbers(nulls.data(), nulls.size());
+        auto nullable_column = NullableColumn::create(data_column, null_column);
+        chunk->append_column(nullable_column, chunk->num_columns());
+    }
+
+    // write chunk
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    auto st = _write_chunk(chunk, type_descs, schema);
+    ASSERT_OK(st);
+
+    // read chunk and assert equality
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+TEST_F(FileWriterTest, TestWriteDate) {
+    auto type_date = TypeDescriptor::from_logical_type(TYPE_DATE);
+    std::vector<TypeDescriptor> type_descs{type_date};
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // not-null column
+        auto data_column = DateColumn::create();
+        {
+            Datum datum;
+            datum.set_date(DateValue::create(1999, 9, 9));
+            data_column->append_datum(datum);
+            datum.set_date(DateValue::create(1999, 9, 10));
+            data_column->append_datum(datum);
+            datum.set_date(DateValue::create(1999, 9, 11));
+            data_column->append_datum(datum);
+            data_column->append_default();
+        }
+
+        auto null_column = UInt8Column::create();
+        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        null_column->append_numbers(nulls.data(), nulls.size());
+        auto nullable_column = NullableColumn::create(data_column, null_column);
+        chunk->append_column(nullable_column, chunk->num_columns());
+    }
+
+    // write chunk
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    auto st = _write_chunk(chunk, type_descs, schema);
+    ASSERT_OK(st);
+
+    // read chunk and assert equality
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+TEST_F(FileWriterTest, TestWriteDatetime) {
+    auto type_datetime = TypeDescriptor::from_logical_type(TYPE_DATETIME);
+    std::vector<TypeDescriptor> type_descs{type_datetime};
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // not-null column
+        auto data_column = TimestampColumn::create();
+        {
+            Datum datum;
+            datum.set_timestamp(TimestampValue::create(1999, 9, 9, 0, 0, 0));
+            data_column->append_datum(datum);
+            datum.set_timestamp(TimestampValue::create(1999, 9, 10, 1, 1, 1));
+            data_column->append_datum(datum);
+            datum.set_timestamp(TimestampValue::create(1999, 9, 11, 2, 2, 2));
+            data_column->append_datum(datum);
+            data_column->append_default();
+        }
+
+        auto null_column = UInt8Column::create();
+        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        null_column->append_numbers(nulls.data(), nulls.size());
+        auto nullable_column = NullableColumn::create(data_column, null_column);
+        chunk->append_column(nullable_column, chunk->num_columns());
+    }
+
+    // write chunk
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    auto st = _write_chunk(chunk, type_descs, schema);
+    ASSERT_OK(st);
+
+    // read chunk and assert equality
+    auto read_chunk = _read_chunk(type_descs);
+    ASSERT_TRUE(read_chunk != nullptr);
+    assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+TEST_F(FileWriterTest, TestWriteVarchar) {
+    auto type_varchar = TypeDescriptor::from_logical_type(TYPE_VARCHAR);
+    std::vector<TypeDescriptor> type_descs{type_varchar};
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // not-null column
+        auto data_column = BinaryColumn::create();
+        data_column->append("hello");
+        data_column->append("world");
+        data_column->append("starrocks");
+        data_column->append("lakehouse");
+
+        auto null_column = UInt8Column::create();
+        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        null_column->append_numbers(nulls.data(), nulls.size());
+        auto nullable_column = NullableColumn::create(data_column, null_column);
+        chunk->append_column(nullable_column, chunk->num_columns());
     }
 
     // write chunk

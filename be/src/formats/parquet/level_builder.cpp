@@ -152,8 +152,8 @@ void LevelBuilder::_write_boolean_column_chunk(const LevelBuilderContext& ctx, c
 
     write_leaf_callback(LevelBuilderResult{
             .num_levels = ctx._num_levels,
-            .def_levels = def_levels->data(),
-            .rep_levels = rep_levels->data(),
+            .def_levels = def_levels ? def_levels->data() : nullptr,
+            .rep_levels = rep_levels ? rep_levels->data() : nullptr,
             .values = reinterpret_cast<uint8_t*>(values),
             .null_bitset = nullptr,
     });
@@ -236,7 +236,7 @@ void LevelBuilder::_write_decimal128_column_chunk(const LevelBuilderContext& ctx
             .num_levels = ctx._num_levels,
             .def_levels = def_levels ? def_levels->data() : nullptr,
             .rep_levels = rep_levels ? rep_levels->data() : nullptr,
-            .values = reinterpret_cast<uint8_t*>(values.data()),
+            .values = reinterpret_cast<uint8_t*>(flba_values.data()),
             .null_bitset = nullptr,
     });
 }
