@@ -77,6 +77,10 @@ public class OptExpressionDuplicator {
         return source.getOp().accept(visitor, source, null);
     }
 
+    public Map<ColumnRefOperator, ScalarOperator> getColumnMapping() {
+        return columnMapping;
+    }
+
     public List<ColumnRefOperator> getMappedColumns(List<ColumnRefOperator> originColumns) {
         List<ColumnRefOperator> newColumnRefs = Lists.newArrayList();
         for (ColumnRefOperator columnRef : originColumns) {
