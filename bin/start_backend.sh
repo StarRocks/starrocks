@@ -105,6 +105,11 @@ else
     fi
 fi
 
+# Appending the option to avoid "process heaper" stack overflow exceptions.
+# Tried to adding this option to LIBHDFS_OPTS only, but that doesn't work.
+export JAVA_OPTS="$JAVA_OPTS -Djdk.lang.processReaperUseDefaultStackSize=true"
+export JAVA_OPTS_FOR_JDK_9_AND_LATER="$JAVA_OPTS_FOR_JDK_9_AND_LATER -Djdk.lang.processReaperUseDefaultStackSize=true"
+
 # check java version and choose correct JAVA_OPTS
 JAVA_VERSION=$(jdk_version)
 final_java_opt=$JAVA_OPTS
