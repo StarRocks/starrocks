@@ -581,6 +581,14 @@ public:
      */
     DEFINE_VECTORIZED_FN(time_to_sec);
 
+    /**
+     * calculate a date by year and day of year
+     * @param: [year, dayOfYear]
+     * @paramType columns:[IntColumn,IntColumn]
+     * @return DateColumn
+     */
+    DEFINE_VECTORIZED_FN(make_date);
+
     // Following const variables used to obtains number days of year
     constexpr static int NUMBER_OF_LEAP_YEAR = 366;
     constexpr static int NUMBER_OF_NON_LEAP_YEAR = 365;
