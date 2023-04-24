@@ -51,10 +51,13 @@ public class StreamLoadManager {
 
     private Map<String, StreamLoadTask> idToStreamLoadTask;
 
-    // only used for sync stream load
+    // Only used for sync stream load
     // txnId -> streamLoadTask
     private Map<Long, StreamLoadTask> txnIdToSyncStreamLoadTasks;
 
+    // The reason of not using labelToSyncStreamLoadTasks fo sync stream load is that
+    // there may be lots of sync stream load,
+    // and these task would better not be showed through `show stream load`
     private Map<String, StreamLoadTask> labelToSyncStreamLoadTasks;
     private Map<Long, Map<String, StreamLoadTask>> dbToLabelToStreamLoadTask;
     private ReentrantReadWriteLock lock;

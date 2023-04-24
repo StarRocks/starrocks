@@ -15,7 +15,6 @@
 
 package com.starrocks.load.routineload;
 
-import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
@@ -24,7 +23,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PulsarUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExecPlanFragmentParams;
@@ -127,9 +125,6 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
             throw new MetaNotFoundException("table " + routineLoadJob.getTableId() + " does not exist");
         }
         tRoutineLoadTask.setTbl(tbl.getName());
-        // label = job_name+job_id+task_id+txn_id
-        String label =
-                Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id), txnId);
         tRoutineLoadTask.setLabel(label);
         tRoutineLoadTask.setAuth_code(routineLoadJob.getAuthCode());
         TPulsarLoadInfo tPulsarLoadInfo = new TPulsarLoadInfo();
@@ -177,8 +172,6 @@ public class PulsarTaskInfo extends RoutineLoadTaskInfo {
     }
 
     private TExecPlanFragmentParams plan(RoutineLoadJob routineLoadJob) throws UserException {
-        String label =
-                Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id), txnId);
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);

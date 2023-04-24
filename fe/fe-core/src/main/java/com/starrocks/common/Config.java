@@ -2262,6 +2262,7 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean only_use_compute_node = false;
+
     @ConfField
     public static boolean enable_execute_script_on_frontend = true;
 
@@ -2285,5 +2286,5 @@ public class Config extends ConfigBase {
      * the profile will be put into the profileManager
      */
     @ConfField(mutable = true)
-    public static long stream_load_profile_collect_second = 10000; //10s
+    public static long stream_load_profile_collect_second = 10; //10s
 }

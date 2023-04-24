@@ -87,12 +87,13 @@ public class ProfileManager {
         public byte[] profileContent;
     }
 
-    // only protect profileDeque; profileMap is concurrent, no need to protect
+    // Only protect profileDeque; profileMap is concurrent, no need to protect
     private ReentrantReadWriteLock lock;
     private ReadLock readLock;
     private WriteLock writeLock;
 
     private Deque<ProfileElement> profileDeque;
+
     // The frequency of load may be relatively high,
     // so do not use the same deque and map of the query to reduce the impact on the query
     private Deque<ProfileElement> loadProfileDeque;

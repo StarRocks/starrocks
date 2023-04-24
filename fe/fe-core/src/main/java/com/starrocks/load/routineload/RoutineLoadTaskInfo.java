@@ -99,6 +99,8 @@ public abstract class RoutineLoadTaskInfo {
     // record task schedule info
     protected String msg;
 
+    protected String label;
+
     protected StreamLoadTask streamLoadTask = null;
 
     public RoutineLoadTaskInfo(UUID id, long jobId, long taskScheduleIntervalMs,
@@ -207,8 +209,9 @@ public abstract class RoutineLoadTaskInfo {
         // begin a txn for task
         RoutineLoadJob routineLoadJob = routineLoadManager.getJob(jobId);
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
-        String label =
-                Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id));
+
+        //  label = job_name+job_id+task_id
+        label = Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id));
         txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                 routineLoadJob.getDbId(), Lists.newArrayList(routineLoadJob.getTableId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
