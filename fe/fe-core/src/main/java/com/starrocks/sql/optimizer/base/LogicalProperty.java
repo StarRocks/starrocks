@@ -3,9 +3,11 @@
 package com.starrocks.sql.optimizer.base;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
@@ -33,6 +35,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.starrocks.sql.optimizer.operator.OperatorType.LOGICAL_CTE_ANCHOR;
+import static com.starrocks.sql.optimizer.operator.OperatorType.LOGICAL_CTE_CONSUME;
+import static com.starrocks.sql.optimizer.operator.OperatorType.LOGICAL_CTE_PRODUCE;
+
 public class LogicalProperty implements Property {
     // Operator's output columns
     private ColumnRefSet outputColumns;
@@ -40,8 +46,15 @@ public class LogicalProperty implements Property {
     // The flag for execute upon less than or equal one tablet
     private OneTabletProperty oneTabletProperty;
 
+    // save the used cte collection of this group
+    private CTEProperty usedCTEs;
+
     public ColumnRefSet getOutputColumns() {
         return outputColumns;
+    }
+
+    public CTEProperty getUsedCTEs() {
+        return usedCTEs;
     }
 
     public void setOutputColumns(ColumnRefSet outputColumns) {
@@ -54,21 +67,54 @@ public class LogicalProperty implements Property {
 
     public LogicalProperty() {
         this.outputColumns = new ColumnRefSet();
+        this.usedCTEs = CTEProperty.EMPTY;
     }
 
     public LogicalProperty(ColumnRefSet outputColumns) {
         this.outputColumns = outputColumns;
+        this.usedCTEs = CTEProperty.EMPTY;
     }
 
     public LogicalProperty(LogicalProperty other) {
         outputColumns = other.outputColumns.clone();
         oneTabletProperty = other.oneTabletProperty;
+        usedCTEs = other.usedCTEs;
     }
 
     public void derive(ExpressionContext expressionContext) {
         LogicalOperator op = (LogicalOperator) expressionContext.getOp();
         outputColumns = op.getOutputColumns(expressionContext);
         oneTabletProperty = op.accept(new OneTabletExecutorVisitor(), expressionContext);
+        if (expressionContext.isGroupExprContext()) {
+            // only derived after entering memo
+            deriveUsedCTEs(expressionContext);
+        }
+    }
+
+    private void deriveUsedCTEs(ExpressionContext expressionContext) {
+        OperatorType type = expressionContext.getOp().getOpType();
+        Set<Integer> cteIds = Sets.newHashSet();
+
+        if (type == LOGICAL_CTE_ANCHOR) {
+            LogicalCTEAnchorOperator anchorOperator = (LogicalCTEAnchorOperator) expressionContext.getOp();
+            cteIds.addAll(expressionContext.getChildLogicalProperty(0).getUsedCTEs().getCteIds());
+            cteIds.addAll(expressionContext.getChildLogicalProperty(1).getUsedCTEs().getCteIds());
+            cteIds.remove(anchorOperator.getCteId());
+        } else if (type == LOGICAL_CTE_PRODUCE) {
+            cteIds.addAll(expressionContext.getChildLogicalProperty(0).getUsedCTEs().getCteIds());
+        } else if (type == LOGICAL_CTE_CONSUME) {
+            LogicalCTEConsumeOperator consumeOperator = (LogicalCTEConsumeOperator) expressionContext.getOp();
+            if (expressionContext.arity() > 0) {
+                cteIds.addAll(expressionContext.getChildLogicalProperty(0).getUsedCTEs().getCteIds());
+            }
+            cteIds.add(consumeOperator.getCteId());
+        } else {
+            for (int i = 0; i < expressionContext.arity(); i++) {
+                cteIds.addAll(expressionContext.getChildLogicalProperty(i).getUsedCTEs().getCteIds());
+            }
+        }
+
+        usedCTEs = new CTEProperty(cteIds);
     }
 
     public static final class OneTabletProperty {
