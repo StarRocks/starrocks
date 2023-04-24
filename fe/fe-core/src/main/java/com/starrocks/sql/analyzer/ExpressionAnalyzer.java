@@ -204,6 +204,10 @@ public class ExpressionAnalyzer {
             for (int i = 1; i < childSize; ++i) {
                 Expr expr = expression.getChild(i);
                 bottomUpAnalyze(visitor, expr, scope);
+            }
+            // putting lambda inputs should after analyze
+            for (int i = 1; i < childSize; ++i) {
+                Expr expr = expression.getChild(i);
                 if (expr instanceof NullLiteral) {
                     expr.setType(Type.ARRAY_INT); // Let it have item type.
                 }
@@ -239,10 +243,15 @@ public class ExpressionAnalyzer {
         }
         // visit LambdaFunction
         visitor.visit(expression.getChild(0), scope);
+<<<<<<< HEAD
         Expr res = rewriteHighOrderFunction(expression);
         if (res != null) {
             visitor.visit(res, scope);
         }
+=======
+        rewriteHighOrderFunction(expression, visitor, scope);
+        scope.clearLambdaInputs();
+>>>>>>> 40ba6270d ([BugFix] analyze all nest array_map before set lambda inputs in array_map() (#22260))
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
