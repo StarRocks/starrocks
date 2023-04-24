@@ -98,7 +98,7 @@ jobs:
 
   close_msg:
     runs-on: self-hosted
-    if: github.event.pull_request.merged == true
+    if: github.event.pull_request.merged == true && github.base_ref == 'main'
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
