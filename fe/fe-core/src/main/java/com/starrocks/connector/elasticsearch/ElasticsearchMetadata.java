@@ -38,13 +38,15 @@ public class ElasticsearchMetadata
 
     private final EsRestClient esRestClient;
     private final Map<String, String> properties;
+    private final String catalogName;
     public static final String DEFAULT_DB = "default_db";
     public static final long DEFAULT_DB_ID = 1L;
 
 
-    public ElasticsearchMetadata(EsRestClient esRestClient, Map<String, String> properties) {
+    public ElasticsearchMetadata(EsRestClient esRestClient, Map<String, String> properties, String catalogName) {
         this.esRestClient = esRestClient;
         this.properties = properties;
+        this.catalogName = catalogName;
     }
 
     @Override
@@ -67,17 +69,17 @@ public class ElasticsearchMetadata
         if (!DEFAULT_DB.equalsIgnoreCase(dbName)) {
             return null;
         }
-        return toEsTable(esRestClient, properties, tblName);
+        return toEsTable(esRestClient, properties, tblName, dbName, catalogName);
     }
 
     public static EsTable toEsTable(EsRestClient esRestClient,
                                     Map<String, String> properties,
-                                    String tableName) {
+                                    String tableName, String dbName, String catalogName) {
         try {
             List<Column> columns = EsUtil.convertColumnSchema(esRestClient, tableName);
             properties.put(EsTable.INDEX, tableName);
             EsTable esTable = new EsTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
-                    tableName, columns, properties, new SinglePartitionInfo());
+                    catalogName, dbName, tableName, columns, properties, new SinglePartitionInfo());
             esTable.setComment("created by external es catalog");
             esTable.syncTableMetaData(esRestClient);
             return esTable;

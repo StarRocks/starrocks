@@ -35,7 +35,7 @@ public class ElasticsearchMetadataTest {
             }
         };
 
-        ElasticsearchMetadata metadata = new ElasticsearchMetadata(client, new HashMap<>());
+        ElasticsearchMetadata metadata = new ElasticsearchMetadata(client, new HashMap<>(), "catalog");
         ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
                 "Unknown index not_exist_index",
                 () -> metadata.getTable("default_db", "not_exist_index"));

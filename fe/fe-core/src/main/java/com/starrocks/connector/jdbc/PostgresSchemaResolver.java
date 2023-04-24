@@ -46,9 +46,9 @@ public class PostgresSchemaResolver extends JDBCSchemaResolver {
     }
 
     @Override
-    public Table getTable(long id, String name, List<Column> schema, String dbName,
+    public Table getTable(long id, String name, List<Column> schema, String dbName, String catalogName,
                           Map<String, String> properties) throws DdlException {
-        return new JDBCTable(id, dbName + "." + name, schema, "", properties);
+        return new JDBCTable(id, dbName + "." + name, schema, "", catalogName, properties);
     }
 
     @Override

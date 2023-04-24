@@ -39,7 +39,7 @@ public class DeltaUtils {
     private static final Logger LOG = LogManager.getLogger(DeltaUtils.class);
 
     public static DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                       Configuration configuration) {
+                                                       Configuration configuration, long createTime) {
         DeltaLog deltaLog = DeltaLog.forTable(configuration, path);
 
         if (!deltaLog.tableExists()) {
@@ -70,7 +70,7 @@ public class DeltaUtils {
         }
 
         return new DeltaLakeTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalog, dbName, tblName,
-                fullSchema, metadata.getPartitionColumns(), deltaLog);
+                fullSchema, metadata.getPartitionColumns(), deltaLog, createTime);
     }
 
     public static RemoteFileInputFormat getRemoteFileFormat(String format) {
