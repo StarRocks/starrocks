@@ -17,7 +17,6 @@ package com.starrocks.pseudocluster;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Replica;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

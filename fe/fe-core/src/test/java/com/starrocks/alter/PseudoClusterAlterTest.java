@@ -15,7 +15,6 @@
 package com.starrocks.alter;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.AfterClass;
