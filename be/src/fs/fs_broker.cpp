@@ -210,7 +210,9 @@ class BrokerWritableFile : public WritableFile {
 public:
     BrokerWritableFile(const TNetworkAddress& broker, std::string path, const TBrokerFD& fd, size_t offset,
                        int timeout_ms)
-            : _broker(broker), _path(std::move(path)), _fd(fd), _offset(offset), _timeout_ms(timeout_ms) {}
+            : _broker(broker), _path(std::move(path)), _fd(fd), _offset(offset), _timeout_ms(timeout_ms) {
+        FileSystem::on_file_write_open(this);
+    }
 
     ~BrokerWritableFile() override { (void)BrokerWritableFile::close(); }
 
@@ -248,6 +250,7 @@ public:
         if (_closed) {
             return Status::OK();
         }
+        FileSystem::on_file_write_close(this);
         Status st = broker_close_writer(_broker, _fd, _timeout_ms);
         _closed = true;
         return st;

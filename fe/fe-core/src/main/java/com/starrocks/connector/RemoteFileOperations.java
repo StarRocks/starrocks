@@ -49,10 +49,18 @@ public class RemoteFileOperations {
     }
 
     public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions) {
-        return getRemoteFiles(partitions, Optional.empty());
+        return getRemoteFiles(partitions, Optional.empty(), true);
+    }
+
+    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, boolean useCache) {
+        return getRemoteFiles(partitions, Optional.empty(), useCache);
     }
 
     public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, Optional<String> hudiTableLocation) {
+        return getRemoteFiles(partitions, hudiTableLocation, true);
+    }
+
+    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, Optional<String> hudiTableLocation, boolean useCache) {
         Map<RemotePathKey, Partition> pathKeyToPartition = Maps.newHashMap();
         for (Partition partition : partitions) {
             RemotePathKey key = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
@@ -60,7 +68,7 @@ public class RemoteFileOperations {
         }
 
         int cacheMissSize = partitions.size();
-        if (enableCatalogLevelCache) {
+        if (enableCatalogLevelCache && useCache) {
             cacheMissSize = cacheMissSize - remoteFileIO.getPresentRemoteFiles(
                     Lists.newArrayList(pathKeyToPartition.keySet())).size();
         }
@@ -75,7 +83,7 @@ public class RemoteFileOperations {
             for (Partition partition : partitions) {
                 RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
                 Future<Map<RemotePathKey, List<RemoteFileDesc>>> future = executor.submit(() ->
-                        remoteFileIO.getRemoteFiles(pathKey));
+                        remoteFileIO.getRemoteFiles(pathKey, useCache));
                 futures.add(future);
             }
 
