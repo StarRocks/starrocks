@@ -453,7 +453,7 @@ public class ConnectProcessor {
         if (command == null) {
             ErrorReport.report(ErrorCode.ERR_UNKNOWN_COM_ERROR);
             ctx.getState().setError("Unknown command(" + command + ")");
-            LOG.warn("Unknown command(" + command + ")");
+            LOG.debug("Unknown MySQL protocol command");
             return;
         }
         ctx.setCommand(command);
@@ -486,7 +486,7 @@ public class ConnectProcessor {
                 break;
             default:
                 ctx.getState().setError("Unsupported command(" + command + ")");
-                LOG.warn("Unsupported command(" + command + ")");
+                LOG.debug("Unsupported command: {}", command);
                 break;
         }
     }
