@@ -185,7 +185,7 @@ public class MaterializedViewRewriter {
             List<ScalarOperator> partitionPredicates =
                     getPartitionRelatedPredicates(mvPredicate, mvRewriteContext.getMaterializationContext().getMv());
             if (partitionPredicates.stream().noneMatch(p -> (p instanceof IsNullPredicateOperator)
-                    && !((IsNullPredicateOperator)p).isNotNull())) {
+                    && !((IsNullPredicateOperator) p).isNotNull())) {
                 // there is no partition column is null predicate
                 // add latest partition predicate to mv predicate
                 ScalarOperator rewritten =
