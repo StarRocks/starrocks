@@ -2285,5 +2285,5 @@ public class Config extends ConfigBase {
      * the profile will be put into the profileManager
      */
     @ConfField(mutable = true)
-    public static long stream_load_profile_collect_millis = 10000; //10s
+    public static long stream_load_profile_collect_second = 10000; //10s
 }
