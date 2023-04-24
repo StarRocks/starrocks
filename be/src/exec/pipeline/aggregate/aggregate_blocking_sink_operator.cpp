@@ -49,8 +49,11 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
         if (_aggregator->hash_map_variant().size() == 0) {
             _aggregator->set_ht_eos();
         }
-        _aggregator->hash_map_variant().visit(
-                [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
+        _aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
+            if (!_aggregator->it_hash().has_value()) {
+                _aggregator->it_hash() = _aggregator->_state_allocator.begin();
+            }
+        });
 
     } else if (_aggregator->is_none_group_by_exprs()) {
         // for aggregate no group by, if _num_input_rows is 0,

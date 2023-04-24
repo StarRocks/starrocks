@@ -60,6 +60,5 @@ select * from information_schema.loads where database_name='db_${uuid1}';
 -- !result
 select * from information_schema.load_tracking_logs where database_name='db_${uuid1}';
 -- result:
-65080	insert_1dd7d7e1-c702-11ed-a15b-00163e0dcbfc	db_1cf973c2bf9b491e98d17785d2ee827d	Error: The row is out of partition ranges. Please add a new partition.. Row: [2022-01-14, 2]
-
+E: (1064, 'load_tracking_logs must specify label or job_id')
 -- !result

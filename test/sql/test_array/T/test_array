@@ -1,0 +1,35 @@
+-- name: test01
+select ARRAY<INT>[], [], ARRAY<STRING>['abc'], [123, NULL, 1.0], ['abc', NULL];
+
+-- name: testArrayPredicate
+CREATE TABLE array_data_type
+    (c1 int,
+    c2  array<bigint>, 
+    c3  array<bigint>,
+    c4  array<bigint> not null, 
+    c5  array<bigint> not null)
+    PRIMARY KEY(c1) 
+    DISTRIBUTED BY HASH(c1) 
+    buckets 1 
+    PROPERTIES ("replication_num" = "1");
+
+insert into array_data_type (c1, c2, c3, c4,c5) values 
+    (1,NULL,NULL,[22, 11, 33],[22, 11, 33]);
+
+select c2 = c3 from array_data_type;   
+
+insert into array_data_type (c1, c2, c3, c4,c5) values 
+    (2,NULL,[22, 11, 33],[22, 11, 33],[22, 11, 33]),
+    (3,[22, 11, 33],[22, 11, 33],[22, 11, 33],[22, 11, 33]),
+    (4,[22, 11, 33],NULL,[22, 11, 33],[22, 11, 33]);
+
+select c2 <=> c3 from array_data_type;
+select c2 = c3 from array_data_type;
+select c3 = c4 from array_data_type;
+select c4 = c5 from array_data_type;
+
+insert into array_data_type (c1, c2, c3, c4,c5) values 
+    (5,[22, 11, 33],[22, 11, 33],[22, 11, 44],[22, 11, 33]);
+
+select c4 = c5 from array_data_type;
+select c4 > c5 from array_data_type;
