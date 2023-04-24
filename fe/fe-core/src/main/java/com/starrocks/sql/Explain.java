@@ -111,7 +111,12 @@ public class Explain {
     }
 
     public static CostEstimate buildCost(OptExpression optExpression) {
-        return CostModel.calculateCostEstimate(new ExpressionContext(optExpression));
+        CostEstimate totalCost = CostModel.calculateCostEstimate(new ExpressionContext(optExpression));
+        for (OptExpression child : optExpression.getInputs()) {
+            CostEstimate curCost = buildCost(child);
+            totalCost = CostEstimate.addCost(totalCost, curCost);
+        }
+        return totalCost;
     }
 
     private static class OperatorStr {
