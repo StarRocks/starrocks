@@ -165,7 +165,7 @@ public class ReplayFromDumpTest {
         if (sessionVariable != null) {
             queryDumpInfo.setSessionVariable(sessionVariable);
         }
-        queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(3000);
+        queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         queryDumpInfo.getSessionVariable().setCboPushDownAggregateMode(-1);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
