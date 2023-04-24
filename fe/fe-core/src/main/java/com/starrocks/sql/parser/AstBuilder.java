@@ -5947,9 +5947,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     dateTimeFormatter = DateUtils.probeFormat(stringLiteral.getStringValue());
                     LocalDateTime tempStartTime = DateUtils.
                             parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
-                    if (tempStartTime.isBefore(LocalDateTime.now())) {
-                        throw new ParsingException(PARSER_ERROR_MSG.invalidStartTime(), timePos);
-                    }
                     startTime = tempStartTime;
                     defineStartTime = true;
                 } catch (AnalysisException e) {
