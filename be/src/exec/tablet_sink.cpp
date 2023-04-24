@@ -2020,7 +2020,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
                         }
 #endif
                         if (state->enable_log_rejected_record()) {
-                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(i, ","), ss.str(),
+                            state->append_rejected_record_to_file(chunk->rebuild_csv_row(j, ","), ss.str(),
                                                                   chunk->source_filename());
                         }
                     }
