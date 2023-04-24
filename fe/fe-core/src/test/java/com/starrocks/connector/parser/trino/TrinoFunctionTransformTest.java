@@ -75,4 +75,46 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select slice(array[1,2,3,4], 2, 2)";
         assertPlanContains(sql, "array_slice(ARRAY<tinyint(4)>[1,2,3,4], 2, 2)");
     }
+
+    @Test
+    public void testDateFnTransform() throws Exception {
+        String sql = "select to_unixtime(TIMESTAMP '2023-04-22 00:00:00');";
+        assertPlanContains(sql, "1682092800");
+
+        sql = "select date_parse('2022/10/20/05', '%Y/%m/%d/%H');";
+        assertPlanContains(sql, "2022-10-20 05:00:00");
+
+        sql = "SELECT date_parse('20141221','%Y%m%d');";
+        assertPlanContains(sql, "'2014-12-21'");
+
+        sql = "select date_parse('2014-12-21 12:34:56', '%Y-%m-%d %H:%i:%s');";
+        assertPlanContains(sql, "2014-12-21 12:34:56");
+
+        sql = "select day_of_week(timestamp '2022-03-06 01:02:03');";
+        assertPlanContains(sql, "dayofweek('2022-03-06 01:02:03')");
+
+        sql = "select dow(timestamp '2022-03-06 01:02:03');";
+        assertPlanContains(sql, "dayofweek('2022-03-06 01:02:03')");
+
+        sql = "select dow(date '2022-03-06');";
+        assertPlanContains(sql, "dayofweek('2022-03-06 00:00:00')");
+
+        sql = "select day_of_month(timestamp '2022-03-06 01:02:03');";
+        assertPlanContains(sql, "dayofmonth('2022-03-06 01:02:03')");
+
+        sql = "select day_of_month(date '2022-03-06');";
+        assertPlanContains(sql, "dayofmonth('2022-03-06 00:00:00')");
+
+        sql = "select day_of_year(timestamp '2022-03-06 01:02:03');";
+        assertPlanContains(sql, "dayofyear('2022-03-06 01:02:03')");
+
+        sql = "select day_of_year(date '2022-03-06');";
+        assertPlanContains(sql, "dayofyear('2022-03-06 00:00:00')");
+
+        sql = "select doy(timestamp '2022-03-06 01:02:03');";
+        assertPlanContains(sql, "dayofyear('2022-03-06 01:02:03')");
+
+        sql = "select doy(date '2022-03-06');";
+        assertPlanContains(sql, "dayofyear('2022-03-06 00:00:00')");
+    }
 }
