@@ -556,4 +556,11 @@ public class AnalyzeSingleTest {
         selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
         Assert.assertEquals("1", selectRelation.getSelectList().getOptHints().get("broadcast_row_limit"));
     }
+
+    @Test
+    public void testNonReservedWord() {
+        analyzeSuccess("select 1 as label");
+        analyzeSuccess("select * from (select * from (select v1, row_number() over(partition by v1) " +
+                "as rank from t0) row where row.rank = 1) b where b.v1 = 1");
+    }
 }
