@@ -12,9 +12,9 @@ Supports implicit conversion if the returned value of an expression can be conve
 
 The following bugs are fixed:
 
-- If a user's LOAD privilege is granted at the table level, an error message `Access denied; you need (at least one of) the LOAD privilege(s) for this operation`  is returned at transaction rollback in the event of a load job failure. [# 21129](https://github.com/StarRocks/starrocks/issues/21129)
+- If a user's LOAD_PRIV is granted at the table level, an error message `Access denied; you need (at least one of) the LOAD privilege(s) for this operation`  is returned at transaction rollback in the event of a load job failure. [# 21129](https://github.com/StarRocks/starrocks/issues/21129)
 - After ALTER SYSTEM DROP BACKEND is executed to drop a BE, the replicas of tables whose replication number is set to 2 on that BE cannot be repaired. In this situation, data loads into these tables fail. [# 20681](https://github.com/StarRocks/starrocks/pull/20681)
-- The error message returned when unsupported data types are specified at table creation provides inaccurate error information. [# 20999](https://github.com/StarRocks/starrocks/issues/20999)
+- NPE is returned when an unsupported data type is used in CREATE TABLE. [# 20999](https://github.com/StarRocks/starrocks/issues/20999)
 - The shortcircut logic of the Broadcast Join is abnormal, leading to incorrect query results. [# 20952](https://github.com/StarRocks/starrocks/issues/20952)
 - Disk usage may increase significantly after materialized views are used. [# 20590](https://github.com/StarRocks/starrocks/pull/20590)
 - The Audit Loader plugin cannot be completely uninstalled. [# 20468](https://github.com/StarRocks/starrocks/issues/20468)
