@@ -1033,6 +1033,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorScanRangeShuffle = false;
 
+<<<<<<< HEAD
+=======
+    @VariableMgr.VarAttr(name = CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW)
+    private boolean cboPushDownDistinctBelowWindow = true;
+
+    private int exprChildrenLimit = -1;
+
+    public int getExprChildrenLimit() {
+        return exprChildrenLimit;
+    }
+
+    public void setExprChildrenLimit(int exprChildrenLimit) {
+        this.exprChildrenLimit = exprChildrenLimit;
+    }
+
+>>>>>>> 284e0e7b6 ([BugFix] Support invalid partition statistics delete (#22286))
     public void setFullSortMaxBufferedRows(long v) {
         fullSortMaxBufferedRows = v;
     }
