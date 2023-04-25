@@ -20,7 +20,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 
 import java.io.DataInput;
@@ -63,21 +62,12 @@ public class Cluster implements Writable {
                 String.valueOf(this.getRunningSqls())));
     }
 
-    public void addNode(ComputeNode cn, String warehouseName) {
+    public void addNode(ComputeNode cn) {
         computeNodeList.add(cn);
-        cn.setWarehouseName(warehouseName);
-        if (RunMode.allowCreateLakeTable()) {
-            cn.setWorkerGroupId(workerGroupId);
-            // add worker to group
-        }
     }
 
     public void dropNode(ComputeNode cn) {
         computeNodeList.remove(cn);
-        cn.setWarehouseName(null);
-        if (RunMode.allowCreateLakeTable()) {
-            cn.setWorkerGroupId(-1L);
-        }
     }
 
     @Override
