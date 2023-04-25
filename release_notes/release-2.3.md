@@ -1,5 +1,28 @@
 # StarRocks version 2.3
 
+## 2.3.12
+
+发布日期： 2023 年 4 月 25 日
+
+### 功能优化
+
+如果表达式的返回值可以合法转换为 Boolean 值，则会对其进行隐式转换。[# 21792](https://github.com/StarRocks/starrocks/pull/21792)
+
+### 问题修复
+
+修复了如下问题：
+
+- 如果用户的 LOAD 权限为表级别，则导入作业失败后导入事务回滚时报错提示 `Access denied; you need (at least one of) the LOAD privilege(s) for this operation`。[# 21129](https://github.com/StarRocks/starrocks/issues/21129)
+- 执行 ALTER SYSTEM DROP BACKEND 删除一个 BE 后，可能会导致该 BE 上的两副本表的副本不能修复，进而导致导入作业因为没有可用的副本而失败。[# 20681](https://github.com/StarRocks/starrocks/pull/20681)
+- 建表时使用不支持的数据类型，报错信息有误。[# 20999](https://github.com/StarRocks/starrocks/issues/20999)
+- Broadcast Join 的短路逻辑异常，导致查询结果不正确。[# 20952](https://github.com/StarRocks/starrocks/issues/20952)
+- 使用物化视图后磁盘占用率大幅增加。[# 20590](https://github.com/StarRocks/starrocks/pull/20590)
+- 未能彻底卸载插件 Audit Loader。[# 20468](https://github.com/StarRocks/starrocks/issues/20468)
+- `INSERT INTO XXX SELECT` 返回结果显示的数据行数和 `SELECT COUNT(*) FROM XXX` 返回结果显示的数据行数不一致。[# 20084](https://github.com/StarRocks/starrocks/issues/20084)
+- 如果子查询使用窗口函数，父查询使用 GROUP BY 子句，则查询结果无法聚合。[# 19725](https://github.com/StarRocks/starrocks/issues/19725)
+- 启动 BE 后，BE 进程存在但是 BE 所有端口无法开启。[# 19347](https://github.com/StarRocks/starrocks/pull/19347)
+- 如果磁盘 IO 利用率过高，导致主键模型表的事务提交过慢，则查询该表时可能会返回报错 `backend not found`。[# 18835](https://github.com/StarRocks/starrocks/issues/18835)
+
 ## 2.3.11
 
 发布日期： 2023 年 3 月 28 日
