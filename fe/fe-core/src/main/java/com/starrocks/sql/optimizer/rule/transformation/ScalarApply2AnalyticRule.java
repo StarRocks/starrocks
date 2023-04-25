@@ -861,7 +861,7 @@ public class ScalarApply2AnalyticRule extends TransformationRule {
 
         @Override
         public ScalarOperator visitCastOperator(CastOperator operator, Void context) {
-            return new CastOperator(operator.getType(), clone(operator.getChild(0)), operator.isImplicit());
+            return new CastOperator(operator.getType(), clone(operator.getChild(0)));
         }
 
         @Override

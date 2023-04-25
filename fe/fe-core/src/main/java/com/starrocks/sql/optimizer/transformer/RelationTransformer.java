@@ -291,7 +291,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                     Type outputType = setOperationRelation.getRelationFields().getFieldByIndex(i).getType();
                     if (!outputType.equals(relation.getRelationFields().getFieldByIndex(i).getType())) {
                         ColumnRefOperator c = columnRefFactory.create("cast", outputType, true);
-                        ScalarOperator expr = foldCast(new CastOperator(outputType, childOutputColumn.get(i), true));
+                        ScalarOperator expr = foldCast(new CastOperator(outputType, childOutputColumn.get(i)));
                         projections.put(c, expr);
                         newChildOutputs.add(c);
                     } else {

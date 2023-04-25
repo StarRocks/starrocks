@@ -705,8 +705,8 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitCastExpr(CastExpr node, Context context) {
-            return new CastOperator(node.getType(), visit(node.getChild(0), context.clone(node)),
-                    node.isImplicit());
+            return new CastOperator(node.getType(), visit(node.getChild(0), context.clone(node))
+            );
         }
 
         @Override

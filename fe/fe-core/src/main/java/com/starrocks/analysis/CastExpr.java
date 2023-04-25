@@ -57,12 +57,6 @@ public class CastExpr extends Expr {
     // Only set for explicit casts. Null for implicit casts.
     private final TypeDef targetTypeDef;
 
-    // True if this is a "pre-analyzed" implicit cast.
-    private boolean isImplicit;
-
-    // True if this cast does not change the type.
-    private boolean noOp = false;
-
     public CastExpr(Type targetType, Expr e) {
         this(targetType, e, NodePosition.ZERO);
     }
@@ -73,7 +67,6 @@ public class CastExpr extends Expr {
         Preconditions.checkNotNull(e);
         type = targetType;
         targetTypeDef = null;
-        isImplicit = true;
 
         children.add(e);
         try {
@@ -98,15 +91,12 @@ public class CastExpr extends Expr {
         Preconditions.checkNotNull(targetTypeDef);
         Preconditions.checkNotNull(e);
         this.targetTypeDef = targetTypeDef;
-        isImplicit = false;
         children.add(e);
     }
 
     protected CastExpr(CastExpr other) {
         super(other);
         targetTypeDef = other.targetTypeDef;
-        isImplicit = other.isImplicit;
-        noOp = other.noOp;
     }
 
     public TypeDef getTargetTypeDef() {
@@ -124,9 +114,6 @@ public class CastExpr extends Expr {
 
     @Override
     public String toSqlImpl() {
-        if (isImplicit) {
-            return getChild(0).toSql();
-        }
         if (isAnalyzed) {
             return "CAST(" + getChild(0).toSql() + " AS " + type.toString() + ")";
         } else {
@@ -136,11 +123,7 @@ public class CastExpr extends Expr {
 
     @Override
     protected String explainImpl() {
-        if (noOp) {
-            return getChild(0).explain();
-        } else {
-            return "cast(" + getChild(0).explain() + " as " + type.toString() + ")";
-        }
+        return "cast(" + getChild(0).explain() + " as " + type.toString() + ")";
     }
 
     @Override
@@ -155,21 +138,12 @@ public class CastExpr extends Expr {
         }
     }
 
-    public boolean isImplicit() {
-        return isImplicit;
-    }
-
-    public void setImplicit(boolean implicit) {
-        isImplicit = implicit;
-    }
-
     public void analyze() throws AnalysisException {
         // cast was asked for in the query, check for validity of cast
         Type childType = getChild(0).getType();
 
         // this cast may result in loss of precision, but the user requested it
         if (childType.matchesType(type)) {
-            noOp = true;
             return;
         }
 
@@ -205,26 +179,7 @@ public class CastExpr extends Expr {
 
     @Override
     public Expr reset() {
-        Expr e = super.reset();
-        if (noOp && !getChild(0).getType().matchesType(this.type)) {
-            noOp = false;
-        }
-        return e;
-    }
-
-    /**
-     * Returns child expr if this expr is an implicit cast, otherwise returns 'this'.
-     */
-    @Override
-    public Expr ignoreImplicitCast() {
-        if (isImplicit) {
-            // we don't expect to see to consecutive implicit casts
-            Preconditions.checkState(
-                    !(getChild(0) instanceof CastExpr) || !((CastExpr) getChild(0)).isImplicit());
-            return getChild(0);
-        } else {
-            return this;
-        }
+        return super.reset();
     }
 
     public boolean canHashPartition() {
