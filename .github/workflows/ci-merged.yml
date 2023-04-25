@@ -1,16 +1,18 @@
-name: backport
+name: MERGE PIPELINE
 
 on:
   pull_request_target:
     branches:
       - main
+      - 'branch*'
     types:
       - closed
 jobs:
   backport:
     runs-on: ubuntu-latest
     if: >
-      ${{ github.event.pull_request.merged == true }} &&
+      ${{ github.event.pull_request.merged == true }} && 
+      github.base_ref == 'main' && 
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport') && (
       contains(github.event.pull_request.labels.*.name, '3.0') ||
