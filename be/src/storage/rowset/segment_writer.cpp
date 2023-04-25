@@ -88,6 +88,12 @@ Status SegmentWriter::init() {
     return init(all_column_indexes, true);
 }
 
+inline bool is_zone_map_key_type(FieldType type) {
+    return type != FieldType::OLAP_FIELD_TYPE_CHAR && type != FieldType::OLAP_FIELD_TYPE_VARCHAR &&
+           type != FieldType::OLAP_FIELD_TYPE_JSON && type != FieldType::OLAP_FIELD_TYPE_OBJECT &&
+           type != FieldType::OLAP_FIELD_TYPE_HLL && type != FieldType::OLAP_FIELD_TYPE_PERCENTILE;
+}
+
 Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has_key, SegmentFooterPB* footer) {
     DCHECK(_column_writers.empty());
     DCHECK(_column_indexes.empty());
@@ -132,13 +138,12 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
         // now we create zone map for key columns
         // and not support zone map for array type.
         // TODO(mofei) refactor it to type specification
-        opts.need_zone_map = column.is_key() || (_tablet_schema->keys_type() == KeysType::DUP_KEYS &&
-                                                 column.type() != FieldType::OLAP_FIELD_TYPE_CHAR &&
-                                                 column.type() != FieldType::OLAP_FIELD_TYPE_VARCHAR &&
-                                                 column.type() != FieldType::OLAP_FIELD_TYPE_JSON &&
-                                                 column.type() != FieldType::OLAP_FIELD_TYPE_OBJECT &&
-                                                 column.type() != FieldType::OLAP_FIELD_TYPE_HLL &&
-                                                 column.type() != FieldType::OLAP_FIELD_TYPE_PERCENTILE);
+        const bool enable_pk_zone_map = config::enable_pk_value_column_zonemap &&
+                                        _tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
+                                        is_zone_map_key_type(column.type());
+        const bool enable_dup_zone_map =
+                _tablet_schema->keys_type() == KeysType::DUP_KEYS && is_zone_map_key_type(column.type());
+        opts.need_zone_map = column.is_key() || enable_pk_zone_map || enable_dup_zone_map;
         if (column.type() == FieldType::OLAP_FIELD_TYPE_ARRAY) {
             opts.need_zone_map = false;
         }
