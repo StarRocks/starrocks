@@ -70,6 +70,7 @@ import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
@@ -122,6 +123,7 @@ import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.ShowStorageVolumesStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -851,6 +853,18 @@ public class Analyzer {
 
         @Override
         public Void visitDropStorageVolumeStatement(DropStorageVolumeStmt statement, ConnectContext context) {
+            StorageVolumeAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowStorageVolumesStatement(ShowStorageVolumesStmt statement, ConnectContext context) {
+            StorageVolumeAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDescStorageVolumeStatement(DescStorageVolumeStmt statement, ConnectContext context) {
             StorageVolumeAnalyzer.analyze(statement, context);
             return null;
         }

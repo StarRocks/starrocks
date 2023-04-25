@@ -19,17 +19,18 @@ import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
+import java.util.Optional;
 
 public class AlterStorageVolumeStmt extends DdlStmt {
     private String storageVolumeName;
 
     private Map<String, String> storageParams;
-    private final Boolean enabled;
+    private final Optional<Boolean> enabled;
     private final String comment;
-    private final Boolean isDefault;
+    private final boolean isDefault;
 
-    public AlterStorageVolumeStmt(String storageVolumeName, Map<String, String> storageParams, Boolean enabled,
-                                  Boolean isDefault, String comment, NodePosition pos) {
+    public AlterStorageVolumeStmt(String storageVolumeName, Map<String, String> storageParams, Optional<Boolean> enabled,
+                                  boolean isDefault, String comment, NodePosition pos) {
         super(pos);
         this.storageVolumeName = storageVolumeName;
         this.storageParams = storageParams;
@@ -51,7 +52,7 @@ public class AlterStorageVolumeStmt extends DdlStmt {
     public String toSql() {
         StringBuilder sb = new StringBuilder();
         sb.append("ALTER STORAGE VOLUME ").append(storageVolumeName).append(" SET");
-        if (isDefault != null && isDefault) {
+        if (isDefault) {
             sb.append(" AS DEFAULT");
         }
         if (!storageParams.isEmpty()) {
@@ -59,8 +60,8 @@ public class AlterStorageVolumeStmt extends DdlStmt {
                     append(new PrintableMap<>(storageParams, "=", true, false))
                     .append(")");
         }
-        if (enabled != null) {
-            sb.append(" ENABLED = ").append(enabled);
+        if (enabled.isPresent()) {
+            sb.append(" ENABLED = ").append(enabled.get());
         }
         if (!comment.isEmpty()) {
             sb.append(" COMMENT = '").append(comment).append("'");

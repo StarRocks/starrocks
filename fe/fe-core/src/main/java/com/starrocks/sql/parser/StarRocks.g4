@@ -725,7 +725,7 @@ dropStorageVolumeStatement
     ;
 
 alterStorageVolumeStatement
-    : ALTER STORAGE VOLUME identifier SET (AS DEFAULT)? propertyList? enabledDesc? modifyCommentClause?
+    : ALTER STORAGE VOLUME identifierOrString SET (AS DEFAULT)? propertyList? enabledDesc? modifyCommentClause?
     ;
 
 descStorageVolumeStatement

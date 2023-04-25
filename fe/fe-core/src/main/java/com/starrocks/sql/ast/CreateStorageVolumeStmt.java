@@ -27,7 +27,7 @@ public class CreateStorageVolumeStmt extends DdlStmt {
     private final String storageVolumeType;
     private Map<String, String> storageParams;
     private final List<String> locations;
-    private final Boolean enabled;
+    private final boolean enabled;
     private final String comment;
 
     public CreateStorageVolumeStmt(boolean ifNotExists,
@@ -35,7 +35,7 @@ public class CreateStorageVolumeStmt extends DdlStmt {
                                    String storageVolumeType,
                                    Map<String, String> storageParams,
                                    List<String> locations,
-                                   Boolean enabled,
+                                   boolean enabled,
                                    String comment,
                                    NodePosition pos) {
         super(pos);

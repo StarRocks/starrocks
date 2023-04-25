@@ -408,6 +408,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -3218,7 +3219,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             locations.add(((StringLiteral) visit(location)).getValue());
         }
 
-        Boolean enabled = true;
+        boolean enabled = true;
         if (context.enabledDesc() != null) {
             enabled = Boolean.parseBoolean(context.enabledDesc().booleanValue().getText());
         }
@@ -3242,7 +3243,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAlterStorageVolumeStatement(StarRocksParser.AlterStorageVolumeStatementContext context) {
-        String svName = ((Identifier) visit(context.identifier())).getValue();
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String svName = identifier.getValue();
         NodePosition pos = createPos(context);
 
         Map<String, String> storageParams = new HashMap<>();
@@ -3253,9 +3255,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
-        Boolean enabled = null;
+        Optional<Boolean> enabled = Optional.empty();
         if (context.enabledDesc() != null) {
-            enabled = Boolean.parseBoolean(context.enabledDesc().booleanValue().getText());
+            enabled = Optional.of(Boolean.parseBoolean(context.enabledDesc().booleanValue().getText()));
         }
 
         String comment = context.modifyCommentClause() != null ?
