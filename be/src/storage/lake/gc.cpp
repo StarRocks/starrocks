@@ -33,6 +33,7 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/update_manager.h"
 #include "storage/olap_common.h"
+#include "testutil/sync_point.h"
 #include "util/raw_container.h"
 
 namespace starrocks::lake {
@@ -103,6 +104,8 @@ static Status write_orphan_list_file(const std::set<std::string>& orphans, Writa
 }
 
 static Status delete_tablet_metadata(std::string_view root_location, const std::set<int64_t>& owned_tablets) {
+    TEST_SYNC_POINT("CloudNative::GC::delete_tablet_metadata:enter");
+
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
     const auto max_versions = config::lake_gc_metadata_max_versions;
     if (UNLIKELY(max_versions < 1)) {
@@ -155,6 +158,9 @@ static Status delete_tablet_metadata(std::string_view root_location, const std::
             LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << path << ": " << st;
         }
     }
+
+    TEST_SYNC_POINT("CloudNative::GC::delete_tablet_metadata:return");
+
     return Status::OK();
 }
 
@@ -243,6 +249,8 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         return iter_st;
     }
 
+    TEST_SYNC_POINT("CloudNative::GC::find_orphan_datafiles:finished_list_meta");
+
     VLOG(4) << "Listed all data files. total files=" << total_files << " possible orphan files=" << datafiles.size();
 
     if (datafiles.empty()) {
@@ -274,12 +282,12 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
         }
     };
 
+    TEST_SYNC_POINT("CloudNative::GC::find_orphan_datafiles:check_meta");
+
     for (const auto& filename : tablet_metadatas) {
         auto location = join_path(metadata_root_location, filename);
         auto res = tablet_mgr->get_tablet_metadata(location, false);
-        if (res.status().is_not_found()) {
-            continue;
-        } else if (!res.ok()) {
+        if (!res.ok()) {
             return res.status();
         }
 

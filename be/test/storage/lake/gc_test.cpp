@@ -32,6 +32,7 @@
 #include "storage/lake/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
 #include "util/uid_util.h"
 
 namespace starrocks::lake {
@@ -376,6 +377,79 @@ TEST_F(GCTest, test_delvec_gc) {
             ASSERT_ERROR(fs->path_exists(location));
         }
     }
+}
+
+TEST_F(GCTest, test_concurrent_gc) {
+    auto fs = FileSystem::Default();
+    auto tablet_id_1 = next_id();
+
+    config::lake_gc_segment_expire_seconds = 0;
+    config::lake_gc_metadata_max_versions = 1;
+
+    // LocationProvider and TabletManager of worker A
+    auto lp = std::make_unique<TestLocationProvider>(kTestDir);
+    auto um = std::make_unique<lake::UpdateManager>(lp.get());
+    auto tablet_mgr = std::make_unique<lake::TabletManager>(lp.get(), um.get(), 0);
+    lp->_owned_shards.insert(tablet_id_1);
+
+    auto segments = std::vector<std::string>();
+    for (int i = 0; i < 2; i++) {
+        segments.emplace_back(random_segment_filename());
+        auto location = tablet_mgr->segment_location(tablet_id_1, segments.back());
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(location));
+        ASSERT_OK(wf->append("content"));
+        ASSERT_OK(wf->close());
+    }
+
+    // Generate a metadata of version 1 and segments[0] is referenced in the metadata
+    {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id_1);
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(1);
+        auto rowset = metadata->add_rowsets();
+        rowset->add_segments(segments[0]);
+        ASSERT_OK(tablet_mgr->put_tablet_metadata(metadata));
+    }
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->LoadDependency({
+            {"CloudNative::GC::find_orphan_datafiles:finished_list_meta", "GCTest::test_concurrent_gc:begin_write"},
+            {"GCTest::test_concurrent_gc:finish_write", "CloudNative::GC::delete_tablet_metadata:enter"},
+            {"CloudNative::GC::delete_tablet_metadata:return", "CloudNative::GC::find_orphan_datafiles:check_meta"},
+    });
+
+    // This thread will generate a metadata of version 2 and both segments[0] and segments[1] are referenced in
+    // the metadata
+    auto write_thread = std::thread([&]() {
+        TEST_SYNC_POINT("GCTest::test_concurrent_gc:begin_write");
+        auto metadata_v2 = std::make_shared<TabletMetadata>();
+        metadata_v2->set_id(tablet_id_1);
+        metadata_v2->set_version(2);
+        metadata_v2->set_next_rowset_id(3);
+        metadata_v2->add_rowsets()->add_segments(segments[0]);
+        metadata_v2->add_rowsets()->add_segments(segments[1]);
+        ASSERT_OK(tablet_mgr->put_tablet_metadata(metadata_v2));
+        TEST_SYNC_POINT("GCTest::test_concurrent_gc:finish_write");
+    });
+
+    // This thread can only see the metadata of version 1 and the version 1 will be removed during the execution
+    auto datagc_thread = std::thread([&]() { (void)datafile_gc(kTestDir, tablet_mgr.get()); });
+
+    // This thread is used to simulate the shard been balanced to another node.
+    // This thread will remove the metadata of version 1 but keep the metadata of version 2
+    auto metagc_thread = std::thread([&]() { CHECK_OK(metadata_gc(kTestDir, tablet_mgr.get(), 0)); });
+
+    write_thread.join();
+    datagc_thread.join();
+    metagc_thread.join();
+
+    ASSERT_TRUE(fs->path_exists(tablet_mgr->tablet_metadata_location(tablet_id_1, 1)).is_not_found());
+    ASSERT_TRUE(fs->path_exists(tablet_mgr->tablet_metadata_location(tablet_id_1, 2)).ok());
+    ASSERT_TRUE(fs->path_exists(tablet_mgr->segment_location(tablet_id_1, segments[0])).ok());
+    ASSERT_TRUE(fs->path_exists(tablet_mgr->segment_location(tablet_id_1, segments[1])).ok());
+
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 } // namespace starrocks::lake
