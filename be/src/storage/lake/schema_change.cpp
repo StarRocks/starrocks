@@ -372,8 +372,15 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
     // copy delete vector files if necessary
     if (op_schema_change->linked_segment() && base_metadata->has_delvec_meta()) {
         for (const auto& delvec : base_metadata->delvec_meta().delvecs()) {
-            auto src = base_tablet->delvec_location(delvec.second.version());
-            auto dst = new_tablet->delvec_location(delvec.second.version());
+            auto itr_src = base_metadata->delvec_meta().version_to_delvec().find(delvec.second.version());
+            if (itr_src == base_metadata->delvec_meta().version_to_delvec().end()) {
+                LOG(ERROR) << "Can't find delvec file for tablet: " << base_metadata->id()
+                           << ", version: " << delvec.second.version();
+                return Status::InternalError("Can't find delvec file");
+            }
+
+            auto src = base_tablet->delvec_location(itr_src->second);
+            auto dst = new_tablet->delvec_location(tablet_delvec_filename());
             RETURN_IF_ERROR(fs::copy_file(src, dst));
         }
         op_schema_change->mutable_delvec_meta()->CopyFrom(base_metadata->delvec_meta());

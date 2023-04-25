@@ -353,8 +353,15 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
 
     auto check_delvecs = [&](int64_t tablet_id, const DelvecMetadataPB& delvec_meta) {
         for (const auto& delvec : delvec_meta.delvecs()) {
-            std::string delvec_name = tablet_delvec_filename(tablet_id, delvec.second.version());
-            datafiles.erase(delvec_name);
+            // lookup delvec file name from map
+            auto iter = delvec_meta.version_to_delvec().find(delvec.second.version());
+            // find nothing, something wrong
+            if (iter == delvec_meta.version_to_delvec().end()) {
+                LOG(ERROR) << "Can't find delvec file name for tablet: " << tablet_id
+                           << ", version: " << delvec.second.version();
+            } else {
+                datafiles.erase(iter->second);
+            }
         }
     };
 
