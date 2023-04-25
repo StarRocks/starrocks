@@ -754,9 +754,13 @@ public class OlapTable extends Table implements GsonPostProcessable {
             } else if (!reserveTablets) {
                 tabletIds = GlobalStateMgr.getCurrentState().onErasePartition(partition);
             }
+<<<<<<< HEAD
 
             // drop partition info
             rangePartitionInfo.dropPartition(partition.getId());
+=======
+            GlobalStateMgr.getCurrentAnalyzeMgr().dropPartition(partition.getId());
+>>>>>>> 284e0e7b6 ([BugFix] Support invalid partition statistics delete (#22286))
         }
         return tabletIds;
     }

@@ -635,8 +635,249 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PRUNE_SHUFFLE_COLUMN_RATE, flag = VariableMgr.INVISIBLE)
     private double cboPruneShuffleColumnRate = 0.1;
 
+<<<<<<< HEAD
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
+=======
+    // 0: auto, 1: force push down, -1: don't push down, 2: push down medium, 3: push down high
+    @VarAttr(name = "cboPushDownAggregateMode_v1", alias = CBO_PUSH_DOWN_AGGREGATE_MODE,
+            show = CBO_PUSH_DOWN_AGGREGATE_MODE, flag = VariableMgr.INVISIBLE)
+    private int cboPushDownAggregateMode = -1;
+
+    // auto, global, local
+    @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE, flag = VariableMgr.INVISIBLE)
+    private String cboPushDownAggregate = "global";
+
+    @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
+    private int parseTokensLimit = 3500000;
+
+    @VarAttr(name = ENABLE_SORT_AGGREGATE)
+    private boolean enableSortAggregate = false;
+
+    @VarAttr(name = ENABLE_PARALLEL_MERGE)
+    private boolean enableParallelMerge = false;
+
+    // 1: sort based, 2: hash based
+    @VarAttr(name = WINDOW_PARTITION_MODE, flag = VariableMgr.INVISIBLE)
+    private int windowPartitionMode = 1;
+
+    @VarAttr(name = ENABLE_REWRITE_SUM_BY_ASSOCIATIVE_RULE)
+    private boolean enableRewriteSumByAssociativeRule = true;
+
+    @VarAttr(name = ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN)
+    private boolean enableRewriteSimpleAggToMetaScan = false;
+
+    public boolean isEnableSortAggregate() {
+        return enableSortAggregate;
+    }
+
+    public int getWindowPartitionMode() {
+        return windowPartitionMode;
+    }
+
+    public void setEnableSortAggregate(boolean enableSortAggregate) {
+        this.enableSortAggregate = enableSortAggregate;
+    }
+
+    public boolean isEnableParallelMerge() {
+        return enableParallelMerge;
+    }
+
+    public void setEnableParallelMerge(boolean enableParallelMerge) {
+        this.enableParallelMerge = enableParallelMerge;
+    }
+
+    @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
+    private boolean useScanBlockCache = false;
+
+    @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
+    private int ioTasksPerScanOperator = 4;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR)
+    private int connectorIoTasksPerScanOperator = 16;
+
+    @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS)
+    private boolean enableConnectorAdaptiveIoTasks = true;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS, flag = VariableMgr.INVISIBLE)
+    private int connectorIoTasksSlowIoLatency = 50;
+
+    @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
+    private boolean enablePopulateBlockCache = true;
+
+    @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
+    private boolean hudiMORForceJNIReader = false;
+
+    @VarAttr(name = ENABLE_QUERY_CACHE)
+    private boolean enableQueryCache = false;
+
+    @VarAttr(name = QUERY_CACHE_FORCE_POPULATE)
+    private boolean queryCacheForcePopulate = false;
+
+    @VarAttr(name = QUERY_CACHE_ENTRY_MAX_BYTES)
+    private long queryCacheEntryMaxBytes = 4194304;
+
+    @VarAttr(name = QUERY_CACHE_ENTRY_MAX_ROWS)
+    private long queryCacheEntryMaxRows = 409600;
+
+    @VarAttr(name = QUERY_CACHE_HOT_PARTITION_NUM)
+    private int queryCacheHotPartitionNum = 3;
+
+    @VarAttr(name = QUERY_CACHE_AGG_CARDINALITY_LIMIT)
+    private long queryCacheAggCardinalityLimit = 5000000;
+
+    @VarAttr(name = NESTED_MV_REWRITE_MAX_LEVEL)
+    private int nestedMvRewriteMaxLevel = 3;
+
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE)
+    private boolean enableMaterializedViewRewrite = true;
+
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_UNION_REWRITE)
+    private boolean enableMaterializedViewUnionRewrite = true;
+
+    @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
+    private boolean enableRuleBasedMaterializedViewRewrite = true;
+
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE)
+    private boolean enableMaterializedViewViewDeltaRewrite = true;
+
+    //  Whether to enable view delta compensation for single table,
+    //  - try to rewrite single table query into candidate view-delta mvs if enabled which will choose
+    //      plan by cost.
+    //  - otherwise not try to write single table query by using candidate view-delta mvs which only
+    //      try to rewrite by single table mvs and is determined by rule rather than by cost.
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE, flag = VariableMgr.INVISIBLE)
+    private boolean enableMaterializedViewSingleTableViewDeltaRewrite = false;
+
+    @VarAttr(name = ANALYZE_FOR_MV)
+    private String analyzeTypeForMV = "sample";
+
+    // if enable_big_query_log = true and cpu/io cost of a query exceeds the related threshold,
+    // the information will be written to the big query log
+    @VarAttr(name = ENABLE_BIG_QUERY_LOG)
+    private boolean enableBigQueryLog = true;
+    // the value is set for testing,
+    // if a query needs to perform 10s for computing tasks at full load on three 16-core machines,
+    // we treat it as a big query, so set this value to 480(10 * 16 * 3).
+    // Users need to set up according to their own scenario.
+    @VarAttr(name = BIG_QUERY_LOG_CPU_SECOND_THRESHOLD)
+    private long bigQueryLogCPUSecondThreshold = 480;
+    // the value is set for testing, if a query needs to scan more than 10GB of data, we treat it as a big query.
+    // Users need to set up according to their own scenario.
+    @VarAttr(name = BIG_QUERY_LOG_SCAN_BYTES_THRESHOLD)
+    private long bigQueryLogScanBytesThreshold = 1024L * 1024 * 1024 * 10;
+    // the value is set for testing, if a query need to scan more than 1 billion rows of data,
+    // we treat it as a big query.
+    // Users need to set up according to their own scenario.
+    @VarAttr(name = BIG_QUERY_LOG_SCAN_ROWS_THRESHOLD)
+    private long bigQueryLogScanRowsThreshold = 1000000000L;
+
+    @VarAttr(name = SQL_DIALECT)
+    private String sqlDialect = "StarRocks";
+
+    @VarAttr(name = ENABLE_OUTER_JOIN_REORDER)
+    private boolean enableOuterJoinReorder = true;
+
+    // This value is different from cboMaxReorderNodeUseExhaustive which only counts innerOrCross join node, while it
+    // counts all types of join node including outer/semi/anti join.
+    @VarAttr(name = CBO_REORDER_THRESHOLD_USE_EXHAUSTIVE)
+    private int cboReorderThresholdUseExhaustive = 6;
+
+    @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
+    private boolean enablePruneComplexTypes = true;
+
+    @VarAttr(name = RANGE_PRUNER_PREDICATES_MAX_LEN)
+    public int rangePrunerPredicateMaxLen = 100;
+
+    @VarAttr(name = SQL_QUOTE_SHOW_CREATE)
+    private boolean quoteShowCreate = true; // Defined but unused now, for compatibility with MySQL
+
+    @VariableMgr.VarAttr(name = GROUP_CONCAT_MAX_LEN)
+    private long groupConcatMaxLen = 65535;
+
+    @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_ROWS, flag = VariableMgr.INVISIBLE)
+    private long fullSortMaxBufferedRows = 1024000;
+
+    @VariableMgr.VarAttr(name = FULL_SORT_MAX_BUFFERED_BYTES, flag = VariableMgr.INVISIBLE)
+    private long fullSortMaxBufferedBytes = 16L * 1024 * 1024;
+
+    @VariableMgr.VarAttr(name = FULL_SORT_LATE_MATERIALIZATION)
+    private boolean fullSortLateMaterialization = false;
+
+    @VariableMgr.VarAttr(name = DISTINCT_COLUMN_BUCKETS)
+    private int distinctColumnBuckets = 1024;
+
+    @VariableMgr.VarAttr(name = ENABLE_DISTINCT_COLUMN_BUCKETIZATION)
+    private boolean enableDistinctColumnBucketization = false;
+
+    @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
+    private boolean hdfsBackendSelectorScanRangeShuffle = false;
+
+    @VariableMgr.VarAttr(name = CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW)
+    private boolean cboPushDownDistinctBelowWindow = true;
+
+    private int exprChildrenLimit = -1;
+
+    public int getExprChildrenLimit() {
+        return exprChildrenLimit;
+    }
+
+    public void setExprChildrenLimit(int exprChildrenLimit) {
+        this.exprChildrenLimit = exprChildrenLimit;
+    }
+
+    public void setFullSortMaxBufferedRows(long v) {
+        fullSortMaxBufferedRows = v;
+    }
+
+    public void setFullSortMaxBufferedBytes(long v) {
+        fullSortMaxBufferedBytes = v;
+    }
+
+    public long getFullSortMaxBufferedRows() {
+        return fullSortMaxBufferedRows;
+    }
+
+    public long getFullSortMaxBufferedBytes() {
+        return fullSortMaxBufferedBytes;
+    }
+
+    public void setFullSortLateMaterialization(boolean v) {
+        fullSortLateMaterialization = v;
+    }
+
+    public boolean isFullSortLateMaterialization() {
+        return fullSortLateMaterialization;
+    }
+
+    public void setDistinctColumnBuckets(int buckets) {
+        distinctColumnBuckets = buckets;
+    }
+
+    public int getDistinctColumnBuckets() {
+        return distinctColumnBuckets;
+    }
+
+    public void setEnableDistinctColumnBucketization(boolean flag) {
+        enableDistinctColumnBucketization = flag;
+    }
+
+    public boolean isEnableDistinctColumnBucketization() {
+        return enableDistinctColumnBucketization;
+    }
+
+    public boolean getHudiMORForceJNIReader() {
+        return hudiMORForceJNIReader;
+    }
+
+    public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
+        this.cboCTEMaxLimit = cboCTEMaxLimit;
+    }
+
+    public int getCboCTEMaxLimit() {
+        return cboCTEMaxLimit;
+    }
+>>>>>>> 284e0e7b6 ([BugFix] Support invalid partition statistics delete (#22286))
 
     public double getCboPruneShuffleColumnRate() {
         return cboPruneShuffleColumnRate;

@@ -94,6 +94,19 @@ public class StatisticExecutor {
         }
     }
 
+    public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
+        String sql = StatisticSQLBuilder.buildDropPartitionSQL(pids);
+        LOG.debug("Expire partition statistic SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
+    public boolean dropTableInvalidPartitionStatistics(ConnectContext statsConnectCtx, List<Long> tables,
+                                                    List<Long> pids) {
+        String sql = StatisticSQLBuilder.buildDropTableInvalidPartitionSQL(tables, pids);
+        LOG.debug("Expire invalid partition statistic SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
     public List<TStatisticData> queryHistogram(ConnectContext statsConnectCtx, Long tableId, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildQueryHistogramStatisticsSQL(tableId, columnNames);
         return executeDQL(statsConnectCtx, sql);
@@ -120,8 +133,14 @@ public class StatisticExecutor {
 
         Database db = MetaUtils.getDatabase(dbId);
         Table table = MetaUtils.getTable(dbId, tableId);
+<<<<<<< HEAD
         if (!table.isOlapOrLakeTable()) {
             throw new SemanticException("Table '%s' is not a OLAP table or LAKE table", table.getName());
+=======
+        if (!(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
+            throw new SemanticException("Table '%s' is not a OLAP table or LAKE table or Materialize View",
+                    table.getName());
+>>>>>>> 284e0e7b6 ([BugFix] Support invalid partition statistics delete (#22286))
         }
 
         OlapTable olapTable = (OlapTable) table;
@@ -252,7 +271,7 @@ public class StatisticExecutor {
             executor.execute();
             return true;
         } catch (Exception e) {
-            LOG.warn("Execute statistic DML " + sql + " fail.", e);
+            LOG.warn("Execute statistic DML fail | {} | SQL {}", DebugUtil.printId(context.getQueryId()), sql, e);
             return false;
         }
     }

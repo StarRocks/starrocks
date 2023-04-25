@@ -1,8 +1,25 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 284e0e7b6 ([BugFix] Support invalid partition statistics delete (#22286))
 
 package com.starrocks.statistic;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import org.apache.velocity.VelocityContext;
@@ -99,6 +116,25 @@ public class StatisticSQLBuilder {
         }
 
         return "DELETE FROM " + tableName + " WHERE TABLE_ID = " + tableId;
+    }
+
+    public static String buildDropPartitionSQL(List<Long> pids) {
+        return "DELETE FROM " + FULL_STATISTICS_TABLE_NAME + " WHERE " +
+                " PARTITION_ID IN (" +
+                pids.stream().map(String::valueOf).collect(Collectors.joining(", ")) +
+                ");";
+    }
+
+    public static String buildDropTableInvalidPartitionSQL(List<Long> tables, List<Long> partitions) {
+        Preconditions.checkState(!tables.isEmpty() && !partitions.isEmpty());
+
+        StringBuilder sql = new StringBuilder();
+        sql.append("DELETE FROM " + FULL_STATISTICS_TABLE_NAME + " WHERE");
+        String tids = tables.stream().map(String::valueOf).collect(Collectors.joining(", "));
+        String pids = partitions.stream().map(String::valueOf).collect(Collectors.joining(", "));
+        sql.append(" TABLE_ID IN (").append(tids).append(")");
+        sql.append(" AND PARTITION_ID NOT IN (").append(pids).append(")");
+        return sql.toString();
     }
 
     public static String buildQueryHistogramStatisticsSQL(Long tableId, List<String> columnNames) {

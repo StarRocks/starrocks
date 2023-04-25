@@ -82,8 +82,15 @@ public class SqlParser {
         StarRocksParser parser = new StarRocksParser(tokenStream);
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
+<<<<<<< HEAD
         StarRocksParser.ExpressionContext expressionContext = parser.expression();
         return ((Expr) new AstBuilder(sqlMode).visit(expressionContext));
+=======
+        parser.removeParseListeners();
+        parser.addParseListener(new PostProcessListener(sessionVariable.getParseTokensLimit(),
+                Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit())));
+        return parser;
+>>>>>>> 284e0e7b6 ([BugFix] Support invalid partition statistics delete (#22286))
     }
 
     public static StatementBase parseFirstStatement(String originSql, long sqlMode) {

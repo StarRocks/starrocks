@@ -101,4 +101,23 @@ public class StatisticsSQLTest extends PlanTestBase {
         assertCContains(plan, "left(");
         assertCContains(plan, "char_length(");
     }
+
+    @Test
+    public void testDropPartitionSQL() throws Exception {
+        starRocksAssert.useDatabase("_statistics_");
+        String sql = StatisticSQLBuilder.buildDropPartitionSQL(Lists.newArrayList(1L, 2L, 3L));
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "partition_id IN (1, 2, 3)");
+
+    }
+
+    @Test
+    public void testDropInvalidPartitionSQL() throws Exception {
+        starRocksAssert.useDatabase("_statistics_");
+        String sql = StatisticSQLBuilder.buildDropTableInvalidPartitionSQL(Lists.newArrayList(4L, 5L, 6L),
+                Lists.newArrayList(1L, 2L, 3L));
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "table_id IN (4, 5, 6)");
+        assertCContains(plan, "partition_id NOT IN (1, 2, 3)");
+    }
 }

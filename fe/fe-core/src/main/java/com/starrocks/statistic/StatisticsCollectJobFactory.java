@@ -99,6 +99,12 @@ public class StatisticsCollectJobFactory {
             return;
         }
 
+        if (table instanceof OlapTable) {
+            if (((OlapTable) table).getState() != OlapTable.OlapTableState.NORMAL) {
+                return;
+            }
+        }
+
         if (StatisticUtils.isEmptyTable(table)) {
             return;
         }
