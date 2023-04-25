@@ -58,7 +58,7 @@ struct TTabletSchema {
 // this enum stands for different storage format in src_backends
 // V1 for Segment-V1
 // V2 for Segment-V2
-enum TStorageFormat {
+enum TStorageFormat { //Deprecated
     DEFAULT,
     V1,
     V2
@@ -97,7 +97,7 @@ struct TCreateTabletReq {
     11: optional i64 allocation_term
     // indicate whether this tablet is a compute storage split mode, we call it "eco mode"
     12: optional bool is_eco_mode
-    13: optional TStorageFormat storage_format
+    13: optional TStorageFormat storage_format //Deprecated
     14: optional TTabletType tablet_type
     15: optional bool enable_persistent_index
     16: optional Types.TCompressionType compression_type = Types.TCompressionType.LZ4_FRAME

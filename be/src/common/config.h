@@ -819,6 +819,7 @@ CONF_Int64(lake_gc_metadata_max_versions, "10");
 CONF_Int64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
 CONF_Int64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
 // This value should be much larger than the maximum timeout of loading/compaction/schema change jobs.
+// The actual effective value is max(lake_gc_segment_expire_seconds, 86400)
 CONF_Int64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
 CONF_Bool(lake_compaction_check_txn_log_first, "false");
 
@@ -943,5 +944,7 @@ CONF_mBool(enable_auto_evict_update_cache, "true");
 CONF_Bool(enable_preload_column_mode_update_cache, "true");
 
 CONF_mInt64(load_tablet_timeout_seconds, "30");
+
+CONF_mBool(enable_pk_value_column_zonemap, "true");
 
 } // namespace starrocks::config

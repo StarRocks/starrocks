@@ -31,7 +31,6 @@ ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 WORKDIR /root
 
-
 FROM base as builder
 ARG prebuild_maven
 ARG predownload_thirdparty
@@ -55,7 +54,6 @@ FROM starrocks/starlet-artifacts-ubuntu22:${starlet_tag} as starlet-ubuntu
 FROM starrocks/starlet-artifacts-centos7:${starlet_tag} as starlet-centos7
 # determine which artifacts to use
 FROM starlet-${distro} as starlet
-
 
 FROM base as dev-env
 ARG commit_id

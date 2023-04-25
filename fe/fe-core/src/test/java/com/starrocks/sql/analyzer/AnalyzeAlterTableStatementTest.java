@@ -96,8 +96,6 @@ public class AnalyzeAlterTableStatementTest {
                 "Unknown properties: {abc=2}");
         analyzeFail("ALTER TABLE test.t0 SET (\"send_clear_alter_tasks\" = \"FALSE\");",
                 "Property send_clear_alter_tasks should be set to true");
-        analyzeFail("ALTER TABLE test.t0 SET (\"storage_format\" = \"V1\");",
-                "Property storage_format should be v2");
         analyzeFail("ALTER TABLE test.t0 SET (\"tablet_type\" = \"V1\");",
                 "Alter tablet type not supported");
     }
