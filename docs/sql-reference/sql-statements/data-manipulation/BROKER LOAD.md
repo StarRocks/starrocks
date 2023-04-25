@@ -323,8 +323,8 @@ If you choose Google GCS as your storage system, take one of the following actio
 - To choose the service account-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "gcp.gcs.service_account_email" = "<google_service_account_email>"
-  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>"
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
   "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
   ```
 
@@ -341,7 +341,7 @@ If you choose Google GCS as your storage system, take one of the following actio
   - Make a VM instance impersonate a service account:
 
     ```SQL
-    "gcp.gcs.use_compute_engine_service_account" = "true"
+    "gcp.gcs.use_compute_engine_service_account" = "true",
     "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
     ```
 
@@ -355,9 +355,9 @@ If you choose Google GCS as your storage system, take one of the following actio
   - Make a service account (named as meta service account) impersonate another service account (named as data service account):
 
     ```SQL
-    "gcp.gcs.service_account_email" = "<google_service_account_email>"
-    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>"
-    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>"
+    "gcp.gcs.service_account_email" = "<google_service_account_email>",
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
 
@@ -447,8 +447,8 @@ If you choose Data Lake Storage Gen1 as your storage system, take one of the fol
 - To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls1.oauth2_client_id" = "<application_client_id>"
-  "azure.adls1.oauth2_credential" = "<application_client_credential>"
+  "azure.adls1.oauth2_client_id" = "<application_client_id>",
+  "azure.adls1.oauth2_credential" = "<application_client_credential>",
   "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
   ```
 
@@ -467,8 +467,8 @@ If you choose Data Lake Storage Gen2 as your storage system, take one of the fol
 - To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true"
-  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>"
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
   "azure.adls2.oauth2_client_id" = "<service_client_id>"
   ```
 
@@ -483,7 +483,7 @@ If you choose Data Lake Storage Gen2 as your storage system, take one of the fol
 - To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>"
+  "azure.adls2.storage_account" = "<storage_account_name>",
   "azure.adls2.shared_key" = "<shared_key>"
   ```
 
@@ -497,8 +497,8 @@ If you choose Data Lake Storage Gen2 as your storage system, take one of the fol
 - To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>"
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
   "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
