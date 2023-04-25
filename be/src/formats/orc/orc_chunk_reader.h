@@ -10,10 +10,10 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
-#include "runtime/descriptors.h"
-#include "runtime/types.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/descriptors.h"
+#include "runtime/types.h"
 
 namespace orc {
 namespace proto {
@@ -24,7 +24,7 @@ class ColumnStatistics;
 namespace starrocks {
 class RuntimeState;
 class RandomAccessFile;
-}
+} // namespace starrocks
 namespace starrocks::vectorized {
 
 using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
@@ -208,19 +208,11 @@ public:
 
     void prepareCache(orc::InputStream::PrepareCacheScope scope, uint64_t offset, uint64_t length) override;
 
-
-
     bool canUseCacheBuffer(uint64_t offset, uint64_t length);
-
-
 
     void read(void* buf, uint64_t length, uint64_t offset) override;
 
-
-
     void doRead(void* buf, uint64_t length, uint64_t offset);
-
-
 
     const std::string& getName() const override { return _file->filename(); }
 
