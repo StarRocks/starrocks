@@ -607,7 +607,7 @@ std::shared_ptr<std::vector<uint8_t>> LevelBuilder::_make_null_bitset(size_t n, 
     return bitset;
 }
 
-// Make definition levels int terms of repetition and nullity.
+// Make definition levels in terms of repetition and nullity.
 // node could be primitive, or group node denoting struct.
 std::shared_ptr<std::vector<int16_t>> LevelBuilder::_make_def_levels(const LevelBuilderContext& ctx,
                                                                      const ::parquet::schema::NodePtr& node,
