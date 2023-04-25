@@ -362,7 +362,7 @@ public class SyncPartitionUtils {
             Column partitionColumn =
                     ((RangePartitionInfo) materializedView.getPartitionInfo()).getPartitionColumns().get(0);
             Range<PartitionKey> rangeToInclude = createRange(start, end, partitionColumn);
-            Map<String, Range<PartitionKey>> rangeMap = materializedView.getRangePartitionMap();
+            Map<String, Range<PartitionKey>> rangeMap = materializedView.getValidPartitionMap(partitionTTLNumber);
             for (Map.Entry<String, Range<PartitionKey>> entry : rangeMap.entrySet()) {
                 Range<PartitionKey> rangeToCheck = entry.getValue();
                 int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
@@ -385,7 +385,7 @@ public class SyncPartitionUtils {
             lastPartitionNum = TableProperty.INVALID;
         }
 
-        return materializedView.getValidPartitionNames(lastPartitionNum);
+        return materializedView.getValidPartitionMap(lastPartitionNum).keySet();
     }
 
     public static Range<PartitionKey> createRange(String lowerBound, String upperBound, Column partitionColumn)

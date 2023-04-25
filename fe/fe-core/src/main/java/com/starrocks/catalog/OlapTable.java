@@ -1107,19 +1107,19 @@ public class OlapTable extends Table {
         return Sets.newHashSet(nameToPartition.keySet());
     }
 
-    public Set<String> getValidPartitionNames(int lastPartitionNum) throws AnalysisException {
+    public Map<String, Range<PartitionKey>> getValidPartitionMap(int lastPartitionNum) throws AnalysisException {
+        Map<String, Range<PartitionKey>> rangePartitionMap = getRangePartitionMap();
         // less than 0 means not set
         if (lastPartitionNum < 0) {
-            return getPartitionNames();
+            return rangePartitionMap;
         }
 
-        Map<String, Range<PartitionKey>> rangePartitionMap = getRangePartitionMap();
         List<Range<PartitionKey>> sortedRange = rangePartitionMap.values().stream()
                 .sorted(RangeUtils.RANGE_COMPARATOR).collect(Collectors.toList());
         int partitionNum = sortedRange.size();
 
         if (lastPartitionNum > partitionNum) {
-            return getPartitionNames();
+            return rangePartitionMap;
         }
 
         LiteralExpr startExpr = sortedRange.get(partitionNum - lastPartitionNum).lowerEndpoint().
@@ -1128,7 +1128,7 @@ public class OlapTable extends Table {
         String start = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
         String end = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 0);
 
-        Set<String> result = Sets.newHashSet();
+        Map<String, Range<PartitionKey>> result = Maps.newHashMap();
         Column partitionColumn = ((RangePartitionInfo) partitionInfo).getPartitionColumns().get(0);
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
         for (Map.Entry<String, Range<PartitionKey>> entry : rangePartitionMap.entrySet()) {
@@ -1136,7 +1136,7 @@ public class OlapTable extends Table {
             int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
             int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
             if (!(lowerCmp >= 0 || upperCmp <= 0)) {
-                result.add(entry.getKey());
+                result.put(entry.getKey(), entry.getValue());
             }
         }
 

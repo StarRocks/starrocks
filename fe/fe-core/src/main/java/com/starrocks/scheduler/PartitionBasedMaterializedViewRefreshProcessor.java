@@ -591,14 +591,14 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                                                                   int partitionTTLNumber,
                                                                   boolean force) throws AnalysisException {
         if (force && start == null && end == null) {
-            return Sets.newHashSet(materializedView.getValidPartitionNames(partitionTTLNumber));
+            return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
         }
 
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
             if (force || unPartitionedMVNeedToRefresh()) {
-                return Sets.newHashSet(materializedView.getValidPartitionNames(partitionTTLNumber));
+                return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
             }
         } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             Expr partitionExpr = MaterializedView.getPartitionExpr(materializedView);
@@ -613,7 +613,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             if (needToRefreshNonPartitionTable(partitionTable)) {
                 if (start == null && end == null) {
                     // if non partition table changed, should refresh all partitions of materialized view
-                    return Sets.newHashSet(materializedView.getValidPartitionNames(partitionTTLNumber));
+                    return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
                 } else {
                     // If the user specifies the start and end ranges, and the non-partitioned table still changes,
                     // it should be refreshed according to the user-specified range, not all partitions.
