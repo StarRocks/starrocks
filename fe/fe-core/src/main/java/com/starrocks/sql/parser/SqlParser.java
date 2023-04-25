@@ -75,8 +75,13 @@ public class SqlParser {
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
+<<<<<<< HEAD
         parser.addParseListener(new TokenNumberListener(sessionVariable.getParseTokensLimit(), Config.expr_children_limit));
 
+=======
+        parser.addParseListener(new PostProcessListener(sessionVariable.getParseTokensLimit(),
+                Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit())));
+>>>>>>> 284e0e7b6 ([BugFix] Support invalid partition statistics delete (#22286))
         return parser;
     }
 }

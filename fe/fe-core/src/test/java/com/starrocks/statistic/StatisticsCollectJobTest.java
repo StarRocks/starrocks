@@ -488,7 +488,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t0_stats_partition")));
         Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t1_stats")));
     }
-    
+
     @Test
     public void testCount() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb("stats");

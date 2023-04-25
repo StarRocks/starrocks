@@ -872,6 +872,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
 
+    private int exprChildrenLimit = -1;
+
+    public int getExprChildrenLimit() {
+        return exprChildrenLimit;
+    }
+
+    public void setExprChildrenLimit(int exprChildrenLimit) {
+        this.exprChildrenLimit = exprChildrenLimit;
+    }
+
     public void setFullSortMaxBufferedRows(long v) {
         fullSortMaxBufferedRows = v;
     }
