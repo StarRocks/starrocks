@@ -4,10 +4,15 @@ Iceberg Catalog 是一种 External Catalog。通过 Iceberg Catalog，您不需�
 
 此外，您还可以基于 Iceberg Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/insert.md) 能力来实现数据转换和导入。StarRocks 从 2.4 版本开始支持 Iceberg Catalog。
 
-为保证正常访问 Iceberg 数据，StarRocks 集群必须集成以下两个关键组件：
+为保证正常访问 Hive 数据，StarRocks 集群必须集成以下两个关键组件：
 
-- 对象存储或分布式文件系统，如 AWS S3 或 HDFS
+- 对象存储或分布式文件系统，如 AWS S3、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、Google GCS、或 HDFS
+
 - 元数据服务，如 Hive Metastore（以下简称 HMS）或 AWS Glue
+
+  > **说明**
+  >
+  > 如果选择 AWS S3 作为存储系统，您可以选择 HMS 或 AWS Glue 作为元数据服务。如果选择其他存储系统，则只能选择 HMS 作为元数据服务。
 
 ## 使用说明
 
@@ -113,7 +118,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 
 ##### AWS Glue
 
-如果选择 AWS Glue 作为 Iceberg 集群的元数据服务，请按如下配置 `MetastoreParams`：
+如果选择 AWS Glue 作为 Iceberg 集群的元数据服务（只有使用 AWS S3 作为存储系统时支持），请按如下配置 `MetastoreParams`：
 
 - 基于 Instance Profile 进行认证和鉴权
 
@@ -291,8 +296,8 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 - 基于 Service Principal 进行认证和鉴权
 
   ```SQL
-  "azure.adls1.oauth2_client_id" = "<application_client_id>"
-  "azure.adls1.oauth2_credential" = "<application_client_credential>"
+  "azure.adls1.oauth2_client_id" = "<application_client_id>",
+  "azure.adls1.oauth2_credential" = "<application_client_credential>",
   "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
   ```
 
@@ -311,8 +316,8 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 - 基于 Managed Identity 进行认证和鉴权
 
   ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true"
-  "azure.adls2.oauth2_tenant_id" = "<service_principle_tenant_id>"
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
   "azure.adls2.oauth2_client_id" = "<service_client_id>"
   ```
 
@@ -327,7 +332,7 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 - 基于 Shared Key 进行认证和鉴权
 
   ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>"
+  "azure.adls2.storage_account" = "<storage_account_name>",
   "azure.adls2.shared_key" = "<shared_key>"
   ```
 
@@ -341,9 +346,9 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 - 基于 Service Principal 进行认证和鉴权
 
   ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  "azure.adls2.oauth2_client_secret" = "<service_principle_client_secret>"
-  "azure.adls2.oauth2_client_endpoint" = "<service_principle_client_endpoint>
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>
   ```
 
   `StorageCredentialParams` 包含如下参数。
@@ -373,8 +378,8 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
 - 基于 Service Account 进行认证和鉴权
 
   ```SQL
-  "gcp.gcs.service_account_email" = "<google_service_account_email>"
-  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>"
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
   "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
   ```
 
@@ -391,7 +396,7 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
   - 使用 VM Instance 模拟 Service Account
 
     ```SQL
-    "gcp.gcs.use_compute_engine_service_account" = "true"
+    "gcp.gcs.use_compute_engine_service_account" = "true",
     "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
     ```
 
@@ -405,9 +410,9 @@ StarRocks 访问 Iceberg 集群文件存储的相关参数配置。
   - 使用一个 Service Account（即“Meta Service Account”）模拟另一个 Service Account（即“Data Service Account”）
 
     ```SQL
-    "gcp.gcs.service_account_email" = "<google_service_account_email>"
-    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>"
-    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>"
+    "gcp.gcs.service_account_email" = "<google_service_account_email>",
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
 
@@ -443,9 +448,11 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
 
 以下示例创建了一个名为 `iceberg_catalog_hms` 或 `iceberg_catalog_glue` 的 Iceberg Catalog，用于查询 Iceberg 集群里的数据。
 
-#### 如果基于 Instance Profile 进行鉴权和认证
+#### AWS S3
 
-- 如果 Iceberg 集群使用 HMS 作为元数据服务，您可以这样创建 Iceberg Catalog：
+##### 如果基于 Instance Profile 进行鉴权和认证
+
+- 如果 Iceberg 集群使用 HMS 作为元数据服务，可以按如下创建 Iceberg Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -458,7 +465,7 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   );
   ```
 
-- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，您可以这样创建 Iceberg Catalog：
+- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Iceberg Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_glue
@@ -473,9 +480,9 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   );
   ```
 
-#### 如果基于 Assumed Role 进行鉴权和认证
+##### 如果基于 Assumed Role 进行鉴权和认证
 
-- 如果 Iceberg 集群使用 HMS 作为元数据服务，您可以这样创建 Iceberg Catalog：
+- 如果 Iceberg 集群使用 HMS 作为元数据服务，可以按如下创建 Iceberg Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -489,7 +496,7 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   );
   ```
 
-- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，您可以这样创建 Iceberg Catalog：
+- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Iceberg Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_glue
@@ -506,9 +513,9 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   );
   ```
 
-#### 如果基于 IAM User 进行鉴权和认证
+##### 如果基于 IAM User 进行鉴权和认证
 
-- 如果 Iceberg 集群使用 HMS 作为元数据服务，您可以这样创建 Iceberg Catalog：
+- 如果 Iceberg 集群使用 HMS 作为元数据服务，可以按如下创建 Iceberg Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_hms
@@ -523,7 +530,7 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
   );
   ```
 
-- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，您可以这样创建 Iceberg Catalog：
+- 如果 Amazon EMR Iceberg 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Iceberg Catalog：
 
   ```SQL
   CREATE EXTERNAL CATALOG iceberg_catalog_glue
@@ -541,6 +548,184 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
       "aws.glue.region" = "us-west-2"
   );
   ```
+
+#### 兼容 S3 协议的对象存储
+
+以 MinIO 为例，可以按如下创建 Iceberg Catalog：
+
+```SQL
+CREATE EXTERNAL CATALOG hive_catalog_hms
+PROPERTIES
+(
+    "type" = "hive", 
+    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "aws.s3.enable_ssl" = "true",
+    "aws.s3.enable_path_style_access" = "true",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
+
+#### Microsoft Azure Storage
+
+##### Azure Blob Storage
+
+- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  );
+  ```
+
+- 如果基于 SAS Token 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.blob.account_name" = "<blob_storage_account_name>",
+      "azure.blob.container_name" = "<blob_container_name>",
+      "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  );
+  ```
+
+##### Azure Data Lake Storage Gen1
+
+- 如果基于 Managed Service Identity 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls1.use_managed_service_identity" = "true"    
+  );
+  ```
+
+- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls1.oauth2_client_id" = "<application_client_id>",
+      "azure.adls1.oauth2_credential" = "<application_client_credential>",
+      "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  );
+  ```
+
+##### Azure Data Lake Storage Gen2
+
+- 如果基于 Managed Identity 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.oauth2_use_managed_identity" = "true",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
+- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.storage_account" = "<storage_account_name>",
+      "azure.adls2.shared_key" = "<shared_key>"     
+  );
+  ```
+
+- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>",
+      "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint> 
+  );
+  ```
+
+#### Google GCS
+
+- 如果基于 VM 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "gcp.gcs.use_compute_engine_service_account" = "true"    
+  );
+  ```
+
+- 如果基于 Service Account 进行认证和鉴权，可以按如下创建 Iceberg Catalog：
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type"="hive", 
+      "hive.metastore.uris"="thrift://34.132.15.127:9083",
+      "gcp.gcs.service_account_email" = "<google_service_account_email>",
+      "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+      "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
+  );
+  ```
+
+- 如果基于 Impersonation 进行认证和鉴权
+
+  - 使用 VM Instance 模拟 Service Account，可以按如下创建 Iceberg Catalog：
+
+    ```SQL
+    CREATE EXTERNAL CATALOG hive_catalog_hms
+    PROPERTIES
+    (
+        "type"="hive", 
+        "hive.metastore.uris"="thrift://34.132.15.127:9083",
+        "gcp.gcs.use_compute_engine_service_account" = "true",
+        "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>",
+    );
+    ```
+
+  - 使用一个 Service Account 模拟另一个 Service Account，可以按如下创建 Iceberg Catalog：
+
+    ```SQL
+    CREATE EXTERNAL CATALOG hive_catalog_hms
+    PROPERTIES
+    (
+        "type"="hive", 
+        "hive.metastore.uris"="thrift://34.132.15.127:9083",
+        "gcp.gcs.service_account_email" = "<google_service_account_email>",
+        "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+        "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
+        "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"    
+    );
+    ```
 
 ## 查看 Iceberg Catalog
 
