@@ -4,10 +4,15 @@ A Delta Lake catalog is a kind of external catalog that enables you to query dat
 
 Also, you can directly transform and load data from Delta Lake by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Delta Lake catalogs. StarRocks supports Delta Lake catalogs from v2.5 onwards.
 
-To ensure successful SQL workloads on your Delta Lake cluster, your StarRocks cluster needs to integrate with two important components:
+To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster needs to integrate with two important components:
 
-- Object storage or distributed file system like AWS S3 or HDFS
+- Object storage or distributed file system like AWS S3, other S3-compatible storage system, Microsoft Azure Storage, Google GCS, or HDFS
+
 - Metastore like Hive metastore or AWS Glue
+
+  > **NOTE**
+  >
+  > If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
 
 ## Usage notes
 
@@ -112,7 +117,7 @@ The following table describes the parameter you need to configure in `MetastoreP
 
 ##### AWS Glue
 
-If you choose AWS Glue as the metastore of your data source, take one of the following actions:
+If you choose AWS Glue as the metastore of your data source, which is supported only when you choose AWS S3 as storage, take one of the following actions:
 
 - To choose instance profile as the credential method for accessing AWS Glue, configure `MetastoreParams` as follows:
 
@@ -278,8 +283,8 @@ If you choose Data Lake Storage Gen1 as storage for your Delta Lake cluster, tak
 - To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls1.oauth2_client_id" = "<application_client_id>"
-  "azure.adls1.oauth2_credential" = "<application_client_credential>"
+  "azure.adls1.oauth2_client_id" = "<application_client_id>",
+  "azure.adls1.oauth2_credential" = "<application_client_credential>",
   "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
   ```
 
@@ -298,8 +303,8 @@ If you choose Data Lake Storage Gen2 as storage for your Delta Lake cluster, tak
 - To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true"
-  "azure.adls2.oauth2_tenant_id" = "<service_principle_tenant_id>"
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
   "azure.adls2.oauth2_client_id" = "<service_client_id>"
   ```
 
@@ -314,7 +319,7 @@ If you choose Data Lake Storage Gen2 as storage for your Delta Lake cluster, tak
 - To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>"
+  "azure.adls2.storage_account" = "<storage_account_name>",
   "azure.adls2.shared_key" = "<shared_key>"
   ```
 
@@ -328,9 +333,9 @@ If you choose Data Lake Storage Gen2 as storage for your Delta Lake cluster, tak
 - To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  "azure.adls2.oauth2_client_secret" = "<service_principle_client_secret>"
-  "azure.adls2.oauth2_client_endpoint" = "<service_principle_client_endpoint>
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>
   ```
 
   The following table describes the parameters you need to configure `in StorageCredentialParams`.
@@ -360,9 +365,9 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
 - To choose the service account-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "gcp.gcs.service_account_email" = "<google_service_account_email>"
-  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>"
-  "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+  "gcp.gcs.service_account_private_key" = "<google_service_private_key>",
   ```
 
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
@@ -375,10 +380,10 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
 
 - To choose the impersonation-based authentication method, configure `StorageCredentialParams` as follows:
 
-  - Make the VM instance impersonate the service account:
+  - Make a VM instance impersonate a service account:
   
     ```SQL
-    "gcp.gcs.use_compute_engine_service_account" = "true"
+    "gcp.gcs.use_compute_engine_service_account" = "true",
     "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
     ```
 
@@ -392,9 +397,9 @@ If you choose Google GCS as storage for your Delta Lake cluster, take one of the
   - Make a service account (named as meta service account) impersonate another service account (named as data service account):
 
     ```SQL
-    "gcp.gcs.service_account_email" = "<google_service_account_email>"
-    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>"
-    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>"
+    "gcp.gcs.service_account_email" = "<google_service_account_email>",
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
 
@@ -436,7 +441,9 @@ For more information, see the "[Understand automatic asynchronous update](../cat
 
 The following examples create a Delta Lake catalog named `deltalake_catalog_hms` or `deltalake_catalog_glue`, depending on the type of metastore you use, to query data from your Delta Lake cluster.
 
-#### If you choose instance profile-based credential
+#### AWS S3
+
+##### If you choose instance profile-based credential
 
 - If you use Hive metastore in your Delta Lake cluster, run a command like below:
 
@@ -466,7 +473,7 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   );
   ```
 
-#### If you choose assumed role-based credential
+##### If you choose assumed role-based credential
 
 - If you use Hive metastore in your Delta Lake cluster, run a command like below:
 
@@ -499,7 +506,7 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
   );
   ```
 
-#### If you choose IAM user-based credential
+##### If you choose IAM user-based credential
 
 - If you use Hive metastore in your Delta Lake cluster, run a command like below:
 
@@ -534,6 +541,184 @@ The following examples create a Delta Lake catalog named `deltalake_catalog_hms`
       "aws.glue.region" = "us-west-2"
   );
   ```
+
+#### S3-compatible storage system
+
+Use MinIO as an example. Run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG hive_catalog_hms
+PROPERTIES
+(
+    "type" = "hive", 
+    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "aws.s3.enable_ssl" = "true",
+    "aws.s3.enable_path_style_access" = "true",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
+
+#### Microsoft Azure Storage
+
+##### Azure Blob Storage
+
+- If you choose the Shared Key authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  );
+  ```
+
+- If you choose the SAS Token authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.blob.account_name" = "<blob_storage_account_name>",
+      "azure.blob.container_name" = "<blob_container_name>",
+      "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  );
+  ```
+
+##### Azure Data Lake Storage Gen1
+
+- If you choose the Managed Service Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls1.use_managed_service_identity" = "true"    
+  );
+  ```
+
+- If you choose the Service Principal authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls1.oauth2_client_id" = "<application_client_id>",
+      "azure.adls1.oauth2_credential" = "<application_client_credential>",
+      "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  );
+  ```
+
+##### Azure Data Lake Storage Gen2
+
+- If you choose the Managed Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.oauth2_use_managed_identity" = "true",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
+- If you choose the Shared Key authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.storage_account" = "<storage_account_name>",
+      "azure.adls2.shared_key" = "<shared_key>"     
+  );
+  ```
+
+- If you choose the Service Principal authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>",
+      "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint> 
+  );
+  ```
+
+#### Google GCS
+
+- If you choose the VM-based authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "gcp.gcs.use_compute_engine_service_account" = "true"    
+  );
+  ```
+
+- If you choose the service account-based authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type"="hive", 
+      "hive.metastore.uris"="thrift://34.132.15.127:9083",
+      "gcp.gcs.service_account_email" = "<google_service_account_email>",
+      "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+      "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
+  );
+  ```
+
+- If you choose the impersonation-based authentication method:
+
+  - If you make a VM instance impersonate a service account, run a command like below:
+
+    ```SQL
+    CREATE EXTERNAL CATALOG hive_catalog_hms
+    PROPERTIES
+    (
+        "type"="hive", 
+        "hive.metastore.uris"="thrift://34.132.15.127:9083",
+        "gcp.gcs.use_compute_engine_service_account" = "true",
+        "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
+    );
+    ```
+
+  - If you make a service account impersonate another service account, run a command like below:
+
+    ```SQL
+    CREATE EXTERNAL CATALOG hive_catalog_hms
+    PROPERTIES
+    (
+        "type"="hive", 
+        "hive.metastore.uris"="thrift://34.132.15.127:9083",
+        "gcp.gcs.service_account_email" = "<google_service_account_email>",
+        "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+        "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
+        "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"    
+    );
+    ```
 
 ## View Delta Lake catalogs
 
