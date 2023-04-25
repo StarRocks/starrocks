@@ -762,9 +762,6 @@ CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 CONF_Int32(io_tasks_per_scan_operator, "4");
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 
-CONF_Bool(scan_node_always_shared_scan, "false");
-CONF_Bool(connector_scan_node_always_shared_scan, "true");
-
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
 // following the default naming pattern of aws_sdk_<date>.log.
