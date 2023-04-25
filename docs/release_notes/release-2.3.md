@@ -2,11 +2,11 @@
 
 ## 2.3.12
 
-Release date: April 24, 2023
+Release date: April 25, 2023
 
 ### Improvements
 
-Support implicit conversion if the returned value of an expression can be legally converted to a Boolean value. [# 21792](https://github.com/StarRocks/starrocks/pull/21792)
+Supports implicit conversion if the returned value of an expression can be converted to a valid Boolean value. [# 21792](https://github.com/StarRocks/starrocks/pull/21792)
 
 ### Bug Fixes
 
