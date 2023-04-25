@@ -34,7 +34,7 @@ public class ReplicaMinReadableVersionTest {
     public static void setUp() throws Exception {
         Config.tablet_sched_checker_interval_seconds = 2;
         Config.tablet_sched_repair_delay_factor_second = 2;
-        Config.default_scheduler_interval_millisecond = 5000;
+        Config.default_alter_scheduler_interval_millisecond = 5000;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         cluster = PseudoCluster.getInstance();
         cluster.runSql(null, "create database test");

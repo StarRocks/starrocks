@@ -68,7 +68,7 @@ public class MVRewriteTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        Config.default_scheduler_interval_millisecond = 1;
+        Config.default_alter_scheduler_interval_millisecond = 1;
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster();
         GlobalStateMgr.getCurrentState().setStatisticStorage(new EmptyStatisticStorage());

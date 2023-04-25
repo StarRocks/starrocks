@@ -75,7 +75,7 @@ public class CreateRoutineLoadStmtTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         FeConstants.runningUnitTest = true;
-        Config.default_scheduler_interval_millisecond = 100;
+        Config.default_routine_load_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         UtFrameUtils.createMinStarRocksCluster();
@@ -344,7 +344,7 @@ public class CreateRoutineLoadStmtTest {
     public void testAnalyzeAvroConfig() throws Exception {
         String createSQL = "CREATE ROUTINE LOAD db0.routine_load_0 ON t1 " +
                 "PROPERTIES(\"format\" = \"avro\",\"jsonpaths\"=\"[\\\"$.k1\\\",\\\"$.k2.\\\\\\\"k2.1\\\\\\\"\\\"]\") " +
-                "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:xxx\",\"kafka_topic\" = \"topic_0\"," + 
+                "FROM KAFKA(\"kafka_broker_list\" = \"xxx.xxx.xxx.xxx:xxx\",\"kafka_topic\" = \"topic_0\"," +
                 "\"confluent.schema.registry.url\" = \"https://user:password@confluent.west.us\");";
         ConnectContext ctx = starRocksAssert.getCtx();
         CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt) SqlParser.parse(createSQL, 32).get(0);

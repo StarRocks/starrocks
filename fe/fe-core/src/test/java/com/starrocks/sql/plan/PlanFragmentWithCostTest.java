@@ -57,7 +57,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
 
-        Config.default_scheduler_interval_millisecond = 1;
+        Config.default_alter_scheduler_interval_millisecond = 1;
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         OlapTable table2 = (OlapTable) globalStateMgr.getDb("test").getTable("test_all_type");

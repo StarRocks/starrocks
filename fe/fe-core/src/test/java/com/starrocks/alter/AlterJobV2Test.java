@@ -64,7 +64,7 @@ public class AlterJobV2Test {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        Config.default_scheduler_interval_millisecond = 1000;
+        Config.default_alter_scheduler_interval_millisecond = 1000;
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();

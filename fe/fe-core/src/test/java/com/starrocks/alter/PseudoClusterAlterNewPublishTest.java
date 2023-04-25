@@ -21,7 +21,7 @@ import org.junit.BeforeClass;
 public class PseudoClusterAlterNewPublishTest extends PseudoClusterAlterTest {
     @BeforeClass
     public static void setUp() throws Exception {
-        Config.default_scheduler_interval_millisecond = 10000;
+        Config.default_alter_scheduler_interval_millisecond = 10000;
         System.out.println("enable new publish for PseudoClusterAlterNewPublishTest");
         Config.enable_new_publish_mechanism = true;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);

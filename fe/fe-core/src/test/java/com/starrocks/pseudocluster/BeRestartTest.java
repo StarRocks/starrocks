@@ -35,7 +35,7 @@ public class BeRestartTest {
         Config.tablet_sched_checker_interval_seconds = 2;
         Config.tablet_sched_repair_delay_factor_second = 2;
         Config.enable_new_publish_mechanism = newPublish;
-        Config.default_scheduler_interval_millisecond = 5000;
+        Config.default_alter_scheduler_interval_millisecond = 5000;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(3000);
         PseudoCluster.getInstance().runSql(null, "create database test");

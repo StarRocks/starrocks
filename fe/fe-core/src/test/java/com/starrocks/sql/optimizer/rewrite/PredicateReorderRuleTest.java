@@ -72,7 +72,7 @@ public class PredicateReorderRuleTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
 
-        Config.default_scheduler_interval_millisecond = 1;
+        Config.default_alter_scheduler_interval_millisecond = 1;
         UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context

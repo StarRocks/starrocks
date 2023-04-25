@@ -29,7 +29,7 @@ public class BalanceTest {
     @BeforeClass
     public static void setUp() throws Exception {
         Config.sys_log_verbose_modules = new String[] {"com.starrocks.clone"};
-        Config.default_scheduler_interval_millisecond = 5000;
+        Config.default_alter_scheduler_interval_millisecond = 5000;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
         PseudoCluster.getInstance().runSql(null, "create database test");
