@@ -170,7 +170,7 @@ StarRocks 中 Instance Profile、Assumed Role、以及 IAM User 三种认证方�
 - 分布式文件存储，如 AWS S3，用于存储表文件。
 - 元数据服务，如 Hive Metastore（以下简称 HMS）或 AWS Glue，用于存储表文件的元数据和位置信息。
 
-StarRocks 支持以下四种 External Catalog：
+StarRocks 支持以下类型的 External Catalog：
 
 - [Hive catalog](../data_source/catalog/hive_catalog.md)
 - [Iceberg catalog](../data_source/catalog/iceberg_catalog.md)
