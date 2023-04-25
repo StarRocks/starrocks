@@ -47,6 +47,7 @@ import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -77,7 +78,9 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -1104,13 +1107,40 @@ public class OlapTable extends Table {
         return Sets.newHashSet(nameToPartition.keySet());
     }
 
-    public Set<String> getValidPartitionNames(int partitionTTLNumber) {
-        // ess than 0 means not set
-        if (partitionTTLNumber < 0) {
+    public Set<String> getValidPartitionNames(int lastPartitionNum) throws AnalysisException {
+        // less than 0 means not set
+        if (lastPartitionNum < 0) {
             return getPartitionNames();
         }
-        int startIndex = Math.max(0, nameToPartition.size() - partitionTTLNumber);
-        return nameToPartition.keySet().stream().skip(startIndex).collect(Collectors.toSet());
+
+        Map<String, Range<PartitionKey>> rangePartitionMap = getRangePartitionMap();
+        List<Range<PartitionKey>> sortedRange = rangePartitionMap.values().stream()
+                .sorted(RangeUtils.RANGE_COMPARATOR).collect(Collectors.toList());
+        int partitionNum = sortedRange.size();
+
+        if (lastPartitionNum > partitionNum) {
+            return getPartitionNames();
+        }
+
+        LiteralExpr startExpr = sortedRange.get(partitionNum - lastPartitionNum).lowerEndpoint().
+                getKeys().get(0);
+        LiteralExpr endExpr = sortedRange.get(partitionNum - 1).upperEndpoint().getKeys().get(0);
+        String start = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
+        String end = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 0);
+
+        Set<String> result = Sets.newHashSet();
+        Column partitionColumn = ((RangePartitionInfo) partitionInfo).getPartitionColumns().get(0);
+        Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
+        for (Map.Entry<String, Range<PartitionKey>> entry : rangePartitionMap.entrySet()) {
+            Range<PartitionKey> rangeToCheck = entry.getValue();
+            int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
+            int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
+            if (!(lowerCmp >= 0 || upperCmp <= 0)) {
+                result.add(entry.getKey());
+            }
+        }
+
+        return result;
     }
 
     public Set<String> getBfColumns() {
