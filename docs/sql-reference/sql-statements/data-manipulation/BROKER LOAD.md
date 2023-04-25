@@ -338,7 +338,7 @@ If you choose Google GCS as your storage system, take one of the following actio
 
 - To choose the impersonation-based authentication method, configure `StorageCredentialParams` as follows:
 
-  - Make the VM instance impersonate the service account:
+  - Make a VM instance impersonate a service account:
 
     ```SQL
     "gcp.gcs.use_compute_engine_service_account" = "true"
@@ -468,7 +468,7 @@ If you choose Data Lake Storage Gen2 as your storage system, take one of the fol
 
   ```SQL
   "azure.adls2.oauth2_use_managed_identity" = "true"
-  "azure.adls2.oauth2_tenant_id" = "<service_principle_tenant_id>"
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>"
   "azure.adls2.oauth2_client_id" = "<service_client_id>"
   ```
 
@@ -498,8 +498,8 @@ If you choose Data Lake Storage Gen2 as your storage system, take one of the fol
 
   ```SQL
   "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  "azure.adls2.oauth2_client_secret" = "<service_principle_client_secret>"
-  "azure.adls2.oauth2_client_endpoint" = "<service_principle_client_endpoint>"
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>"
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
   The following table describes the parameters you need to configure `in StorageCredentialParams`.
