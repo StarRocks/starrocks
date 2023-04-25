@@ -62,6 +62,9 @@ public class PushDownPredicateScanRule extends TransformationRule {
     public static final PushDownPredicateScanRule BINLOG_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_BINLOG_SCAN);
 
+    public static final PushDownPredicateScanRule TEMP_EXT_TABLE_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_TEMP_EXT_TABLE_SCAN);
+
     public PushDownPredicateScanRule(OperatorType type) {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_SCAN, Pattern.create(OperatorType.LOGICAL_FILTER, type));
     }

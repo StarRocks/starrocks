@@ -364,6 +364,14 @@ struct TFileTable {
     2: optional list<TColumn> columns
 }
 
+struct TTempExtTable {
+    // Temp External Table dir
+    1: optional string location
+
+    // Schema columns
+    2: optional list<TColumn> columns
+}
+
 struct TIcebergSchema {
     1: optional list<TIcebergSchemaField> fields
 }
@@ -492,6 +500,9 @@ struct TTableDescriptor {
 
   // File Table
   34: optional TFileTable fileTable
+
+  // Temp External Table
+  35: optional TTempExtTable tempExtTable
 }
 
 struct TDescriptorTable {

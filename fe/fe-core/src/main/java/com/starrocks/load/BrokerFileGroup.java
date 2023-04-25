@@ -51,6 +51,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TempExternalTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.DdlException;
@@ -66,6 +67,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -124,6 +126,18 @@ public class BrokerFileGroup implements Writable {
         this.isNegative = false;
         this.filePaths = table.getPaths();
         this.fileFormat = table.getFileFormat();
+        this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
+    }
+
+    public BrokerFileGroup(TempExternalTable table) throws AnalysisException {
+        this.tableId = table.getId();
+        this.isNegative = false;
+        this.filePaths = new ArrayList<>();
+        this.filePaths.add(table.getPath());
+        this.fileFormat = table.getFormat();
+        this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
+        this.columnSeparator = "\t";
+        this.rowDelimiter = "\n";
         this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
     }
 

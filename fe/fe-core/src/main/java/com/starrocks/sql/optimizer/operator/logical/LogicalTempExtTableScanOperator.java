@@ -28,6 +28,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Map;
 
 public class LogicalTempExtTableScanOperator extends LogicalScanOperator {
+    private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+    private boolean hasUnknownColumn;
     public LogicalTempExtTableScanOperator(Table table,
                                            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
@@ -52,6 +54,26 @@ public class LogicalTempExtTableScanOperator extends LogicalScanOperator {
                 builder.getPredicate(),
                 builder.getProjection());
     }
+
+
+    @Override
+    public ScanOperatorPredicates getScanOperatorPredicates() {
+        return this.predicates;
+    }
+
+    @Override
+    public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
+        this.predicates = predicates;
+    }
+
+    public boolean hasUnknownColumn() {
+        return hasUnknownColumn;
+    }
+
+    public void setHasUnknownColumn(boolean hasUnknownColumn) {
+        this.hasUnknownColumn = hasUnknownColumn;
+    }
+
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {

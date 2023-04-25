@@ -94,6 +94,7 @@ public enum OperatorType {
     PHYSICAL_STREAM_SCAN,
     PHYSICAL_STREAM_JOIN,
     PHYSICAL_STREAM_AGG,
+    PHYSICAL_TEMP_EXT_TABLE_SCAN,
 
     /**
      * Scalar operator

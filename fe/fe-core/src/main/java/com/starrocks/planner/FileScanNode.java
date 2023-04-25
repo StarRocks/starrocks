@@ -43,6 +43,7 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.catalog.TempExternalTable;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
@@ -183,14 +184,25 @@ public class FileScanNode extends LoadScanNode {
 
         this.analyzer = analyzer;
         if (desc.getTable() != null) {
-            BrokerTable brokerTable = (BrokerTable) desc.getTable();
-            try {
-                fileGroups = Lists.newArrayList(new BrokerFileGroup(brokerTable));
-            } catch (AnalysisException e) {
-                throw new UserException(e.getMessage());
+            Table tbl = desc.getTable();
+            if (tbl instanceof BrokerTable) {
+                BrokerTable brokerTable = (BrokerTable) desc.getTable();
+                try {
+                    fileGroups = Lists.newArrayList(new BrokerFileGroup(brokerTable));
+                } catch (AnalysisException e) {
+                    throw new UserException(e.getMessage());
+                }
+                brokerDesc = new BrokerDesc(brokerTable.getBrokerName(), brokerTable.getBrokerProperties());
+            } else if (tbl instanceof TempExternalTable) {
+                TempExternalTable tempTable = (TempExternalTable) desc.getTable();
+                try {
+                    fileGroups = Lists.newArrayList(new BrokerFileGroup(tempTable));
+                } catch (AnalysisException e) {
+                    throw new UserException(e.getMessage());
+                }
+                brokerDesc = new BrokerDesc(tempTable.getProperties());
             }
-            brokerDesc = new BrokerDesc(brokerTable.getBrokerName(), brokerTable.getBrokerProperties());
-            targetTable = brokerTable;
+            targetTable = tbl;
         }
 
         // Get all broker file status

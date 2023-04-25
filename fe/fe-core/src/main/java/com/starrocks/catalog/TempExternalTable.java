@@ -18,6 +18,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.fs.HdfsUtil;
@@ -33,6 +34,7 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TBrokerScanRangeParams;
+import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TGetFileSchemaRequest;
@@ -40,6 +42,9 @@ import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPrimitiveType;
 import com.starrocks.thrift.TScanRange;
+import com.starrocks.thrift.TTableDescriptor;
+import com.starrocks.thrift.TTableType;
+import com.starrocks.thrift.TTempExtTable;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
@@ -69,6 +74,41 @@ public class TempExternalTable extends Table {
         parseFiles();
 
         super.setNewFullSchema(getFileSchema());
+    }
+
+    public List<TBrokerFileStatus> fileList() {
+        return fileStatuses;
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    @Override
+    public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
+        TTempExtTable tTbl = new TTempExtTable();
+        tTbl.setLocation(path);
+
+        List<TColumn> tColumns = Lists.newArrayList();
+
+        for (Column column : getBaseSchema()) {
+            tColumns.add(column.toThrift());
+        }
+        tTbl.setColumns(tColumns);
+
+        TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.FILE_TABLE, fullSchema.size(),
+                0, "", "");
+        tTableDescriptor.setTempExtTable(tTbl);
+        return tTableDescriptor;
+    }
+
+    public String getFormat() {
+        return format;
+    }
+
+    public String getPath() {
+        return path;
     }
 
     private void parseProperties() throws DdlException {

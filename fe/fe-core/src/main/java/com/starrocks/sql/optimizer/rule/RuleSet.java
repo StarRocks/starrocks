@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.rule.implementation.ProjectImplementationRule
 import com.starrocks.sql.optimizer.rule.implementation.RepeatImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.SchemaScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.TableFunctionImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.TmpExtTableScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.TopNImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.UnionImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.ValuesImplementationRule;
@@ -162,6 +163,7 @@ public class RuleSet {
             new EsScanImplementationRule(),
             new MetaScanImplementationRule(),
             new JDBCScanImplementationRule(),
+            new TmpExtTableScanImplementationRule(),
             new HashAggImplementationRule(),
             new ProjectImplementationRule(),
             new TopNImplementationRule(),
@@ -219,7 +221,8 @@ public class RuleSet {
                 MergeLimitDirectRule.EXCEPT,
                 MergeLimitDirectRule.VALUES,
                 MergeLimitDirectRule.FILTER,
-                MergeLimitDirectRule.TABLE_FUNCTION
+                MergeLimitDirectRule.TABLE_FUNCTION,
+                MergeLimitDirectRule.TEMP_EXT_TABLE_SCAN
         ));
 
         REWRITE_RULES.put(RuleSetType.PARTITION_PRUNE, ImmutableList.of(
@@ -243,6 +246,7 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.DELTALAKE_SCAN,
                 PruneHDFSScanColumnRule.FILE_SCAN,
                 PruneHDFSScanColumnRule.HUDI_SCAN,
+                PruneHDFSScanColumnRule.TEMP_EXT_TABLE_SCAN,
                 PruneScanColumnRule.JDBC_SCAN,
                 PruneScanColumnRule.BINLOG_SCAN,
                 new PruneProjectColumnsRule(),
@@ -275,6 +279,7 @@ public class RuleSet {
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,
                 PushDownPredicateScanRule.BINLOG_SCAN,
+                PushDownPredicateScanRule.TEMP_EXT_TABLE_SCAN,
                 new PushDownPredicateAggRule(),
                 new PushDownPredicateWindowRule(),
                 new PushDownPredicateJoinRule(),
