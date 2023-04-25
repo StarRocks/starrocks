@@ -385,7 +385,6 @@ public class SelectStmtWithCaseWhenTest {
         };
         for (String[] tc : testCases) {
             String sql = tc[0];
-            System.out.println(sql);
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
             Assert.assertTrue(plan, Stream.of(tc).skip(1).anyMatch(plan::contains));
         }
