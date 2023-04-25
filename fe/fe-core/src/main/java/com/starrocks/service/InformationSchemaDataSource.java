@@ -194,9 +194,6 @@ public class InformationSchemaDataSource {
                     storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK));
         }
 
-        // storage type
-        propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT, olapTable.getStorageFormat().name());
-
         // enable_persistent_index
         propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                 String.valueOf(olapTable.enablePersistentIndex()));

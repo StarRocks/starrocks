@@ -2695,8 +2695,7 @@ public class PrivilegeCheckerV2Test {
                 "DISTRIBUTED BY HASH(`pk`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         ctxToRoot();

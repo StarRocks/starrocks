@@ -50,7 +50,6 @@ public class SelectStmtWithCaseWhenTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"replicated_storage\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +

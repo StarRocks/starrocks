@@ -75,8 +75,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`c1`, `c2`, `c3`, `c4`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
 
         String createTbl1StmtStr = "" +
@@ -100,8 +99,7 @@ public class QueryCacheTest {
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"colocate_with\" = \"cg0\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"colocate_with\" = \"cg0\"\n" +
                 ");";
 
         String createTbl2StmtStr = "" +
@@ -117,8 +115,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`c1`, `c2`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
 
         String createTbl3StmtStr = "" +
@@ -137,8 +134,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`c1`, `c2`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
 
         String createTbl4StmtStr = "" +
@@ -155,8 +151,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
 
         String createTbl5StmtStr = "" +
@@ -173,8 +168,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
         String createTbl6StmtStr = "" +
                 "CREATE TABLE if not exists t6(\n" +
@@ -190,8 +184,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
         String createTbl7StmtStr = "" +
                 "CREATE TABLE if not exists t7(\n" +
@@ -207,8 +200,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
 
         String createTbl8StmtStr = "" +
@@ -226,7 +218,6 @@ public class QueryCacheTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
@@ -377,7 +368,6 @@ public class QueryCacheTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");";
 
@@ -393,8 +383,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`REGION_CODE`, `REGION_NAME`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
 
         ctx = UtFrameUtils.createDefaultCtx();

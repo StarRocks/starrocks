@@ -47,7 +47,6 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TOlapTableIndex;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletSchema;
@@ -100,8 +99,6 @@ public class CreateReplicaTask extends AgentTask {
     // if base tablet id is set, BE will create the replica on same disk as this base tablet
     private long baseTabletId = -1;
     private int baseSchemaHash = -1;
-
-    private TStorageFormat storageFormat = null;
 
     // true if this task is created by recover request(See comment of Config.recover_with_empty_tablet)
     private boolean isRecoverTask = false;
@@ -211,10 +208,6 @@ public class CreateReplicaTask extends AgentTask {
         this.baseSchemaHash = baseSchemaHash;
     }
 
-    public void setStorageFormat(TStorageFormat storageFormat) {
-        this.storageFormat = storageFormat;
-    }
-
     public TCreateTabletReq toThrift() {
         TCreateTabletReq createTabletReq = new TCreateTabletReq();
         createTabletReq.setTablet_id(tabletId);
@@ -252,7 +245,6 @@ public class CreateReplicaTask extends AgentTask {
                 tIndexes.add(index.toThrift());
             }
             tSchema.setIndexes(tIndexes);
-            storageFormat = TStorageFormat.V2;
         }
 
         if (bfColumns != null) {
@@ -282,9 +274,6 @@ public class CreateReplicaTask extends AgentTask {
             createTabletReq.setBase_schema_hash(baseSchemaHash);
         }
 
-        if (storageFormat != null) {
-            createTabletReq.setStorage_format(storageFormat);
-        }
         createTabletReq.setCompression_type(compressionType);
 
         createTabletReq.setTablet_type(tabletType);

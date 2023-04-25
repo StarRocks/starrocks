@@ -126,8 +126,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`cc_call_center_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `catalog_page` (\n" +
@@ -146,8 +145,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`cp_catalog_page_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `catalog_returns` (\n" +
@@ -184,8 +182,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`cr_item_sk`, `cr_order_number`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `catalog_sales` (\n" +
@@ -229,8 +226,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`cs_item_sk`, `cs_order_number`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `customer` (\n" +
@@ -258,8 +254,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`c_customer_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `customer_address` (\n" +
@@ -282,8 +277,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`ca_address_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `customer_demographics` (\n" +
@@ -302,8 +296,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`cd_demo_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `date_dim` (\n" +
@@ -341,8 +334,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`d_date_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `household_demographics` (\n" +
@@ -357,8 +349,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`hd_demo_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `income_band` (\n" +
@@ -371,8 +362,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`ib_income_band_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `inventory` (\n" +
@@ -386,8 +376,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`inv_date_sk`, `inv_item_sk`, `inv_warehouse_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `item` (\n" +
@@ -419,8 +408,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`i_item_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `promotion` (\n" +
@@ -449,8 +437,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`p_promo_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `reason` (\n" +
@@ -463,8 +450,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`r_reason_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `ship_mode` (\n" +
@@ -480,8 +466,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`sm_ship_mode_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `store` (\n" +
@@ -520,8 +505,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`s_store_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `store_returns` (\n" +
@@ -551,8 +535,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`sr_item_sk`, `sr_ticket_number`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `store_sales` (\n" +
@@ -586,8 +569,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "rollup (r1(ss_sold_date_sk,ss_store_sk,ss_item_sk,ss_sales_price))\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `time_dim` (\n" +
@@ -607,8 +589,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`t_time_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `warehouse` (\n" +
@@ -632,8 +613,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`w_warehouse_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `web_page` (\n" +
@@ -657,8 +637,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`wp_web_page_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `web_returns` (\n" +
@@ -692,8 +671,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`wr_item_sk`, `wr_order_number`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `web_sales` (\n" +
@@ -737,8 +715,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`ws_item_sk`, `ws_order_number`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `web_site` (\n" +
@@ -774,8 +751,7 @@ public class TPCDSPlanTestBase extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`web_site_sk`) BUCKETS 5\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         connectContext.getSessionVariable().setMaxTransformReorderJoins(3);

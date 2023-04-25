@@ -145,8 +145,7 @@ public class MvRewriteOptimizationTest {
                 "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -157,8 +156,7 @@ public class MvRewriteOptimizationTest {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `table_with_partition` (\n" +
@@ -177,8 +175,7 @@ public class MvRewriteOptimizationTest {
                 "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `table_with_day_partition` (\n" +
@@ -197,9 +194,7 @@ public class MvRewriteOptimizationTest {
                 "PARTITION p19910402 VALUES [('1991-04-02'), ('1991-04-03')))" +
                 "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"replication_num\" = \"1\"\n" +
                 ");");
 
         starRocksAssert.withTable("create table test_base_part(c1 int, c2 bigint, c3 bigint, c4 bigint)" +
@@ -1270,7 +1265,6 @@ public class MvRewriteOptimizationTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
@@ -1526,8 +1520,7 @@ public class MvRewriteOptimizationTest {
                 "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE `t02` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -1538,8 +1531,7 @@ public class MvRewriteOptimizationTest {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         cluster.runSql("test", "insert into t02 values(1, 2, 3)");

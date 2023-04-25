@@ -46,8 +46,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE table_int (id_int INT, id_bigint BIGINT) " +
@@ -71,8 +70,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE lineorder_flat (\n" +
@@ -120,8 +118,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(LO_ORDERKEY) BUCKETS 48\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         FeConstants.USE_MOCK_DICT_MANAGER = true;

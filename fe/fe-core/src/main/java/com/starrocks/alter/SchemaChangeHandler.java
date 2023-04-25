@@ -103,7 +103,6 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.ClearAlterTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -958,8 +957,6 @@ public class SchemaChangeHandler extends AlterHandler {
         // property 3: timeout
         long timeoutSecond = PropertyAnalyzer.analyzeTimeout(propertyMap, Config.alter_table_timeout_second);
 
-        TStorageFormat storageFormat = PropertyAnalyzer.analyzeStorageFormat(propertyMap);
-
         // create job
         AlterJobV2Builder jobBuilder = olapTable.alterTable();
         jobBuilder.withJobId(GlobalStateMgr.getCurrentState().getNextId())
@@ -967,7 +964,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 .withTimeoutSeconds(timeoutSecond)
                 .withAlterIndexInfo(hasIndexChange, indexes)
                 .withStartTime(ConnectContext.get().getStartTime())
-                .withNewStorageFormat(storageFormat)
                 .withBloomFilterColumns(bfColumns, bfFpp)
                 .withBloomFilterColumnsChanged(hasBfChange);
 
@@ -1010,10 +1006,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             } else if (hasIndexChange) {
                 needAlter = true;
-            } else if (storageFormat == TStorageFormat.V2) {
-                if (olapTable.getStorageFormat() != TStorageFormat.V2) {
-                    needAlter = true;
-                }
             }
 
             if (!needAlter) {

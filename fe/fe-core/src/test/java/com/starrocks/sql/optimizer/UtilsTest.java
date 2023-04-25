@@ -74,8 +74,7 @@ public class UtilsTest {
             + "DISTRIBUTED BY HASH(`table_id`, `column_name`, `db_id`) BUCKETS 2\n"
             + "PROPERTIES (\n"
             + "\"replication_num\" = \"1\",\n"
-            + "\"in_memory\" = \"false\",\n"
-            + "\"storage_format\" = \"V2\"\n"
+            + "\"in_memory\" = \"false\"\n"
             + ");";
 
     private static ConnectContext connectContext;
@@ -111,8 +110,7 @@ public class UtilsTest {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `t1` (\n" +
@@ -124,8 +122,7 @@ public class UtilsTest {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);

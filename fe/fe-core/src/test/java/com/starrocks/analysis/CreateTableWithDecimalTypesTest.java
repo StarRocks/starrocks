@@ -56,8 +56,7 @@ public class CreateTableWithDecimalTypesTest {
                 "DISTRIBUTED BY HASH(`key0`) BUCKETS 1\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
         starRocksAssert.withTable(createTableSql);
     }

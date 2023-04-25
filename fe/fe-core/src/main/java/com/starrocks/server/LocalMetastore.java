@@ -747,7 +747,6 @@ public class LocalMetastore implements ConnectorMetadata {
      * 6.1. dynamicProperty
      * 6.2. replicationNum
      * 6.3. inMemory
-     * 6.4. storageFormat
      * 7. set index meta
      * 8. check colocation properties
      * 9. create tablet in BE

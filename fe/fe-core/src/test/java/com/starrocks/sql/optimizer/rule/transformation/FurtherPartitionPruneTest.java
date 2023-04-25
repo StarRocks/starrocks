@@ -52,8 +52,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
                 + "DISTRIBUTED BY HASH(`k1`) BUCKETS 10\n"
                 + "PROPERTIES (\n"
                 + "\"replication_num\" = \"1\",\n"
-                + "\"in_memory\" = \"false\",\n"
-                + "\"storage_format\" = \"DEFAULT\"\n"
+                + "\"in_memory\" = \"false\"\n"
                 + ");");
         starRocksAssert.withTable("CREATE TABLE `tbl_int` (\n" +
                 "  `k1` int(11) NULL,\n" +
@@ -70,8 +69,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`s1`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE `two_key` (\n" +
                 "  `k1` int(11) NULL,\n" +
@@ -88,8 +86,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`s1`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE `less_than_tbl` " +
                 "( `k1` date, `k2` datetime, `k3` char(20), `k4` varchar(20), `k5` boolean) " +
@@ -100,7 +97,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
                 "PARTITION `p202008` VALUES LESS THAN (\"2020-09-01\")," +
                 "PARTITION `p202009` VALUES LESS THAN (\"2020-10-01\") ) " +
                 "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3 " +
-                "PROPERTIES ( \"replication_num\" = \"1\", \"storage_format\" = \"v2\" );;");
+                "PROPERTIES ( \"replication_num\" = \"1\");");
     }
 
     @ParameterizedTest(name = "sql_{index}: {0}.")

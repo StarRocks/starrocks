@@ -19,8 +19,7 @@ DUPLICATE KEY(`pk`)
 DISTRIBUTED BY HASH(`pk`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
-"in_memory" = "false",
-"storage_format" = "DEFAULT"
+"in_memory" = "false"
 );
 
 

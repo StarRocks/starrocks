@@ -46,7 +46,6 @@ public class MaterializedViewPrimaryKeySSBTest extends MaterializedViewTestBase 
                 "\"replication_num\" = \"1\",\n" +
                 "\"colocate_with\" = \"groupa2\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"replicated_storage\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
@@ -70,7 +69,6 @@ public class MaterializedViewPrimaryKeySSBTest extends MaterializedViewTestBase 
                 "\"replication_num\" = \"1\",\n" +
                 "\"colocate_with\" = \"groupa5\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"replicated_storage\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
@@ -93,7 +91,6 @@ public class MaterializedViewPrimaryKeySSBTest extends MaterializedViewTestBase 
                 "\"replication_num\" = \"1\",\n" +
                 "\"colocate_with\" = \"groupa4\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"replicated_storage\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
@@ -125,7 +122,6 @@ public class MaterializedViewPrimaryKeySSBTest extends MaterializedViewTestBase 
                 "\"replication_num\" = \"1\",\n" +
                 "\"colocate_with\" = \"groupa3\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"replicated_storage\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
@@ -166,7 +162,6 @@ public class MaterializedViewPrimaryKeySSBTest extends MaterializedViewTestBase 
                 "\"replication_num\" = \"1\",\n" +
                 "\"colocate_with\" = \"groupa1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"foreign_key_constraints\" = \"(lo_custkey) REFERENCES customer(c_custkey);(lo_partkey) REFERENCES part(p_partkey);(lo_suppkey) REFERENCES supplier(s_suppkey);(lo_orderdate) REFERENCES dates(d_datekey)\",\n" +

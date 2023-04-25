@@ -56,7 +56,6 @@ CREATE TABLE `test_decimal_type6` (
              PROPERTIES (
              "replication_num" = "3",
              "in_memory" = "false",
-             "storage_format" = "DEFAULT",
              "enable_persistent_index" = "false"
              );
 insert into test_decimal_type6 values(1,1,0.100000000000000000),(2,10,0.100000000000000000);

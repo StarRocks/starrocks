@@ -2384,11 +2384,6 @@ public class GlobalStateMgr {
                         .append("\" = \"");
                 sb.append(olapTable.isInMemory()).append("\"");
 
-                // storage type
-                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT)
-                        .append("\" = \"");
-                sb.append(olapTable.getStorageFormat()).append("\"");
-
                 // enable_persistent_index
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
                         .append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
