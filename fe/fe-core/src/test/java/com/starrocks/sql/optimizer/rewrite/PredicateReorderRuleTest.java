@@ -92,8 +92,7 @@ public class PredicateReorderRuleTest {
                         "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");")
                 .withTable("CREATE TABLE `t1` (\n" +
                         "  `v1` int NULL COMMENT \"\",\n" +
@@ -103,8 +102,7 @@ public class PredicateReorderRuleTest {
                         "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");");
         CreateDbStmt dbStmt = new CreateDbStmt(false, StatsConstants.STATISTICS_DB_NAME);
         try {

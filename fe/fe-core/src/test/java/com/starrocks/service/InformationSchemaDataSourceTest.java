@@ -123,7 +123,6 @@ public class InformationSchemaDataSourceTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"V2\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
