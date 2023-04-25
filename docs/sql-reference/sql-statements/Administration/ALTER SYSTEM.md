@@ -71,7 +71,7 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
   ALTER SYSTEM DECOMMISSION BACKEND "<be_host>:<heartbeat_service_port>"[, ...]
   ```
 
-  Decommissioning BE means set it offline safely. It is an asynchronous operation. When a BE is decommissioned, the data on the BE is migrated to other BEs. Data loading and query will not be affected during the data migration. You can check whether the operation is successful using [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md). If the operation is successful, the decommissioned BE will not be returned. If the operation fails, the BE will still be online. You can manually cancel the operation using [CANCEL DECOMMISSION](../Administration/CANCEL%20DECOMMISSION.md).
+  Decommissioning a BE means removing it safely. It is an asynchronous operation. When a BE is decommissioned, the data on the BE is migrated to other BEs. Data loading and query will not be affected during the data migration. You can check whether the operation is successful using [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md). If the operation is successful, the decommissioned BE will not be returned. If the operation fails, the BE will still be online. You can manually cancel the operation using [CANCEL DECOMMISSION](../Administration/CANCEL%20DECOMMISSION.md).
 
 | **Parameter**          | **Required** | **Description**                                                                            |
 | ---------------------- | ------------ | ------------------------------------------------------------------------------------------ |
