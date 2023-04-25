@@ -78,9 +78,16 @@ INTO TABLE <table_name>
   - `hdfs_host`：HDFS 集群中 NameNode 所在主机的 IP 地址。
   - `hdfs_port`：HDFS 集群中 NameNode 所在主机的 FS 端口。默认端口号为 `9000`。
 
-  >**注意**
+  > **注意**
   >
-  > 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
+  > - 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，文件路径里传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
+  > - 从 Blob Storage 导入数据时，需要根据使用的访问协议在文件路径里添加 `wasb://` 或 `wasbs://` 作为前缀：
+  >   - 如果使用 HTTP 协议进行访问，请使用 `wasb://` 作为前缀，例如，`wasb://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`。
+  >   - 如果使用 HTTPS 协议进行访问，请使用 `wasbs://` 作为前缀，例如，`wasbs://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`。
+  > - 从 Azure Data Lake Storage Gen1 导入数据时，需要在文件路径里添加 `adl://` 作为前缀，例如， `adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>`。
+  > - 从 Data Lake Storage Gen2 导入数据时，需要根据使用的访问协议在文件路径里添加 `abfs://` 或 `abfss://` 作为前缀：
+  >   - 如果使用 HTTP 协议进行访问，请使用 `abfs://` 作为前缀，例如，`abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
+  >   - 如果使用 HTTPS 协议进行访问，请使用 `abfss://` 作为前缀，例如，`abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
 
 - `INTO TABLE`
 
@@ -460,13 +467,6 @@ StarRocks 访问存储系统的认证配置。
 ##### Azure Blob Storage
 
 如果存储系统为 Blob Storage，请按如下配置 `StorageCredentialParams`：
-
-> **NOTE**
->
-> 从 Blob Storage 导入数据时，需要根据使用的访问协议在文件路径 (`DATA INFILE`) 添加前缀：
->
-> - 如果使用 HTTP 协议进行访问，请使用 `wasb` 作为前缀，例如，`wasb://<container>@<storage_account>.``blob.core.windows.net/<path>/<file_name>/*`。
-> - 如果使用 HTTPS 协议进行访问，请使用 `wasbs` 作为前缀，例如，`wasbs://<container>@<storage_account>.``blob.core.windows.net/<path>/<file_name>/*`。
 
 - 基于 Shared Key 进行认证和鉴权
 
