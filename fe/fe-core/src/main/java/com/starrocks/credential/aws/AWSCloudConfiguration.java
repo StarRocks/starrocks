@@ -14,6 +14,7 @@
 
 package com.starrocks.credential.aws;
 
+import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudType;
@@ -79,6 +80,11 @@ public class AWSCloudConfiguration implements CloudConfiguration {
     @Override
     public CloudType getCloudType() {
         return CloudType.AWS;
+    }
+
+    @Override
+    public FileStoreInfo toFileStore() {
+        return awsCloudCredential.toFileStore();
     }
 
     @Override

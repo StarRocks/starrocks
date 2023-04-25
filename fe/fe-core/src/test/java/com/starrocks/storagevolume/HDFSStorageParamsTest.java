@@ -14,10 +14,9 @@
 
 package com.starrocks.storagevolume;
 
-import com.starrocks.storagevolume.HDFSStorageParams;
-import com.starrocks.storagevolume.credential.hdfs.HDFSCredential;
-import com.starrocks.storagevolume.credential.hdfs.HDFSKerberosCredential;
-import com.starrocks.storagevolume.credential.hdfs.HDFSSimpleCredential;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudType;
+import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -39,24 +38,22 @@ public class HDFSStorageParamsTest {
                 "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
 
         HDFSStorageParams sp = new HDFSStorageParams(storageParams);
-        HDFSCredential credential = sp.getCredential();
-        Assert.assertEquals(HDFSCredential.HDFSCredentialType.SIMPLE, credential.type());
-        Assert.assertEquals("username", ((HDFSSimpleCredential) credential).getUserName());
-        Assert.assertEquals("password", ((HDFSSimpleCredential) credential).getPassword());
-        Map<String, String> haConfigurations = ((HDFSSimpleCredential) credential).getHaConfigurations();
-        Assert.assertEquals(5, haConfigurations.size());
+        CloudConfiguration cloudConfiguration = sp.getCloudConfiguration();
+        Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
+        HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
+        Assert.assertEquals("simple", hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
+        Assert.assertEquals(5, hdfsCloudConfiguration.getHdfsCloudCredential().getHaConfigurations().size());
 
         Map<String, String> storageParams1 = new HashMap<>();
         storageParams1.put("hadoop.security.authentication", "simple");
         storageParams1.put("username", "username");
         storageParams1.put("password", "password");
         HDFSStorageParams sp1 = new HDFSStorageParams(storageParams1);
-        credential = sp1.getCredential();
-        Assert.assertEquals(HDFSCredential.HDFSCredentialType.SIMPLE, credential.type());
-        Assert.assertEquals("username", ((HDFSSimpleCredential) credential).getUserName());
-        Assert.assertEquals("password", ((HDFSSimpleCredential) credential).getPassword());
-        haConfigurations = ((HDFSSimpleCredential) credential).getHaConfigurations();
-        Assert.assertEquals(0, haConfigurations.size());
+        cloudConfiguration = sp.getCloudConfiguration();
+        Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
+        hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
+        Assert.assertEquals("simple", hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
+        Assert.assertEquals(5, hdfsCloudConfiguration.getHdfsCloudCredential().getHaConfigurations().size());
     }
 
     @Test
@@ -65,7 +62,6 @@ public class HDFSStorageParamsTest {
         storageParams.put("hadoop.security.authentication", "kerberos");
         storageParams.put("kerberos_principal", "nn/abc@ABC.COM");
         storageParams.put("kerberos_keytab", "/keytab/hive.keytab");
-        storageParams.put("kerberos_keytab_content", "YWFhYWFh");
         storageParams.put("dfs.nameservices", "ha_cluster");
         storageParams.put("dfs.ha.namenodes.ha_cluster", "ha_n1,ha_n2");
         storageParams.put("dfs.namenode.rpc-address.ha_cluster.ha_n1", "<hdfs_host>:<hdfs_port>");
@@ -74,12 +70,10 @@ public class HDFSStorageParamsTest {
                 "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider");
 
         HDFSStorageParams sp = new HDFSStorageParams(storageParams);
-        HDFSCredential credential = sp.getCredential();
-        Assert.assertEquals(HDFSCredential.HDFSCredentialType.KERBEROS, credential.type());
-        Assert.assertEquals("nn/abc@ABC.COM", ((HDFSKerberosCredential) credential).getPrincipal());
-        Assert.assertEquals("/keytab/hive.keytab", ((HDFSKerberosCredential) credential).getKeyTab());
-        Assert.assertEquals("YWFhYWFh", ((HDFSKerberosCredential) credential).getKeyContent());
-        Map<String, String> haConfigurations = ((HDFSKerberosCredential) credential).getHaConfigurations();
-        Assert.assertEquals(5, haConfigurations.size());
+        CloudConfiguration cloudConfiguration = sp.getCloudConfiguration();
+        Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
+        HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
+        Assert.assertEquals("kerberos", hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
+        Assert.assertEquals(5, hdfsCloudConfiguration.getHdfsCloudCredential().getHaConfigurations().size());
     }
 }

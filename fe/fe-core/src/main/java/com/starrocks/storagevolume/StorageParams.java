@@ -14,8 +14,10 @@
 
 package com.starrocks.storagevolume;
 
-import com.starrocks.storagevolume.StorageVolume;
+import com.starrocks.credential.CloudConfiguration;
 
 public interface StorageParams {
     public StorageVolume.StorageVolumeType type();
+
+    public CloudConfiguration getCloudConfiguration();
 }

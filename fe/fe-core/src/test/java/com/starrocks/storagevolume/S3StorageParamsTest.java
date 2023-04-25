@@ -14,9 +14,13 @@
 
 package com.starrocks.storagevolume;
 
-import com.starrocks.storagevolume.credential.aws.AWSAssumeIamRoleCredential;
-import com.starrocks.storagevolume.credential.aws.AWSCredential;
-import com.starrocks.storagevolume.credential.aws.AWSSimpleCredential;
+import com.staros.proto.AwsAssumeIamRoleCredentialInfo;
+import com.staros.proto.AwsSimpleCredentialInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudType;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -41,8 +45,13 @@ public class S3StorageParamsTest {
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
 
         S3StorageParams sp = new S3StorageParams(storageParams);
-        AWSCredential credential = sp.getCredential();
-        Assert.assertEquals(AWSCredential.AWSCredentialType.DEFAULT, credential.type());
+        CloudConfiguration cloudConfiguration = sp.getCloudConfiguration();
+        Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
+        FileStoreInfo fileStore = cloudConfiguration.toFileStore();
+        Assert.assertEquals(FileStoreType.S3, fileStore.getFsType());
+        Assert.assertTrue(fileStore.hasS3FsInfo());
+        S3FileStoreInfo s3FileStoreInfo = fileStore.getS3FsInfo();
+        Assert.assertTrue(s3FileStoreInfo.getCredential().hasDefaultCredential());
         Assert.assertEquals("region", sp.getRegion());
         Assert.assertEquals("endpoint", sp.getEndpoint());
     }
@@ -57,10 +66,16 @@ public class S3StorageParamsTest {
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
 
         S3StorageParams sp = new S3StorageParams(storageParams);
-        AWSCredential credential = sp.getCredential();
-        Assert.assertEquals(AWSCredential.AWSCredentialType.SIMPLE, credential.type());
-        Assert.assertEquals("access_key", ((AWSSimpleCredential) credential).getAccessKey());
-        Assert.assertEquals("secret_key", ((AWSSimpleCredential) credential).getSecretKey());
+        CloudConfiguration cloudConfiguration = sp.getCloudConfiguration();
+        Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
+        FileStoreInfo fileStore = cloudConfiguration.toFileStore();
+        Assert.assertEquals(FileStoreType.S3, fileStore.getFsType());
+        Assert.assertTrue(fileStore.hasS3FsInfo());
+        S3FileStoreInfo s3FileStoreInfo = fileStore.getS3FsInfo();
+        Assert.assertTrue(s3FileStoreInfo.getCredential().hasSimpleCredential());
+        AwsSimpleCredentialInfo simpleCredentialInfo = s3FileStoreInfo.getCredential().getSimpleCredential();
+        Assert.assertEquals("access_key", simpleCredentialInfo.getAccessKey());
+        Assert.assertEquals("secret_key", simpleCredentialInfo.getAccessKeySecret());
         Assert.assertEquals("region", sp.getRegion());
         Assert.assertEquals("endpoint", sp.getEndpoint());
     }
@@ -74,8 +89,13 @@ public class S3StorageParamsTest {
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
 
         S3StorageParams sp = new S3StorageParams(storageParams);
-        AWSCredential credential = sp.getCredential();
-        Assert.assertEquals(AWSCredential.AWSCredentialType.INSTANCE_PROFILE, credential.type());
+        CloudConfiguration cloudConfiguration = sp.getCloudConfiguration();
+        Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
+        FileStoreInfo fileStore = cloudConfiguration.toFileStore();
+        Assert.assertEquals(FileStoreType.S3, fileStore.getFsType());
+        Assert.assertTrue(fileStore.hasS3FsInfo());
+        S3FileStoreInfo s3FileStoreInfo = fileStore.getS3FsInfo();
+        Assert.assertTrue(s3FileStoreInfo.getCredential().hasProfileCredential());
         Assert.assertEquals("region", sp.getRegion());
         Assert.assertEquals("endpoint", sp.getEndpoint());
     }
@@ -88,14 +108,21 @@ public class S3StorageParamsTest {
         storageParams.put(AWS_S3_USE_INSTANCE_PROFILE, "true");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "false");
         storageParams.put(AWS_S3_IAM_ROLE_ARN, "iam_role_arn");
-        storageParams.put(AWS_S3_EXTERNAL_ID, "external_id");
+        storageParams.put(AWS_S3_EXTERNAL_ID, "iam_role_arn");
 
         S3StorageParams sp = new S3StorageParams(storageParams);
-        AWSCredential credential = sp.getCredential();
-        Assert.assertEquals(AWSCredential.AWSCredentialType.ASSUME_ROLE, credential.type());
+        CloudConfiguration cloudConfiguration = sp.getCloudConfiguration();
+        Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
+        FileStoreInfo fileStore = cloudConfiguration.toFileStore();
+        Assert.assertEquals(FileStoreType.S3, fileStore.getFsType());
+        Assert.assertTrue(fileStore.hasS3FsInfo());
+        S3FileStoreInfo s3FileStoreInfo = fileStore.getS3FsInfo();
+        Assert.assertTrue(s3FileStoreInfo.getCredential().hasAssumeRoleCredential());
+        AwsAssumeIamRoleCredentialInfo assumeIamRoleCredentialInfo = s3FileStoreInfo.getCredential()
+                .getAssumeRoleCredential();
+        Assert.assertEquals("iam_role_arn", assumeIamRoleCredentialInfo.getIamRoleArn());
+        Assert.assertEquals("iam_role_arn", assumeIamRoleCredentialInfo.getIamRoleArn());
         Assert.assertEquals("region", sp.getRegion());
         Assert.assertEquals("endpoint", sp.getEndpoint());
-        Assert.assertEquals("iam_role_arn", ((AWSAssumeIamRoleCredential) credential).getIamRoleArn());
-        Assert.assertEquals("external_id", ((AWSAssumeIamRoleCredential) credential).getExternalId());
     }
 }

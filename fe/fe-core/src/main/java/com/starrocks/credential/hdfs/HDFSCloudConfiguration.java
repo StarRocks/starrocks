@@ -12,55 +12,50 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.credential.gcp;
+package com.starrocks.credential.hdfs;
 
-import com.google.common.base.Preconditions;
+import autovalue.shaded.com.google.common.common.base.Preconditions;
 import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
-import com.starrocks.thrift.TCloudProperty;
-import com.starrocks.thrift.TCloudType;
 import org.apache.hadoop.conf.Configuration;
 
-import java.util.LinkedList;
-import java.util.List;
+public class HDFSCloudConfiguration implements CloudConfiguration {
+    private final HDFSCloudCredential hdfsCloudCredential;
 
-public class GCPCloudConfiguration implements CloudConfiguration {
+    public HDFSCloudConfiguration(HDFSCloudCredential hdfsCloudCredential) {
+        Preconditions.checkNotNull(hdfsCloudCredential);
+        this.hdfsCloudCredential = hdfsCloudCredential;
+    }
 
-    private final GCPCloudCredential gcpCloudCredential;
-
-    public GCPCloudConfiguration(GCPCloudCredential gcpCloudCredential) {
-        Preconditions.checkNotNull(gcpCloudCredential);
-        this.gcpCloudCredential = gcpCloudCredential;
+    public HDFSCloudCredential getHdfsCloudCredential() {
+        return hdfsCloudCredential;
     }
 
     @Override
     public void toThrift(TCloudConfiguration tCloudConfiguration) {
-        tCloudConfiguration.setCloud_type(TCloudType.AZURE);
-
-        List<TCloudProperty> properties = new LinkedList<>();
-        gcpCloudCredential.toThrift(properties);
-        tCloudConfiguration.setCloud_properties(properties);
+        // TODO
     }
 
     @Override
     public void applyToConfiguration(Configuration configuration) {
-        gcpCloudCredential.applyToConfiguration(configuration);
-    }
-
-    @Override
-    public CloudType getCloudType() {
-        return CloudType.GCP;
-    }
-
-    @Override
-    public FileStoreInfo toFileStore() {
-        return null;
+        // TODO
     }
 
     @Override
     public String getCredentialString() {
-        return gcpCloudCredential.getCredentialString();
+        return hdfsCloudCredential.getCredentialString();
+    }
+
+    @Override
+    public CloudType getCloudType() {
+        return CloudType.HDFS;
+    }
+
+    @Override
+    public FileStoreInfo toFileStore() {
+        // TODO
+        return null;
     }
 }

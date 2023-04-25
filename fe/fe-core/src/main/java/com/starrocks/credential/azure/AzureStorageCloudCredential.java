@@ -15,6 +15,7 @@
 package com.starrocks.credential.azure;
 
 import com.google.common.base.Preconditions;
+import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudCredential;
 import com.starrocks.thrift.TCloudProperty;
 import org.apache.hadoop.conf.Configuration;
@@ -99,6 +100,11 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
                 ", sasToken='" + sasToken + '\'' +
                 '}';
     }
+
+    @Override
+    public FileStoreInfo toFileStore() {
+        return null;
+    }
 }
 
 class AzureADLS1CloudCredential extends AzureStorageCloudCredential {
@@ -141,6 +147,11 @@ class AzureADLS1CloudCredential extends AzureStorageCloudCredential {
                 ", oauth2Credential='" + oauth2Credential + '\'' +
                 ", oauth2Endpoint='" + oauth2Endpoint + '\'' +
                 '}';
+    }
+
+    @Override
+    public FileStoreInfo toFileStore() {
+        return null;
     }
 }
 
@@ -212,6 +223,11 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
                 ", oauth2ClientSecret='" + oauth2ClientSecret + '\'' +
                 ", oauth2ClientEndpoint='" + oauth2ClientEndpoint + '\'' +
                 '}';
+    }
+
+    @Override
+    public FileStoreInfo toFileStore() {
+        return null;
     }
 
     // Create Hadoop configuration key for specific storage account, if storage account is not set, means this property

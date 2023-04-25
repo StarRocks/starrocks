@@ -15,6 +15,7 @@
 package com.starrocks.credential.gcp;
 
 import com.google.common.base.Preconditions;
+import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudCredential;
 import com.starrocks.thrift.TCloudProperty;
 import org.apache.hadoop.conf.Configuration;
@@ -98,5 +99,10 @@ public class GCPCloudCredential implements CloudCredential {
                 ", serviceAccountPrivateKey='" + serviceAccountPrivateKey + '\'' +
                 ", impersonationServiceAccount='" + impersonationServiceAccount + '\'' +
                 '}';
+    }
+
+    @Override
+    public FileStoreInfo toFileStore() {
+        return null;
     }
 }

@@ -14,6 +14,7 @@
 
 package com.starrocks.credential.azure;
 
+import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -49,6 +50,11 @@ public class AzureCloudConfiguration implements CloudConfiguration {
     @Override
     public CloudType getCloudType() {
         return CloudType.AZURE;
+    }
+
+    @Override
+    public FileStoreInfo toFileStore() {
+        return null;
     }
 
     @Override

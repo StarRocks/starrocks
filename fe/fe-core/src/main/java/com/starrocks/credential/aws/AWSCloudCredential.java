@@ -23,6 +23,14 @@ import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
 import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
 import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
 import com.google.common.base.Preconditions;
+import com.staros.proto.AwsAssumeIamRoleCredentialInfo;
+import com.staros.proto.AwsCredentialInfo;
+import com.staros.proto.AwsDefaultCredentialInfo;
+import com.staros.proto.AwsInstanceProfileCredentialInfo;
+import com.staros.proto.AwsSimpleCredentialInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import com.starrocks.credential.provider.AssumedRoleCredentialProvider;
@@ -222,5 +230,37 @@ public class AWSCloudCredential implements CloudCredential {
                 ", region='" + region + '\'' +
                 ", endpoint='" + endpoint + '\'' +
                 '}';
+    }
+
+    @Override
+    public FileStoreInfo toFileStore() {
+        FileStoreInfo.Builder fileStore = FileStoreInfo.newBuilder();
+        fileStore.setFsType(FileStoreType.S3);
+        S3FileStoreInfo.Builder s3FileStoreInfo = S3FileStoreInfo.newBuilder();
+        AwsCredentialInfo.Builder awsCredentialInfo = AwsCredentialInfo.newBuilder();
+        if (useAWSSDKDefaultBehavior) {
+            AwsDefaultCredentialInfo.Builder defaultCredentialInfo = AwsDefaultCredentialInfo.newBuilder();
+            awsCredentialInfo.setDefaultCredential(defaultCredentialInfo.build());
+        } else if (useInstanceProfile) {
+            if (!iamRoleArn.isEmpty()) {
+                AwsAssumeIamRoleCredentialInfo.Builder assumeIamRowCredentialInfo
+                        = AwsAssumeIamRoleCredentialInfo.newBuilder();
+                assumeIamRowCredentialInfo.setIamRoleArn(iamRoleArn);
+                assumeIamRowCredentialInfo.setExternalId(externalId);
+                awsCredentialInfo.setAssumeRoleCredential(assumeIamRowCredentialInfo.build());
+            } else {
+                awsCredentialInfo.setProfileCredential(AwsInstanceProfileCredentialInfo.newBuilder().build());
+            }
+        } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
+            AwsSimpleCredentialInfo.Builder simpleCredentialInfo = AwsSimpleCredentialInfo.newBuilder();
+            simpleCredentialInfo.setAccessKey(accessKey);
+            simpleCredentialInfo.setAccessKeySecret(secretKey);
+            awsCredentialInfo.setSimpleCredential(simpleCredentialInfo.build());
+        } else {
+            Preconditions.checkArgument(false, "Unreachable");
+        }
+        s3FileStoreInfo.setCredential(awsCredentialInfo.build());
+        fileStore.setS3FsInfo(s3FileStoreInfo.build());
+        return fileStore.build();
     }
 }

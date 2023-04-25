@@ -14,6 +14,7 @@
 
 package com.starrocks.credential;
 
+import com.staros.proto.FileStoreInfo;
 import com.starrocks.thrift.TCloudConfiguration;
 import org.apache.hadoop.conf.Configuration;
 
@@ -30,4 +31,6 @@ public interface CloudConfiguration {
     String getCredentialString();
 
     CloudType getCloudType();
+
+    FileStoreInfo toFileStore();
 }
