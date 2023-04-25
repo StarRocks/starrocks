@@ -154,9 +154,13 @@ public class CompactionScheduler extends Daemon {
                 iterator.remove();
                 context.setFinishTs(System.currentTimeMillis());
                 history.offer(CompactionRecord.build(context));
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Removed published compaction. {} cost={}ms running={}", context.getDebugString(),
-                            (context.getFinishTs() - context.getStartTs()), runningCompactions.size());
+                long cost = context.getFinishTs() - context.getStartTs();
+                if (cost >= /*60 minutes=*/3600000) {
+                    LOG.info("Removed published compaction. {} cost={}s running={}", context.getDebugString(),
+                            cost / 1000, runningCompactions.size());
+                } else if (LOG.isDebugEnabled()) {
+                    LOG.debug("Removed published compaction. {} cost={}s running={}", context.getDebugString(),
+                            cost / 1000, runningCompactions.size());
                 }
                 compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS);
             }
