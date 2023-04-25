@@ -371,6 +371,9 @@ public class GlobalStateMgr {
     // false if default_cluster is not created.
     private boolean isDefaultClusterCreated = false;
 
+    // false if default_warehouse is not created.
+    private boolean isDefaultWarehouseCreated = false;
+
     private FrontendNodeType feType;
     // replica and observer use this value to decide provide read service or not
     private long synchronizedTimeMs;
@@ -1056,7 +1059,7 @@ public class GlobalStateMgr {
                     // already upgraded, set auth = null
                     auth = null;
                 }
-                warehouseMgr.init();
+
                 break;
             }
 
@@ -1138,6 +1141,10 @@ public class GlobalStateMgr {
 
             if (!isDefaultClusterCreated) {
                 initDefaultCluster();
+            }
+
+            if (!isDefaultWarehouseCreated) {
+                initDefaultWarehouse();
             }
 
             // MUST set leader ip before starting checkpoint thread.
@@ -3448,6 +3455,11 @@ public class GlobalStateMgr {
 
     public void initDefaultCluster() {
         localMetastore.initDefaultCluster();
+    }
+
+    public void initDefaultWarehouse() {
+        warehouseMgr.initDefaultWarehouse();
+        isDefaultWarehouseCreated = true;
     }
 
     public void replayUpdateClusterAndBackends(BackendIdsUpdateInfo info) {
