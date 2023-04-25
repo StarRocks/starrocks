@@ -14,8 +14,10 @@
 
 package com.starrocks.storagevolume;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
 
 import java.util.Map;
 
@@ -27,8 +29,11 @@ public class HDFSStorageParams implements StorageParams {
         return StorageVolume.StorageVolumeType.HDFS;
     }
 
-    public HDFSStorageParams(Map<String, String> params) {
+    public HDFSStorageParams(Map<String, String> params) throws AnalysisException {
         cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
+        if (cloudConfiguration.getCloudType() != CloudType.HDFS) {
+            throw new AnalysisException("Storage params is not valid");
+        }
     }
 
     @Override

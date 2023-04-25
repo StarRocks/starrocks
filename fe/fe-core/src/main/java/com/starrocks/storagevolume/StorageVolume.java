@@ -14,6 +14,8 @@
 
 package com.starrocks.storagevolume;
 
+import com.starrocks.common.AnalysisException;
+
 import java.util.List;
 import java.util.Map;
 
@@ -39,7 +41,7 @@ public class StorageVolume {
     private Boolean enabled;
 
     public StorageVolume(String name, String svt, List<String> locations,
-                         Map<String, String> storageParams, Boolean enabled, String comment) {
+                         Map<String, String> storageParams, Boolean enabled, String comment) throws AnalysisException {
         this.name = name;
         this.svt = toStorageVolumeType(svt);
         this.locations = locations;
@@ -49,7 +51,7 @@ public class StorageVolume {
         this.storageParams = toStorageParams(storageParams);
     }
 
-    public void setStorageParams(Map<String, String> params) {
+    public void setStorageParams(Map<String, String> params) throws AnalysisException {
         this.storageParams = toStorageParams(params);
     }
 
@@ -84,7 +86,7 @@ public class StorageVolume {
         }
     }
 
-    private StorageParams toStorageParams(Map<String, String> storageParams) {
+    private StorageParams toStorageParams(Map<String, String> storageParams) throws AnalysisException {
         switch (svt) {
             case S3:
                 return new S3StorageParams(storageParams);

@@ -38,8 +38,7 @@ public class HDFSCloudConfigurationFactory extends CloudConfigurationFactory {
     @Override
     protected CloudConfiguration buildForStorage() {
         Preconditions.checkNotNull(properties);
-        Map<String, String> haConfigurations = new HashMap<>();
-        haConfigurations.putAll(properties);
+        Map<String, String> haConfigurations = new HashMap<>(properties);
         haConfigurations.remove(HDFS_AUTHENTICATION);
         haConfigurations.remove(HDFS_USER_NAME);
         haConfigurations.remove(HDFS_PASSWORD);

@@ -14,9 +14,11 @@
 
 package com.starrocks.storagevolume;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
 
 import java.util.Map;
 
@@ -31,10 +33,13 @@ public class S3StorageParams implements StorageParams {
         return StorageVolume.StorageVolumeType.S3;
     }
 
-    public S3StorageParams(Map<String, String> params) {
+    public S3StorageParams(Map<String, String> params) throws AnalysisException {
         region = params.get(CloudConfigurationConstants.AWS_S3_REGION);
         endpoint = params.get(CloudConfigurationConstants.AWS_S3_ENDPOINT);
         cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
+        if (cloudConfiguration.getCloudType() != CloudType.AWS) {
+            throw new AnalysisException("Storage params is not valid");
+        }
     }
 
     public String getRegion() {

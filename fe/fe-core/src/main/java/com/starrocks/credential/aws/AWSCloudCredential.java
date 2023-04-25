@@ -252,6 +252,7 @@ public class AWSCloudCredential implements CloudCredential {
                 awsCredentialInfo.setProfileCredential(AwsInstanceProfileCredentialInfo.newBuilder().build());
             }
         } else if (!accessKey.isEmpty() && !secretKey.isEmpty()) {
+            // TODO: Support assumeRole with AK/SK
             AwsSimpleCredentialInfo.Builder simpleCredentialInfo = AwsSimpleCredentialInfo.newBuilder();
             simpleCredentialInfo.setAccessKey(accessKey);
             simpleCredentialInfo.setAccessKeySecret(secretKey);

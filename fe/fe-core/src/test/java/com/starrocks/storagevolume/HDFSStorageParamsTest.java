@@ -14,6 +14,7 @@
 
 package com.starrocks.storagevolume;
 
+import com.starrocks.common.AnalysisException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
@@ -25,7 +26,7 @@ import java.util.Map;
 
 public class HDFSStorageParamsTest {
     @Test
-    public void testSimpleCredential() {
+    public void testSimpleCredential() throws AnalysisException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put("hadoop.security.authentication", "simple");
         storageParams.put("username", "username");
@@ -57,7 +58,7 @@ public class HDFSStorageParamsTest {
     }
 
     @Test
-    public void testKerberosCredential() {
+    public void testKerberosCredential() throws AnalysisException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put("hadoop.security.authentication", "kerberos");
         storageParams.put("kerberos_principal", "nn/abc@ABC.COM");
@@ -75,5 +76,18 @@ public class HDFSStorageParamsTest {
         HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
         Assert.assertEquals("kerberos", hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
         Assert.assertEquals(5, hdfsCloudConfiguration.getHdfsCloudCredential().getHaConfigurations().size());
+    }
+
+    @Test
+    public void testInvalidCredential() {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put("hadoop.security.authentication", "kerberos");
+        storageParams.put("kerberos_principal", "nn/abc@ABC.COM");
+
+        try {
+            S3StorageParams sp = new S3StorageParams(storageParams);
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("Storage params is not valid"));
+        }
     }
 }

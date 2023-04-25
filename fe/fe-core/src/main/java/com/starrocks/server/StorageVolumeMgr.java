@@ -14,8 +14,10 @@
 
 package com.starrocks.server;
 
-import autovalue.shaded.com.google.common.common.base.Preconditions;
+import com.google.common.base.Preconditions;
 import com.staros.util.LockCloseable;
+import com.starrocks.common.AlreadyExistsException;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.storagevolume.StorageVolume;
 
 import java.util.HashMap;
@@ -32,10 +34,11 @@ public class StorageVolumeMgr {
     private String defaultSV;
 
     public void createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
-                                    Boolean enabled, String comment) {
+                                    Boolean enabled, String comment) throws AlreadyExistsException, AnalysisException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Preconditions.checkState(!nameToSV.containsKey(name),
-                    "Storage Volume '%s' already exists", name);
+            if (nameToSV.containsKey(name)) {
+                throw new AlreadyExistsException(String.format("Storage Volume '%s' already exists", name));
+            }
             StorageVolume sv = new StorageVolume(name, svType, locations, params, enabled, comment);
             nameToSV.put(name, sv);
         }
@@ -51,7 +54,7 @@ public class StorageVolumeMgr {
     }
 
     public void updateStorageVolume(String name, Map<String, String> params, Boolean enabled, String comment,
-                                    String defaultSV) {
+                                    Boolean asDefault) throws AnalysisException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(nameToSV.containsKey(name),
                     "Storage Volume '%s' does not exist", name);
@@ -62,6 +65,10 @@ public class StorageVolumeMgr {
             }
 
             if (enabled != null) {
+                if (!enabled) {
+                    Preconditions.checkState(!name.equals(defaultSV),
+                            "Default volume can not be disabled");
+                }
                 sv.setEnabled(enabled);
             }
 
@@ -69,8 +76,8 @@ public class StorageVolumeMgr {
                 sv.setComment(comment);
             }
 
-            if (defaultSV != null) {
-                setDefaultStorageVolume(defaultSV);
+            if (asDefault != null) {
+                setDefaultStorageVolume(name);
             }
         }
     }

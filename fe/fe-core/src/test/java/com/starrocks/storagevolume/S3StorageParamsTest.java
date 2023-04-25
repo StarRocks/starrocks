@@ -19,6 +19,7 @@ import com.staros.proto.AwsSimpleCredentialInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import org.junit.Assert;
@@ -38,7 +39,7 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_IN
 
 public class S3StorageParamsTest {
     @Test
-    public void testDefaultCredential() {
+    public void testDefaultCredential() throws AnalysisException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
@@ -57,7 +58,7 @@ public class S3StorageParamsTest {
     }
 
     @Test
-    public void testSimpleCredential() {
+    public void testSimpleCredential() throws AnalysisException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
@@ -81,7 +82,7 @@ public class S3StorageParamsTest {
     }
 
     @Test
-    public void testInstanceProfile() {
+    public void testInstanceProfile() throws AnalysisException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
@@ -101,7 +102,7 @@ public class S3StorageParamsTest {
     }
 
     @Test
-    public void testAssumeIamRole() {
+    public void testAssumeIamRole() throws AnalysisException {
         Map<String, String> storageParams = new HashMap<>();
         storageParams.put(AWS_S3_REGION, "region");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint");
@@ -124,5 +125,22 @@ public class S3StorageParamsTest {
         Assert.assertEquals("iam_role_arn", assumeIamRoleCredentialInfo.getIamRoleArn());
         Assert.assertEquals("region", sp.getRegion());
         Assert.assertEquals("endpoint", sp.getEndpoint());
+    }
+
+    @Test
+    public void testInvalidCredential() {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put(AWS_S3_REGION, "region");
+        storageParams.put(AWS_S3_ENDPOINT, "endpoint");
+        storageParams.put(AWS_S3_USE_INSTANCE_PROFILE, "true");
+        storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
+        storageParams.put(AWS_S3_IAM_ROLE_ARN, "iam_role_arn");
+        storageParams.put(AWS_S3_EXTERNAL_ID, "iam_role_arn");
+
+        try {
+            S3StorageParams sp = new S3StorageParams(storageParams);
+        } catch (AnalysisException e) {
+            Assert.assertTrue(e.getMessage().contains("Storage params is not valid"));
+        }
     }
 }

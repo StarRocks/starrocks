@@ -86,6 +86,7 @@ public class CloudConfigurationConstants {
             "gcp.gcs.impersonation_service_account";
 
     // Credential for HDFS
+    // TODO: Refactor the name of parameters
     public static final String HDFS_AUTHENTICATION = "hadoop.security.authentication";
     public static final String HDFS_USER_NAME = "username";
     public static final String HDFS_PASSWORD = "password";
