@@ -1033,6 +1033,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HDFS_BACKEND_SELECTOR_SCAN_RANGE_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean hdfsBackendSelectorScanRangeShuffle = false;
 
+    private int exprChildrenLimit = -1;
+
+    public int getExprChildrenLimit() {
+        return exprChildrenLimit;
+    }
+
+    public void setExprChildrenLimit(int exprChildrenLimit) {
+        this.exprChildrenLimit = exprChildrenLimit;
+    }
+
     public void setFullSortMaxBufferedRows(long v) {
         fullSortMaxBufferedRows = v;
     }
