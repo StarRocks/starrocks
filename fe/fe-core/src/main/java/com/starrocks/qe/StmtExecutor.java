@@ -927,9 +927,6 @@ public class StmtExecutor {
         } else {
             StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
                     StatsConstants.AnalyzeType.FULL;
-            if (analyzeType == StatsConstants.AnalyzeType.FULL) {
-                statisticExecutor.dropTableStatistics(statsConnectCtx, table.getId(), analyzeType);
-            }
             statisticExecutor.collectStatistics(statsConnectCtx,
                     StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
                             analyzeStmt.getColumnNames(),
