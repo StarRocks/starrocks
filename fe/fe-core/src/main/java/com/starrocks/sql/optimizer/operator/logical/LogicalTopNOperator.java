@@ -182,6 +182,11 @@ public class LogicalTopNOperator extends LogicalOperator {
             extends LogicalOperator.Builder<LogicalTopNOperator, LogicalTopNOperator.Builder> {
 
         @Override
+        protected LogicalTopNOperator newInstance() {
+            return new LogicalTopNOperator();
+        }
+
+        @Override
         public LogicalTopNOperator.Builder withOperator(LogicalTopNOperator topNOperator) {
             super.withOperator(topNOperator);
             builder.orderByElements = topNOperator.orderByElements;

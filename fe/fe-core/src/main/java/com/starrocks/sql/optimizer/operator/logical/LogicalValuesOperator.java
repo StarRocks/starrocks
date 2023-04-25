@@ -98,6 +98,11 @@ public class LogicalValuesOperator extends LogicalOperator {
     public static class Builder extends LogicalOperator.Builder<LogicalValuesOperator, LogicalValuesOperator.Builder> {
 
         @Override
+        protected LogicalValuesOperator newInstance() {
+            return new LogicalValuesOperator();
+        }
+
+        @Override
         public Builder withOperator(LogicalValuesOperator valuesOperator) {
             super.withOperator(valuesOperator);
 

@@ -33,7 +33,7 @@ import java.util.Objects;
  *
  * */
 public class LogicalCTEProduceOperator extends LogicalOperator {
-    private final int cteId;
+    private int cteId;
 
     public LogicalCTEProduceOperator(int cteId) {
         super(OperatorType.LOGICAL_CTE_PRODUCE);
@@ -91,5 +91,19 @@ public class LogicalCTEProduceOperator extends LogicalOperator {
 
     public static class Builder
             extends LogicalOperator.Builder<LogicalCTEProduceOperator, LogicalValuesOperator.Builder> {
+        @Override
+        protected LogicalCTEProduceOperator newInstance() {
+            return new LogicalCTEProduceOperator(-1);
+        }
+
+        public void setCteId(int cteId) {
+            builder.cteId = cteId;
+        }
+
+        @Override
+        public LogicalValuesOperator.Builder withOperator(LogicalCTEProduceOperator operator) {
+            builder.cteId = operator.cteId;
+            return super.withOperator(operator);
+        }
     }
 }

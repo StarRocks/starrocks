@@ -75,6 +75,11 @@ public class LogicalUnionOperator extends LogicalSetOperator {
 
     public static class Builder extends LogicalSetOperator.Builder<LogicalUnionOperator, LogicalUnionOperator.Builder> {
         @Override
+        protected LogicalUnionOperator newInstance() {
+            return new LogicalUnionOperator();
+        }
+
+        @Override
         public Builder withOperator(LogicalUnionOperator unionOperator) {
             super.withOperator(unionOperator);
             builder.isUnionAll = unionOperator.isUnionAll;

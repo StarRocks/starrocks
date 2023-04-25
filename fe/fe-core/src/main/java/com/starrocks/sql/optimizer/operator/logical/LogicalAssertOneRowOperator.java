@@ -42,13 +42,6 @@ public class LogicalAssertOneRowOperator extends LogicalOperator {
         this.tips = tips;
     }
 
-    // private LogicalAssertOneRowOperator(Builder builder) {
-    //     super(OperatorType.LOGICAL_ASSERT_ONE_ROW, builder.getLimit(), builder.getPredicate(), builder.getProjection());
-    //     this.assertion = builder.assertion;
-    //     this.checkRows = builder.checkRows;
-    //     this.tips = builder.tips;
-    // }
-
     private LogicalAssertOneRowOperator() {
         super(OperatorType.LOGICAL_ASSERT_ONE_ROW);
     }
@@ -105,6 +98,11 @@ public class LogicalAssertOneRowOperator extends LogicalOperator {
 
     public static class Builder
             extends LogicalOperator.Builder<LogicalAssertOneRowOperator, LogicalAssertOneRowOperator.Builder> {
+
+        @Override
+        protected LogicalAssertOneRowOperator newInstance() {
+            return new LogicalAssertOneRowOperator();
+        }
 
         @Override
         public LogicalAssertOneRowOperator.Builder withOperator(LogicalAssertOneRowOperator assertOneRowOperator) {

@@ -36,5 +36,9 @@ public class LogicalExceptOperator extends LogicalSetOperator {
 
     public static class Builder
             extends LogicalSetOperator.Builder<LogicalExceptOperator, LogicalExceptOperator.Builder> {
+        @Override
+        protected LogicalExceptOperator newInstance() {
+            return new LogicalExceptOperator();
+        }
     }
 }

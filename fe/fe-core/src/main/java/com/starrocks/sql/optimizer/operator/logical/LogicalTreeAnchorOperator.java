@@ -54,5 +54,9 @@ public class LogicalTreeAnchorOperator extends LogicalOperator {
 
     public static class Builder
             extends LogicalOperator.Builder<LogicalTreeAnchorOperator, LogicalAggregationOperator.Builder> {
+        @Override
+        protected LogicalTreeAnchorOperator newInstance() {
+            return new LogicalTreeAnchorOperator();
+        }
     }
 }

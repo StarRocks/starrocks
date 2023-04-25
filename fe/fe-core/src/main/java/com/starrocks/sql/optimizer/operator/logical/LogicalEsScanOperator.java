@@ -70,6 +70,11 @@ public class LogicalEsScanOperator extends LogicalScanOperator {
             extends LogicalScanOperator.Builder<LogicalEsScanOperator, LogicalEsScanOperator.Builder> {
 
         @Override
+        protected LogicalEsScanOperator newInstance() {
+            return new LogicalEsScanOperator();
+        }
+
+        @Override
         public LogicalEsScanOperator.Builder withOperator(LogicalEsScanOperator esScanOperator) {
             super.withOperator(esScanOperator);
             builder.esTablePartitions = esScanOperator.esTablePartitions;

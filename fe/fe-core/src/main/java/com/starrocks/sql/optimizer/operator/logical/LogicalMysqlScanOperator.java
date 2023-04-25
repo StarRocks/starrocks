@@ -60,5 +60,9 @@ public class LogicalMysqlScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalMysqlScanOperator, LogicalMysqlScanOperator.Builder> {
+        @Override
+        protected LogicalMysqlScanOperator newInstance() {
+            return new LogicalMysqlScanOperator();
+        }
     }
 }

@@ -176,13 +176,13 @@ public abstract class LogicalScanOperator extends LogicalOperator {
             return (B) this;
         }
 
-        public B setColRefToColumnMetaMap(ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-            builder.colRefToColumnMetaMap = colRefToColumnMetaMap;
+        public B setColRefToColumnMetaMap(Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+            builder.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
             return (B) this;
         }
 
         public B setColumnMetaToColRefMap(ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap) {
-            builder.columnMetaToColRefMap = columnMetaToColRefMap;
+            builder.columnMetaToColRefMap = ImmutableMap.copyOf(columnMetaToColRefMap);
             return (B) this;
         }
 

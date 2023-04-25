@@ -80,5 +80,9 @@ public class LogicalFilterOperator extends LogicalOperator {
 
     public static class Builder
             extends LogicalOperator.Builder<LogicalFilterOperator, LogicalFilterOperator.Builder> {
+        @Override
+        protected LogicalFilterOperator newInstance() {
+            return new LogicalFilterOperator();
+        }
     }
 }

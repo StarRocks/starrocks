@@ -78,6 +78,11 @@ public class LogicalHudiScanOperator extends LogicalScanOperator {
             extends LogicalScanOperator.Builder<LogicalHudiScanOperator, LogicalHudiScanOperator.Builder> {
 
         @Override
+        protected LogicalHudiScanOperator newInstance() {
+            return new LogicalHudiScanOperator();
+        }
+
+        @Override
         public LogicalHudiScanOperator.Builder withOperator(LogicalHudiScanOperator scanOperator) {
             super.withOperator(scanOperator);
 

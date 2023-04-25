@@ -94,6 +94,8 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     private LogicalAggregationOperator() {
         super(OperatorType.LOGICAL_AGGR);
+        this.isSplit = false;
+        this.singleDistinctFunctionPos = -1;
     }
 
     public AggType getType() {
@@ -238,6 +240,11 @@ public class LogicalAggregationOperator extends LogicalOperator {
 
     public static class Builder
             extends LogicalOperator.Builder<LogicalAggregationOperator, LogicalAggregationOperator.Builder> {
+
+        @Override
+        protected LogicalAggregationOperator newInstance() {
+            return new LogicalAggregationOperator();
+        }
 
         @Override
         public LogicalAggregationOperator build() {

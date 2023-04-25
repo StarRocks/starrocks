@@ -61,6 +61,11 @@ public class LogicalDeltaLakeScanOperator extends LogicalScanOperator {
             extends LogicalScanOperator.Builder<LogicalDeltaLakeScanOperator, LogicalDeltaLakeScanOperator.Builder> {
 
         @Override
+        protected LogicalDeltaLakeScanOperator newInstance() {
+            return new LogicalDeltaLakeScanOperator();
+        }
+
+        @Override
         public LogicalDeltaLakeScanOperator.Builder withOperator(LogicalDeltaLakeScanOperator scanOperator) {
             super.withOperator(scanOperator);
             builder.predicates = scanOperator.predicates.clone();

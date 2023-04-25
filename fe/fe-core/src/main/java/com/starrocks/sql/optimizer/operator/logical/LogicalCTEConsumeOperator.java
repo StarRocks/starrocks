@@ -115,6 +115,11 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
             extends LogicalOperator.Builder<LogicalCTEConsumeOperator, LogicalCTEConsumeOperator.Builder> {
 
         @Override
+        protected LogicalCTEConsumeOperator newInstance() {
+            return new LogicalCTEConsumeOperator();
+        }
+
+        @Override
         public LogicalCTEConsumeOperator.Builder withOperator(LogicalCTEConsumeOperator operator) {
             super.withOperator(operator);
             builder.cteId = operator.cteId;

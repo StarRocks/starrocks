@@ -237,6 +237,12 @@ public class LogicalJoinOperator extends LogicalOperator {
     }
 
     public static class Builder extends LogicalOperator.Builder<LogicalJoinOperator, LogicalJoinOperator.Builder> {
+
+        @Override
+        protected LogicalJoinOperator newInstance() {
+            return new LogicalJoinOperator();
+        }
+
         @Override
         public LogicalJoinOperator.Builder withOperator(LogicalJoinOperator joinOperator) {
             super.withOperator(joinOperator);

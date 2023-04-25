@@ -81,6 +81,11 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
             extends LogicalScanOperator.Builder<LogicalMetaScanOperator, LogicalMetaScanOperator.Builder> {
 
         @Override
+        protected LogicalMetaScanOperator newInstance() {
+            return new LogicalMetaScanOperator();
+        }
+
+        @Override
         public LogicalMetaScanOperator.Builder withOperator(LogicalMetaScanOperator operator) {
             super.withOperator(operator);
             builder.aggColumnIdToNames = ImmutableMap.copyOf(operator.aggColumnIdToNames);

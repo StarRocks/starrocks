@@ -175,6 +175,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalOlapScanOperator, LogicalOlapScanOperator.Builder> {
         @Override
+        protected LogicalOlapScanOperator newInstance() {
+            return new LogicalOlapScanOperator();
+        }
+
+        @Override
         public Builder withOperator(LogicalOlapScanOperator scanOperator) {
             super.withOperator(scanOperator);
 

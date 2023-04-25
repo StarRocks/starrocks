@@ -43,7 +43,7 @@ public class LogicalSchemaScanOperator extends LogicalScanOperator {
         Preconditions.checkState(table instanceof SchemaTable);
     }
 
-    private LogicalSchemaScanOperator(Builder builder) {
+    private LogicalSchemaScanOperator() {
         super(OperatorType.LOGICAL_SCHEMA_SCAN);
     }
 
@@ -54,5 +54,9 @@ public class LogicalSchemaScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalSchemaScanOperator, LogicalSchemaScanOperator.Builder> {
+        @Override
+        protected LogicalSchemaScanOperator newInstance() {
+            return new LogicalSchemaScanOperator();
+        }
     }
 }

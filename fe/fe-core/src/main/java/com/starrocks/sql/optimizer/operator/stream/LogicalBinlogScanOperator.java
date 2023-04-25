@@ -50,6 +50,11 @@ public class LogicalBinlogScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalBinlogScanOperator, LogicalBinlogScanOperator.Builder> {
+
+        @Override
+        protected LogicalBinlogScanOperator newInstance() {
+            return new LogicalBinlogScanOperator();
+        }
     }
 
 }

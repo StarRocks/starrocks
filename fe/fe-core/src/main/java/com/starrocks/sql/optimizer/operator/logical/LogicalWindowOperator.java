@@ -55,6 +55,10 @@ public class LogicalWindowOperator extends LogicalOperator {
 
     private LogicalWindowOperator() {
         super(OperatorType.LOGICAL_WINDOW);
+        this.partitionExpressions = ImmutableList.of();
+        this.orderByElements = ImmutableList.of();
+        this.enforceSortColumns = ImmutableList.of();
+        this.useHashBasedPartition = false;
     }
 
     public Map<ColumnRefOperator, CallOperator> getWindowCall() {
@@ -140,9 +144,8 @@ public class LogicalWindowOperator extends LogicalOperator {
     }
 
     public static class Builder extends LogicalOperator.Builder<LogicalWindowOperator, LogicalWindowOperator.Builder> {
-
         @Override
-        public LogicalWindowOperator build() {
+        protected LogicalWindowOperator newInstance() {
             return new LogicalWindowOperator();
         }
 

@@ -102,6 +102,11 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
             extends LogicalOperator.Builder<LogicalCTEAnchorOperator, LogicalCTEAnchorOperator.Builder> {
 
         @Override
+        protected LogicalCTEAnchorOperator newInstance() {
+            return new LogicalCTEAnchorOperator();
+        }
+
+        @Override
         public LogicalCTEAnchorOperator.Builder withOperator(LogicalCTEAnchorOperator operator) {
             super.withOperator(operator);
             builder.cteId = operator.cteId;

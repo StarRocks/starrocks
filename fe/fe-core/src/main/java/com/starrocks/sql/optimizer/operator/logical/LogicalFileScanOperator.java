@@ -76,6 +76,11 @@ public class LogicalFileScanOperator extends LogicalScanOperator {
             extends LogicalScanOperator.Builder<LogicalFileScanOperator, LogicalFileScanOperator.Builder> {
 
         @Override
+        protected LogicalFileScanOperator newInstance() {
+            return new LogicalFileScanOperator();
+        }
+
+        @Override
         public LogicalFileScanOperator.Builder withOperator(LogicalFileScanOperator scanOperator) {
             super.withOperator(scanOperator);
 

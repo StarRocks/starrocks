@@ -45,7 +45,7 @@ public final class LogicalProjectOperator extends LogicalOperator {
         this.limit = limit;
     }
 
-    public LogicalProjectOperator() {
+    private LogicalProjectOperator() {
         super(OperatorType.LOGICAL_PROJECT);
     }
 
@@ -107,6 +107,11 @@ public final class LogicalProjectOperator extends LogicalOperator {
     }
 
     public static class Builder extends Operator.Builder<LogicalProjectOperator, LogicalProjectOperator.Builder> {
+
+        @Override
+        protected LogicalProjectOperator newInstance() {
+            return new LogicalProjectOperator();
+        }
 
         @Override
         public Builder withOperator(LogicalProjectOperator operator) {

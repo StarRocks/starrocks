@@ -115,6 +115,11 @@ public class LogicalRepeatOperator extends LogicalOperator {
             extends LogicalOperator.Builder<LogicalRepeatOperator, LogicalRepeatOperator.Builder> {
 
         @Override
+        protected LogicalRepeatOperator newInstance() {
+            return new LogicalRepeatOperator();
+        }
+
+        @Override
         public LogicalRepeatOperator.Builder withOperator(LogicalRepeatOperator operator) {
             super.withOperator(operator);
             builder.outputGrouping = operator.outputGrouping;

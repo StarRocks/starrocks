@@ -135,6 +135,11 @@ public class LogicalLimitOperator extends LogicalOperator {
     public static class Builder extends LogicalOperator.Builder<LogicalLimitOperator, LogicalLimitOperator.Builder> {
 
         @Override
+        protected LogicalLimitOperator newInstance() {
+            return new LogicalLimitOperator();
+        }
+
+        @Override
         public LogicalLimitOperator.Builder withOperator(LogicalLimitOperator operator) {
             super.withOperator(operator);
             builder.offset = operator.offset;

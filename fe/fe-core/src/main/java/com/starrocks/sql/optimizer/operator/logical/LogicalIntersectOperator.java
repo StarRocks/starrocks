@@ -36,6 +36,10 @@ public class LogicalIntersectOperator extends LogicalSetOperator {
 
     public static class Builder
             extends LogicalSetOperator.Builder<LogicalIntersectOperator, LogicalIntersectOperator.Builder> {
+        @Override
+        protected LogicalIntersectOperator newInstance() {
+            return new LogicalIntersectOperator();
+        }
     }
 }
 

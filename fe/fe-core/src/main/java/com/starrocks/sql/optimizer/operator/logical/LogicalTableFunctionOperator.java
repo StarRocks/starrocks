@@ -145,6 +145,11 @@ public class LogicalTableFunctionOperator extends LogicalOperator {
     public static class Builder
             extends LogicalOperator.Builder<LogicalTableFunctionOperator, LogicalTableFunctionOperator.Builder> {
 
+        @Override
+        protected LogicalTableFunctionOperator newInstance() {
+            return new LogicalTableFunctionOperator();
+        }
+
         public LogicalTableFunctionOperator.Builder setOuterColRefs(List<ColumnRefOperator> outerColRefs) {
             builder.outerColRefs = outerColRefs;
             return this;

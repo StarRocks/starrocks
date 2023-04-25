@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
@@ -77,6 +76,11 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalHiveScanOperator, LogicalHiveScanOperator.Builder> {
+
+        @Override
+        protected LogicalHiveScanOperator newInstance() {
+            return new LogicalHiveScanOperator();
+        }
 
         @Override
         public LogicalHiveScanOperator.Builder withOperator(LogicalHiveScanOperator scanOperator) {

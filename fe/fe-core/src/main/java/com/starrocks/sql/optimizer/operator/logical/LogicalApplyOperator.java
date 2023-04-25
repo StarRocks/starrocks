@@ -158,6 +158,11 @@ public class LogicalApplyOperator extends LogicalOperator {
     }
 
     public static class Builder extends LogicalOperator.Builder<LogicalApplyOperator, LogicalApplyOperator.Builder> {
+        @Override
+        protected LogicalApplyOperator newInstance() {
+            return new LogicalApplyOperator();
+        }
+
         public Builder setSubqueryOperator(ScalarOperator subqueryOperator) {
             builder.subqueryOperator = subqueryOperator;
             return this;

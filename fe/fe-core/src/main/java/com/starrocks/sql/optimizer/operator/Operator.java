@@ -20,8 +20,6 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.lang.reflect.ParameterizedType;
-import java.lang.reflect.Type;
 import java.util.List;
 import java.util.Objects;
 
@@ -160,16 +158,7 @@ public abstract class Operator {
     public abstract static class Builder<O extends Operator, B extends Builder> {
         protected O builder = newInstance();
 
-        protected O newInstance() {
-            Type type = this.getClass().getGenericSuperclass();
-            Type operatorType = ((ParameterizedType) type).getActualTypeArguments()[0];
-
-            try {
-                return (O) ((Class) operatorType).getConstructor().newInstance();
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-        }
+        protected abstract O newInstance();
 
         public B withOperator(O operator) {
             builder.limit = operator.limit;

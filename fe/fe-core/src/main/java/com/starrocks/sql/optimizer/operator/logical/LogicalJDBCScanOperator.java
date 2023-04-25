@@ -42,7 +42,7 @@ public class LogicalJDBCScanOperator extends LogicalScanOperator {
         Preconditions.checkState(table instanceof JDBCTable);
     }
 
-    private LogicalJDBCScanOperator(LogicalJDBCScanOperator.Builder builder) {
+    private LogicalJDBCScanOperator() {
         super(OperatorType.LOGICAL_JDBC_SCAN);
     }
 
@@ -53,5 +53,9 @@ public class LogicalJDBCScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalJDBCScanOperator, LogicalJDBCScanOperator.Builder> {
+        @Override
+        protected LogicalJDBCScanOperator newInstance() {
+            return new LogicalJDBCScanOperator();
+        }
     }
 }
