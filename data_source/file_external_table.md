@@ -132,7 +132,7 @@ PROPERTIES
 | 参数                            | 是否必须 | 说明                                                         |
 | ------------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.enable_ssl               | 是      | 是否开启 SSL 连接。<br>取值范围：true 和 false。 默认值：true。  |
-| aws.s3.enable_path_style_access | 是      | 是否开启路径类型 URL 访问 (Path-Style URL Access)。<br>取值范围：true 和 false。默认值：false。 |
+| aws.s3.enable_path_style_access | 是      | 是否开启路径类型访问 (Path-Style Access)。<br>取值范围：`true` 和 `false`。默认值：`false`。<br>路径类型 URL 使用如下格式：`https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`。例如，如果您在美国西部（俄勒冈）区域中创建一个名为 `DOC-EXAMPLE-BUCKET1` 的存储桶，并希望访问该存储桶中的 `alice.jpg` 对象，则可使用以下路径类型 URL：`https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`。 |
 | aws.s3.endpoint                 | 是      | 用于访问兼容 S3 协议的对象存储的 Endpoint。                  |
 | aws.s3.access_key               | 是      | IAM User 的 Access Key。                                     |
 | aws.s3.secret_key               | 是      | IAM User 的 Secret Key。                                     |
