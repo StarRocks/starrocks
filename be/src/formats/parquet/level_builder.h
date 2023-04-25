@@ -138,7 +138,7 @@ private:
                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                     const CallbackFunction& write_leaf_callback);
 
-    std::vector<uint8_t> _make_null_bitset(size_t n, const uint8_t* nulls) const;
+    std::shared_ptr<std::vector<uint8_t>> _make_null_bitset(size_t n, const uint8_t* nulls) const;
 
     std::shared_ptr<std::vector<int16_t>> _make_def_levels(const LevelBuilderContext& ctx,
                                                            const ::parquet::schema::NodePtr& node,

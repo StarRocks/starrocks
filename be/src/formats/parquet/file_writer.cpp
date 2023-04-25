@@ -306,9 +306,9 @@ Status FileWriterBase::init() {
 }
 
 void FileWriterBase::_generate_chunk_writer() {
+    DCHECK(_writer != nullptr);
     if (_chunk_writer == nullptr) {
-        DCHECK(_writer != nullptr);
-        auto rg_writer = _writer->AppendBufferedRowGroup();
+        auto rg_writer = _writer->AppendRowGroup();
         _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema);
     }
 }
@@ -321,9 +321,9 @@ Status FileWriterBase::write(Chunk* chunk) {
     _generate_chunk_writer();
     _chunk_writer->write(chunk);
 
-    if (_chunk_writer->estimated_buffered_bytes() > _max_row_group_size) {
+//    if (_chunk_writer->estimated_buffered_bytes() > _max_row_group_size) {
         _flush_row_group();
-    }
+//    }
 
     return Status::OK();
 }

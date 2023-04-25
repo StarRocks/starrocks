@@ -12,9 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ADD_BE_BENCH(${SRC_DIR}/bench/chunks_sorter_bench)
-ADD_BE_BENCH(${SRC_DIR}/bench/runtime_filter_bench)
-ADD_BE_BENCH(${SRC_DIR}/bench/csv_reader_bench)
-ADD_BE_BENCH(${SRC_DIR}/bench/shuffle_chunk_bench)
+#ADD_BE_BENCH(${SRC_DIR}/bench/chunks_sorter_bench)
+#ADD_BE_BENCH(${SRC_DIR}/bench/runtime_filter_bench)
+#ADD_BE_BENCH(${SRC_DIR}/bench/csv_reader_bench)
+#ADD_BE_BENCH(${SRC_DIR}/bench/shuffle_chunk_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/parquet_writer_bench)
-ADD_BE_BENCH(${SRC_DIR}/bench/block_cache_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/parquet_writer_array_bench)
+#ADD_BE_BENCH(${SRC_DIR}/bench/block_cache_bench)

@@ -42,13 +42,14 @@ Status ChunkWriter::write(Chunk* chunk) {
 
     // Writes out all leaf parquet columns to the RowGroupWriter. Each leaf column is written fully before
     // the next column is written. Columns are written in DFS order.
-    int leaf_column_idx = 0;
+//    int leaf_column_idx = 0;
 
     auto write_leaf_column = [&](const LevelBuilderResult& result) {
-        auto leaf_column_writer = ColumnChunkWriter(_rg_writer->column(leaf_column_idx));
+//        auto leaf_column_writer = ColumnChunkWriter(_rg_writer->column(leaf_column_idx));
+        auto leaf_column_writer = ColumnChunkWriter(_rg_writer->NextColumn());
         leaf_column_writer.write(result);
-        _estimated_buffered_bytes[leaf_column_idx] = leaf_column_writer.estimated_buffered_value_bytes();
-        ++leaf_column_idx;
+//        _estimated_buffered_bytes[leaf_column_idx] = leaf_column_writer.estimated_buffered_value_bytes();
+//        ++leaf_column_idx;
     };
 
     for (size_t i = 0; i < chunk->num_columns(); i++) {

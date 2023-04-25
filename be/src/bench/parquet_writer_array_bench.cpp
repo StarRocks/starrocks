@@ -37,8 +37,8 @@ namespace starrocks {
 namespace parquet {
 namespace {
 
-const int null_prop = 5;
-const int max_array_len = 50;
+const int null_prop = 50;
+const int max_array_len = 10;
 
 inline std::shared_ptr<Chunk> make_chunk(int num_rows) {
     auto chunk = std::make_shared<Chunk>();
@@ -54,7 +54,7 @@ inline std::shared_ptr<Chunk> make_chunk(int num_rows) {
             datum.set_null();
         } else {
             std::vector<Datum> datum_array;
-            int len = (rand() % max_array_len) + 1;
+            int len = (rand() % (max_array_len + 1)); // [0, max_array_len]
             for (int j = 0; j < len; j++) {
                 Datum datum_element;
                 datum_element.set_int32(rand());

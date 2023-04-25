@@ -18,6 +18,7 @@
 
 #include <memory>
 #include <random>
+#include <vector>
 
 #include "bench.h"
 #include "column/chunk.h"
@@ -37,24 +38,54 @@ namespace starrocks {
 namespace parquet {
 namespace {
 
-inline std::shared_ptr<Chunk> make_chunk(int num_rows) {
+const int random_seed = 42;
+
+inline std::shared_ptr<Chunk> make_chunk(int num_rows, int null_percent) {
+    std::srand(random_seed);
+
+    std::vector<int16_t> values(num_rows);
+    std::vector<uint8_t> is_null(num_rows, 0);
+
+    for (int i = 0; i < num_rows; i++) {
+        if (std::rand() % 100 < null_percent) {
+            is_null[i] = 1;
+        } else {
+            values[i] = std::rand();
+        }
+    }
+
     auto chunk = std::make_shared<Chunk>();
-    auto col = Bench::create_series_column(TypeDescriptor::from_logical_type(TYPE_INT), num_rows);
+    auto data_column = Int16Column::create();
+    data_column->append_numbers(values.data(), values.size() * sizeof(int16));
+    auto null_column = UInt8Column::create();
+    null_column->append_numbers(is_null.data(), is_null.size());
+    auto col = NullableColumn::create(data_column, null_column);
+
     chunk->append_column(col, 0);
     return chunk;
 }
 
-inline std::shared_ptr<arrow::Table> make_arrow_table(int num_rows) {
-    std::vector<int32_t> values(num_rows);
-    std::iota(values.begin(), values.end(), 0);
-    arrow::Int32Builder i32builder;
-    PARQUET_THROW_NOT_OK(i32builder.AppendValues(values));
-    std::shared_ptr<arrow::Array> i32array;
-    PARQUET_THROW_NOT_OK(i32builder.Finish(&i32array));
+inline std::shared_ptr<arrow::Table> make_arrow_table(int num_rows, int null_percent) {
+    std::srand(random_seed);
 
-    std::shared_ptr<arrow::Schema> schema = arrow::schema({arrow::field("int", arrow::int32())});
+    std::vector<int16_t> values(num_rows);
+    std::vector<bool> is_valid(num_rows, 1);
 
-    return arrow::Table::Make(schema, {i32array});
+    for (int i = 0; i < num_rows; i++) {
+        if (std::rand() % 100 < null_percent) {
+            is_valid[i] = 0;
+        } else {
+            values[i] = std::rand();
+        }
+    }
+
+    arrow::Int16Builder i16builder;
+    PARQUET_THROW_NOT_OK(i16builder.AppendValues(values, is_valid));
+    std::shared_ptr<arrow::Array> i16array;
+    PARQUET_THROW_NOT_OK(i16builder.Finish(&i16array));
+
+    std::shared_ptr<arrow::Schema> schema = arrow::schema({arrow::field("int16", arrow::int16())});
+    return arrow::Table::Make(schema, {i16array});
 }
 
 inline std::shared_ptr<::parquet::WriterProperties> make_property() {
@@ -64,12 +95,12 @@ inline std::shared_ptr<::parquet::WriterProperties> make_property() {
 }
 
 inline std::vector<TypeDescriptor> make_type_descs() {
-    return {TypeDescriptor::from_logical_type(TYPE_INT)};
+    return {TypeDescriptor::from_logical_type(TYPE_SMALLINT)};
 }
 
 inline std::shared_ptr<::parquet::schema::GroupNode> make_schema() {
     auto type_descs = make_type_descs();
-    std::vector<std::string> type_names{"int32"};
+    std::vector<std::string> type_names{"int16"};
     auto ret = ParquetBuildHelper::make_schema(type_names, type_descs);
     EXPECT_TRUE(ret.ok());
     auto schema = ret.ValueOrDie();
@@ -77,7 +108,7 @@ inline std::shared_ptr<::parquet::schema::GroupNode> make_schema() {
 }
 
 inline std::shared_ptr<arrow::Schema> make_arrow_schema() {
-    std::shared_ptr<arrow::Schema> schema = arrow::schema({arrow::field("int", arrow::int32())});
+    std::shared_ptr<arrow::Schema> schema = arrow::schema({arrow::field("int16", arrow::int16())});
     return schema;
 }
 
@@ -101,9 +132,12 @@ inline std::unique_ptr<::parquet::arrow::FileWriter> make_arrow_writer(std::shar
 }
 
 static void Benchmark_ParquetWriterArgs(benchmark::internal::Benchmark* b) {
-    std::vector<int64_t> bm_num_rows = {100000, 1000000, 10000000, 100000000};
+    std::vector<int64_t> bm_num_rows = {100000, 1000000, 10000000};
+    std::vector<int> bm_null_percent = {0, 5, 25, 50, 75}; // percentage of null values
     for (auto& num_rows : bm_num_rows) {
-        b->Args({num_rows});
+        for (auto& null_percent : bm_null_percent) {
+            b->Args({num_rows, null_percent});
+        }
     }
 }
 
@@ -113,7 +147,8 @@ static void Benchmark_StarRocksParquetWriter(benchmark::State& state) {
     fs->delete_file(file_path);
 
     auto num_rows = state.range(0);
-    auto chunk = make_chunk(num_rows);
+    auto null_percent = state.range(1);
+    auto chunk = make_chunk(num_rows, null_percent);
 
     for (int i = 0; i < 10; i++) {
         ASSIGN_OR_ABORT(auto file, fs->new_writable_file(file_path));
@@ -151,8 +186,6 @@ static void Benchmark_StarRocksParquetWriter(benchmark::State& state) {
         writer->write(chunk.get());
         auto st = writer->close();
         ASSERT_TRUE(st.ok());
-
-        fs->delete_file(file_path);
     }
 }
 
@@ -162,7 +195,8 @@ static void Benchmark_StarRocksParquetWriter(benchmark::State& state) {
     fs->delete_file(file_path);
 
     auto num_rows = state.range(0);
-    std::shared_ptr<arrow::Table> table = make_arrow_table(num_rows);
+    auto null_percent = state.range(1);
+    std::shared_ptr<arrow::Table> table = make_arrow_table(num_rows, null_percent);
 
     for (int i = 0; i < 10; i++) {
         ASSIGN_OR_ABORT(auto file, fs->new_writable_file(file_path));
@@ -206,24 +240,11 @@ static void Benchmark_StarRocksParquetWriter(benchmark::State& state) {
 
 BENCHMARK(Benchmark_StarRocksParquetWriter)
         ->Apply(Benchmark_ParquetWriterArgs)
-        ->Unit(benchmark::kMillisecond)
-        ->MinTime(30);
-BENCHMARK(Benchmark_ArrowParquetWriter)->Apply(Benchmark_ParquetWriterArgs)->Unit(benchmark::kMillisecond)->MinTime(30);
+        ->Unit(benchmark::kMillisecond)->MinTime(10);
+BENCHMARK(Benchmark_ArrowParquetWriter)->Apply(Benchmark_ParquetWriterArgs)->Unit(benchmark::kMillisecond)->MinTime(10);
 
 } // namespace
 } // namespace parquet
 } // namespace starrocks
 
 BENCHMARK_MAIN();
-
-//-----------------------------------------------------------------------------------------------------
-//Benchmark                                                           Time             CPU   Iterations
-//-----------------------------------------------------------------------------------------------------
-//Benchmark_StarRocksParquetWriter/100000/min_time:30.000          16.9 ms         9.07 ms         4582
-//Benchmark_StarRocksParquetWriter/1000000/min_time:30.000          118 ms         67.8 ms          619
-//Benchmark_StarRocksParquetWriter/10000000/min_time:30.000        1030 ms          579 ms           74
-//Benchmark_StarRocksParquetWriter/100000000/min_time:30.000      10828 ms         5568 ms            7
-//Benchmark_ArrowParquetWriter/100000/min_time:30.000              14.8 ms         6.91 ms         5948
-//Benchmark_ArrowParquetWriter/1000000/min_time:30.000             90.1 ms         40.3 ms          978
-//Benchmark_ArrowParquetWriter/10000000/min_time:30.000             662 ms          185 ms          228
-//Benchmark_ArrowParquetWriter/100000000/min_time:30.000           6956 ms         1619 ms           26

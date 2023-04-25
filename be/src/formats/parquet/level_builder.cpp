@@ -113,7 +113,7 @@ void LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const Typ
         break;
     }
     case TYPE_ARRAY: {
-        _write_array_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
+        _write_array_column_chunk_branchless(ctx, type_desc, node, col, write_leaf_callback);
         break;
     }
     case TYPE_MAP: {
@@ -137,7 +137,8 @@ void LevelBuilder::_write_boolean_column_chunk(const LevelBuilderContext& ctx, c
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
-    auto def_levels = _make_def_levels(ctx, node, null_col);
+    auto def_levels = _make_def_levels_branchless(ctx, node, null_col, col->size());
+    auto null_bitset = _make_null_bitset(col->size(), null_col);
 
     // sizeof(bool) depends on implementation, thus we cast values to ensure correctness
     auto values = new bool[col->size()];
@@ -152,7 +153,7 @@ void LevelBuilder::_write_boolean_column_chunk(const LevelBuilderContext& ctx, c
             .def_levels = def_levels ? def_levels->data() : nullptr,
             .rep_levels = rep_levels ? rep_levels->data() : nullptr,
             .values = reinterpret_cast<uint8_t*>(values),
-            .null_bitset = nullptr,
+            .null_bitset = null_bitset ? null_bitset->data() : nullptr,
     });
 }
 
@@ -166,6 +167,7 @@ void LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, const
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
     auto def_levels = _make_def_levels(ctx, node, null_col);
+    auto null_bitset = _make_null_bitset(col->size(), null_col);
 
     using source_type = RunTimeCppType<lt>;
     using target_type = typename ::parquet::type_traits<pt>::value_type;
@@ -178,8 +180,7 @@ void LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, const
                 .def_levels = def_levels ? def_levels->data() : nullptr,
                 .rep_levels = rep_levels ? rep_levels->data() : nullptr,
                 .values = reinterpret_cast<uint8_t*>(data_col),
-                // Make bitset to denote not-null values
-                .null_bitset = col->has_null() ? _make_null_bitset(col->size(), null_col).data() : nullptr,
+                .null_bitset = null_bitset ? null_bitset->data() : nullptr,
         });
     } else {
         // If two types are different, cast values
@@ -195,7 +196,7 @@ void LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, const
                 .def_levels = def_levels ? def_levels->data() : nullptr,
                 .rep_levels = rep_levels ? rep_levels->data() : nullptr,
                 .values = reinterpret_cast<uint8_t*>(values),
-                .null_bitset = col->has_null() ? _make_null_bitset(col->size(), null_col).data() : nullptr,
+                .null_bitset = null_bitset ? null_bitset->data() : nullptr,
         });
     }
 }
@@ -208,7 +209,8 @@ void LevelBuilder::_write_decimal128_column_chunk(const LevelBuilderContext& ctx
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
-    auto def_levels = _make_def_levels(ctx, node, null_col);
+    auto def_levels = _make_def_levels_branchless(ctx, node, null_col, col->size());
+    auto null_bitset = _make_null_bitset(col->size(), null_col);
 
     auto values = new unsigned __int128[col->size()];
     DeferOp defer([&] { delete[] values; });
@@ -231,7 +233,7 @@ void LevelBuilder::_write_decimal128_column_chunk(const LevelBuilderContext& ctx
             .def_levels = def_levels ? def_levels->data() : nullptr,
             .rep_levels = rep_levels ? rep_levels->data() : nullptr,
             .values = reinterpret_cast<uint8_t*>(flba_values),
-            .null_bitset = nullptr,
+            .null_bitset = null_bitset ? null_bitset->data() : nullptr,
     });
 }
 
@@ -243,7 +245,8 @@ void LevelBuilder::_write_date_column_chunk(const LevelBuilderContext& ctx, cons
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
-    auto def_levels = _make_def_levels(ctx, node, null_col);
+    auto def_levels = _make_def_levels_branchless(ctx, node, null_col, col->size());
+    auto null_bitset = _make_null_bitset(col->size(), null_col);
 
     auto unix_epoch_date = DateValue::create(1970, 1, 1); // base date to subtract
 
@@ -259,7 +262,7 @@ void LevelBuilder::_write_date_column_chunk(const LevelBuilderContext& ctx, cons
             .def_levels = def_levels ? def_levels->data() : nullptr,
             .rep_levels = rep_levels ? rep_levels->data() : nullptr,
             .values = reinterpret_cast<uint8_t*>(values),
-            .null_bitset = nullptr,
+            .null_bitset = null_bitset ? null_bitset->data() : nullptr,
     });
 }
 
@@ -271,7 +274,8 @@ void LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx, 
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
-    auto def_levels = _make_def_levels(ctx, node, null_col);
+    auto def_levels = _make_def_levels_branchless(ctx, node, null_col, col->size());
+    auto null_bitset = _make_null_bitset(col->size(), null_col);
 
     auto values = new int64_t[col->size()];
     DeferOp defer([&] { delete[] values; });
@@ -285,7 +289,7 @@ void LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx, 
             .def_levels = def_levels ? def_levels->data() : nullptr,
             .rep_levels = rep_levels ? rep_levels->data() : nullptr,
             .values = reinterpret_cast<uint8_t*>(values),
-            .null_bitset = nullptr,
+            .null_bitset = null_bitset ? null_bitset->data() : nullptr,
     });
 }
 
@@ -299,7 +303,8 @@ void LevelBuilder::_write_varchar_column_chunk(const LevelBuilderContext& ctx, c
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
-    auto def_levels = _make_def_levels(ctx, node, null_col);
+    auto def_levels = _make_def_levels_branchless(ctx, node, null_col, col->size());
+    auto null_bitset = _make_null_bitset(col->size(), null_col);
 
     auto values = new ::parquet::ByteArray[col->size()];
     DeferOp defer([&] { delete[] values; });
@@ -314,7 +319,7 @@ void LevelBuilder::_write_varchar_column_chunk(const LevelBuilderContext& ctx, c
             .def_levels = def_levels ? def_levels->data() : nullptr,
             .rep_levels = rep_levels ? rep_levels->data() : nullptr,
             .values = reinterpret_cast<uint8_t*>(values),
-            .null_bitset = nullptr,
+            .null_bitset = null_bitset ? null_bitset->data() : nullptr,
     });
 }
 
@@ -577,7 +582,7 @@ void LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, co
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
-    auto def_levels = _make_def_levels(ctx, node, null_col);
+    auto def_levels = _make_def_levels_branchless(ctx, node, null_col, col->size());
 
     LevelBuilderContext derived_ctx(def_levels->size(), def_levels, ctx._max_def_level + node->is_optional(),
                                     rep_levels, ctx._max_rep_level);
@@ -589,26 +594,16 @@ void LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, co
 }
 
 // Convert byte-addressable bitset into a bit-addressable bitset.
-std::vector<uint8_t> LevelBuilder::_make_null_bitset(size_t n, const uint8_t* nulls) const {
-    DCHECK(nulls != nullptr);
-    std::vector<uint8_t> bitset((n + 7) / 8);
-    size_t start = 0;
-
-#ifdef __AVX2__
-    constexpr size_t kBatchSize = /*width of AVX registers*/ 256 / 8;
-    while (start + kBatchSize < n) {
-        __m256i null_vec = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(nulls + start));
-        uint32_t mask = _mm256_testz_si256(null_vec, _mm256_set1_epi8(0x01));
-        memcpy(bitset.data() + kBatchSize / sizeof(uint8_t), &mask, sizeof(uint32_t));
-        start += kBatchSize;
+std::shared_ptr<std::vector<uint8_t>> LevelBuilder::_make_null_bitset(size_t n, const uint8_t* nulls) const {
+    if (nulls == nullptr) {
+        return nullptr;
     }
-#endif
 
-    for (size_t i = start; i < n; i++) {
-        if (!nulls[i]) {
-            bitset[i / 8] |= 1 << (i % 8);
-        }
+    auto bitset = std::make_shared<std::vector<uint8_t>>((n + 7) / 8);
+    for (size_t i = 0; i < n; i++) {
+        (*bitset)[i / 8] |= (1 - nulls[i]) << (i % 8);
     }
+
     return bitset;
 }
 
