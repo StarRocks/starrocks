@@ -35,7 +35,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
@@ -501,7 +500,7 @@ public class FunctionSet {
                     .add(FunctionSet.EXCHANGE_SPEED)
                     .build();
 
-    public static final Set<String> DECIMAL_ROUND_FUNCTIONS =
+    public static final Set<String> decimalRoundFunctions =
             ImmutableSet.<String>builder()
                     .add(TRUNCATE)
                     .add(ROUND)
@@ -526,7 +525,7 @@ public class FunctionSet {
             .add(FunctionSet.FIRST_VALUE_REWRITE)
             .build();
 
-    public static final Set<String> VARIANCE_FUNCTIONS = ImmutableSet.<String>builder()
+    public static final Set<String> varianceFunctions = ImmutableSet.<String>builder()
             .add(FunctionSet.VAR_POP)
             .add(FunctionSet.VAR_SAMP)
             .add(FunctionSet.VARIANCE)
@@ -536,18 +535,6 @@ public class FunctionSet {
             .add(FunctionSet.STDDEV)
             .add(FunctionSet.STDDEV_POP)
             .add(FunctionSet.STDDEV_SAMP).build();
-
-    public static final List<String> ARRAY_DECIMAL_FUNCTIONS = ImmutableList.<String>builder()
-            // @todo: support later
-            // .add("array_sum")
-            // .add("array_avg")
-            // .add("array_min")
-            // .add("array_max")
-            .add(ARRAY_DISTINCT)
-            .add(ARRAY_SORT)
-            .add(REVERSE)
-            .add(ARRAY_INTERSECT)
-            .build();
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
