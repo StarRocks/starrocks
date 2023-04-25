@@ -1,4 +1,4 @@
-name: FOLLOW-UP
+name: MERGE PIPELINE
 
 on:
   pull_request_target:
