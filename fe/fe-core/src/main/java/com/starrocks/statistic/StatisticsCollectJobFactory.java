@@ -17,6 +17,7 @@ package com.starrocks.statistic;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -109,6 +110,12 @@ public class StatisticsCollectJobFactory {
                                   Database db, Table table, List<String> columns) {
         if (table == null || !(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
             return;
+        }
+
+        if (table instanceof OlapTable) {
+            if (((OlapTable) table).getState() != OlapTable.OlapTableState.NORMAL) {
+                return;
+            }
         }
 
         if (StatisticUtils.isEmptyTable(table)) {
