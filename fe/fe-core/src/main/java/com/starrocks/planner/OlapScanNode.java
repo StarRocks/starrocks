@@ -721,6 +721,13 @@ public class OlapScanNode extends ScanNode {
                             .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
             }
+
+            if (!bucketColumns.isEmpty()) {
+                output.append(prefix).append("LocalShuffleColumns:\n");
+                for (ColumnRefOperator col : bucketColumns) {
+                    output.append(prefix).append("- ").append(col.toString()).append("\n");
+                }
+            }
         }
 
         return output.toString();
