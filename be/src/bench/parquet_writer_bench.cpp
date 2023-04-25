@@ -17,7 +17,6 @@
 #include <gtest/gtest.h>
 
 #include <memory>
-#include <random>
 #include <vector>
 
 #include "bench.h"
@@ -30,7 +29,6 @@
 #include "fs/fs.h"
 #include "fs/fs_posix.h"
 #include "runtime/descriptor_helper.h"
-#include "simd/simd.h"
 #include "testutil/assert.h"
 #include "util/time.h"
 
@@ -43,7 +41,7 @@ const int random_seed = 42;
 inline std::shared_ptr<Chunk> make_chunk(int num_rows, int null_percent) {
     std::srand(random_seed);
 
-    std::vector<int16_t> values(num_rows);
+    std::vector<int32_t> values(num_rows);
     std::vector<uint8_t> is_null(num_rows, 0);
 
     for (int i = 0; i < num_rows; i++) {
@@ -55,8 +53,8 @@ inline std::shared_ptr<Chunk> make_chunk(int num_rows, int null_percent) {
     }
 
     auto chunk = std::make_shared<Chunk>();
-    auto data_column = Int16Column::create();
-    data_column->append_numbers(values.data(), values.size() * sizeof(int16));
+    auto data_column = Int32Column::create();
+    data_column->append_numbers(values.data(), values.size() * sizeof(int32));
     auto null_column = UInt8Column::create();
     null_column->append_numbers(is_null.data(), is_null.size());
     auto col = NullableColumn::create(data_column, null_column);
@@ -68,7 +66,7 @@ inline std::shared_ptr<Chunk> make_chunk(int num_rows, int null_percent) {
 inline std::shared_ptr<arrow::Table> make_arrow_table(int num_rows, int null_percent) {
     std::srand(random_seed);
 
-    std::vector<int16_t> values(num_rows);
+    std::vector<int32_t> values(num_rows);
     std::vector<bool> is_valid(num_rows, 1);
 
     for (int i = 0; i < num_rows; i++) {
@@ -79,13 +77,13 @@ inline std::shared_ptr<arrow::Table> make_arrow_table(int num_rows, int null_per
         }
     }
 
-    arrow::Int16Builder i16builder;
-    PARQUET_THROW_NOT_OK(i16builder.AppendValues(values, is_valid));
-    std::shared_ptr<arrow::Array> i16array;
-    PARQUET_THROW_NOT_OK(i16builder.Finish(&i16array));
+    arrow::Int32Builder i32builder;
+    PARQUET_THROW_NOT_OK(i32builder.AppendValues(values, is_valid));
+    std::shared_ptr<arrow::Array> i32array;
+    PARQUET_THROW_NOT_OK(i32builder.Finish(&i32array));
 
-    std::shared_ptr<arrow::Schema> schema = arrow::schema({arrow::field("int16", arrow::int16())});
-    return arrow::Table::Make(schema, {i16array});
+    std::shared_ptr<arrow::Schema> schema = arrow::schema({arrow::field("int32", arrow::int32())});
+    return arrow::Table::Make(schema, {i32array});
 }
 
 inline std::shared_ptr<::parquet::WriterProperties> make_property() {
@@ -95,12 +93,12 @@ inline std::shared_ptr<::parquet::WriterProperties> make_property() {
 }
 
 inline std::vector<TypeDescriptor> make_type_descs() {
-    return {TypeDescriptor::from_logical_type(TYPE_SMALLINT)};
+    return {TypeDescriptor::from_logical_type(TYPE_INT)};
 }
 
 inline std::shared_ptr<::parquet::schema::GroupNode> make_schema() {
     auto type_descs = make_type_descs();
-    std::vector<std::string> type_names{"int16"};
+    std::vector<std::string> type_names{"int32"};
     auto ret = ParquetBuildHelper::make_schema(type_names, type_descs);
     EXPECT_TRUE(ret.ok());
     auto schema = ret.ValueOrDie();
@@ -108,7 +106,7 @@ inline std::shared_ptr<::parquet::schema::GroupNode> make_schema() {
 }
 
 inline std::shared_ptr<arrow::Schema> make_arrow_schema() {
-    std::shared_ptr<arrow::Schema> schema = arrow::schema({arrow::field("int16", arrow::int16())});
+    std::shared_ptr<arrow::Schema> schema = arrow::schema({arrow::field("int32", arrow::int32())});
     return schema;
 }
 
@@ -240,7 +238,8 @@ static void Benchmark_StarRocksParquetWriter(benchmark::State& state) {
 
 BENCHMARK(Benchmark_StarRocksParquetWriter)
         ->Apply(Benchmark_ParquetWriterArgs)
-        ->Unit(benchmark::kMillisecond)->MinTime(10);
+        ->Unit(benchmark::kMillisecond)
+        ->MinTime(10);
 BENCHMARK(Benchmark_ArrowParquetWriter)->Apply(Benchmark_ParquetWriterArgs)->Unit(benchmark::kMillisecond)->MinTime(10);
 
 } // namespace

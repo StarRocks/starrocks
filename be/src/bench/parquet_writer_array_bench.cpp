@@ -69,19 +69,6 @@ inline std::shared_ptr<Chunk> make_chunk(int num_rows) {
     return chunk;
 }
 
-inline std::shared_ptr<arrow::Table> make_arrow_table(int num_rows) {
-    std::vector<int32_t> values(num_rows);
-    std::iota(values.begin(), values.end(), 0);
-    arrow::Int32Builder i32builder;
-    PARQUET_THROW_NOT_OK(i32builder.AppendValues(values));
-    std::shared_ptr<arrow::Array> i32array;
-    PARQUET_THROW_NOT_OK(i32builder.Finish(&i32array));
-
-    std::shared_ptr<arrow::Schema> schema = arrow::schema({arrow::field("int", arrow::int32())});
-
-    return arrow::Table::Make(schema, {i32array});
-}
-
 inline std::shared_ptr<::parquet::WriterProperties> make_property() {
     ::parquet::WriterProperties::Builder builder;
     builder.disable_dictionary();
@@ -104,28 +91,12 @@ inline std::shared_ptr<::parquet::schema::GroupNode> make_schema() {
     return schema;
 }
 
-inline std::shared_ptr<arrow::Schema> make_arrow_schema() {
-    std::shared_ptr<arrow::Schema> schema = arrow::schema({arrow::field("int", arrow::int32())});
-    return schema;
-}
-
 inline std::unique_ptr<SyncFileWriter> make_starrocks_writer(std::unique_ptr<WritableFile> file) {
     auto property = make_property();
     auto schema = make_schema();
     auto type_descs = make_type_descs();
     auto file_writer = std::make_unique<SyncFileWriter>(std::move(file), property, schema, type_descs);
     return file_writer;
-}
-
-inline std::unique_ptr<::parquet::arrow::FileWriter> make_arrow_writer(std::shared_ptr<ParquetOutputStream> sink) {
-    auto schema = make_arrow_schema();
-    auto property = make_property();
-    std::unique_ptr<::parquet::arrow::FileWriter> writer;
-    auto st = ::parquet::arrow::FileWriter::Open(*schema, ::arrow::default_memory_pool(), sink, property, &writer);
-    if (!st.ok()) {
-        return nullptr;
-    }
-    return writer;
 }
 
 static void Benchmark_ParquetWriterArgs(benchmark::internal::Benchmark* b) {
@@ -184,59 +155,10 @@ static void Benchmark_StarRocksParquetWriter(benchmark::State& state) {
     }
 }
 
-[[maybe_unused]] static void Benchmark_ArrowParquetWriter(benchmark::State& state) {
-    auto fs = new_fs_posix();
-    const std::string file_path = "./be/test/exec/test_data/parquet_scanner/arrow_writer.parquet";
-    fs->delete_file(file_path);
-
-    auto num_rows = state.range(0);
-    std::shared_ptr<arrow::Table> table = make_arrow_table(num_rows);
-
-    for (int i = 0; i < 10; i++) {
-        ASSIGN_OR_ABORT(auto file, fs->new_writable_file(file_path));
-        auto outstream = std::make_shared<ParquetOutputStream>(std::move(file));
-        auto writer = make_arrow_writer(outstream);
-
-        PARQUET_THROW_NOT_OK(writer->WriteTable(*table, num_rows));
-
-        auto st = outstream->Close();
-        ASSERT_TRUE(st.ok());
-        fs->delete_file(file_path);
-    }
-
-    for (auto _ : state) {
-        state.PauseTiming();
-        ASSIGN_OR_ABORT(auto file, fs->new_writable_file(file_path));
-        auto outstream = std::make_shared<ParquetOutputStream>(std::move(file));
-        auto writer = make_arrow_writer(outstream);
-
-        state.ResumeTiming();
-        PARQUET_THROW_NOT_OK(writer->WriteTable(*table, num_rows));
-        auto st = outstream->Close();
-        ASSERT_TRUE(st.ok());
-        state.PauseTiming();
-
-        fs->delete_file(file_path);
-    }
-
-    // leave output for analysis
-    {
-        ASSIGN_OR_ABORT(auto file, fs->new_writable_file(file_path));
-        auto outstream = std::make_shared<ParquetOutputStream>(std::move(file));
-        auto writer = make_arrow_writer(outstream);
-
-        PARQUET_THROW_NOT_OK(writer->WriteTable(*table, num_rows));
-
-        auto st = outstream->Close();
-        ASSERT_TRUE(st.ok());
-    }
-}
-
 BENCHMARK(Benchmark_StarRocksParquetWriter)
         ->Apply(Benchmark_ParquetWriterArgs)
         ->Unit(benchmark::kMillisecond)
         ->MinTime(30);
-//BENCHMARK(Benchmark_ArrowParquetWriter)->Apply(Benchmark_ParquetWriterArgs)->Unit(benchmark::kMillisecond)->MinTime(30);
 
 } // namespace
 } // namespace parquet
