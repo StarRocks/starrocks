@@ -15,18 +15,18 @@
 #include "parquet_builder.h"
 
 #include <arrow/buffer.h>
-#include <arrow/io/file.h>
-#include <arrow/io/interfaces.h>
 #include <parquet/arrow/writer.h>
-#include <parquet/exception.h>
 
+#include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
 #include "common/logging.h"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
+#include "gutil/endian.h"
 #include "runtime/exec_env.h"
-#include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 
@@ -35,6 +35,7 @@ ParquetOutputStream::ParquetOutputStream(std::unique_ptr<WritableFile> writable_
     set_mode(arrow::io::FileMode::WRITE);
 }
 
+<<<<<<< HEAD
 ParquetOutputStream::~ParquetOutputStream() {
     arrow::Status st = ParquetOutputStream::Close();
     if (!st.ok()) {
@@ -231,6 +232,8 @@ void ParquetBuilder::_generate_rg_writer() {
             reinterpret_cast<const NATIVE_TYPE*>(down_cast<const COLUMN_TYPE*>(data_column)->get_data().data())); \
     _buffered_values_estimate[i] = col_writer->EstimatedBufferedValueBytes();
 
+=======
+>>>>>>> 34bef3191 ([Feature] Parquet writer support nested and primitive types (#19827))
 Status ParquetBuilder::add_chunk(Chunk* chunk) {
     if (!chunk->has_rows()) {
         return Status::OK();

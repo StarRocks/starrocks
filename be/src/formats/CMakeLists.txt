@@ -55,6 +55,13 @@ add_library(Formats STATIC
         parquet/meta_helper.cpp
         parquet/group_reader.cpp
         parquet/file_reader.cpp
+<<<<<<< HEAD
+=======
+        parquet/file_writer.cpp
+        parquet/chunk_writer.cpp
+        parquet/level_builder.cpp
+        parquet/column_chunk_writer.cpp
+>>>>>>> 34bef3191 ([Feature] Parquet writer support nested and primitive types (#19827))
         )
 
 add_subdirectory(orc/apache-orc)

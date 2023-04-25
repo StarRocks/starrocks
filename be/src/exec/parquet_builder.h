@@ -39,6 +39,7 @@ namespace starrocks {
 class ExprContext;
 class FileWriter;
 
+<<<<<<< HEAD
 struct ParquetBuilderOptions {
     TCompressionType::type compression_type{TCompressionType::SNAPPY};
     bool use_dict{true};
@@ -72,6 +73,8 @@ public:
                                        const TCompressionType::type& compression_type);
 };
 
+=======
+>>>>>>> 34bef3191 ([Feature] Parquet writer support nested and primitive types (#19827))
 class ParquetBuilder : public FileBuilder {
 public:
     ParquetBuilder(std::unique_ptr<WritableFile> writable_file, const std::vector<ExprContext*>& output_expr_ctxs,
