@@ -96,6 +96,19 @@ public class StatisticExecutor {
         }
     }
 
+    public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
+        String sql = StatisticSQLBuilder.buildDropPartitionSQL(pids);
+        LOG.debug("Expire partition statistic SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
+    public boolean dropTableInvalidPartitionStatistics(ConnectContext statsConnectCtx, List<Long> tables,
+                                                    List<Long> pids) {
+        String sql = StatisticSQLBuilder.buildDropTableInvalidPartitionSQL(tables, pids);
+        LOG.debug("Expire invalid partition statistic SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
     public List<TStatisticData> queryHistogram(ConnectContext statsConnectCtx, Long tableId, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildQueryHistogramStatisticsSQL(tableId, columnNames);
         return executeStatisticDQL(statsConnectCtx, sql);
@@ -262,7 +275,7 @@ public class StatisticExecutor {
             executor.execute();
             return true;
         } catch (Exception e) {
-            LOG.warn("Execute statistic DML " + sql + " fail.", e);
+            LOG.warn("Execute statistic DML fail | {} | SQL {}", DebugUtil.printId(context.getQueryId()), sql, e);
             return false;
         }
     }
