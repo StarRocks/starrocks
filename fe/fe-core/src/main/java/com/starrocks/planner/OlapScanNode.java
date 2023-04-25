@@ -68,6 +68,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
@@ -722,7 +723,7 @@ public class OlapScanNode extends ScanNode {
                 }
             }
 
-            if (!bucketColumns.isEmpty()) {
+            if (!bucketColumns.isEmpty() && FeConstants.showLocalShuffleColumnsInExplain) {
                 output.append(prefix).append("LocalShuffleColumns:\n");
                 for (ColumnRefOperator col : bucketColumns) {
                     output.append(prefix).append("- ").append(col.toString()).append("\n");
