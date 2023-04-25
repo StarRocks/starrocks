@@ -983,9 +983,9 @@ static string int_list_to_string(const vector<uint32_t>& l) {
     return ret;
 }
 
-Status PrimaryIndex::prepare(const EditVersion& version) {
+Status PrimaryIndex::prepare(const EditVersion& version, size_t n) {
     if (_persistent_index != nullptr) {
-        return _persistent_index->prepare(version);
+        return _persistent_index->prepare(version, n);
     }
     return Status::OK();
 }
