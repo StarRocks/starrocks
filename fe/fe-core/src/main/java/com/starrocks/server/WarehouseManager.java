@@ -60,10 +60,11 @@ public class WarehouseManager implements Writable {
     public WarehouseManager() {
     }
 
-    public void init() {
+    public void initDefaultWarehouse() {
         // gen a default warehouse
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            Warehouse wh = new LocalWarehouse(0, DEFAULT_WAREHOUSE_NAME);
+            Warehouse wh = new LocalWarehouse(GlobalStateMgr.getCurrentState().getNextId(),
+                    DEFAULT_WAREHOUSE_NAME);
             fullNameToWh.put(wh.getFullName(), wh);
             idToWh.put(wh.getId(), wh);
             wh.setExist(true);
