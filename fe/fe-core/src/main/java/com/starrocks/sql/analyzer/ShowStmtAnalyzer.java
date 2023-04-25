@@ -48,7 +48,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowClustersStmt;
@@ -70,7 +69,6 @@ import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
 import com.starrocks.sql.ast.ShowStmt;
-import com.starrocks.sql.ast.ShowStorageVolumesStmt;
 import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
@@ -672,20 +670,6 @@ public class ShowStmtAnalyzer {
             String catalogName = node.getCatalogName();
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
-            }
-            return null;
-        }
-
-        @Override
-        public Void visitShowStorageVolumesStatement(ShowStorageVolumesStmt node, ConnectContext context) {
-            return null;
-        }
-
-        @Override
-        public Void visitDescStorageVolumeStatement(DescStorageVolumeStmt node, ConnectContext context) {
-            String svName = node.getName();
-            if (Strings.isNullOrEmpty(svName)) {
-                throw new SemanticException("'storage volume name' can not be null or empty");
             }
             return null;
         }

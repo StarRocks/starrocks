@@ -19,8 +19,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.ShowStorageVolumesStmt;
 import com.starrocks.sql.ast.StatementBase;
 
 import java.util.List;
@@ -73,6 +75,19 @@ public class StorageVolumeAnalyzer {
             }
             return null;
         }
-    }
 
+        @Override
+        public Void visitShowStorageVolumesStatement(ShowStorageVolumesStmt statement, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public Void visitDescStorageVolumeStatement(DescStorageVolumeStmt statement, ConnectContext context) {
+            String svName = statement.getName();
+            if (Strings.isNullOrEmpty(svName)) {
+                throw new SemanticException("'storage volume name' can not be null or empty");
+            }
+            return null;
+        }
+    }
 }
