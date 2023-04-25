@@ -17,9 +17,7 @@ CompactionManager::CompactionManager() : _next_task_id(0) {}
 
 CompactionManager::~CompactionManager() {
     _stop.store(true, std::memory_order_release);
-    if (_scheduler_thread.joinable()) {
-        _scheduler_thread.join();
-    }
+
     if (_compaction_pool) {
         _compaction_pool->shutdown();
     }
@@ -28,6 +26,10 @@ CompactionManager::~CompactionManager() {
     }
     if (_update_candidate_pool) {
         _update_candidate_pool->shutdown();
+    }
+
+    if (_scheduler_thread.joinable()) {
+        _scheduler_thread.join();
     }
 }
 
@@ -288,6 +290,9 @@ void CompactionManager::_dispatch_worker() {
 }
 
 void CompactionManager::update_tablet_async(TabletSharedPtr tablet) {
+    if (_stop) {
+        return;
+    }
     std::lock_guard lock(_dispatch_mutex);
     auto iter = _dispatch_map.find(tablet->tablet_id());
     if (iter != _dispatch_map.end()) {
@@ -302,6 +307,9 @@ void CompactionManager::update_tablet_async(TabletSharedPtr tablet) {
 }
 
 void CompactionManager::update_tablet(TabletSharedPtr tablet) {
+    if (_stop) {
+        return;
+    }
     if (_disable_update_tablet) {
         return;
     }
@@ -316,6 +324,9 @@ void CompactionManager::update_tablet(TabletSharedPtr tablet) {
 }
 
 bool CompactionManager::register_task(CompactionTask* compaction_task) {
+    if (_stop) {
+        return false;
+    }
     if (!compaction_task) {
         return false;
     }

@@ -496,6 +496,9 @@ void StorageEngine::stop() {
     if (_update_cache_expire_thread.joinable()) {
         _update_cache_expire_thread.join();
     }
+    if (_update_cache_evict_thread.joinable()) {
+        _update_cache_evict_thread.join();
+    }
     if (_unused_rowset_monitor_thread.joinable()) {
         _unused_rowset_monitor_thread.join();
     }

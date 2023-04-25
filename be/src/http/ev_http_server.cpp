@@ -54,6 +54,8 @@ static void on_free(struct evhttp_request* ev_req, void* arg) {
     delete request;
 }
 
+static void on_error(enum evhttp_request_error error, void* arg) {}
+
 static void on_request(struct evhttp_request* ev_req, void* arg) {
     auto request = (HttpRequest*)ev_req->on_free_cb_arg;
     if (request == nullptr) {
@@ -279,6 +281,7 @@ int EvHttpServer::on_header(struct evhttp_request* ev_req) {
         evhttp_request_set_chunked_cb(ev_req, on_chunked);
     }
 
+    evhttp_request_set_error_cb(ev_req, on_error);
     evhttp_request_set_on_free_cb(ev_req, on_free, request.release());
     return 0;
 }
