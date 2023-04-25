@@ -268,7 +268,7 @@ You can specify the value for `START` and `END` and the expression in `EVERY` to
 
 For more information, see [Data distribution](../../../table_design/Data_distribution.md#create-and-modify-partitions-in-bulk).
 
-### distribution_des
+### distribution_desc
 
 Syntax:
 
