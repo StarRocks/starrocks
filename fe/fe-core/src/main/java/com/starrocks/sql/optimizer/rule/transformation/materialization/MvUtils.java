@@ -691,7 +691,9 @@ public class MvUtils {
             for (int j = 0; j < mergedRanges.size(); j++) {
                 // 1 < r < 10, 10 <= r < 20 => 1 < r < 20
                 Range<PartitionKey> mergedRange = mergedRanges.get(j);
-                if (currentRange.isConnected(mergedRange) && currentRange.gap(mergedRange).isEmpty()) {
+                if (currentRange.isConnected(mergedRange)) {
+                    // for partition range, the intersection must be empty
+                    Preconditions.checkState(currentRange.intersection(mergedRange).isEmpty());
                     mergedRanges.set(j, mergedRange.span(currentRange));
                     merged = true;
                     break;
