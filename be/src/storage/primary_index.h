@@ -93,7 +93,7 @@ public:
 
     void get(const vectorized::Column& pks, std::vector<uint64_t>* rowids) const;
 
-    Status prepare(const EditVersion& version);
+    Status prepare(const EditVersion& version, size_t n);
 
     Status commit(PersistentIndexMetaPB* index_meta);
 
