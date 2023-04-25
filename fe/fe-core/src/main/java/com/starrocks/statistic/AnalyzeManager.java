@@ -339,6 +339,8 @@ public class AnalyzeManager implements Writable {
 
             List<Long> pids = table.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
+            // SQL parse will limit expr number, so we need modify it in the session
+            // Of course, it's low probability to reach the limit
             if (pids.size() > exprLimit) {
                 checkDbTableIds.clear();
                 checkPartitionIds.clear();
