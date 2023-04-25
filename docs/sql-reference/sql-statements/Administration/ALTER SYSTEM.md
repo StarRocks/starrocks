@@ -2,7 +2,7 @@
 
 ## Description
 
-Manages FE, BE, Broker nodes, and metadata snapshots in a cluster.
+Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
 
 > **NOTE**
 >
