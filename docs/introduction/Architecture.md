@@ -10,7 +10,7 @@ The following figure shows the architecture of StarRocks.
 
 ## FE and BE
 
-FEs are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE stores and maintains a complete copy of metadata in its memory, which guarantees indiscriminate services among the FEs. FEs can work as leaders, followers, and observers. Followers can elect a leader according to the Paxos-like BDB JE protocol. BDB JE is short for Berkeley DB Java Edition.
+FEs are responsible for metadata management, client connection management, query planning, and query scheduling. Each FE stores and maintains a complete copy of metadata in its memory, which guarantees indiscriminate services among the FEs. FEs can work as leaders, followers, and observers. Followers can select a leader according to the Paxos-like BDB JE protocol. BDB JE is short for Berkeley DB Java Edition.
 
 - Leader
   - The leader FE is elected from follower FEs. To perform leader election, more than half of the follower FEs in the cluster must be active. When the leader FE fails, follower FEs will start another round of leader election.
