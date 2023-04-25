@@ -1725,9 +1725,10 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan, "partial_mv");
 
         String query2 = "select t1a, id_date, t1b from table_with_partition" +
-                " where id_date >= '1992-02-01' and id_date < '1993-05-01'";
+                " where id_date >= '1992-01-01' and id_date < '1993-01-01'";
         String plan2 = getFragmentPlan(query2);
         PlanTestBase.assertContains(plan2, "partial_mv");
+        PlanTestBase.assertNotContains(plan2, "PREDICATES:");
 
         dropMv("test", "partial_mv");
 

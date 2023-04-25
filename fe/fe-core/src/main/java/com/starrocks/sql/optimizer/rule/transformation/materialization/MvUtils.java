@@ -690,9 +690,9 @@ public class MvUtils {
             boolean merged = false;
             for (int j = 0; j < mergedRanges.size(); j++) {
                 // 1 < r < 10, 10 <= r < 20 => 1 < r < 20
-                Range<PartitionKey> resultRange = mergedRanges.get(j);
-                if (currentRange.isConnected(currentRange) && currentRange.gap(resultRange).isEmpty()) {
-                    mergedRanges.set(j, resultRange.span(currentRange));
+                Range<PartitionKey> mergedRange = mergedRanges.get(j);
+                if (currentRange.isConnected(mergedRange) && currentRange.gap(mergedRange).isEmpty()) {
+                    mergedRanges.set(j, mergedRange.span(currentRange));
                     merged = true;
                     break;
                 }
