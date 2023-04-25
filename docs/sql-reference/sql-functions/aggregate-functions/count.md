@@ -51,7 +51,7 @@ select * from test order by id;
 +------+----------+----------+------------+
 ~~~
 
-Example 1：Count the number of rows in table `test`.
+Example 1: Count the number of rows in table `test`.
 
 ~~~Plain
     select count(*) from test;
@@ -62,7 +62,7 @@ Example 1：Count the number of rows in table `test`.
     +----------+
 ~~~
 
-Example 2：Count the number of values in the `id` column.
+Example 2: Count the number of values in the `id` column.
 
 ~~~Plain
     select count(id) from test;
@@ -84,7 +84,7 @@ select count(category) from test;
   +-----------------+
 ~~~
 
-Example 4：Count the number of distinct values in the `category` column.
+Example 4: Count the number of distinct values in the `category` column.
 
 ~~~Plain
 select count(distinct category) from test;
@@ -95,7 +95,7 @@ select count(distinct category) from test;
 +-------------------------+
 ~~~
 
-Example 5：Count the number of combinations that can be formed by `category` and `supplier`.
+Example 5: Count the number of combinations that can be formed by `category` and `supplier`.
 
 ~~~Plain
 select count(distinct category, supplier) from test;

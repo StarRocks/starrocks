@@ -122,12 +122,14 @@ static void search_delta_column_groups_by_version(const DeltaColumnGroupList& al
 
 Status UpdateManager::get_delta_column_group(KVStore* meta, const TabletSegmentId& tsid, int64_t version,
                                              DeltaColumnGroupList* dcgs) {
+    StarRocksMetrics::instance()->delta_column_group_get_total.increment(1);
     {
         // find in delta column group cache
         std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
         auto itr = _delta_column_group_cache.find(tsid);
         if (itr != _delta_column_group_cache.end()) {
             search_delta_column_groups_by_version(itr->second, version, dcgs);
+            StarRocksMetrics::instance()->delta_column_group_get_hit_cache.increment(1);
             return Status::OK();
         }
     }
@@ -232,6 +234,31 @@ void UpdateManager::clear_cached_delta_column_group(const std::vector<TabletSegm
             _delta_column_group_cache.erase(itr);
         }
     }
+}
+
+Status UpdateManager::set_cached_delta_column_group(KVStore* meta, const TabletSegmentId& tsid,
+                                                    const DeltaColumnGroupPtr& dcg) {
+    {
+        std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
+        auto itr = _delta_column_group_cache.find(tsid);
+        if (itr != _delta_column_group_cache.end()) {
+            itr->second.insert(itr->second.begin(), dcg);
+            _delta_column_group_cache_mem_tracker->consume(dcg->memory_usage());
+            return Status::OK();
+        }
+    }
+    // find from rocksdb
+    DeltaColumnGroupList new_dcgs;
+    RETURN_IF_ERROR(
+            TabletMetaManager::get_delta_column_group(meta, tsid.tablet_id, tsid.segment_id, INT64_MAX, &new_dcgs));
+    std::lock_guard<std::mutex> lg(_delta_column_group_cache_lock);
+    auto itr = _delta_column_group_cache.find(tsid);
+    if (itr != _delta_column_group_cache.end()) {
+        _delta_column_group_cache_mem_tracker->release(delta_column_group_list_memory_usage(itr->second));
+    }
+    _delta_column_group_cache[tsid] = new_dcgs;
+    _delta_column_group_cache_mem_tracker->consume(delta_column_group_list_memory_usage(new_dcgs));
+    return Status::OK();
 }
 
 void UpdateManager::expire_cache() {

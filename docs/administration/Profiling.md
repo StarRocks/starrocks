@@ -2,11 +2,11 @@
 
 ## Table Creation
 
-### Data Model Selection
+### Table Type Selection
 
-StarRocks supports three kinds of data model: AGGREGATE KEY, UNIQUE KEY, and DUPLICATE KEY. All three are sorted by KEY.
+StarRocks supports four table types: Duplicate Key table, Aggragate table, Unique Key table, and Primary Key table. All three are sorted by KEY.
 
-* AGGREGATE KEY: When the AGGREGATE KEY is the same, the old and new records are aggregated. The currently supported aggregate functions are SUM, MIN, MAX, REPLACE. Aggregate  model can aggregate data in advance, which is suitable for reporting and multi-dimensional analyses.
+* AGGREGATE KEY: When the AGGREGATE KEY is the same, the old and new records are aggregated. The currently supported aggregate functions are SUM, MIN, MAX, and REPLACE. Aggregate tables support aggregating data in advance, facilitating reporting and multi-dimensional analyses.
 
 ~~~sql
 CREATE TABLE site_visit
@@ -104,7 +104,7 @@ For more information about colocate join and replica management, refer to [Coloc
 
 To adapt to the front-end business,  flat tables don’t  differentiate between dimension information and index information. Such flat tables often do not perform as well as expected because:
 
-* The schema has many fields When there are a large number of key columns in the aggregation model,  it may lead to an increase in the number of columns that need to be sorted during the import.
+* The schema has many fields When there are a large number of key columns in the Aggregate table,  it may lead to an increase in the number of columns that need to be sorted during the import.
 * Updates on dimension information will be reflected to the table. The frequency of updates directly affects query efficiency.
 
 It is recommended to use star schema to distinguish dimension tables and index tables. This schema can place dimension tables with frequent updates in MySQL, and dimension tables with fewer updates in StarRocks. Creating replicas of dimension tables in StarRocks can improve join performance.
@@ -143,7 +143,7 @@ StarRocks stores data in an ordered manner and builds a sparse index with  block
 
 ### Inverted Index
 
-StarRocks adopts Bitmap Indexing technology to support inverted indexes that can be applied to all columns of the duplicate data model and the key column of the aggregate and unique data models. Bitmap Index is suitable for columns with a small value range, such as gender, city, and province. As the range expands, the bitmap index expands in parallel.
+StarRocks adopts Bitmap Indexing technology to support inverted indexes that can be applied to all columns of the Duplicate Key table and the key column of the Aggregate table and Unique Key table. Bitmap Index is suitable for columns with a small value range, such as gender, city, and province. As the range expands, the bitmap index expands in parallel.
 
 ### Materialized view (rollup)
 

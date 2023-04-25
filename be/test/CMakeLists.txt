@@ -131,6 +131,7 @@ set(EXEC_FILES
         ./formats/csv/decimalv2_converter_test.cpp
         ./formats/csv/float_converter_test.cpp
         ./formats/csv/json_converter_test.cpp
+        ./formats/csv/map_converter_test.cpp
         ./formats/csv/nullable_converter_test.cpp
         ./formats/csv/numeric_converter_test.cpp
         ./formats/csv/default_value_converter_test.cpp

@@ -588,8 +588,6 @@ public class Coordinator {
             int backendId = 0;
             int profileFragmentId = 0;
 
-            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
-
             Set<TNetworkAddress> firstDeliveryAddresses = new HashSet<>();
             for (PlanFragment fragment : fragments) {
                 CoordinatorPreprocessor.FragmentExecParams params =
@@ -630,7 +628,8 @@ public class Coordinator {
 
                 // if pipeline is enable and current fragment contain olap table sink, in fe we will 
                 // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-                boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
+                boolean enablePipelineTableSinkDop = enablePipelineEngine &&
+                        (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
                 boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
                 int tabletSinkTotalDop = 0;
                 int accTabletSinkDop = 0;
@@ -867,8 +866,6 @@ public class Coordinator {
             int backendNum = 0;
             int profileFragmentId = 0;
 
-            Set<Long> dbIds = connectContext != null ? connectContext.getCurrentSqlDbIds() : null;
-
             this.descTable.setIs_cached(false);
             TDescriptorTable emptyDescTable = new TDescriptorTable();
             emptyDescTable.setIs_cached(true);
@@ -910,9 +907,10 @@ public class Coordinator {
                                             Collectors.mapping(Function.identity(), Collectors.toList())));
                     // if pipeline is enable and current fragment contain olap table sink, in fe we will 
                     // calculate the number of all tablet sinks in advance and assign them to each fragment instance
-                    boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
+                    boolean enablePipelineTableSinkDop = enablePipelineEngine &&
+                            (fragment.hasOlapTableSink() || fragment.hasIcebergTableSink());
                     boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
-                    int tabletSinkTotalDop = 0;
+                    int tableSinkTotalDop = 0;
                     int accTabletSinkDop = 0;
                     if (enablePipelineTableSinkDop) {
                         for (Map.Entry<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> hostAndRequests :
@@ -920,17 +918,17 @@ public class Coordinator {
                             List<CoordinatorPreprocessor.FInstanceExecParam> requests = hostAndRequests.getValue();
                             for (CoordinatorPreprocessor.FInstanceExecParam request : requests) {
                                 if (!forceSetTableSinkDop) {
-                                    tabletSinkTotalDop += request.getPipelineDop();
+                                    tableSinkTotalDop += request.getPipelineDop();
                                 } else {
-                                    tabletSinkTotalDop += fragment.getPipelineDop();
+                                    tableSinkTotalDop += fragment.getPipelineDop();
                                 }
                             }
                         }
                     }
 
-                    if (tabletSinkTotalDop < 0) {
+                    if (tableSinkTotalDop < 0) {
                         throw new UserException(
-                                "tabletSinkTotalDop = " + tabletSinkTotalDop + " should be >= 0");
+                                "tableSinkTotalDop = " + tableSinkTotalDop + " should be >= 0");
                     }
 
                     for (Map.Entry<TNetworkAddress, List<CoordinatorPreprocessor.FInstanceExecParam>> hostAndRequests :
@@ -966,7 +964,7 @@ public class Coordinator {
                                 .collect(Collectors.toSet());
                         TExecBatchPlanFragmentsParams tRequest =
                                 params.toThriftInBatch(curInstanceIds, host, curDescTable, enablePipelineEngine,
-                                        accTabletSinkDop, tabletSinkTotalDop);
+                                        accTabletSinkDop, tableSinkTotalDop);
                         if (enablePipelineTableSinkDop) {
                             for (CoordinatorPreprocessor.FInstanceExecParam request : requests) {
                                 if (!forceSetTableSinkDop) {

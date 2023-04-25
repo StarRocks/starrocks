@@ -31,7 +31,7 @@ jobs:
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '3.0')
         with:
-          labels: 3.0 
+          labels: '3.0'
 
       - name: backport branch-2.5
         if: contains(github.event.pull_request.labels.*.name, '2.5')
@@ -44,7 +44,7 @@ jobs:
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '2.5')
         with:
-          labels: 2.5
+          labels: '2.5'
 
       - name: backport branch-2.4
         if: contains(github.event.pull_request.labels.*.name, '2.4')
@@ -57,7 +57,7 @@ jobs:
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '2.4')
         with:
-          labels: 2.4
+          labels: '2.4'
 
       - name: backport branch-2.3
         if: contains(github.event.pull_request.labels.*.name, '2.3')
@@ -70,24 +70,55 @@ jobs:
       - uses: actions-ecosystem/action-remove-labels@v1
         if: contains(github.event.pull_request.labels.*.name, '2.3')
         with:
-          labels: 2.3
+          labels: '2.3'
+
+  thirdparty-update-image:
+    runs-on: self-hosted
+    name: Thirdparty Update Image
+    if: github.event.pull_request.merged == true
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
+    steps:
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            thirdparty:
+            - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+
+      - name: update image
+        if: steps.changes.outputs.thirdparty == 'true'
+        run: |
+          rm -rf ./elastic-service
+          cp -rf /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER
 
   close_msg:
     runs-on: self-hosted
-    if: github.event.pull_request.merged == true &&
-      !contains(github.event.pull_request.title, 'cherry-pick') &&
-      !contains(github.event.pull_request.title, 'backport')
+    if: github.event.pull_request.merged == true && github.base_ref == 'main'
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
-      - name: merge_commit_sha
+      - name: commit_sha
+        id: commit_sha
         run: |
           set -x
-          merge_commit_sha=`curl -L \
-          -H "Accept: application/vnd.github+json" \
-          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          -H "X-GitHub-Api-Version: 2022-11-28" \
-          https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER} 2>/dev/null \
-          | jq .merge_commit_sha`
-          merge_commit_sha=$(echo ${merge_commit_sha//\"})
-          echo "merge_commit_sha=${merge_commit_sha}" >> $GITHUB_OUTPUT
+          commit_sha=`curl -L \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER} 2>/dev/null \
+            | jq .merge_commit_sha`
+          commit_sha=$(echo ${commit_sha//\"})
+          echo "commit_sha=${commit_sha}" >> $GITHUB_OUTPUT
+
+      - name: update merged coverage
+        run: |
+          set -ex
+          rm -rf ./elastic-service
+          ln -s /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          ./bin/upload_cov_after_merge.sh --pr ${PR_NUMBER} --commit ${{ steps.commit_sha.outputs.commit_sha }}

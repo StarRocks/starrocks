@@ -111,7 +111,7 @@ DISTRIBUTED BY HASH(id)
 PROPERTIES("replicated_storage" = "true");
 ```
 
-Implicitly assign and explicitly specify the values for the `AUTO_INCREMENT` column `number` in the table `test_tbl2`。
+Implicitly assign and explicitly specify the values for the `AUTO_INCREMENT` column `number` in the table `test_tbl2`.
 
 ```SQL
 INSERT INTO test_tbl2 (id, number) VALUES (1, DEFAULT);
@@ -335,3 +335,7 @@ This feature can be used to build a dictionary table for fastly computing distin
 - Adding the `AUTO_INCREMENT` attribute by using ALTER TABLE is not supported.
 - Currently, StarRocks's shared-data mode does not support the `AUTO_INCREMENT` attribute.
 - StarRocks does not support specifying the starting value and step size for the `AUTO_INCREMENT` column.
+
+## Keywords
+
+AUTO_INCREMENT, AUTO INCREMENT

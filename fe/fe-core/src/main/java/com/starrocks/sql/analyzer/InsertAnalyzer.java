@@ -22,6 +22,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -50,6 +51,11 @@ public class InsertAnalyzer {
     public static void analyze(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
         new QueryAnalyzer(session).analyze(insertStmt.getQueryStatement());
+
+        List<Table> tables = new ArrayList<>();
+        AnalyzerUtils.collectSpecifyExternalTables(insertStmt.getQueryStatement(), tables, Table::isHiveTable);
+        tables.stream().map(table -> (HiveTable) table)
+                .forEach(table -> table.useMetadataCache(false));
 
         /*
          *  Target table

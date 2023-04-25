@@ -77,6 +77,33 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testDateExpression() throws Exception {
+        String sql = "select current_date";
+        analyzeSuccess(sql);
+
+        sql = "select current_time";
+        analyzeSuccess(sql);
+
+        sql = "select current_timestamp";
+        analyzeSuccess(sql);
+
+        sql = "select localtimestamp";
+        analyzeSuccess(sql);
+
+        sql = "select localtime";
+        analyzeSuccess(sql);
+
+        sql = "select timestamp '2021-01-01 00:00:00'";
+        assertPlanContains(sql, "'2021-01-01 00:00:00'");
+
+        sql = "select timestamp '2021-01-01 10:01:02.123456'";
+        assertPlanContains(sql, "'2021-01-01 10:01:02.123456'");
+
+        sql = "select date '2021-01-01'";
+        assertPlanContains(sql, "'2021-01-01'");
+    }
+
+    @Test
     public void testCastExpression() throws Exception {
         String sql = "select cast(tb as varchar(10)) from tall";
         assertPlanContains(sql, "<slot 11> : CAST(2: tb AS VARCHAR(10))");
@@ -107,6 +134,21 @@ public class TrinoQueryTest extends TrinoTestBase {
 
         sql = "select nullif(v1, v2) from t0";
         assertPlanContains(sql, "<slot 4> : nullif(1: v1, 2: v2)");
+    }
+
+    @Test
+    public void testIfExpression() throws Exception {
+        String sql = "select if(1, 2, 3)";
+        assertPlanContains(sql, "<slot 2> : 2");
+
+        sql = "select if(v1, v2, v3) from t0";
+        assertPlanContains(sql, "<slot 4> : if(CAST(1: v1 AS BOOLEAN), 2: v2, 3: v3)");
+
+        sql = "select if(v1, v2) from t0";
+        assertPlanContains(sql, "<slot 4> : if(CAST(1: v1 AS BOOLEAN), 2: v2, NULL)");
+
+        sql = "select * from t0 where if (v1, v2, v3) = 2";
+        assertPlanContains(sql, "PREDICATES: if(CAST(1: v1 AS BOOLEAN), 2: v2, 3: v3) = 2");
     }
 
     @Test
@@ -813,8 +855,8 @@ public class TrinoQueryTest extends TrinoTestBase {
         sql = "select approx_percentile(2.25, 1.79E-10)";
         assertPlanContains(sql, "percentile_approx(2.25, 1.79E-10)");
 
-        sql = "select approx_percentile(2.25, 1.79E+10)";
-        assertPlanContains(sql, "percentile_approx(2.25, 1.79E10)");
+        sql = "select approx_percentile(2.25, 0.4)";
+        assertPlanContains(sql, "percentile_approx(2.25, 0.4)");
     }
 
     @Test

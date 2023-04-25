@@ -66,7 +66,6 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -114,12 +113,6 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_COMPRESSION = "compression";
 
     public static final String PROPERTIES_COLOCATE_MV = "colocate_mv";
-    /*
-     * for upgrade alpha rowset to beta rowset, valid value: v1, v2
-     * v1: alpha rowset
-     * v2: beta rowset
-     */
-    public static final String PROPERTIES_STORAGE_FORMAT = "storage_format";
 
     public static final String PROPERTIES_INMEMORY = "in_memory";
 
@@ -585,29 +578,6 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_TIMEOUT);
         }
         return timeout;
-    }
-
-    // analyzeStorageFormat will parse the storage format from properties
-    // sql: alter table tablet_name set ("storage_format" = "v2")
-    // Use this sql to convert all tablets(base and rollup index) to a new format segment
-    public static TStorageFormat analyzeStorageFormat(Map<String, String> properties) throws AnalysisException {
-        String storageFormat;
-        if (properties != null && properties.containsKey(PROPERTIES_STORAGE_FORMAT)) {
-            storageFormat = properties.get(PROPERTIES_STORAGE_FORMAT);
-            properties.remove(PROPERTIES_STORAGE_FORMAT);
-        } else {
-            return TStorageFormat.DEFAULT;
-        }
-
-        if (storageFormat.equalsIgnoreCase("v1")) {
-            return TStorageFormat.V1;
-        } else if (storageFormat.equalsIgnoreCase("v2")) {
-            return TStorageFormat.V2;
-        } else if (storageFormat.equalsIgnoreCase("default")) {
-            return TStorageFormat.DEFAULT;
-        } else {
-            throw new AnalysisException("unknown storage format: " + storageFormat);
-        }
     }
 
     // analyzeCompressionType will parse the compression type from properties

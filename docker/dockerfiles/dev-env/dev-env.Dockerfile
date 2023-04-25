@@ -31,7 +31,6 @@ ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 WORKDIR /root
 
-
 FROM base as builder
 ARG prebuild_maven
 ARG predownload_thirdparty
@@ -56,12 +55,12 @@ FROM starrocks/starlet-artifacts-centos7:${starlet_tag} as starlet-centos7
 # determine which artifacts to use
 FROM starlet-${distro} as starlet
 
-
 FROM base as dev-env
 ARG commit_id
 LABEL org.opencontainers.image.source="https://github.com/StarRocks/starrocks"
 LABEL com.starrocks.commit=${commit_id:-"UNKNOWN"}
 ENV STARLET_INSTALL_DIR=$STARROCKS_THIRDPARTY/installed/starlet
+ENV PATH=$STARROCKS_GCC_HOME/bin:$PATH
 
 # Copy third-party dependencies
 COPY --from=builder $STARROCKS_THIRDPARTY $STARROCKS_THIRDPARTY

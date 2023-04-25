@@ -52,6 +52,8 @@ Broker Load supports the following storage systems:
 
 - Other S3-compatible storage system such as MinIO
 
+- Microsoft Azure Storage
+
 ## How it works
 
 After you submit a load job to an FE, the FE generates a query plan, splits the query plan into portions based on the number of BEs and the size of the data file you want to load, and then assigns each portion of the query plan to a specific BE. During the load, each BE pulls the data of the data file by using the broker, pre-processes the data, and then loads the data into your StarRocks cluster. After all BEs finish their portions of the query plan, the FE determines whether the load job is successful.
@@ -72,7 +74,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 1. In your StarRocks database `test_db`, create StarRocks tables.
 
-   a. Create a table named `table1` that uses the Primary Key model. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+   a. Create a table named `table1` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table1`
@@ -86,7 +88,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    DISTRIBUTED BY HASH(`id`) BUCKETS 10;
    ```
 
-   b. Create a table named `table2` that uses the Primary Key model. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
+   b. Create a table named `table2` that uses the Primary Key table. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table2`
@@ -179,12 +181,12 @@ Execute the following statement to load `file1.csv` and `file2.csv` from the `in
 ```SQL
 LOAD LABEL test_db.label3
 (
-    DATA INFILE("s3a://bucket_gcs/input/file1.csv")
+    DATA INFILE("gs://bucket_gcs/input/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
     ,
-    DATA INFILE("s3a://bucket_gcs/input/file2.csv")
+    DATA INFILE("gs://bucket_gcs/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
     (id, city)
@@ -197,11 +199,11 @@ WITH BROKER
 
 > **NOTE**
 >
-> Broker Load supports accessing Google GCS only according to the S3A protocol. Therefore, when you load data from Google GCS, you must replace the prefix in the GCS URI you pass as a file path into `DATA INFILE` with `s3a://`.
+> Broker Load supports accessing Google GCS only according to the gs protocol. Therefore, when you load data from Google GCS, you must use `gs` as the prefix in the GCS URI that you pass as a file path into `DATA INFILE`.
 
 #### Load data from other S3-compatible storage system
 
-Use MinIO as an example. You can execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your MinIO bucket `bucket_gcs` into `table1` and `table2`, respectively:
+Use MinIO as an example. You can execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your MinIO bucket `bucket_minio` into `table1` and `table2`, respectively:
 
 ```SQL
 LOAD LABEL test_db.label7
@@ -212,6 +214,29 @@ LOAD LABEL test_db.label7
     (id, name, score)
     ,
     DATA INFILE("obs://bucket_minio/input/file2.csv")
+    INTO TABLE table2
+    COLUMNS TERMINATED BY ","
+    (id, city)
+)
+WITH BROKER
+(
+    StorageCredentialParams
+);
+```
+
+#### Load data from Microsoft Azure Storage
+
+Execute the following statement to load `file1.csv` and `file2.csv` from the specified paths of your Azure Storage:
+
+```SQL
+LOAD LABEL test_db.label8
+(
+    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    (id, name, score)
+    ,
+    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
     (id, city)
@@ -270,7 +295,7 @@ LOAD LABEL test_db.label_7
 WITH BROKER 
 (
     StorageCredentialParams
-)；
+);
 ```
 
 To load all data files from the `input` folder into `table1`, execute the following statement:
@@ -286,7 +311,7 @@ LOAD LABEL test_db.label_8
 WITH BROKER 
 (
     StorageCredentialParams
-)；
+);
 ```
 
 ### View a load job

@@ -34,7 +34,7 @@
 
 #include "storage/rowset/ordinal_page_index.h"
 
-#include <bthread/sys_futex.h>
+#include <memory>
 
 #include "common/logging.h"
 #include "fs/fs.h"
@@ -101,9 +101,11 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
     if (meta.root_page().is_root_data_page()) {
         // only one data page, no index page
         _num_pages = 1;
-        _ordinals.push_back(0);
-        _ordinals.push_back(num_values);
-        _pages.emplace_back(meta.root_page().root_page());
+        _ordinals = std::make_unique<ordinal_t[]>(2);
+        _ordinals[0] = 0;
+        _ordinals[1] = num_values;
+        _pages = std::make_unique<PagePointer[]>(1);
+        _pages[0] = meta.root_page().root_page();
         return Status::OK();
     }
     // need to read index page
@@ -130,8 +132,8 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
     RETURN_IF_ERROR(reader.parse(body, footer.index_page_footer()));
 
     _num_pages = reader.count();
-    _ordinals.resize(_num_pages + 1);
-    _pages.resize(_num_pages);
+    _ordinals = std::make_unique<ordinal_t[]>(_num_pages + 1);
+    _pages = std::make_unique<PagePointer[]>(_num_pages);
     for (int i = 0; i < _num_pages; i++) {
         Slice key = reader.get_key(i);
         ordinal_t ordinal = 0;
@@ -147,8 +149,8 @@ Status OrdinalIndexReader::_do_load(const IndexReadOptions& opts, const OrdinalI
 
 void OrdinalIndexReader::_reset() {
     _num_pages = 0;
-    std::vector<ordinal_t>{}.swap(_ordinals);
-    std::vector<PagePointer>{}.swap(_pages);
+    _ordinals.reset();
+    _pages.reset();
 }
 
 OrdinalPageIndexIterator OrdinalIndexReader::seek_at_or_before(ordinal_t ordinal) {

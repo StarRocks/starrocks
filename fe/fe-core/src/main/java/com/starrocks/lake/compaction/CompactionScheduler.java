@@ -154,9 +154,13 @@ public class CompactionScheduler extends Daemon {
                 iterator.remove();
                 context.setFinishTs(System.currentTimeMillis());
                 history.offer(CompactionRecord.build(context));
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Removed published compaction. {} cost={}ms running={}", context.getDebugString(),
-                            (context.getFinishTs() - context.getStartTs()), runningCompactions.size());
+                long cost = context.getFinishTs() - context.getStartTs();
+                if (cost >= /*60 minutes=*/3600000) {
+                    LOG.info("Removed published compaction. {} cost={}s running={}", context.getDebugString(),
+                            cost / 1000, runningCompactions.size());
+                } else if (LOG.isDebugEnabled()) {
+                    LOG.debug("Removed published compaction. {} cost={}s running={}", context.getDebugString(),
+                            cost / 1000, runningCompactions.size());
                 }
                 compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS);
             }
@@ -386,26 +390,6 @@ public class CompactionScheduler extends Daemon {
         }
         context.setVisibleStateWaiter(waiter);
         context.setCommitTs(System.currentTimeMillis());
-        if (LOG.isDebugEnabled()) {
-            long numInputBytes = 0;
-            long numInputRows = 0;
-            long numOutputBytes = 0;
-            long numOutputRows = 0;
-            for (Future<CompactResponse> responseFuture : context.getResponseList()) {
-                CompactResponse response = responseFuture.get();
-                numInputBytes += response.numInputBytes;
-                numInputRows += response.numInputRows;
-                numOutputBytes += response.numOutputBytes;
-                numOutputRows += response.numOutputRows;
-            }
-            LOG.debug("Committed compaction. {} inputBytes={} inputRows={} outputBytes={} outputRows={} time={}",
-                    context.getDebugString(),
-                    numInputBytes,
-                    numInputRows,
-                    numOutputBytes,
-                    numOutputRows,
-                    (context.getCommitTs() - context.getStartTs()));
-        }
     }
 
     private void abortTransactionIgnoreError(long dbId, long txnId, String reason) {

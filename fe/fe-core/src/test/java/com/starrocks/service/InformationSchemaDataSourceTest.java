@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.service;
 
 import com.google.gson.Gson;
@@ -69,7 +68,9 @@ public class InformationSchemaDataSourceTest {
         authInfo.setUser_ip("%");
         req.setAuth_info(authInfo);
         TGetTablesConfigResponse response = impl.getTablesConfig(req);
-        TTableConfigInfo tableConfig = response.getTables_config_infos().get(0);
+        TTableConfigInfo tableConfig = response.getTables_config_infos().stream()
+                .filter(t -> t.getTable_name().equals("tbl1")).findFirst()
+                .orElseGet(null);
         Assert.assertEquals("db1", tableConfig.getTable_schema());
         Assert.assertEquals("tbl1", tableConfig.getTable_name());
         Assert.assertEquals("OLAP", tableConfig.getTable_engine());
@@ -81,7 +82,9 @@ public class InformationSchemaDataSourceTest {
         Assert.assertEquals(3, tableConfig.getDistribute_bucket());
         Assert.assertEquals("`v2`, `v3`", tableConfig.getSort_key());
 
-        TTableConfigInfo mvConfig = response.getTables_config_infos().get(1);
+        TTableConfigInfo mvConfig = response.getTables_config_infos().stream()
+                .filter(t -> t.getTable_engine().equals("MATERIALIZED_VIEW")).findFirst()
+                .orElseGet(null);
         Assert.assertEquals("MATERIALIZED_VIEW", mvConfig.getTable_engine());
         Map<String, String> propsMap = new HashMap<>();
         propsMap = new Gson().fromJson(mvConfig.getProperties(), propsMap.getClass());
@@ -120,12 +123,10 @@ public class InformationSchemaDataSourceTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"V2\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
         starRocksAssert.withTable(createTblStmtStr);
-
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TGetTablesConfigRequest req = new TGetTablesConfigRequest();
@@ -135,7 +136,8 @@ public class InformationSchemaDataSourceTest {
         authInfo.setUser_ip("%");
         req.setAuth_info(authInfo);
         TGetTablesConfigResponse response = impl.getTablesConfig(req);
-        TTableConfigInfo tableConfig = response.getTables_config_infos().get(0);
+        TTableConfigInfo tableConfig = response.getTables_config_infos().stream()
+                .filter(t -> t.getTable_name().equals("unique_table_with_null")).findFirst().orElseGet(null);
         Assert.assertEquals("db2", tableConfig.getTable_schema());
         Assert.assertEquals("unique_table_with_null", tableConfig.getTable_name());
         Assert.assertEquals("OLAP", tableConfig.getTable_engine());

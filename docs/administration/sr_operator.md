@@ -1,4 +1,4 @@
-# Deploy and Manage StarRocks on Kubernetes with StarRocks Operator
+# Deploy StarRocks with Operator
 
 This topic introduces how to use the StarRocks Operator to automate the deployment and management of a StarRocks cluster on a Kubernetes cluster.
 
