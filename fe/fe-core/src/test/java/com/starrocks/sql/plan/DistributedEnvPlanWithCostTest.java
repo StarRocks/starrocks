@@ -1415,43 +1415,61 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testAggExecuteInOneTablet() throws Exception {
         String sql;
         String plan;
-        ExecPlan execPlan;
-        OlapScanNode olapScanNode;
 
         // dates_n only contains one tablet.
         sql = "select count(d_datekey), d_date from dates_n group by d_date";
-        execPlan = getExecPlan(sql);
-        olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-        Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
-        plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "LocalShuffleColumns");
         assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: count(1: d_datekey)\n" +
-                "  |  group by: 2: d_date\n" +
+                "  |  aggregate: count[([1: d_datekey, INT, true]); args: INT; result: BIGINT; args nullable: true; result nullable: false]\n" +
+                "  |  group by: [2: d_date, VARCHAR, true]\n" +
+                "  |  cardinality: 1278\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
 
         // dates_n only contains one tablet.
         sql = "select count(d_date), d_datekey from dates_n group by d_datekey";
-        execPlan = getExecPlan(sql);
-        olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-        Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
-        plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "LocalShuffleColumns");
         assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: count(2: d_date)\n" +
-                "  |  group by: 1: d_datekey\n" +
+                "  |  aggregate: count[([2: d_date, VARCHAR, true]); args: VARCHAR; result: BIGINT; args nullable: true; result nullable: false]\n" +
+                "  |  group by: [1: d_datekey, INT, true]\n" +
+                "  |  cardinality: 1278\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
 
+        // dates_n only contains one tablet.
+        //       HashJoin(Colocate)
+        //      /               \
+        // OlapScanNode       BlockingAgg
+        //                       |
+        //                    OlapScanNode
+        sql = "WITH w1 as (SELECT count(d_date) as cnt, d_datekey FROM dates_n group by d_datekey) " +
+                "SELECT * from dates_n join [colocate] w1 using(d_datekey)";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "LocalShuffleColumns");
+        assertContains(plan, "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (COLOCATE)\n" +
+                "  |  colocate: true\n" +
+                "  |  equal join conjunct: [19: d_datekey, INT, true] = [36: d_datekey, INT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (36: d_datekey), remote = false\n" +
+                "  |  cardinality: 2300\n" +
+                "  |  \n" +
+                "  |----2:AGGREGATE (update finalize)");
+
         // lineorder_new_l contains more than one tablet.
         sql = "select count(P_TYPE), LO_ORDERKEY from lineorder_new_l group by LO_ORDERKEY";
-        execPlan = getExecPlan(sql);
-        olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-        Assert.assertEquals(1, olapScanNode.getBucketExprs().size());
-        plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "     LocalShuffleColumns:\n" +
+                "     - 1: LO_ORDERKEY");
         assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: count(36: P_TYPE)\n" +
-                "  |  group by: 1: LO_ORDERKEY\n" +
+                "  |  aggregate: count[([36: P_TYPE, VARCHAR, false]); args: VARCHAR; result: BIGINT; args nullable: false; result nullable: false]\n" +
+                "  |  group by: [1: LO_ORDERKEY, INT, false]\n" +
+                "  |  cardinality: 300004609\n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+
+
     }
 }
