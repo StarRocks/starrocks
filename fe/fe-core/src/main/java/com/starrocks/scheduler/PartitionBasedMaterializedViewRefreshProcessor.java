@@ -598,7 +598,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
             if (force || unPartitionedMVNeedToRefresh()) {
-                return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
+                return materializedView.getPartitionNames();
             }
         } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             Expr partitionExpr = MaterializedView.getPartitionExpr(materializedView);
