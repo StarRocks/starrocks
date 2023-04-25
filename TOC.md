@@ -16,7 +16,12 @@
   + [导入和查询数据](/quick_start/Import_and_query.md)
 + 表设计
   + [理解表设计](/table_design/StarRocks_table_design.md)
-  + [数据模型](/table_design/Data_model.md)
+  + 数据模型
+    + [数据模型概览](/table_design/table_types/table_types.md)
+    + [明细模型](/table_design/table_types/duplicate_key_table.md)
+    + [聚合模型](/table_design/table_types/aggregate_table.md)
+    + [更新模型](/table_design/table_types/unique_key_table.md)
+    + [主键模型](/table_design/table_types/primary_key_table.md)
   + 数据分布
     + [数据分布](/table_design/Data_distribution.md)
     + [自动创建分区](/table_design/automatic_partitioning.md)
