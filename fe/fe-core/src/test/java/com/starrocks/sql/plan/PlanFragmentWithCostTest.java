@@ -10,12 +10,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
-<<<<<<< HEAD
-=======
-import com.starrocks.planner.PlanNode;
 import com.starrocks.plugin.AuditEvent;
->>>>>>> 748f3f5a20 ([Bugfix] Calculate plan cost for audit log based on the entire plan (#22369))
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
