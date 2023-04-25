@@ -307,7 +307,7 @@
         + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
         + [BINARY](/sql-reference/sql-statements/data-types/BINARY.md)
     + [关键字](/sql-reference/sql-statements/keywords.md)
-    + [AUTO_INCREMENT](/sql-reference/auto_increment.md)
+    + [AUTO_INCREMENT](/sql-reference/sql-statements/auto_increment.md)
   + 函数参考
     + [Java UDF](/sql-reference/sql-functions/JAVA_UDF.md)
     + [窗口函数](/sql-reference/sql-functions/Window_function.md)
