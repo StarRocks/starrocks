@@ -34,7 +34,7 @@ Manages FE, BE, Broker nodes, and metadata snapshots in a cluster.
 
   You can check the status of the new Observer FE by executing `SHOW PROC '/frontends'\G`.
 
-- Drop an Observer FE。
+- Drop an Observer FE.
 
   ```SQL
   ALTER SYSTEM DROP OBSERVER "<fe_host>:<edit_log_port>"[, ...]
@@ -71,12 +71,33 @@ Manages FE, BE, Broker nodes, and metadata snapshots in a cluster.
   ALTER SYSTEM DECOMMISSION BACKEND "<be_host>:<heartbeat_service_port>"[, ...]
   ```
 
-  Decommissioning BE is an asynchronous operation. When a BE is decommissioned, the data on the BE is migrated to other BEs. Data loading and query will not be affected during the data migration. You can check whether the operation is successful using [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md). If the operation is successful, the decommissioned BE will not be returned. You can manually cancel the operation using [CANCEL DECOMMISSION](../Administration/CANCEL%20DECOMMISSION.md).
+  Decommissioning BE means set it offline safely. It is an asynchronous operation. When a BE is decommissioned, the data on the BE is migrated to other BEs. Data loading and query will not be affected during the data migration. You can check whether the operation is successful using [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md). If the operation is successful, the decommissioned BE will not be returned. If the operation fails, the BE will still be online. You can manually cancel the operation using [CANCEL DECOMMISSION](../Administration/CANCEL%20DECOMMISSION.md).
 
 | **Parameter**          | **Required** | **Description**                                                                            |
 | ---------------------- | ------------ | ------------------------------------------------------------------------------------------ |
 | be_host                | Yes          | The host name or IP address of the BE instance. Use the value of configuration item `priority_networks` if your instance has multiple IP addresses.|
 | heartbeat_service_port | Yes          | BE heartbeat service port. BE uses this port to receive heartbeat from FE. Default: `9050`.|
+
+### CN
+
+- Add a CN node.
+
+  ```SQL
+  ALTER SYSTEM ADD COMPUTE NODE "<cn_host>:<heartbeat_service_port>"[, ...]
+  ```
+
+  You can check the status of the new CN by executing [SHOW COMPUTE NODES](../Administration/SHOW%20COMPUTE%20NODES.md).
+
+- Drop a CN node.
+
+  ```SQL
+  ALTER SYSTEM DROP COMPUTE NODE "<cn_host>:<heartbeat_service_port>"[, ...]
+  ```
+
+| **Parameter**          | **Required** | **Description**                                                                            |
+| ---------------------- | ------------ | ------------------------------------------------------------------------------------------ |
+| cn_host                | Yes          | The host name or IP address of the CN instance. Use the value of configuration item `priority_networks` if your instance has multiple IP addresses.|
+| heartbeat_service_port | Yes          | CN heartbeat service port. CN uses this port to receive heartbeat from FE. Default: `9050`.|
 
 ### Broker
 
@@ -106,15 +127,15 @@ Manages FE, BE, Broker nodes, and metadata snapshots in a cluster.
     ALTER SYSTEM DROP ALL BROKER <broker_name>
     ```
 
-| **Parameter**   | **Required** | **Description**                                                                            |
-| --------------- | ------------ | ------------------------------------------------------------ |
-| broker_name     | Yes          | The name of the Broker node(s). Multiple Broker nodes can use the same name.                    |
+| **Parameter**   | **Required** | **Description**                                                              |
+| --------------- | ------------ | ---------------------------------------------------------------------------- |
+| broker_name     | Yes          | The name of the Broker node(s). Multiple Broker nodes can use the same name. |
 | broker_host     | Yes          | The host name or IP address of the Broker instance. Use the value of configuration item `priority_networks` if your instance has multiple IP addresses.|
 | broker_ipc_port | Yes          | The thrift server port on the Broker node. The Broker node uses it to receive requests from FE or BE. Default: `8000`. |
 
 ### Create image
 
-Create an image. An image is a snapshot of the FE meatadata.
+Create an image file. An image file is a snapshot of the FE meatadata.
 
 ```SQL
 ALTER SYSTEM CREATE IMAGE
@@ -124,7 +145,7 @@ Creating an image is an asynchronous operation on the Leader FE. You can check t
 
 ## Usage notes
 
-Adding and drooping FE, BE, or Broker nodes are synchronous operations. You cannot cancel the node dropping operations.
+Adding and drooping FE, BE, CN, or Broker nodes are synchronous operations. You cannot cancel the node dropping operations.
 
 ## Examples
 
