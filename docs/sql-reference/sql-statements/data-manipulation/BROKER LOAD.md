@@ -87,6 +87,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
   > - When you load data from Data Lake Storage Gen2, you must include `abfs://` or `abfss://` as a prefix in the file path based on the protocol that is used to access your storage account:
   >   - If your Data Lake Storage Gen2 allows access only via HTTP, use `abfs://` as the prefix, for example, `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
   >   - If your Data Lake Storage Gen2 allows access only via HTTPS, use `abfss://` as the prefix, for example, `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
+  > - Broker Load supports accessing Google GCS only according to the gs protocol. Therefore, when you load data from Google GCS, you must include `gs://` as the prefix in the GCS URI that you pass as the file path.
 
 - `INTO TABLE`
 
