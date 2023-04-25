@@ -144,7 +144,7 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper:
     ::parquet::schema::NodeVector fields;
 
     for (int i = 0; i < output_expr_ctxs.size(); i++) {
-        auto column_expr = output_expr_ctxs[i]->root();
+        auto* column_expr = output_expr_ctxs[i]->root();
         ARROW_ASSIGN_OR_RAISE(auto node,
                               _make_schema_node(file_column_names[i], column_expr->type(),
                                                 column_expr->is_nullable() ? ::parquet::Repetition::OPTIONAL
