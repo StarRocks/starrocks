@@ -18,26 +18,15 @@
 
 namespace starrocks::vectorized {
 
-class ORCFileStream : public orc::InputStream {
+class ORCFileStream : public ORCHdfsFileStream {
 public:
-    ORCFileStream(std::shared_ptr<RandomAccessFile> file, starrocks::vectorized::ScannerCounter* counter)
-            : _file(std::move(file)), _counter(counter) {}
+    ORCFileStream(std::shared_ptr <RandomAccessFile> file, uint64_t length,
+                  starrocks::vectorized::ScannerCounter *counter)
+            : ORCHdfsFileStream(file.get(), length), _file(std::move(file)), _counter(counter) {}
 
     ~ORCFileStream() override { _file.reset(); }
 
-    /**
-     * Get the total length of the file in bytes.
-     */
-    uint64_t getLength() const override {
-        const auto status_or = _file->get_size();
-        return status_or.ok() ? status_or.value() : 0;
-    }
 
-    /**
-     * Get the natural size for reads.
-     * @return the number of bytes that should be read at once
-     */
-    uint64_t getNaturalReadSize() const override { return 8 * 1024 * 1024; }
 
     /**
      * Read length bytes from the file starting at offset into
@@ -48,21 +37,9 @@ public:
      */
     void read(void* buf, uint64_t length, uint64_t offset) override {
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
-        if (buf == nullptr) {
-            throw orc::ParseError("Buffer is null");
-        }
-
-        Status status = _file->read_at_fully(offset, buf, length);
-        if (!status.ok()) {
-            auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
-            throw orc::ParseError(msg);
-        }
+        ORCHdfsFileStream::read(buf, length, offset);
     }
 
-    /**
-     * Get the name of the stream for error messages.
-     */
-    const std::string& getName() const override { return _file->filename(); }
 
 private:
     std::shared_ptr<RandomAccessFile> _file;

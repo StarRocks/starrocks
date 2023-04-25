@@ -6,93 +6,12 @@
 
 #include "exec/exec_node.h"
 #include "formats/orc/orc_chunk_reader.h"
-#include "fs/fs.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "storage/chunk_helper.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::vectorized {
-class ORCHdfsFileStream : public orc::InputStream {
-public:
-    // |file| must outlive ORCHdfsFileStream
-    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length)
-            : _file(std::move(file)), _length(length), _cache_buffer(0), _cache_offset(0) {}
 
-    ~ORCHdfsFileStream() override = default;
-
-    uint64_t getLength() const override { return _length; }
-
-    // refers to paper `Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores`
-    uint64_t getNaturalReadSize() const override { return 1 * 1024 * 1024; }
-
-    // It's for read size after doing seek.
-    // When doing read after seek, we make assumption that we are doing random read because of seeking row group.
-    // And if we still use NaturalReadSize we probably read many row groups
-    // after the row group we want to read, and that will amplify read IO bytes.
-
-    // So the best way is to reduce read size, hopefully we just read that row group in one shot.
-    // We also have chance that we may not read enough at this shot, then we fallback to NaturalReadSize to read.
-    // The cost is, there is a extra IO, and we read 1/4 of NaturalReadSize more data.
-    // And the potential gain is, we save 3/4 of NaturalReadSize IO bytes.
-
-    // Normally 256K can cover a row group of a column(like integer or double, but maybe not string)
-    // And this value can not be too small because if we can not read a row group in a single shot,
-    // we will fallback to read in normal size, and we pay cost of a extra read.
-
-    uint64_t getNaturalReadSizeAfterSeek() const override { return 256 * 1024; }
-
-    void prepareCache(orc::InputStream::PrepareCacheScope scope, uint64_t offset, uint64_t length) override {
-        const size_t cache_max_size = config::orc_file_cache_max_size;
-        if (length > cache_max_size) return;
-        if (canUseCacheBuffer(offset, length)) return;
-
-        // If this stripe is small, probably other stripes are also small
-        // we combine those reads into one, and try to read several stripes in one shot.
-        if (scope == orc::InputStream::PrepareCacheScope::READ_FULL_STRIPE) {
-            length = std::min(_length - offset, cache_max_size);
-        }
-
-        _cache_buffer.resize(length);
-        _cache_offset = offset;
-        doRead(_cache_buffer.data(), length, offset);
-    }
-
-    bool canUseCacheBuffer(uint64_t offset, uint64_t length) {
-        if ((_cache_buffer.size() != 0) && (offset >= _cache_offset) &&
-            ((offset + length) <= (_cache_offset + _cache_buffer.size()))) {
-            return true;
-        }
-        return false;
-    }
-
-    void read(void* buf, uint64_t length, uint64_t offset) override {
-        if (canUseCacheBuffer(offset, length)) {
-            size_t idx = offset - _cache_offset;
-            memcpy(buf, _cache_buffer.data() + idx, length);
-        } else {
-            doRead(buf, length, offset);
-        }
-    }
-
-    void doRead(void* buf, uint64_t length, uint64_t offset) {
-        if (buf == nullptr) {
-            throw orc::ParseError("Buffer is null");
-        }
-        Status status = _file->read_at_fully(offset, buf, length);
-        if (!status.ok()) {
-            auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
-            throw orc::ParseError(msg);
-        }
-    }
-
-    const std::string& getName() const override { return _file->filename(); }
-
-private:
-    RandomAccessFile* _file;
-    uint64_t _length;
-    std::vector<char> _cache_buffer;
-    uint64_t _cache_offset;
-};
 
 class OrcRowReaderFilter : public orc::RowReaderFilter {
 public:
@@ -256,8 +175,6 @@ static inline size_t remove_trailing_spaces(const char* s, size_t size) {
 
 bool OrcRowReaderFilter::filterOnPickStringDictionary(
         const std::unordered_map<uint64_t, orc::StringDictionary*>& sdicts) {
-    _dict_filter_eval_cache.clear();
-
     if (sdicts.empty()) return false;
 
     if (!_init_use_dict_filter_slots) {
@@ -274,6 +191,8 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         }
         _init_use_dict_filter_slots = true;
     }
+
+    _dict_filter_eval_cache.clear();
 
     for (auto& p : _use_dict_filter_slots) {
         SlotDescriptor* slot_desc = p.first;
@@ -435,8 +354,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     }
     _orc_reader->set_hive_column_names(_scanner_params.hive_column_names);
     _orc_reader->set_case_sensitive(_scanner_params.case_sensitive);
-    if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0 &&
-        _lazy_load_ctx.active_load_slots.size() != 0) {
+    if (config::enable_orc_late_materialization && _lazy_load_ctx.lazy_load_slots.size() != 0) {
         _orc_reader->set_lazy_load_context(&_lazy_load_ctx);
     }
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader)));
