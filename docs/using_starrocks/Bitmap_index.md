@@ -17,11 +17,7 @@ You can benefit from bitmap indexes in the following aspects:
 ## Usage notes
 
 - You can create a bitmap index for a column that can be filtered by using the equal (`=`) or [NOT] IN operator.
-<<<<<<< HEAD
-- You can create bitmap indexes for all columns of a table that uses the Duplicate Key Model or Unique Key Model. For a table that uses the Aggregate Key Model or Primary Key model, you can only create bitmap indexes for key columns.
-=======
 - You can create bitmap indexes for all columns of a Duplicate Key table or Unique Key table. For an Aggregate table or Primary Key table, you can only create bitmap indexes for key columns.
->>>>>>> fad09c2fc6 (split data model and update related proper names)
 - The columns of the FLOAT, DOUBLE, BOOLEAN, and DECIMAL types do not support creating bitmap indexes.
 - You can check whether a query uses bitmap indexes by viewing the `BitmapIndexFilterRows` field of the query's profile.
 
