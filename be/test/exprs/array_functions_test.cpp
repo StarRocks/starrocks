@@ -2083,7 +2083,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_sum<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_sum_int(nullptr, {array}).value();
         EXPECT_EQ(1, result->size());
         EXPECT_TRUE(result->is_null(0));
     }
@@ -2091,7 +2091,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_sum<TYPE_BOOLEAN>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_sum_boolean(nullptr, {array}).value();
         EXPECT_EQ(1, result->size());
         EXPECT_TRUE(result->is_null(0));
     }
@@ -2103,7 +2103,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_sum<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_sum_int(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2118,7 +2118,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_sum<TYPE_TINYINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_sum_tinyint(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2133,7 +2133,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_sum<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_sum_int(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2146,7 +2146,7 @@ TEST_F(ArrayFunctionsTest, array_sum_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        result = ArrayFunctions::array_sum<TYPE_BOOLEAN>(nullptr, {array}).value();
+        result = ArrayFunctions::array_sum_boolean(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2160,7 +2160,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_avg<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_avg_int(nullptr, {array}).value();
         EXPECT_EQ(1, result->size());
         EXPECT_TRUE(result->is_null(0));
     }
@@ -2168,7 +2168,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_avg<TYPE_BOOLEAN>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_avg_boolean(nullptr, {array}).value();
         EXPECT_EQ(1, result->size());
         EXPECT_TRUE(result->is_null(0));
     }
@@ -2180,7 +2180,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_avg<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_avg_int(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2195,7 +2195,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_avg<TYPE_TINYINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_avg_tinyint(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2210,7 +2210,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_avg<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_avg_int(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2223,7 +2223,7 @@ TEST_F(ArrayFunctionsTest, array_avg_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        result = ArrayFunctions::array_avg<TYPE_BOOLEAN>(nullptr, {array}).value();
+        result = ArrayFunctions::array_avg_boolean(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2237,7 +2237,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_min<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_int(nullptr, {array}).value();
         EXPECT_EQ(1, result->size());
         EXPECT_TRUE(result->is_null(0));
     }
@@ -2245,7 +2245,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_min<TYPE_BOOLEAN>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_boolean(nullptr, {array}).value();
         EXPECT_EQ(1, result->size());
         EXPECT_TRUE(result->is_null(0));
     }
@@ -2257,7 +2257,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_min<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_int(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2272,7 +2272,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_min<TYPE_TINYINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_tinyint(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2287,7 +2287,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_min<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_int(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2300,7 +2300,7 @@ TEST_F(ArrayFunctionsTest, array_min_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        result = ArrayFunctions::array_min<TYPE_BOOLEAN>(nullptr, {array}).value();
+        result = ArrayFunctions::array_min_boolean(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2314,7 +2314,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_INT, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_max<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_int(nullptr, {array}).value();
         EXPECT_EQ(1, result->size());
         EXPECT_TRUE(result->is_null(0));
     }
@@ -2322,7 +2322,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
         auto array = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_max<TYPE_BOOLEAN>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_boolean(nullptr, {array}).value();
         EXPECT_EQ(1, result->size());
         EXPECT_TRUE(result->is_null(0));
     }
@@ -2334,7 +2334,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_max<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_int(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2349,7 +2349,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_max<TYPE_TINYINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_tinyint(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2364,7 +2364,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        auto result = ArrayFunctions::array_max<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_int(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2377,7 +2377,7 @@ TEST_F(ArrayFunctionsTest, array_max_empty_array) {
         array->append_datum(Datum(DatumArray{}));
         array->append_datum(Datum(DatumArray{}));
 
-        result = ArrayFunctions::array_max<TYPE_BOOLEAN>(nullptr, {array}).value();
+        result = ArrayFunctions::array_max_boolean(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2398,7 +2398,7 @@ TEST_F(ArrayFunctionsTest, array_sum_no_null) {
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
 
-        auto result = ArrayFunctions::array_sum<TYPE_BOOLEAN>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_sum_boolean(nullptr, {array}).value();
         EXPECT_EQ(8, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2419,7 +2419,7 @@ TEST_F(ArrayFunctionsTest, array_sum_no_null) {
         array->append_datum(DatumArray{2, 1, 3});
         array->append_datum(DatumArray{1, 2, 3, Datum()});
 
-        auto result = ArrayFunctions::array_sum<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_sum_int(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(2, result->get(1).get_int64());
@@ -2435,7 +2435,7 @@ TEST_F(ArrayFunctionsTest, array_sum_no_null) {
         array->append_datum(DatumArray{(int8_t)127, (int8_t)100, (int8_t)-1});
         array->append_datum(DatumArray{(int8_t)-128, (int8_t)-1, (int8_t)10});
 
-        auto result = ArrayFunctions::array_sum<TYPE_TINYINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_sum_tinyint(nullptr, {array}).value();
         EXPECT_EQ(3, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(226, result->get(1).get_int64());
@@ -2455,7 +2455,7 @@ TEST_F(ArrayFunctionsTest, array_avg_no_null) {
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
 
-        auto result = ArrayFunctions::array_avg<TYPE_BOOLEAN>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_avg_boolean(nullptr, {array}).value();
         EXPECT_EQ(8, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2476,7 +2476,7 @@ TEST_F(ArrayFunctionsTest, array_avg_no_null) {
         array->append_datum(DatumArray{2, 1, 3});
         array->append_datum(DatumArray{1, 2, 3, Datum()});
 
-        auto result = ArrayFunctions::array_avg<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_avg_int(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(2, result->get(1).get_double());
@@ -2493,7 +2493,7 @@ TEST_F(ArrayFunctionsTest, array_avg_no_null) {
         array->append_datum(DatumArray{(int8_t) false, Datum()});
         array->append_datum(DatumArray{(int8_t) true, Datum()});
 
-        auto result = ArrayFunctions::array_avg<TYPE_BOOLEAN>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_avg_boolean(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(0.25, result->get(1).get_double());
@@ -2507,7 +2507,7 @@ TEST_F(ArrayFunctionsTest, array_avg_no_null) {
         array->append_datum(DatumArray{(int8_t)-128, (int8_t)127, (int8_t)0, Datum()});
         array->append_datum(DatumArray{(int8_t)127, (int8_t)10, (int8_t)100});
 
-        auto result = ArrayFunctions::array_avg<TYPE_TINYINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_avg_tinyint(nullptr, {array}).value();
         EXPECT_EQ(3, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(-0.25, result->get(1).get_double());
@@ -2520,7 +2520,7 @@ TEST_F(ArrayFunctionsTest, array_avg_no_null) {
         array->append_datum(DatumArray{(int16_t)30000, (int16_t)30000, Datum()});
         array->append_datum(DatumArray{(int16_t)-32768, (int16_t)32767, Datum(), (int16_t)0, (int16_t)1});
 
-        auto result = ArrayFunctions::array_avg<TYPE_SMALLINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_avg_smallint(nullptr, {array}).value();
         EXPECT_EQ(3, result->size());
 
         EXPECT_TRUE(result->is_null(0));
@@ -2541,7 +2541,7 @@ TEST_F(ArrayFunctionsTest, array_min_no_null) {
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
 
-        auto result = ArrayFunctions::array_min<TYPE_BOOLEAN>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_boolean(nullptr, {array}).value();
         EXPECT_EQ(8, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2561,7 +2561,7 @@ TEST_F(ArrayFunctionsTest, array_min_no_null) {
         array->append_datum(DatumArray{3, 2, 1});
         array->append_datum(DatumArray{2, 1, 3});
 
-        auto result = ArrayFunctions::array_min<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_int(nullptr, {array}).value();
         EXPECT_EQ(5, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(2, result->get(1).get_int32());
@@ -2583,7 +2583,7 @@ TEST_F(ArrayFunctionsTest, array_max_no_null) {
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
         array->append_datum(DatumArray{(int8_t) true, (int8_t) false});
 
-        auto result = ArrayFunctions::array_max<TYPE_BOOLEAN>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_boolean(nullptr, {array}).value();
         EXPECT_EQ(8, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2603,7 +2603,7 @@ TEST_F(ArrayFunctionsTest, array_max_no_null) {
         array->append_datum(DatumArray{3, 2, 1});
         array->append_datum(DatumArray{2, 1, 3});
 
-        auto result = ArrayFunctions::array_max<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_int(nullptr, {array}).value();
         EXPECT_EQ(5, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(2, result->get(1).get_int32());
@@ -2623,7 +2623,7 @@ TEST_F(ArrayFunctionsTest, array_sum_has_null_element) {
         array->append_datum(DatumArray{(int64_t)200000000, (int64_t)121, (int64_t)300});
         array->append_datum(DatumArray{(int64_t)33, Datum(), (int64_t)300});
 
-        auto result = ArrayFunctions::array_sum<TYPE_BIGINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_sum_bigint(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(2000, result->get(1).get_int64());
@@ -2642,7 +2642,7 @@ TEST_F(ArrayFunctionsTest, array_sum_has_null_element) {
         array->append_datum(DatumArray{(int128_t)200000000, (int128_t)121, (int128_t)300});
         array->append_datum(DatumArray{(int128_t)33, Datum(), (int128_t)300});
 
-        auto result = ArrayFunctions::array_sum<TYPE_LARGEINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_sum_largeint(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(2000, result->get(1).get_int128());
@@ -2663,7 +2663,7 @@ TEST_F(ArrayFunctionsTest, array_avg_has_null_element) {
         array->append_datum(DatumArray{(int64_t)1, (int64_t)1, (int64_t)1});
         array->append_datum(DatumArray{(int64_t)2, Datum(), (int64_t)1});
 
-        auto result = ArrayFunctions::array_avg<TYPE_BIGINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_avg_bigint(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(2000, result->get(1).get_double());
@@ -2682,7 +2682,7 @@ TEST_F(ArrayFunctionsTest, array_avg_has_null_element) {
         array->append_datum(DatumArray{(int128_t)1, (int128_t)1, (int128_t)1});
         array->append_datum(DatumArray{(int128_t)2, Datum(), (int128_t)1});
 
-        auto result = ArrayFunctions::array_avg<TYPE_LARGEINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_avg_largeint(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(2000, result->get(1).get_double());
@@ -2703,7 +2703,7 @@ TEST_F(ArrayFunctionsTest, array_min_has_null_element) {
         array->append_datum(DatumArray{(int64_t)1, (int64_t)1, (int64_t)1});
         array->append_datum(DatumArray{(int64_t)1, Datum(), (int64_t)1});
 
-        auto result = ArrayFunctions::array_min<TYPE_BIGINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_bigint(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(2000, result->get(1).get_int64());
@@ -2722,7 +2722,7 @@ TEST_F(ArrayFunctionsTest, array_min_has_null_element) {
         array->append_datum(DatumArray{(int128_t)1, (int128_t)1, (int128_t)1});
         array->append_datum(DatumArray{(int128_t)1, Datum(), (int128_t)1});
 
-        auto result = ArrayFunctions::array_min<TYPE_LARGEINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_largeint(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(2000, result->get(1).get_int128());
@@ -2741,7 +2741,7 @@ TEST_F(ArrayFunctionsTest, array_min_has_null_element) {
         array->append_datum(DatumArray{DateValue::create(1990, 3, 22), DateValue::create(1990, 3, 28)});
         array->append_datum(DatumArray{Datum(), DateValue::create(1990, 3, 28)});
 
-        auto result = ArrayFunctions::array_min<TYPE_DATE>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_date(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(DateValue::create(1990, 3, 22), result->get(1).get_date());
@@ -2763,7 +2763,7 @@ TEST_F(ArrayFunctionsTest, array_min_has_null_element) {
                                        TimestampValue::create(1990, 3, 22, 5, 32, 38)});
         array->append_datum(DatumArray{Datum(), TimestampValue::create(1990, 3, 22, 5, 32, 38)});
 
-        auto result = ArrayFunctions::array_min<TYPE_DATETIME>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_datetime(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(TimestampValue::create(1990, 3, 22, 5, 32, 32), result->get(1).get_timestamp());
@@ -2782,7 +2782,7 @@ TEST_F(ArrayFunctionsTest, array_min_has_null_element) {
         array->append_datum(DatumArray{"varchar1", "varchar4"});
         array->append_datum(DatumArray{Datum(), "varchar4"});
 
-        auto result = ArrayFunctions::array_min<TYPE_VARCHAR>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_varchar(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ("varchar", result->get(1).get_slice());
@@ -2802,7 +2802,7 @@ TEST_F(ArrayFunctionsTest, array_max_has_null_element) {
         array->append_datum(DatumArray{(int64_t)3, (int64_t)2, (int64_t)1});
         array->append_datum(DatumArray{(int64_t)1, (int64_t)1, (int64_t)1});
 
-        auto result = ArrayFunctions::array_max<TYPE_BIGINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_bigint(nullptr, {array}).value();
         EXPECT_EQ(5, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(2000, result->get(1).get_int64());
@@ -2820,7 +2820,7 @@ TEST_F(ArrayFunctionsTest, array_max_has_null_element) {
         array->append_datum(DatumArray{(int128_t)1, (int128_t)1, (int128_t)1});
         array->append_datum(DatumArray{(int128_t)2, (int128_t)1, Datum()});
 
-        auto result = ArrayFunctions::array_max<TYPE_LARGEINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_largeint(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(2000, result->get(1).get_int128());
@@ -2839,7 +2839,7 @@ TEST_F(ArrayFunctionsTest, array_max_has_null_element) {
         array->append_datum(DatumArray{DateValue::create(1990, 3, 22), DateValue::create(1990, 3, 28)});
         array->append_datum(DatumArray{DateValue::create(1990, 3, 22), Datum()});
 
-        auto result = ArrayFunctions::array_max<TYPE_DATE>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_date(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(DateValue::create(1990, 3, 22), result->get(1).get_date());
@@ -2861,7 +2861,7 @@ TEST_F(ArrayFunctionsTest, array_max_has_null_element) {
                                        TimestampValue::create(1990, 3, 22, 5, 32, 38)});
         array->append_datum(DatumArray{TimestampValue::create(1990, 3, 22, 5, 32, 32), Datum()});
 
-        auto result = ArrayFunctions::array_max<TYPE_DATETIME>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_datetime(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ(TimestampValue::create(1990, 3, 22, 5, 32, 32), result->get(1).get_timestamp());
@@ -2880,7 +2880,7 @@ TEST_F(ArrayFunctionsTest, array_max_has_null_element) {
         array->append_datum(DatumArray{"varchar1", "varchar4"});
         array->append_datum(DatumArray{"varchar1", Datum()});
 
-        auto result = ArrayFunctions::array_max<TYPE_VARCHAR>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_varchar(nullptr, {array}).value();
         EXPECT_EQ(6, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_EQ("varchar", result->get(1).get_slice());
@@ -2898,7 +2898,7 @@ TEST_F(ArrayFunctionsTest, array_sum_nullable_array) {
         array->append_datum(DatumArray{Datum(), 54});
         array->append_datum(DatumArray{5352, 121, 30});
 
-        auto result = ArrayFunctions::array_sum<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_sum_int(nullptr, {array}).value();
         EXPECT_EQ(3, result->size());
         EXPECT_EQ(8, result->get(0).get_int64());
         EXPECT_EQ(54, result->get(1).get_int64());
@@ -2913,7 +2913,7 @@ TEST_F(ArrayFunctionsTest, array_avg_nullable_array) {
         array->append_datum(DatumArray{Datum(), 54});
         array->append_datum(DatumArray{5352, 121, 32});
 
-        auto result = ArrayFunctions::array_avg<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_avg_int(nullptr, {array}).value();
         EXPECT_EQ(3, result->size());
         EXPECT_EQ(4, result->get(0).get_double());
         EXPECT_EQ(27, result->get(1).get_double());
@@ -2928,7 +2928,7 @@ TEST_F(ArrayFunctionsTest, array_min_nullable_array) {
         array->append_datum(DatumArray{Datum(), 54});
         array->append_datum(DatumArray{5352, 121, 32});
 
-        auto result = ArrayFunctions::array_min<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_int(nullptr, {array}).value();
         EXPECT_EQ(3, result->size());
         EXPECT_EQ(3, result->get(0).get_int32());
         EXPECT_EQ(54, result->get(1).get_int32());
@@ -2943,7 +2943,7 @@ TEST_F(ArrayFunctionsTest, array_max_nullable_array) {
         array->append_datum(DatumArray{Datum(), 54});
         array->append_datum(DatumArray{5352, 121, 32});
 
-        auto result = ArrayFunctions::array_max<TYPE_INT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_int(nullptr, {array}).value();
         EXPECT_EQ(3, result->size());
         EXPECT_EQ(5, result->get(0).get_int32());
         EXPECT_EQ(54, result->get(1).get_int32());
@@ -2959,7 +2959,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
 
-        auto result = ArrayFunctions::array_sum<TYPE_BIGINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_sum_bigint(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2974,7 +2974,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
 
-        auto result = ArrayFunctions::array_avg<TYPE_BIGINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_avg_bigint(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -2989,7 +2989,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
 
-        auto result = ArrayFunctions::array_min<TYPE_BIGINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_bigint(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -3004,7 +3004,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
 
-        auto result = ArrayFunctions::array_min<TYPE_VARCHAR>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_min_varchar(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -3019,7 +3019,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
 
-        auto result = ArrayFunctions::array_max<TYPE_BIGINT>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_bigint(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));
@@ -3034,7 +3034,7 @@ TEST_F(ArrayFunctionsTest, array_all_null) {
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
         array->append_datum(DatumArray{Datum(), Datum(), Datum()});
 
-        auto result = ArrayFunctions::array_max<TYPE_VARCHAR>(nullptr, {array}).value();
+        auto result = ArrayFunctions::array_max_varchar(nullptr, {array}).value();
         EXPECT_EQ(4, result->size());
         EXPECT_TRUE(result->is_null(0));
         EXPECT_TRUE(result->is_null(1));

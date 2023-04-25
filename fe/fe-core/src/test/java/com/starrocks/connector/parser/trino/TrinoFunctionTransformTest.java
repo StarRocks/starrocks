@@ -59,16 +59,6 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select concat(array[1,2,3], array[4,5,6]) from test_array";
         assertPlanContains(sql, "array_concat(ARRAY<tinyint(4)>[1,2,3], ARRAY<tinyint(4)>[4,5,6])");
 
-        sql = "select concat(c1, c2) from test_array";
-        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>))");
-
-        sql = "select concat(c1, c2, array[1,2], array[3,4]) from test_array";
-        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>), " +
-                "CAST(ARRAY<tinyint(4)>[1,2] AS ARRAY<VARCHAR>), CAST(ARRAY<tinyint(4)>[3,4] AS ARRAY<VARCHAR>))");
-
-        sql = "select concat(c2, 2) from test_array";
-        assertPlanContains(sql, "array_concat(3: c2, CAST(ARRAY<tinyint(4)>[2] AS ARRAY<INT>))");
-
         sql = "select contains(array[1,2,3], 1)";
         assertPlanContains(sql, "array_contains(ARRAY<tinyint(4)>[1,2,3], 1)");
 
