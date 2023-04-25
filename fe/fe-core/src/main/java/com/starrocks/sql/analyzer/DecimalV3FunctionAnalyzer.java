@@ -21,6 +21,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
@@ -299,5 +300,19 @@ public class DecimalV3FunctionAnalyzer {
         newFn.setUserVisible(fn.isUserVisible());
         newFn.setisAnalyticFn(fn.isAnalyticFn());
         return newFn;
+    }
+
+    public static boolean argumentTypeContainDecimalV3(String fnName, Type[] argumentTypes) {
+        if (FunctionSet.decimalRoundFunctions.contains(fnName)) {
+            return true;
+        }
+
+        if (Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
+            return true;
+        }
+
+        // check array child type
+        return Arrays.stream(argumentTypes).filter(Type::isArrayType).map(t -> (ArrayType) t)
+                .anyMatch(t -> t.getItemType().isDecimalV3());
     }
 }

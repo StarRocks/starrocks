@@ -23,7 +23,6 @@ import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.sql.ast.ArrayExpr;
 
 import java.util.List;
 import java.util.Map;
@@ -110,10 +109,6 @@ public class Trino2SRFunctionCallTransformer {
                 ImmutableList.of(new FunctionCallExpr("array_concat", ImmutableList.of(
                         new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class)
                 )))));
-
-        // 2. concat -> array_concat
-        registerFunctionTransformerWithVarArgs("concat", "array_concat",
-                ImmutableList.of(ArrayExpr.class));
 
         // 3. contains -> array_contains
         registerFunctionTransformer("contains", 2, "array_contains",
