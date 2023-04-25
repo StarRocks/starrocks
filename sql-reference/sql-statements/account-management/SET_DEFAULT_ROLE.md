@@ -8,11 +8,11 @@
 
 ```SQL
 -- 设置指定角色为用户的默认角色。
-SET DEFAULT ROLE <role_name>[,<role_name>,..] [TO <user_identity>];
+SET DEFAULT ROLE <role_name>[,<role_name>,..] TO <user_identity>;
 -- 设置用户拥有的所有角色为默认角色，包括未来赋予给用户的角色。
-SET DEFAULT ROLE ALL [TO <user_identity>];
+SET DEFAULT ROLE ALL TO <user_identity>;
 -- 不设置任何角色为默认角色，但此时用户仍旧会默认激活 public 角色。
-SET DEFAULT ROLE NONE [TO <user_identity>]; 
+SET DEFAULT ROLE NONE TO <user_identity>; 
 ```
 
 ## 参数说明
