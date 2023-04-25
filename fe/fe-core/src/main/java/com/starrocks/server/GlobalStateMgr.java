@@ -1059,7 +1059,6 @@ public class GlobalStateMgr {
                     // already upgraded, set auth = null
                     auth = null;
                 }
-                warehouseMgr.init();
                 break;
             }
 
