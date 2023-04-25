@@ -20,13 +20,11 @@ namespace starrocks::vectorized {
 
 class ORCFileStream : public ORCHdfsFileStream {
 public:
-    ORCFileStream(std::shared_ptr <RandomAccessFile> file, uint64_t length,
-                  starrocks::vectorized::ScannerCounter *counter)
+    ORCFileStream(std::shared_ptr<RandomAccessFile> file, uint64_t length,
+                  starrocks::vectorized::ScannerCounter* counter)
             : ORCHdfsFileStream(file.get(), length), _file(std::move(file)), _counter(counter) {}
 
     ~ORCFileStream() override { _file.reset(); }
-
-
 
     /**
      * Read length bytes from the file starting at offset into
@@ -39,7 +37,6 @@ public:
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         ORCHdfsFileStream::read(buf, length, offset);
     }
-
 
 private:
     std::shared_ptr<RandomAccessFile> _file;
