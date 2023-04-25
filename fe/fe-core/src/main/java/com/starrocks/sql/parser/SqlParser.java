@@ -75,7 +75,8 @@ public class SqlParser {
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
-        parser.addParseListener(new TokenNumberListener(sessionVariable.getParseTokensLimit(), Config.expr_children_limit));
+        parser.addParseListener(new TokenNumberListener(sessionVariable.getParseTokensLimit(), 
+                Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit())));
 
         return parser;
     }
