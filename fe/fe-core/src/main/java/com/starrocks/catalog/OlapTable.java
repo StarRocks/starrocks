@@ -789,6 +789,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
             // drop partition info
             rangePartitionInfo.dropPartition(partition.getId());
+            GlobalStateMgr.getCurrentAnalyzeMgr().dropPartition(partition.getId());
         }
         return tabletIds;
     }

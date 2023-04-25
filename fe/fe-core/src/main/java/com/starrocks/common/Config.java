@@ -1404,6 +1404,12 @@ public class Config extends ConfigBase {
     public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3d
 
     /**
+     * Check expire partition statistics data when StarRocks start up
+     */
+    @ConfField(mutable = true)
+    public static boolean statistic_check_expire_partition = true;
+
+    /**
      * The collect thread work interval
      */
     @ConfField(mutable = true)
