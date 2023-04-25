@@ -5,7 +5,7 @@
 ## 基本概念
 
 - **内部数据**：指保存在 StarRocks 中的数据。
-- **外部数据**：指保存在外部数据源（如 Apache Hive™、Apache Iceberg 和 Apache Hudi）中的数据。
+- **外部数据**：指保存在外部数据源（如 Apache Hive™、Apache Iceberg、Apache Hudi、Delta Lake）中的数据。
 
 ## Catalog
 
