@@ -12,7 +12,6 @@
 
 namespace starrocks::vectorized {
 
-
 class OrcRowReaderFilter : public orc::RowReaderFilter {
 public:
     OrcRowReaderFilter(const HdfsScannerParams& scanner_params, const HdfsScannerContext& scanner_ctx,
