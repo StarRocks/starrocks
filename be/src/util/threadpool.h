@@ -169,9 +169,9 @@ public:
     // Wait for the running tasks to complete and then shutdown the threads.
     // All the other pending tasks in the queue will be removed.
     // NOTE: That the user may implement an external abort logic for the
-    //       runnables, that must be called before Shutdown(), if the system
+    //       runnable, that must be called before Shutdown(), if the system
     //       should know about the non-execution of these tasks, or the runnable
-    //       require an explicit "abort" notification to exit from the run loop.
+    //       required an explicit "abort" notification to exit from the run loop.
     void shutdown();
 
     // Submits a Runnable class.

@@ -9,7 +9,7 @@ This topic describes what catalog is, and how to manage and query internal data 
 ## Basic concepts
 
 - **Internal data**: refers to the data stored in StarRocks.
-- **External data**: refers to the data stored in an external data source, such as Apache Hive™, Apache Iceberg, and Apache Hudi.
+- **External data**: refers to the data stored in an external data source, such as Apache Hive™, Apache Iceberg, Apache Hudi, or Delta Lake.
 
 ## Catalog
 
