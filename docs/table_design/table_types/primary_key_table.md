@@ -1,10 +1,6 @@
 # Primary Key table
 
-When a table is created, you can define the primary key and sort key separately. When data is loaded into a Primary Key table, StarRocks sorts the data according to the sort key before it stores the data. Queries return the most recent record among a group of records that have the same primary key. Unlike the Unique Key table, the Primary Key table does not require aggregate operations during queries and supports the pushdown of predicates and indexes. As such, the Primary Key table can deliver high query performance despite real-time and frequent data updates.
-
-> NOTE
->
-> In versions earlier than v3.0, the Primary Key table does not support decoupling the primary key and sort key.
+StarRocks has started to support the Primary Key table since v1.19. When you create a table that uses the Primary Key table, you can define primary key columns and metric columns. Queries return the most recent record among a group of records that have the same primary key. Unlike the Unique Key table, the Primary Key table does not require aggregate operations during queries and supports the pushdown of predicates and indexes. As such, the Primary Key table can deliver high query performance despite real-time and frequent data updates.
 
 ## Scenarios
 
@@ -31,7 +27,7 @@ When a table is created, you can define the primary key and sort key separately.
 
     ![Primary index -2](../../assets/3.2.4-2.png)
 
-### Principle
+## Principle
 
 The Primary Key table is designed based on a new storage engine that is provided by StarRocks. The metadata structure and the read/write mechanism in the Primary Key table differ from those in the Duplicate Key table. As such, the Primary Key table does not require aggregate operations and supports the pushdown of predicates and indexes. These significantly increase query performance.
 
@@ -71,7 +67,7 @@ PROPERTIES("replication_num" = "3",
 "enable_persistent_index" = "true");
 ```
 
-Example 2: Suppose that you need to analyze user behavior in real time from dimensions such as users' address and last active time. When you create a table, you can define the `user_id` column as the primary key and define the combination of the `address` and `last_active` columns as the sort key.
+Example 2: Suppose that you need to analyze user behavior in real time. In this example, create a table named `users`, define `user_id` as the primary key, and define the other columns as metric columns.
 
 ```SQL
 create table users (
@@ -89,12 +85,11 @@ create table users (
     ....
 ) PRIMARY KEY (user_id)
 DISTRIBUTED BY HASH(user_id) BUCKETS 4
-ORDER BY(`address`,`last_active`)
 PROPERTIES("replication_num" = "3",
 "enable_persistent_index" = "true");
 ```
 
-## Usage notes
+### Usage notes
 
 - Take note of the following points about the primary key of a table:
   - The primary key is defined by using the `PRIMARY KEY` keyword.
@@ -124,22 +119,15 @@ PROPERTIES("replication_num" = "3",
   > - It is recommended to set this property to true if the disk is SSD.
   > - As of version 2.3.0, StarRocks supports to set this property.
 
-- You can specify the sort key as the permutation and combination of any columns by using the `ORDER BY` keyword.
+- Since version 2.3.0, the indicator column now supports BITMAP, HLL data types.
 
-  > **NOTICE**
-  >
-  > If the sort key is specified, the prefix index is built according to the sort key; if the sort key is not specified, the prefix index is built according to the primary key.
-
-- ALTER TABLE can be used to change table schema, but the following limits exist:
-  - Modifying the primary key is not supported.
-  - Reassigning the sort key by using ALTER TABLE ... ORDER BY .... is supported. Deleting the sort key is not supported. Modifying the data types of columns in the sort key is not supported.
-  - Adjusting the column order is not supported.
-
-- Since version 2.3.0, the columns except for the primary key columns now support the BITMAP and HLL data types.
-
-- When you create a table, you can create BITMAP indexes or Bloom Filter indexes on the columns except for primary key columns.
+- When you create a table, you cannot create BITMAP indexes or Bloom Filter indexes on the metric columns of the table.
 
 - Since version 2.4.0, you can create asynchronous materialized views based on Primary Key tables.
+
+- The Primary Key table does not support materialized views.
+
+- You cannot use the ALTER TABLE statement to change the data types of the primary key columns and reorder metric columns. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
 
 ## What to do next
 
