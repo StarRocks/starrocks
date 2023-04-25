@@ -83,7 +83,7 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
   > - When you load data from Blob Storage, you must include `wasb://` or `wasbs://` as a prefix in the file path based on the protocol that is used to access your storage account:
   >   - If your Blob Storage allows access only through HTTP, use `wasb://` as the prefix, for example, `wasb://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`.
   >   - If your Blob Storage allows access only through HTTPS, use `wasbs://` as the prefix, for example, `wasbs://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`
-  > - When you load data from Data Lake Storage Gen1, you must include `adl://` as a prefix in the file path, for example, `adl://<data_lake_storage_gen1_name>.``azuredatalakestore.net/<path>/<file_name>`.
+  > - When you load data from Data Lake Storage Gen1, you must include `adl://` as a prefix in the file path, for example, `adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>`.
   > - When you load data from Data Lake Storage Gen2, you must include `abfs://` or `abfss://` as a prefix in the file path based on the protocol that is used to access your storage account:
   >   - If your Data Lake Storage Gen2 allows access only via HTTP, use `abfs://` as the prefix, for example, `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
   >   - If your Data Lake Storage Gen2 allows access only via HTTPS, use `abfss://` as the prefix, for example, `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
