@@ -125,7 +125,8 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
                 "AS res0 from db1.decimal_table;";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
         Assert.assertTrue(thrift, thrift.contains(
-                "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:DOUBLE))"));
+                "type:TTypeDesc(types:[TTypeNode(type:SCALAR, " +
+                        "scalar_type:TScalarType(type:DECIMAL64, precision:11, scale:4))"));
     }
 
     @Test
@@ -836,8 +837,8 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         String sql = "select if(col_decimal64p13s0, col_decimal64p13s0, 0) from db1.decimal_table";
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
         Assert.assertTrue(plan, plan.contains("if[(cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as BOOLEAN), " +
-                "cast([3: col_decimal64p13s0, DECIMAL64(13,0), false] as DOUBLE), 0.0); args: BOOLEAN,DOUBLE,DOUBLE; " +
-                "result: DOUBLE; args nullable: true; result nullable: true]"));
+                "[3: col_decimal64p13s0, DECIMAL64(13,0), false], 0); args: BOOLEAN,DECIMAL64,DECIMAL64; " +
+                "result: DECIMAL64(13,0); args nullable: true; result nullable: true]"));
     }
 }
 
