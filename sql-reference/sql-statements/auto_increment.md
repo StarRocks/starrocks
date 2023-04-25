@@ -334,3 +334,7 @@ mysql > SELECT * FROM test_tbl3 ORDER BY id;
 - 不支持使用 ALTER TABLE 添加 `AUTO_INCREMENT` 属性。
 - 存算分离模式暂时不支持该功能。
 - 不支持设置自增列的起始值和自增步长。
+
+## Keywords
+
+AUTO_INCREMENT, AUTO INCREMENT
