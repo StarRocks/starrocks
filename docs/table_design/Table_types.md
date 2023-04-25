@@ -1,4 +1,4 @@
-# Data models
+# Table Types
 
 You must specify a data model and define one or more columns as a sort key at table creation. This way, when data is initially loaded into the table that you created, StarRocks can sort, process, and store the data based on the sort key. This topic describes the data models that StarRocks provides to meet your varying business requirements.
 
@@ -6,7 +6,7 @@ You must specify a data model and define one or more columns as a sort key at ta
 
 ### Data models
 
-StarRocks provides four data models: Duplicate Key, Aggregate Key, Unique Key, and Primary Key. These four data models are well suited to a wide range of data analytics scenarios such as log analysis, data aggregation and analysis, and real-time data analysis.
+StarRocks provides four table types: Duplicate Key table, Aggregate table, Unique Key table, and Primary Key table. These four table types are well suited to a wide range of data analytics scenarios such as log analysis, data aggregation and analysis, and real-time data analysis.
 
 ### Sort keys
 
@@ -16,7 +16,7 @@ Compared with traditional primary keys, sort keys in StarRocks have the followin
 
 - Sort keys are usually created on dimension columns that are frequently used as filter conditions for queries.
 
-- In the Duplicate Key model, sort keys do not need to be created on columns on which unique constraints are enforced. In the Aggregate Key model, Unique Key model, and Primary Key model, however, sort keys must be created on columns on which unique constraints are enforced.
+- In the Duplicate Key table, sort keys do not need to be created on columns on which unique constraints are enforced. In the Aggregate Key model, Unique Key model, and Primary Key model, however, sort keys must be created on columns on which unique constraints are enforced.
 
 - StarRocks tables use clustered storage. This means that the values in each column of a table are stored in sorted order based on the sort key that you specified for the table.
 
@@ -35,13 +35,13 @@ Compared with traditional primary keys, sort keys in StarRocks have the followin
 
     StarRocks loads each of the records as a separate row into the table. After the data load is complete, the table contains rows that have the same primary key, and the rows map the source records in a one-to-one relationship. You can recall all historical data that you loaded.
 
-  - Aggregate Key model
+  - Aggregate table
 
     StarRocks aggregates the records into one record and loads the aggregated record as a row into the table. After the loading is complete, the table does not contain rows that have the same primary key. You can recall the aggregation results of all historical data that you loaded. However, you cannot recall all historical data.
 
-  - Unique Key model and Primary Key model
+  - Unique Key table and Primary Key table
 
-    StarRocks replaces each newly loaded record with the previously loaded record and retains only the most recently loaded record as a row in the table. After the loading is complete, the table does not contain rows that have the same primary key. The Unique Key model and the Primary Key model can be considered a special Aggregate Key model in which the REPLACE aggregate function is specified for metric columns to return the most recent record among a group of records that have the same primary key.
+    StarRocks replaces each newly loaded record with the previously loaded record and retains only the most recently loaded record as a row in the table. After the loading is complete, the table does not contain rows that have the same primary key. The Unique Key table and the Primary Key table can be considered a special Aggregate table in which the REPLACE aggregate function is specified for metric columns to return the most recent record among a group of records that have the same primary key.
 
 ## Duplicate Key model
 
@@ -96,13 +96,13 @@ After a table is created, you can use various data ingestion methods to load dat
 
 > Note: When you load data into a table that uses the Duplicate Key model, you can only append data to the table. You cannot modify the existing data in the table.
 
-## Aggregate Key model
+## Aggregate table
 
-When you create a table that uses the Aggregate Key model, you can define sort key columns and metric columns and can specify an aggregate function for the metric columns. If the records to be loaded have the same sort key, the metric columns are aggregated. The Aggregate Key model helps reduce the amount of data that needs to be processed for queries, thereby accelerating queries.
+When you create a table that uses the Aggregate table, you can define sort key columns and metric columns and can specify an aggregate function for the metric columns. If the records to be loaded have the same sort key, the metric columns are aggregated. The Aggregate table helps reduce the amount of data that needs to be processed for queries, thereby accelerating queries.
 
 ### Scenarios
 
-The Aggregate Key model is well suited to data statistics and analytics scenarios. A few examples are as follows:
+The Aggregate table is well suited to data statistics and analytics scenarios. A few examples are as follows:
 
 - Help website or app providers analyze the amount of traffic and time that their users spend on a specific website or app and the total number of visits to the website or app.
 
@@ -118,7 +118,7 @@ The data querying and ingestion in the preceding scenarios have the following ch
 
 ### Principle
 
-Starting from data ingestion to data querying, data with the same sort key in a table that uses the Aggregate Key model is aggregated multiple times as follows:
+Starting from data ingestion to data querying, data with the same sort key in a table that uses the Aggregate table is aggregated multiple times as follows:
 
 1. In the data ingestion phase, when data is loaded as batches into the table, each batch comprises a data version. After a data version is generated, StarRocks aggregates the data that has the same sort key in the data version.
 2. In the background compaction phase, when the files of multiple data versions that are generated at data ingestion are periodically compacted into a large file, StarRocks aggregates the data that has the same sort key in the large file.
@@ -126,7 +126,7 @@ Starting from data ingestion to data querying, data with the same sort key in a 
 
 The aggregate operations help reduce the amount of data that needs to be processed, thereby accelerating queries.
 
-Suppose that you have a table that uses the Aggregate Key model and want to load the following four raw records into the table.
+Suppose that you have a table that uses the Aggregate table and want to load the following four raw records into the table.
 
 | Date       | Country | PV   |
 | ---------- | ------- | ---- |
@@ -174,7 +174,7 @@ PROPERTIES (
 
 - You can specify an aggregate function following the name of a column to define the column as a metric column. In most cases, metric columns hold data that needs to be aggregated and analyzed.
 
-- For information about the aggregate functions that are supported by the Aggregate Key model, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE%20LIKE.md).
+- For information about the aggregate functions that are supported by the Aggregate table, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
 - When queries are run, sort key columns are filtered before the aggregation of multiple data versions, whereas metric columns are filtered after the aggregation of multiple data versions. Therefore, we recommend that you identify the columns that are frequently used as filter conditions and define these columns as the sort key. This way, data filtering can start before the aggregation of multiple data versions to improve query performance.
 
@@ -184,7 +184,7 @@ PROPERTIES (
 
 After a table is created, you can use various data ingestion methods to load data into StarRocks. For information about the data ingestion methods that are supported by StarRocks, see [Data import](../loading/Loading_intro.md).
 
-> Note: When you load data into a table that uses the Aggregate Key model, you can only update all columns of the table. For example, when you update the preceding `example_db.aggregate_tbl` table, you must update all its columns, which are `site_id`, `date`, `city_code`, and `pv`.
+> Note: When you load data into a table that uses the Aggregate table, you can only update all columns of the table. For example, when you update the preceding `example_db.aggregate_tbl` table, you must update all its columns, which are `site_id`, `date`, `city_code`, and `pv`.
 
 ## Unique Key model
 
@@ -196,7 +196,7 @@ The Unique Key model is suitable for business scenarios in which data needs to b
 
 ### Principle
 
-The Unique Key model can be considered a special Aggregate Key model in which the REPLACE aggregate function is specified for metric columns to return the most recent record among a group of records that have the same primary key.
+The Unique Key table can be considered a special Aggregate table in which the REPLACE aggregate function is specified for metric columns to return the most recent record among a group of records that have the same primary key.
 
 When you load data into a table that uses the Unique Key model, the data is split into multiple batches. Each batch is assigned a version number. Therefore, records with the same primary key may come in multiple versions, of which the most recent version (namely, the record with the largest version number) is retrieved for queries.
 

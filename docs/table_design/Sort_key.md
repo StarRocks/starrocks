@@ -8,7 +8,7 @@ Additionally, to reduce memory consumption, StarRocks supports creating a prefix
 
 In the Duplicate Key model, sort key columns are defined by using the `DUPLICATE KEY` keyword.
 
-In the Aggregate Key model, sort key columns are defined by using the `AGGREGATE KEY` keyword.
+In the Aggregate table, sort key columns are defined by using the `AGGREGATE KEY` keyword.
 
 In the Unique Key model, sort key columns are defined by using the `UNIQUE KEY` keyword.
 
@@ -73,7 +73,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 >**NOTICE**
 >
-> For an Aggregate Key table, columns for which `agg_type` is not specified are key columns, and those for which `agg_type` is specified are value columns. See [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md). In the preceding example, only `site_id` and `city_code` are specified as sort key columns, and therefore `agg_type` must be specified for `user_id` and `pv`.
+> For an Aggregate table, columns for which `agg_type` is not specified are key columns, and those for which `agg_type` is specified are value columns. See [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md). In the preceding example, only `site_id` and `city_code` are specified as sort key columns, and therefore `agg_type` must be specified for `user_id` and `pv`.
 
 ### Unique Key
 
