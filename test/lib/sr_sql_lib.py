@@ -68,7 +68,7 @@ NAME_FLAG = "-- name: "
 UNCHECK_FLAG = "[UC]"
 ORDER_FLAG = "[ORDER]"
 REGEX_FLAG = "[REGEX]"
-VERSION_FILE = "version"
+VERSION_FILE = os.path.join(root_path, "version")
 
 
 class StarrocksSQLApiLib(object):
