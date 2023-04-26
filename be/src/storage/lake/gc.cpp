@@ -194,7 +194,7 @@ static Status delete_tablet_metadata(TabletManager* tablet_mgr, std::string_view
             if (res.status().is_not_found()) {
                 break;
             } else if (!res.ok()) {
-                LOG_IF(WARNING, !res.status().is_not_found()) << "Fail to read " << path << ": " << res.status();
+                LOG(ERROR) << "Fail to read " << path << ": " << res.status();
                 return res.status();
             } else {
                 auto metadata = std::move(res).value();
