@@ -428,10 +428,10 @@ void convert_string_fail(size_t limit, bool strict_mode) {
 template <LogicalType LT>
 void convert_binary_fail(size_t limit, bool strict_mode) {
     auto test_cases_pass = TestCaseArray<std::string>{
-            {7, std::string(limit * 2, 'a'), false},
-            {8, std::string(limit * 2 + 1, 'a'), true},
-            {9, std::string(limit * 2, 'a'), false},
-            {10, std::string(limit * 2 + 2, 'a'), true},
+            {7, std::string(limit, 'a'), false},
+            {8, std::string(limit + 1, 'a'), true},
+            {9, std::string(limit, 'a'), false},
+            {10, std::string(limit + 2, 'a'), true},
     };
     test_nullable_binary<ArrowTypeId::BINARY, LT, arrow::BinaryType, std::string>(test_cases_pass, strict_mode);
     test_nullable_binary<ArrowTypeId::LARGE_BINARY, LT, arrow::LargeBinaryType, std::string>(test_cases_pass,
@@ -457,11 +457,11 @@ PARALLEL_TEST(ArrowConverterTest, test_varchar_fail_nonstrict) {
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_binary_fail_strict) {
-    convert_binary_fail<TYPE_VARBINARY>(TypeDescriptor::MAX_CHAR_LENGTH, true);
+    convert_binary_fail<TYPE_VARBINARY>(TypeDescriptor::MAX_VARCHAR_LENGTH, true);
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_binary_fail_nonstrict) {
-    convert_binary_fail<TYPE_VARBINARY>(TypeDescriptor::MAX_CHAR_LENGTH, false);
+    convert_binary_fail<TYPE_VARBINARY>(TypeDescriptor::MAX_VARCHAR_LENGTH, false);
 }
 
 template <int bytes_width, bool is_nullable = false>
@@ -650,8 +650,6 @@ PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_binary_fail) {
     auto test_cases = TestCaseArray<std::string>{
             {2, std::string(255, 'x'), true},
     };
-    PARALLEL_TESTixed_size_binary<256, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
-    test_nullable_fixed_size_binary<256, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
     PARALLEL_TESTixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH + 1, ArrowTypeId::FIXED_SIZE_BINARY,
                                   TYPE_VARBINARY>(test_cases);
     test_nullable_fixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH + 1, ArrowTypeId::FIXED_SIZE_BINARY,

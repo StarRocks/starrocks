@@ -199,8 +199,9 @@ void offsets_copy(const T* arrow_offsets_data, T arrow_base_offset, size_t num_e
 }
 
 template <LogicalType LT, typename = StringOrBinaryGaurd<LT>>
-static inline constexpr uint32_t binary_max_length = (LT == TYPE_VARCHAR) ? TypeDescriptor::MAX_VARCHAR_LENGTH
-                                                                          : TypeDescriptor::MAX_CHAR_LENGTH;
+static inline constexpr uint32_t binary_max_length = (LT == TYPE_VARCHAR || LT == TYPE_VARBINARY)
+                                                             ? TypeDescriptor::MAX_VARCHAR_LENGTH
+                                                             : TypeDescriptor::MAX_CHAR_LENGTH;
 
 template <ArrowTypeId AT, LogicalType LT, bool is_nullable, bool is_strict>
 struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringOrBinaryGaurd<LT>> {
@@ -279,7 +280,7 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, BinaryATGuard<AT>, StringO
     }
 
     static Status length_exceeds_limit_error(int length, int limit) {
-        std::string s = (LT == TYPE_VARCHAR) ? "varchar" : "char";
+        std::string s = (LT == TYPE_VARCHAR) ? "varchar" : ((LT == TYPE_CHAR) ? "char" : "binary");
         return Status::InternalError(strings::Substitute("Length($0) exceeds limit($1) of $2", length, limit, s));
     }
 
