@@ -30,7 +30,7 @@ The query cache supports queries that meet the following conditions:
 
   **NOTE**
   >
-  > - The query cache supports Broadcast Join and  Bucket Shuffle Join.
+  > - The query cache supports Broadcast Join and Bucket Shuffle Join.
   > - The query cache supports two tree structures that contain Join operators: Aggregation-Join and Join-Aggregation. Shuffle joins are not supported in the Aggregation-Join tree structure, while Hash joins are not supported in the Join-Aggregation tree structure.
 
 - The queries do not include nondeterminstic functions such as `rand`, `random`, `uuid`, and `sleep`.
