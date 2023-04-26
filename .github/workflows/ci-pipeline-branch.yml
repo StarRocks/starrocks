@@ -190,7 +190,7 @@ jobs:
 
   be-ut:
     runs-on: self-hosted
-    needs: [ clang-format, thirdparty-update ]
+    needs: [ be-checker, clang-format, thirdparty-update ]
     timeout-minutes: 90
     name: BE UT
     env:
