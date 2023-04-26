@@ -23,6 +23,7 @@ import com.starrocks.storagevolume.StorageVolume;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -34,12 +35,13 @@ public class StorageVolumeMgr {
     private String defaultSV;
 
     public void createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
-                                    Boolean enabled, String comment) throws AlreadyExistsException, AnalysisException {
+                                    Optional<Boolean> enabled, String comment)
+            throws AlreadyExistsException, AnalysisException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             if (nameToSV.containsKey(name)) {
                 throw new AlreadyExistsException(String.format("Storage Volume '%s' already exists", name));
             }
-            StorageVolume sv = new StorageVolume(name, svType, locations, params, enabled, comment);
+            StorageVolume sv = new StorageVolume(name, svType, locations, params, enabled.orElse(true), comment);
             nameToSV.put(name, sv);
         }
     }
@@ -53,8 +55,8 @@ public class StorageVolumeMgr {
         }
     }
 
-    public void updateStorageVolume(String name, Map<String, String> params, Boolean enabled, String comment,
-                                    Boolean asDefault) throws AnalysisException {
+    public void updateStorageVolume(String name, Map<String, String> params, Optional<Boolean> enabled, String comment,
+                                    boolean asDefault) throws AnalysisException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(nameToSV.containsKey(name),
                     "Storage Volume '%s' does not exist", name);
@@ -64,19 +66,19 @@ public class StorageVolumeMgr {
                 sv.setStorageParams(params);
             }
 
-            if (enabled != null) {
-                if (!enabled) {
-                    Preconditions.checkState(!name.equals(defaultSV),
+            if (enabled.isPresent()) {
+                if (!enabled.get()) {
+                    Preconditions.checkState(!name.equals(defaultSV) && !asDefault,
                             "Default volume can not be disabled");
                 }
-                sv.setEnabled(enabled);
+                sv.setEnabled(enabled.get());
             }
 
             if (!comment.isEmpty()) {
                 sv.setComment(comment);
             }
 
-            if (asDefault != null) {
+            if (asDefault) {
                 setDefaultStorageVolume(name);
             }
         }

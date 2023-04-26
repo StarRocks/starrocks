@@ -38,10 +38,10 @@ public class StorageVolume {
 
     private int refCount;
 
-    private Boolean enabled;
+    private boolean enabled;
 
     public StorageVolume(String name, String svt, List<String> locations,
-                         Map<String, String> storageParams, Boolean enabled, String comment) throws AnalysisException {
+                         Map<String, String> storageParams, boolean enabled, String comment) throws AnalysisException {
         this.name = name;
         this.svt = toStorageVolumeType(svt);
         this.locations = locations;
