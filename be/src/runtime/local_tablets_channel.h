@@ -1,0 +1,210 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+#pragma once
+
+#include <brpc/controller.h>
+#include <bthread/condition_variable.h>
+#include <bthread/mutex.h>
+
+#include "common/compiler_util.h"
+#include "runtime/tablets_channel.h"
+#include "service/backend_options.h"
+#include "storage/async_delta_writer.h"
+#include "util/countdown_latch.h"
+
+namespace brpc {
+class Controller;
+}
+
+namespace starrocks {
+
+class MemTracker;
+
+class LocalTabletsChannel : public TabletsChannel {
+public:
+    LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
+    ~LocalTabletsChannel() override;
+
+    LocalTabletsChannel(const LocalTabletsChannel&) = delete;
+    LocalTabletsChannel(LocalTabletsChannel&&) = delete;
+    void operator=(const LocalTabletsChannel&) = delete;
+    void operator=(LocalTabletsChannel&&) = delete;
+
+    const TabletsChannelKey& key() const { return _key; }
+
+    Status open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema,
+                bool is_incremental) override;
+
+    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+                   PTabletWriterAddBatchResult* response) override;
+
+    Status incremental_open(const PTabletWriterOpenRequest& params,
+                            std::shared_ptr<OlapTableSchemaParam> schema) override;
+
+    void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
+                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
+
+    void cancel() override;
+
+    void abort() override;
+
+    void abort(const std::vector<int64_t>& tablet_ids);
+
+    MemTracker* mem_tracker() { return _mem_tracker; }
+
+    void incr_num_ref_senders() { _num_ref_senders.fetch_add(1); }
+
+    int num_ref_senders() { return _num_ref_senders.load(std::memory_order_acquire); }
+
+private:
+    using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
+
+    static std::atomic<uint64_t> _s_tablet_writer_count;
+
+    struct Sender {
+        bthread::Mutex lock;
+
+        std::set<int64_t> receive_sliding_window;
+        std::set<int64_t> success_sliding_window;
+
+        int64_t last_sliding_packet_seq = -1;
+        bool has_incremental_open = false;
+    };
+
+    class WriteContext {
+    public:
+        explicit WriteContext(PTabletWriterAddBatchResult* response)
+                : _response_lock(),
+                  _response(response),
+
+                  _chunk(),
+                  _row_indexes(),
+                  _channel_row_idx_start_points() {}
+
+        ~WriteContext() noexcept {
+            if (_latch) _latch->count_down();
+        }
+
+        DISALLOW_COPY_AND_MOVE(WriteContext);
+
+        void update_status(const Status& status) {
+            if (status.ok() || _response == nullptr) {
+                return;
+            }
+            std::string msg = fmt::format("{}: {}", BackendOptions::get_localhost(), status.message());
+            std::lock_guard l(_response_lock);
+            if (_response->status().status_code() == TStatusCode::OK) {
+                _response->mutable_status()->set_status_code(status.code());
+                _response->mutable_status()->add_error_msgs(msg);
+            }
+        }
+
+        void add_committed_tablet_info(PTabletInfo* tablet_info) {
+            DCHECK(_response != nullptr);
+            std::lock_guard l(_response_lock);
+            _response->add_tablet_vec()->Swap(tablet_info);
+        }
+
+        void add_failed_tablet_info(PTabletInfo* tablet_info) {
+            DCHECK(_response != nullptr);
+            std::lock_guard l(_response_lock);
+            _response->add_failed_tablet_vec()->Swap(tablet_info);
+        }
+
+        void set_count_down_latch(BThreadCountDownLatch* latch) { _latch = latch; }
+
+    private:
+        friend class LocalTabletsChannel;
+
+        mutable bthread::Mutex _response_lock;
+        PTabletWriterAddBatchResult* _response;
+        BThreadCountDownLatch* _latch{nullptr};
+
+        Chunk _chunk;
+        std::unique_ptr<uint32_t[]> _row_indexes;
+        std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
+    };
+
+    class WriteCallback : public AsyncDeltaWriterCallback {
+    public:
+        explicit WriteCallback(std::shared_ptr<WriteContext> context) : _context(std::move(context)) {}
+
+        ~WriteCallback() override = default;
+
+        void run(const Status& st, const CommittedRowsetInfo* info, const FailedRowsetInfo* failed_info) override;
+
+        WriteCallback(const WriteCallback&) = delete;
+        void operator=(const WriteCallback&) = delete;
+        WriteCallback(WriteCallback&&) = delete;
+        void operator=(WriteCallback&&) = delete;
+
+    private:
+        std::shared_ptr<WriteContext> _context;
+    };
+
+    Status _open_all_writers(const PTabletWriterOpenRequest& params);
+
+    StatusOr<std::shared_ptr<WriteContext>> _create_write_context(Chunk* chunk,
+                                                                  const PTabletWriterAddChunkRequest& request,
+                                                                  PTabletWriterAddBatchResult* response);
+
+    int _close_sender(const int64_t* partitions, size_t partitions_size);
+
+    void _commit_tablets(const PTabletWriterAddChunkRequest& request,
+                         std::shared_ptr<LocalTabletsChannel::WriteContext> context);
+
+    LoadChannel* _load_channel;
+
+    TabletsChannelKey _key;
+
+    MemTracker* _mem_tracker;
+
+    // initialized in open function
+    int64_t _txn_id = -1;
+    int64_t _index_id = -1;
+    int64_t _node_id = -1;
+    std::shared_ptr<OlapTableSchemaParam> _schema;
+    TupleDescriptor* _tuple_desc = nullptr;
+
+    // next sequence we expect
+    std::atomic<int> _num_remaining_senders = 0;
+    std::vector<Sender> _senders;
+    size_t _max_sliding_window_size = config::max_load_dop * 3;
+    std::atomic<int> _num_ref_senders = 0;
+
+    mutable bthread::Mutex _partitions_ids_lock;
+    std::unordered_set<int64_t> _partition_ids;
+
+    std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
+    // tablet_id -> TabletChannel
+    std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
+
+    GlobalDictByNameMaps _global_dicts;
+    std::unique_ptr<MemPool> _mem_pool;
+
+    bool _is_replicated_storage = false;
+
+    std::unordered_map<int64_t, PNetworkAddress> _node_id_to_endpoint;
+
+    // Initially load tablets are not present on this node, so there will be no TabletsChannel.
+    // After the partition is created during data loading, there are some tablets of the new partitions on this node,
+    // so a TabletsChannel needs to be created, such that _is_incremental_channel=true
+    bool _is_incremental_channel = false;
+};
+
+std::shared_ptr<TabletsChannel> new_local_tablets_channel(LoadChannel* load_channel, const TabletsChannelKey& key,
+                                                          MemTracker* mem_tracker);
+
+} // namespace starrocks

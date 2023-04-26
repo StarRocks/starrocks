@@ -1,0 +1,10 @@
+[{
+   "k1":"v2",
+   "kind":"server",
+   "keyname": {
+      "record" : {
+         "a":1,
+         "b":"abcde"
+      }
+   }
+}]

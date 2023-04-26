@@ -1,0 +1,112 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/gensrc/proto/data.proto
+
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+syntax = "proto2";
+
+package starrocks;
+option java_package = "com.starrocks.proto";
+
+import "types.proto";
+
+message PQueryStatistics {
+    optional int64 scan_rows = 1;
+    optional int64 scan_bytes = 2;
+    optional int64 returned_rows = 3;
+    optional int64 cpu_cost_ns = 4;
+    optional int64 mem_cost_bytes = 5;
+    repeated QueryStatisticsItemPB stats_items = 10;
+}
+
+message QueryStatisticsItemPB {
+    optional int64 scan_rows = 1;
+    optional int64 scan_bytes = 2;
+    optional int64 table_id = 3;
+}
+
+message PRowBatch {
+    required int32 num_rows = 1;
+    repeated int32 row_tuples = 2;
+    repeated int32 tuple_offsets = 3;
+    required bytes tuple_data = 4;
+    required bool is_compressed = 5;
+};
+
+message ChunkExtraColumnsMetaPB {
+    optional PTypeDesc type_desc = 1;
+    optional bool is_null = 2;
+    optional bool is_const = 3;
+};
+
+// We only serialize slot_id_map, is_nulls, is_consts in first chunk when RPC.
+message ChunkPB {
+    // Content for this chunk.
+    optional bytes data = 1;
+    optional CompressionTypePB compress_type = 2;
+    // Helper to allocate memory to decompress compressed data.
+    optional int64 uncompressed_size = 3;
+    repeated int32 slot_id_map = 4;  // slot id to column id map
+    repeated bool is_nulls = 5;      // column is nullable
+    repeated bool is_consts = 6;     // column is const
+    repeated int32 tuple_id_map = 7; // tuple id to column id map
+    optional int64 data_size = 8;    // used to record size using brpc attachment
+    // For some object column types like bitmap/hll/percentile.
+    // we may estimate larger serialized_size but actually don't use that much space.
+    optional int64 serialized_size = 9; // how many bytes are really written into data.
+    repeated int32 encode_level = 10;   // the encode level for data columns, during upgrade, this must be 0.
+    repeated ChunkExtraColumnsMetaPB extra_data_metas = 11; // chunk's extra data meta.
+};
+
+message SegmentPB {
+    optional int64 segment_id = 1;
+    optional bytes data = 2;
+    optional int64 data_size = 3;
+    optional int64 index_size = 4;
+    optional int64 num_rows = 5;
+    optional int64 row_size = 6;
+    optional string path = 7;
+
+    optional int64 delete_id = 8;
+    optional int64 delete_data_size = 9;
+    optional int64 delete_num_rows = 10;
+    optional string delete_path = 11;
+    optional int64 partial_footer_position = 12;
+    optional int64 partial_footer_size = 13;
+
+    // for column mode partial update
+    optional int64 update_id = 14;
+    optional int64 update_data_size = 15;
+    optional int64 update_num_rows = 16;
+    optional string update_path = 17;
+    optional int64 update_row_size = 18;
+};

@@ -1,0 +1,63 @@
+{
+  "statement":"select  \n  ref_3.cd_credit_rating as c0, \n  ref_4.P_COMMENT as c1, \n  ref_3.cd_dep_count as c2, \n  ref_1.c_mktsegment as c3, \n  ref_3.cd_gender as c4, \n  case when (true) \n      and (ref_1.c_custkey \u003e\u003d ref_1.c_custkey) then ref_4.P_CONTAINER else ref_4.P_CONTAINER end\n     as c5, \n  ref_3.cd_dep_college_count as c6, \n  ref_1.c_custkey as c7, \n  ref_1.c_custkey as c8, \n  ref_2.value as c9, \n  case when (ref_1.c_city \u003e ref_1.c_city) \n      or ((ref_2.value \u003e\u003d ref_2.value) \n        and (ref_3.cd_gender \u003c ref_3.cd_marital_status)) then rand() else rand() end\n     as c10, \n  ref_4.P_COMMENT as c11\nfrom \n  sqlsmith.tpcds_100g_web_page as ref_0\n          inner join sqlsmith.ssb_100g_customer as ref_1\n          on (ref_0.wp_url \u003d ref_1.c_name )\n        right join sqlsmith.metrics_detail as ref_2\n        on (ref_1.c_custkey \u003d ref_2.tags_id )\n      inner join sqlsmith.tpcds_100g_customer_demographics as ref_3\n      on (ref_1.c_mktsegment \u003d ref_3.cd_gender )\n    right join sqlsmith.tpch_100g_part as ref_4\n    on (ref_1.c_nation \u003d ref_4.P_NAME )\nwhere ref_0.wp_creation_date_sk \u003c ref_2.tags_id\nlimit 102;\n",
+  "table_meta":{
+    "sqlsmith.metrics_detail":"CREATE TABLE `metrics_detail` (\n  `tags_id` int(11) NULL COMMENT \"\",\n  `timestamp` datetime NULL COMMENT \"\",\n  `value` double SUM NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nAGGREGATE KEY(`tags_id`, `timestamp`)\nCOMMENT \"OLAP\"\nPARTITION BY RANGE(`timestamp`)\n(PARTITION p20200704 VALUES [(\u00270000-01-01 00:00:00\u0027), (\u00272020-07-05 00:00:00\u0027)))\nDISTRIBUTED BY HASH(`tags_id`) BUCKETS 32 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"false\"\n);",
+    "sqlsmith.ssb_100g_customer":"CREATE TABLE `ssb_100g_customer` (\n  `c_custkey` int(11) NOT NULL COMMENT \"\",\n  `c_name` varchar(26) NOT NULL COMMENT \"\",\n  `c_address` varchar(41) NOT NULL COMMENT \"\",\n  `c_city` varchar(11) NOT NULL COMMENT \"\",\n  `c_nation` varchar(16) NOT NULL COMMENT \"\",\n  `c_region` varchar(13) NOT NULL COMMENT \"\",\n  `c_phone` varchar(16) NOT NULL COMMENT \"\",\n  `c_mktsegment` varchar(11) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`c_custkey`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`c_custkey`) BUCKETS 1 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"false\"\n);",
+    "sqlsmith.tpcds_100g_customer_demographics":"CREATE TABLE `tpcds_100g_customer_demographics` (\n  `cd_demo_sk` int(11) NOT NULL COMMENT \"\",\n  `cd_gender` char(1) NULL COMMENT \"\",\n  `cd_marital_status` char(1) NULL COMMENT \"\",\n  `cd_education_status` char(20) NULL COMMENT \"\",\n  `cd_purchase_estimate` int(11) NULL COMMENT \"\",\n  `cd_credit_rating` char(10) NULL COMMENT \"\",\n  `cd_dep_count` int(11) NULL COMMENT \"\",\n  `cd_dep_employed_count` int(11) NULL COMMENT \"\",\n  `cd_dep_college_count` int(11) NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`cd_demo_sk`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`cd_demo_sk`) BUCKETS 5 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"false\"\n);",
+    "sqlsmith.tpcds_100g_web_page":"CREATE TABLE `tpcds_100g_web_page` (\n  `wp_web_page_sk` int(11) NOT NULL COMMENT \"\",\n  `wp_web_page_id` char(16) NOT NULL COMMENT \"\",\n  `wp_rec_start_date` date NULL COMMENT \"\",\n  `wp_rec_end_date` date NULL COMMENT \"\",\n  `wp_creation_date_sk` int(11) NULL COMMENT \"\",\n  `wp_access_date_sk` int(11) NULL COMMENT \"\",\n  `wp_autogen_flag` char(1) NULL COMMENT \"\",\n  `wp_customer_sk` int(11) NULL COMMENT \"\",\n  `wp_url` varchar(100) NULL COMMENT \"\",\n  `wp_type` char(50) NULL COMMENT \"\",\n  `wp_char_count` int(11) NULL COMMENT \"\",\n  `wp_link_count` int(11) NULL COMMENT \"\",\n  `wp_image_count` int(11) NULL COMMENT \"\",\n  `wp_max_ad_count` int(11) NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`wp_web_page_sk`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`wp_web_page_sk`) BUCKETS 5 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"false\"\n);",
+    "sqlsmith.tpch_100g_part":"CREATE TABLE `tpch_100g_part` (\n  `P_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `P_NAME` varchar(55) NOT NULL COMMENT \"\",\n  `P_MFGR` char(25) NOT NULL COMMENT \"\",\n  `P_BRAND` char(10) NOT NULL COMMENT \"\",\n  `P_TYPE` varchar(25) NOT NULL COMMENT \"\",\n  `P_SIZE` int(11) NOT NULL COMMENT \"\",\n  `P_CONTAINER` char(10) NOT NULL COMMENT \"\",\n  `P_RETAILPRICE` decimal64(15, 2) NOT NULL COMMENT \"\",\n  `P_COMMENT` varchar(23) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`P_PARTKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`P_PARTKEY`) BUCKETS 12 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"false\"\n);"
+  },
+  "table_row_count":{
+    "sqlsmith.tpcds_100g_web_page":{
+      "tpcds_100g_web_page":2040
+    },
+    "sqlsmith.tpch_100g_part":{
+      "tpch_100g_part":20000000
+    },
+    "sqlsmith.metrics_detail":{
+      "p20200704":8
+    },
+    "sqlsmith.tpcds_100g_customer_demographics":{
+      "tpcds_100g_customer_demographics":1920800
+    },
+    "sqlsmith.ssb_100g_customer":{
+      "ssb_100g_customer":3000000
+    }
+  },
+  "session_variables":"{\"enable_resource_group\":false,\"codegen_level\":0,\"cbo_cte_reuse\":false,\"character_set_connection\":\"utf8\",\"cbo_use_correlated_join_estimate\":true,\"enable_insert_strict\":true,\"join_implementation_mode\":\"hash\",\"tx_isolation\":\"REPEATABLE-READ\",\"wait_timeout\":28800,\"cbo_cte_reuse_rate\":1.2,\"foreign_key_checks\":true,\"character_set_results\":\"utf8\",\"enable_global_runtime_filter\":true,\"forward_to_master\":false,\"cbo_enable_low_cardinality_optimize\":true,\"new_planner_optimize_timeout\":3000,\"force_schedule_local\":false,\"cbo_enable_greedy_join_reorder\":true,\"prefer_join_method\":\"broadcast\",\"load_mem_limit\":0,\"profiling\":false,\"sql_safe_updates\":0,\"global_runtime_filter_probe_min_size\":102400,\"enable_exchange_pass_through_expire\":false,\"enable_vectorized_engine\":true,\"net_write_timeout\":60,\"collation_database\":\"utf8_general_ci\",\"hash_join_push_down_right_table\":true,\"new_planner_agg_stage\":0,\"collation_connection\":\"utf8_general_ci\",\"resource_group\":\"\",\"broadcast_row_limit\":15000000,\"exec_mem_limit\":32212254720,\"cbo_max_reorder_node_use_dp\":10,\"disable_join_reorder\":false,\"enable_profile\":false,\"enable_hive_column_stats\":true,\"enable_groupby_use_output_alias\":false,\"net_buffer_length\":16384,\"query_timeout\":180,\"cbo_max_reorder_node\":50,\"max_execution_time\":3000000,\"runtime_filter_scan_wait_time\":20,\"SQL_AUTO_IS_NULL\":false,\"event_scheduler\":\"OFF\",\"disable_streaming_preaggregations\":false,\"chunk_size\":4096,\"disable_bucket_join\":false,\"runtime_join_filter_push_down_limit\":1024000,\"global_runtime_filter_probe_min_selectivity\":0.5,\"query_mem_limit\":0,\"enable_tablet_internal_parallel\":false,\"enable_filter_unused_columns_in_scan_stage\":true,\"div_precision_increment\":4,\"auto_increment_increment\":1,\"character_set_client\":\"utf8\",\"autocommit\":true,\"enable_column_expr_predicate\":true,\"pipeline_profile_level\":1,\"parallel_fragment_exec_instance_num\":8,\"max_scan_key_num\":-1,\"net_read_timeout\":60,\"streaming_preaggregation_mode\":\"auto\",\"storage_engine\":\"olap\",\"enable_optimizer_trace_log\":false,\"cbo_enable_dp_join_reorder\":true,\"tx_visible_wait_timeout\":10,\"cbo_max_reorder_node_use_exhaustive\":4,\"enable_sql_digest\":false,\"pipeline_dop\":0,\"enable_query_dump\":false,\"single_node_exec_plan\":false,\"global_runtime_filter_build_max_size\":67108864,\"sql_select_limit\":9223372036854775807,\"statistic_collect_parallel\":1,\"query_cache_type\":0,\"disable_colocate_join\":false,\"max_pushdown_conditions_per_column\":-1,\"enable_predicate_reorder\":false,\"workgroup_id\":0,\"transmission_compression_type\":\"LZ4\",\"enable_vectorized_insert\":true,\"interactive_timeout\":3600,\"enable_spilling\":false,\"batch_size\":1024,\"cbo_enable_replicated_join\":true,\"max_allowed_packet\":1048576,\"enable_cbo\":true,\"collation_server\":\"utf8_general_ci\",\"time_zone\":\"Asia/Shanghai\",\"character_set_server\":\"utf8\",\"enable_pipeline\":true,\"cbo_use_nth_exec_plan\":0,\"rewrite_count_distinct_to_bitmap_hll\":true,\"parallel_exchange_instance_num\":-1,\"sql_mode\":0,\"allow_default_partition\":false}",
+  "column_statistics":{
+    "sqlsmith.tpcds_100g_web_page":{
+      "wp_creation_date_sk":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "wp_url":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "sqlsmith.tpch_100g_part":{
+      "P_CONTAINER":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "P_COMMENT":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "P_NAME":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "sqlsmith.metrics_detail":{
+      "tags_id":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "value":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "sqlsmith.tpcds_100g_customer_demographics":{
+      "cd_credit_rating":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "cd_dep_count":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "cd_dep_college_count":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "cd_marital_status":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "cd_gender":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    },
+    "sqlsmith.ssb_100g_customer":{
+      "c_custkey":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "c_mktsegment":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "c_nation":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "c_name":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN",
+      "c_city":"[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"
+    }
+  },
+  "be_number":3,
+  "exception":[
+
+  ],
+  "version":"BRANCH-2.3-RELEASE",
+  "commit_version":"b7c1680"
+}

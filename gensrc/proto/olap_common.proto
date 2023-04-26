@@ -1,0 +1,71 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/gensrc/proto/olap_common.proto
+
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+// Define common messages shared by other proto files.
+
+syntax = "proto2";
+
+package starrocks;
+option java_package = "com.starrocks.proto";
+
+// An internal version for primary key tablet
+// Each commit will increase this version
+//   FE's publish will increase major by 1
+//   internal compaction will increase minor by 1
+message EditVersionPB {
+    optional int64 major = 1;
+    optional int64 minor = 2;
+}
+
+// used in partial update for primary key tablet
+message DeltaColumnGroupPB {
+    repeated uint32 column_ids = 1;
+    optional string column_file = 2;
+}
+
+message DeltaColumnGroupListPB {
+    repeated DeltaColumnGroupPB dcgs = 1;
+    repeated int64 versions = 2;
+}
+
+// page position info for segment file and persistent index file
+message PagePointerPB {
+    required uint64 offset = 1; // offset in segment file
+    required uint32 size = 2;   // size of page in byte
+}
+
+message PNetworkAddress {
+    optional string host = 1;
+    optional int32 port = 2;
+    optional int64 node_id = 3;
+}

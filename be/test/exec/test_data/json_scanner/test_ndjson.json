@@ -1,0 +1,4 @@
+{"k1":"v1",   "kind":"server", "keyname":{"ip":"10.10.0.1", "value":"10"}}
+{"k1":"v2", "kind":"server", "keyname":{"ip":"10.10.0.2", "value":"20"}} {"k1":"v3", "kind":"server", "keyname":{"ip":"10.10.0.3", "value":"30"}}
+
+{"k1":"v4",   "kind":"server", "keyname":{"ip":"10.10.0.4", "value":"40"}}  {"k1":"v5",   "kind":"server", "keyname":{"ip":"10.10.0.5", "value":"50"}}

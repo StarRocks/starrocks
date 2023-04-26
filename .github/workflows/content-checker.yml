@@ -1,0 +1,93 @@
+name: CONTENT CHECKER
+
+on:
+  pull_request_target:
+    branches:
+      - main
+      - branch-2.3
+      - branch-2.4
+      - branch-2.5
+      - branch-3.0
+    types:
+      - opened
+      - reopened
+      - edited
+
+jobs:
+  title-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: thehanimo/pr-title-checker@v1.3.5
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          pass_on_octokit_error: false
+          configuration_path: ".github/pr-title-checker-config.json"
+
+  branch-info-check:
+    needs: title-check
+    runs-on: ubuntu-latest
+    if: >
+      (startsWith(github.event.pull_request.title, '[BugFix]') ||
+       startsWith(github.event.pull_request.title, '[Enhancement]'))&&
+      !contains(github.event.pull_request.title, 'cherry-pick') &&
+      !contains(github.event.pull_request.title, 'backport')
+    steps:
+
+      - name: add branch-3.0 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 3.0')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '3.0'
+
+      - name: add branch-2.5 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 2.5')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '2.5'
+
+      - name: add branch-2.4 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 2.4')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '2.4'
+
+      - name: add branch-2.3 label
+        if: contains(toJson(github.event.pull_request.body), '[x] 2.3')
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          labels: '2.3'
+
+      - name: remove branch-3.0 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 3.0') && contains(github.event.pull_request.labels.*.name, '3.0')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: '3.0'
+
+      - name: remove branch-2.5 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 2.5') && contains(github.event.pull_request.labels.*.name, '2.5')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: '2.5'
+
+      - name: remove branch-2.4 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 2.4') && contains(github.event.pull_request.labels.*.name, '2.4')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: '2.4'
+
+      - name: remove branch-2.3 label
+        if: contains(toJson(github.event.pull_request.body), '[ ] 2.3') && contains(github.event.pull_request.labels.*.name, '2.3')
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          labels: '2.3'
+
+      - name: check-done
+        if: >
+          (startsWith(github.event.pull_request.title, '[BugFix]') ||
+           startsWith(github.event.pull_request.title, '[Enhancement]'))&&
+          !contains(github.event.pull_request.title, 'cherry-pick') &&
+          !contains(github.event.pull_request.title, 'backport') &&
+          contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels')
+        run: |
+          echo "You must mark this checkbox - I have checked the version labels which the pr will be auto backported to target branch"
+          exit 1

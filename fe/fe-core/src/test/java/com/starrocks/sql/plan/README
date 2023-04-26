@@ -1,0 +1,40 @@
+FE Plan case
+Most of the test cases in this directory are to check the string of plan. Due to the orthogonality of
+various syntax, it's difficult to define a clear boundary only by considering the syntax of SQL. Here
+are some requirements for test cases.
+
+##Rules
+Priority:
+1. According to the classification of test purpose, e.g. test right join + right table with limit.
+   The test purpose is strongly related to limit and can be added it to LimitTest
+2. According to the classification of function modules, e.g. the new array type, the low cardinality, can
+   be add as a new test set separately
+
+Pay attention:
+1. Forbidden to add overly complex test cases. unit cases should use simple SQL that can cover the
+   problem rather than complex SQL, which will increase the difficulty of repairing unit cases
+2. Use meaningful test names instead of simple names without meaning
+
+## Classification
+Current classification, including & but not limited:
+* Aggregate
+* ArrayType
+* CTE
+* DecimalType
+* Digest
+* ExternalTable
+* GroupingSet
+* Join
+* JsonType
+* Limit
+* LiteralJoin
+* LowCardinality
+* MetricType
+* OrderBy
+* Scan
+* Set(UNION/INTERSECT/EXCEPT)
+* Subquery
+* UDF
+* View
+* Window
+

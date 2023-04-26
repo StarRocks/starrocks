@@ -1,0 +1,44 @@
+name: code-check
+
+on:
+  pull_request:
+    types: [labeled]
+
+jobs:
+  sonarcloud-be:
+    runs-on: self-hosted
+    if: ${{ github.event.label.name == 'be-build' }}
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: pre build
+        run: |
+          sudo rm -rf ../starrocks/*
+
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            be:
+            - 'be/**'
+
+      - name: set up
+        if: steps.changes.outputs.be == 'true'
+        run: |
+          time scp jenkins@ci01:~/userContent/be-build-$PR_NUMBER.tar.gz .
+          tar xzf be-build-$PR_NUMBER.tar.gz
+          workdir=$(pwd)
+          echo $workdir
+          sed -i "s|\/root\/starrocks|$workdir|g" be/build-wrapper/build-wrapper-dump.json
+
+      - name: Run sonar-scanner
+        if: steps.changes.outputs.be == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: f0fb4d25c03bae90c2e994c45c29c49dc86fc169
+        run: |
+          sonar-scanner -Dsonar.organization=starrocks -Dsonar.projectKey=Starrocks_be -Dsonar.cfamily.build-wrapper-output="be/build-wrapper" -Dsonar.host.url="https://sonarcloud.io" -Dsonar.sources="be/src" -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }} -Dsonar.projectBaseDir=. -Dsonar.pullrequest.github.repository=StarRocks/starrocks
+
+      - name: post build
+        run: |
+          sudo rm -rf ../starrocks/*

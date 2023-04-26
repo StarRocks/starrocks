@@ -1,0 +1,30 @@
+name: Open Question
+description: Ask questions about documentation.
+labels: docs/help wanted
+title: "[Question]: " 
+body:
+- type: markdown
+  attributes:
+    value: |
+      > This repository is for StarRocks DOCS ONLY. If you need assistance on StarRocks usage, [file an issue in StarRocks repository](https://github.com/StarRocks/starrocks/issues/new/choose).
+- type: textarea
+  attributes:
+    label: Ask the Question
+    description: |
+      You can ask anything about the Docs of StarRocks.
+  validations:
+    required: true
+- type: textarea
+  attributes:
+    label: Proposed Solution
+    description: |
+      Any Solution you expect from us.
+  validations:
+    required: false
+- type: textarea
+  attributes:
+    label: Additional Info
+    description: |
+      Screenshots or anything that will give us more context about the issue you are encountering!
+  validations:
+    required: false

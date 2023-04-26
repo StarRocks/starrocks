@@ -1,0 +1,182 @@
+--- gperftools-gperftools-2.7/src/libc_override_gcc_and_weak.h	2018-04-30 14:00:34.000000000 +0800
++++ gperftools-gperftools-2.7/src/libc_override_gcc_and_weak.h	2021-11-05 17:26:30.853784606 +0800
+@@ -57,168 +57,7 @@
+ 
+ #define ALIAS(tc_fn)   __attribute__ ((alias (#tc_fn), used))
+ 
+-void* operator new(size_t size) CPP_BADALLOC  ALIAS(tc_new);
+-void operator delete(void* p) CPP_NOTHROW     ALIAS(tc_delete);
+-void* operator new[](size_t size) CPP_BADALLOC ALIAS(tc_newarray);
+-void operator delete[](void* p) CPP_NOTHROW   ALIAS(tc_deletearray);
+-void* operator new(size_t size, const std::nothrow_t& nt) CPP_NOTHROW
+-                                              ALIAS(tc_new_nothrow);
+-void* operator new[](size_t size, const std::nothrow_t& nt) CPP_NOTHROW
+-                                              ALIAS(tc_newarray_nothrow);
+-void operator delete(void* p, const std::nothrow_t& nt) CPP_NOTHROW
+-                                              ALIAS(tc_delete_nothrow);
+-void operator delete[](void* p, const std::nothrow_t& nt) CPP_NOTHROW
+-                                              ALIAS(tc_deletearray_nothrow);
+-
+-#if defined(ENABLE_SIZED_DELETE)
+-
+-void operator delete(void *p, size_t size) CPP_NOTHROW
+-    ALIAS(tc_delete_sized);
+-void operator delete[](void *p, size_t size) CPP_NOTHROW
+-    ALIAS(tc_deletearray_sized);
+-
+-#elif defined(ENABLE_DYNAMIC_SIZED_DELETE) && \
+-  (__GNUC__ * 100 + __GNUC_MINOR__) >= 405
+-
+-static void delegate_sized_delete(void *p, size_t s) {
+-  (operator delete)(p);
+-}
+-
+-static void delegate_sized_deletearray(void *p, size_t s) {
+-  (operator delete[])(p);
+-}
+-
+-extern "C" __attribute__((weak))
+-int tcmalloc_sized_delete_enabled(void);
+-
+-static bool sized_delete_enabled(void) {
+-  if (tcmalloc_sized_delete_enabled != 0) {
+-    return !!tcmalloc_sized_delete_enabled();
+-  }
+-
+-  const char *flag = TCMallocGetenvSafe("TCMALLOC_ENABLE_SIZED_DELETE");
+-  return tcmalloc::commandlineflags::StringToBool(flag, false);
+-}
+-
+-extern "C" {
+-
+-static void *resolve_delete_sized(void) {
+-  if (sized_delete_enabled()) {
+-    return reinterpret_cast<void *>(tc_delete_sized);
+-  }
+-  return reinterpret_cast<void *>(delegate_sized_delete);
+-}
+-
+-static void *resolve_deletearray_sized(void) {
+-  if (sized_delete_enabled()) {
+-    return reinterpret_cast<void *>(tc_deletearray_sized);
+-  }
+-  return reinterpret_cast<void *>(delegate_sized_deletearray);
+-}
+-
+-}
+-
+-void operator delete(void *p, size_t size) CPP_NOTHROW
+-  __attribute__((ifunc("resolve_delete_sized")));
+-void operator delete[](void *p, size_t size) CPP_NOTHROW
+-  __attribute__((ifunc("resolve_deletearray_sized")));
+-
+-#else /* !ENABLE_SIZED_DELETE && !ENABLE_DYN_SIZED_DELETE */
+-
+-void operator delete(void *p, size_t size) CPP_NOTHROW
+-  ALIAS(tc_delete);
+-void operator delete[](void *p, size_t size) CPP_NOTHROW
+-  ALIAS(tc_deletearray);
+-
+-#endif /* !ENABLE_SIZED_DELETE && !ENABLE_DYN_SIZED_DELETE */
+-
+-#if defined(ENABLE_ALIGNED_NEW_DELETE)
+-
+-void* operator new(size_t size, std::align_val_t al)
+-    ALIAS(tc_new_aligned);
+-void operator delete(void* p, std::align_val_t al) CPP_NOTHROW
+-    ALIAS(tc_delete_aligned);
+-void* operator new[](size_t size, std::align_val_t al)
+-    ALIAS(tc_newarray_aligned);
+-void operator delete[](void* p, std::align_val_t al) CPP_NOTHROW
+-    ALIAS(tc_deletearray_aligned);
+-void* operator new(size_t size, std::align_val_t al, const std::nothrow_t& nt) CPP_NOTHROW
+-    ALIAS(tc_new_aligned_nothrow);
+-void* operator new[](size_t size, std::align_val_t al, const std::nothrow_t& nt) CPP_NOTHROW
+-    ALIAS(tc_newarray_aligned_nothrow);
+-void operator delete(void* p, std::align_val_t al, const std::nothrow_t& nt) CPP_NOTHROW
+-    ALIAS(tc_delete_aligned_nothrow);
+-void operator delete[](void* p, std::align_val_t al, const std::nothrow_t& nt) CPP_NOTHROW
+-    ALIAS(tc_deletearray_aligned_nothrow);
+-
+-#if defined(ENABLE_SIZED_DELETE)
+-
+-void operator delete(void *p, size_t size, std::align_val_t al) CPP_NOTHROW
+-    ALIAS(tc_delete_sized_aligned);
+-void operator delete[](void *p, size_t size, std::align_val_t al) CPP_NOTHROW
+-    ALIAS(tc_deletearray_sized_aligned);
+-
+-#else /* defined(ENABLE_SIZED_DELETE) */
+-
+-#if defined(ENABLE_DYNAMIC_SIZED_DELETE) && \
+-  (__GNUC__ * 100 + __GNUC_MINOR__) >= 405
+-
+-static void delegate_sized_aligned_delete(void *p, size_t s, std::align_val_t al) {
+-  (operator delete)(p, al);
+-}
+-
+-static void delegate_sized_aligned_deletearray(void *p, size_t s, std::align_val_t al) {
+-  (operator delete[])(p, al);
+-}
+-
+-extern "C" {
+-
+-static void *resolve_delete_sized_aligned(void) {
+-  if (sized_delete_enabled()) {
+-    return reinterpret_cast<void *>(tc_delete_sized_aligned);
+-  }
+-  return reinterpret_cast<void *>(delegate_sized_aligned_delete);
+-}
+-
+-static void *resolve_deletearray_sized_aligned(void) {
+-  if (sized_delete_enabled()) {
+-    return reinterpret_cast<void *>(tc_deletearray_sized_aligned);
+-  }
+-  return reinterpret_cast<void *>(delegate_sized_aligned_deletearray);
+-}
+-
+-}
+-
+-void operator delete(void *p, size_t size, std::align_val_t al) CPP_NOTHROW
+-  __attribute__((ifunc("resolve_delete_sized_aligned")));
+-void operator delete[](void *p, size_t size, std::align_val_t al) CPP_NOTHROW
+-  __attribute__((ifunc("resolve_deletearray_sized_aligned")));
+-
+-#else /* defined(ENABLE_DYN_SIZED_DELETE) */
+-
+-void operator delete(void *p, size_t size, std::align_val_t al) CPP_NOTHROW
+-  ALIAS(tc_delete);
+-void operator delete[](void *p, size_t size, std::align_val_t al) CPP_NOTHROW
+-  ALIAS(tc_deletearray);
+-
+-#endif /* defined(ENABLE_DYN_SIZED_DELETE) */
+-
+-#endif /* defined(ENABLE_SIZED_DELETE) */
+-
+-#endif /* defined(ENABLE_ALIGNED_NEW_DELETE) */
+-
+ extern "C" {
+-  void* malloc(size_t size) __THROW               ALIAS(tc_malloc);
+-  void free(void* ptr) __THROW                    ALIAS(tc_free);
+-  void* realloc(void* ptr, size_t size) __THROW   ALIAS(tc_realloc);
+-  void* calloc(size_t n, size_t size) __THROW     ALIAS(tc_calloc);
+-  void cfree(void* ptr) __THROW                   ALIAS(tc_cfree);
+-  void* memalign(size_t align, size_t s) __THROW  ALIAS(tc_memalign);
+-  void* aligned_alloc(size_t align, size_t s) __THROW ALIAS(tc_memalign);
+-  void* valloc(size_t size) __THROW               ALIAS(tc_valloc);
+-  void* pvalloc(size_t size) __THROW              ALIAS(tc_pvalloc);
+-  int posix_memalign(void** r, size_t a, size_t s) __THROW
+-      ALIAS(tc_posix_memalign);
+ #ifndef __UCLIBC__
+   void malloc_stats(void) __THROW                 ALIAS(tc_malloc_stats);
+ #endif
+--- gperftools-gperftools-2.7/src/tests/tcmalloc_unittest.cc	2018-04-30 14:00:34.000000000 +0800
++++ gperftools-gperftools-2.7/src/tests/tcmalloc_unittest.cc	2021-11-05 17:26:59.906356097 +0800
+@@ -1300,7 +1300,7 @@ static int RunAllTests(int argc, char**
+     CHECK(p1 != NULL);
+     VerifyNewHookWasCalled();
+     VerifyDeleteHookWasCalled();
+-    cfree(p1);  // synonym for free
++    tc_cfree(p1);  // synonym for free
+     VerifyDeleteHookWasCalled();
+ 
+     if (kOSSupportsMemalign) {

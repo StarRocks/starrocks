@@ -1,0 +1,301 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/gensrc/proto/olap_file.proto
+
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+// Define file format struct, like data header, index header.
+
+syntax = "proto2";
+
+package starrocks;
+option java_package = "com.starrocks.proto";
+
+import "olap_common.proto";
+import "tablet_schema.proto";
+import "types.proto";
+import "segment.proto";
+
+message ZoneMapOfRowset {
+    required bytes min = 1;
+    required bytes max = 2;
+    optional bool null_flag = 3;
+}
+
+enum RowsetTypePB {
+    ALPHA_ROWSET = 0; // Deleted
+    BETA_ROWSET = 1;
+}
+
+enum RowsetStatePB {
+    // Rowset be writting
+    PREPARED = 0;
+    // indicates that the rowset is written, but not yet visible to the user; the rowset in this
+    // state cannot be deleted by the BE itself, but must be commanded by the FE
+    COMMITTED = 1;
+    // Indicates that the rowset is already visible to the user
+    VISIBLE = 2;
+}
+
+// indicate whether date between segments of a rowset is overlappinng
+enum SegmentsOverlapPB {
+    OVERLAP_UNKNOWN = 0;
+    OVERLAPPING = 1;
+    NONOVERLAPPING = 2;
+}
+
+// indicate segment footer position and size of partial rowset
+message FooterPointerPB {
+    optional uint64 position = 1;
+    optional uint64 size = 2;
+}
+
+// some txn semantic information bind to a written rowset
+// i.e.
+//   1. partial update txn only provide and update a subset of columns,
+//      so it should add info about updated columns, whether to insert new
+//      rows if old row doesn't exists, and default values etc
+//   2. conditional update txn may add some meta to describe condition
+//   3. more general read-write txn may add complex expressions
+enum PartialUpdateMode {
+    UNKNOWN_MODE = 0;
+    ROW_MODE = 1;
+    COLUMN_MODE = 2;
+    AUTO_MODE = 3;
+}
+message RowsetTxnMetaPB {
+    repeated uint32 partial_update_column_ids = 1;
+    repeated uint32 partial_update_column_unique_ids = 2;
+
+    // one for each segment
+    repeated FooterPointerPB partial_rowset_footers = 3;
+
+    optional string merge_condition = 4;
+
+    optional int32 auto_increment_partial_update_column_id = 5;
+    // recode partial update mode
+    optional PartialUpdateMode partial_update_mode = 6;
+}
+
+message RowsetMetaPB {
+    required int64 deprecated_rowset_id = 1;
+    optional int64 partition_id = 2;
+    optional int64 tablet_id = 3;
+    // only for pending rowset
+    optional int64 txn_id = 4;
+    // tablet id and schema hash could find tablet
+    optional int32 tablet_schema_hash = 5;
+    optional RowsetTypePB rowset_type = 6 [default = BETA_ROWSET]; // deprecated
+    optional RowsetStatePB rowset_state = 7;
+    // only for visible rowset.
+    optional int64 start_version = 8;
+    // only for visible rowset.
+    optional int64 end_version = 9;
+    // only for visible rowset.
+    optional int64 version_hash = 10 [deprecated = true];
+    // total number of rows.
+    optional int64 num_rows = 11;
+    // calculated by index + data
+    optional int64 total_disk_size = 12;
+    // calculated sum(segmentgroup.data_size)
+    optional int64 data_disk_size = 13;
+    // calculated sum(segmentgroup.index_size)
+    optional int64 index_disk_size = 14;
+    // rowset level column min/max/null statistics, not not used currently
+    repeated ZoneMapOfRowset zone_maps = 15 [deprecated = true];
+    optional DeletePredicatePB delete_predicate = 16;
+    // calculated from segment group
+    optional bool empty = 17;
+    // only for pending rowset
+    optional PUniqueId load_id = 18;
+    // not set, get from olap index header msg?
+    optional bool delete_flag = 19;
+    optional int64 creation_time = 20;
+    optional PUniqueId tablet_uid = 21;
+    // total number of segments
+    optional int64 num_segments = 22;
+    // rowset id definition, it will replace required rowset id
+    optional string rowset_id = 23;
+    // to indicate whether the data between the segments overlap
+    optional SegmentsOverlapPB segments_overlap_pb = 51 [default = OVERLAP_UNKNOWN];
+    // every segment in a rowset has an unique uint32 id
+    // it is incrementally allocated when the rowset is committed
+    // if a rowset have 4 segments, 4 ids will be allocated.
+    // if rowset_seg_id=n then segment ids will be: n, n+1, n+2, n+3
+    optional uint32 rowset_seg_id = 52;
+    // number of delete files, delete file store delete operations'
+    // primary keys
+    optional uint32 num_delete_files = 53;
+    // total row size in approximately
+    optional int64 total_row_size = 54;
+    // some txn semantic information bind to this rowset
+    optional RowsetTxnMetaPB txn_meta = 55;
+    // delete file index
+    repeated uint32 delfile_idxes = 56;
+    // number of update files
+    optional uint32 num_update_files = 57;
+    // total partial update row size
+    optional int64 total_update_row_size = 58;
+}
+
+enum DataFileType {
+    OLAP_DATA_FILE = 0; // Deprecated. Only columnar-wise format is supported.
+    COLUMN_ORIENTED_FILE = 1;
+}
+
+enum AlterTabletState {
+    ALTER_PREPARED = 0;
+    ALTER_RUNNING = 1;
+    ALTER_FINISHED = 2;
+    ALTER_FAILED = 3;
+}
+
+enum AlterTabletType {
+    SCHEMA_CHANGE = 1;
+    ROLLUP = 2;
+}
+
+message AlterTabletPB {
+    optional AlterTabletState alter_state = 1;
+    required int64 related_tablet_id = 2;
+    optional int32 related_schema_hash = 3;
+    optional AlterTabletType alter_type = 4;
+}
+
+enum TabletStatePB {
+    PB_NOTREADY = 0; // under alter table, rollup, clone
+    PB_RUNNING = 1;
+    PB_TOMBSTONED = 2;
+    PB_STOPPED = 3;
+    PB_SHUTDOWN = 4;
+}
+
+enum TabletTypePB {
+    TABLET_TYPE_DISK = 0;
+    TABLET_TYPE_MEMORY = 1;
+}
+
+message CompactionInfoPB {
+    optional EditVersionPB start_version = 1;
+    repeated uint32 inputs = 2;
+    // may support multiple output rowsets in future
+    repeated uint32 outputs = 3;
+}
+
+message EditVersionMetaPB {
+    optional EditVersionPB version = 1;
+    optional int64 creation_time = 2;
+    repeated uint32 rowsets = 3;     // full data, optional
+    repeated uint32 rowsets_add = 4; // incremental optional
+    repeated uint32 rowsets_del = 5; // incremental optional
+    repeated uint32 deltas = 6;
+    optional CompactionInfoPB compaction = 7;
+    optional uint32 rowsetid_add = 8; // only available&useful in meta log
+}
+
+enum TabletMetaOpType {
+    OP_NONE = 0;
+    OP_ROWSET_COMMIT = 1;
+    OP_COMPACTION_COMMIT = 2;
+    OP_APPLY = 3;
+}
+
+message TabletMetaOpPB {
+    optional TabletMetaOpType type = 1;
+    optional EditVersionMetaPB commit = 2;
+    optional EditVersionPB apply = 3;
+}
+
+message TabletMetaLogPB { 
+    repeated TabletMetaOpPB ops = 1; 
+}
+
+message TabletUpdatesPB {
+    repeated EditVersionMetaPB versions = 1;
+    optional EditVersionPB apply_version = 2;
+    optional uint32 next_rowset_id = 3;
+    optional uint64 next_log_id = 4;
+}
+
+message BinlogConfigPB {
+    // Version of the configuration, and FE should deliver it to
+    // the BE when executing 'ALTER TABLE'. The configuration with
+    // a higher version can override that with a lower version.
+    optional int64 version = 1;
+    optional bool binlog_enable = 2;
+    optional int64 binlog_ttl_second = 3;
+    optional int64 binlog_max_size = 4;
+}
+
+message TabletMetaPB {
+    optional int64 table_id = 1;               // ?
+    optional int64 partition_id = 2;           // ?
+    optional int64 tablet_id = 3;              // OlapHeaderMessage.tablet_id
+    optional int32 schema_hash = 4;            // OlapHeaderMessage.schema_hash
+    optional int32 shard_id = 5;               // OlapHeaderMessage.shard
+    optional int64 creation_time = 6;          // OlapHeaderMessage.creation_time
+    optional int64 cumulative_layer_point = 7; // OlapHeaderMessage.cumulative_layer_point
+
+    optional TabletStatePB tablet_state = 8;
+    optional TabletSchemaPB schema = 9;
+    repeated RowsetMetaPB rs_metas = 10;
+    repeated RowsetMetaPB inc_rs_metas = 11;
+    optional AlterTabletPB alter_task = 12 [deprecated = true];
+    // if true, this tablet will not do compaction,
+    // and does not create init version
+    optional bool in_restore_mode = 13 [default = false]; // OlapHeaderMessage.in_restore_mode
+    // a uniqued id to identified tablet with same tablet_id and schema hash
+    optional PUniqueId tablet_uid = 14;
+    optional int64 end_rowset_id = 15;
+    optional RowsetTypePB preferred_rowset_type = 16 [ default = BETA_ROWSET, deprecated = true ];
+    optional TabletTypePB tablet_type = 17;
+    optional TabletUpdatesPB updates = 50;                        // used for new updatable tablet
+    optional bool enable_persistent_index = 51 [default = false]; // used for persistent index in primary index
+    optional BinlogConfigPB binlog_config = 52;
+}
+
+message OLAPIndexHeaderMessage {
+    required int32 start_version = 1;
+    required int32 end_version = 2;
+    required int64 cumulative_version_hash = 3 [deprecated = true];
+
+    required uint32 segment = 4;
+    required uint32 num_rows_per_block = 5;
+    optional bool null_supported = 6;
+    optional bool delete_flag = 7;
+}
+
+message OLAPDataHeaderMessage {
+    required uint32 segment = 2;
+}
+
+message OLAPRawDeltaHeaderMessage {
+    required int32 schema_hash = 2;
+}

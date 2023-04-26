@@ -1,0 +1,74 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+syntax = "proto3";
+
+package starrocks;
+
+import "olap_common.proto";
+
+message IndexSnapshotMetaPB {
+    EditVersionPB version = 1;
+    PagePointerPB data = 2;
+    repeated uint32 dumped_shard_idxes = 3;
+}
+
+message IndexWalMetaPB {
+    EditVersionPB version = 1;
+    PagePointerPB data = 2;
+}
+
+message MutableIndexMetaPB {
+    uint32 format_version = 1;
+    IndexSnapshotMetaPB snapshot = 2;
+    repeated IndexWalMetaPB wals = 3;
+}
+
+// Do not modify the parameters order because of compatibility
+// The parameters will be reorder after compatibility code is finished
+message ImmutableIndexShardMetaPB {
+    uint64 size = 1;
+    uint64 npage = 2;
+    PagePointerPB data = 3;
+    uint64 key_size = 4;
+    uint64 value_size = 5;
+    uint64 nbucket = 6;
+    uint64 data_size = 7;
+}
+
+message ShardInfoPB {
+    uint32 key_size = 1;
+    uint64 shard_off = 2;
+    uint64 shard_num = 3;
+}
+
+message ImmutableIndexMetaPB {
+    uint32 format_version = 1;
+    EditVersionPB version = 2;
+    uint64 size = 3;
+    repeated ImmutableIndexShardMetaPB shards = 4;
+    repeated ShardInfoPB shard_info = 5;
+}
+
+message PersistentIndexMetaPB {
+    EditVersionPB version = 1;
+    uint64 key_size = 2;
+    uint64 size = 3;
+    MutableIndexMetaPB l0_meta = 4;
+    // l1's meta stored in l1 file
+    // only store a version to get file name
+    EditVersionPB l1_version = 5;
+    uint32 format_version = 6;
+    uint64 usage =7;
+}

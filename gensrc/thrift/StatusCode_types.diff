@@ -1,0 +1,27 @@
+--- StatusCode_types.cpp	2021-12-02 14:49:35.352849329 +0800
++++ StatusCode_types.cpp.new	2021-12-02 14:42:52.816116556 +0800
+@@ -10,6 +10,7 @@
+ #include <ostream>
+ 
+ #include <thrift/TToString.h>
++#include <thrift/Thrift.h>
+ 
+ namespace starrocks {
+ 
+--- StatusCode_types.h	2021-12-02 14:49:35.352849329 +0800
++++ StatusCode_types.h.new	2021-12-02 14:42:36.364555258 +0800
+@@ -9,13 +9,8 @@
+ 
+ #include <iosfwd>
+ 
+-#include <thrift/Thrift.h>
+-#include <thrift/TApplicationException.h>
+-#include <thrift/TBase.h>
+-#include <thrift/protocol/TProtocol.h>
+-#include <thrift/transport/TTransport.h>
+-
+ #include <functional>
++#include <map>
+ #include <memory>
+ 
+ 

@@ -1,0 +1,6 @@
+-- name: test_ddl_alter_table
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE t1 (id1 int) DUPLICATE KEY(id1) COMMENT "c1" DISTRIBUTED BY HASH(id1) BUCKETS 1 properties('replication_num' = '1');
+ALTER TABLE t1 COMMENT="c2";
+SHOW CREATE TABLE t1;

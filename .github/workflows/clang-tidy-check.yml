@@ -1,0 +1,48 @@
+name: code-check
+
+on:
+  pull_request_target:
+    types: [labeled]
+
+jobs:
+  clang-tidy:
+    runs-on: self-hosted
+    if: ${{ github.event.label.name == 'be-build' }}
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: pre build
+        run: |
+          sudo rm -rf ../starrocks/*
+
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            be:
+            - 'be/**'
+
+      - uses: actions/checkout@v3
+        if: steps.changes.outputs.be == 'true'
+        with:
+          fetch-depth: 0
+
+      - name: set up build
+        if: steps.changes.outputs.be == 'true'
+        run: |
+          time scp jenkins@ci01:~/userContent/be-build-$PR_NUMBER.tar.gz .
+          tar xzf be-build-$PR_NUMBER.tar.gz
+          workdir=$(pwd)
+          echo $workdir
+          sed -i "s|\/root\/starrocks|$workdir|g" be/ut_build_ASAN/compile_commands.json
+
+      - uses: ZedThree/clang-tidy-review@v0.10.1
+        if: steps.changes.outputs.be == 'true'
+        id: review
+        with:
+          build_dir: be/ut_build_ASAN
+          config_file: .clang-tidy
+
+      - name: post build
+        run: |
+          sudo rm -rf ../starrocks/*

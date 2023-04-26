@@ -1,0 +1,548 @@
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+//
+// This file is based on code available under the Apache license here:
+//   https://github.com/apache/incubator-doris/blob/master/gensrc/proto/internal_service.proto
+
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+syntax = "proto2";
+
+package starrocks;
+option java_package = "com.starrocks.proto";
+
+import "data.proto";
+import "descriptors.proto";
+import "status.proto";
+import "types.proto";
+import "olap_common.proto";
+import "olap_file.proto";
+
+option cc_generic_services = true;
+
+// Transmit data when process SQL query.
+message PTransmitDataParams {
+    // non-change member
+    required PUniqueId finst_id = 1;
+    required int32 node_id = 2;
+    // Id of this fragment in its role as a sender.
+    required int32 sender_id = 3;
+    required int32 be_number = 4;
+
+    // If set to true, indicates that no more row batches will be sent
+    // for this dest_node_id.
+    required bool eos = 5;
+    optional PRowBatch row_batch = 6;
+    // Different per packet.
+    required int64 packet_seq = 7;
+    optional PQueryStatistics query_statistics = 8;
+};
+
+message PHttpRequest {
+};
+
+// Transmit vectorized data chunks between Backends.
+// Try to batch enough chunk in one request to reduce each RPC call overhead.
+message PTransmitChunkParams {
+    // non-change member
+    optional PUniqueId finst_id = 1;
+    optional int32 node_id = 2;
+    // Id of this fragment in its role as a sender.
+    optional int32 sender_id = 3;
+    optional int32 be_number = 4;
+    // If set to true, indicates that no more row batches will be sent
+    // for this dest_node_id.
+    optional bool eos = 5;
+    // RPC sequence number for the send channel.
+    // Sever will check this number to see if some packet has lost.
+    optional int64 sequence = 6;
+
+    // The protobuf data structure for column chunk.
+    repeated ChunkPB chunks = 7;
+
+    // Some statistics for the runing query.
+    optional PQueryStatistics query_statistics = 8;
+    optional bool use_pass_through = 9 [default = false];
+
+    // Whether enable pipeline level shuffle.
+    optional bool is_pipeline_level_shuffle = 10 [default = false];
+    // Driver sequences of pipeline level shuffle.
+    repeated int32 driver_sequences = 11;
+};
+
+message PTransmitDataResult {
+    optional StatusPB status = 1;
+};
+
+message PTransmitChunkResult {
+    optional StatusPB status = 1;
+    optional int64 receive_timestamp = 2;
+};
+
+message PTransmitRuntimeFilterForwardTarget {
+    optional string host = 1;
+    optional int32 port = 2;
+    repeated PUniqueId probe_finst_ids = 3;
+};
+
+message PTransmitRuntimeFilterParams {
+    // if this runtime filter is partial
+    // if it's partial, then it's supposed to be merged.
+    // otherwise it's supported to be consumed.
+
+    optional bool is_partial = 1;
+    optional PUniqueId query_id = 3;
+    optional int32 filter_id = 4;
+    optional PUniqueId finst_id = 5;
+    optional bytes data = 6;
+
+    // Multiple probe fragment instances maybe on a single host.
+    repeated PUniqueId probe_finst_ids = 7;
+    optional int32 build_be_number = 8;
+    repeated PTransmitRuntimeFilterForwardTarget forward_targets = 9;
+    // When merge node starts to broadcast this rf(millseconds since unix epoch).
+    optional int64 broadcast_timestamp = 10;
+    optional bool is_pipeline = 11;
+};
+
+message PTransmitRuntimeFilterResult {
+    optional StatusPB status = 1;
+};
+
+message PTabletWithPartition {
+    required int64 partition_id = 1;
+    required int64 tablet_id = 2;
+    repeated PNetworkAddress replicas = 3;
+}
+
+message PTabletInfo {
+    required int64 tablet_id = 1;
+    required int32 schema_hash = 2;
+    repeated string invalid_dict_cache_columns = 3;
+    repeated string valid_dict_cache_columns = 4;
+    optional int64 node_id = 5;
+}
+
+// Open a tablet writer.
+message PTabletWriterOpenRequest {
+    required PUniqueId id = 1;
+    required int64 index_id = 2;
+    required int64 txn_id = 3;
+    required POlapTableSchemaParam schema = 4;
+    repeated PTabletWithPartition tablets = 5;
+    required int32 num_senders = 6;
+    required bool need_gen_rollup = 7; // Deprecated
+    optional int64 load_mem_limit = 8;
+    optional int64 load_channel_timeout_s = 9;
+    optional int64 node_id = 10;
+    optional bool is_vectorized = 20; // Deprecate if we confirm all customer have upgrade to 2.1
+    optional bool is_lake_tablet = 21;
+    optional string txn_trace_parent = 22;
+    optional bool is_replicated_storage = 23;
+    optional int64 timeout_ms = 24;
+    optional WriteQuorumTypePB write_quorum = 25;
+    optional string merge_condition = 26;
+    optional bool miss_auto_increment_column = 27;
+    optional bool abort_delete = 28; // Deprecated
+    // before data load, the all current partitions will be opened
+    // When the data load in progress, the partition created by automatic partition needs incremental open
+    optional bool is_incremental = 29 [default = false];
+    optional int32 sender_id = 30;
+    optional PartialUpdateMode partial_update_mode = 31;
+};
+
+message PTabletWriterOpenResult {
+    required StatusPB status = 1;
+    optional bool is_repeated_chunk = 2 [default = false];
+};
+
+// Add batch to tablet writer.
+message PTabletWriterAddBatchRequest {
+    required PUniqueId id = 1;
+    required int64 index_id = 2;
+    required int32 sender_id = 3;
+
+    // If this is the last batch from this sender
+    optional bool eos = 4;
+
+    required int64 packet_seq = 5;
+    repeated int64 tablet_ids = 6;
+    // Unset if and only if when eos is true.
+    optional PRowBatch row_batch = 7;
+    // Only valid when eos is true.
+    // valid partition ids that would write in this writer
+    repeated int64 partition_ids = 8;
+};
+
+message PTabletWriterAddChunkRequest {
+    optional PUniqueId id = 1;
+    optional int64 index_id = 2;
+    optional int32 sender_id = 3;
+
+    // Whether this is the last batch from this sender.
+    optional bool eos = 4;
+
+    optional int64 packet_seq = 5;
+    repeated int64 tablet_ids = 6;
+    // Unset if and only if eos is true.
+    optional ChunkPB chunk = 7;
+    // only valid when eos is true
+    // valid partition ids that would write in this writer
+    repeated int64 partition_ids = 8;
+    optional int64 txn_id = 9;
+    optional int64 timeout_ms = 10;
+    // wait all sender close before rpc returning
+    // this is used for automatic partition creation
+    optional bool wait_all_sender_close = 11 [default = false];
+};
+
+message PTabletWriterAddChunksRequest {
+    optional PUniqueId id = 1;
+    repeated PTabletWriterAddChunkRequest requests = 2;
+    // all request's chunk are repeated if true
+    // only first request's chunk will be set
+    optional bool is_repeated_chunk = 3 [default = false];
+}
+
+message PTabletWriterAddBatchResult {
+    required StatusPB status = 1;
+    repeated PTabletInfo tablet_vec = 2;
+    optional int64 execution_time_us = 3;
+    optional int64 wait_lock_time_us = 4;
+    repeated PTabletInfo failed_tablet_vec = 5;
+};
+
+message PTabletWriterAddSegmentRequest {
+    optional PUniqueId id = 1;
+    optional int64 index_id = 2;
+    optional int64 tablet_id = 3;
+    optional int64 txn_id = 4;
+    optional bool eos = 5;
+    optional int64 num_segments = 6;
+    optional SegmentPB segment = 7;
+};
+
+message PTabletWriterAddSegmentResult {
+    optional StatusPB status = 1;
+    optional int64 execution_time_us = 2;
+    repeated PTabletInfo tablet_vec = 3;
+    repeated PTabletInfo failed_tablet_vec = 4;
+};
+
+// Tablet writer cancel.
+message PTabletWriterCancelRequest {
+    required PUniqueId id = 1;
+    required int64 index_id = 2;
+    required int32 sender_id = 3;
+    optional int64 txn_id = 4;
+    optional int64 tablet_id = 5;
+    repeated int64 tablet_ids = 6;
+};
+
+message PTabletWriterCancelResult {
+};
+
+message PExecPlanFragmentRequest {
+};
+
+message PTabletReaderOpenRequest {
+    optional PUniqueId id = 1;
+    optional int64 tablet_id = 2;
+    optional int64 version = 3;
+}
+
+message PTabletReaderOpenResult {
+    optional StatusPB status = 1;
+}
+
+message PTabletReaderCloseRequest {
+    optional PUniqueId id = 1;
+}
+
+message PTabletReaderCloseResult {
+    optional StatusPB status = 1;
+}
+
+message PTabletReaderMultiGetRequest {
+    optional int64 tablet_id = 1;
+    optional int64 version = 2;
+    optional ChunkPB keys = 3;
+    repeated string values_columns = 4;
+}
+
+message PTabletReaderMultiGetResult {
+    optional StatusPB status = 1;
+    repeated bool found = 2;
+    optional ChunkPB values = 3;
+};
+
+message PTabletReaderScanOpenRequest {
+    optional PUniqueId id = 1;
+    optional int64 chunk_size = 2;
+    repeated string values_columns = 3;
+}
+
+message PTabletReaderScanOpenResult {
+    optional StatusPB status = 1;
+    optional int64 scanner_id = 2;
+    optional int64 chunk_id = 3;
+    optional ChunkPB chunk = 4;
+};
+
+message PTabletReaderScanGetNextRequest {
+    optional PUniqueId id = 1;
+    optional int64 scanner_id = 2;
+    optional int64 chunk_id = 3;
+}
+
+message PTabletReaderScanGetNextResult {
+    optional StatusPB status = 1;
+    optional int64 scanner_id = 2;
+    optional int64 chunk_id = 3;
+    optional ChunkPB chunk = 4;
+}
+
+message PExecPlanFragmentResult {
+    required StatusPB status = 1;
+};
+
+message PExecBatchPlanFragmentsRequest {
+};
+
+message PExecBatchPlanFragmentsResult {
+    optional StatusPB status = 1;
+};
+
+enum PPlanFragmentCancelReason {
+    // 0 is reserved
+    LIMIT_REACH = 1;
+    USER_CANCEL = 2;
+    INTERNAL_ERROR = 3;
+    TIMEOUT = 4;
+};
+
+message PCancelPlanFragmentRequest {
+    required PUniqueId finst_id = 1;
+    optional PPlanFragmentCancelReason cancel_reason = 2;
+    optional bool is_pipeline = 10;
+    optional PUniqueId query_id = 11;
+};
+
+message PCancelPlanFragmentResult {
+    required StatusPB status = 1;
+};
+
+message PFetchDataRequest {
+    required PUniqueId finst_id = 1;
+};
+
+message PFetchDataResult {
+    required StatusPB status = 1;
+    // Valid when status is ok.
+    optional int64 packet_seq = 2;
+    optional bool eos = 3;
+    optional PQueryStatistics query_statistics = 4;
+};
+
+message PTriggerProfileReportRequest {
+    repeated PUniqueId instance_ids = 1;
+};
+
+message PTriggerProfileReportResult {
+    required StatusPB status = 1;
+};
+
+message PCollectQueryStatisticsRequest {
+    repeated PUniqueId query_ids = 1;
+};
+
+message PCollectQueryStatistics {
+    optional PUniqueId query_id = 1;
+    optional int64 cpu_cost_ns = 2;
+    optional int64 scan_bytes = 3;
+    optional int64 scan_rows = 4;
+    optional int64 mem_usage_bytes = 5;
+}
+
+message PCollectQueryStatisticsResult {
+    repeated PCollectQueryStatistics query_statistics = 1;
+};
+
+message PStringPair {
+    required string key = 1;
+    required string val = 2;
+};
+
+message PKafkaLoadInfo {
+    required string brokers = 1;
+    required string topic = 2;
+    repeated PStringPair properties = 3;
+};
+
+message PKafkaMetaProxyRequest {
+    optional PKafkaLoadInfo kafka_info = 1;
+};
+
+message PKafkaOffsetProxyRequest {
+    optional PKafkaLoadInfo kafka_info = 1;
+    repeated int32 partition_ids = 2;
+};
+
+message PKafkaOffsetBatchProxyRequest {
+    repeated PKafkaOffsetProxyRequest requests = 1;
+};
+
+message PProxyRequest {
+    optional PKafkaMetaProxyRequest kafka_meta_request = 1;
+    optional PKafkaOffsetProxyRequest kafka_offset_request = 101;
+    optional PKafkaOffsetBatchProxyRequest kafka_offset_batch_request = 102;
+    optional int64 timeout = 103;
+};
+
+message PKafkaMetaProxyResult {
+    repeated int32 partition_ids = 1;
+};
+
+message PKafkaOffsetProxyResult {
+    // offset of partition_ids[i] is beginning_offsets[i] and latest_offsets[i]
+    repeated int32 partition_ids = 1;
+    repeated int64 beginning_offsets = 2;
+    repeated int64 latest_offsets = 3;
+}
+
+message PKafkaOffsetBatchProxyResult {
+    repeated PKafkaOffsetProxyResult results = 1;
+}
+
+message PProxyResult {
+    required StatusPB status = 1;
+    optional PKafkaMetaProxyResult kafka_meta_result = 2;
+    optional PKafkaOffsetProxyResult kafka_offset_result = 101;
+    optional PKafkaOffsetBatchProxyResult kafka_offset_batch_result = 102;
+};
+
+message PPulsarLoadInfo {
+    required string service_url = 1;
+    required string topic = 2;
+    required string subscription = 3;
+    repeated PStringPair properties = 4;
+};
+
+message PPulsarMetaProxyRequest {
+    optional PPulsarLoadInfo pulsar_info = 1;
+};
+
+message PPulsarBacklogProxyRequest {
+    optional PPulsarLoadInfo pulsar_info = 1;
+    repeated string partitions = 2;
+};
+
+message PPulsarBacklogBatchProxyRequest {
+    repeated PPulsarBacklogProxyRequest requests = 1;
+};
+
+message PPulsarProxyRequest {
+    optional PPulsarMetaProxyRequest pulsar_meta_request = 1;
+    optional PPulsarBacklogProxyRequest pulsar_backlog_request = 101;
+    optional PPulsarBacklogBatchProxyRequest pulsar_backlog_batch_request = 102;
+    optional int64 timeout = 103;
+};
+
+message PPulsarMetaProxyResult {
+    repeated string partitions = 1;
+};
+
+message PPulsarBacklogProxyResult {
+    repeated string partitions = 1;
+    repeated int64 backlog_nums = 2;
+}
+
+message PPulsarBacklogBatchProxyResult {
+    repeated PPulsarBacklogProxyResult results = 1;
+}
+
+message PPulsarProxyResult {
+    required StatusPB status = 1;
+    optional PPulsarMetaProxyResult pulsar_meta_result = 2;
+    optional PPulsarBacklogProxyResult pulsar_backlog_result = 101;
+    optional PPulsarBacklogBatchProxyResult pulsar_backlog_batch_result = 102;
+};
+
+message PMVMaintenanceTaskRequest {
+};
+
+message PMVMaintenanceTaskResult {
+    required StatusPB status = 1;
+};
+
+message ExecuteCommandRequestPB {
+    optional string command = 1;
+    optional string params = 2;
+};
+
+message ExecuteCommandResultPB {
+    optional StatusPB status = 1;
+    optional string result = 2;
+};
+
+// NOTE(zc): If you want to add new method here,
+// you must add same method to 'doris_internal_service.proto'.
+service PInternalService {
+    rpc transmit_data(PTransmitDataParams) returns (PTransmitDataResult);
+    rpc exec_plan_fragment(PExecPlanFragmentRequest) returns (PExecPlanFragmentResult);
+    rpc exec_batch_plan_fragments(PExecBatchPlanFragmentsRequest) returns (PExecBatchPlanFragmentsResult);
+    rpc cancel_plan_fragment(PCancelPlanFragmentRequest) returns (PCancelPlanFragmentResult);
+    rpc fetch_data(PFetchDataRequest) returns (PFetchDataResult);
+    rpc tablet_writer_open(PTabletWriterOpenRequest) returns (PTabletWriterOpenResult);
+    rpc tablet_writer_add_batch(PTabletWriterAddBatchRequest) returns (PTabletWriterAddBatchResult);
+    rpc tablet_writer_cancel(PTabletWriterCancelRequest) returns (PTabletWriterCancelResult);
+    rpc trigger_profile_report(PTriggerProfileReportRequest) returns (PTriggerProfileReportResult);
+    rpc collect_query_statistics(PCollectQueryStatisticsRequest) returns (PCollectQueryStatisticsResult);
+    rpc get_info(PProxyRequest) returns (PProxyResult);
+    rpc get_pulsar_info(PPulsarProxyRequest) returns (PPulsarProxyResult);
+
+    // Transmit vectorized data between backends.
+    rpc transmit_chunk(PTransmitChunkParams) returns (PTransmitChunkResult);
+    rpc transmit_chunk_via_http(PHttpRequest) returns (PTransmitChunkResult);
+    rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc tablet_writer_add_chunks(starrocks.PTabletWriterAddChunksRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
+    rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
+
+    rpc submit_mv_maintenance_task(PMVMaintenanceTaskRequest) returns (PMVMaintenanceTaskResult);
+
+    // local tablet reader
+    rpc local_tablet_reader_open(PTabletReaderOpenRequest) returns (PTabletReaderOpenResult);
+    rpc local_tablet_reader_close(PTabletReaderCloseRequest) returns (PTabletReaderCloseResult);
+    rpc local_tablet_reader_multi_get(PTabletReaderMultiGetRequest) returns (PTabletReaderMultiGetResult);
+    rpc local_tablet_reader_scan_open(PTabletReaderScanOpenRequest) returns (PTabletReaderScanOpenResult);
+    rpc local_tablet_reader_scan_get_next(PTabletReaderScanGetNextRequest) returns (PTabletReaderScanGetNextResult);
+
+    rpc execute_command(ExecuteCommandRequestPB) returns (ExecuteCommandResultPB);
+};

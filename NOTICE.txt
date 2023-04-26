@@ -1,0 +1,58 @@
+StarRocks
+
+Copyright 2021-present, StarRocks Inc.
+
+---------------------------
+apache-doris-incubating NOTICE
+---------------------------
+Apache Doris (incubating)
+Copyright 2018-2021 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+Based on source code originally developed by
+Baidu (http://www.baidu.com/).
+
+
+---------------------------
+apache-impala NOTICE
+---------------------------
+Apache Impala
+Copyright 2019 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+Portions of this software were developed at
+Cloudera, Inc (http://www.cloudera.com/).
+
+This product includes software developed by the OpenSSL
+Project for use in the OpenSSL Toolkit (http://www.openssl.org/)
+
+This product includes cryptographic software written by Eric Young
+(eay@cryptsoft.com).  This product includes software written by Tim
+Hudson (tjh@cryptsoft.com).
+
+This product includes software developed by the University of Chicago,
+as Operator of Argonne National Laboratory.
+Copyright (C) 1999 University of Chicago. All rights reserved.
+
+---------------------------
+apache-kudu NOTICE
+---------------------------
+Apache Kudu
+Copyright 2016 The Apache Software Foundation
+
+This product includes software developed at
+The Apache Software Foundation (http://www.apache.org/).
+
+Portions of this software were developed at
+Cloudera, Inc (http://www.cloudera.com/).
+
+This product includes software developed by the OpenSSL
+Project for use in the OpenSSL Toolkit (http://www.openssl.org/)
+
+This product includes cryptographic software written by Eric Young
+(eay@cryptsoft.com).  This product includes software written by Tim
+Hudson (tjh@cryptsoft.com).

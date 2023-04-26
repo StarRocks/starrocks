@@ -1,0 +1,26 @@
+
+
+Licensing of XZ for Java
+========================
+
+    All the files in this package have been written by Lasse Collin
+    and/or Igor Pavlov. All these files have been put into the
+    public domain. You can do whatever you want with these files.
+
+    This software is provided "as is", without any warranty.
+
+Thanks
+======
+
+People (in alphabetical order):
+  - Stefan Bodewig
+  - Carl Hasselskog
+  - Arunesh Mathur
+  - Jim Meyering
+  - Benoit Nadeau
+  - Igor Sakovich
+  - Christian Schlichtherle
+  - Alyosha Vasilieva
+
+Companies:
+  - Red Hat

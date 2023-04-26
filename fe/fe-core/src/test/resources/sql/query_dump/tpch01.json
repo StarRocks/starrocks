@@ -1,0 +1,33 @@
+{
+  "statement":"select\n  l_returnflag,\n  l_linestatus,\n  sum(l_quantity) as sum_qty,\n  sum(l_extendedprice) as sum_base_price,\n  sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,\n  sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,\n  avg(l_quantity) as avg_qty,\n  avg(l_extendedprice) as avg_price,\n  avg(l_discount) as avg_disc,\n  count(*) as count_order\nfrom\n  lineitem\nwhere\n  l_shipdate \u003c\u003d date \u00271998-12-01\u0027\ngroup by\n  l_returnflag,\n  l_linestatus\norder by\n  l_returnflag,\n  l_linestatus;\n\n",
+  "table_meta":{
+    "tpch.lineitem":"CREATE TABLE `lineitem` (\n  `l_orderkey` bigint(20) NOT NULL COMMENT \"\",\n  `l_linenumber` int(11) NOT NULL COMMENT \"\",\n  `l_shipdate` date NOT NULL COMMENT \"\",\n  `l_partkey` int(11) NOT NULL COMMENT \"\",\n  `l_suppkey` int(11) NOT NULL COMMENT \"\",\n  `l_quantity` decimal(15, 2) NOT NULL COMMENT \"\",\n  `l_extendedprice` decimal(15, 2) NOT NULL COMMENT \"\",\n  `l_discount` decimal(15, 2) NOT NULL COMMENT \"\",\n  `l_tax` decimal(15, 2) NOT NULL COMMENT \"\",\n  `l_returnflag` char(1) NOT NULL COMMENT \"\",\n  `l_linestatus` char(1) NOT NULL COMMENT \"\",\n  `l_commitdate` date NOT NULL COMMENT \"\",\n  `l_receiptdate` date NOT NULL COMMENT \"\",\n  `l_shipinstruct` char(25) NOT NULL COMMENT \"\",\n  `l_shipmode` char(10) NOT NULL COMMENT \"\",\n  `l_comment` varchar(44) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`l_orderkey`, `l_linenumber`, `l_shipdate`)\nCOMMENT \"OLAP\"\nPARTITION BY RANGE(`l_shipdate`)\n(PARTITION p1992 VALUES [(\u00271992-01-01\u0027), (\u00271993-01-01\u0027)),\nPARTITION p1993 VALUES [(\u00271993-01-01\u0027), (\u00271994-01-01\u0027)),\nPARTITION p1994 VALUES [(\u00271994-01-01\u0027), (\u00271995-01-01\u0027)),\nPARTITION p1995 VALUES [(\u00271995-01-01\u0027), (\u00271996-01-01\u0027)),\nPARTITION p1996 VALUES [(\u00271996-01-01\u0027), (\u00271997-01-01\u0027)),\nPARTITION p1997 VALUES [(\u00271997-01-01\u0027), (\u00271998-01-01\u0027)),\nPARTITION p1998 VALUES [(\u00271998-01-01\u0027), (\u00271999-01-01\u0027)))\nDISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 48 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"colocate_with\" \u003d \"tpch1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\"\n);"
+  },
+  "table_row_count":{
+    "tpch.lineitem":{
+      "p1992":722554525,
+      "p1994":864732441,
+      "p1993":864713214,
+      "p1996":867015250,
+      "p1995":864700466,
+      "p1998":651535163,
+      "p1997":864738650
+    }
+  },
+  "session_variables":"{\"runtime_join_filter_push_down_limit\":1024000,\"codegen_level\":0,\"character_set_connection\":\"utf8\",\"enable_insert_strict\":true,\"div_precision_increment\":4,\"tx_isolation\":\"REPEATABLE-READ\",\"wait_timeout\":28800,\"auto_increment_increment\":1,\"foreign_key_checks\":true,\"character_set_client\":\"utf8\",\"autocommit\":true,\"character_set_results\":\"utf8\",\"parallel_fragment_exec_instance_num\":4,\"max_scan_key_num\":-1,\"enable_global_runtime_filter\":true,\"forward_to_master\":false,\"net_read_timeout\":60,\"streaming_preaggregation_mode\":\"auto\",\"storage_engine\":\"olap\",\"cbo_enable_dp_join_reorder\":true,\"tx_visible_wait_timeout\":10,\"cbo_max_reorder_node_use_exhaustive\":4,\"new_planner_optimize_timeout\":3000,\"force_schedule_local\":false,\"query_threads\":1,\"enable_query_dump\":false,\"prefer_join_method\":\"broadcast\",\"cbo_enable_greedy_join_reorder\":true,\"load_mem_limit\":0,\"sql_select_limit\":9223372036854775807,\"profiling\":false,\"sql_safe_updates\":0,\"enable_new_planner_mock_tpch_statistic\":false,\"enable_pipeline_engine\":false,\"query_cache_type\":0,\"use_v2_rollup\":false,\"disable_colocate_join\":false,\"max_pushdown_conditions_per_column\":-1,\"new_planner_tpch_scale\":1,\"enable_vectorized_engine\":true,\"net_write_timeout\":60,\"collation_database\":\"utf8_general_ci\",\"hash_join_push_down_right_table\":true,\"new_planner_agg_stage\":0,\"collation_connection\":\"utf8_general_ci\",\"resource_group\":\"normal\",\"enable_new_planner_push_down_join_to_agg\":false,\"broadcast_row_limit\":15000000,\"exec_mem_limit\":1000000000000000,\"cbo_max_reorder_node_use_dp\":10,\"disable_join_reorder\":false,\"enable_profile\":true,\"enable_groupby_use_output_alias\":false,\"enable_vectorized_insert\":true,\"net_buffer_length\":16384,\"transmission_compression_type\":\"LZ4\",\"interactive_timeout\":3600,\"enable_spilling\":false,\"batch_size\":1024,\"max_allowed_packet\":1048576,\"query_timeout\":300,\"test_materialized_view\":false,\"enable_cbo\":true,\"collation_server\":\"utf8_general_ci\",\"time_zone\":\"Asia/Shanghai\",\"max_execution_time\":3000000,\"character_set_server\":\"utf8\",\"rewrite_count_distinct_to_bitmap_hll\":true,\"parallel_exchange_instance_num\":-1,\"sql_mode\":0,\"SQL_AUTO_IS_NULL\":false,\"event_scheduler\":\"OFF\",\"disable_streaming_preaggregations\":false}",
+  "column_statistics":{
+    "tpch.lineitem":{
+      "l_returnflag":"[-Infinity, Infinity, 0.0, 1.0, 1.0]",
+      "l_tax":"[-Infinity, Infinity, 0.0, 1.0, 1.0]",
+      "l_quantity":"[-Infinity, Infinity, 0.0, 1.0, 1.0]",
+      "l_linestatus":"[-Infinity, Infinity, 0.0, 1.0, 1.0]",
+      "l_extendedprice":"[-Infinity, Infinity, 0.0, 1.0, 1.0]",
+      "l_shipdate":"[-Infinity, Infinity, 0.0, 1.0, 1.0]",
+      "l_discount":"[-Infinity, Infinity, 0.0, 1.0, 1.0]"
+    }
+  },
+  "be_number":12,
+  "exception":[
+
+  ]
+}
