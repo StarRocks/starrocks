@@ -47,7 +47,14 @@ public class FeConstants {
 
     // set to true to skip some step when running FE unit test
     public static boolean runningUnitTest = false;
+<<<<<<< HEAD
 
+=======
+    // Set this flag to false to suppress showing local shuffle columns in verbose explain, when running FE unit tests.
+    public static boolean showLocalShuffleColumnsInExplain = true;
+    // set to true when replay from query dump
+    public static boolean isReplayFromQueryDump = false;
+>>>>>>> 260fa5446 ([BugFix] Clear bucketColumns if not all OlapScanNode use it  (#22483))
     // default scheduler interval is 10 seconds
     public static int default_scheduler_interval_millisecond = 10000;
 

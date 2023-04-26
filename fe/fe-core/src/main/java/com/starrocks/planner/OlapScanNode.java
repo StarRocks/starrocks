@@ -51,6 +51,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+>>>>>>> 260fa5446 ([BugFix] Clear bucketColumns if not all OlapScanNode use it  (#22483))
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
@@ -577,8 +582,18 @@ public class OlapScanNode extends ScanNode {
             if (dictStringIdToIntIds.size() > 5) {
                 format_template = format_template + "...";
             }
+<<<<<<< HEAD
             output.append(prefix).append(String.format(format_template, Joiner.on(",").join(printList)));
             output.append("\n");
+=======
+
+            if (!bucketColumns.isEmpty() && FeConstants.showLocalShuffleColumnsInExplain) {
+                output.append(prefix).append("LocalShuffleColumns:\n");
+                for (ColumnRefOperator col : bucketColumns) {
+                    output.append(prefix).append("- ").append(col.toString()).append("\n");
+                }
+            }
+>>>>>>> 260fa5446 ([BugFix] Clear bucketColumns if not all OlapScanNode use it  (#22483))
         }
 
         output.append(prefix).append(String.format(
