@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -141,19 +142,19 @@ public class LogicalApplyOperator extends LogicalOperator {
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> entryList = Lists.newArrayList();
-        for (ColumnOutputInfo entry : inputs.get(0).getRowOutputInfo().getColumnEntries()) {
+        for (ColumnOutputInfo entry : inputs.get(0).getRowOutputInfo().getColumnOutputInfo()) {
             entryList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
         }
 
         if (needOutputRightChildColumns) {
-            for (ColumnOutputInfo entry : inputs.get(1).getRowOutputInfo().getColumnEntries()) {
+            for (ColumnOutputInfo entry : inputs.get(1).getRowOutputInfo().getColumnOutputInfo()) {
                 entryList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
             }
         } else if (output != null) {
             entryList.add(new ColumnOutputInfo(output, output));
         }
 
-        return new RowOutputInfo(entryList);
+        return new RowOutputInfo(entryList, Sets.newHashSet(output));
     }
 
     @Override
