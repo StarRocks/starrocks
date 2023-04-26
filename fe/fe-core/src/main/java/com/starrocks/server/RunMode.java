@@ -99,7 +99,7 @@ public abstract class RunMode {
 
         @Override
         public short getDefaultReplicationNum() {
-            return 3;
+            return Config.default_replication_num;
         }
     }
 

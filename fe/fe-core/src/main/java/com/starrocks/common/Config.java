@@ -2191,6 +2191,11 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_execute_script_on_frontend = true;
 
+<<<<<<< HEAD
     @ConfField
     public static boolean only_use_compute_node = false;
+=======
+    @ConfField(mutable = true)
+    public static short default_replication_num = 3;
+>>>>>>> 851de6e10 ([Refactor] Add default_replication_num in the FE config (#22493))
 }
