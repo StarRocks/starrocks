@@ -193,7 +193,8 @@ Status ORCScanner::_open_next_orc_reader() {
             return st;
         }
         const std::string& file_name = file->filename();
-        auto inStream = std::make_unique<ORCFileStream>(file, _counter);
+        ASSIGN_OR_RETURN(uint64_t file_size, file->get_size());
+        auto inStream = std::make_unique<ORCFileStream>(file, file_size, _counter);
         _next_range++;
         _orc_reader->set_read_chunk_size(_max_chunk_size);
         _orc_reader->set_current_file_name(file_name);
