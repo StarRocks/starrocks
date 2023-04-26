@@ -40,7 +40,7 @@ namespace starrocks::parquet {
 
 struct FileColumnId {
     int32_t field_id = -1;
-    std::vector<FileColumnId> children = std::vector<FileColumnId>();
+    std::vector<FileColumnId> children;
 };
 
 class ParquetOutputStream : public arrow::io::OutputStream {
