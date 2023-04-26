@@ -38,6 +38,11 @@
 
 namespace starrocks::parquet {
 
+struct FileColumnId {
+    int32_t field_id = -1;
+    std::vector<FileColumnId> children = std::vector<FileColumnId>();
+};
+
 class ParquetOutputStream : public arrow::io::OutputStream {
 public:
     ParquetOutputStream(std::unique_ptr<starrocks::WritableFile> wfile);
@@ -78,7 +83,8 @@ public:
                                        const TCompressionType::type& compression_type);
 
     static arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> make_schema(
-            const std::vector<std::string>& file_column_names, const std::vector<ExprContext*>& output_expr_ctxs);
+            const std::vector<std::string>& file_column_names, const std::vector<ExprContext*>& output_expr_ctxs,
+            const std::vector<FileColumnId>& file_column_ids);
 
     static arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> make_schema(
             const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs);
@@ -88,7 +94,8 @@ public:
 private:
     static arrow::Result<::parquet::schema::NodePtr> _make_schema_node(const std::string& name,
                                                                        const TypeDescriptor& type_desc,
-                                                                       ::parquet::Repetition::type rep_type);
+                                                                       ::parquet::Repetition::type rep_type,
+                                                                       FileColumnId file_column_ids = FileColumnId());
 };
 
 class FileWriterBase {
