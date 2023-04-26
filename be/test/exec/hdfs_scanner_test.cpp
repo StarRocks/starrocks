@@ -2413,7 +2413,8 @@ TEST_F(HdfsScannerTest, TestParquetTimestampToDatetime) {
 TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
     SlotDesc parquet_descs[] = {{"Id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
 
-    const std::string parquet_file = "./be/test/formats/parquet/test_data/iceberg_schema_evolution/add_struct_subfield.parquet";
+    const std::string parquet_file =
+            "./be/test/formats/parquet/test_data/iceberg_schema_evolution/add_struct_subfield.parquet";
 
     _create_runtime_state("Asia/Shanghai");
     auto scanner = std::make_shared<HdfsParquetScanner>();
