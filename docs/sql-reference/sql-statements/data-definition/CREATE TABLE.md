@@ -437,11 +437,7 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 
 ## Examples
 
-<<<<<<< HEAD
-### Create an Aggregate Key table that uses Hash bucketing and column-based storage
-=======
 ### Create an Aggregate table that uses Hash bucketing and columnar storage
->>>>>>> 6c59f51ef3 (split data model and update related proper names)
 
 ```SQL
 CREATE TABLE example_db.table_hash
