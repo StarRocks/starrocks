@@ -25,6 +25,7 @@
 #include "common/config.h"
 #include "fs/fs.h"
 #include "fs/rapidjson_stream_adapter.h"
+#include "gutil/stl_util.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -77,13 +78,32 @@ struct OrphanSegmentHandler {
             std::string_view name(str, length);
             VLOG(2) << "Dropping disk cache of " << name;
             auto path = join_path(dir, name);
-            auto st = fs->drop_local_cache(path);
-            LOG_IF(ERROR, !st.ok() && !st.is_not_found()) << "Fail to drop disk cache of " << name << ": " << st;
+            auto st = ignore_not_found(fs->drop_local_cache(path));
+            LOG_IF(ERROR, !st.ok()) << "Fail to drop disk cache of " << name << ": " << st;
         }
         return true;
     }
 };
 } // namespace
+
+static Status list_tablet_metadata(const std::string& metadir, std::set<std::string>* metas) {
+    auto fs_or = FileSystem::CreateSharedFromString(metadir);
+    if (!fs_or.ok()) {
+        // Return NotFound only when the file or directory does not exist.
+        if (fs_or.status().is_not_found()) {
+            return Status::InternalError(fs_or.status().message());
+        } else {
+            return fs_or.status();
+        }
+    }
+
+    return (*fs_or)->iterate_dir(metadir, [&](std::string_view name) {
+        if (is_tablet_metadata(name)) {
+            metas->emplace(name);
+        }
+        return true;
+    });
+}
 
 static Status write_orphan_list_file(const std::set<std::string>& orphans, WritableFile* file) {
     raw::RawVector<char> buffer(4096);
@@ -153,9 +173,12 @@ static Status delete_tablet_metadata(std::string_view root_location, const std::
                 }
             }
             auto path = join_path(metadata_root_location, tablet_metadata_filename(tablet_id, versions[i]));
-            LOG(INFO) << "Deleting " << path;
-            auto st = fs->delete_file(path);
-            LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << path << ": " << st;
+            auto st = ignore_not_found(fs->delete_file(path));
+            if (st.ok()) {
+                LOG(INFO) << "Deleted " << path;
+            } else {
+                LOG(WARNING) << "Fail to delete " << path << ": " << st;
+            }
         }
     }
 
@@ -168,19 +191,21 @@ static Status delete_txn_log(std::string_view root_location, const std::set<int6
                              int64_t min_active_txn_id) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
     auto txn_log_root_location = join_path(root_location, kTxnLogDirectoryName);
-    auto iter_st = fs->iterate_dir(txn_log_root_location, [&](std::string_view name) {
+    return ignore_not_found(fs->iterate_dir(txn_log_root_location, [&](std::string_view name) {
         if (is_txn_log(name)) {
             auto [tablet_id, txn_id] = parse_txn_log_filename(name);
             if (txn_id < min_active_txn_id && owned_tablets.count(tablet_id) > 0) {
                 auto location = join_path(txn_log_root_location, name);
-                LOG(INFO) << "Deleting " << location << ". min_active_txn_id=" << min_active_txn_id;
-                auto st = fs->delete_file(location);
-                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << name << ": " << st;
+                auto st = ignore_not_found(fs->delete_file(location));
+                if (st.ok()) {
+                    LOG(INFO) << "Deleted " << location << ". min_active_txn_id=" << min_active_txn_id;
+                } else {
+                    LOG(WARNING) << "Fail to delete " << name << ": " << st;
+                }
             }
         }
         return true;
-    });
-    return iter_st.is_not_found() ? Status::OK() : iter_st;
+    }));
 }
 
 static Status drop_disk_cache(std::string_view root_location) {
@@ -215,8 +240,9 @@ Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, in
     return ret;
 }
 
+// To developers: |tablet_metadatas| must be a sorted container to use STLSetDifference
 static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tablet_mgr, std::string_view root_location,
-                                                             const std::vector<std::string>& tablet_metadatas,
+                                                             std::set<std::string>* tablet_metadatas,
                                                              const std::vector<std::string>& txn_logs) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
     const auto now = std::time(nullptr);
@@ -234,7 +260,7 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
     bool need_check_modify_time = false;
     int64_t total_files = 0;
     // List segment
-    auto iter_st = fs->iterate_dir2(segment_root_location, [&](DirEntry entry) {
+    auto st = ignore_not_found(fs->iterate_dir2(segment_root_location, [&](DirEntry entry) {
         total_files++;
         if (!is_segment(entry.name) && !is_del(entry.name) && !is_delvec(entry.name)) {
             LOG_EVERY_N(WARNING, 100) << "Unrecognized data file " << entry.name;
@@ -248,9 +274,9 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
             datafiles.emplace(entry.name);
         }
         return true;
-    });
-    if (!iter_st.ok() && !iter_st.is_not_found()) {
-        return iter_st;
+    }));
+    if (!st.ok()) {
+        return st;
     }
 
     TEST_SYNC_POINT("CloudNative::GC::find_orphan_datafiles:finished_list_meta");
@@ -288,18 +314,39 @@ static StatusOr<std::set<std::string>> find_orphan_datafiles(TabletManager* tabl
 
     TEST_SYNC_POINT("CloudNative::GC::find_orphan_datafiles:check_meta");
 
-    for (const auto& filename : tablet_metadatas) {
-        auto location = join_path(metadata_root_location, filename);
-        auto res = tablet_mgr->get_tablet_metadata(location, false);
-        if (!res.ok()) {
-            return res.status();
+    std::set<std::string> processed_metadatas;
+    int retries = 0;
+    while (true) {
+        bool has_deleted_metadata = false;
+        for (const auto& filename : *tablet_metadatas) {
+            auto location = join_path(metadata_root_location, filename);
+            auto res = tablet_mgr->get_tablet_metadata(location, false);
+            if (res.status().is_not_found()) { // This metadata file was deleted by another node
+                has_deleted_metadata = true;
+            } else if (!res.ok()) {
+                return res.status();
+            } else {
+                auto metadata = std::move(res).value();
+                for (const auto& rowset : metadata->rowsets()) {
+                    check_rowset(rowset);
+                }
+                check_delvecs(metadata->id(), metadata->delvec_meta());
+            }
         }
 
-        auto metadata = std::move(res).value();
-        for (const auto& rowset : metadata->rowsets()) {
-            check_rowset(rowset);
+        if (has_deleted_metadata && ++retries <= config::experimental_lake_segment_gc_max_retries) {
+            LOG(INFO) << "Some metadata files deleted by other nodes, retrying";
+            std::set<std::string> new_metadatas;
+            processed_metadatas.insert(tablet_metadatas->begin(), tablet_metadatas->end());
+            RETURN_IF_ERROR(list_tablet_metadata(metadata_root_location, &new_metadatas));
+            // Copies the elements from the set |new_metadatas| which are not found in set
+            // |processed_metadatas| to the set |tablet_metadatas|.
+            *tablet_metadatas = STLSetDifference(new_metadatas, processed_metadatas);
+        } else if (has_deleted_metadata) {
+            return Status::InternalError("Some metadata files deleted by other nodes");
+        } else {
+            break;
         }
-        check_delvecs(metadata->id(), metadata->delvec_meta());
     }
 
     for (const auto& filename : txn_logs) {
@@ -359,28 +406,23 @@ Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     const auto txn_log_root_location = join_path(root_location, kTxnLogDirectoryName);
     const auto segment_root_location = join_path(root_location, kSegmentDirectoryName);
 
-    int64_t min_tablet_id = INT64_MAX;
-    std::vector<std::string> tablet_metadatas;
+    std::set<std::string> tablet_metadatas;
+    RETURN_IF_ERROR(list_tablet_metadata(metadata_root_location, &tablet_metadatas));
 
-    // List tablet meatadata
-    auto iter_st = fs->iterate_dir(metadata_root_location, [&](std::string_view name) {
-        if (!is_tablet_metadata(name)) {
-            return true;
-        }
-        auto [tablet_id, version] = parse_tablet_metadata_filename(name);
-        min_tablet_id = std::min(min_tablet_id, tablet_id);
-        tablet_metadatas.emplace_back(name);
-        return true;
-    });
-    if (!iter_st.ok()) {
-        return iter_st;
-    }
-
-    if (min_tablet_id == INT64_MAX) {
-        LOG(INFO) << "Skiped datafile GC of " << root_location << " because there is no tablet metadata";
+    if (tablet_metadatas.empty()) {
+        LOG(INFO) << "Skipped datafile GC of " << root_location << " because there is no tablet metadata";
         return Status::OK();
     }
 
+    // Find the minimum tablet id.
+    int64_t min_tablet_id = INT64_MAX;
+    for (const auto& name : tablet_metadatas) {
+        auto [tablet_id, version] = parse_tablet_metadata_filename(name);
+        min_tablet_id = std::min(min_tablet_id, tablet_id);
+        (void)version;
+    }
+
+    // Check if the minimum tablet id is managed by the current node.
     if (owned_tablets.count(min_tablet_id) == 0) {
         // The tablet with the smallest ID is not managed by the current process, skip segment GC
         LOG(INFO) << "Skiped datafile GC of " << root_location
@@ -390,28 +432,30 @@ Status datafile_gc(std::string_view root_location, TabletManager* tablet_mgr) {
 
     // List txn log
     std::vector<std::string> txn_logs;
-    iter_st = fs->iterate_dir(txn_log_root_location, [&](std::string_view name) {
+    RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(txn_log_root_location, [&](std::string_view name) {
         txn_logs.emplace_back(name);
         return true;
-    });
-    if (!iter_st.ok() && !iter_st.is_not_found()) {
-        return iter_st;
-    }
+    })));
 
     // Find orphan data files, include segment, del, and delvec
     ASSIGN_OR_RETURN(auto orphan_datafiles,
-                     find_orphan_datafiles(tablet_mgr, root_location, tablet_metadatas, txn_logs));
+                     find_orphan_datafiles(tablet_mgr, root_location, &tablet_metadatas, txn_logs));
+
     // Write orphan segment list file
     WritableFileOptions opts{
             .sync_on_close = false, .skip_fill_local_cache = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto orphan_list_file, fs->new_writable_file(opts, join_path(root_location, kGCFileName)));
     RETURN_IF_ERROR(write_orphan_list_file(orphan_datafiles, orphan_list_file.get()));
+
     // Delete orphan segment files and del files
     for (auto& file : orphan_datafiles) {
         auto location = join_path(segment_root_location, file);
-        LOG(INFO) << "Deleting orphan data file: " << location;
-        auto st = fs->delete_file(location);
-        LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << location << ": " << st;
+        auto st = ignore_not_found(fs->delete_file(location));
+        if (st.ok()) {
+            LOG(INFO) << "Deleted orphan data file: " << location;
+        } else {
+            LOG(WARNING) << "Fail to delete " << location << ": " << st;
+        }
     }
     return Status::OK();
 }
