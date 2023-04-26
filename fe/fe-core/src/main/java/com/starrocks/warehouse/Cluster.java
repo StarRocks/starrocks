@@ -24,12 +24,16 @@ import com.starrocks.persist.gson.GsonUtils;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.Set;
 
 public class Cluster implements Writable {
     @SerializedName(value = "id")
     private long id;
     @SerializedName(value = "wgid")
     private long workerGroupId;
+    @SerializedName(value = "computeNodeIds")
+    private Set<Long> computeNodeIds = new HashSet<>();
 
     public Cluster(long id) {
         this.id = id;
@@ -55,6 +59,14 @@ public class Cluster implements Writable {
         result.addRow(Lists.newArrayList(String.valueOf(this.getId()),
                 String.valueOf(this.getPendingSqls()),
                 String.valueOf(this.getRunningSqls())));
+    }
+
+    public void addNode(long cnId) {
+        computeNodeIds.add(cnId);
+    }
+
+    public void dropNode(long cnId) {
+        computeNodeIds.remove(cnId);
     }
 
     @Override

@@ -238,13 +238,15 @@ public class HeartbeatMgr extends FrontendDaemon {
                                     .abortTxnWhenCoordinateBeDown(computeNode.getHost(), 100);
                         }
                     } else {
-                        if (RunMode.allowCreateLakeTable() && !isReplay && isBackend) {
-                            // addWorker
-                            int starletPort = computeNode.getStarletPort();
+                        if (RunMode.allowCreateLakeTable() && !isReplay) {
+                            if (isBackend || Config.only_use_compute_node) {
+                                // addWorker
+                                int starletPort = computeNode.getStarletPort();
 
-                            if (starletPort != 0) {
-                                String workerAddr = computeNode.getHost() + ":" + starletPort;
-                                GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(computeNode.getId(), workerAddr);
+                                if (starletPort != 0) {
+                                    String workerAddr = computeNode.getHost() + ":" + starletPort;
+                                    GlobalStateMgr.getCurrentState().getStarOSAgent().addWorker(computeNode.getId(), workerAddr);
+                                }
                             }
                         }
                     }
