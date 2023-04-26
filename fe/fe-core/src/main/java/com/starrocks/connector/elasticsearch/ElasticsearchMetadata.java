@@ -20,7 +20,6 @@ import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -84,11 +83,12 @@ public class ElasticsearchMetadata
             esTable.syncTableMetaData(esRestClient);
             return esTable;
         } catch (NoSuchElementException e) {
-            LOG.error("Unknown index {}", tableName);
-            throw new StarRocksConnectorException("Unknown index " + tableName);
+            LOG.error(String.format("Unknown index {%s}", tableName), e);
+            return null;
         } catch (Exception e) {
             LOG.error("transform to EsTable Error", e);
-            throw new StarRocksConnectorException(e.getMessage());
+            return null;
         }
+
     }
 }

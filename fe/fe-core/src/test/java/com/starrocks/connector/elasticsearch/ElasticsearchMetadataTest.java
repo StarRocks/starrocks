@@ -14,32 +14,18 @@
 
 package com.starrocks.connector.elasticsearch;
 
-import com.starrocks.common.ExceptionChecker;
-import com.starrocks.connector.exception.StarRocksConnectorException;
-import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.HashMap;
-import java.util.NoSuchElementException;
 
 public class ElasticsearchMetadataTest {
 
     @Test
     public void testGetTable(@Mocked EsRestClient client) {
-        new Expectations() {
-            {
-                client.getMapping("not_exist_index");
-                result = new NoSuchElementException();
-            }
-        };
-
         ElasticsearchMetadata metadata = new ElasticsearchMetadata(client, new HashMap<>(), "catalog");
-        ExceptionChecker.expectThrowsWithMsg(StarRocksConnectorException.class,
-                "Unknown index not_exist_index",
-                () -> metadata.getTable("default_db", "not_exist_index"));
-
+        Assert.assertNull(metadata.getTable("default_db", "not_exist_index"));
         Assert.assertNull(metadata.getTable("aaaa", "tbl"));
     }
 }
