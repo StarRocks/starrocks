@@ -15,6 +15,9 @@
 package com.starrocks.storagevolume;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudConfigurationFactory;
+import com.starrocks.credential.CloudType;
 
 import java.util.List;
 import java.util.Map;
@@ -32,7 +35,9 @@ public class StorageVolume {
 
     private List<String> locations;
 
-    private StorageParams storageParams;
+    private CloudConfiguration cloudConfiguration;
+
+    private Map<String, String> params;
 
     private String comment;
 
@@ -41,22 +46,30 @@ public class StorageVolume {
     private boolean enabled;
 
     public StorageVolume(String name, String svt, List<String> locations,
-                         Map<String, String> storageParams, boolean enabled, String comment) throws AnalysisException {
+                         Map<String, String> params, boolean enabled, String comment) throws AnalysisException {
         this.name = name;
         this.svt = toStorageVolumeType(svt);
         this.locations = locations;
         this.comment = comment;
         this.refCount = 0;
         this.enabled = enabled;
-        this.storageParams = toStorageParams(storageParams);
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
+        if (!isValidCloudConfiguration()) {
+            throw new AnalysisException("Storage params is not valid");
+        }
+        this.params = params;
     }
 
-    public void setStorageParams(Map<String, String> params) throws AnalysisException {
-        this.storageParams = toStorageParams(params);
+    public void setCloudConfiguration(Map<String, String> params) throws AnalysisException {
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
+        if (!isValidCloudConfiguration()) {
+            throw new AnalysisException("Storage params is not valid");
+        }
+        this.params = params;
     }
 
-    public StorageParams getStorageParams() {
-        return storageParams;
+    public CloudConfiguration getCloudConfiguration() {
+        return cloudConfiguration;
     }
 
     public void setEnabled(boolean enabled) {
@@ -86,14 +99,14 @@ public class StorageVolume {
         }
     }
 
-    private StorageParams toStorageParams(Map<String, String> storageParams) throws AnalysisException {
+    private boolean isValidCloudConfiguration() {
         switch (svt) {
             case S3:
-                return new S3StorageParams(storageParams);
+                return cloudConfiguration.getCloudType() == CloudType.AWS;
             case HDFS:
-                return new HDFSStorageParams(storageParams);
+                return cloudConfiguration.getCloudType() == CloudType.HDFS;
             default:
-                return null;
+                return false;
         }
     }
 }

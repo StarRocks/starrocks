@@ -63,7 +63,7 @@ public class StorageVolumeMgr {
 
             StorageVolume sv = nameToSV.get(name);
             if (!params.isEmpty()) {
-                sv.setStorageParams(params);
+                sv.setCloudConfiguration(params);
             }
 
             if (enabled.isPresent()) {
