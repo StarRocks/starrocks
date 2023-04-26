@@ -1,39 +1,39 @@
-# Primary Key model
+# Primary Key table
 
-StarRocks has started to support the Primary Key model since v1.19. When you create a table that uses the Primary Key model, you can define primary key columns and metric columns. Queries return the most recent record among a group of records that have the same primary key. Unlike the Unique Key model, the Primary Key model does not require aggregate operations during queries and supports the pushdown of predicates and indexes. As such, the Primary Key model can deliver high query performance despite real-time and frequent data updates.
+StarRocks has started to support the Primary Key table since v1.19. When you create a table that uses the Primary Key table, you can define primary key columns and metric columns. Queries return the most recent record among a group of records that have the same primary key. Unlike the Unique Key table, the Primary Key table does not require aggregate operations during queries and supports the pushdown of predicates and indexes. As such, the Primary Key table can deliver high query performance despite real-time and frequent data updates.
 
 ## Scenarios
 
-- The Primary Key model is suitable for the following scenarios in which data needs to be frequently updated in real time:
-  - **Stream data in real time from transaction processing systems into StarRocks.** In normal cases, transaction processing systems involve a large number of update and delete operations in addition to insert operations. If you need to synchronize data from a transaction processing system to StarRocks, we recommend that you create a table that uses the Primary Key model. Then, you can use tools, such as CDC Connectors for Apache Flink®, to synchronize the binary logs of the transaction processing system to StarRocks. StarRocks uses the binary logs to add, delete, and update the data in the table in real time. This simplifies data synchronization and delivers 3 to 10 times higher query performance than when a Merge on Read (MoR) table of the Unique Key model is used. For example, you can use flink-connector-starrocks to load data. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
+- The Primary Key table is suitable for the following scenarios in which data needs to be frequently updated in real time:
+  - **Stream data in real time from transaction processing systems into StarRocks.** In normal cases, transaction processing systems involve a large number of update and delete operations in addition to insert operations. If you need to synchronize data from a transaction processing system to StarRocks, we recommend that you create a table that uses the Primary Key table. Then, you can use tools, such as CDC Connectors for Apache Flink®, to synchronize the binary logs of the transaction processing system to StarRocks. StarRocks uses the binary logs to add, delete, and update the data in the table in real time. This simplifies data synchronization and delivers 3 to 10 times higher query performance than when a Merge on Read (MoR) table of the Unique Key table is used. For example, you can use flink-connector-starrocks to load data. For more information, see [Load data by using flink-connector-starrocks](../../loading/Flink-connector-starrocks.md).
 
-  - **Join multiple streams by performing update operations on individual columns**. In business scenarios such as user profiling, flat tables are preferably used to improve multi-dimensional analysis performance and simplify the analytics model that is used by data analysts. Upstream data in these scenarios may come from various apps, such as shopping apps, delivery apps, and banking apps, or from systems, such as machine learning systems that perform computations to obtain the distinct tags and properties of users. The Primary Key model is well suited in these scenarios, because it supports updates to individual columns. Each app or system can update only the columns that hold the data within its own service scope while benefiting from real-time data additions, deletions, and updates at high query performance.
+  - **Join multiple streams by performing update operations on individual columns**. In business scenarios such as user profiling, flat tables are preferably used to improve multi-dimensional analysis performance and simplify the analytics model that is used by data analysts. Upstream data in these scenarios may come from various apps, such as shopping apps, delivery apps, and banking apps, or from systems, such as machine learning systems that perform computations to obtain the distinct tags and properties of users. The Primary Key table is well suited in these scenarios, because it supports updates to individual columns. Each app or system can update only the columns that hold the data within its own service scope while benefiting from real-time data additions, deletions, and updates at high query performance.
 
-- The Primary Key model is suitable for scenarios in which the memory occupied by the primary key is controllable.
+- The Primary Key table is suitable for scenarios in which the memory occupied by the primary key is controllable.
 
-  The storage engine of StarRocks creates an index for the primary key of each table that uses the Primary Key model. Additionally, when you load data into a table, StarRocks loads the primary key index into the memory. Therefore, the Primary Key model requires a larger memory capacity than the other three data models. **StarRocks limits the total length of the fields that comprise the primary key to 127 bytes after encoding.**
+  The storage engine of StarRocks creates an index for the primary key of each table that uses the Primary Key table. Additionally, when you load data into a table, StarRocks loads the primary key index into the memory. Therefore, the Primary Key table requires a larger memory capacity than the other three data models. **StarRocks limits the total length of the fields that comprise the primary key to 127 bytes after encoding.**
 
-  Consider using the Primary Key model if a table has the following characteristics:
+  Consider using the Primary Key table if a table has the following characteristics:
 
   - The table contains both fast-changing data and slow-changing data. Fast-changing data is frequently updated over the most recent days, whereas slow-changing data is rarely updated. Suppose that you need to synchronize a MySQL order table to StarRocks in real time for analytics and queries. In this example, the data of the table is partitioned by day, and most updates are performed on orders that are created within the most recent days. Historical orders are no longer updated after they are completed. When you run a data load job, the primary key index is not loaded into the memory and only the index entries of the recently updated orders are loaded into the memory.
 
     As shown in the following figure, the data in the table is partitioned by day, and the data in the most recent two partitions is frequently updated.
 
-    ![Primary index -1](../assets/3.2-1.png)
+    ![Primary index -1](../../assets/3.2-1.png)
 
   - The table is a flat table that is composed of hundreds or thousands of columns. The primary key comprises only a small portion of the table data and consumes only a small amount of memory. For example, a user status or profile table consists of a large number of columns but only tens to hundreds of millions of users. In this situation, the amount of memory consumed by the primary key is controllable.
 
     As shown in the following figure, the table contains only a few rows, and the primary key of the table comprises only a small portion of the table.
 
-    ![Primary index -2](../assets/3.2.4-2.png)
+    ![Primary index -2](../../assets/3.2.4-2.png)
 
 ## Principle
 
-The Primary Key model is designed based on a new storage engine that is provided by StarRocks. The metadata structure and the read/write mechanism in the Primary Key model differ from those in the Duplicate Key model. As such, the Primary Key model does not require aggregate operations and supports the pushdown of predicates and indexes. These significantly increase query performance.
+The Primary Key table is designed based on a new storage engine that is provided by StarRocks. The metadata structure and the read/write mechanism in the Primary Key table differ from those in the Duplicate Key table. As such, the Primary Key table does not require aggregate operations and supports the pushdown of predicates and indexes. These significantly increase query performance.
 
-The Duplicate Key model adopts the MoR policy. MoR streamlines data writes but requires online aggregation of multiple data versions. Additionally, the Merge operator does not support the pushdown of predicates and indexes. As a result, query performance deteriorates.
+The Duplicate Key table adopts the MoR policy. MoR streamlines data writes but requires online aggregation of multiple data versions. Additionally, the Merge operator does not support the pushdown of predicates and indexes. As a result, query performance deteriorates.
 
-The Primary Key model adopts the Delete+Insert policy to ensure that each record has a unique primary key. This way, the Primary Key model does not require merge operations. Details are as follows:
+The Primary Key table adopts the Delete+Insert policy to ensure that each record has a unique primary key. This way, the Primary Key table does not require merge operations. Details are as follows:
 
 - When StarRocks receives a request for an update operation on a record, it locates the record by searching the primary key index, marks the record as deleted, and inserts a new record. In other words, StarRocks converts an update operation to a delete operation plus an insert operation.
 
@@ -115,7 +115,7 @@ PROPERTIES("replication_num" = "3",
 
 - `enable_persistent_index`: the primary key index can be persisted to disk and stored in memory to avoid it taking up too much memory. Generally, the primary key index can only take up 1/10 of the memory it does before. You can set this property in `PROPERTIES` when you create a table. Valid values are true or false. Default value is false.
 
-  > - If you want to modify this parameter after the table is created, please see the part Modify the properties of table in [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
+  > - If you want to modify this parameter after the table is created, please see the part Modify the properties of table in [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
   > - It is recommended to set this property to true if the disk is SSD.
   > - As of version 2.3.0, StarRocks supports to set this property.
 
@@ -125,10 +125,10 @@ PROPERTIES("replication_num" = "3",
 
 - Since version 2.4.0, you can create asynchronous materialized views based on Primary Key tables.
 
-- The Primary Key model does not support materialized views.
+- The Primary Key table does not support materialized views.
 
-- You cannot use the ALTER TABLE statement to change the data types of the primary key columns and reorder metric columns. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
+- You cannot use the ALTER TABLE statement to change the data types of the primary key columns and reorder metric columns. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
 
 ## What to do next
 
-You can run a  stream load, broker load, or routine load job to perform insert, update, or delete operations on all or individual columns of a table that uses the Primary Key model. For more information, see [Overview of data loading](../loading/Loading_intro.md).
+You can run a  stream load, broker load, or routine load job to perform insert, update, or delete operations on all or individual columns of a table that uses the Primary Key table. For more information, see [Overview of data loading](../../loading/Loading_intro.md).
