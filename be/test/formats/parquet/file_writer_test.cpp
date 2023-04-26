@@ -86,7 +86,8 @@ protected:
 
     std::shared_ptr<::parquet::schema::GroupNode> _make_schema(const std::vector<TypeDescriptor>& type_descs) {
         auto type_names = _make_type_names(type_descs);
-        auto ret = ParquetBuildHelper::make_schema(type_names, type_descs);
+        auto ret =
+                ParquetBuildHelper::make_schema(type_names, type_descs, std::vector<FileColumnId>(type_descs.size()));
         if (!ret.ok()) {
             return nullptr;
         }
@@ -222,7 +223,6 @@ TEST_F(FileWriterTest, TestWriteDecimal) {
     ASSERT_TRUE(read_chunk != nullptr);
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
-
 
 TEST_F(FileWriterTest, TestWriteBoolean) {
     auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
