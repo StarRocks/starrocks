@@ -539,9 +539,20 @@ columnAliases
     : '(' identifier (',' identifier)* ')'
     ;
 
+// partitionNames should not support string, it should be identifier here only for compatibility with historical bugs
 partitionNames
+<<<<<<< HEAD
     : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
     | TEMPORARY? (PARTITION | PARTITIONS) identifier
+=======
+    : TEMPORARY? (PARTITION | PARTITIONS) '(' identifierOrString (',' identifierOrString)* ')'
+    | TEMPORARY? (PARTITION | PARTITIONS) identifierOrString
+    | keyPartitions
+    ;
+
+keyPartitions
+    : PARTITION '(' keyPartition (',' keyPartition)* ')'                              #keyPartitionList
+>>>>>>> 86431f812 (Syntax partition name support string literal (#22468))
     ;
 
 tabletList
