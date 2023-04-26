@@ -35,6 +35,85 @@ public class ArrayTypeTest extends PlanTestBase {
         starRocksAssert.withTable("create table test_array(c0 INT, c1 array<varchar(65533)>, c2 array<int>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
+
+        starRocksAssert.withTable("CREATE TABLE adec ( \n" +
+                "v1 bigint not null ,\n" +
+                "i_1 Array<INT> NOT NULL ,\n" +
+                "s_1 Array<String> NULL ,\n" +
+                "d_1 Array<DECIMAL(26, 2)> NOT NULL ,\n" +
+                "d_2 Array<DECIMAL64(4, 3)> NULL ,\n" +
+                "d_3 Array<DECIMAL128(25, 19)> NOT NULL ,\n" +
+                "d_4 Array<DECIMAL32(8, 5)> NULL ,\n" +
+                "d_5 Array<DECIMAL(16, 3)> NULL ,\n" +
+                "d_6 Array<DECIMAL128(18, 6)> NOT NULL \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+    }
+
+    @Test
+    public void testConcatArray() throws Exception {
+        String sql = "select concat(c1, c2) from test_array";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>))");
+
+        sql = "select concat(c1, c0) from test_array";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(2: c1, CAST(ARRAY<int(11)>[1: c0] AS ARRAY<VARCHAR>))");
+
+        sql = "select concat(c0, c2) from test_array";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(ARRAY<int(11)>[1: c0], 3: c2)");
+
+        sql = "select concat(t1a, t1b, t1c) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "concat(1: t1a, CAST(2: t1b AS VARCHAR), CAST(3: t1c AS VARCHAR))");
+
+        sql = "select concat(i_1, s_1, d_1) from adec";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(CAST(2: i_1 AS ARRAY<VARCHAR>), 3: s_1, CAST(4: d_1 AS ARRAY<VARCHAR>))");
+
+        sql = "select concat(d_1, d_2) from adec";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(CAST(4: d_1 AS ARRAY<DOUBLE>), CAST(5: d_2 AS ARRAY<DOUBLE>))");
+
+        sql = "select concat(d_1, d_2, d_3, d_4, d_5, d_6) from adec";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(CAST(4: d_1 AS ARRAY<DOUBLE>), CAST(5: d_2 AS ARRAY<DOUBLE>), " +
+                "CAST(6: d_3 AS ARRAY<DOUBLE>), CAST(7: d_4 AS ARRAY<DOUBLE>), CAST(8: d_5 AS ARRAY<DOUBLE>), " +
+                "CAST(9: d_6 AS ARRAY<DOUBLE>))");
+
+        sql = "select concat(i_1, s_1, d_1, d_2, d_3, d_4, d_5, d_6) from adec";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(CAST(2: i_1 AS ARRAY<VARCHAR>), 3: s_1, CAST(4: d_1 AS ARRAY<VARCHAR>), " +
+                "CAST(5: d_2 AS ARRAY<VARCHAR>), CAST(6: d_3 AS ARRAY<VARCHAR>)," +
+                " CAST(7: d_4 AS ARRAY<VARCHAR>), CAST(8: d_5 AS ARRAY<VARCHAR>), " +
+                "CAST(9: d_6 AS ARRAY<VARCHAR>))");
+
+        sql = "select concat(v1, [1,2,3], s_1) from adec";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(CAST(ARRAY<bigint(20)>[1: v1] AS ARRAY<VARCHAR>), " +
+                "CAST(ARRAY<tinyint(4)>[1,2,3] AS ARRAY<VARCHAR>), 3: s_1)");
+
+        sql = "select concat(1,2, [1,2])";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(ARRAY<tinyint(4)>[1], ARRAY<tinyint(4)>[2], ARRAY<tinyint(4)>[1,2])");
+
+        sql = "select concat(1,2, [1,2], 'a', 'b')";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "array_concat(CAST(ARRAY<tinyint(4)>[1] AS ARRAY<VARCHAR>), " +
+                "CAST(ARRAY<tinyint(4)>[2] AS ARRAY<VARCHAR>), CAST(ARRAY<tinyint(4)>[1,2] AS ARRAY<VARCHAR>), " +
+                "ARRAY<varchar>['a'], ARRAY<varchar>['b'])");
+
+        sql = "select concat(1,2, [1,2], 'a', 'b', 1.1)";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, " array_concat(CAST(ARRAY<tinyint(4)>[1] AS ARRAY<VARCHAR>), " +
+                "CAST(ARRAY<tinyint(4)>[2] AS ARRAY<VARCHAR>), CAST(ARRAY<tinyint(4)>[1,2] AS ARRAY<VARCHAR>), " +
+                "ARRAY<varchar>['a'], ARRAY<varchar>['b'], CAST(ARRAY<decimal32(2, 1)>[1.1] AS ARRAY<VARCHAR>))");
     }
 
     @Test
