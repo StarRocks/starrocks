@@ -12,7 +12,7 @@ In v2.5, the query cache supports only aggregate queries on single flat tables. 
 
 We recommend that you use the query cache in the following scenarios:
 
-- You frequently run aggregate queries on a single flat table or on multiple tables joined in a star schema.
+- You frequently run aggregate queries on individual flat tables or on multiple joined tables that are connected in a star schema.
 - Most of your aggregate queries are non-GROUP BY aggregate queries and low-cardinality GROUP BY aggregate queries.
 - Your data is loaded in append mode by time partition and can be categorized as hot data and cold data based on access frequency.
 
@@ -26,11 +26,11 @@ The query cache supports queries that meet the following conditions:
 
 - The queries are on native OLAP tables (from v2.5) or lake tables (from v3.0). The query cache does not support queries on external tables or lake tables. The query cache also supports queries whose plans require access to synchronous materialized views. However, the query cache does not support queries whose plans require access to asynchronous materialized views.
 
-- The queries are aggregate queries on a single table or on multiple tables joined in a star schema.
+- The queries are aggregate queries on individual tables or on multiple joined tables.
 
   **NOTE**
   >
-  > - The query cache supports aggregate queries on multiple tables that are joined by using broadcast joins or bucket shuffle joins.
+  > - The query cache supports Broadcast Join and  Bucket Shuffle Join.
   > - The query cache supports two tree structures that contain Join operators: Aggregation-Join and Join-Aggregation. Shuffle joins are not supported in the Aggregation-Join tree structure, while Hash joins are not supported in the Join-Aggregation tree structure.
 
 - The queries do not include nondeterminstic functions such as `rand`, `random`, `uuid`, and `sleep`.
