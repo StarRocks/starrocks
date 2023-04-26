@@ -187,6 +187,8 @@ static Status delete_tablet_metadata(TabletManager* tablet_mgr, std::string_view
             if (has_lock_file) {
                 // It is not safe to delete compaction input files when there is a lock file, as it is unknown
                 // whether these file are referenced by the locked metadata.
+                LOG(INFO) << "Skipped copmaction metadata check due to the presence of lock file. location="
+                          << root_location;
                 break;
             }
             auto path = join_path(metadata_root_location, tablet_metadata_filename(tablet_id, compaction_version));
