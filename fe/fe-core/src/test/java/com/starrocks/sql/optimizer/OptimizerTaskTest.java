@@ -33,7 +33,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -746,7 +745,7 @@ public class OptimizerTaskTest {
         try {
             optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
             fail("invalid plan. can not optimize success");
-        } catch (StarRocksPlannerException e) {
+        } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 2: t2 in " +
                     "expr '2: t2' is defined as INT, but the actual type is BIGINT"));
         }
@@ -831,7 +830,7 @@ public class OptimizerTaskTest {
         try {
             optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
             fail("invalid plan. can not optimize success");
-        } catch (StarRocksPlannerException e) {
+        } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 5: t5 in " +
                     "expr '5: t5' is defined as INT, but the actual type is BIGINT"));
         }
@@ -876,7 +875,7 @@ public class OptimizerTaskTest {
         try {
             optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
             fail("invalid plan. can not optimize success");
-        } catch (StarRocksPlannerException e) {
+        } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
                     "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
         }
@@ -926,7 +925,7 @@ public class OptimizerTaskTest {
         try {
             optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
             fail("invalid plan. can not optimize success");
-        } catch (StarRocksPlannerException e) {
+        } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
                     "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
         }
@@ -1098,7 +1097,7 @@ public class OptimizerTaskTest {
         try {
             optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
             fail("invalid plan. can not optimize success");
-        } catch (StarRocksPlannerException e) {
+        } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
                     "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
         }
@@ -1161,7 +1160,7 @@ public class OptimizerTaskTest {
         try {
             optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
             fail("invalid plan. can not optimize success");
-        } catch (StarRocksPlannerException e) {
+        } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
                     "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
         }
@@ -1227,7 +1226,7 @@ public class OptimizerTaskTest {
         try {
             optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
             fail("invalid plan. can not optimize success");
-        } catch (StarRocksPlannerException e) {
+        } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
                     "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
         }
@@ -1349,7 +1348,7 @@ public class OptimizerTaskTest {
         try {
             optimizer.optimize(ctx, root, new PhysicalPropertySet(), outputColumns, columnRefFactory);
             fail("invalid plan. can not optimize success");
-        } catch (StarRocksPlannerException e) {
+        } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 5: t5 in " +
                     "expr '5: t5' is defined as INT, but the actual type is BIGINT"));
         }

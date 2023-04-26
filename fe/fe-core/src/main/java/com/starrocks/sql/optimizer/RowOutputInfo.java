@@ -142,8 +142,7 @@ public class RowOutputInfo {
     }
 
     public ColumnRefSet getOutputColumnRefSet() {
-        ColumnRefSet columnRefSet = ColumnRefSet.createByIds(chooseOutputMap().keySet());
-        return columnRefSet;
+        return ColumnRefSet.createByIds(chooseOutputMap().keySet());
     }
 
 
