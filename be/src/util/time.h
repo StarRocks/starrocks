@@ -34,6 +34,11 @@
 
 #pragma once
 
+#include <stdint.h>   // int64_t, uint64_t
+#include <sys/time.h> // timeval, gettimeofday
+#include <time.h>     // timespec, clock_gettime
+
+#include <chrono>
 #include <cstdint>
 #include <ctime>
 #include <string>
@@ -145,5 +150,25 @@ std::string ToStringFromUnixMicros(int64_t us, TimePrecision p = TimePrecision::
 
 /// Converts input microseconds-since-epoch to date-time string in UTC time zone.
 std::string ToUtcStringFromUnixMicros(int64_t us, TimePrecision p = TimePrecision::Microsecond);
+
+template <typename Duration>
+inline ::timespec TimespecFromTimePoint(const std::chrono::time_point<std::chrono::system_clock, Duration>& atime) {
+    auto s = std::chrono::time_point_cast<std::chrono::seconds>(atime);
+    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(atime - s);
+
+    ::timespec spec = {.tv_sec = static_cast<std::time_t>(s.time_since_epoch().count()),
+                       .tv_nsec = static_cast<long>(ns.count())};
+    return spec;
+}
+
+template <typename Duration>
+inline ::timespec TimespecFromTimePoint(const std::chrono::time_point<std::chrono::steady_clock, Duration>& atime) {
+    auto s = std::chrono::time_point_cast<std::chrono::seconds>(atime);
+    auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(atime - s);
+
+    ::timespec spec = {.tv_sec = static_cast<std::time_t>(s.time_since_epoch().count()),
+                       .tv_nsec = static_cast<long>(ns.count())};
+    return spec;
+}
 
 } // namespace starrocks
