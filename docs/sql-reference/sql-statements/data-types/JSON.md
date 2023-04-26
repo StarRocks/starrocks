@@ -170,7 +170,7 @@ You can use JSON functions and operators to construct and process JSON data. For
 
 - The ORDER BY, GROUP BY, and JOIN clauses do not support references to JSON columns. If you want to create references to JSON columns, use the CAST function to convert JSON columns to SQL columns before you create the references. For more information, see [cast](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md).
 
-- JSON columns are supported in Duplicate Key, Primary Key, and Unique Key tables. They are not supported in Aggregate Key tables.
+- JSON columns are supported in Duplicate Key, Primary Key, and Unique Key tables. They are not supported in Aggregate tables.
 
 - JSON columns cannot be used as partition keys, bucketing keys, or dimension columns (DUPLICATE KEY, PRIMARY KEY, UNIQUE KEY). They cannot be used in ORDER BY, GROUP BY, and JOIN clauses.
 
