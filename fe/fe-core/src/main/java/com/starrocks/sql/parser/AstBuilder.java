@@ -3663,7 +3663,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitPartitionNames(StarRocksParser.PartitionNamesContext context) {
+<<<<<<< HEAD
         List<Identifier> identifierList = visit(context.identifier(), Identifier.class);
+=======
+        if (context.keyPartitions() != null) {
+            return visit(context.keyPartitions());
+        }
+
+        List<Identifier> identifierList = visit(context.identifierOrString(), Identifier.class);
+>>>>>>> 86431f812 (Syntax partition name support string literal (#22468))
         return new PartitionNames(context.TEMPORARY() != null,
                 identifierList.stream().map(Identifier::getValue).collect(toList()));
     }
