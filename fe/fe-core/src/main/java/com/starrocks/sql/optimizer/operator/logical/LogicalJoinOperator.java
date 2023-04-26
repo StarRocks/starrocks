@@ -152,19 +152,6 @@ public class LogicalJoinOperator extends LogicalOperator {
         return result;
     }
 
-    public ColumnRefSet getRequiredCols() {
-        ColumnRefSet result = new ColumnRefSet();
-        if (onPredicate != null) {
-            result.union(onPredicate.getUsedColumns());
-        }
-        if (predicate != null) {
-            result.union(predicate.getUsedColumns());
-        }
-        result.union(rowOutputInfo.getUsedColumnRefSet());
-
-        return result;
-    }
-
     @Override
     public ColumnRefOperator getSmallestColumn(ColumnRefSet required, ColumnRefFactory columnRefFactory,
                                                OptExpression expr) {
@@ -200,7 +187,7 @@ public class LogicalJoinOperator extends LogicalOperator {
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
         List<ColumnOutputInfo> entryList = Lists.newArrayList();
         for (OptExpression input : inputs) {
-            for (ColumnOutputInfo entry : input.getRowOutputInfo().getColumnEntries()) {
+            for (ColumnOutputInfo entry : input.getRowOutputInfo().getColumnOutputInfo()) {
                 entryList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
             }
         }
