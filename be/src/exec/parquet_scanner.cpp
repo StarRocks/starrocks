@@ -330,6 +330,13 @@ Status ParquetScanner::next_batch() {
     SCOPED_RAW_TIMER(&_counter->read_batch_ns);
     _batch_start_idx = 0;
     if (_curr_file_reader == nullptr) {
+        if (_last_range_size - _last_file_scan_bytes != 0) {
+            _state->update_num_bytes_scan_from_source(_last_range_size - _last_file_scan_bytes);
+            _last_file_scan_bytes = 0;
+            _last_file_scan_rows = 0;
+            _next_batch_counter = 0;
+            _last_range_size = 0;
+        }
         RETURN_IF_ERROR(open_next_reader());
     }
     while (!_scanner_eof) {
@@ -337,6 +344,17 @@ Status ParquetScanner::next_batch() {
         if (status.ok() && _batch->num_rows() == 0) {
             continue;
         } else {
+            if (status.ok()) {
+                _next_batch_counter++;
+                _last_file_scan_rows += _batch->num_rows();
+                if (_next_batch_counter % 32 == 0) {
+                    auto incr_bytes = (int64_t)((double)_last_file_scan_rows / _curr_file_reader->total_num_rows() *
+                                                        _last_file_size -
+                                                _last_file_scan_bytes);
+                    _last_file_scan_bytes += incr_bytes;
+                    _state->update_num_bytes_scan_from_source(incr_bytes);
+                }
+            }
             return status;
         }
     }
@@ -364,6 +382,8 @@ Status ParquetScanner::open_next_reader() {
         _next_file++;
         int64_t file_size;
         RETURN_IF_ERROR(parquet_reader->size(&file_size));
+        _last_file_size = file_size;
+        _last_range_size = range_desc.size;
         // switch to next file if the current file is empty
         if (file_size == 0) {
             parquet_reader->close();

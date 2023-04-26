@@ -43,6 +43,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     _runtime_state = runtime_state;
     _skip_aggregation = params.skip_aggregation;
     _need_agg_finalize = params.need_agg_finalize;
+    _update_num_scan_range = params.update_num_scan_range;
 
     RETURN_IF_ERROR(Expr::clone_if_not_exists(runtime_state, &_pool, *params.conjunct_ctxs, &_conjunct_ctxs));
     RETURN_IF_ERROR(_get_tablet(params.scan_range));

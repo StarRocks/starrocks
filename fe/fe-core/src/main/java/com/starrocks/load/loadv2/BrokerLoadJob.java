@@ -277,6 +277,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 UUID uuid = UUID.randomUUID();
                 TUniqueId loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
                 task.init(loadId, attachment.getFileStatusByTable(aggKey), attachment.getFileNumByTable(aggKey));
+                // update total loading task scan range num
                 idToTasks.put(task.getSignature(), task);
                 // idToTasks contains previous LoadPendingTasks, so idToTasks is just used to save all tasks.
                 // use newLoadingTasks to save new created loading tasks and submit them later.
@@ -444,8 +445,13 @@ public class BrokerLoadJob extends BulkLoadJob {
         try {
             super.updateProgess(params);
             if (!loadingStatus.getLoadStatistic().getLoadFinish()) {
-                progress = (int) ((double) loadingStatus.getLoadStatistic().totalSourceLoadBytes() /
-                        loadingStatus.getLoadStatistic().totalFileSize() * 100);
+                if (jobType == EtlJobType.BROKER) {
+                    progress = (int) ((double) loadingStatus.getLoadStatistic().sourceScanBytes() /
+                            loadingStatus.getLoadStatistic().totalFileSize() * 100);
+                } else {
+                    progress = (int) ((double) loadingStatus.getLoadStatistic().totalSourceLoadBytes() /
+                            loadingStatus.getLoadStatistic().totalFileSize() * 100);
+                }
                 if (progress >= 100) {
                     progress = 99;
                 }

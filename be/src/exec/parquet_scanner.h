@@ -80,6 +80,11 @@ private:
     ObjectPool _pool;
     Filter _chunk_filter;
     ArrowConvertContext _conv_ctx;
+    int64_t _last_file_size = 0;
+    int64_t _last_range_size = 0;
+    int64_t _last_file_scan_rows = 0;
+    int64_t _last_file_scan_bytes = 0;
+    int64_t _next_batch_counter = 0;
 };
 
 } // namespace starrocks

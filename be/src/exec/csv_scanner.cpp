@@ -64,6 +64,8 @@ Status CSVScanner::ScannerCSVReader::_fill_buffer() {
             // Has reached the end of file and the buffer is empty.
             return Status::EndOfFile(_file->filename());
         }
+    } else {
+        _state->update_num_bytes_scan_from_source(s.size);
     }
     return Status::OK();
 }
@@ -195,7 +197,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
                 return st;
             }
 
-            _curr_reader = std::make_unique<ScannerCSVReader>(file, _parse_options);
+            _curr_reader = std::make_unique<ScannerCSVReader>(file, _state, _parse_options);
             _curr_reader->set_counter(_counter);
             if (_scan_range.ranges[_curr_file_index].size > 0 &&
                 _scan_range.ranges[_curr_file_index].format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
