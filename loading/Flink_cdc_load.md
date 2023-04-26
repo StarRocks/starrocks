@@ -238,11 +238,11 @@
     flink-create.all.sql  starrocks-create.1.sql
     ```
 
-3. 执行如下命令，连接 StarRocks，并执行 SQL 文件 **starrocks-create.all.sql**，用于创建目标库和表。推荐使用 SQL 文件中默认的建表语句，本示例中建表语句默认创建的数据模型为[主键模型](../table_design/Data_model.md#主键模型)。
+3. 执行如下命令，连接 StarRocks，并执行 SQL 文件 **starrocks-create.all.sql**，用于创建目标库和表。推荐使用 SQL 文件中默认的建表语句，本示例中建表语句默认创建的数据模型为[主键模型](../table_design/table_types/primary_key_table.md)。
 
     > **注意**
     >
-    > - 您也可以根据业务需要，修改 SQL 文件中的建表语句，基于[其他模型](../table_design/Data_model.md)创建目标表。
+    > - 您也可以根据业务需要，修改 SQL 文件中的建表语句，基于其他模型创建目标表。
     > - 如果您选择基于非主键模型创建目标表，StarRocks 不支持将源表中 DELETE 操作同步至非主键模型的表，请谨慎使用。
 
     ```Bash

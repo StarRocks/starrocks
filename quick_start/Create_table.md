@@ -43,7 +43,7 @@ MySQL [(none)]> SHOW DATABASES;
 
 在新建的数据库中创建表。
 
-StarRocks 支持 [多种数据模型](../table_design/Data_model.md)，以适用不同的应用场景。以下示例基于 [明细表模型](../table_design/Data_model.md#明细模型) 编写建表语句。
+StarRocks 支持 [多种数据模型](../table_design/table_types/table_types.md)，以适用不同的应用场景。以下示例基于 [明细表模型](../table_design/table_types/duplicate_key_table.md) 编写建表语句。
 
 更多建表语法，参考 [CREATE TABLE](/sql-reference/sql-statements/data-definition/CREATE%20TABLE.md) 。
 
@@ -109,7 +109,7 @@ StarRocks 表中支持多种字段类型，除以上示例中已经列举的字�
 
 #### 数据模型
 
-`DUPLICATE` 关键字表示当前表为明细模型，`KEY` 中的列表示当前表的排序列。StarRocks 支持多种数据模型，分别为 [明细模型](/table_design/Data_model.md#明细模型)，[聚合模型](/table_design/Data_model.md#聚合模型)，[更新模型](/table_design/Data_model.md#更新模型)，[主键模型](/table_design/Data_model.md#主键模型)。不同模型的适用于多种业务场景，合理选择可优化查询效率。
+`DUPLICATE` 关键字表示当前表为明细模型，`KEY` 中的列表示当前表的排序列。StarRocks 支持多种数据模型，分别为 [明细模型](/table_design/table_types/duplicate_key_table.md)，[聚合模型](/table_design/table_types/aggregate_table.md)，[更新模型](/table_design/table_types/unique_key_table.md)，[主键模型](/table_design/table_types/primary_key_table.md)。不同模型的适用于多种业务场景，合理选择可优化查询效率。
 
 #### 索引
 
