@@ -1069,7 +1069,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     }
 
     /**
-     * try to upgrade the priority if this tablet has not been scheduled by long time
+     * try to upgrade the priority if this tablet has not been scheduled for a long time
      */
     public boolean adjustPriority(TabletSchedulerStat stat) {
         long currentTime = System.currentTimeMillis();

@@ -1172,10 +1172,10 @@ public class Config extends ConfigBase {
     /**
      * If the tablet in scheduler queue has not been scheduled for tablet_sched_max_not_being_scheduled_interval_ms,
      * its priority will upgrade.
-     * default is 30min
+     * default is 15min
      */
     @ConfField(mutable = true)
-    public static long tablet_sched_max_not_being_scheduled_interval_ms = 30 * 60 * 1000;
+    public static long tablet_sched_max_not_being_scheduled_interval_ms = 15 * 60 * 1000;
 
     /**
      * enable replicated storage as default table engine
