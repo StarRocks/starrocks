@@ -60,20 +60,29 @@ public class StorageVolumeMgrTest {
         storageParams.put(AWS_S3_ENDPOINT, "endpoint1");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         try {
-            svm.updateStorageVolume(svKey1, storageParams, Optional.of(false), "test update", true);
+            svm.updateStorageVolume(svKey1, storageParams, Optional.of(false), "test update");
             Assert.fail();
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("Storage Volume 'test1' does not exist"));
         }
-        svm.updateStorageVolume(svKey, storageParams, Optional.of(true), "test update", true);
+        svm.updateStorageVolume(svKey, storageParams, Optional.of(true), "test update");
         sp = (S3StorageParams) sv.getStorageParams();
         Assert.assertEquals("region1", sp.getRegion());
         Assert.assertEquals("endpoint1", sp.getEndpoint());
         Assert.assertEquals("test update", sv.getComment());
         Assert.assertEquals(true, sv.getEnabled());
+
+        // set default storage volume
+        try {
+            svm.setDefaultStorageVolume(svKey1);
+            Assert.fail();
+        } catch (IllegalStateException e) {
+            Assert.assertTrue(e.getMessage().contains("Storage Volume 'test1' does not exist"));
+        }
+        svm.setDefaultStorageVolume(svKey);
         Assert.assertEquals(svKey, svm.getDefaultSV());
         try {
-            svm.updateStorageVolume(svKey, storageParams, Optional.of(false), "", true);
+            svm.updateStorageVolume(svKey, storageParams, Optional.of(false), "");
             Assert.fail();
         } catch (IllegalStateException e) {
             Assert.assertTrue(e.getMessage().contains("Default volume can not be disabled"));
@@ -94,7 +103,8 @@ public class StorageVolumeMgrTest {
         }
 
         svm.createStorageVolume(svKey1, "S3", locations, storageParams, Optional.empty(), "");
-        svm.updateStorageVolume(svKey1, storageParams, Optional.empty(), "test update", true);
+        svm.updateStorageVolume(svKey1, storageParams, Optional.empty(), "test update");
+        svm.setDefaultStorageVolume(svKey1);
         svm.removeStorageVolume(svKey);
         Assert.assertFalse(svm.exists(svKey));
     }

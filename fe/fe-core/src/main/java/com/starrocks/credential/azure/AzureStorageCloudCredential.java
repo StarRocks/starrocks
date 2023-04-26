@@ -102,7 +102,7 @@ class AzureBlobCloudCredential extends AzureStorageCloudCredential {
     }
 
     @Override
-    public FileStoreInfo toFileStore() {
+    public FileStoreInfo toFileStoreInfo() {
         // TODO: Support azure credential
         return null;
     }
@@ -151,7 +151,7 @@ class AzureADLS1CloudCredential extends AzureStorageCloudCredential {
     }
 
     @Override
-    public FileStoreInfo toFileStore() {
+    public FileStoreInfo toFileStoreInfo() {
         return null;
     }
 }
@@ -227,7 +227,7 @@ class AzureADLS2CloudCredential extends AzureStorageCloudCredential {
     }
 
     @Override
-    public FileStoreInfo toFileStore() {
+    public FileStoreInfo toFileStoreInfo() {
         // TODO: Support azure credential
         return null;
     }

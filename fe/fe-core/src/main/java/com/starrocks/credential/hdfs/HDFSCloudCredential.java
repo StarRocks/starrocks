@@ -97,7 +97,7 @@ public class HDFSCloudCredential implements CloudCredential {
     }
 
     @Override
-    public FileStoreInfo toFileStore() {
+    public FileStoreInfo toFileStoreInfo() {
         // TODO: support hdfs credential
         return null;
     }

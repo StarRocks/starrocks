@@ -56,7 +56,8 @@ public class GCPCloudConfiguration implements CloudConfiguration {
 
     @Override
     public FileStoreInfo toFileStoreInfo() {
-        return null;
+        // TODO: Support gcp credential
+        return gcpCloudCredential.toFileStoreInfo();
     }
 
     @Override

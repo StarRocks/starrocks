@@ -102,7 +102,8 @@ public class GCPCloudCredential implements CloudCredential {
     }
 
     @Override
-    public FileStoreInfo toFileStore() {
+    public FileStoreInfo toFileStoreInfo() {
+        // TODO: Support gcp credential
         return null;
     }
 }

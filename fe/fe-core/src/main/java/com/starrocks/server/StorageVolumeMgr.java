@@ -55,8 +55,8 @@ public class StorageVolumeMgr {
         }
     }
 
-    public void updateStorageVolume(String name, Map<String, String> params, Optional<Boolean> enabled, String comment,
-                                    boolean asDefault) throws AnalysisException {
+    public void updateStorageVolume(String name, Map<String, String> params, Optional<Boolean> enabled, String comment)
+            throws AnalysisException {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(nameToSV.containsKey(name),
                     "Storage Volume '%s' does not exist", name);
@@ -68,18 +68,13 @@ public class StorageVolumeMgr {
 
             if (enabled.isPresent()) {
                 if (!enabled.get()) {
-                    Preconditions.checkState(!name.equals(defaultSV) && !asDefault,
-                            "Default volume can not be disabled");
+                    Preconditions.checkState(!name.equals(defaultSV), "Default volume can not be disabled");
                 }
                 sv.setEnabled(enabled.get());
             }
 
             if (!comment.isEmpty()) {
                 sv.setComment(comment);
-            }
-
-            if (asDefault) {
-                setDefaultStorageVolume(name);
             }
         }
     }

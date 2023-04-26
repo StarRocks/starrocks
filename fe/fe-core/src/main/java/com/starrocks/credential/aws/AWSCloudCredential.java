@@ -233,7 +233,7 @@ public class AWSCloudCredential implements CloudCredential {
     }
 
     @Override
-    public FileStoreInfo toFileStore() {
+    public FileStoreInfo toFileStoreInfo() {
         FileStoreInfo.Builder fileStore = FileStoreInfo.newBuilder();
         fileStore.setFsType(FileStoreType.S3);
         S3FileStoreInfo.Builder s3FileStoreInfo = S3FileStoreInfo.newBuilder();

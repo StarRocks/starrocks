@@ -42,5 +42,6 @@ public interface CloudCredential {
     // Generate unique credential string, used in FileSystem cache
     String getCredentialString();
 
-    FileStoreInfo toFileStore();
+    // Convert to the protobuf used by staros.
+    FileStoreInfo toFileStoreInfo();
 }
