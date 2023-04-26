@@ -95,8 +95,7 @@ public class CreateTableTest {
                         "char(20), `k4`  varchar(20), `k5`  boolean, `k6`  tinyint, `k7`  smallint, " +
                         "`k8`  int, `k9`  bigint, `k10` largeint, `k11` float, `k12` double, " +
                         "`k13` decimal(27,9)) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY " +
-                        "time_slice(k2, interval 1 hour) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) " +
-                        "PROPERTIES ( \"storage_format\" = \"v2\");"
+                        "time_slice(k2, interval 1 hour) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`); "
         );
     }
 
@@ -585,8 +584,7 @@ public class CreateTableTest {
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"in_memory\" = \"false\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"in_memory\" = \"false\"\n" +
                 ");";
         starRocksAssert.withTable(sql);
         final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
@@ -606,8 +604,7 @@ public class CreateTableTest {
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"in_memory\" = \"false\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"in_memory\" = \"false\"\n" +
                 ");";
         starRocksAssert.withTable(sql);
         final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
@@ -623,8 +620,7 @@ public class CreateTableTest {
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"in_memory\" = \"false\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"in_memory\" = \"false\"\n" +
                 ");";
         starRocksAssert.withTable(sql2);
 
@@ -646,8 +642,7 @@ public class CreateTableTest {
                         "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
                         "PROPERTIES (\n" +
                         "    \"replication_num\" = \"1\",\n" +
-                        "    \"in_memory\" = \"false\",\n" +
-                        "    \"storage_format\" = \"DEFAULT\"\n" +
+                        "    \"in_memory\" = \"false\"\n" +
                         ");"));
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Default function uuid() for type INT is not supported",
@@ -660,8 +655,7 @@ public class CreateTableTest {
                         "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
                         "PROPERTIES (\n" +
                         "    \"replication_num\" = \"1\",\n" +
-                        "    \"in_memory\" = \"false\",\n" +
-                        "    \"storage_format\" = \"DEFAULT\"\n" +
+                        "    \"in_memory\" = \"false\"\n" +
                         ");"));
 
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
@@ -675,8 +669,7 @@ public class CreateTableTest {
                         "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
                         "PROPERTIES (\n" +
                         "    \"replication_num\" = \"1\",\n" +
-                        "    \"in_memory\" = \"false\",\n" +
-                        "    \"storage_format\" = \"DEFAULT\"\n" +
+                        "    \"in_memory\" = \"false\"\n" +
                         ");"));
     }
 

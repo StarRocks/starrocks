@@ -138,7 +138,9 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
 class HDFSWritableFile : public WritableFile {
 public:
     HDFSWritableFile(hdfsFS fs, hdfsFile file, std::string path, size_t offset)
-            : _fs(fs), _file(file), _path(std::move(path)), _offset(offset) {}
+            : _fs(fs), _file(file), _path(std::move(path)), _offset(offset) {
+        FileSystem::on_file_write_open(this);
+    }
 
     ~HDFSWritableFile() override { (void)HDFSWritableFile::close(); }
 
@@ -197,6 +199,7 @@ Status HDFSWritableFile::close() {
     if (_closed) {
         return Status::OK();
     }
+    FileSystem::on_file_write_close(this);
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
         int r = hdfsHSync(_fs, _file);
         if (r != 0) {

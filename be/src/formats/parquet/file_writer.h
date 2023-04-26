@@ -27,7 +27,11 @@
 #include <parquet/arrow/writer.h>
 #include <parquet/exception.h>
 
+#include <utility>
+
 #include "column/chunk.h"
+#include "column/nullable_column.h"
+#include "formats/parquet/chunk_writer.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
 #include "util/priority_thread_pool.hpp"
@@ -37,11 +41,15 @@ namespace starrocks::parquet {
 class ParquetOutputStream : public arrow::io::OutputStream {
 public:
     ParquetOutputStream(std::unique_ptr<starrocks::WritableFile> wfile);
+
     ~ParquetOutputStream() override;
 
     arrow::Status Write(const void* data, int64_t nbytes) override;
+
     arrow::Status Write(const std::shared_ptr<arrow::Buffer>& data) override;
+
     arrow::Status Close() override;
+
     arrow::Result<int64_t> Tell() const override;
 
     bool closed() const override { return _is_closed; };
@@ -58,15 +66,29 @@ private:
     HEADER_STATE _header_state = INITED;
 };
 
+struct ParquetBuilderOptions {
+    TCompressionType::type compression_type = TCompressionType::SNAPPY;
+    bool use_dict = true;
+    int64_t row_group_max_size = 128 * 1024 * 1024;
+};
+
 class ParquetBuildHelper {
 public:
-    static void build_file_data_type(::parquet::Type::type& parquet_data_type, const LogicalType& column_data_type);
-
-    static void build_parquet_repetition_type(::parquet::Repetition::type& parquet_repetition_type,
-                                              const bool is_nullable);
-
     static void build_compression_type(::parquet::WriterProperties::Builder& builder,
                                        const TCompressionType::type& compression_type);
+
+    static arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> make_schema(
+            const std::vector<std::string>& file_column_names, const std::vector<ExprContext*>& output_expr_ctxs);
+
+    static arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> make_schema(
+            const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs);
+
+    static std::shared_ptr<::parquet::WriterProperties> make_properties(const ParquetBuilderOptions& options);
+
+private:
+    static arrow::Result<::parquet::schema::NodePtr> _make_schema_node(const std::string& name,
+                                                                       const TypeDescriptor& type_desc,
+                                                                       ::parquet::Repetition::type rep_type);
 };
 
 class FileWriterBase {
@@ -74,35 +96,43 @@ public:
     FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
                    const std::vector<ExprContext*>& output_expr_ctxs);
+
+    FileWriterBase(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
+                   std::shared_ptr<::parquet::schema::GroupNode> schema, std::vector<TypeDescriptor> type_descs);
+
     virtual ~FileWriterBase() = default;
 
     Status init();
+
     Status write(Chunk* chunk);
+
     std::size_t file_size() const;
+
     void set_max_row_group_size(int64_t rg_size) { _max_row_group_size = rg_size; }
+
     std::shared_ptr<::parquet::FileMetaData> metadata() const { return _file_metadata; }
+
     Status split_offsets(std::vector<int64_t>& splitOffsets) const;
+
     virtual bool closed() const = 0;
 
 protected:
-    virtual void _flush_row_group() = 0;
+    void _generate_chunk_writer();
 
-private:
-    ::parquet::RowGroupWriter* _get_rg_writer();
-    std::size_t _get_current_rg_written_bytes() const;
+    virtual void _flush_row_group() = 0;
 
 protected:
     std::shared_ptr<ParquetOutputStream> _outstream;
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
     std::unique_ptr<::parquet::ParquetFileWriter> _writer;
-    ::parquet::RowGroupWriter* _rg_writer = nullptr;
-    std::vector<ExprContext*> _output_expr_ctxs;
+    std::unique_ptr<ChunkWriter> _chunk_writer;
+
+    std::vector<TypeDescriptor> _type_descs;
     std::shared_ptr<::parquet::FileMetaData> _file_metadata;
 
     const static int64_t kDefaultMaxRowGroupSize = 128 * 1024 * 1024; // 128MB
     int64_t _max_row_group_size = kDefaultMaxRowGroupSize;
-    std::vector<int64_t> _buffered_values_estimate;
 };
 
 class SyncFileWriter : public FileWriterBase {
@@ -111,13 +141,21 @@ public:
                    std::shared_ptr<::parquet::schema::GroupNode> schema,
                    const std::vector<ExprContext*>& output_expr_ctxs)
             : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs) {}
+
+    SyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
+                   std::shared_ptr<::parquet::schema::GroupNode> schema, std::vector<TypeDescriptor> type_descs)
+            : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema),
+                             std::move(type_descs)) {}
+
     ~SyncFileWriter() override = default;
 
     Status close();
+
     bool closed() const override { return _closed; }
 
 private:
     void _flush_row_group() override;
+
     bool _closed = false;
 };
 
@@ -138,6 +176,7 @@ public:
         auto lock = std::unique_lock(_m);
         return !_rg_writer_closing;
     }
+
     bool closed() const override { return _closed.load(); }
 
     std::string file_name() const { return _file_name; }

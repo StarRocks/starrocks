@@ -296,6 +296,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_HIVE_COLUMN_STATS = "enable_hive_column_stats";
 
+    public static final String ENABLE_HIVE_METADATA_CACHE_WITH_INSERT = "enable_hive_metadata_cache_with_insert";
+
     public static final String DEFAULT_TABLE_COMPRESSION = "default_table_compression";
 
     // In most cases, the partition statistics obtained from the hive metastore are empty.
@@ -424,7 +426,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             .add(DISABLE_BUCKET_JOIN)
             .add(CBO_ENABLE_REPLICATED_JOIN)
             .add(FOREIGN_KEY_CHECKS)
-            .add(PIPELINE_SINK_DOP)
             .add("enable_cbo")
             .add("enable_vectorized_engine")
             .add("vectorized_engine_enable")
@@ -664,6 +665,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_DOP)
     private int pipelineDop = 0;
 
+    @VariableMgr.VarAttr(name = PIPELINE_SINK_DOP)
+    private int pipelineSinkDop = 0;
+
     /*
      * The maximum pipeline dop limit which only takes effect when pipeline_dop=0.
      * This limitation is to avoid the negative overhead caused by scheduling on super multi-core scenarios.
@@ -855,6 +859,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_HIVE_COLUMN_STATS)
     private boolean enableHiveColumnStats = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_HIVE_METADATA_CACHE_WITH_INSERT)
+    private boolean enableHiveMetadataCacheWithInsert = false;
 
     @VariableMgr.VarAttr(name = HIVE_PARTITION_STATS_SAMPLE_SIZE)
     private int hivePartitionStatsSampleSize = 3000;
@@ -1063,6 +1070,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW)
     private boolean cboPushDownDistinctBelowWindow = true;
 
+    private int exprChildrenLimit = -1;
+
+    public int getExprChildrenLimit() {
+        return exprChildrenLimit;
+    }
+
+    public void setExprChildrenLimit(int exprChildrenLimit) {
+        this.exprChildrenLimit = exprChildrenLimit;
+    }
+
     public void setFullSortMaxBufferedRows(long v) {
         fullSortMaxBufferedRows = v;
     }
@@ -1164,6 +1181,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableHiveColumnStats(boolean enableHiveColumnStats) {
         this.enableHiveColumnStats = enableHiveColumnStats;
+    }
+
+    public boolean isEnableHiveMetadataCacheWithInsert() {
+        return enableHiveMetadataCacheWithInsert;
+    }
+
+    public void setEnableHiveMetadataCacheWithInsert(boolean enableHiveMetadataCacheWithInsert) {
+        this.enableHiveMetadataCacheWithInsert = enableHiveMetadataCacheWithInsert;
     }
 
     public int getHivePartitionStatsSampleSize() {
@@ -1612,6 +1637,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getPipelineDop() {
         return this.pipelineDop;
+    }
+
+    public int getPipelineSinkDop() {
+        return pipelineSinkDop;
+    }
+
+    public void setPipelineSinkDop(int pipelineSinkDop) {
+        this.pipelineSinkDop = pipelineSinkDop;
     }
 
     public void setMaxPipelineDop(int maxPipelineDop) {

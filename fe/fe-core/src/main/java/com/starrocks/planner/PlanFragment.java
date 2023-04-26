@@ -58,6 +58,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -151,6 +152,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     private TCacheParam cacheParam = null;
     private boolean hasOlapTableSink = false;
+    private boolean hasIcebergTableSink = false;
     private boolean forceSetTableSinkDop = false;
     private boolean forceAssignScanRangesPerDriverSeq = false;
 
@@ -258,6 +260,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setHasOlapTableSink() {
         this.hasOlapTableSink = true;
+    }
+
+    public boolean hasIcebergTableSink() {
+        return this.hasIcebergTableSink;
+    }
+
+    public void setHasIcebergTableSink() {
+        this.hasIcebergTableSink = true;
     }
 
     public boolean forceSetTableSinkDop() {
@@ -651,14 +661,23 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.cacheParam = cacheParam;
     }
 
-    public PlanNode getLeftMostLeafNode() {
-        PlanNode node = planRoot;
-        while (!node.getChildren().isEmpty()) {
+    public List<OlapScanNode> collectOlapScanNodes() {
+        List<OlapScanNode> olapScanNodes = Lists.newArrayList();
+        Queue<PlanNode> queue = Lists.newLinkedList();
+        queue.add(planRoot);
+        while (!queue.isEmpty()) {
+            PlanNode node = queue.poll();
+
             if (node instanceof ExchangeNode) {
-                break;
+                continue;
             }
-            node = node.getChild(0);
+            if (node instanceof OlapScanNode) {
+                olapScanNodes.add((OlapScanNode) node);
+            }
+
+            queue.addAll(node.getChildren());
         }
-        return node;
+
+        return olapScanNodes;
     }
 }

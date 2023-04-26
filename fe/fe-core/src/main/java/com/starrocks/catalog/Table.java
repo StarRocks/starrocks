@@ -181,6 +181,13 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     @SerializedName(value = "mvs")
     protected Set<MvId> relatedMaterializedViews;
 
+    // unique constraints for mv rewrite
+    // a table may have multi unique constraints
+    protected List<UniqueConstraint> uniqueConstraints;
+
+    // foreign key constraint for mv rewrite
+    protected List<ForeignKeyConstraint> foreignKeyConstraints;
+
     public Table(TableType type) {
         this.type = type;
         this.fullSchema = Lists.newArrayList();
@@ -663,7 +670,24 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return false;
     }
 
+
     public boolean supportInsert() {
         return false;
+    }
+
+    public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
+        this.uniqueConstraints = uniqueConstraints;
+    }
+
+    public List<UniqueConstraint> getUniqueConstraints() {
+        return this.uniqueConstraints;
+    }
+
+    public void setForeignKeyConstraints(List<ForeignKeyConstraint> foreignKeyConstraints) {
+        this.foreignKeyConstraints = foreignKeyConstraints;
+    }
+
+    public List<ForeignKeyConstraint> getForeignKeyConstraints() {
+        return this.foreignKeyConstraints;
     }
 }

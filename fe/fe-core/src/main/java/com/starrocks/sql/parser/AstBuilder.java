@@ -5188,6 +5188,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName.getFunction()), e1, e2, pos);
         }
 
+        if (fnName.getFunction().equalsIgnoreCase("CONNECTION_ID")) {
+            return new InformationFunction("CONNECTION_ID");
+        }
+
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
                 new FunctionParams(false, visit(context.expression(), Expr.class)), pos);
         if (context.over() != null) {
@@ -5947,9 +5951,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     dateTimeFormatter = DateUtils.probeFormat(stringLiteral.getStringValue());
                     LocalDateTime tempStartTime = DateUtils.
                             parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
-                    if (tempStartTime.isBefore(LocalDateTime.now())) {
-                        throw new ParsingException(PARSER_ERROR_MSG.invalidStartTime(), timePos);
-                    }
                     startTime = tempStartTime;
                     defineStartTime = true;
                 } catch (AnalysisException e) {

@@ -26,6 +26,7 @@ add_library(Formats STATIC
         csv/decimalv3_converter.cpp
         csv/float_converter.cpp
         csv/json_converter.cpp
+        csv/map_converter.cpp
         csv/numeric_converter.cpp
         csv/nullable_converter.cpp
         csv/default_value_converter.cpp
@@ -57,6 +58,9 @@ add_library(Formats STATIC
         parquet/group_reader.cpp
         parquet/file_reader.cpp
         parquet/file_writer.cpp
+        parquet/chunk_writer.cpp
+        parquet/level_builder.cpp
+        parquet/column_chunk_writer.cpp
         )
 
 add_subdirectory(orc/apache-orc)
