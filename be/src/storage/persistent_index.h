@@ -79,6 +79,40 @@ struct ImmutableIndexShard;
 class PersistentIndex;
 class ImmutableIndexWriter;
 
+/*
+enum MergeCompactionType {
+    kRange = 0,
+    kFull = 1,
+};
+
+using PersistentIndexSharedPtr = std::shared_ptr<PersistentIndex>;
+class MergeCompactionTask : public Runnable {
+public:
+    MergeCompactionTask(PersistentIndexSharedPtr index, MergeCompactionType type, int merge_start_idx, int merge_end_idx)
+            : _index(std::move(index)), _type(type), _merge_start_idx(merge_start_idx), _merge_end_idx(merge_end_idx) {}
+
+    void run() override {
+        switch (_type) {
+            case kRange: {
+                _index->_merge_compaction_advance(_merge_start_idx, _merge_end_idx);
+                break;
+            }
+            case kFull: {
+                _index->_merge_compaction();
+                break;
+            }
+            default: {}
+        }
+    }
+
+private:
+    MergeCompactionType _type;
+    PersistentIndexSharedPtr _index;
+    int _merge_start_idx;
+    int _merge_end_idx;
+};
+*/
+
 class MutableIndex {
 public:
     MutableIndex();
@@ -376,6 +410,13 @@ public:
         return size;
     }
 
+    size_t memory_usage() {
+        if (_bf) {
+            return _bf->size();
+        }
+        return 0;
+    }
+
     static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<RandomAccessFile>&& rb);
 
 private:
@@ -497,7 +538,13 @@ public:
 
     size_t size() const { return _size; }
     size_t capacity() const { return _l0 ? _l0->capacity() : 0; }
-    size_t memory_usage() const { return _l0 ? _l0->memory_usage() : 0; }
+    size_t memory_usage() const {
+        size_t memory_usage = _l0 ? _l0->memory_usage() : 0;
+        for (int i = 0; i < _l1_vec.size(); i++) {
+            memory_usage += _l1_vec[i]->memory_usage();
+        }
+        return memory_usage;
+    }
 
     EditVersion version() const { return _version; }
 
