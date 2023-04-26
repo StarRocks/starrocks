@@ -253,10 +253,13 @@ public class SelectStmtTest {
 
     @Test
     public void testCatalogFunSupport() throws Exception {
-        String sql = "select current_catalog()";
+        String sql = "select catalog()";
         starRocksAssert.query(sql).explainQuery();
+<<<<<<< HEAD
         sql = "select current_catalog";
         starRocksAssert.query(sql).explainQuery();
+=======
+>>>>>>> bef26bfa3 (Remove connection_id and current_catalog from syntax file (#22475))
     }
 
     @Test
