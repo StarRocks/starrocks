@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_REGION;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR;
@@ -61,6 +62,7 @@ public class StorageVolumeMgrTest {
         // update
         storageParams.put(AWS_S3_REGION, "region1");
         storageParams.put(AWS_S3_ENDPOINT, "endpoint1");
+        storageParams.put(AWS_S3_ACCESS_KEY, "ak");
         storageParams.put(AWS_S3_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         try {
             svm.updateStorageVolume(svKey1, storageParams, Optional.of(false), "test update");

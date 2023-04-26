@@ -19,6 +19,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -61,11 +62,13 @@ public class StorageVolume {
     }
 
     public void setCloudConfiguration(Map<String, String> params) throws AnalysisException {
-        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(params);
+        Map<String, String> newParams = new HashMap<>(this.params);
+        newParams.putAll(params);
+        this.cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(newParams);
         if (!isValidCloudConfiguration()) {
             throw new AnalysisException("Storage params is not valid");
         }
-        this.params = params;
+        this.params = newParams;
     }
 
     public CloudConfiguration getCloudConfiguration() {
