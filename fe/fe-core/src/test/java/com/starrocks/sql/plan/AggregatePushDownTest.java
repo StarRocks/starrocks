@@ -37,8 +37,7 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`region`, `order_date`) BUCKETS 128\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ")");
         connectContext.getSessionVariable().setNewPlanerAggStage(1);
         connectContext.getSessionVariable().setCboPushDownAggregateMode(1);

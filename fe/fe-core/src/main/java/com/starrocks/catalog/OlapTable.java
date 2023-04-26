@@ -43,7 +43,6 @@ import com.google.gson.annotations.SerializedName;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.starrocks.alter.AlterJobV2Builder;
-import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
@@ -87,7 +86,6 @@ import com.starrocks.task.DropAutoIncrementMapTask;
 import com.starrocks.task.DropReplicaTask;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTable;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
@@ -537,11 +535,6 @@ public class OlapTable extends Table {
         return indexNameToId.get(indexName);
     }
 
-    public Long getSegmentV2FormatIndexId() {
-        String v2RollupIndexName = MaterializedViewHandler.NEW_STORAGE_FORMAT_INDEX_NAME_PREFIX + getName();
-        return indexNameToId.get(v2RollupIndexName);
-    }
-
     public String getIndexNameById(long indexId) {
         for (Map.Entry<String, Long> entry : indexNameToId.entrySet()) {
             if (entry.getValue() == indexId) {
@@ -977,6 +970,7 @@ public class OlapTable extends Table {
                 // drop partition info
                 listPartitionInfo.dropPartition(partition.getId());
             }
+            GlobalStateMgr.getCurrentAnalyzeMgr().dropPartition(partition.getId());
         }
     }
 
@@ -2138,21 +2132,6 @@ public class OlapTable extends Table {
 
     public boolean existTempPartitions() {
         return !tempPartitions.isEmpty();
-    }
-
-    public void setStorageFormat(TStorageFormat storageFormat) {
-        if (tableProperty == null) {
-            tableProperty = new TableProperty(new HashMap<>());
-        }
-        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT, storageFormat.name());
-        tableProperty.buildStorageFormat();
-    }
-
-    public TStorageFormat getStorageFormat() {
-        if (tableProperty == null) {
-            return TStorageFormat.DEFAULT;
-        }
-        return tableProperty.getStorageFormat();
     }
 
     public void setStorageVolume(String storageVolume) {

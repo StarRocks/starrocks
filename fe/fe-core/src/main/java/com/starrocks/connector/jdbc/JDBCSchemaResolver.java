@@ -58,9 +58,9 @@ public abstract class JDBCSchemaResolver {
         return connection.getMetaData().getColumns(dbName, null, tblName, "%");
     }
 
-    public Table getTable(long id, String name, List<Column> schema, String dbName,
+    public Table getTable(long id, String name, List<Column> schema, String dbName, String catalogName,
                           Map<String, String> properties) throws DdlException {
-        return new JDBCTable(id, name, schema, dbName, properties);
+        return new JDBCTable(id, name, schema, dbName, catalogName, properties);
     }
 
     public List<Column> convertToSRTable(ResultSet columnSet) throws SQLException {

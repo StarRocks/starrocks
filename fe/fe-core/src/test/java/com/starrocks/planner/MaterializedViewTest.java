@@ -47,8 +47,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"groupa2\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
-                "    \"unique_constraints\" = \"c_custkey\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"unique_constraints\" = \"c_custkey\"\n" +
                 ")\n");
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `dates` (\n" +
                 "    `d_datekey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -76,8 +75,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
                 "    \"colocate_with\" = \"groupa3\",\n" +
-                "    \"unique_constraints\" = \"d_datekey\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"unique_constraints\" = \"d_datekey\"\n" +
                 ")");
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `part` (\n" +
                 "    `p_partkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -97,8 +95,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"groupa5\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
-                "    \"unique_constraints\" = \"p_partkey\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"unique_constraints\" = \"p_partkey\"\n" +
                 ")");
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `supplier` (\n" +
                 "    `s_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -116,8 +113,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"groupa4\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
-                "    \"unique_constraints\" = \"s_suppkey\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"unique_constraints\" = \"s_suppkey\"\n" +
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder` (\n" +
@@ -157,8 +153,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"in_memory\" = \"false\",\n" +
                 "    \"foreign_key_constraints\" = \"(lo_custkey) REFERENCES customer(c_custkey);" +
                 " (lo_partkey) REFERENCES part(p_partkey);  (lo_suppkey) REFERENCES supplier(s_suppkey);" +
-                "  (lo_orderdate) REFERENCES dates(d_datekey)\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "  (lo_orderdate) REFERENCES dates(d_datekey)\"\n" +
                 ")");
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `lineorder_null` (\n" +
@@ -198,8 +193,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"in_memory\" = \"false\",\n" +
                 "    \"foreign_key_constraints\" = \"(lo_custkey) REFERENCES customer(c_custkey);" +
                 " (lo_partkey) REFERENCES part(p_partkey);  (lo_suppkey) REFERENCES supplier(s_suppkey);" +
-                "  (lo_orderdate) REFERENCES dates(d_datekey)\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "  (lo_orderdate) REFERENCES dates(d_datekey)\"\n" +
                 ")");
 
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t2` (\n" +
@@ -214,8 +208,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"groupa4\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
-                "    \"unique_constraints\" = \"c5\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"unique_constraints\" = \"c5\"\n" +
                 ")");
 
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t3` (\n" +
@@ -230,8 +223,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"groupa4\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
-                "    \"unique_constraints\" = \"c5\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"unique_constraints\" = \"c5\"\n" +
                 ")");
 
         starRocksAssert.withTable(" CREATE TABLE IF NOT EXISTS `t1` (\n" +
@@ -246,10 +238,17 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"replication_num\" = \"1\",\n" +
                 "    \"colocate_with\" = \"groupa4\",\n" +
                 "    \"in_memory\" = \"false\",\n" +
-                "    \"foreign_key_constraints\" = \"(c2) REFERENCES t2(c5);(c3) REFERENCES t2(c5)\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"foreign_key_constraints\" = \"(c2) REFERENCES t2(c5);(c3) REFERENCES t2(c5)\"\n" +
                 ")");
 
+        String userTagTable = "create table user_tags " +
+                "(time date, user_id int, user_name varchar(20), tag_id int) " +
+                "partition by range (time) (partition p1 values less than MAXVALUE) " +
+                "distributed by hash(time) " +
+                "buckets 3 " +
+                "properties('replication_num' = '1');";
+        starRocksAssert
+                .withTable(userTagTable);
     }
 
     @Test
@@ -1777,8 +1776,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"colocate_with\" = \"groupa4\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
                     "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1792,8 +1790,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"colocate_with\" = \"groupa4\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1808,8 +1805,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"colocate_with\" = \"groupa4\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(C5)\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(C5)\"\n" +
                     ");");
 
             String mv = "select c1 as col1, c2, c3, l.c6, r.c7\n" +
@@ -1837,8 +1833,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
                     "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1851,8 +1846,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5, C6, c7\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5, C6, c7\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1866,8 +1860,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"foreign_key_constraints\" = \"(c2, c4, C3) REFERENCES tbl_02(c5, C7, C6)\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"foreign_key_constraints\" = \"(c2, c4, C3) REFERENCES tbl_02(c5, C7, C6)\"\n" +
                     ");");
 
             String mv = "select c1 as col1, c2, c3, l.c6, l.c7\n" +
@@ -1897,8 +1890,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"colocate_with\" = \"groupa4\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
                     "    `c5` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1911,8 +1903,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"colocate_with\" = \"groupa4\",\n" +
-                    "    \"in_memory\" = \"false\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1927,8 +1918,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"colocate_with\" = \"groupa4\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(c5)\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(c5)\"\n" +
                     ");");
 
             String mv = "select c1 as col1, c2, c3, l.c6, r.c7\n" +
@@ -1956,8 +1946,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
                     "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1969,8 +1958,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "DISTRIBUTED BY HASH(`C5`, `C6`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
-                    "    \"in_memory\" = \"false\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
@@ -1984,8 +1972,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"foreign_key_constraints\" = \"(c2, C3) REFERENCES tbl_02(c5, C6)\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"foreign_key_constraints\" = \"(c2, C3) REFERENCES tbl_02(c5, C6)\"\n" +
                     ");");
 
             String mv = "select c1 as col1, c2, c3, l.c6, l.c7\n" +
@@ -2015,8 +2002,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
                     "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
@@ -2028,8 +2014,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "DISTRIBUTED BY HASH(`C5`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
-                    "    \"in_memory\" = \"false\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
@@ -2043,8 +2028,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(c5)\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"foreign_key_constraints\" = \"(c2) REFERENCES tbl_02(C5);(C3) REFERENCES tbl_02(c5)\"\n" +
                     ");");
 
             String mv = "select c1 as col1, c2, c3, l.c6, r.c7\n" +
@@ -2072,8 +2056,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"unique_constraints\" = \"C5\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"unique_constraints\" = \"C5\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_02` (\n" +
                     "    `C5` int(11) NOT NULL COMMENT \"\",\n" +
@@ -2085,8 +2068,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "DISTRIBUTED BY HASH(`C5`, `C6`) BUCKETS 12\n" +
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
-                    "    \"in_memory\" = \"false\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"in_memory\" = \"false\"\n" +
                     ");");
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_01` (\n" +
                     "    `c1` int(11) NOT NULL COMMENT \"\",\n" +
@@ -2100,8 +2082,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     "PROPERTIES (\n" +
                     "    \"replication_num\" = \"1\",\n" +
                     "    \"in_memory\" = \"false\",\n" +
-                    "    \"foreign_key_constraints\" = \"(C3, c2) REFERENCES tbl_02(C6, c5)\",\n" +
-                    "    \"storage_format\" = \"DEFAULT\"\n" +
+                    "    \"foreign_key_constraints\" = \"(C3, c2) REFERENCES tbl_02(C6, c5)\"\n" +
                     ");");
 
             String mv = "select c1 as col1, c2, c3, l.c6, l.c7\n" +
@@ -2214,5 +2195,116 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                     " LEFT OUTER JOIN lineorder AS l ON c.C_CUSTKEY = l.LO_CUSTKEY";
             testRewriteFail(mv, query);
         }
+    }
+    @Test
+    public void testRewriteAvg1() {
+        String mv1 = "select user_id, avg(tag_id) from user_tags group by user_id;";
+        testRewriteOK(mv1, "select user_id, avg(tag_id) from user_tags group by user_id;");
+        String mv2 = "select user_id, sum(tag_id), count(tag_id) from user_tags group by user_id;";
+        testRewriteOK(mv2, "select user_id, avg(tag_id) from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testRewriteAvg2() {
+        String mv2 = "select user_id, time, sum(tag_id), count(tag_id) from user_tags group by user_id, time;";
+        testRewriteOK(mv2, "select user_id, avg(tag_id) from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testRewriteAvg3() {
+        String mv2 = "select user_id, time, sum(tag_id % 10), count(tag_id % 10) from user_tags group by user_id, time;";
+        testRewriteOK(mv2, "select user_id, avg(tag_id % 10) from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount1() {
+        String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount2() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
+        // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount3() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id % 10)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id % 10)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id % 10))) x from user_tags group by user_id;");
+        // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
+        testRewriteOK(mv, "select user_id, count(distinct tag_id % 10) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount4() {
+        String mv = "select user_id, tag_id from user_tags where user_id > 10;";
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags  where user_id > 10 group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount5() {
+        String mv = "select user_id, tag_id from user_tags;";
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount6() {
+        String mv = "select user_id, count(tag_id) from user_tags group by user_id;";
+        testRewriteFail(mv, "select user_id, bitmap_union(to_bitmap(tag_id)) x from user_tags where user_id > 10 group by user_id ;");
+        testRewriteFail(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags where user_id > 10 group by user_id;");
+        testRewriteFail(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testBitmapUnionCountToBitmapCount1() {
+        String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
+        testRewriteOK(mv, "select user_id, bitmap_union_count(to_bitmap(tag_id)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testBitmapUnionCountToBitmapCount2() {
+        String mv = "select user_id, time, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, bitmap_union_count(to_bitmap(tag_id)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testApproxCountToHLL1() {
+        String mv = "select user_id, time, hll_union(hll_hash(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, ndv(tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, hll_union(hll_hash(tag_id)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testApproxCountToHLL2() {
+        String mv = "select user_id, hll_union(hll_hash(tag_id)) from user_tags group by user_id;";
+        testRewriteOK(mv, "select user_id, approx_count_distinct(tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, ndv(tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, hll_union(hll_hash(tag_id)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testPercentile1() {
+        String mv = "select user_id, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id;";
+        testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 0) x from user_tags group by user_id;");
+        // testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testPercentile2() {
+        String mv = "select user_id, time, percentile_union(percentile_hash(tag_id)) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, percentile_approx(tag_id, 1) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, round(percentile_approx(tag_id, 0)) x from user_tags group by user_id;");
     }
 }
