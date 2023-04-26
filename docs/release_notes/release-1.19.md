@@ -8,7 +8,7 @@ Release date: Octorber 22, 2021
 
 * Implement Global Runtime Filter, which can enable runtime filter for shuffle join.
 * CBO Planner is enabled by default, improved colocated join, bucket shuffle, statistical information estimation, etc.
-* [Experimental Function] Primary Key model release: To better support real-time/frequent update feature, StarRocks has added a new table type: primary key model. The model supports Stream Load, Broker Load, Routine Load and also provides a second-level synchronization tool for MySQL data based on Flink-cdc.
+* [Experimental Function] Primary Key table release: To better support real-time/frequent update feature, StarRocks has added a new table type: Primary Key table. The Primary Key table supports Stream Load, Broker Load, Routine Load and also provides a second-level synchronization tool for MySQL data based on Flink-cdc.
 * [Experimental Function] Support write function for external tables. Support writing data to another StarRocks cluster table by external tables to solve the read/write separation requirement and provide better resource isolation.
 
 ### Improvement

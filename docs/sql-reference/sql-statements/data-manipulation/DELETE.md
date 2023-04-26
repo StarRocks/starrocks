@@ -13,7 +13,7 @@ For Duplicate Key, Aggregate Key, and Unique Key tables, you can delete data fro
 - The deleted rows are not immediately cleaned. They are marked as "deleted" and will be temporarily saved in Segment. Physically, the rows are removed only after data version merge (compaction) is completed.
 - This operation also deletes data of the materialized views that reference this table.
 
-## Duplicate Key, Aggregate Key, and Unique Key tables
+## Duplicate Key tables, Aggregate tables, and Unique Key tables
 
 ### Syntax
 
@@ -35,11 +35,11 @@ column_name1 op { value | value_list } [ AND column_name2 op { value | value_lis
 
 ### Limits
 
-- For Duplicate Key tables, you can use **any column** as the DELETE condition. For Aggregate Key and Unique Key tables, only **key columns** can be used as the DELETE condition.
+- For Duplicate Key tables, you can use **any column** as the DELETE condition. For Aggregate tables and Unique Key tables, only **key columns** can be used as the DELETE condition.
 
 - The conditions that you specify must be in the AND relation. If you want to specify conditions in OR relation, you must specify the conditions in separate DELETE statements.
 
-- For Duplicate Key, Aggregate Key, and Unique Key tables, the DELETE statement does not support using subquery results as conditions.
+- For Duplicate Key tables, Aggregate tables, and Unique Key tables, the DELETE statement does not support using subquery results as conditions.
 
 ### Impacts
 
