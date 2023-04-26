@@ -126,6 +126,33 @@ bool RollingAsyncParquetWriter::closed() {
     return true;
 }
 
+#define MergeStats_BATCH_CASE(ParquetType)                                                                         \
+    case ParquetType: {                                                                                            \
+        auto typed_left_stat =                                                                                     \
+                std::static_pointer_cast<::parquet::TypedStatistics<::parquet::PhysicalType<ParquetType>>>(left);  \
+        auto typed_right_stat =                                                                                    \
+                std::static_pointer_cast<::parquet::TypedStatistics<::parquet::PhysicalType<ParquetType>>>(right); \
+        typed_left_stat->Merge(*typed_left_stat);                                                                  \
+        return;                                                                                                    \
+    }
+
+void merge_stats(const std::shared_ptr<::parquet::Statistics>& left,
+                 const std::shared_ptr<::parquet::Statistics>& right) {
+    DCHECK(left->physical_type() == right->physical_type());
+    switch (left->physical_type()) {
+        MergeStats_BATCH_CASE(::parquet::Type::BOOLEAN);
+        MergeStats_BATCH_CASE(::parquet::Type::INT32);
+        MergeStats_BATCH_CASE(::parquet::Type::INT64);
+        MergeStats_BATCH_CASE(::parquet::Type::INT96);
+        MergeStats_BATCH_CASE(::parquet::Type::FLOAT);
+        MergeStats_BATCH_CASE(::parquet::Type::DOUBLE);
+        MergeStats_BATCH_CASE(::parquet::Type::BYTE_ARRAY);
+        MergeStats_BATCH_CASE(::parquet::Type::FIXED_LEN_BYTE_ARRAY);
+    default: {
+    }
+    }
+}
+
 void RollingAsyncParquetWriter::add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer,
                                                         RuntimeState* state) {
     TIcebergDataFile dataFile;
@@ -138,60 +165,47 @@ void RollingAsyncParquetWriter::add_iceberg_commit_info(starrocks::parquet::Asyn
     writer->split_offsets(split_offsets);
     dataFile.split_offsets = split_offsets;
 
+    // field_id -> column_stat
     std::unordered_map<int32_t, int64_t> column_sizes;
-    std::unordered_map<int32_t, int64_t> value_counts;
-    std::unordered_map<int32_t, int64_t> null_value_counts;
-    std::unordered_map<int32_t, std::string> min_values;
-    std::unordered_map<int32_t, std::string> max_values;
+    std::unordered_map<int32_t, std::shared_ptr<::parquet::Statistics>> column_stats;
 
-    const auto& metadata = writer->metadata();
+    const auto& meta = writer->metadata();
+    auto* schema = meta->schema();
 
-    for (int i = 0; i < metadata->num_row_groups(); ++i) {
-        auto block = metadata->RowGroup(i);
-        for (int j = 0; j < block->num_columns(); j++) {
-            auto column_meta = block->ColumnChunk(j);
-            int field_id = j + 1;
-            if (null_value_counts.find(field_id) == null_value_counts.end()) {
-                null_value_counts.insert({field_id, column_meta->statistics()->null_count()});
+    for (int col_idx = 0; col_idx < meta->num_columns(); col_idx++) {
+        auto field_id = schema->Column(col_idx)->schema_node()->field_id();
+
+        // traverse meta of column chunk in each row group
+        for (int rg_idx = 0; rg_idx < meta->num_row_groups(); rg_idx++) {
+            auto column_meta = meta->RowGroup(rg_idx)->ColumnChunk(col_idx);
+            column_sizes[field_id] += column_meta->total_compressed_size();
+
+            auto column_stat = column_meta->statistics();
+            if (rg_idx == 0) {
+                column_stats[field_id] = column_stat;
             } else {
-                null_value_counts[field_id] += column_meta->statistics()->null_count();
+                merge_stats(column_stats[field_id], column_stat);
             }
-
-            if (column_sizes.find(field_id) == column_sizes.end()) {
-                column_sizes.insert({field_id, column_meta->total_compressed_size()});
-            } else {
-                column_sizes[field_id] += column_meta->total_compressed_size();
-            }
-
-            if (value_counts.find(field_id) == value_counts.end()) {
-                value_counts.insert({field_id, column_meta->num_values()});
-            } else {
-                value_counts[field_id] += column_meta->num_values();
-            }
-
-            min_values[field_id] = column_meta->statistics()->EncodeMin();
-            max_values[field_id] = column_meta->statistics()->EncodeMax();
         }
     }
 
-    TIcebergColumnStats stats;
-    for (auto& i : column_sizes) {
-        stats.column_sizes.insert({i.first, i.second});
-    }
-    for (auto& i : value_counts) {
-        stats.value_counts.insert({i.first, i.second});
-    }
-    for (auto& i : null_value_counts) {
-        stats.null_value_counts.insert({i.first, i.second});
-    }
-    for (auto& i : min_values) {
-        stats.lower_bounds.insert({i.first, i.second});
-    }
-    for (auto& i : max_values) {
-        stats.upper_bounds.insert({i.first, i.second});
+    TIcebergColumnStats iceberg_stats;
+    for (auto& [field_id, column_size] : column_sizes) {
+        iceberg_stats.column_sizes[field_id] = column_size;
     }
 
-    dataFile.column_stats = stats;
+    for (auto& [field_id, column_stat] : column_stats) {
+        iceberg_stats.value_counts[field_id] = column_stat->num_values();
+        if (column_stat->HasNullCount()) {
+            iceberg_stats.null_value_counts[field_id] = column_stat->null_count();
+        }
+        if (column_stat->HasMinMax()) {
+            iceberg_stats.lower_bounds[field_id] = column_stat->EncodeMin();
+            iceberg_stats.upper_bounds[field_id] = column_stat->EncodeMax();
+        }
+    }
+
+    dataFile.column_stats = iceberg_stats;
 
     state->add_iceberg_data_file(dataFile);
 }
