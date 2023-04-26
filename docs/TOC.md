@@ -78,13 +78,9 @@
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
-<<<<<<< HEAD
     + Deploy StarRocks on Kubernetes
       + [Deploy StarRocks with Operator](./administration/sr_operator.md)
       + [Deploy StarRocks with Helm](./administration/helm.md)
-=======
-    + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/sr_operator.md)
->>>>>>> c0f6c8d49 (Upd docker deploy (#21624))
     + [Deploy CN](./administration/deploy_cn.md)
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
   + Management
