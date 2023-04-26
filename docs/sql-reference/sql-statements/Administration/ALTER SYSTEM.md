@@ -59,7 +59,7 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
 
   > **NOTE**
   >
-  > You cannot drop the BE node that stores the tablets of single-replica table.
+  > You cannot drop the BE node that stores the tablets of single-replica tables.
 
   ```SQL
   ALTER SYSTEM DROP BACKEND "<be_host>:<heartbeat_service_port>"[, ...]
@@ -71,7 +71,7 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
   ALTER SYSTEM DECOMMISSION BACKEND "<be_host>:<heartbeat_service_port>"[, ...]
   ```
 
-  Decommissioning a BE means removing it safely. It is an asynchronous operation. When a BE is decommissioned, the data on the BE is migrated to other BEs. Data loading and query will not be affected during the data migration. You can check whether the operation is successful using [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md). If the operation is successful, the decommissioned BE will not be returned. If the operation fails, the BE will still be online. You can manually cancel the operation using [CANCEL DECOMMISSION](../Administration/CANCEL%20DECOMMISSION.md).
+  Unlike dropping a BE node, which is removing it forcibly from the cluster, decommissioning a BE means removing it safely. It is an asynchronous operation. When a BE is decommissioned, the data on the BE is first migrated to other BEs, and then the BE is removed from the cluster. Data loading and query will not be affected during the data migration. You can check whether the operation is successful using [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md). If the operation is successful, the decommissioned BE will not be returned. If the operation fails, the BE will still be online. You can manually cancel the operation using [CANCEL DECOMMISSION](../Administration/CANCEL%20DECOMMISSION.md).
 
 | **Parameter**          | **Required** | **Description**                                                                            |
 | ---------------------- | ------------ | ------------------------------------------------------------------------------------------ |
@@ -113,7 +113,7 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
 
 > **CAUTION**
 >
-> Dropping a Broker nodes terminates the tasks currently running on it.
+> Dropping a Broker node terminates the tasks currently running on it.
 
   - Drop one or multiple Broker nodes with the same `broker_name`.
 
@@ -145,7 +145,8 @@ Creating an image is an asynchronous operation on the Leader FE. You can check t
 
 ## Usage notes
 
-Adding and drooping FE, BE, CN, or Broker nodes are synchronous operations. You cannot cancel the node dropping operations.
+- Adding and dropping FE, BE, CN, or Broker nodes are synchronous operations. You cannot cancel the node dropping operations.
+- You cannot drop BE nodes if the number of the remained BE nodes is less than the number of data replicas. For example, if you have three BE nodes in your cluster and you store your data in three replicas, you cannot drop any of the BE nodes. And if you have four BE nodes and three replicas, you can drop one BE node.
 
 ## Examples
 
