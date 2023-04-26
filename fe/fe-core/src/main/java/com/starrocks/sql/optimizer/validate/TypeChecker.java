@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.optimizer.validate;
 
-import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -187,7 +186,6 @@ public class TypeChecker implements PlanValidator.Checker {
 
         private void checkAggArguments(CallOperator aggCall, boolean isMergeAggFn) {
             String functionName = aggCall.getFunction().functionName();
-            AggregateFunction aggFunc = (AggregateFunction) aggCall.getFunction();
             List<ScalarOperator> arguments = aggCall.getArguments();
             Type[] definedTypes = aggCall.getFunction().getArgs();
             List<Type> argTypes = arguments.stream().map(ScalarOperator::getType).collect(Collectors.toList());
