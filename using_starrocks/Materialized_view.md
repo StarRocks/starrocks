@@ -32,7 +32,7 @@ StarRocks 2.4 之前的版本提供了一种同步更新的同步物化视图（
 
   物化视图的驱动表。
 
-  对于 StarRocks 的异步物化视图，基表可以是 [Default catalog](../data_source/catalog/default_catalog.md) 中的内部表、外部数据目录中的表（自 2.5 版本起支持），甚至是已有的异步物化视图（自 2.5 版本起支持）。StarRocks 支持在所有 [StarRocks 表类型](../table_design/Data_model.md) 上创建异步物化视图。
+  对于 StarRocks 的异步物化视图，基表可以是 [Default catalog](../data_source/catalog/default_catalog.md) 中的内部表、外部数据目录中的表（自 2.5 版本起支持），甚至是已有的异步物化视图（自 2.5 版本起支持）。StarRocks 支持在所有 [StarRocks 表类型](../table_design/table_types/table_types.md) 上创建异步物化视图。
 
 - **刷新（Refresh）**
 

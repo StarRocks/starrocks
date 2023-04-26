@@ -30,7 +30,7 @@
 <NavBoxPartItem>
 
 - [理解表设计](/table_design/StarRocks_table_design)
-- [数据模型](/table_design/Data_model)
+- [数据模型](/table_design/table_types/table_types)
 - [数据分布](/table_design/Data_distribution)
 - [排序键和前缀索引](/table_design/Sort_key)
 
