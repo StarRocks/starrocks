@@ -159,12 +159,13 @@ arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper:
 }
 
 arrow::Result<std::shared_ptr<::parquet::schema::GroupNode>> ParquetBuildHelper::make_schema(
-        const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs) {
+        const std::vector<std::string>& file_column_names, const std::vector<TypeDescriptor>& type_descs,
+        const std::vector<FileColumnId>& file_column_ids) {
     ::parquet::schema::NodeVector fields;
 
     for (int i = 0; i < type_descs.size(); i++) {
-        ARROW_ASSIGN_OR_RAISE(auto node,
-                              _make_schema_node(file_column_names[i], type_descs[i], ::parquet::Repetition::OPTIONAL));
+        ARROW_ASSIGN_OR_RAISE(auto node, _make_schema_node(file_column_names[i], type_descs[i],
+                                                           ::parquet::Repetition::OPTIONAL, file_column_ids[i]))
         DCHECK(node != nullptr);
         fields.push_back(std::move(node));
     }
@@ -186,8 +187,8 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
                                                                                 const TypeDescriptor& type_desc,
                                                                                 ::parquet::Repetition::type rep_type,
                                                                                 FileColumnId file_column_id) {
-    if (file_column_id.children.size() != type_desc.field_names.size()) {
-        file_column_id.children = std::vector<FileColumnId>(type_desc.field_names.size());
+    if (file_column_id.children.size() != type_desc.children.size()) {
+        file_column_id.children = std::vector<FileColumnId>(type_desc.children.size());
     }
 
     switch (type_desc.type) {
