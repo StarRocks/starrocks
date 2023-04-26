@@ -23,21 +23,13 @@
   - [Docker Engine](https://docs.docker.com/engine/install/) (17.06.0 以上)
   - MySQL 客户端 (5.5 以上)
 
-## 第一步：下载 StarRocks Docker 镜像
+## 第一步：通过 Docker 镜像部署 StarRocks
 
 从 [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/allin1-ubuntu/tags) 下载 StarRocks Docker 镜像。您可以根据 Tag 选择特定版本的镜像。
 
 ```Bash
-sudo docker pull starrocks/allin1-ubuntu
-```
-
-## 第二步：在 Docker 容器中部署 StarRocks
-
-下载 Docker 镜像后，您可以通过运行以下命令来部署 StarRocks：
-
-```Bash
 sudo docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 \
-    -itd starrocks/allin1-ubuntu
+    -itd starrocks.docker.scarf.sh/starrocks/allin1-ubuntu
 ```
 
 > **故障排除**
@@ -57,7 +49,7 @@ CONTAINER ID   IMAGE                                          COMMAND           
 8962368f9208   starrocks/allin1-ubuntu:branch-3.0-0afb97bbf   "/bin/sh -c ./start_…"   4 minutes ago   Up 4 minutes           0.0.0.0:8037->8030/tcp, :::8037->8030/tcp, 0.0.0.0:8047->8040/tcp, :::8047->8040/tcp, 0.0.0.0:9037->9030/tcp, :::9037->9030/tcp   xxxxx
 ```
 
-## 第三步：连接 StarRocks
+## 第二步：连接 StarRocks
 
 成功部署后，您可以通过 MySQL 客户端连接该 StarRocks 集群。
 
