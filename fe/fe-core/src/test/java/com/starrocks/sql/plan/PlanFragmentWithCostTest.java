@@ -1233,13 +1233,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [4: t1a, VARCHAR, true] = [16: cast, VARCHAR(1048576), true]\n" +
                 "  |  output columns: 1, 4\n" +
-                "  |  cardinality: 9000\n" +
+                "  |  cardinality: 10000\n" +
                 "  |  \n" +
                 "  |----8:EXCHANGE\n" +
                 "  |       cardinality: 1\n" +
                 "  |    \n" +
                 "  6:EXCHANGE\n" +
-                "     cardinality: 9000");
+                "     cardinality: 10000");
 
         AuditEvent event = connectContext.getAuditEventBuilder().build();
         Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
