@@ -77,6 +77,7 @@ jobs:
     name: BE FILTER
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
+      output2: ${{ steps.be-changes-info.outputs.thirdparty }}
     steps:
       - uses: dorny/paths-filter@v2
         id: changes
@@ -87,10 +88,24 @@ jobs:
             - 'gensrc/**'
             - 'run-be-ut.sh'
             - 'build.sh'
+<<<<<<< HEAD
+=======
+            - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+            thirdparty:
+            - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+
+>>>>>>> 727619abc ([Tool] build thirdparty image in branch (#22565))
       - name: BE CHECK INFO
         id: be-changes-info
         run: |
           echo "be=${{ steps.changes.outputs.be }}" >> $GITHUB_OUTPUT
+<<<<<<< HEAD
+=======
+          echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
+
+>>>>>>> 727619abc ([Tool] build thirdparty image in branch (#22565))
   clang-format:
     runs-on: self-hosted
     needs: be-checker
@@ -114,13 +129,67 @@ jobs:
         run: |
           export PATH=/var/lib/llvm/bin:$PATH
           bash build-support/check-format.sh
+<<<<<<< HEAD
+=======
+
+  thirdparty-update:
+    runs-on: self-hosted
+    needs: [ be-checker, clang-format ]
+    name: Thirdparty Update
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
+    outputs:
+      ip: ${{ steps.update-image.outputs.ip }}
+      instance_id: ${{ steps.update-image.outputs.instance_id }}
+      image_cache_id: ${{ steps.update-image.outputs.image_cache_id }}
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Update Image
+        id: update-image
+        run: |
+          set -ex
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+            rm -rf ./elastic-service
+            cp -rf /var/lib/elastic-service ./elastic-service
+            cd elastic-service && git pull
+            ./bin/elastic-cluster.sh --template thirdparty
+            ip=$(grep hosts conf/starrocks_deploy.conf | head -n 1 | awk '{print $NF}')
+            instance_id=$(grep instances conf/starrocks_deploy.conf | head -n 1 | awk '{print $NF}')
+            echo "ip=${ip}" >> $GITHUB_OUTPUT
+            echo "instance_id=${instance_id}" >> $GITHUB_OUTPUT
+            sleep 30
+            sudo ssh-keygen -f "/root/.ssh/known_hosts" -R "${ip}" || true
+            sshpass -p ${{ secrets.PASSWORD }} scp -o StrictHostKeyChecking=no -r bin/elastic-build-thirdparty.sh root@$ip:/home/disk1/
+            sshpass -p ${{ secrets.PASSWORD }} ssh -o StrictHostKeyChecking=no root@$ip "cd /home/disk1; ./elastic-build-thirdparty.sh $BRANCH $PR_NUMBER"
+            image_cache_id=$(python3 lib/eci_imagecache.py create $BRANCH-$PR_NUMBER)
+            echo "image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+              cd elastic-service
+              python3 lib/ecs_lib.py delete_instances conf/starrocks_deploy.conf
+          fi
+
+>>>>>>> 727619abc ([Tool] build thirdparty image in branch (#22565))
   be-ut:
     runs-on: self-hosted
-    needs: [ clang-format ]
+    needs: [ be-checker, clang-format, thirdparty-update ]
     timeout-minutes: 90
     name: BE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
     steps:
       - name: BRANCH INFO
         id: branch
@@ -136,6 +205,10 @@ jobs:
           rm -rf ./elastic-service
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+              export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+              export image_tag=$BRANCH-$PR_NUMBER
+          fi
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{steps.branch.outputs.branch}}
       - name: clean ECI
         if: always()
@@ -240,5 +313,23 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/*.xml
 
+<<<<<<< HEAD
       - name: Clean Report
         run: rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
+=======
+      - name: Upload log
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: FE UT LOG
+          path: ${{ steps.run_ut.outputs.RES_LOG }}
+          retention-days: 1
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
+          rm -f ${{ steps.run_ut.outputs.RES_FILE }}
+          rm -f ${{ steps.run_ut.outputs.RES_LOG }}
+          rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
+>>>>>>> 727619abc ([Tool] build thirdparty image in branch (#22565))
