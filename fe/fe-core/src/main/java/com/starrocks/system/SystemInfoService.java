@@ -1052,8 +1052,7 @@ public class SystemInfoService {
         LOG.debug("replayDropComputeNode: {}", computeNodeId);
         // update idToComputeNode
         Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
-        ComputeNode cn = copiedComputeNodes.get(computeNodeId);
-        copiedComputeNodes.remove(computeNodeId);
+        ComputeNode cn = copiedComputeNodes.remove(computeNodeId);
         idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
 
 
