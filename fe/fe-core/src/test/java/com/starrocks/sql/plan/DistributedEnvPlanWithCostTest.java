@@ -1408,7 +1408,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  equal join conjunct: [19: d_datekey, INT, true] = [36: d_datekey, INT, true]\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 0, build_expr = (36: d_datekey), remote = false\n" +
-                "  |  cardinality: 2300\n" +
+                "  |  cardinality: 2556\n" +
                 "  |  \n" +
                 "  |----2:AGGREGATE (update finalize)");
 

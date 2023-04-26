@@ -18,6 +18,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -51,7 +52,6 @@ public class ReplayFromDumpTest {
 
     @AfterClass
     public static void afterClass() throws Exception {
-        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
         FeConstants.showLocalShuffleColumnsInExplain = true;
     }
 
