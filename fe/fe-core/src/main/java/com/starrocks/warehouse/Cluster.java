@@ -20,7 +20,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.system.ComputeNode;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -34,7 +33,7 @@ public class Cluster implements Writable {
     @SerializedName(value = "wgid")
     private long workerGroupId;
     @SerializedName(value = "computeNodeList")
-    private List<ComputeNode> computeNodeList = new ArrayList<>();
+    private List<Long> computeNodeIdList = new ArrayList<>();
 
     public Cluster(long id) {
         this.id = id;
@@ -62,12 +61,12 @@ public class Cluster implements Writable {
                 String.valueOf(this.getRunningSqls())));
     }
 
-    public void addNode(ComputeNode cn) {
-        computeNodeList.add(cn);
+    public void addNode(long cnId) {
+        computeNodeIdList.add(cnId);
     }
 
-    public void dropNode(ComputeNode cn) {
-        computeNodeList.remove(cn);
+    public void dropNode(long cnId) {
+        computeNodeIdList.remove(cnId);
     }
 
     @Override
