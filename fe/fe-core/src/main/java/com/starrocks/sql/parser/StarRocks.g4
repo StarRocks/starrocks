@@ -2303,6 +2303,7 @@ specialFunctionExpression
     | DAY '(' expression ')'
     | HOUR '(' expression ')'
     | IF '(' (expression (',' expression)*)? ')'
+    | IFS '(' expression ',' expression ((',' expression ',' expression)*)? (',' expression)? ')'
     | LEFT '(' expression ',' expression ')'
     | LIKE '(' expression ',' expression ')'
     | MINUTE '(' expression ')'

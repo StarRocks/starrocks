@@ -347,6 +347,7 @@ public class FunctionSet {
     public static final String IF = "if";
     public static final String IFNULL = "ifnull";
     public static final String NULLIF = "nullif";
+    public static final String IFS = "ifs";
 
     // Math functions:
     public static final String ABS = "abs";

@@ -20,7 +20,9 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -59,5 +61,21 @@ public class SqlToScalarOperatorTranslatorTest {
         CallOperator so = (CallOperator) SqlToScalarOperatorTranslator.translate(complexFunc,
                 new ExpressionMapping(null, Collections.emptyList()), new ColumnRefFactory());
         assertEquals("if", so.getFnName());
+    }
+
+    @Test
+    public void testTranslateIfsFunction() {
+        StringLiteral column = new StringLiteral("c1");
+        StringLiteral firstWhen = new StringLiteral("str1");
+        IntLiteral firstThen = new IntLiteral(1);
+        BinaryPredicate firstPredicate = new BinaryPredicate(BinaryPredicate.Operator.EQ, column, firstWhen);
+        StringLiteral secondWhen = new StringLiteral("str2");
+        IntLiteral secondThen = new IntLiteral(2);
+        BinaryPredicate secondPredicate = new BinaryPredicate(BinaryPredicate.Operator.EQ, column, secondWhen);
+        IntLiteral elseResult = new IntLiteral(0);
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr(FunctionSet.IFS,
+                ImmutableList.of(firstPredicate, firstThen, secondPredicate, secondThen, elseResult));
+        CallOperator co = (CallOperator) SqlToScalarOperatorTranslator.translate(functionCallExpr);
+        assertEquals("CaseWhen", co.getFnName());
     }
 }

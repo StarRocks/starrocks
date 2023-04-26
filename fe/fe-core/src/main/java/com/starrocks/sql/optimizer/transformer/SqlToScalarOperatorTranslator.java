@@ -662,7 +662,21 @@ public final class SqlToScalarOperatorTranslator {
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
-
+            if (FunctionSet.IFS.equalsIgnoreCase(node.getFnName().getFunction())) {
+                List<ScalarOperator> whenThenClauses = Lists.newArrayList();
+                ScalarOperator elseClause = null;
+                // has elseClause
+                if ((arguments.size() & 1) == 1) {
+                    int elseIndex = arguments.size() - 1;
+                    elseClause = arguments.get(elseIndex);
+                    for (int i = 0; i < elseIndex; i++) {
+                        whenThenClauses.add(arguments.get(i));
+                    }
+                } else {
+                    whenThenClauses = arguments;
+                }
+                return new CaseWhenOperator(node.getType(), null, elseClause, whenThenClauses);
+            }
             CallOperator callOperator = new CallOperator(
                     node.getFnName().getFunction(),
                     node.getType(),
