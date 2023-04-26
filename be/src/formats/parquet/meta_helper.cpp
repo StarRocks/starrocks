@@ -68,7 +68,8 @@ void IcebergMetaHelper::set_existed_column_names(std::unordered_set<std::string>
     const auto& fields = _t_iceberg_schema->fields;
     for (const auto& field : fields) {
         if (_file_metadata->schema().contain_field_id(field.field_id)) {
-            names->emplace(field.name);
+            // Use _file_metadata->schema()'s column name, it's already formatted
+             names->emplace(_file_metadata->schema().get_stored_column_by_field_id(field.field_id)->name);
         }
     }
 }
