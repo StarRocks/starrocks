@@ -1512,7 +1512,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "join [shuffle] (select 1 as v1_c1 where false) v1 on t1a=v1 and t1a=v1_c1");
         assertContains(plan, "  9:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  equal join conjunct: [4: t1a, VARCHAR, true] = [16: cast, VARCHAR(1048576), false]\n" +
+                "  |  equal join conjunct: [4: t1a, VARCHAR, true] = [16: cast, VARCHAR(1048576), true]\n" +
                 "  |  output columns: 1, 4\n" +
                 "  |  cardinality: 9000\n" +
                 "  |  \n" +
