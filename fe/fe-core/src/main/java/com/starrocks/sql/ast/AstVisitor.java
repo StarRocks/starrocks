@@ -777,6 +777,10 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
+    public R visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------
 
     public R visitUnsupportedStatement(UnsupportedStmt statement, C context) {

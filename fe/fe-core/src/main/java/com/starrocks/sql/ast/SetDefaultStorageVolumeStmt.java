@@ -14,24 +14,14 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.cloud.hadoop.repackaged.gcs.com.google.common.base.Strings;
-import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.parser.NodePosition;
 
-import java.util.Map;
+public class SetDefaultStorageVolumeStmt extends DdlStmt {
+    private final String storageVolumeName;
 
-public class AlterStorageVolumeStmt extends DdlStmt {
-    private String storageVolumeName;
-
-    private Map<String, String> properties;
-    private final String comment;
-
-    public AlterStorageVolumeStmt(String storageVolumeName, Map<String, String> properties,
-                                  String comment, NodePosition pos) {
+    public SetDefaultStorageVolumeStmt(String storageVolumeName, NodePosition pos) {
         super(pos);
         this.storageVolumeName = storageVolumeName;
-        this.properties = properties;
-        this.comment = Strings.nullToEmpty(comment);
     }
 
     public String getName() {
@@ -40,22 +30,13 @@ public class AlterStorageVolumeStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitAlterStorageVolumeStatement(this, context);
+        return visitor.visitSetDefaultStorageVolumeStatement(this, context);
     }
 
     @Override
     public String toSql() {
         StringBuilder sb = new StringBuilder();
-        sb.append("ALTER STORAGE VOLUME ").append(storageVolumeName);
-        if (!comment.isEmpty()) {
-            sb.append(" COMMENT '").append(comment).append("'");
-        }
-        if (!properties.isEmpty()) {
-            sb.append(" SET (").
-                    append(new PrintableMap<>(properties, "=", true, false))
-                    .append(")");
-        }
+        sb.append("SET ").append(storageVolumeName).append(" AS DEFAULT STORAGE VOLUME");
         return sb.toString();
     }
-
 }

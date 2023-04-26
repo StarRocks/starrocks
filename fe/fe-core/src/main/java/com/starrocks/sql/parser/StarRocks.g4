@@ -282,6 +282,7 @@ statement
     | dropStorageVolumeStatement
     | showStorageVolumesStatement
     | descStorageVolumeStatement
+    | setDefaultStorageVolumeStatement
 
     //Unsupported Statement
     | unsupportedStatement
@@ -700,8 +701,8 @@ resumeWarehouseStatement
 // ---------------------------------------- Storage Volume Statement ---------------------------------------------------
 
 createStorageVolumeStatement
-    : CREATE STORAGE VOLUME (IF NOT EXISTS)? storageVolumeName=identifierOrString typeDesc propertyList
-    locationsDesc enabledDesc? comment?
+    : CREATE STORAGE VOLUME (IF NOT EXISTS)? storageVolumeName=identifierOrString typeDesc locationsDesc
+          comment? properties
     ;
 
 typeDesc
@@ -710,10 +711,6 @@ typeDesc
 
 locationsDesc
     : LOCATIONS EQ stringList
-    ;
-
-enabledDesc
-    : ENABLED EQ booleanValue
     ;
 
 showStorageVolumesStatement
@@ -725,12 +722,17 @@ dropStorageVolumeStatement
     ;
 
 alterStorageVolumeStatement
-    : ALTER STORAGE VOLUME identifierOrString SET (AS DEFAULT)? propertyList? enabledDesc? modifyCommentClause?
+    : ALTER STORAGE VOLUME identifierOrString comment? (SET propertyList)?
     ;
 
 descStorageVolumeStatement
     : (DESC | DESCRIBE) STORAGE VOLUME identifierOrString
     ;
+
+setDefaultStorageVolumeStatement
+    : SET identifierOrString AS DEFAULT STORAGE VOLUME
+    ;
+
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
 
 alterClause

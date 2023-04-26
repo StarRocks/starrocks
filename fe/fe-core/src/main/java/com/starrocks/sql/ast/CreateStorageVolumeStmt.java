@@ -25,17 +25,15 @@ public class CreateStorageVolumeStmt extends DdlStmt {
     private final boolean ifNotExists;
     private final String storageVolumeName;
     private final String storageVolumeType;
-    private Map<String, String> storageParams;
+    private Map<String, String> properties;
     private final List<String> locations;
-    private final boolean enabled;
     private final String comment;
 
     public CreateStorageVolumeStmt(boolean ifNotExists,
                                    String storageVolumeName,
                                    String storageVolumeType,
-                                   Map<String, String> storageParams,
+                                   Map<String, String> properties,
                                    List<String> locations,
-                                   boolean enabled,
                                    String comment,
                                    NodePosition pos) {
         super(pos);
@@ -44,8 +42,7 @@ public class CreateStorageVolumeStmt extends DdlStmt {
         this.storageVolumeName = storageVolumeName;
         this.storageVolumeType = storageVolumeType;
         this.locations = locations;
-        this.storageParams = storageParams;
-        this.enabled = enabled;
+        this.properties = properties;
         this.comment = Strings.nullToEmpty(comment);
     }
 
@@ -75,8 +72,6 @@ public class CreateStorageVolumeStmt extends DdlStmt {
         }
         sb.append(storageVolumeName);
         sb.append(" TYPE = ").append(storageVolumeType);
-        sb.append(" (").
-                append(new PrintableMap<>(storageParams, "=", true, false)).append(")");
         sb.append(" LOCATIONS = (");
         for (int i = 0; i < locations.size(); ++i) {
             if (i == 0) {
@@ -86,11 +81,11 @@ public class CreateStorageVolumeStmt extends DdlStmt {
             }
         }
         sb.append(")");
-
-        sb.append(" ENABLED = ").append(enabled);
         if (!comment.isEmpty()) {
-            sb.append(" COMMENT = ").append(comment);
+            sb.append(" COMMENT = '").append(comment).append("'");
         }
+        sb.append(" PROPERTIES (").
+                append(new PrintableMap<>(properties, "=", true, false)).append(")");
         return sb.toString();
     }
 }

@@ -103,6 +103,7 @@ import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
+import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
@@ -865,6 +866,12 @@ public class Analyzer {
 
         @Override
         public Void visitDescStorageVolumeStatement(DescStorageVolumeStmt statement, ConnectContext context) {
+            StorageVolumeAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement, ConnectContext context) {
             StorageVolumeAnalyzer.analyze(statement, context);
             return null;
         }

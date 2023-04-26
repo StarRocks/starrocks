@@ -278,6 +278,7 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
+import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetPassVar;
@@ -408,7 +409,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
@@ -3205,12 +3205,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         String svName = identifier.getValue();
 
-        Map<String, String> storageParams = new HashMap<>();
-        List<Property> propertyList = visit(context.propertyList().property(), Property.class);
-        for (Property property : propertyList) {
-            storageParams.put(property.getKey(), property.getValue());
-        }
-
         String storageType = ((Identifier) visit(context.typeDesc().identifier())).getValue();
 
         List<StarRocksParser.StringContext> locationList = context.locationsDesc().stringList().string();
@@ -3219,13 +3213,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             locations.add(((StringLiteral) visit(location)).getValue());
         }
 
-        boolean enabled = true;
-        if (context.enabledDesc() != null) {
-            enabled = Boolean.parseBoolean(context.enabledDesc().booleanValue().getText());
-        }
-
         return new CreateStorageVolumeStmt(context.IF() != null,
-                svName, storageType, storageParams, locations, enabled,
+                svName, storageType, getProperties(context.properties()), locations,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
                 createPos(context));
     }
@@ -3247,24 +3236,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String svName = identifier.getValue();
         NodePosition pos = createPos(context);
 
-        Map<String, String> storageParams = new HashMap<>();
+        Map<String, String> properties = new HashMap<>();
         if (context.propertyList() != null) {
+            properties = new HashMap<>();
             List<Property> propertyList = visit(context.propertyList().property(), Property.class);
             for (Property property : propertyList) {
-                storageParams.put(property.getKey(), property.getValue());
+                properties.put(property.getKey(), property.getValue());
             }
         }
 
-        Optional<Boolean> enabled = Optional.empty();
-        if (context.enabledDesc() != null) {
-            enabled = Optional.of(Boolean.parseBoolean(context.enabledDesc().booleanValue().getText()));
-        }
+        String comment = context.comment() == null ?
+                null : ((StringLiteral) visit(context.comment().string())).getStringValue();
 
-        String comment = context.modifyCommentClause() != null ?
-                ((StringLiteral) visit(context.modifyCommentClause().string())).getStringValue() : null;
-
-        return new AlterStorageVolumeStmt(svName, storageParams, enabled, context.DEFAULT() != null,
-                comment, pos);
+        return new AlterStorageVolumeStmt(svName, properties, comment, pos);
     }
 
     @Override
@@ -3279,6 +3263,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         String svName = identifier.getValue();
         return new DescStorageVolumeStmt(svName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitSetDefaultStorageVolumeStatement(
+            StarRocksParser.SetDefaultStorageVolumeStatementContext context) {
+        Identifier identifier = (Identifier) visit(context.identifierOrString());
+        String svName = identifier.getValue();
+        return new SetDefaultStorageVolumeStmt(svName, createPos(context));
     }
 
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------
