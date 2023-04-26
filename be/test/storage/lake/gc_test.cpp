@@ -579,6 +579,7 @@ TEST_F(GCTest, test_delete_compaction_inputs) {
 
     config::lake_gc_segment_expire_seconds = 0;
     config::lake_gc_metadata_max_versions = 1;
+    config::experimental_lake_enable_fast_gc = true;
     EXPECT_OK(metadata_gc(kTestDir, tablet_mgr.get(), 0));
 
     EXPECT_TRUE(fs->path_exists(tablet_mgr->tablet_metadata_location(tablet_id, 2)).is_not_found());
