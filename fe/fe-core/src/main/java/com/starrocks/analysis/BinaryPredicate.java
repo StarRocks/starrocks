@@ -270,6 +270,16 @@ public class BinaryPredicate extends Predicate implements Writable {
         if (type1.isJsonType() || type2.isJsonType()) {
             return Type.JSON;
         }
+<<<<<<< HEAD
+=======
+        if (type1.isArrayType() || type2.isArrayType()) {
+            // Must both be array
+            if (!type1.matchesType(type2)) {
+                return Type.INVALID;
+            }
+            return type1;
+        }
+>>>>>>> b81e3df06 ([BugFix] ignore varchar length when compare array<varchar> types (#22504))
         if (type1.isComplexType() || type2.isComplexType()) {
             // We don't support complex type for binary predicate.
             return Type.INVALID;
