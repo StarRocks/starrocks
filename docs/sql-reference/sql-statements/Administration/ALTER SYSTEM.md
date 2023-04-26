@@ -6,7 +6,7 @@ Manages FE, BE, CN, Broker nodes, and metadata snapshots in a cluster.
 
 > **NOTE**
 >
-> Only users with the `cluster_admin` privilege can execute this SQL statement.
+> Only the `cluster_admin` role has the privilege to execute this SQL statement.
 
 ## Syntax and parameters
 
