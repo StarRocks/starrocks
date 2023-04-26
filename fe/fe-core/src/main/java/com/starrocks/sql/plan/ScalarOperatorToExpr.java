@@ -502,12 +502,12 @@ public class ScalarOperatorToExpr {
                             buildExpr.build(call.getChildren().get(1), context));
                     break;
                 // FixMe(kks): InformationFunction shouldn't be CallOperator
+                case "catalog":
                 case "database":
                 case "schema":
                 case "user":
                 case "current_user":
                 case "current_role":
-                case "current_catalog":
                     callExpr = new InformationFunction(fnName,
                             ((ConstantOperator) call.getChild(0)).getVarchar(),
                             0);
