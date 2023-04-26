@@ -70,6 +70,7 @@ public class ReplayFromDumpTest {
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
+        FeConstants.showLocalShuffleColumnsInExplain = false;
     }
 
     @Before
@@ -81,6 +82,7 @@ public class ReplayFromDumpTest {
     @AfterClass
     public static void afterClass() throws Exception {
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+        FeConstants.showLocalShuffleColumnsInExplain = true;
     }
 
     public String getModelContent(String filename, String model) {
