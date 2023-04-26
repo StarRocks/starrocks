@@ -345,11 +345,6 @@ DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 10;
 
 在 StarRocks 中，分桶是实际物理文件组织的单元。自 2.4 版本起，StarRocks 提供了自适应的 Tablet 并行扫描能力，即一个查询中涉及到的任意一个 Tablet 可能是由多个线程并行地分段扫描，减少了 Tablet 数量对查询能力的限制，从而可以简化对分桶数量的设定。简化后的分桶方式可以是：首先预估每个分区的数据量，然后按照每 10 GB 原始数据一个 Tablet 计算，从而确定分桶数量。
 
-<<<<<<< HEAD
-> 注意：
-> 您需要确保系统变量 `SET GLOBAL enable_tablet_internal_parallel`为 `true`，以开启并行扫描 Tablet。
-> 不支持修改已创建的分区的分桶数量，支持在增加分区时为新增分区设置新的分桶数量。
-=======
 ```SQL
 CREATE TABLE site_access(
     site_id INT DEFAULT '10',
@@ -367,7 +362,6 @@ DISTRIBUTED BY HASH(site_id,city_code); --无需手动设置分桶数量
 >
 > - 您需要确保系统变量 `GLOBAL enable_tablet_internal_parallel`为 `true`，已经开启并行扫描 Tablet。
 > - 不支持修改已创建分区的分桶数量，支持在增加分区时为新增分区设置新的分桶数量。
->>>>>>> 825e5817 (Update Data_distribution.md (#4764))
 
 ## 最佳实践
 
