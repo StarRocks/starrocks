@@ -28,6 +28,10 @@ import sys
 
 import nose
 
+if not os.environ.get("version"):
+    version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    os.environ["version"] = version
+
 from lib import sr_sql_lib
 
 
@@ -116,12 +120,6 @@ if __name__ == "__main__":
         if opt in ("-a", "--attr"):
             attr = arg
 
-    version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-    print("Version: %s" % version)
-    # os.environ["version"] = version
-    with open('version', 'w') as f:
-        f.write(version)
-
     # set environment
     os.environ["record_mode"] = "true" if record else "false"
     os.environ["sql_dir"] = str(dirname)
@@ -151,6 +149,10 @@ if __name__ == "__main__":
         sys.exit(4)
     argv += ["--process-timeout=%s" % timeout]
 
+    # test xml
+    if not record:
+        argv += ["--with-xunitmp"]
+
     if collect:
         argv += ["--collect-only"]
 
@@ -161,5 +163,3 @@ if __name__ == "__main__":
     # record mode
     if record and not collect:
         sr_sql_lib.StarrocksSQLApiLib().save_r_into_file(part)
-
-    os.remove("version")
