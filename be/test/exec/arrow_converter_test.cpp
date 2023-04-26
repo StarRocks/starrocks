@@ -251,7 +251,6 @@ void add_arrow_to_binary_column(Column* column, size_t num_elements, ArrowCppTyp
     for (auto i = 0; i < num_elements; ++i) {
         auto idx = counter - num_elements + i;
         auto s = binary_column->get_slice(idx);
-        // std::cout << "s:" << s.to_string() << std::endl;
         if (fail) {
             ASSERT_EQ(filter[idx], 0);
             ASSERT_EQ(s.size, 0);
