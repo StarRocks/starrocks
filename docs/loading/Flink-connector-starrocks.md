@@ -50,7 +50,7 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
                     .withProperty("sink.properties.strip_outer_array", "true")
                     .build()
             )
-        );
+        ).setParallelism(1); // define the parallelism of the sink;
 
         // -------- sink with stream transformation --------
         class RowData {
@@ -123,9 +123,11 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
                 // "'sink.properties.columns' = 'k1,k2,k3,__op'," + 
                 "'sink.properties.column_separator' = '\\x01'," +
                 "'sink.properties.row_delimiter' = '\\x02'," +
-                "'sink.max-retries' = '3'" +
+                "'sink.max-retries' = '3'," +
                 // stream load properties like `'sink.properties.columns' = 'k1, v1'`
-                "'sink.properties.*' = 'xxx'" + 
+                "'sink.properties.*' = 'xxx'," + 
+                // define the parallelism of the sink
+                "'sink.parallelism' = '1'"
             ")"
         );
         ```
