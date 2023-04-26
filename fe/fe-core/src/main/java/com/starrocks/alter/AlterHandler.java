@@ -87,7 +87,7 @@ public abstract class AlterHandler extends FrontendDaemon {
     }
 
     public AlterHandler(String name) {
-        super(name, Config.default_alter_scheduler_interval_millisecond);
+        super(name, Config.alter_scheduler_interval_millisecond);
         executor = ThreadPoolManager
                 .newDaemonCacheThreadPool(Config.alter_max_worker_threads, Config.alter_max_worker_queue_size,
                         name + "_pool", true);

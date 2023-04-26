@@ -2242,11 +2242,11 @@ public class Config extends ConfigBase {
      * The default scheduler interval for alter jobs.
      */
     @ConfField(mutable = true)
-    public static int default_alter_scheduler_interval_millisecond = 10000;
+    public static int alter_scheduler_interval_millisecond = 10000;
 
     /**
      * The default scheduler interval for routine loads.
      */
     @ConfField(mutable = true)
-    public static int default_routine_load_scheduler_interval_millisecond = 10000;
+    public static int routine_load_scheduler_interval_millisecond = 10000;
 }

@@ -50,7 +50,7 @@ public class LocalMetaStoreTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        Config.default_alter_scheduler_interval_millisecond = 1000;
+        Config.alter_scheduler_interval_millisecond = 1000;
         FeConstants.runningUnitTest = true;
 
         UtFrameUtils.createMinStarRocksCluster();

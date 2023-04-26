@@ -61,7 +61,7 @@ public class RoutineLoadScheduler extends FrontendDaemon {
     }
 
     public RoutineLoadScheduler(RoutineLoadManager routineLoadManager) {
-        super("Routine load scheduler", Config.default_routine_load_scheduler_interval_millisecond);
+        super("Routine load scheduler", Config.routine_load_scheduler_interval_millisecond);
         this.routineLoadManager = routineLoadManager;
     }
 

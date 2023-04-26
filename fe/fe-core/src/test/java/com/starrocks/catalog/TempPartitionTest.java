@@ -85,7 +85,7 @@ public class TempPartitionTest {
     public static void setup() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
-        Config.default_alter_scheduler_interval_millisecond = 100;
+        Config.alter_scheduler_interval_millisecond = 100;
         starRocksAssert = new StarRocksAssert(ctx);
     }
 

@@ -5,7 +5,6 @@ import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -144,7 +143,7 @@ public class ResourceGroupStmtTest {
     public static void setUp() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        Config.default_alter_scheduler_interval_millisecond = 1;
+        Config.alter_scheduler_interval_millisecond = 1;
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withRole("rg1_role1");
         starRocksAssert.withUser("rg1_user1");
