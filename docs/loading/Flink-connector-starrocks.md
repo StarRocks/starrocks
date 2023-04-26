@@ -125,7 +125,7 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
                 "'sink.properties.column_separator' = '\\x01'," +
                 "'sink.properties.row_delimiter' = '\\x02'," +
                 "'sink.max-retries' = '3'," +
-                // stream load properties like `'sink.properties.columns' = 'k1, v1'`
+                // Stream load properties like `'sink.properties.columns' = 'k1, v1'`
                 "'sink.properties.*' = 'xxx'," + 
                 // Define the parallelism of the sink. In the scenario of multiple paralel sinks, you need to guarantee the data order.
                 "'sink.parallelism' = '1'"
