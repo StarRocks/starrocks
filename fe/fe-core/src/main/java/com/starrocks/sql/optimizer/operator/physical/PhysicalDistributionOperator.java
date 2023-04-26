@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -45,6 +46,11 @@ public class PhysicalDistributionOperator extends PhysicalOperator {
     public void setGlobalDicts(
             List<Pair<Integer, ColumnDict>> globalDicts) {
         this.globalDicts = globalDicts;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return projectInputRow(inputs.get(0).getRowOutputInfo());
     }
 
     @Override

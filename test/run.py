@@ -28,6 +28,10 @@ import sys
 
 import nose
 
+if not os.environ.get("version"):
+    version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    os.environ["version"] = version
+
 from lib import sr_sql_lib
 
 
@@ -115,10 +119,6 @@ if __name__ == "__main__":
 
         if opt in ("-a", "--attr"):
             attr = arg
-
-    version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-    print("Version: %s" % version)
-    os.environ["version"] = version
 
     # set environment
     os.environ["record_mode"] = "true" if record else "false"
