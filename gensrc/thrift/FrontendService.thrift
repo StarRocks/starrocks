@@ -549,6 +549,15 @@ struct TReportExecStatusParams {
   22: optional i64 filtered_rows
 
   23: optional i64 unselected_rows
+<<<<<<< HEAD
+=======
+
+  24: optional string rejected_record_path
+
+  25: optional list<Types.TSinkCommitInfo> sink_commit_infos
+
+  26: optional i64 source_scan_bytes
+>>>>>>> c081d2c34 ([Enhancement] Improve accuracy of broker load progress information (#21361))
 }
 
 struct TFeResult {
