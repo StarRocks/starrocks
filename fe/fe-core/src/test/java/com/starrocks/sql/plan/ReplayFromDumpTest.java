@@ -46,6 +46,13 @@ public class ReplayFromDumpTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
+        FeConstants.showLocalShuffleColumnsInExplain = false;
+    }
+
+    @AfterClass
+    public static void afterClass() throws Exception {
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+        FeConstants.showLocalShuffleColumnsInExplain = true;
     }
 
     public String getModelContent(String filename, String model) {

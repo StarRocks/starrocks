@@ -3,6 +3,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -12,7 +13,13 @@ public class TPCHPlanWithCostTest extends DistributedEnvPlanTestBase {
     public static void beforeClass() throws Exception {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
+        FeConstants.showLocalShuffleColumnsInExplain = false;
         connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(true);
+    }
+
+    @AfterClass
+    public static void afterClass() {
+        FeConstants.showLocalShuffleColumnsInExplain = true;
     }
 
     @Test
