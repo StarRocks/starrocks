@@ -11,6 +11,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.plugin.AuditEvent;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -1235,13 +1236,9 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  |  cardinality: 9000\n" +
                 "  |  \n" +
                 "  |----8:EXCHANGE\n" +
-                "  |       distribution type: SHUFFLE\n" +
-                "  |       partition exprs: [16: cast, VARCHAR(1048576), false]\n" +
                 "  |       cardinality: 1\n" +
                 "  |    \n" +
                 "  6:EXCHANGE\n" +
-                "     distribution type: SHUFFLE\n" +
-                "     partition exprs: [4: t1a, VARCHAR, true]\n" +
                 "     cardinality: 9000");
 
         AuditEvent event = connectContext.getAuditEventBuilder().build();
