@@ -486,4 +486,5 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     // todo: build predicate hook and ranges hook.
     return Status::OK();
 }
+
 } // namespace starrocks::vectorized
