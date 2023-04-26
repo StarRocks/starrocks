@@ -343,15 +343,14 @@ Status SchemaChangeHandler::convert_historical_rowsets(const SchemaChangeParams&
         sc_procedure = std::make_unique<SortedSchemaChange>(_tablet_manager, base_tablet, new_tablet, alter_version,
                                                             chunk_changer, memory_limitation);
         op_schema_change->set_linked_segment(false);
-    } else if (sc_params.sc_directly) {
-        LOG(INFO) << "doing direct schema change for base tablet: " << base_tablet->id();
+    } else {
+        // Note: In current implementation, linked schema change may refer to the segments deleted by gc,
+        // so disable linked schema change and will support it in the later version.
+        LOG(INFO) << "doing direct schema change for base tablet: " << base_tablet->id()
+                  << ", params directly: " << sc_params.sc_directly;
         sc_procedure = std::make_unique<DirectSchemaChange>(_tablet_manager, base_tablet, new_tablet, alter_version,
                                                             chunk_changer);
         op_schema_change->set_linked_segment(false);
-    } else {
-        LOG(INFO) << "doing linked schema change for base tablet: " << base_tablet->id();
-        sc_procedure = std::make_unique<LinkedSchemaChange>(_tablet_manager);
-        op_schema_change->set_linked_segment(true);
     }
     RETURN_IF_ERROR(sc_procedure->init());
 
