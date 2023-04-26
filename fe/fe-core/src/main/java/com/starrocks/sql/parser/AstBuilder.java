@@ -4149,7 +4149,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return visit(context.keyPartitions());
         }
 
-        List<Identifier> identifierList = visit(context.identifier(), Identifier.class);
+        List<Identifier> identifierList = visit(context.identifierOrString(), Identifier.class);
         return new PartitionNames(context.TEMPORARY() != null,
                 identifierList.stream().map(Identifier::getValue).collect(toList()),
                 createPos(context));
