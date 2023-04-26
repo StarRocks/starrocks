@@ -50,7 +50,8 @@ enum TDataSinkType {
     OLAP_TABLE_SINK,
     MEMORY_SCRATCH_SINK,
     MULTI_CAST_DATA_STREAM_SINK,
-    SCHEMA_TABLE_SINK
+    SCHEMA_TABLE_SINK,
+    ICEBERG_TABLE_SINK
 }
 
 enum TResultSinkType {
@@ -205,6 +206,15 @@ struct TSchemaTableSink {
     2: optional Descriptors.TNodesInfo nodes_info
 }
 
+struct TIcebergTableSink {
+    1: required string location
+    2: optional string file_format
+    3: optional i64 target_table_id
+    4: optional Types.TTupleId tuple_id
+    5: optional Types.TCompressionType compression_type
+    6: optional bool is_statistics_partition_sink
+}
+
 struct TDataSink {
   1: required TDataSinkType type
   2: optional TDataStreamSink stream_sink
@@ -215,4 +225,5 @@ struct TDataSink {
   8: optional TMemoryScratchSink memory_scratch_sink
   9: optional TMultiCastDataStreamSink multi_cast_stream_sink
   10: optional TSchemaTableSink schema_table_sink
+  11: optional TIcebergTableSink iceberg_table_sink
 }

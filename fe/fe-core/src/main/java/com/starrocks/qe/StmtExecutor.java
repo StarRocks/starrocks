@@ -46,6 +46,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
@@ -152,6 +153,7 @@ import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
@@ -1296,15 +1298,19 @@ public class StmtExecutor {
             return;
         }
 
-        if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite()
-                && !((InsertStmt) parsedStmt).hasOverwriteJob()) {
+        MetaUtils.normalizationTableName(context, stmt.getTableName());
+        String catalogName = stmt.getTableName().getCatalog();
+        String dbName = stmt.getTableName().getDb();
+        String tableName = stmt.getTableName().getTbl();
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+        Table targetTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+
+        if (parsedStmt instanceof InsertStmt && ((InsertStmt) parsedStmt).isOverwrite() &&
+                !((InsertStmt) parsedStmt).hasOverwriteJob() &&
+                !(targetTable instanceof IcebergTable)) {
             handleInsertOverwrite((InsertStmt) parsedStmt);
             return;
         }
-
-        MetaUtils.normalizationTableName(context, stmt.getTableName());
-        Database database = MetaUtils.getDatabase(context, stmt.getTableName());
-        Table targetTable = MetaUtils.getTable(context, stmt.getTableName());
 
         String label = DebugUtil.printId(context.getExecutionId());
         if (stmt instanceof InsertStmt) {
@@ -1341,8 +1347,8 @@ public class StmtExecutor {
                                     sourceType,
                                     ConnectContext.get().getSessionVariable().getQueryTimeoutS(),
                                     authenticateParams);
-        } else if (targetTable instanceof SchemaTable) {
-            // schema table does not need txn
+        } else if (targetTable instanceof SchemaTable || targetTable instanceof IcebergTable) {
+            // schema table and iceberg table does not need txn
         } else {
             transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(
                     database.getId(),
@@ -1412,15 +1418,18 @@ public class StmtExecutor {
                 type = TLoadJobType.INSERT_VALUES;
             }
 
-            jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
-                    label,
-                    database.getFullName(),
-                    targetTable.getId(),
-                    EtlJobType.INSERT,
-                    createTime,
-                    estimateScanRows,
-                    type,
-                    ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+            if (!targetTable.isIcebergTable()) {
+                jobId = context.getGlobalStateMgr().getLoadManager().registerLoadJob(
+                        label,
+                        database.getFullName(),
+                        targetTable.getId(),
+                        EtlJobType.INSERT,
+                        createTime,
+                        estimateScanRows,
+                        type,
+                        ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+            }
+
             coord.setJobId(jobId);
             trackingSql = "select tracking_log from information_schema.load_tracking_logs where job_id=" + jobId;
 
@@ -1491,7 +1500,7 @@ public class StmtExecutor {
                                 externalTable.getSourceTablePort(),
                                 TransactionCommitFailedException.FILTER_DATA_IN_STRICT_MODE + ", tracking sql = " + trackingSql
                         );
-                    } else if (targetTable instanceof SchemaTable) {
+                    } else if (targetTable instanceof SchemaTable || targetTable instanceof IcebergTable) {
                         // schema table does not need txn
                     } else {
                         GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
@@ -1517,7 +1526,7 @@ public class StmtExecutor {
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
                             TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
-                } else if (targetTable instanceof SchemaTable) {
+                } else if (targetTable instanceof SchemaTable || targetTable instanceof IcebergTable) {
                     // schema table does not need txn
                 } else {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
@@ -1545,6 +1554,18 @@ public class StmtExecutor {
             } else if (targetTable instanceof SchemaTable) {
                 // schema table does not need txn
                 txnStatus = TransactionStatus.VISIBLE;
+            } else if (targetTable instanceof IcebergTable) {
+                // TODO(stephen): support abort interface and delete data files when aborting.
+                List<TSinkCommitInfo> commitInfos = coord.getSinkCommitInfos();
+                if (stmt instanceof InsertStmt && ((InsertStmt) stmt).isOverwrite()) {
+                    for (TSinkCommitInfo commitInfo : commitInfos) {
+                        commitInfo.setIs_overwrite(true);
+                    }
+                }
+
+                context.getGlobalStateMgr().getMetadataMgr().finishSink(catalogName, dbName, tableName, commitInfos);
+                txnStatus = TransactionStatus.VISIBLE;
+                label = "FAKE_ICEBERG_SINK_LABEL";
             } else {
                 if (GlobalStateMgr.getCurrentGlobalTransactionMgr().commitAndPublishTransaction(
                         database,
@@ -1645,10 +1666,12 @@ public class StmtExecutor {
             errMsg = "Publish timeout " + timeoutInfo;
         }
         try {
-            context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId,
-                    EtlJobType.INSERT,
-                    "",
-                    coord.getTrackingUrl());
+            if (jobId != -1) {
+                context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId,
+                        EtlJobType.INSERT,
+                        "",
+                        coord.getTrackingUrl());
+            }
         } catch (MetaNotFoundException e) {
             LOG.warn("Record info of insert load with error {}", e.getMessage(), e);
             errMsg = "Record info of insert load with error " + e.getMessage();

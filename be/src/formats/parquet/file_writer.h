@@ -169,8 +169,8 @@ private:
 
 class AsyncFileWriter : public FileWriterBase {
 public:
-    AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::string file_name, std::string& file_dir,
-                    std::shared_ptr<::parquet::WriterProperties> properties,
+    AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::string file_location,
+                    std::string partition_location, std::shared_ptr<::parquet::WriterProperties> properties,
                     std::shared_ptr<::parquet::schema::GroupNode> schema,
                     const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
                     RuntimeProfile* parent_profile);
@@ -187,16 +187,15 @@ public:
 
     bool closed() const override { return _closed.load(); }
 
-    std::string file_name() const { return _file_name; }
+    std::string file_location() const { return _file_location; }
 
-    std::string file_dir() const { return _file_dir; }
+    std::string partition_location() const { return _partition_location; }
 
 private:
     void _flush_row_group() override;
 
-    std::string _file_name;
-    std::string _file_dir;
-
+    std::string _file_location;
+    std::string _partition_location;
     std::atomic<bool> _closed = false;
 
     PriorityThreadPool* _executor_pool;

@@ -346,6 +346,9 @@ std::size_t FileWriterBase::file_size() const {
     return _outstream->Tell().MoveValueUnsafe() + _chunk_writer->estimated_buffered_bytes();
 }
 
+// TODO(stephen): we should use `RowGroupMetaData::file_offset()` of arrow to get file split_offset.
+// However, the current arrow version 5.0.0 have bug in this interface and requires an upgrade.
+// So we rewrite the correct logic for this.
 Status FileWriterBase::split_offsets(std::vector<int64_t>& splitOffsets) const {
     if (_file_metadata == nullptr) {
         LOG(WARNING) << "file metadata null";
@@ -387,14 +390,15 @@ Status SyncFileWriter::close() {
     return Status::OK();
 }
 
-AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::string file_name,
-                                 std::string& file_dir, std::shared_ptr<::parquet::WriterProperties> properties,
+AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, std::string file_location,
+                                 std::string partition_location,
+                                 std::shared_ptr<::parquet::WriterProperties> properties,
                                  std::shared_ptr<::parquet::schema::GroupNode> schema,
                                  const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
                                  RuntimeProfile* parent_profile)
         : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs),
-          _file_name(std::move(file_name)),
-          _file_dir(file_dir),
+          _file_location(std::move(file_location)),
+          _partition_location(std::move(partition_location)),
           _executor_pool(executor_pool),
           _parent_profile(parent_profile) {
     _io_timer = ADD_TIMER(_parent_profile, "FileWriterIoTimer");
