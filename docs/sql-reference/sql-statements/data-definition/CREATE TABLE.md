@@ -340,15 +340,7 @@ Note:
 
 Please use specified key columns for Hash bucketing. The default bucket number is 10.
 
-<<<<<<< HEAD
 It is recommended to use Hash bucketing method.
-=======
-Since version 3.0, the primary key and sort key are decoupled in the Primary Key table. The sort key is specified by the `ORDER BY` keyword and can be the permutation and combination of any columns.
-
-> **NOTICE**
->
-> If the sort key is specified, the prefix index is built according to the sort key; if the sort key is not specified, the prefix index is built according to the primary key.
->>>>>>> 05c6b616af (split data model and update related proper names)
 
 ### PROPERTIES
 
