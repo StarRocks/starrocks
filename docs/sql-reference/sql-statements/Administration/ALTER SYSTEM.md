@@ -149,7 +149,7 @@ Creating an image is an asynchronous operation on the Leader FE. You can check t
 - You cannot drop the FE node in a single-FE cluster.
 - You cannot directly drop the Leader FE node in a multi-FE cluster. To drop it, you must first restart it. After StarRocks elects a new Leader FE, you can then drop the previous one.
 - You cannot drop BE nodes if the number of the remained BE nodes is less than the number of data replicas. For example, if you have three BE nodes in your cluster and you store your data in three replicas, you cannot drop any of the BE nodes. And if you have four BE nodes and three replicas, you can drop one BE node.
-- The difference between dropping and decommissioning a BE node is that, when you drop a BE node, StarRocks removes it forcibly from the cluster and make up the dropped tablets after the removal, and when you decommission a BE node, StarRocks first migrate the tablets on the decommissioned BE node to others, and then remove the node.
+- The difference between dropping and decommissioning a BE node is that, when you drop a BE node, StarRocks removes it forcibly from the cluster and make up the dropped tablets after the removal, and when you decommission a BE node, StarRocks first migrates the tablets on the decommissioned BE node to others, and then removes the node.
 
 ## Examples
 
