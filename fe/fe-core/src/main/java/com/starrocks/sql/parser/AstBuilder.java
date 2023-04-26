@@ -5019,6 +5019,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName.getFunction()), e1, e2);
         }
 
+        if (fnName.getFunction().equalsIgnoreCase("CONNECTION_ID")) {
+            return new InformationFunction("CONNECTION_ID");
+        }
+
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
                 new FunctionParams(false, visit(context.expression(), Expr.class)));
         if (context.over() != null) {
@@ -5125,13 +5129,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitInformationFunctionExpression(StarRocksParser.InformationFunctionExpressionContext context) {
-        if (context.name.getText().equalsIgnoreCase("database")
+        if (context.name.getText().equalsIgnoreCase("catalog")
+                || context.name.getText().equalsIgnoreCase("database")
                 || context.name.getText().equalsIgnoreCase("schema")
                 || context.name.getText().equalsIgnoreCase("user")
                 || context.name.getText().equalsIgnoreCase("current_user")
                 || context.name.getText().equalsIgnoreCase("connection_id")
-                || context.name.getText().equalsIgnoreCase("current_role")
-                || context.name.getText().equalsIgnoreCase("current_catalog")) {
+                || context.name.getText().equalsIgnoreCase("current_role")) {
             return new InformationFunction(context.name.getText().toUpperCase());
         }
         throw new ParsingException("Unknown special function " + context.name.getText());
