@@ -12,7 +12,7 @@ In the Aggregate table, sort key columns are defined by using the `AGGREGATE KEY
 
 In the Unique Key table, sort key columns are defined by using the `UNIQUE KEY` keyword.
 
-In the Primary Key model, sort key columns are primary key columns, which are defined by using the `PRIMARY KEY` keyword.
+In the Primary Key table, sort key columns and primary key columns are coupled, which are defined by using the `PRIMARY KEY` keyword.
 
 When you define sort key columns for a table at table creation, take note of the following points:
 
