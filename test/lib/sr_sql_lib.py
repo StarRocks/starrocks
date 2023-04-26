@@ -68,18 +68,12 @@ NAME_FLAG = "-- name: "
 UNCHECK_FLAG = "[UC]"
 ORDER_FLAG = "[ORDER]"
 REGEX_FLAG = "[REGEX]"
-VERSION_FILE = os.path.join(root_path, "version")
 
 
 class StarrocksSQLApiLib(object):
     """api lib"""
-    if os.path.exists(VERSION_FILE):
-        with open(VERSION_FILE, "r") as f:
-            version = f.readlines()[0]
-        log.info("version: %s" % version)
-    else:
-        version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-        log.info("version timestamp: %s" % version)
+
+    version = os.environ.get("version", datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

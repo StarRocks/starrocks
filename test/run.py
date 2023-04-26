@@ -28,11 +28,9 @@ import sys
 
 import nose
 
-version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-print("Version: %s" % version)
-# os.environ["version"] = version
-with open('version', 'w') as f:
-    f.write(version)
+if not os.environ.get("version"):
+    version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    os.environ["version"] = version
 
 from lib import sr_sql_lib
 
@@ -165,5 +163,3 @@ if __name__ == "__main__":
     # record mode
     if record and not collect:
         sr_sql_lib.StarrocksSQLApiLib().save_r_into_file(part)
-
-    os.remove("version")
