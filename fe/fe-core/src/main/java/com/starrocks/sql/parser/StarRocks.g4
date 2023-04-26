@@ -2007,13 +2007,12 @@ columnReference
     ;
 
 informationFunctionExpression
-    : name = DATABASE '(' ')'
+    : name = CATALOG '(' ')'
+    | name = DATABASE '(' ')'
     | name = SCHEMA '(' ')'
     | name = USER '(' ')'
-    | name = CONNECTION_ID '(' ')'
     | name = CURRENT_USER ('(' ')')?
     | name = CURRENT_ROLE ('(' ')')?
-    | name = CURRENT_CATALOG ('(' ')')?
     ;
 
 specialDateTimeExpression
@@ -2374,7 +2373,7 @@ nonReserved
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BINARY | BODY | BOOLEAN | BROKER | BUCKETS
     | BUILTIN | BASE
     | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
-    | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT
+    | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
