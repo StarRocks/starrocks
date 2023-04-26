@@ -126,7 +126,7 @@ bool RollingAsyncParquetWriter::closed() {
     return true;
 }
 
-#define MERGE_STATS_CASE(ParquetType)                                                                         \
+#define MERGE_STATS_CASE(ParquetType)                                                                              \
     case ParquetType: {                                                                                            \
         auto typed_left_stat =                                                                                     \
                 std::static_pointer_cast<::parquet::TypedStatistics<::parquet::PhysicalType<ParquetType>>>(left);  \
