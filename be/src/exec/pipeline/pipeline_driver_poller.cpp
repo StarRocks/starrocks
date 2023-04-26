@@ -157,6 +157,14 @@ void PipelineDriverPoller::run_internal() {
         if (spin_count != 0 && spin_count % 64 == 0) {
 #ifdef __x86_64__
             _mm_pause();
+#elif defined __aarch64__
+            // A "yield" instruction in aarch64 is essentially a nop, and does
+            // not cause enough delay to help backoff. "isb" is a barrier that,
+            // especially inside a loop, creates a small delay without consuming
+            // ALU resources.  Experiments shown that adding the isb instruction
+            // improves stability and reduces result jitter. Adding more delay
+            // to the UT_RELAX_CPU than a single isb reduces performance.
+            asm volatile("isb" ::: "memory");
 #else
             // TODO: Maybe there's a better intrinsic like _mm_pause on non-x86_64 architecture.
             sched_yield();
