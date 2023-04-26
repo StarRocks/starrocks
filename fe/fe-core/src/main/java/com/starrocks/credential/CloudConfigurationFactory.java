@@ -81,7 +81,7 @@ public abstract class CloudConfigurationFactory {
             }
 
             @Override
-            public FileStoreInfo toFileStore() {
+            public FileStoreInfo toFileStoreInfo() {
                 return null;
             }
 

@@ -54,7 +54,7 @@ public class HDFSCloudConfiguration implements CloudConfiguration {
     }
 
     @Override
-    public FileStoreInfo toFileStore() {
+    public FileStoreInfo toFileStoreInfo() {
         // TODO: support hdfs credential
         return null;
     }

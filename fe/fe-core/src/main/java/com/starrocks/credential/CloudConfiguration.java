@@ -32,5 +32,6 @@ public interface CloudConfiguration {
 
     CloudType getCloudType();
 
-    FileStoreInfo toFileStore();
+    // Convert to the protobuf used by staros.
+    FileStoreInfo toFileStoreInfo();
 }

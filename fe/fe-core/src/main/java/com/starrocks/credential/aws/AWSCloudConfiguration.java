@@ -83,7 +83,7 @@ public class AWSCloudConfiguration implements CloudConfiguration {
     }
 
     @Override
-    public FileStoreInfo toFileStore() {
+    public FileStoreInfo toFileStoreInfo() {
         return awsCloudCredential.toFileStore();
     }
 

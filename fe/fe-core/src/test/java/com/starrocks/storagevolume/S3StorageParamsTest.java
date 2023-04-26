@@ -48,7 +48,7 @@ public class S3StorageParamsTest {
         S3StorageParams sp = new S3StorageParams(storageParams);
         CloudConfiguration cloudConfiguration = sp.getCloudConfiguration();
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
-        FileStoreInfo fileStore = cloudConfiguration.toFileStore();
+        FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
         Assert.assertEquals(FileStoreType.S3, fileStore.getFsType());
         Assert.assertTrue(fileStore.hasS3FsInfo());
         S3FileStoreInfo s3FileStoreInfo = fileStore.getS3FsInfo();
@@ -69,7 +69,7 @@ public class S3StorageParamsTest {
         S3StorageParams sp = new S3StorageParams(storageParams);
         CloudConfiguration cloudConfiguration = sp.getCloudConfiguration();
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
-        FileStoreInfo fileStore = cloudConfiguration.toFileStore();
+        FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
         Assert.assertEquals(FileStoreType.S3, fileStore.getFsType());
         Assert.assertTrue(fileStore.hasS3FsInfo());
         S3FileStoreInfo s3FileStoreInfo = fileStore.getS3FsInfo();
@@ -92,7 +92,7 @@ public class S3StorageParamsTest {
         S3StorageParams sp = new S3StorageParams(storageParams);
         CloudConfiguration cloudConfiguration = sp.getCloudConfiguration();
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
-        FileStoreInfo fileStore = cloudConfiguration.toFileStore();
+        FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
         Assert.assertEquals(FileStoreType.S3, fileStore.getFsType());
         Assert.assertTrue(fileStore.hasS3FsInfo());
         S3FileStoreInfo s3FileStoreInfo = fileStore.getS3FsInfo();
@@ -114,7 +114,7 @@ public class S3StorageParamsTest {
         S3StorageParams sp = new S3StorageParams(storageParams);
         CloudConfiguration cloudConfiguration = sp.getCloudConfiguration();
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
-        FileStoreInfo fileStore = cloudConfiguration.toFileStore();
+        FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
         Assert.assertEquals(FileStoreType.S3, fileStore.getFsType());
         Assert.assertTrue(fileStore.hasS3FsInfo());
         S3FileStoreInfo s3FileStoreInfo = fileStore.getS3FsInfo();

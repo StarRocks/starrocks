@@ -55,7 +55,7 @@ public class GCPCloudConfiguration implements CloudConfiguration {
     }
 
     @Override
-    public FileStoreInfo toFileStore() {
+    public FileStoreInfo toFileStoreInfo() {
         return null;
     }
 

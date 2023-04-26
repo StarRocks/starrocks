@@ -27,6 +27,7 @@ public class S3StorageParams implements StorageParams {
     private String region;
     private String endpoint;
     private CloudConfiguration cloudConfiguration;
+    private Map<String, String> params;
 
     @Override
     public StorageVolume.StorageVolumeType type() {
@@ -40,6 +41,7 @@ public class S3StorageParams implements StorageParams {
         if (cloudConfiguration.getCloudType() != CloudType.AWS) {
             throw new AnalysisException("Storage params is not valid");
         }
+        this.params = params;
     }
 
     public String getRegion() {

@@ -23,6 +23,7 @@ import java.util.Map;
 
 public class HDFSStorageParams implements StorageParams {
     private CloudConfiguration cloudConfiguration;
+    private Map<String, String> params;
 
     @Override
     public StorageVolume.StorageVolumeType type() {
@@ -34,6 +35,7 @@ public class HDFSStorageParams implements StorageParams {
         if (cloudConfiguration.getCloudType() != CloudType.HDFS) {
             throw new AnalysisException("Storage params is not valid");
         }
+        this.params = params;
     }
 
     @Override
