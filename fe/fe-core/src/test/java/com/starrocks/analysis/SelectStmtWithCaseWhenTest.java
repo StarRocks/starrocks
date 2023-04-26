@@ -97,6 +97,9 @@ public class SelectStmtWithCaseWhenTest {
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
                                 "     actualRows=0, avgRowSize=4.0\n" +
+                                "     LocalShuffleColumns:\n" +
+                                "     - 1: region\n" +
+                                "     - 2: order_date\n" +
                                 "     cardinality: 1",
                 },
                 {"select * from test.t0 where \n" +
@@ -190,6 +193,9 @@ public class SelectStmtWithCaseWhenTest {
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
                                 "     actualRows=0, avgRowSize=4.0\n" +
+                                "     LocalShuffleColumns:\n" +
+                                "     - 1: region\n" +
+                                "     - 2: order_date\n" +
                                 "     cardinality: 1",
                 },
 
@@ -346,6 +352,9 @@ public class SelectStmtWithCaseWhenTest {
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
                                 "     actualRows=0, avgRowSize=4.0\n" +
+                                "     LocalShuffleColumns:\n" +
+                                "     - 1: region\n" +
+                                "     - 2: order_date\n" +
                                 "     cardinality: 1",
                 },
                 // Q21
@@ -425,6 +434,9 @@ public class SelectStmtWithCaseWhenTest {
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
                                 "     actualRows=0, avgRowSize=4.0\n" +
+                                "     LocalShuffleColumns:\n" +
+                                "     - 1: region\n" +
+                                "     - 2: order_date\n" +
                                 "     cardinality: 1"},
                 {"in ('A','B','C','D','E','F')",
                         "  0:OlapScanNode\n" +
@@ -433,6 +445,9 @@ public class SelectStmtWithCaseWhenTest {
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
                                 "     actualRows=0, avgRowSize=4.0\n" +
+                                "     LocalShuffleColumns:\n" +
+                                "     - 1: region\n" +
+                                "     - 2: order_date\n" +
                                 "     cardinality: 1"},
                 {"not in ('A','B')",
                         "(4: ship_mode < 80) OR (4: ship_mode >= 90), [4: ship_mode, INT, false] < 90, " +
@@ -454,6 +469,9 @@ public class SelectStmtWithCaseWhenTest {
                                 "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                                 "     tabletList=\n" +
                                 "     actualRows=0, avgRowSize=4.0\n" +
+                                "     LocalShuffleColumns:\n" +
+                                "     - 1: region\n" +
+                                "     - 2: order_date\n" +
                                 "     cardinality: 1"},
         };
         for (String[] tc : testCases) {
@@ -482,6 +500,9 @@ public class SelectStmtWithCaseWhenTest {
                         "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                         "     tabletList=\n" +
                         "     actualRows=0, avgRowSize=4.0\n" +
+                        "     LocalShuffleColumns:\n" +
+                        "     - 1: region\n" +
+                        "     - 2: order_date\n" +
                         "     cardinality: 1"},
                 {"select * from test.t0 where if(region='USA', 1, 0) in (1)",
                         "[1: region, VARCHAR, false] = 'USA', 1: region = 'USA' IS NOT NULL"},
@@ -491,6 +512,9 @@ public class SelectStmtWithCaseWhenTest {
                         "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                         "     tabletList=\n" +
                         "     actualRows=0, avgRowSize=4.0\n" +
+                        "     LocalShuffleColumns:\n" +
+                        "     - 1: region\n" +
+                        "     - 2: order_date\n" +
                         "     cardinality: 1\n"},
                 {"select * from test.t0 where if(region='USA', 1, 0) in (2,3)", "0:EMPTYSET"},
                 {"select * from test.t0 where if(region='USA', 1, 0) not in (0)",
@@ -502,6 +526,9 @@ public class SelectStmtWithCaseWhenTest {
                         "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                         "     tabletList=\n" +
                         "     actualRows=0, avgRowSize=4.0\n" +
+                        "     LocalShuffleColumns:\n" +
+                        "     - 1: region\n" +
+                        "     - 2: order_date\n" +
                         "     cardinality: 1\n"},
                 {"select * from test.t0 where if(region='USA', 1, 0) is NULL", "0:EMPTYSET"},
                 {"select * from test.t0 where if(region='USA', 1, 0) is NOT NULL", "  0:OlapScanNode\n" +
@@ -510,6 +537,9 @@ public class SelectStmtWithCaseWhenTest {
                         "     partitionsRatio=0/3, tabletsRatio=0/0\n" +
                         "     tabletList=\n" +
                         "     actualRows=0, avgRowSize=4.0\n" +
+                        "     LocalShuffleColumns:\n" +
+                        "     - 1: region\n" +
+                        "     - 2: order_date\n" +
                         "     cardinality: 1\n"},
                 // Q14
                 {"select * from test.t0 where nullif('China', region) = 'China'",
