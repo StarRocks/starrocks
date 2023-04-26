@@ -25,11 +25,10 @@
 
 ## 第一步：下载 StarRocks Docker 镜像
 
-从 [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/allin1-ubuntu/tags) 下载 StarRocks Docker 镜像。 您可以根据 Tag 选择特定版本的镜像。
+从 [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/allin1-ubuntu/tags) 下载 StarRocks Docker 镜像。您可以根据 Tag 选择特定版本的镜像。
 
 ```Bash
-# 将 <image_tag> 替换为您要下载的镜像的 Tag，例如 `2.5.4`。
-sudo docker pull starrocks/allin1-ubuntu:<image_tag>
+sudo docker pull starrocks/allin1-ubuntu
 ```
 
 ## 第二步：在 Docker 容器中部署 StarRocks
@@ -37,9 +36,8 @@ sudo docker pull starrocks/allin1-ubuntu:<image_tag>
 下载 Docker 镜像后，您可以通过运行以下命令来部署 StarRocks：
 
 ```Bash
-# 将 <image_tag> 替换为您下载的镜像的 Tag，例如 `2.5.4`。
 sudo docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 \
-    -itd starrocks/allin1-ubuntu:<image_tag>
+    -itd starrocks/allin1-ubuntu
 ```
 
 > **故障排除**
