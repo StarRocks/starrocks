@@ -63,6 +63,7 @@ public class MVProjectAggProjectScanRewrite {
 
         if (input.getOp() instanceof LogicalProjectOperator &&
                 input.inputAt(0).getOp() instanceof LogicalAggregationOperator &&
+                input.inputAt(0).inputAt(0).getOp() instanceof LogicalProjectOperator &&
                 input.inputAt(0).inputAt(0).inputAt(0).getOp() instanceof LogicalOlapScanOperator) {
             LogicalProjectOperator topProject = (LogicalProjectOperator) input.getOp();
             LogicalProjectOperator bellowProject = (LogicalProjectOperator) input.inputAt(0).inputAt(0).getOp();
@@ -138,6 +139,8 @@ public class MVProjectAggProjectScanRewrite {
         for (Map.Entry<ColumnRefOperator, ScalarOperator> kv : projectOperator.getColumnRefMap().entrySet()) {
             if (kv.getValue().getUsedColumns().contains(baseColumnRef)) {
                 kv.setValue(mvColumnRef);
+                kv.getKey().setNullable(mvColumnRef.isNullable());
+                kv.getKey().setType(mvColumnRef.getType());
                 return kv.getKey();
             }
         }
