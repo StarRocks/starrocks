@@ -28,6 +28,13 @@ import sys
 
 import nose
 
+<<<<<<< HEAD
+=======
+if not os.environ.get("version"):
+    version = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+    os.environ["version"] = version
+
+>>>>>>> 4fde7daaf ([Tool] Optimize version information in remote execution (#22573))
 from lib import sr_sql_lib
 
 
@@ -161,5 +168,3 @@ if __name__ == "__main__":
     # record mode
     if record and not collect:
         sr_sql_lib.StarrocksSQLApiLib().save_r_into_file(part)
-
-    os.remove("version")
