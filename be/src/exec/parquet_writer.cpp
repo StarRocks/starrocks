@@ -126,7 +126,7 @@ bool RollingAsyncParquetWriter::closed() {
     return true;
 }
 
-#define MergeStats_BATCH_CASE(ParquetType)                                                                         \
+#define MERGE_STATS_CASE(ParquetType)                                                                         \
     case ParquetType: {                                                                                            \
         auto typed_left_stat =                                                                                     \
                 std::static_pointer_cast<::parquet::TypedStatistics<::parquet::PhysicalType<ParquetType>>>(left);  \
@@ -140,14 +140,14 @@ void merge_stats(const std::shared_ptr<::parquet::Statistics>& left,
                  const std::shared_ptr<::parquet::Statistics>& right) {
     DCHECK(left->physical_type() == right->physical_type());
     switch (left->physical_type()) {
-        MergeStats_BATCH_CASE(::parquet::Type::BOOLEAN);
-        MergeStats_BATCH_CASE(::parquet::Type::INT32);
-        MergeStats_BATCH_CASE(::parquet::Type::INT64);
-        MergeStats_BATCH_CASE(::parquet::Type::INT96);
-        MergeStats_BATCH_CASE(::parquet::Type::FLOAT);
-        MergeStats_BATCH_CASE(::parquet::Type::DOUBLE);
-        MergeStats_BATCH_CASE(::parquet::Type::BYTE_ARRAY);
-        MergeStats_BATCH_CASE(::parquet::Type::FIXED_LEN_BYTE_ARRAY);
+        MERGE_STATS_CASE(::parquet::Type::BOOLEAN);
+        MERGE_STATS_CASE(::parquet::Type::INT32);
+        MERGE_STATS_CASE(::parquet::Type::INT64);
+        MERGE_STATS_CASE(::parquet::Type::INT96);
+        MERGE_STATS_CASE(::parquet::Type::FLOAT);
+        MERGE_STATS_CASE(::parquet::Type::DOUBLE);
+        MERGE_STATS_CASE(::parquet::Type::BYTE_ARRAY);
+        MERGE_STATS_CASE(::parquet::Type::FIXED_LEN_BYTE_ARRAY);
     default: {
     }
     }
