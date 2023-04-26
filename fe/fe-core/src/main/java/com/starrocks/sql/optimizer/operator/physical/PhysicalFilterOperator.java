@@ -16,10 +16,13 @@ package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+
+import java.util.List;
 
 public class PhysicalFilterOperator extends PhysicalOperator {
     public PhysicalFilterOperator(ScalarOperator predicate,
@@ -33,6 +36,11 @@ public class PhysicalFilterOperator extends PhysicalOperator {
 
     public ScalarOperator getPredicate() {
         return predicate;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        return projectInputRow(inputs.get(0).getRowOutputInfo());
     }
 
     @Override

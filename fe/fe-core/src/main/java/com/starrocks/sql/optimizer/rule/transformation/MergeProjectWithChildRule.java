@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -55,8 +54,7 @@ public class MergeProjectWithChildRule extends TransformationRule {
         }
 
         Operator.Builder builder = OperatorBuilderFactory.build(child);
-        builder.withOperator(child).setProjection(new Projection(logicalProjectOperator.getColumnRefMap(),
-                Maps.newHashMap()));
+        builder.withOperator(child).setProjection(new Projection(logicalProjectOperator.getColumnRefMap()));
 
         if (logicalProjectOperator.hasLimit()) {
             builder.setLimit(Math.min(logicalProjectOperator.getLimit(), child.getLimit()));

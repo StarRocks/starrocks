@@ -170,20 +170,12 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         return Lists.newArrayList(newTopJoinExpr);
     }
 
-    private boolean invalidPlan(OptExpression newTopJoinExpr) {
-        ColumnRefSet requiredCols = ((LogicalJoinOperator) newTopJoinExpr.getOp()).getRequiredCols();
-        ColumnRefSet left = newTopJoinExpr.inputAt(0).getRowOutputInfo().getOutputColumnRefSet();
-        ColumnRefSet right = newTopJoinExpr.inputAt(1).getRowOutputInfo().getOutputColumnRefSet();
-        requiredCols.except(left);
-        requiredCols.except(right);
-        return !requiredCols.isEmpty();
-    }
 
     protected ColumnRefSet deriveTopJoinChildOutputCols(OptExpression input) {
         OptExpression newTopJoinChildOpt = input.inputAt(newTopJoinChildLoc[0]).inputAt(newTopJoinChildLoc[1]);
         RowOutputInfo oldBotJoinOutput = input.inputAt(0).getRowOutputInfo();
         ColumnRefSet cols = newTopJoinChildOpt.getRowOutputInfo().getOutputColumnRefSet();
-        for (ColumnOutputInfo entry : oldBotJoinOutput.getColumnEntries()) {
+        for (ColumnOutputInfo entry : oldBotJoinOutput.getColumnOutputInfo()) {
             if (entry.getUsedColumns().isIntersect(cols)) {
                 cols.union(entry.getColumnRef());
             }
@@ -193,7 +185,18 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
 
     protected ColumnRefSet deriveNewBotJoinColSet(RowOutputInfo topRow, ScalarOperator onCondition,
                                                   ScalarOperator predicate, ColumnRefSet columnRefSet) {
-        ColumnRefSet requiredCols = topRow.getUsedColumnRefSet();
+        ColumnRefSet requiredCols = new ColumnRefSet();
+
+        if (!topRow.getColOutputInfo().isEmpty()) {
+            for (ColumnOutputInfo col : topRow.getColOutputInfo().values()) {
+                requiredCols.union(col.getUsedColumns());
+            }
+        } else {
+            for (ColumnOutputInfo col : topRow.getOriginalColOutputInfo().values()) {
+                requiredCols.union(col.getUsedColumns());
+            }
+        }
+
         if (onCondition != null) {
             requiredCols.union(onCondition.getUsedColumns());
         }
@@ -211,16 +214,16 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
         List<ColumnOutputInfo> columnEntries = Lists.newArrayList();
 
         if (columnRefSet.isEmpty()) {
-            ColumnOutputInfo anyCol = leftChild.getRowOutputInfo().getColumnEntries().get(0);
+            ColumnOutputInfo anyCol = leftChild.getRowOutputInfo().getColumnOutputInfo().get(0);
             columnEntries.add(new ColumnOutputInfo(anyCol.getColumnRef(), anyCol.getColumnRef()));
         } else {
-            for (ColumnOutputInfo entry : leftChild.getRowOutputInfo().getColumnEntries()) {
+            for (ColumnOutputInfo entry : leftChild.getRowOutputInfo().getColumnOutputInfo()) {
                 if (columnRefSet.contains(entry.getColId())) {
                     columnEntries.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
                 }
             }
 
-            for (ColumnOutputInfo entry : rightChild.getRowOutputInfo().getColumnEntries()) {
+            for (ColumnOutputInfo entry : rightChild.getRowOutputInfo().getColumnOutputInfo()) {
                 if (columnRefSet.contains(entry.getColId())) {
                     columnEntries.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
                 }
@@ -296,7 +299,7 @@ public abstract class JoinAssociateBaseRule extends TransformationRule {
                 return;
             }
             ColumnRefSet leftChildCols = newBotJoinLeftChildOpt.getRowOutputInfo().getOutputColumnRefSet();
-            for (ColumnOutputInfo columnOutputInfo : rowOutputInfo.getColumnEntries()) {
+            for (ColumnOutputInfo columnOutputInfo : rowOutputInfo.getColumnOutputInfo()) {
                 ColumnRefOperator columnRef = columnOutputInfo.getColumnRef();
                 ScalarOperator scalarOp = columnOutputInfo.getScalarOp();
                 if (!columnRef.equals(scalarOp)) {

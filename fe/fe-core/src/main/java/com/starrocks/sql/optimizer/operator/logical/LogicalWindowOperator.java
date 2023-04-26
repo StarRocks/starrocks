@@ -105,8 +105,8 @@ public class LogicalWindowOperator extends LogicalOperator {
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : windowCall.entrySet()) {
             columnOutputInfoList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
         }
-        for (ColumnOutputInfo entry : inputs.get(0).getRowOutputInfo().getColumnEntries()) {
-            columnOutputInfoList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getScalarOp()));
+        for (ColumnOutputInfo entry : inputs.get(0).getRowOutputInfo().getColumnOutputInfo()) {
+            columnOutputInfoList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
         }
         return new RowOutputInfo(columnOutputInfoList);
     }

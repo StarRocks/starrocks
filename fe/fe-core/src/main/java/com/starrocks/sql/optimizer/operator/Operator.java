@@ -103,10 +103,11 @@ public abstract class Operator {
             return rowOutputInfo;
         }
 
+
+        rowOutputInfo = deriveRowOutputInfo(inputs);
         if (projection != null) {
-            rowOutputInfo = new RowOutputInfo(projection.getColumnRefMap());
-        } else {
-            rowOutputInfo = deriveRowOutputInfo(inputs);
+            rowOutputInfo = new RowOutputInfo(projection.getColumnRefMap(), projection.getCommonSubOperatorMap(),
+                    rowOutputInfo.getOriginalColOutputInfo(), rowOutputInfo.getEndogenousCols());
         }
         return rowOutputInfo;
     }
@@ -117,7 +118,7 @@ public abstract class Operator {
 
     protected RowOutputInfo projectInputRow(RowOutputInfo inputRow) {
         List<ColumnOutputInfo> entryList = Lists.newArrayList();
-        for (ColumnOutputInfo columnOutputInfo : inputRow.getColumnEntries()) {
+        for (ColumnOutputInfo columnOutputInfo : inputRow.getColumnOutputInfo()) {
             entryList.add(new ColumnOutputInfo(columnOutputInfo.getColumnRef(), columnOutputInfo.getColumnRef()));
         }
         return new RowOutputInfo(entryList);
