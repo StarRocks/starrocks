@@ -690,6 +690,9 @@ public class SchemaTable extends Table {
                                     .column("BE_ID", ScalarType.createType(PrimitiveType.BIGINT))
                                     .column("NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                                     .column("VALUE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("DEFAULT", ScalarType.createVarchar(NAME_CHAR_LEN))
+                                    .column("MUTABLE", ScalarType.createType(PrimitiveType.BOOLEAN))
                                     .build()))
                     .put("fe_tablet_schedules", new SchemaTable(
                             SystemId.FE_SCHEDULES_ID,
