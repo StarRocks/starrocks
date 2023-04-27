@@ -750,6 +750,15 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  10 <-> concat[([13: expr, VARCHAR, true], DictExpr(11: S_ADDRESS,[<place-holder>])); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]"));
         Assert.assertTrue(plan.contains("  |  common expressions:\n" +
                 "  |  13 <-> DictExpr(12: S_COMMENT,[upper(<place-holder>)])"));
+
+        // support(support(unsupport(Column), unsupport(Column)))
+        sql = "select REVERSE(SUBSTR(LEFT(REVERSE(S_ADDRESS),INSTR(REVERSE(S_ADDRESS),'/')-1),5)) FROM supplier";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 9> : reverse(substr(left(11: expr, CAST(CAST(instr(11: expr, '/') AS BIGINT)" +
+                " - 1 AS INT)), 5))\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 11> : DictExpr(10: S_ADDRESS,[reverse(<place-holder>)])");
     }
 
     @Test
@@ -1448,7 +1457,6 @@ public class LowCardinalityTest extends PlanTestBase {
                 "ELSE 'a' END\n" +
                 "  |");
 
-
         sql = "select case when s_address = 'test' then 'a' " +
                 "when s_phone = 'b' then 'b' " +
                 "when upper(s_address) = 'c' then 'c' " +
@@ -1517,8 +1525,9 @@ public class LowCardinalityTest extends PlanTestBase {
 
     @Test
     public void testTopNWithProjection() throws Exception {
-        String sql = "select t2.s_address, cast(t1.a as date), concat(t1.b, '') from (select max(s_address) a, min(s_phone) b " +
-                "from supplier group by s_address) t1 join (select s_address from supplier) t2 order by t1.a";
+        String sql =
+                "select t2.s_address, cast(t1.a as date), concat(t1.b, '') from (select max(s_address) a, min(s_phone) b " +
+                        "from supplier group by s_address) t1 join (select s_address from supplier) t2 order by t1.a";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "10:Decode\n" +
                 "  |  <dict id 23> : <string id 13>\n" +

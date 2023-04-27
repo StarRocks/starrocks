@@ -1,6 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rewrite/physical/DictMappingRewriter.java
 package com.starrocks.sql.optimizer.rewrite.physical;
+=======
+package com.starrocks.sql.optimizer.rule.tree;
+>>>>>>> 2f0bbcab0 ([BugFix] Fix wrong check in lowcardinality complex string function (#22505)):fe/fe-core/src/main/java/com/starrocks/sql/optimizer/rule/tree/DictMappingRewriter.java
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
@@ -93,9 +97,8 @@ public class DictMappingRewriter {
                     hasApplied = hasApplied || context.hasAppliedOperator;
                     disableApplied = disableApplied || context.hasUnsupportedOperator;
                 }
-                Preconditions.checkState(hasApplied);
-                if (!disableApplied) {
-                    context.hasAppliedOperator = true;
+                if (!disableApplied || !hasApplied) {
+                    context.hasAppliedOperator = hasApplied;
                     return operator;
                 } else {
                     context.hasAppliedOperator = false;
