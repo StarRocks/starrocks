@@ -31,7 +31,8 @@ public class TableRelation extends Relation {
 
     public enum TableHint {
         _META_,
-        _BINLOG_
+        _BINLOG_,
+        _SYNC_MV_
     }
 
     private final TableName name;
@@ -151,6 +152,9 @@ public class TableRelation extends Relation {
 
     public boolean isBinlogQuery() {
         return tableHints.contains(TableHint._BINLOG_) && table.isOlapTable();
+    }
+    public boolean isSyncMVQuery() {
+        return tableHints.contains(TableHint._SYNC_MV_);
     }
 
     @Override

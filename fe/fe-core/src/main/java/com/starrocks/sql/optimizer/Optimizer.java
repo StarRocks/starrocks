@@ -301,8 +301,10 @@ public class Optimizer {
             }
         }
 
-        tree = new MaterializedViewRule().transform(tree, context).get(0);
-        deriveLogicalProperty(tree);
+        if (sessionVariable.isEnableSyncMaterializedViewRewrite()) {
+            tree = new MaterializedViewRule().transform(tree, context).get(0);
+            deriveLogicalProperty(tree);
+        }
 
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MULTI_DISTINCT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);

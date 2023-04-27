@@ -355,6 +355,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
 
+    public static final String ENABLE_SYNC_MATERIALIZED_VIEW_REWRITE = "enable_sync_materialized_view_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
 
@@ -986,6 +987,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE)
     private boolean enableMaterializedViewRewrite = true;
+
+    @VarAttr(name = ENABLE_SYNC_MATERIALIZED_VIEW_REWRITE)
+    private boolean enableSyncMaterializedViewRewrite = true;
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_UNION_REWRITE)
     private boolean enableMaterializedViewUnionRewrite = true;
@@ -1916,6 +1920,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableMaterializedViewUnionRewrite(boolean enableMaterializedViewUnionRewrite) {
         this.enableMaterializedViewUnionRewrite = enableMaterializedViewUnionRewrite;
+    }
+
+    public boolean isEnableSyncMaterializedViewRewrite() {
+        return enableSyncMaterializedViewRewrite;
+    }
+
+    public void setEnableSyncMaterializedViewRewrite(boolean enableSyncMaterializedViewRewrite) {
+        this.enableSyncMaterializedViewRewrite = enableSyncMaterializedViewRewrite;
     }
 
     // 1 means the mvs directly based on base table
