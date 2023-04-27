@@ -293,4 +293,16 @@ public class AnalyzeExprTest {
         analyzeFail("select array_agg(1,1);");
         analyzeFail("select array_agg(1 order by 1 nulls first desc)");
     }
+
+    @Test
+    public void testMapType() {
+        analyzeSuccess("select map()");
+        analyzeSuccess("select map(NULL,NULL)");
+        analyzeSuccess("select map(1,NULL)");
+
+        analyzeFail("select map(null)");
+        analyzeFail("select map(1:4)");
+        analyzeFail("select map(1,3,4)");
+    }
+
 }
