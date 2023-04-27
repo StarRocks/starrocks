@@ -42,6 +42,8 @@ public:
     // appended at the tail.
     std::string short_key_encode(size_t num_short_keys, uint8_t padding) const;
 
+    std::string short_key_encode(size_t num_short_keys, std::vector<uint32_t> short_key_idxes, uint8_t padding) const;
+
     void convert_to(SeekTuple* new_tuple, const std::vector<FieldType>& new_types) const;
 
     std::string debug_string() const;
@@ -60,6 +62,26 @@ inline std::string SeekTuple::short_key_encode(size_t num_short_keys, uint8_t pa
         } else {
             output.push_back(KEY_NORMAL_MARKER);
             _schema.field(cid)->encode_ascending(_values[cid], &output);
+        }
+    }
+    if (_values.size() < num_short_keys) {
+        output.push_back(padding);
+    }
+    return output;
+}
+
+inline std::string SeekTuple::short_key_encode(size_t num_short_keys, std::vector<uint32_t> sort_key_idxes,
+                                               uint8_t padding) const {
+    std::string output;
+    DCHECK(num_short_keys <= sort_key_idxes.size());
+    size_t n = std::min(num_short_keys, _values.size());
+    size_t val_num = _values.size();
+    for (auto i = 0; i < n; i++) {
+        if (sort_key_idxes[i] >= val_num || _values[sort_key_idxes[i]].is_null()) {
+            output.push_back(KEY_NULL_FIRST_MARKER);
+        } else {
+            output.push_back(KEY_NORMAL_MARKER);
+            _schema.field(sort_key_idxes[i])->encode_ascending(_values[sort_key_idxes[i]], &output);
         }
     }
     if (_values.size() < num_short_keys) {
