@@ -134,6 +134,16 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testQuery11_1() {
+        runFileUnitTest("materialized-view/tpch/q11-1");
+    }
+
+    @Test
+    public void testQuery11_2() {
+        runFileUnitTest("materialized-view/tpch/q11-2");
+    }
+
+    @Test
     public void testQuery12() {
         runFileUnitTest("materialized-view/tpch/q12");
     }

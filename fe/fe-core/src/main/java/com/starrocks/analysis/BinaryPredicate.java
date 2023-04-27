@@ -289,7 +289,7 @@ public class BinaryPredicate extends Predicate implements Writable {
         }
         if (type1.isArrayType() || type2.isArrayType()) {
             // Must both be array
-            if (!type1.equals(type2)) {
+            if (!type1.matchesType(type2)) {
                 return Type.INVALID;
             }
             return type1;
