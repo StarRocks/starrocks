@@ -78,6 +78,14 @@ class QueryTransformer {
         OptExprBuilder builder = planFrom(queryBlock.getRelation(), cteContext);
         builder.setExpressionMapping(new ExpressionMapping(builder.getScope(), builder.getFieldMappings(), outer));
 
+        Map<Expr, SlotRef> materializeExpressionToColumnRef = queryBlock.getMaterializeExpressionToColumnRef();
+        ExpressionMapping expressionMapping = builder.getExpressionMapping();
+        for (Map.Entry<Expr, SlotRef> m : materializeExpressionToColumnRef.entrySet()) {
+            ScalarOperator scalarOperator = SqlToScalarOperatorTranslator.translate(m.getValue(),
+                    builder.getExpressionMapping(), columnRefFactory);
+            expressionMapping.put(m.getKey(), (ColumnRefOperator) scalarOperator);
+        }
+
         builder = filter(builder, queryBlock.getPredicate());
         builder = aggregate(builder, queryBlock.getGroupBy(), queryBlock.getAggregate(),
                 queryBlock.getGroupingSetsList(), queryBlock.getGroupingFunctionCallExprs());
@@ -203,6 +211,7 @@ class QueryTransformer {
             outputTranslations.setFieldMappings(fieldMappings);
         }
 
+        outputTranslations.addExpressionToColumns(subOpt.getExpressionMapping().getExpressionToColumns());
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections);
         return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
     }
@@ -230,6 +239,7 @@ class QueryTransformer {
             outputTranslations.put(expression, columnRefOperator);
         }
 
+        outputTranslations.addExpressionToColumns(subOpt.getExpressionMapping().getExpressionToColumns());
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projections, limit);
         return new OptExprBuilder(projectOperator, Lists.newArrayList(subOpt), outputTranslations);
     }

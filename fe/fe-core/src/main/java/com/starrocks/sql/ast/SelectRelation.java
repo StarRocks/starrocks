@@ -20,11 +20,13 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.FieldId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -76,6 +78,12 @@ public class SelectRelation extends QueryRelation {
     private Relation relation;
 
     private Map<Expr, FieldId> columnReferences;
+
+    /**
+     *  materializeExpressionToColumnRef stores the mapping relationship
+     *  between materialized expressions and materialized columns
+     */
+    private Map<Expr, SlotRef> materializeExpressionToColumnRef = new HashMap<>();
 
     public SelectRelation(
             SelectList selectList,
@@ -151,6 +159,8 @@ public class SelectRelation extends QueryRelation {
         this.orderByAnalytic = analyzeState.getOrderByAnalytic();
 
         this.columnReferences = analyzeState.getColumnReferences();
+
+        this.materializeExpressionToColumnRef = analyzeState.getMaterializeExpressionToColumnRef();
 
         this.setScope(analyzeState.getOutputScope());
     }
@@ -296,5 +306,9 @@ public class SelectRelation extends QueryRelation {
     @Override
     public List<Expr> getOutputExpression() {
         return outputExpr;
+    }
+
+    public Map<Expr, SlotRef> getMaterializeExpressionToColumnRef() {
+        return materializeExpressionToColumnRef;
     }
 }
