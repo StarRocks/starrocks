@@ -389,8 +389,13 @@ Status DataDir::load() {
         if (tablet == nullptr) {
             continue;
         }
+        // ignore the failure, and this behaviour is the same as that when failed to load rowset above.
+        // For full data, FE will repair it by cloning data from other replicas. For binlog, there may
+        // be data loss, because there is no clone mechanism for binlog currently, and the application
+        // should deal with the case. For example, realtime MV can initialize with the newest full data
+        // to skip the lost binlog, and process the new binlog after that. The situation is similar with
+        // that the binlog is expired and deleted before the application processes it.
         Status st = tablet->finish_load_rowsets();
-        // ignore the failure, and this behaviour is same as that when failed to load rowset
         if (!st.ok()) {
             LOG(WARNING) << "Fail to finish loading rowsets, tablet id=" << tablet_id << ", status: " << st.to_string();
         }
