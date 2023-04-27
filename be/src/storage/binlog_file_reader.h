@@ -90,12 +90,12 @@ public:
                                     int64_t page_index, PageHeaderPB* page_header_pb, int64_t* read_file_size);
 
     // Load the file meta by scanning pages. Scan from the beginning of the file until to the first
-    // page that is corrupted, or is no less than the parameter *maxLsnExclusive*, and construct the
+    // page that is corrupted, or is no less than the parameter *max_lsn_exclusive*, and construct the
     // file meta according to those scanned pages. Returns Status::OK() and the file meta if there
     // is valid data. Returns Status::NotFound() if there is no valid data. Other status will be
     // returned if unexpected error happens.
     //
-    // Why is it possible to have corrupted pages, and need to filter pages by maxLsnExclusive?
+    // Why is it possible to have corrupted pages, and need to filter pages by max_lsn_exclusive?
     // A binlog file is appendable and can be shared by multiple ingestion. Considering a possible
     // process to fail to generate binlog for an ingestion
     // 1. the file already contains binlog for some successful ingestion
@@ -105,16 +105,17 @@ public:
     // 5. restart BE, and load binlog file meta by scanning pages
     // In this case, the last page can be
     // 1. corrupted because there may be only part of data written to the disk
-    // 2. persisted successfully, but should be filtered by maxLsnExclusive because failed to publish
+    // 2. persisted successfully, but should be filtered by max_lsn_exclusive because failed to publish
     // So stop to scan pages until meeting the first corrupted or filtered page.
     static StatusOr<BinlogFileMetaPBPtr> load_meta_by_scan_pages(int64_t file_id, RandomAccessFile* read_file,
-                                                                 int64_t file_size, BinlogLsn& maxLsnExclusive);
+                                                                 int64_t file_size, BinlogLsn& max_lsn_exclusive);
 
     // Load the file meta from the binlog file. First try to get the file meta from the file footer.
     // If the footer not exists, or is invalid, scan pages to get the file meta. Returns Status::OK()
     // and the file meta if there is valid data. Returns Status::NotFound() if there is no valid data.
     // Other status will be returned if unexpected error happens.
-    static StatusOr<BinlogFileMetaPBPtr> load_meta(int64_t file_id, std::string& file_path, BinlogLsn& maxLsnExclusive);
+    static StatusOr<BinlogFileMetaPBPtr> load_meta(int64_t file_id, std::string& file_path,
+                                                   BinlogLsn& max_lsn_exclusive);
 
 private:
     Status _seek(int64_t version, int64_t seq_id);
