@@ -16,13 +16,20 @@
 
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "storage/rowset/scalar_column_iterator.h"
-
+#include "storage/rowset/struct_column_iterator.h"
 namespace starrocks {
 
 MapColumnIterator::MapColumnIterator(std::unique_ptr<ColumnIterator> nulls, std::unique_ptr<ColumnIterator> offsets,
-                                     std::unique_ptr<ColumnIterator> keys, std::unique_ptr<ColumnIterator> values)
-        : _nulls(std::move(nulls)), _offsets(std::move(offsets)), _keys(std::move(keys)), _values(std::move(values)) {}
+                                     std::unique_ptr<ColumnIterator> keys, std::unique_ptr<ColumnIterator> values,
+                                     std::unique_ptr<ColumnIterator> flat, std::vector<std::string>& flat_names)
+        : _nulls(std::move(nulls)),
+          _offsets(std::move(offsets)),
+          _keys(std::move(keys)),
+          _values(std::move(values)),
+          _flat(std::move(flat)),
+          _flat_names(flat_names) {}
 
 MapColumnIterator::MapColumnIterator(ColumnIterator* nulls_iterator, ColumnIterator* offsets_iterator,
                                      ColumnIterator* keys_iterator, ColumnIterator* values_iterator) {
@@ -39,6 +46,32 @@ Status MapColumnIterator::init(const ColumnIteratorOptions& opts) {
     RETURN_IF_ERROR(_offsets->init(opts));
     RETURN_IF_ERROR(_keys->init(opts));
     RETURN_IF_ERROR(_values->init(opts));
+    if (_flat != nullptr) {
+        RETURN_IF_ERROR(_flat->init(opts));
+    }
+    return Status::OK();
+}
+
+Status MapColumnIterator::new_flat_column_or_check(MapColumn const* map_column) {
+    if (map_column->flat_column() == nullptr) {
+        Columns fields;
+        for (auto i = 0; i < _flat_names.size(); ++i) {
+            fields.push_back(map_column->values_column()->clone_empty());
+        }
+        map_column->flat_column() = StructColumn::create(fields, _flat_names);
+    } else {
+        // change to DCHECK() later.
+        auto check = [&]() {
+            auto names = down_cast<StructColumn*>(map_column->flat_column().get())->field_names();
+            if (names.size() != _flat_names.size()) {
+                return false;
+            }
+            return std::equal(_flat_names.begin(), _flat_names.end(), names.begin(), names.end());
+        };
+        if (!check()) {
+            return Status::RuntimeError("reading schema differs from real data' schema.");
+        }
+    }
     return Status::OK();
 }
 
@@ -82,6 +115,11 @@ Status MapColumnIterator::next_batch(size_t* n, Column* dst) {
     // 3. Read elements
     RETURN_IF_ERROR(_keys->next_batch(&num_to_read, map_column->keys_column().get()));
     RETURN_IF_ERROR(_values->next_batch(&num_to_read, map_column->values_column().get()));
+
+    if (_flat != nullptr) {
+        new_flat_column_or_check(map_column);
+        RETURN_IF_ERROR(_flat->next_batch(n, map_column->flat_column().get()));
+    }
 
     return Status::OK();
 }
@@ -151,6 +189,12 @@ Status MapColumnIterator::next_batch(const SparseRange& range, Column* dst) {
     RETURN_IF_ERROR(_keys->next_batch(element_read_range, map_column->keys_column().get()));
     RETURN_IF_ERROR(_values->next_batch(element_read_range, map_column->values_column().get()));
 
+    // TODO: what if exiting flat column's schema differs from this column?
+    if (_flat != nullptr) {
+        new_flat_column_or_check(map_column);
+        RETURN_IF_ERROR(_flat->next_batch(range, map_column->flat_column().get()));
+        std::cout << "scan " << map_column->flat_column()->debug_string() << std::endl;
+    }
     return Status::OK();
 }
 
@@ -196,6 +240,12 @@ Status MapColumnIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t si
         RETURN_IF_ERROR(_values->seek_to_ordinal(element_ordinal));
         RETURN_IF_ERROR(_values->next_batch(&size_to_read, map_column->values_column().get()));
     }
+
+    if (_flat != nullptr) {
+        new_flat_column_or_check(map_column);
+        RETURN_IF_ERROR(_flat->fetch_values_by_rowid(rowids, size, map_column->flat_column().get()));
+    }
+
     return Status::OK();
 }
 
@@ -206,6 +256,9 @@ Status MapColumnIterator::seek_to_first() {
     RETURN_IF_ERROR(_offsets->seek_to_first());
     RETURN_IF_ERROR(_keys->seek_to_first());
     RETURN_IF_ERROR(_values->seek_to_first());
+    if (_flat != nullptr) {
+        RETURN_IF_ERROR(_flat->seek_to_first());
+    }
     return Status::OK();
 }
 
@@ -217,6 +270,9 @@ Status MapColumnIterator::seek_to_ordinal(ordinal_t ord) {
     size_t element_ordinal = _offsets->element_ordinal();
     RETURN_IF_ERROR(_keys->seek_to_ordinal(element_ordinal));
     RETURN_IF_ERROR(_values->seek_to_ordinal(element_ordinal));
+    if (_flat != nullptr) {
+        RETURN_IF_ERROR(_flat->seek_to_ordinal(ord));
+    }
     return Status::OK();
 }
 

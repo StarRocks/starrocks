@@ -127,6 +127,7 @@ void StructColumn::remove_first_n_values(size_t count) {
     }
 }
 
+/// TODO: append different named struct
 void StructColumn::append(const Column& src, size_t offset, size_t count) {
     const auto& struct_column = down_cast<const StructColumn&>(src);
     DCHECK_EQ(_fields.size(), struct_column.fields().size());

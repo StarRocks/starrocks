@@ -203,10 +203,10 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
     } else if (_column_type == LogicalType::TYPE_MAP) {
         _sub_readers = std::make_unique<SubReaderList>();
         if (meta->is_nullable()) {
-            if (meta->children_columns_size() != 4) {
-                return Status::InvalidArgument("nullable array should have 3 children columns");
+            if (meta->children_columns_size() != 5) {
+                return Status::InvalidArgument("nullable map should have 4 children columns");
             }
-            _sub_readers->reserve(4);
+            _sub_readers->reserve(5);
 
             // keys
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
@@ -227,11 +227,21 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             res = ColumnReader::create(meta->mutable_children_columns(3), _segment);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
-        } else {
-            if (meta->children_columns_size() != 3) {
-                return Status::InvalidArgument("non-nullable array should have 2 children columns");
+
+            // flat_columns
+            res = ColumnReader::create(meta->mutable_children_columns(4), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+
+            for (auto i = 0; i < meta->children_columns(4).children_columns_size(); ++i) {
+                _map_keys_name.push_back(meta->children_columns(4).children_columns(i).name());
             }
-            _sub_readers->reserve(3);
+
+        } else {
+            if (meta->children_columns_size() != 4) {
+                return Status::InvalidArgument("non-nullable map should have 2 children columns");
+            }
+            _sub_readers->reserve(4);
 
             // keys
             auto res = ColumnReader::create(meta->mutable_children_columns(0), _segment);
@@ -247,6 +257,15 @@ Status ColumnReader::_init(ColumnMetaPB* meta) {
             res = ColumnReader::create(meta->mutable_children_columns(2), _segment);
             RETURN_IF_ERROR(res);
             _sub_readers->emplace_back(std::move(res).value());
+
+            // flat_columns
+            res = ColumnReader::create(meta->mutable_children_columns(3), _segment);
+            RETURN_IF_ERROR(res);
+            _sub_readers->emplace_back(std::move(res).value());
+
+            for (auto i = 0; i < meta->children_columns(3).children_columns_size(); ++i) {
+                _map_keys_name.push_back(meta->children_columns(3).children_columns(i).name());
+            }
         }
         return Status::OK();
     } else if (_column_type == LogicalType::TYPE_STRUCT) {
@@ -511,8 +530,10 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator() {
             ASSIGN_OR_RETURN(nulls, (*_sub_readers)[col++]->new_iterator());
         }
         ASSIGN_OR_RETURN(auto offsets, (*_sub_readers)[col++]->new_iterator());
+        ASSIGN_OR_RETURN(auto flat_columns, (*_sub_readers)[col++]->new_iterator());
         return std::make_unique<MapColumnIterator>(std::move(nulls), std::move(offsets), std::move(keys),
-                                                   std::move(values));
+                                                   std::move(values), std::move(flat_columns),
+                                                   _map_keys_name);
     } else if (_column_type == LogicalType::TYPE_STRUCT) {
         auto num_fields = _sub_readers->size();
 

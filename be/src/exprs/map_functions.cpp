@@ -502,6 +502,14 @@ StatusOr<ColumnPtr> MapFunctions::flat_map(FunctionContext* context, const Colum
         col_map = down_cast<MapColumn*>(src_column.get());
     }
 
+    if (col_map->flat_column()) {
+        std::cout << "get from storage " << col_map->flat_column()->debug_string() << std::endl;
+        if (null_flag != nullptr && !col_map->flat_column()->is_nullable()) {
+            return NullableColumn::create(col_map->flat_column(), NullColumn::create(*null_flag));
+        }
+        return col_map->flat_column();
+    }
+
     std::map<std::string, ColumnPtr> name_column_map;
     auto& offset = col_map->offsets().get_data();
     auto& values = col_map->values();

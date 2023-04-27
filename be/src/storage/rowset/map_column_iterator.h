@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "column/map_column.h"
 #include "storage/rowset/column_iterator.h"
 
 namespace starrocks {
@@ -21,7 +22,8 @@ namespace starrocks {
 class MapColumnIterator final : public ColumnIterator {
 public:
     MapColumnIterator(std::unique_ptr<ColumnIterator> nulls, std::unique_ptr<ColumnIterator> offsets,
-                      std::unique_ptr<ColumnIterator> keys, std::unique_ptr<ColumnIterator> values);
+                      std::unique_ptr<ColumnIterator> keys, std::unique_ptr<ColumnIterator> values,
+                      std::unique_ptr<ColumnIterator> flat, std::vector<std::string>& flat_names);
     MapColumnIterator(ColumnIterator* null_iterator, ColumnIterator* offsets_iterator, ColumnIterator* keys_iterator,
                       ColumnIterator* values_iterator);
 
@@ -48,11 +50,15 @@ public:
 
     Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
+    Status new_flat_column_or_check(MapColumn const* col);
+
 private:
     std::unique_ptr<ColumnIterator> _nulls;
     std::unique_ptr<ColumnIterator> _offsets;
     std::unique_ptr<ColumnIterator> _keys;
     std::unique_ptr<ColumnIterator> _values;
+    std::unique_ptr<ColumnIterator> _flat;
+    std::vector<std::string> _flat_names;
 };
 
 } // namespace starrocks

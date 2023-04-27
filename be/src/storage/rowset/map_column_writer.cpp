@@ -14,6 +14,7 @@
 
 #include "column/map_column.h"
 #include "column/nullable_column.h"
+#include "column/struct_column.h"
 #include "common/status.h"
 #include "gutil/casts.h"
 #include "storage/rowset/column_writer.h"
@@ -25,7 +26,8 @@ public:
     explicit MapColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
                              std::unique_ptr<ScalarColumnWriter> nulls_writer,
                              std::unique_ptr<ScalarColumnWriter> offsets_writer,
-                             std::unique_ptr<ColumnWriter> keys_writer, std::unique_ptr<ColumnWriter> values_writer);
+                             std::unique_ptr<ColumnWriter> keys_writer, std::unique_ptr<ColumnWriter> values_writer,
+                             const TabletColumn* column = nullptr, WritableFile* wfile = nullptr);
 
     ~MapColumnWriter() override = default;
 
@@ -58,13 +60,18 @@ private:
     std::unique_ptr<ScalarColumnWriter> _offsets_writer;
     std::unique_ptr<ColumnWriter> _keys_writer;
     std::unique_ptr<ColumnWriter> _values_writer;
+    const TabletColumn* _tablet_column;
+    WritableFile* _wfile;
+    std::unique_ptr<ColumnWriter> _flat_writer;
+    size_t _total_rows;
+    std::map<std::string, ColumnPtr> name_2_column;
 };
 
 StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
                                                                  const TabletColumn* column, WritableFile* wfile) {
     DCHECK(column->subcolumn_count() == 2);
 
-    // crete key columns writer
+    // create key columns writer
     std::unique_ptr<ColumnWriter> keys_writer;
     {
         const TabletColumn& key_column = column->subcolumn(0);
@@ -84,7 +91,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
         ASSIGN_OR_RETURN(keys_writer, ColumnWriter::create(key_options, &key_column, wfile));
     }
 
-    // crete key columns writer
+    // create value columns writer
     std::unique_ptr<ColumnWriter> values_writer;
     {
         const TabletColumn& value_column = column->subcolumn(1);
@@ -136,21 +143,25 @@ StatusOr<std::unique_ptr<ColumnWriter>> create_map_column_writer(const ColumnWri
         TypeInfoPtr int_type_info = get_type_info(TYPE_INT);
         offsets_writer = std::make_unique<ScalarColumnWriter>(offsets_options, std::move(int_type_info), wfile);
     }
+
     return std::make_unique<MapColumnWriter>(opts, std::move(type_info), std::move(null_writer),
                                              std::move(offsets_writer), std::move(keys_writer),
-                                             std::move(values_writer));
+                                             std::move(values_writer), column, wfile);
 }
 
 MapColumnWriter::MapColumnWriter(const ColumnWriterOptions& opts, TypeInfoPtr type_info,
                                  std::unique_ptr<ScalarColumnWriter> null_writer,
                                  std::unique_ptr<ScalarColumnWriter> offsets_writer,
-                                 std::unique_ptr<ColumnWriter> keys_writer, std::unique_ptr<ColumnWriter> values_writer)
+                                 std::unique_ptr<ColumnWriter> keys_writer, std::unique_ptr<ColumnWriter> values_writer,
+                                 const TabletColumn* column, WritableFile* wfile)
         : ColumnWriter(std::move(type_info), opts.meta->length(), opts.meta->is_nullable()),
           _opts(opts),
           _nulls_writer(std::move(null_writer)),
           _offsets_writer(std::move(offsets_writer)),
           _keys_writer(std::move(keys_writer)),
-          _values_writer(std::move(values_writer)) {}
+          _values_writer(std::move(values_writer)),
+          _tablet_column(column),
+          _wfile(wfile) {}
 
 Status MapColumnWriter::init() {
     if (is_nullable()) {
@@ -186,6 +197,38 @@ Status MapColumnWriter::append(const Column& column) {
     RETURN_IF_ERROR(_keys_writer->append(map_column->keys()));
     RETURN_IF_ERROR(_values_writer->append(map_column->values()));
 
+    /// recode key->name, values
+    auto col_size = column.size();
+    auto& offset = map_column->offsets().get_data();
+    auto& values = map_column->values();
+    for (auto i = 0; i < col_size; ++i) {
+        if (null_column == nullptr || !null_column->get_data()[i]) {
+            for (auto idx = offset[i]; idx < offset[i + 1]; ++idx) {
+                auto name = map_column->keys().debug_item(idx);
+                auto it = name_2_column.find(name);
+                if (name_2_column.end() == it) { // new nullable column and append current value
+                    ColumnPtr field_col = map_column->values().clone_empty();
+                    NullableColumn* nullable_field = nullptr;
+                    if (!field_col->is_nullable()) {
+                        field_col = NullableColumn::create(std::move(field_col), std::move(NullColumn::create()));
+                    }
+                    nullable_field = down_cast<NullableColumn*>(field_col.get());
+                    if (i + _total_rows > 0) {
+                        nullable_field->append_default(i + _total_rows);
+                    }
+                    nullable_field->append(values, idx, 1);
+                    name_2_column[name] = field_col;
+                } else { // just append current value
+                    auto nullable_field = down_cast<NullableColumn*>(it->second.get());
+                    if (i + _total_rows - nullable_field->size() > 0) {
+                        nullable_field->append_default(i + _total_rows - nullable_field->size());
+                    }
+                    nullable_field->append(values, idx, 1);
+                }
+            }
+        }
+    }
+    _total_rows += col_size;
     return Status::OK();
 }
 
@@ -199,12 +242,69 @@ uint64_t MapColumnWriter::estimate_buffer_size() {
 }
 
 Status MapColumnWriter::finish() {
+    /// construct struct column
+    Columns field_columns;
+    std::vector<std::string> field_names;
+    for (auto it = name_2_column.begin(); it != name_2_column.end(); it++) {
+        // append tails
+        auto field = it->second.get();
+        auto count = _total_rows - field->size();
+        if (count > 0) {
+            field->append_default(count);
+        }
+        // get field names and columns
+        field_names.push_back(it->first);
+        field_columns.push_back(it->second);
+    }
+    /// construct struct writer
+
+    ColumnWriterOptions flat_options;
+    flat_options.meta = _opts.meta->add_children_columns();
+    flat_options.meta->set_column_id(_opts.meta->column_id());
+    flat_options.meta->set_unique_id(_opts.meta->unique_id());
+    flat_options.meta->set_type(TYPE_STRUCT);
+    flat_options.meta->set_length(0);
+    flat_options.meta->set_encoding(DEFAULT_ENCODING);
+    flat_options.meta->set_compression(starrocks::LZ4_FRAME);
+    flat_options.meta->set_is_nullable(false);
+    flat_options.need_zone_map = false;
+    flat_options.need_bloom_filter = false;
+    flat_options.need_bitmap_index = false;
+    for (auto i = 0; i < field_columns.size(); ++i) {
+        ColumnMetaPB* sub_meta = flat_options.meta->add_children_columns();
+        *sub_meta = _opts.meta->children_columns(1); // copy map.value's meta
+        sub_meta->set_name(field_names[i]);
+    }
+
+    DCHECK(_tablet_column != nullptr);
+    TabletColumn struct_column;
+    struct_column.set_unique_id(_opts.meta->unique_id());
+    struct_column.set_name("flat_columns");
+    struct_column.set_type(TYPE_STRUCT);
+    struct_column.set_is_nullable(false);
+    struct_column.set_length(16);
+    for (auto i = 0; i < field_columns.size(); ++i) {
+        const TabletColumn& value_column = _tablet_column->subcolumn(1);
+        struct_column.add_sub_column(value_column);
+    }
+    CHECK(_wfile != nullptr);
+    ASSIGN_OR_RETURN(_flat_writer, ColumnWriter::create(flat_options, &struct_column, _wfile));
+
+    if (_flat_writer == nullptr) {
+        return Status::InternalError("flat writer is null.");
+    }
+    auto struct_col = StructColumn::create(std::move(field_columns), std::move(field_names));
+
+    RETURN_IF_ERROR(_flat_writer->init());
+    RETURN_IF_ERROR(_flat_writer->append(*struct_col));
+
     if (is_nullable()) {
         RETURN_IF_ERROR(_nulls_writer->finish());
     }
     RETURN_IF_ERROR(_offsets_writer->finish());
     RETURN_IF_ERROR(_keys_writer->finish());
     RETURN_IF_ERROR(_values_writer->finish());
+    RETURN_IF_ERROR(_flat_writer->finish());
 
     _opts.meta->set_num_rows(get_next_rowid());
     _opts.meta->set_total_mem_footprint(total_mem_footprint());
@@ -219,6 +319,9 @@ uint64_t MapColumnWriter::total_mem_footprint() const {
     total_mem_footprint += _offsets_writer->total_mem_footprint();
     total_mem_footprint += _keys_writer->total_mem_footprint();
     total_mem_footprint += _values_writer->total_mem_footprint();
+    if (_flat_writer != nullptr) {
+        total_mem_footprint += _flat_writer->total_mem_footprint();
+    }
     return total_mem_footprint;
 }
 
@@ -229,6 +332,9 @@ Status MapColumnWriter::write_data() {
     RETURN_IF_ERROR(_offsets_writer->write_data());
     RETURN_IF_ERROR(_keys_writer->write_data());
     RETURN_IF_ERROR(_values_writer->write_data());
+    if (_flat_writer != nullptr) {
+        RETURN_IF_ERROR(_flat_writer->write_data());
+    }
     return Status::OK();
 }
 
@@ -239,6 +345,9 @@ Status MapColumnWriter::write_ordinal_index() {
     RETURN_IF_ERROR(_offsets_writer->write_ordinal_index());
     RETURN_IF_ERROR(_keys_writer->write_ordinal_index());
     RETURN_IF_ERROR(_values_writer->write_ordinal_index());
+    if (_flat_writer != nullptr) {
+        RETURN_IF_ERROR(_flat_writer->write_ordinal_index());
+    }
     return Status::OK();
 }
 
@@ -249,6 +358,9 @@ Status MapColumnWriter::finish_current_page() {
     RETURN_IF_ERROR(_offsets_writer->finish_current_page());
     RETURN_IF_ERROR(_keys_writer->finish_current_page());
     RETURN_IF_ERROR(_values_writer->finish_current_page());
+    if (_flat_writer != nullptr) {
+        RETURN_IF_ERROR(_flat_writer->finish_current_page());
+    }
     return Status::OK();
 }
 
