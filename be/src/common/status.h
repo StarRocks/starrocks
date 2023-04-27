@@ -280,16 +280,16 @@ inline void Status::update(Status&& new_status) {
     }
 }
 
+inline Status ignore_not_found(const Status& status) {
+    return status.is_not_found() ? Status::OK() : status;
+}
+
 inline std::ostream& operator<<(std::ostream& os, const Status& st) {
     return os << st.to_string();
 }
 
 inline const Status& to_status(const Status& st) {
     return st;
-}
-
-inline Status ignore_not_found(const Status& status) {
-    return status.is_not_found() ? Status::OK() : status;
 }
 
 template <typename T>
