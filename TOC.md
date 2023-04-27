@@ -75,7 +75,7 @@
   + [Query Cache](/using_starrocks/query_cache.md)
   + [Sorted streaming aggregate](/using_starrocks/sorted_aggregate.md)
 + 外部系统集成
-  + [配置 AWS 认证方式](/integrations/authenticate_to_aws_resources.md)
+  + [配置 AWS 认证信息](/integrations/authenticate_to_aws_resources.md)
   + BI 集成
     + [Apache Superset](/integrations/superset_support.md)
   + [其他集成](/integrations/other_integrations/intro.md)
