@@ -2,12 +2,12 @@
 
 ## Table Type Selection
 
-StarRocks supports four table types: Duplicate Key table, Aggragate table, Unique Key table, and Primary Key table. All three are sorted by KEY.
+StarRocks supports four table types: Duplicate Key table, Aggragate table, Unique Key table, and Primary Key table. All of them are sorted by KEY.
 
-- `AGGREGATE KEY`: When the AGGREGATE KEY is the same, the old and new records are aggregated. The currently supported aggregate functions are SUM, MIN, MAX, and REPLACE. Aggregate tables support aggregating data in advance, facilitating reporting and multi-dimensional analyses.
-- `DUPLICATE KEY`: Only need to specify the sort key. Records with the same DUPLICATE KEY exist at the same time. It is suitable for analyses that don’t involve aggregating data in advance.
-- `UNIQUE KEY`: When the UNIQUE KEY is the same, the new record overwrites the old one.. Currently, `UNIQUE KEY` functions similarly as `REPLACE` of `AGGREGATE KEY`.Both are suitable for analyses involving constant updates.
-- `PRIMARY KEY`: Guarantee the uniqueness of key, and provide the capabilty of realtime updating
+- `AGGREGATE KEY`: When records with the same AGGREGATE KEY is loaded into StarRocks, the old and new records are aggregated. Currently, aggregate tables supports the following aggregate functions: SUM, MIN, MAX, and REPLACE. Aggregate tables support aggregating data in advance, facilitating business statements and multi-dimensional analyses.
+- `DUPLICATE KEY`: You only need to specify the sort key for a DUPLICATE KEY table. Records with the same DUPLICATE KEY exist at the same time. It is suitable for analyses that do not involve aggregating data in advance.
+- `UNIQUE KEY`: When records with the same UNIQUE KEY is loaded into StarRocks, the new record overwrites the old one. A UNIQUE KEY tables is similar to an aggregate table with REPLACE function. Both are suitable for analyses involving constant updates.
+- `PRIMARY KEY`: Primary Key tables guarantee the uniqueness of records, and allow you to perform realtime updating.
 
 ~~~sql
 CREATE TABLE site_visit
