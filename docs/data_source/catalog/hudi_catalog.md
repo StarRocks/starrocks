@@ -24,17 +24,17 @@ Before you create a Hudi catalog, make sure your StarRocks cluster can integrate
 
 ### AWS IAM
 
-If your Hudi cluster uses AWS S3 as storage or AWS Glue as metastore, choose your suitable credential method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources.
+If your Hudi cluster uses AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources.
 
-The following credential methods are recommended:
+The following authentication methods are recommended:
 
 - Instance profile
 - Assumed role
 - IAM user
 
-Of the above-mentioned three credential methods, instance profile is the most widely used.
+Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation about the credential in AWS IAM](../../integrations/authenticate_to_aws_resources.md).
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-authentication-in-aws-iam).
 
 ### HDFS
 
@@ -118,7 +118,7 @@ The following table describes the parameter you need to configure in `MetastoreP
 
 If you choose AWS Glue as the metastore of your data source, which is supported only when you choose AWS S3 as storage, take one of the following actions:
 
-- To choose instance profile as the credential method for accessing AWS Glue, configure `MetastoreParams` as follows:
+- To choose the instance profile-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
   "hive.metastore.type" = "glue",
@@ -126,7 +126,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
   "aws.glue.region" = "<aws_glue_region>"
   ```
 
-- To choose assumed role as the credential method for accessing AWS Glue, configure `MetastoreParams` as follows:
+- To choose the assumed role-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
   "hive.metastore.type" = "glue",
@@ -135,7 +135,7 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
   "aws.glue.region" = "<aws_glue_region>"
   ```
 
-- To choose IAM user as the credential method for accessing AWS Glue, configure `MetastoreParams` as follows:
+- To choose the IAM user-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
   "aws.glue.use_instance_profile" = "false",
@@ -149,13 +149,13 @@ The following table describes the parameters you need to configure in `Metastore
 | Parameter                     | Required | Description                                                  |
 | ----------------------------- | -------- | ------------------------------------------------------------ |
 | hive.metastore.type           | Yes      | The type of metastore that you use for your Hudi cluster. Set the value to `glue`. |
-| aws.glue.use_instance_profile | Yes      | Specifies whether to enable the credential methods instance profile and assumed role. Valid values: `true` and `false`. Default value: `false`. |
-| aws.glue.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you choose assumed role as the credential method for accessing AWS Glue, you must specify this parameter. |
+| aws.glue.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. |
+| aws.glue.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter. |
 | aws.glue.region               | Yes      | The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`. |
-| aws.glue.access_key           | No       | The access key of your AWS IAM user. If choose IAM user as the credential method for accessing AWS Glue, you must specify this parameter. |
-| aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS Glue, you must specify this parameter. |
+| aws.glue.access_key           | No       | The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
+| aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 
-For information about how to choose a credential method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
 #### `StorageCredentialParams`
 
@@ -169,14 +169,14 @@ If your Hudi cluster uses any other storage system, you can ignore `StorageCrede
 
 If you choose AWS S3 as storage for your Hudi cluster, take one of the following actions:
 
-- To choose instance profile as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the instance profile-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-- To choose assumed role as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the assumed role-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
@@ -184,7 +184,7 @@ If you choose AWS S3 as storage for your Hudi cluster, take one of the following
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-- To choose IAM user as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the IAM user-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "false",
@@ -197,13 +197,13 @@ The following table describes the parameters you need to configure in `StorageCr
 
 | Parameter                   | Required | Description                                                  |
 | --------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.use_instance_profile | Yes      | Specifies whether to enable the credential methods instance profile and assumed role. Valid values: `true` and `false`. Default value: `false`. |
-| aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. |
+| aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. |
+| aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
-| aws.s3.access_key           | No       | The access key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
-| aws.s3.secret_key           | No       | The secret key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
+| aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
+| aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 
-For information about how to choose a credential method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 ##### S3-compatible storage system
 
