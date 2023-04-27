@@ -436,7 +436,8 @@ Status AsyncFileWriter::close(RuntimeState* state,
             auto lock = std::unique_lock(_m);
             _cv.wait(lock, [&] { return !_rg_writer_closing; });
         }
-        _flush_row_group();
+        _writer->Close();
+        _chunk_writer = nullptr;
         _file_metadata = _writer->metadata();
         auto st = _outstream->Close();
         if (!st.ok()) {
