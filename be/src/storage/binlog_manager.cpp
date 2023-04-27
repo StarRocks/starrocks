@@ -48,11 +48,11 @@ Status BinlogManager::init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted
     std::list<int64_t> binlog_file_ids;
     Status status = BinlogUtil::list_binlog_file_ids(_path, &binlog_file_ids);
     if (!status.ok()) {
-        std::string errMsg = fmt::format("Failed to init binlog because of list error, tablet {}, status: {}",
-                                         _tablet_id, status.to_string());
-        LOG(ERROR) << errMsg;
+        std::string err_msg = fmt::format("Failed to init binlog because of list error, tablet {}, status: {}",
+                                          _tablet_id, status.to_string());
+        LOG(ERROR) << err_msg;
         _init_failure.store(true);
-        return Status::InternalError(errMsg);
+        return Status::InternalError(err_msg);
     }
     binlog_file_ids.sort();
 
@@ -75,13 +75,13 @@ Status BinlogManager::init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted
     }
 
     if (version_it != sorted_valid_versions.rend()) {
-        std::string errMsg = fmt::format(
+        std::string err_msg = fmt::format(
                 "Failed to init binlog because can't find binlog for all of versions, "
                 "tablet: {}, min_valid_lsn: {}, num expected versions: {}, num recovered version: {}, last failed "
                 "version: {}",
                 _tablet_id, min_valid_lsn.to_string(), sorted_valid_versions.size(), num_versions_recovered,
                 *version_it);
-        LOG(ERROR) << errMsg;
+        LOG(ERROR) << err_msg;
         if (VLOG_IS_ON(3)) {
             std::stringstream ss;
             ss << "detail of valid versions for tablet: " << _tablet_id << ", [";
@@ -96,7 +96,7 @@ Status BinlogManager::init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted
             VLOG(3) << ss.str();
         }
         _init_failure.store(true);
-        return Status::InternalError(errMsg);
+        return Status::InternalError(err_msg);
     }
 
     // 3. construct metas according to the recovery result
@@ -173,12 +173,12 @@ Status BinlogManager::_recover_version(int64_t version, BinlogLsn& min_lsn, std:
     }
 
     if (!find_all_binlog) {
-        std::string errMsg = fmt::format("Failed to recover version {} because of incomplete binlog, tablet {}",
-                                         version, _tablet_id);
+        std::string err_msg = fmt::format("Failed to recover version {} because of incomplete binlog, tablet {}",
+                                          version, _tablet_id);
         std::string meta_msg =
                 last_file_meta == nullptr ? "null" : BinlogUtil::file_meta_to_string(last_file_meta.get());
-        LOG(ERROR) << errMsg << ", last file meta: " << meta_msg;
-        return Status::InternalError(errMsg);
+        LOG(ERROR) << err_msg << ", last file meta: " << meta_msg;
+        return Status::InternalError(err_msg);
     }
 
     return Status::OK();
@@ -195,10 +195,11 @@ StatusOr<BinlogFileMetaPBPtr> BinlogManager::_recover_file_meta_for_version(int6
     std::string file_path = BinlogUtil::binlog_file_path(_path, file_id);
     StatusOr status_or = BinlogFileReader::load_meta(file_id, file_path, lsn_upper_bound);
     if (!status_or.ok() && !status_or.status().is_not_found()) {
-        std::string errMsg = fmt::format("Failed to recover version {} because of load error, tablet {}, file_path: {}",
-                                         version, _tablet_id, file_path);
-        LOG(ERROR) << errMsg << ", " << status_or.status();
-        return Status::InternalError(errMsg);
+        std::string err_msg =
+                fmt::format("Failed to recover version {} because of load error, tablet {}, file_path: {}", version,
+                            _tablet_id, file_path);
+        LOG(ERROR) << err_msg << ", " << status_or.status();
+        return Status::InternalError(err_msg);
     }
 
     if (status_or.status().is_not_found()) {
@@ -217,15 +218,15 @@ StatusOr<BinlogFileMetaPBPtr> BinlogManager::_recover_file_meta_for_version(int6
         }
     }
 
-    std::string errMsg = fmt::format(
+    std::string err_msg = fmt::format(
             "Failed to recover version {} because of discontinuous lsn, "
             "tablet: {}, file_path: {}",
             version, _tablet_id, file_path);
-    LOG(ERROR) << errMsg << ", current file meta: " << BinlogUtil::file_meta_to_string(file_meta.get())
+    LOG(ERROR) << err_msg << ", current file meta: " << BinlogUtil::file_meta_to_string(file_meta.get())
                << ", last file meta: "
                << (last_file_meta == nullptr ? "null" : BinlogUtil::file_meta_to_string(last_file_meta));
 
-    return Status::InternalError(errMsg);
+    return Status::InternalError(err_msg);
 }
 
 StatusOr<BinlogBuilderParamsPtr> BinlogManager::begin_ingestion(int64_t version) {
