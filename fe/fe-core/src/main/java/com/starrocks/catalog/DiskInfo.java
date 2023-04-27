@@ -145,21 +145,24 @@ public class DiskInfo implements Writable {
 
     /*
      * Check if this disk's capacity reach the limit. Return true if yes.
-     * if floodStage is true, use floodStage threshold to check.
-     *      floodStage threshold means a loosely limit, and we use 'AND' to give a more loosely limit.
+     * If usingHardLimit is true, use usingHardLimit threshold to check.
      */
-    public boolean exceedLimit(boolean floodStage) {
-        LOG.debug("flood stage: {}, diskAvailableCapacityB: {}, totalCapacityB: {}",
-                floodStage, diskAvailableCapacityB, totalCapacityB);
-        if (floodStage) {
-            return diskAvailableCapacityB < Config.storage_flood_stage_left_capacity_bytes &&
-                    (double) (totalCapacityB - diskAvailableCapacityB) / totalCapacityB >
-                            (Config.storage_flood_stage_usage_percent / 100.0);
+    public static boolean exceedLimit(long currentAvailCapacityB, long totalCapacityB, boolean usingHardLimit) {
+        if (usingHardLimit) {
+            return currentAvailCapacityB < Config.storage_usage_hard_limit_reserve_bytes &&
+                    (double) (totalCapacityB - currentAvailCapacityB) / totalCapacityB >
+                            (Config.storage_usage_hard_limit_percent / 100.0);
         } else {
-            return diskAvailableCapacityB < Config.storage_min_left_capacity_bytes ||
-                    (double) (totalCapacityB - diskAvailableCapacityB) / totalCapacityB >
-                            (Config.storage_high_watermark_usage_percent / 100.0);
+            return currentAvailCapacityB < Config.storage_usage_soft_limit_reserve_bytes &&
+                    (double) (totalCapacityB - currentAvailCapacityB) / totalCapacityB >
+                            (Config.storage_usage_soft_limit_percent / 100.0);
         }
+    }
+
+    public boolean exceedLimit(boolean usingHardLimit) {
+        LOG.debug("using hard limit: {}, diskAvailableCapacityB: {}, totalCapacityB: {}",
+                usingHardLimit, diskAvailableCapacityB, totalCapacityB);
+        return DiskInfo.exceedLimit(diskAvailableCapacityB, totalCapacityB, usingHardLimit);
     }
 
     @Override

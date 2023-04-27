@@ -126,6 +126,7 @@ import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.CleanTabletSchedQClause;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.ColumnRenameClause;
@@ -2877,6 +2878,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitCreateImageClause(StarRocksParser.CreateImageClauseContext context) {
         return new CreateImageClause();
+    }
+
+    @Override
+    public ParseNode visitCleanTabletSchedQClause(
+            StarRocksParser.CleanTabletSchedQClauseContext context) {
+        return new CleanTabletSchedQClause();
     }
 
     // ---------Alter table clause---------
