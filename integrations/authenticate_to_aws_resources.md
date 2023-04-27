@@ -1,22 +1,22 @@
-# 配置 AWS 认证方式
+# 配置 AWS 认证信息
 
-## StarRocks 用于访问 AWS 资源的认证鉴权方式介绍
+## 认证方式介绍
 
-### Instance Profile 认证鉴权
+### 基于 Instance Profile 认证鉴权
 
 通过 Instance Profile，您可以让 StarRocks 集群直接从 AWS EC2 虚拟机继承 Instance Profile 的权限。在该模式下，任何能够登录到集群的用户都可以根据 AWS IAM 策略配置，对相关的 AWS 资源执行授权范围内允许的操作（例如 AWS S3 指定 Bucket 的读写操作）。
 
-### Assumed Role 认证鉴权
+### 基于 Assumed Role 认证鉴权
 
 与 Instance Profile 的模式不同，Assumed Role 是一种 Catalog 级的数据源访问控制解决方案，支持通过担任 AWS IAM Role 来实现认证。参见 AWS 官网文档“[代入角色](https://docs.aws.amazon.com/zh_cn/awscloudtrail/latest/userguide/cloudtrail-sharing-logs-assume-role.html)”。 具体来说，您可以创建多个不同的 Catalog，并为每个 Catalog 配置特定的 Assume Role 来进行鉴权，从而拥有特定 AWS 资源（例如 S3 Bucket）的访问权限。作为管理员，您还可以向不同的用户授予不同 Catalog 的操作权限，从而实现同一集群内不同用户对不同外部数据的访问控制。
 
-### IAM User 认证鉴权
+### 基于 IAM User 认证鉴权
 
 IAM User 也是一种 Catalog 级的数据源访问控制解决方案，支持通过 IAM User 来实现认证和鉴权。您可以在不同 Catalog 里指定不同的 IAM User 的 Access Key 和 Secret Key，从而实现同一集群内不同用户对不同外部数据的访问控制。
 
 ## 准备工作
 
-### 如果基于 Instance Profile 进行认证和鉴权
+### 基于 Instance Profile 认证鉴权
 
 创建如下 IAM 策略用以授予特定 AWS 资源的访问权限。然后，将该策略添加到 EC2 实例相关联的 IAM Role。
 
@@ -80,7 +80,7 @@ IAM User 也是一种 Catalog 级的数据源访问控制解决方案，支持�
 }
 ```
 
-### 如果基于 Assumed Role 进行认证和鉴权
+### 基于 Assumed Role 认证鉴权
 
 您需要创建一个 Assumed Role（例如，命名为 `s3_role_test`），并将本文“[访问 AWS S3](../integrations/authenticate_to_aws_resources.md#访问-aws-s3)”小节所述的 IAM 策略添加到该角色，保证该 Assumed Role 可以访问 AWS S3 资源。接下来，与 EC2 实例相关联的 IAM Role 可以通过担任该 Assumed Role，从而获得访问对应 AWS S3 资源的权限。
 
@@ -133,7 +133,7 @@ IAM User 也是一种 Catalog 级的数据源访问控制解决方案，支持�
 }
 ```
 
-### 如果基于 IAM User 进行认证和鉴权
+### 基于 IAM User 认证鉴权
 
 创建一个 IAM User，并将本文“[访问 AWS S3](../integrations/authenticate_to_aws_resources.md#访问-aws-s3)”或“[访问 AWS Glue](../integrations/authenticate_to_aws_resources.md#访问-aws-glue)”小节所述的 IAM 策略添加到该 IAM User。并准备好该 IAM 用户的 Access Key 和 Secret Key。
 
@@ -179,7 +179,7 @@ StarRocks 支持以下类型的 External Catalog：
 
 以下示例创建了一个名为 `hive_catalog_hms` 或 `hive_catalog_glue` 的 Hive Catalog，用于查询 Hive 集群里的数据。有关详细的语法和参数说明，参见 [Hive catalog](../data_source/catalog/hive_catalog.md)。
 
-#### 如果基于 Instance Profile 进行鉴权和认证
+#### 基于 Instance Profile 鉴权认证
 
 - 如果 Hive 集群使用 HMS 作为元数据服务，您可以这样创建 Hive Catalog：
 
@@ -209,7 +209,7 @@ StarRocks 支持以下类型的 External Catalog：
   );
   ```
 
-#### 如果基于 Assumed Role 进行鉴权和认证
+#### 基于 Assumed Role 鉴权认证
 
 - 如果 Hive 集群使用 HMS 作为元数据服务，您可以这样创建 Hive Catalog：
 
@@ -242,7 +242,7 @@ StarRocks 支持以下类型的 External Catalog：
   );
   ```
 
-#### 如果基于 IAM User 进行鉴权和认证
+#### 基于 IAM User 鉴权认证
 
 - 如果 Hive 集群使用 HMS 作为元数据服务，您可以这样创建 Hive Catalog：
 
@@ -282,7 +282,7 @@ StarRocks 支持以下类型的 External Catalog：
 
 必须在 Internal Catalog `default_catalog` 中创建文件外部表。以下示例在现有数据库 `test_s3_db` 上创建了一个名为 `file_table` 的文件外部表。有关详细的语法和参数说明，参见 [文件外部表](../data_source/file_external_table.md)。
 
-#### 如果基于 Instance Profile 进行鉴权和认证
+#### 基于 Instance Profile 鉴权认证
 
 您可以这样创建文件外部表：
 
@@ -302,7 +302,7 @@ PROPERTIES
 );
 ```
 
-#### 如果基于 Assumed Role 进行鉴权和认证
+#### 基于 Assumed Role 鉴权认证
 
 您可以这样创建文件外部表：
 
@@ -323,7 +323,7 @@ PROPERTIES
 );
 ```
 
-#### 如果基于 IAM User 进行鉴权和认证
+#### 基于 IAM User 鉴权认证
 
 您可以这样创建文件外部表：
 
@@ -349,7 +349,7 @@ PROPERTIES
 
 您可以从 AWS S3 导入数据。 以下示例将存储在 `s3a://test-bucket/test_brokerload_ingestion` 路径下的所有 Parquet 格式数据文件都导入到了现有数据库 `test_s3_db` 中一个名为 `test_ingestion_2` 的表中。有关详细的语法和参数说明，参见 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
 
-#### 如果基于 Instance Profile 进行鉴权和认证
+#### 基于 Instance Profile 鉴权认证
 
 您可以这样导入数据：
 
@@ -371,7 +371,7 @@ PROPERTIES
 );
 ```
 
-#### 如果基于 Assumed Role 进行鉴权和认证
+#### 基于 Assumed Role 鉴权认证
 
 您可以这样导入数据：
 
@@ -394,7 +394,7 @@ PROPERTIES
 );
 ```
 
-#### 如果基于 IAM User 进行鉴权和认证
+#### 基于 IAM User 鉴权认证
 
 您可以这样导入数据：
 
