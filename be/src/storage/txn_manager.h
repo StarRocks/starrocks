@@ -21,8 +21,14 @@
 
 #pragma once
 
+#include "common/compiler_util.h"
+
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
+DIAGNOSTIC_POP
+
 #include <pthread.h>
 #include <rapidjson/document.h>
 
