@@ -823,6 +823,7 @@ CONF_Int64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
 CONF_Int64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
 CONF_Bool(lake_compaction_check_txn_log_first, "false");
 CONF_Int64(experimental_lake_segment_gc_max_retries, "3");
+CONF_Bool(experimental_lake_enable_fast_gc, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
