@@ -576,9 +576,8 @@ void PInternalServiceImplBase<T>::_get_info_impl(
     DeferOp defer([latch] { latch->count_down(); });
 
     if (timeout_ms <= 0) {
-        LOG(WARNING) << "get kafka into timeout, Because timeout_ms is less than or equal to 0." Status::TimedOut(
-                                "get kafka info timeout")
-                                .to_protobuf(response->mutable_status());
+        LOG(WARNING) << "get kafka into timeout, Because timeout_ms is less than or equal to 0.";
+        Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
         return;
     }
     Status st = Status::OK();
