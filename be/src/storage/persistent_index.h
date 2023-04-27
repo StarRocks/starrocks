@@ -55,8 +55,9 @@ constexpr static size_t kSliceMaxFixLength = 64;
 
 uint64_t key_index_hash(const void* data, size_t len);
 
+using KeyInfo = std::pair<uint32_t, uint64_t>;
 struct KeysInfo {
-    std::vector<std::pair<uint32_t, uint64_t>> key_infos;
+    std::vector<KeyInfo> key_infos;
     size_t size() const { return key_infos.size(); }
 
     void set_difference(KeysInfo& input) {
@@ -78,40 +79,6 @@ struct KVRef {
 struct ImmutableIndexShard;
 class PersistentIndex;
 class ImmutableIndexWriter;
-
-/*
-enum MergeCompactionType {
-    kRange = 0,
-    kFull = 1,
-};
-
-using PersistentIndexSharedPtr = std::shared_ptr<PersistentIndex>;
-class MergeCompactionTask : public Runnable {
-public:
-    MergeCompactionTask(PersistentIndexSharedPtr index, MergeCompactionType type, int merge_start_idx, int merge_end_idx)
-            : _index(std::move(index)), _type(type), _merge_start_idx(merge_start_idx), _merge_end_idx(merge_end_idx) {}
-
-    void run() override {
-        switch (_type) {
-            case kRange: {
-                _index->_merge_compaction_advance(_merge_start_idx, _merge_end_idx);
-                break;
-            }
-            case kFull: {
-                _index->_merge_compaction();
-                break;
-            }
-            default: {}
-        }
-    }
-
-private:
-    MergeCompactionType _type;
-    PersistentIndexSharedPtr _index;
-    int _merge_start_idx;
-    int _merge_end_idx;
-};
-*/
 
 class MutableIndex {
 public:
@@ -199,7 +166,7 @@ public:
 
     virtual Status flush_to_immutable_index(std::unique_ptr<ImmutableIndexWriter>& writer, size_t nshard,
                                             size_t npage_hint, size_t nbucket, bool without_null,
-                                            std::unique_ptr<BloomFilter>* bf = nullptr) const = 0;
+                                            BloomFilter* bf = nullptr) const = 0;
 
     // get the number of entries in the index (including NullIndexValue)
     virtual size_t size() const = 0;
@@ -323,7 +290,7 @@ public:
                                                          const std::vector<size_t>& idxes);
 
     Status flush_to_immutable_index(const std::string& dir, const EditVersion& version, bool write_tmp_l1 = false,
-                                    std::unique_ptr<BloomFilter>* bf = nullptr);
+                                    BloomFilter* bf = nullptr);
 
     // get the number of entries in the index (including NullIndexValue)
     size_t size();
@@ -365,7 +332,7 @@ public:
     // |num_found|: add the number of keys found in L1 to this argument
     // |key_size|: the key size of keys array
     Status get(size_t n, const Slice* keys, KeysInfo& keys_info, IndexValue* values, KeysInfo* found_keys_info,
-               size_t key_size) const;
+               size_t key_size);
 
     // batch check key existence
     Status check_not_exist(size_t n, const Slice* keys, size_t key_size);
@@ -435,21 +402,21 @@ private:
     Status _get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_by_shard, size_t shard_idx, uint32_t shard_bits,
                               std::unique_ptr<ImmutableIndexShard>* shard) const;
 
-    Status _get_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
+    Status _get_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const std::vector<KeyInfo>& keys_info,
                                 IndexValue* values, KeysInfo* found_keys_info,
                                 std::unique_ptr<ImmutableIndexShard>* shard) const;
 
-    Status _get_page_idxes(size_t shard_idx, KeysInfo& keys_info, std::vector<size_t>* page_idxes) const;
+    Status _get_page_idxes(size_t shard_idx, std::vector<KeyInfo>& keys_info, std::vector<size_t>* page_idxes) const;
 
-    Status _get_in_varlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
+    Status _get_in_varlen_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
                                 IndexValue* values, KeysInfo* found_keys_info,
                                 std::unique_ptr<ImmutableIndexShard>* shard) const;
 
-    Status _get_in_shard_by_pages(size_t shard_idx, size_t n, const Slice* keys, KeysInfo& keys_info,
+    Status _get_in_shard_by_pages(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
                                   IndexValue* values, KeysInfo* found_keys_info, std::vector<size_t>& page_idxes) const;
 
-    Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, KeysInfo& keys_info, IndexValue* values,
-                         KeysInfo* found_keys_info) const;
+    Status _get_in_shard(size_t shard_idx, size_t n, const Slice* keys, std::vector<KeyInfo>& keys_info,
+                         IndexValue* values, KeysInfo* found_keys_info) const;
 
     Status _check_not_exist_in_fixlen_shard(size_t shard_idx, size_t n, const Slice* keys, const KeysInfo& keys_info,
                                             std::unique_ptr<ImmutableIndexShard>* shard) const;
@@ -577,6 +544,9 @@ public:
     // |values|: value array for return values
     Status get(size_t n, const Slice* keys, IndexValue* values);
 
+    Status get_from_one_immutable_index(size_t n, const Slice* keys, IndexValue* values, KeysInfo* keys_info,
+                                        KeysInfo* found_keys_info, size_t idx, size_t key_size);
+
     // batch upsert
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
@@ -623,9 +593,12 @@ public:
     Status test_flush_varlen_to_immutable_index(const std::string& dir, const EditVersion& version, size_t num_entry,
                                                 const Slice* keys, const IndexValue* values);
 
+    bool is_error() { return _error; }
+
 private:
     size_t _dump_bound();
 
+    void _set_error(bool error) { _error = error; }
     // check _l0 should dump as snapshot or not
     bool _can_dump_directly();
     bool _need_flush_advance();
@@ -639,7 +612,7 @@ private:
 
     Status _merge_compaction_internal(ImmutableIndexWriter* writer, int l1_start_idx, int l1_end_idx,
                                       std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat,
-                                      bool keep_delete, std::unique_ptr<BloomFilter>* bf);
+                                      bool keep_delete, BloomFilter* bf);
     Status _merge_compaction_advance();
     // merge l0 and l1 into new l1, then clear l0
     Status _merge_compaction();
@@ -656,6 +629,9 @@ private:
 
     Status _get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
                                      std::map<size_t, KeysInfo>& keys_info_by_key_size);
+
+    Status _get_from_immutable_index_parallel(size_t n, const Slice* keys, IndexValue* values,
+                                              std::map<size_t, KeysInfo>& keys_info_by_key_size);
 
     Status _update_usage_and_size_by_key_length(std::vector<std::pair<int64_t, int64_t>>& add_usage_and_size);
 
@@ -683,6 +659,13 @@ private:
     bool _flushed = false;
     bool _need_bloom_filter = false;
     std::unique_ptr<BloomFilter> _bf;
+
+    mutable std::mutex _lock;
+    std::unique_ptr<ThreadPool> _get_thread_pool;
+    std::condition_variable _get_task_finished;
+    size_t _running_get_task = 0;
+    std::atomic<bool> _error{false};
+    std::vector<KeysInfo> _found_keys_info;
 };
 
 } // namespace starrocks
