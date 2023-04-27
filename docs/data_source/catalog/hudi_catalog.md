@@ -161,9 +161,9 @@ For information about how to choose an authentication method for accessing AWS G
 
 A set of parameters about how StarRocks integrates with your storage system. This parameter set is optional.
 
-You need to configure `StorageCredentialParams` only when your Hudi cluster uses AWS S3 as storage.
+If you use HDFS as storage, you do not need to configure `StorageCredentialParams`.
 
-If your Hudi cluster uses any other storage system, you can ignore `StorageCredentialParams`.
+If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, or Google GCS as storage, you must `StorageCredentialParams`.
 
 ##### AWS S3
 
@@ -393,7 +393,7 @@ If you choose Google GCS as storage for your Hudi cluster, take one of the follo
     | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
     | gcp.gcs.impersonation_service_account      | ""                | "hello"               | The service account that you want to impersonate.            |
 
-  - Make a service account (named as meta service account) impersonate another service account (named as data service account):
+  - Make a service account (temporarily named as meta service account) impersonate another service account (temporarily named as data service account):
 
     ```SQL
     "gcp.gcs.service_account_email" = "<google_service_account_email>",
