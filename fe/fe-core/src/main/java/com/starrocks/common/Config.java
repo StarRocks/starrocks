@@ -2193,4 +2193,7 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static boolean only_use_compute_node = false;
+
+    @ConfField(mutable = true)
+    public static short default_replication_num = 3;
 }
