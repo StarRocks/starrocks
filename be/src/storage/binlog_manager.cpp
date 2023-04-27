@@ -81,20 +81,8 @@ Status BinlogManager::init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted
                 "version: {}",
                 _tablet_id, min_valid_lsn.to_string(), sorted_valid_versions.size(), num_versions_recovered,
                 *version_it);
-        LOG(ERROR) << err_msg;
-        if (VLOG_IS_ON(3)) {
-            std::stringstream ss;
-            ss << "detail of valid versions for tablet: " << _tablet_id << ", [";
-            auto it = sorted_valid_versions.begin();
-            ss << *it;
-            it++;
-            while (it != sorted_valid_versions.end()) {
-                ss << ", " << *it;
-                it++;
-            }
-            ss << "]";
-            VLOG(3) << ss.str();
-        }
+        LOG(ERROR) << err_msg << ". Details of valid versions for tablet: "
+                   << fmt::format("{}", fmt::join(sorted_valid_versions, ", "));
         _init_failure.store(true);
         return Status::InternalError(err_msg);
     }
@@ -123,6 +111,8 @@ Status BinlogManager::init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted
     }
     LOG(INFO) << "Init binlog successfully, tablet: " << _tablet_id
               << ", num valid versions: " << sorted_valid_versions.size() << version_details;
+    VLOG(3) << "Details of recovered versions for tablet: " << _tablet_id
+            << ", versions: " << fmt::format("{}", fmt::join(sorted_valid_versions, ", "));
 
     return Status::OK();
 }
