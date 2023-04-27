@@ -30,7 +30,6 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -154,9 +153,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     continue;
                 }
                 checked = true;
-                TableProperty mvTableProperty = materializedView.getTableProperty();
-                Set<String> partitionsToRefresh = getPartitionsToRefreshForMaterializedView(context.getProperties(),
-                        mvTableProperty);
+
+                Set<String> partitionsToRefresh = getPartitionsToRefreshForMaterializedView(context.getProperties());
                 if (partitionsToRefresh.isEmpty()) {
                     LOG.info("no partitions to refresh for materialized view {}", materializedView.getName());
                     return;
@@ -411,6 +409,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
         PartitionDiff partitionDiff = new PartitionDiff();
         Map<String, Range<PartitionKey>> basePartitionMap;
+
+        int partitionTTLNumber = materializedView.getTableProperty().getPartitionTTLNumber();
+        mvContext.setPartitionTTLNumber(partitionTTLNumber);
         Map<String, Range<PartitionKey>> mvPartitionMap = materializedView.getRangePartitionMap();
         database.readLock();
         try {
@@ -506,13 +507,12 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     @VisibleForTesting
-    public Set<String> getPartitionsToRefreshForMaterializedView(Map<String, String> taskProperty,
-                                                                 TableProperty mvTableProperty)
+    public Set<String> getPartitionsToRefreshForMaterializedView(Map<String, String> properties)
             throws AnalysisException {
-        String start = taskProperty.get(TaskRun.PARTITION_START);
-        String end = taskProperty.get(TaskRun.PARTITION_END);
-        boolean force = Boolean.parseBoolean(taskProperty.get(TaskRun.FORCE));
-        int partitionTTLNumber = mvTableProperty.getPartitionTTLNumber();
+        String start = properties.get(TaskRun.PARTITION_START);
+        String end = properties.get(TaskRun.PARTITION_END);
+        boolean force = Boolean.parseBoolean(properties.get(TaskRun.FORCE));
+        int partitionTTLNumber = mvContext.getPartitionTTLNumber();
         if (force && start == null && end == null) {
             return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
         }
