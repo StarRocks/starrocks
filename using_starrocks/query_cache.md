@@ -30,7 +30,7 @@ Query Cache 可以生效的典型应用场景有如下特点：
 
   > **说明**
   >
-  > - Query Cache 支持多表做 Broadcast Join、Bucket Shuffle Join 之后再聚合的查询。
+  > - Query Cache 支持 Broadcast Join 和 Bucket Shuffle Join。
   > - Query Cache 支持含 Join 算子的两种树形：先聚合后 Join 和 先 Join 后聚合。在先聚合后 Join 的树形结构中，不支持 Shuffle Join。在先 Join 后聚合的树形结构中，不支持 Hash Join。
 
 - 查询不包含 `rand`、`random`、`uuid` 和 `sleep` 等不确定性 (Nondeterminstic) 函数。
