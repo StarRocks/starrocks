@@ -2491,7 +2491,7 @@ public class ShowExecutor {
         return returnRows;
     }
 
-    private void handleShowCreateExternalCatalog() {
+    private void handleShowCreateExternalCatalog() throws AnalysisException {
         ShowCreateExternalCatalogStmt showStmt = (ShowCreateExternalCatalogStmt) stmt;
         String catalogName = showStmt.getCatalogName();
         List<List<String>> rows = Lists.newArrayList();
@@ -2502,9 +2502,7 @@ public class ShowExecutor {
 
         Catalog catalog = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
         if (catalog == null) {
-            rows.add(Lists.newArrayList(catalogName, "Error: catalog does not exist\n"));
-            resultSet = new ShowResultSet(stmt.getMetaData(), rows);
-            return;
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
         }
 
         // Create external catalog catalogName (
