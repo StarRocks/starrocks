@@ -56,6 +56,9 @@ public:
     bool has_output_data() { return _stream && _stream->is_ready(); }
 
     bool restore_finished() const { return _running_restore_tasks == 0; }
+    uint64_t running_restore_tasks() const {
+        return _running_restore_tasks.load();
+    }
 
     bool has_restore_task() const { return _running_restore_tasks > 0; }
 
@@ -94,6 +97,9 @@ public:
     template <class T>
     T as() {
         return down_cast<T>(this);
+    }
+    uint64_t running_flush_tasks() const {
+        return _running_flush_tasks.load();
     }
 
 protected:
@@ -166,12 +172,7 @@ public:
 
     Status acquire_stream(const SpillPartitionInfo* partition, std::shared_ptr<SpillInputStream>* stream) override;
 
-    void cancel() override {
-        std::lock_guard guard(_mutex);
-        if (_mem_table != nullptr) {
-            _mem_table_pool.push(std::move(_mem_table));
-        }
-    }
+    void cancel() override {}
 
     Status get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) override { return Status::OK(); }
 
@@ -285,9 +286,10 @@ private:
     // 1. We can actually split partitions based on blocks (they all belong to the same partition, but
     // can be executed in splitting out more parallel tasks). Process all blocks that hit this partition while processing the task
     // 2. If our input is ordered, we can use some sorting-based algorithm to split the partition. This way the probe side can do full streaming of the data
+    template <class MemGuard>
     Status _split_partition(SerdeContext& context, SpillerReader* reader, SpilledPartition* partition,
                             SpilledPartition* left_partition, SpilledPartition* right_partition,
-                            const MemTrackerGuard& guard);
+                            MemGuard& guard);
 
     void _add_partition(SpilledPartitionPtr&& partition);
     void _remove_partition(const SpilledPartition* partition);
