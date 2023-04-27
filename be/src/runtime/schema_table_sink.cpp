@@ -112,6 +112,7 @@ static Status write_be_configs_table(const StarRocksNodesInfo& nodes_info, int64
         LOG(WARNING) << "write_be_configs_table ignored: UpdateConfigAction is not inited";
         return Status::OK();
     }
+    Status ret;
     for (size_t i = 0; i < columns[0]->size(); ++i) {
         int64_t be_id = columns[0]->get(i).get_int64();
         const auto& name = columns[1]->get(i).get_slice().to_string();
@@ -133,8 +134,9 @@ static Status write_be_configs_table(const StarRocksNodesInfo& nodes_info, int64
         } else {
             LOG(WARNING) << "set_config " << mode << " " << name << "=" << value << " failed " << s.to_string();
         }
+        ret.update(s);
     }
-    return Status::OK();
+    return ret;
 }
 
 Status SchemaTableSink::send_chunk(RuntimeState* state, Chunk* chunk) {
