@@ -33,7 +33,7 @@ public class CreateFunctionStmtTest {
                 + ");";
         CreateFunctionStmt stmt = (CreateFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                 createFunctionSql, 32).get(0);
-//        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        // com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         Assert.assertEquals("ABC", stmt.getFunctionName().getDb());
         Assert.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());

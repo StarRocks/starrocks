@@ -27,7 +27,7 @@ public class DropFunctionStmtTest {
         String dropFunctionSql = "DROP FUNCTION ABC.MY_UDF_JSON_GET(string, string)";
         DropFunctionStmt stmt = (DropFunctionStmt) com.starrocks.sql.parser.SqlParser.parse(
                 dropFunctionSql, 32).get(0);
-//        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        // com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         Assert.assertEquals("ABC", stmt.getFunctionName().getDb());
         Assert.assertEquals("my_udf_json_get", stmt.getFunctionName().getFunction());
