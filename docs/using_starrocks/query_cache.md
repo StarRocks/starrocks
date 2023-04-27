@@ -10,7 +10,8 @@ This feature is supported since v2.5.
 
 We recommend that you use the query cache in the following scenarios:
 
-- You frequently run aggregate queries on a single flat table.
+- You frequently run aggregate queries on individual flat tables.
+
 - Most of your aggregate queries are non-GROUP BY aggregate queries and low-cardinality GROUP BY aggregate queries.
 - Your data is loaded in append mode by time partition and can be categorized as hot data and cold data based on access frequency.
 
@@ -24,7 +25,7 @@ The query cache supports queries that meet the following conditions:
 
 - The queries are on native OLAP tables. The query cache does not support queries on external tables or lake tables. The query cache also supports queries whose plans require access to synchronous materialized views. However, the query cache does not support queries whose plans require access to asynchronous materialized views.
 
-- The queries are aggregate queries on a single table.
+- The queries are aggregate queries on individual flat tables.
 
   **NOTE**
   >
