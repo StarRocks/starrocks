@@ -217,8 +217,9 @@ Status DeltaWriter::_init() {
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
         if (!std::includes(writer_context.referenced_column_ids.begin(), writer_context.referenced_column_ids.end(),
                            sort_key_idxes.begin(), sort_key_idxes.end())) {
-            LOG(WARNING) << "table with sort key do not support partial update";
-            return Status::NotSupported("table with sort key do not support partial update");
+            //LOG(WARNING) << "table with sort key do not support partial update";
+            //return Status::NotSupported("table with sort key do not support partial update");
+            _partial_schema_with_sort_key = true;
         }
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
         writer_context.partial_update_mode = _opt.partial_update_mode;
@@ -440,6 +441,7 @@ void DeltaWriter::_reset_mem_table() {
                                                 _mem_table_sink.get(), "", _mem_tracker);
     }
     _mem_table->set_write_buffer_row(_memtable_buffer_row);
+    _mem_table->set_partial_schema_with_sort_key(_partial_schema_with_sort_key);
 }
 
 Status DeltaWriter::commit() {

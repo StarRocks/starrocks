@@ -139,6 +139,27 @@ bool MemTable::is_full() const {
     return write_buffer_size() >= _max_buffer_size || write_buffer_rows() >= _max_buffer_row;
 }
 
+// table with sort key do not support partial update so far
+bool MemTable::_check_partial_update_with_sort_key(const Chunk& chunk) {
+    if (_keys_type == KeysType::PRIMARY_KEYS) {
+        if (!_partial_schema_with_sort_key) {
+            return false;
+        }
+        if (!_has_op_slot) {
+            return false;
+        }
+        size_t op_column_id = chunk.num_columns() - 1;
+        auto op_column = chunk.get_column_by_index(op_column_id);
+        auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+        for (size_t i = 0; i < chunk.num_rows(); i++) {
+            if (ops[i] == TOpType::UPSERT) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     if (_chunk == nullptr) {
         _chunk = ChunkHelper::new_chunk(*_vectorized_schema, 0);
