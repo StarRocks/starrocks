@@ -1,9 +1,6 @@
 # 主键模型
 
-主键模型支持分别定义主键和排序键。数据导入至主键模型的表时先按照排序键排序后存储。查询时返回主键相同的一组数据中的最新数据。相对于更新模型，主键模型在查询时不需要执行聚合操作，并且支持谓词和索引下推，能够在支持**实时和频繁更新**等场景的同时，提供高效查询。
-> **说明**
->
-> 3.0 版本之前，主键模型不支持分别定义主键和排序键。
+StarRocks 1.19 版本推出了主键模型 (Primary Key Model) 。建表时，支持定义主键和指标列，查询时返回主键相同的一组数据中的最新数据。相对于更新模型，主键模型在查询时不需要执行聚合操作，并且支持谓词和索引下推，能够在支持**实时和频繁更新**等场景的同时，提供高效查询。
 
 ## 适用场景
 
@@ -67,9 +64,9 @@ PROPERTIES (
 );
 ```
 
-> 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](Data_distribution.md/#分桶)。
+> 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](../Data_distribution.md/#分桶)。
 
-- 例如，需要按地域、最近活跃时间实时分析用户情况，则可以将表示用户 ID 的 `user_id` 列作为主键，表示地域的 `address` 列和表示最近活跃时间的 `last_active` 列作为排序键。建表语句如下：
+- 例如，需要实时分析用户情况，则可以将用户 ID `user_id` 作为主键，其余为指标列。建表语句如下：
 
 ```SQL
 create table users (
@@ -86,14 +83,13 @@ create table users (
     property3 tinyint NOT NULL
 ) PRIMARY KEY (user_id)
 DISTRIBUTED BY HASH(user_id) BUCKETS 4
-ORDER BY(`address`,`last_active`)
 PROPERTIES (
     "replication_num" = "1",
     "enable_persistent_index" = "true"
 );
 ```
 
-> 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](Data_distribution.md/#分桶)。
+> 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](../Data_distribution.md/#分桶)。
 
 ## 使用说明
 
@@ -108,7 +104,7 @@ PROPERTIES (
 
    > - 自 2.3.0 版本起，StarRocks 支持配置该参数。
    > - 如果磁盘为固态硬盘 SSD，则建议设置为 `true`。如果磁盘为机械硬盘 HDD，并且导入频率不高，则也可以设置为 `true`。
-   > - 建表后，如果您需要修改该参数，请参见 ALTER TABLE [修改表的属性](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md#修改-table-的属性) 。
+   > - 建表后，如果您需要修改该参数，请参见 ALTER TABLE [修改表的属性](../../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md#修改-table-的属性) 。
 
 - 如果未开启持久化索引，导入时主键索引存在内存中，可能会导致占用内存较多。因此建议您遵循如下建议：
   - 合理设置主键的列数和长度。建议主键为占用内存空间较少的数据类型，例如 INT、BIGINT 等，暂时不建议为 VARCHAR。
@@ -117,23 +113,13 @@ PROPERTIES (
     - 假设该表的热数据有 1000 万行，存储为三个副本。
     - 则内存占用的计算方式：`(12 + 9(每行固定开销) ) * 1000W * 3 * 1.5（哈希表平均额外开销) = 945 M`
 
-- 通过 `ORDER BY` 关键字指定排序键，可指定为任意列的排列组合。
+- 自2.3.0 版本起，指标列新增支持 BITMAP、HLL 数据类型。
 
-  > 注意：
-  >
-  > 如果指定了排序键，就根据排序键构建前缀索引；如果没指定排序键，就根据主键构建前缀索引。
-
-- 支持使用 ALTER TABLE 进行表结构变更，但是存在如下注意事项：
-
-  - 不支持修改主键。
-  - 对于排序键，支持通过 ALTER TABLE ... ORDER BY ... 重新指定排序键。不支持删除排序键，不支持修改排序键中列的数据类型。
-  - 不支持调整列顺序。
-
-- 自2.3 版本起，除了主键之外的列新增支持 BITMAP、HLL 数据类型。
-
-- 创建表时，支持为除了主键之外的列创建 BITMAP、Bloom Filter 等索引。
+- 创建表时，支持为指标列创建 BITMAP、Bloom Filter 等索引。
 
 - 自 2.4 版本起，支持基于主键模型的表创建[异步物化视图](../../using_starrocks/Materialized_view.md)。
+
+- 使用 [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) 时暂不支持修改主键的列类型，不支持调整指标列的顺序。
 
 ## 下一步
 
