@@ -262,6 +262,9 @@ public:
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         const std::string& value = this->data(state).intermediate_string;
+        if (value.empty()) {
+            return;
+        }
         // Remove first sep_length.
         const char* data = value.data();
         uint32_t size = value.size();
