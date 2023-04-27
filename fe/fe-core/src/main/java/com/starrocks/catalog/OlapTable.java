@@ -47,7 +47,6 @@ import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
@@ -79,10 +78,8 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.PartitionValue;
-import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -1121,41 +1118,44 @@ public class OlapTable extends Table {
         Column partitionColumn = partitionColumns.get(0);
         Type partitionType = partitionColumn.getType();
 
-        List<Range<PartitionKey>> sortedRange;
+        List<Range<PartitionKey>> sortedRange = rangePartitionMap.values().stream()
+                .sorted(RangeUtils.RANGE_COMPARATOR).collect(Collectors.toList());
+        int startIndex;
         if (partitionType.isNumericType()) {
-            sortedRange = rangePartitionMap.values().stream()
-                    .sorted(RangeUtils.RANGE_COMPARATOR).collect(Collectors.toList());
+            startIndex = partitionNum - lastPartitionNum;
         } else if (partitionType.isDateType()) {
             LocalDateTime currentDateTime = LocalDateTime.now();
             PartitionValue currentPartitionValue = new PartitionValue(currentDateTime.format(DateUtils.DATE_FORMATTER_UNIX));
             PartitionKey currentPartitionKey = PartitionKey.createPartitionKey(
                     ImmutableList.of(currentPartitionValue), partitionColumns);
-            sortedRange = rangePartitionMap.values().stream()
-                    .filter(u -> u.lowerEndpoint().compareTo(currentPartitionKey) <= 0)
-                    .sorted(RangeUtils.RANGE_COMPARATOR).collect(Collectors.toList());
+            // For date types, ttl number should not consider future time
+            int futurePartitionNum = 0;
+            for (int i = sortedRange.size(); i > 0; i--) {
+                PartitionKey lowerEndpoint = sortedRange.get(i - 1).lowerEndpoint();
+                if (lowerEndpoint.compareTo(currentPartitionKey) > 0) {
+                    futurePartitionNum++;
+                } else {
+                    break;
+                }
+            }
+
+            if (partitionNum - lastPartitionNum - futurePartitionNum <= 0) {
+                return rangePartitionMap;
+            } else {
+                startIndex = partitionNum - lastPartitionNum - futurePartitionNum;
+            }
         } else {
             throw new AnalysisException("Unsupported partition type: " + partitionType);
         }
-        // this may filter by current time
-        partitionNum = sortedRange.size();
 
-        LiteralExpr startExpr = sortedRange.get(partitionNum - lastPartitionNum).lowerEndpoint().
-                getKeys().get(0);
-        LiteralExpr endExpr = sortedRange.get(partitionNum - 1).upperEndpoint().getKeys().get(0);
-        String start = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
-        String end = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 0);
-
-        Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
+        int curIndex = 0;
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
         for (Map.Entry<String, Range<PartitionKey>> entry : rangePartitionMap.entrySet()) {
-            Range<PartitionKey> rangeToCheck = entry.getValue();
-            int lowerCmp = rangeToInclude.lowerEndpoint().compareTo(rangeToCheck.upperEndpoint());
-            int upperCmp = rangeToInclude.upperEndpoint().compareTo(rangeToCheck.lowerEndpoint());
-            if (!(lowerCmp >= 0 || upperCmp <= 0)) {
+            if (curIndex >= startIndex) {
                 result.put(entry.getKey(), entry.getValue());
             }
+            curIndex++;
         }
-
         return result;
     }
 
