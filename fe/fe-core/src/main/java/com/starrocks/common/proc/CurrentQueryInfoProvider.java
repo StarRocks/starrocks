@@ -47,8 +47,7 @@ import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.RpcException;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -85,7 +84,7 @@ public class CurrentQueryInfoProvider {
             TNetworkAddress brpcNetAddress = brpcAddresses.get(instanceInfo.getAddress());
             if (brpcNetAddress == null) {
                 try {
-                    brpcNetAddress = toBrpcHost(instanceInfo.getAddress());
+                    brpcNetAddress = SystemInfoService.toBrpcHost(instanceInfo.getAddress());
                     brpcAddresses.put(instanceInfo.getAddress(), brpcNetAddress);
                 } catch (Exception e) {
                     LOG.warn(e.getMessage());
@@ -141,7 +140,7 @@ public class CurrentQueryInfoProvider {
                 TNetworkAddress brpcNetAddress = brpcAddresses.get(instanceInfo.getAddress());
                 if (brpcNetAddress == null) {
                     try {
-                        brpcNetAddress = toBrpcHost(instanceInfo.getAddress());
+                        brpcNetAddress = SystemInfoService.toBrpcHost(instanceInfo.getAddress());
                         brpcAddresses.put(instanceInfo.getAddress(), brpcNetAddress);
                     } catch (Exception e) {
                         LOG.warn(e.getMessage());
@@ -211,23 +210,6 @@ public class CurrentQueryInfoProvider {
             }
         }
         return statisticsMap;
-    }
-
-    private TNetworkAddress toBrpcHost(TNetworkAddress host) throws AnalysisException {
-        final Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
-                host.getHostname(), host.getPort());
-        if (backend == null) {
-            throw new AnalysisException(new StringBuilder("Backend ")
-                    .append(host.getHostname())
-                    .append(":")
-                    .append(host.getPort())
-                    .append(" does not exist")
-                    .toString());
-        }
-        if (backend.getBrpcPort() < 0) {
-            throw new AnalysisException("BRPC port is't exist.");
-        }
-        return new TNetworkAddress(backend.getHost(), backend.getBrpcPort());
     }
 
     public static class QueryStatistics {
