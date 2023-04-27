@@ -633,19 +633,21 @@ public class OlapScanNode extends ScanNode {
         List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
         if (selectedIndexId != -1) {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
-            if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
-                for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
-                    Column col = indexMeta.getSchema().get(sortKeyIdx);
-                    keyColumnNames.add(col.getName());
-                    keyColumnTypes.add(col.getPrimitiveType().toThrift());
-                }
-            } else {
-                for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
-                    if (!col.isKey()) {
-                        break;
+            if (indexMeta != null) {
+                if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
+                    for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+                        Column col = indexMeta.getSchema().get(sortKeyIdx);
+                        keyColumnNames.add(col.getName());
+                        keyColumnTypes.add(col.getPrimitiveType().toThrift());
                     }
-                    keyColumnNames.add(col.getName());
-                    keyColumnTypes.add(col.getPrimitiveType().toThrift());
+                } else {
+                    for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
+                        if (!col.isKey()) {
+                            break;
+                        }
+                        keyColumnNames.add(col.getName());
+                        keyColumnTypes.add(col.getPrimitiveType().toThrift());
+                    }
                 }
             }
         }
