@@ -1869,14 +1869,6 @@ expressionOrDefault
     : expression | DEFAULT
     ;
 
-mapExpressionList
-    : mapExpression (',' mapExpression)*
-    ;
-
-mapExpression
-    : key=expression ':' value=expression
-    ;
-
 expressionSingleton
     : expression EOF
     ;
@@ -1954,7 +1946,6 @@ primaryExpression
     | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
     | arrayType? '[' (expressionList)? ']'                                                #arrayConstructor
-    | mapType? '{' (mapExpressionList)? '}'                                               #mapConstructor
     | value=primaryExpression '[' index=valueExpression ']'                               #collectionSubscript
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | primaryExpression ARROW string                                                      #arrowExpression

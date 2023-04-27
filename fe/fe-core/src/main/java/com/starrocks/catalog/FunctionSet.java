@@ -404,9 +404,11 @@ public class FunctionSet {
     public static final String TRANSFORM = "transform";
 
     // map functions:
+    public static final String MAP = "map";
     public static final String MAP_APPLY = "map_apply";
     public static final String MAP_FILTER = "map_filter";
     public static final String MAP_VALUES = "map_values";
+
     public static final String MAP_KEYS = "map_keys";
     public static final String MAP_SIZE = "map_size";
     public static final String TRANSFORM_VALUES = "transform_values";
