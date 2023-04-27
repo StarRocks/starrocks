@@ -815,15 +815,16 @@ CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
 #endif
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
-CONF_Int64(lake_gc_metadata_max_versions, "10");
-CONF_Int64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
-CONF_Int64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
+CONF_mBool(lake_print_delete_log, "true");
+CONF_mInt64(lake_gc_metadata_max_versions, "10");
+CONF_mInt64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
+CONF_mInt64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
 // This value should be much larger than the maximum timeout of loading/compaction/schema change jobs.
 // The actual effective value is max(lake_gc_segment_expire_seconds, 86400)
-CONF_Int64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
-CONF_Bool(lake_compaction_check_txn_log_first, "false");
-CONF_Int64(experimental_lake_segment_gc_max_retries, "3");
-CONF_Bool(experimental_lake_enable_fast_gc, "false");
+CONF_mInt64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
+CONF_mBool(lake_compaction_check_txn_log_first, "false");
+CONF_mInt64(experimental_lake_segment_gc_max_retries, "3");
+CONF_mBool(experimental_lake_enable_fast_gc, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
