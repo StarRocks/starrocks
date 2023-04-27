@@ -234,14 +234,14 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
 If you choose AWS S3 as your storage system, take one of the following actions:
 
-- To choose instance profile as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the instance profile-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-- To choose assumed role as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the assumed role-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
@@ -249,7 +249,7 @@ If you choose AWS S3 as your storage system, take one of the following actions:
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-- To choose IAM user as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the IAM user-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "false",
@@ -268,7 +268,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key           | No       | The access key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this role when it accesses your Hive data by using a Hive catalog. |
 | aws.s3.secret_key           | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. Then, StarRocks will assume this user when it accesses your Hive data by using a Hive catalog. |
 
-For information about how to choose a credential method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 #### Google GCS
 
