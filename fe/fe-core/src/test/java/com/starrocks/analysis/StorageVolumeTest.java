@@ -56,19 +56,19 @@ public class StorageVolumeTest {
     @Test
     public void testAlterStorageVolumeParserAndAnalyzer() {
         String sql = "ALTER STORAGE VOLUME storage_volume_1";
-        AnalyzeTestUtil.analyzeFail(sql, "properties and comment are empty");
+        AnalyzeTestUtil.analyzeFail(sql, "Input '<EOF>' is not valid at this position");
 
-        sql = "ALTER STORAGE VOLUME storage_volume_1 COMMENT 'comment'" +
+        sql = "ALTER STORAGE VOLUME storage_volume_1 COMMENT = 'comment', " +
                 "SET (\"aws.s3.region\"=\"us-west-2\", \"enabled\"=\"false\")";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof AlterStorageVolumeStmt);
-        Assert.assertEquals("ALTER STORAGE VOLUME storage_volume_1 COMMENT 'comment' SET " +
+        Assert.assertEquals("ALTER STORAGE VOLUME storage_volume_1 COMMENT = 'comment' SET " +
                 "(\"aws.s3.region\" = \"us-west-2\", \"enabled\" = \"false\")", stmt.toSql());
 
-        sql = "ALTER STORAGE VOLUME storage_volume_1 COMMENT 'comment'";
+        sql = "ALTER STORAGE VOLUME storage_volume_1 COMMENT = 'comment'";
         stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof AlterStorageVolumeStmt);
-        Assert.assertEquals("ALTER STORAGE VOLUME storage_volume_1 COMMENT 'comment'",
+        Assert.assertEquals("ALTER STORAGE VOLUME storage_volume_1 COMMENT = 'comment'",
                 stmt.toSql());
 
         sql = "ALTER STORAGE VOLUME storage_volume_1 SET (\"aws.s3.region\"=\"us-west-2\", " +

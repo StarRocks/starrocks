@@ -122,6 +122,8 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
+import com.starrocks.sql.ast.AlterStorageVolumeClause;
+import com.starrocks.sql.ast.AlterStorageVolumeCommentClause;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -239,6 +241,7 @@ import com.starrocks.sql.ast.ModifyBrokerClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
+import com.starrocks.sql.ast.ModifyStorageVolumePropertiesClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
@@ -3236,17 +3239,18 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String svName = identifier.getValue();
         NodePosition pos = createPos(context);
 
+        List<AlterStorageVolumeClause> alterClauses = visit(context.alterStorageVolumeClause(),
+                AlterStorageVolumeClause.class);
+
         Map<String, String> properties = new HashMap<>();
-        if (context.propertyList() != null) {
-            properties = new HashMap<>();
-            List<Property> propertyList = visit(context.propertyList().property(), Property.class);
-            for (Property property : propertyList) {
-                properties.put(property.getKey(), property.getValue());
+        String comment = null;
+        for (AlterStorageVolumeClause clause : alterClauses) {
+            if (clause.getOpType().equals(AlterStorageVolumeClause.AlterOpType.ALTER_COMMENT)) {
+                comment = ((AlterStorageVolumeCommentClause) clause).getNewComment();
+            } else if (clause.getOpType().equals(AlterStorageVolumeClause.AlterOpType.MODIFY_PROPERTIES)) {
+                properties = ((ModifyStorageVolumePropertiesClause) clause).getProperties();
             }
         }
-
-        String comment = context.comment() == null ?
-                null : ((StringLiteral) visit(context.comment().string())).getStringValue();
 
         return new AlterStorageVolumeStmt(svName, properties, comment, pos);
     }
@@ -3271,6 +3275,24 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         String svName = identifier.getValue();
         return new SetDefaultStorageVolumeStmt(svName, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitModifyStorageVolumeCommentClause(
+            StarRocksParser.ModifyStorageVolumeCommentClauseContext context) {
+        String comment = ((StringLiteral) visit(context.string())).getStringValue();
+        return new AlterStorageVolumeCommentClause(comment, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitModifyStorageVolumePropertiesClause(
+            StarRocksParser.ModifyStorageVolumePropertiesClauseContext context) {
+        Map<String, String> properties = new HashMap<>();
+        List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+        for (Property property : propertyList) {
+            properties.put(property.getKey(), property.getValue());
+        }
+        return new ModifyStorageVolumePropertiesClause(properties, createPos(context));
     }
 
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------

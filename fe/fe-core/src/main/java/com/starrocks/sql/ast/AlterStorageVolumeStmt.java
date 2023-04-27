@@ -38,14 +38,6 @@ public class AlterStorageVolumeStmt extends DdlStmt {
         return storageVolumeName;
     }
 
-    public Map<String, String> getProperties() {
-        return properties;
-    }
-
-    public String getComment() {
-        return comment;
-    }
-
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAlterStorageVolumeStatement(this, context);
@@ -56,7 +48,7 @@ public class AlterStorageVolumeStmt extends DdlStmt {
         StringBuilder sb = new StringBuilder();
         sb.append("ALTER STORAGE VOLUME ").append(storageVolumeName);
         if (!comment.isEmpty()) {
-            sb.append(" COMMENT '").append(comment).append("'");
+            sb.append(" COMMENT = '").append(comment).append("'");
         }
         if (!properties.isEmpty()) {
             sb.append(" SET (").

@@ -722,7 +722,20 @@ dropStorageVolumeStatement
     ;
 
 alterStorageVolumeStatement
-    : ALTER STORAGE VOLUME identifierOrString comment? (SET propertyList)?
+    : ALTER STORAGE VOLUME identifierOrString alterStorageVolumeClause (',' alterStorageVolumeClause)*
+    ;
+
+alterStorageVolumeClause
+    : modifyStorageVolumeCommentClause
+    | modifyStorageVolumePropertiesClause
+    ;
+
+modifyStorageVolumePropertiesClause
+    : SET propertyList
+    ;
+
+modifyStorageVolumeCommentClause
+    : COMMENT '=' string
     ;
 
 descStorageVolumeStatement

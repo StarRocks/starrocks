@@ -781,6 +781,14 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitModifyStorageVolumePropertiesClause(ModifyStorageVolumePropertiesClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitAlterStorageVolumeCommentClause(AlterStorageVolumeCommentClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     // ------------------------------------------- Unsupported statement ---------------------------------------------------------
 
     public R visitUnsupportedStatement(UnsupportedStmt statement, C context) {
