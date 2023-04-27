@@ -74,6 +74,8 @@
   + [Sorted streaming aggregate](./using_starrocks/sorted_aggregate.md)
 + Integration
   + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
+  + [Authenticate to Microsoft Azure Storage](./integrations/authenticate_to_azure_storage.md)
+  + [Authenticate to Google Cloud Storage](./integrations/authenticate_to_gcs.md)
   + BI tools
     + [Hex](./integrations/BI_integrations/Hex.md)
     + [Querybook](./integrations/BI_integrations/Querybook.md)
