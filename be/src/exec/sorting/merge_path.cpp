@@ -1035,7 +1035,7 @@ void MergePathCascadeMerger::_split_chunk(const int32_t parallel_idx) {
 
     size_t remain_size = big_run.num_rows();
     while (remain_size > 0) {
-        auto pair = big_run.steal_chunk(_late_materialization, _chunk_size);
+        auto pair = big_run.steal(_late_materialization, _chunk_size, 0);
         ChunkPtr chunk = pair.first;
         Columns orderby = std::move(pair.second);
         DCHECK(chunk != nullptr);

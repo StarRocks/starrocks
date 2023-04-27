@@ -443,10 +443,10 @@ protected:
               _driver_id(0) {}
 
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round.
-    static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
+    static constexpr int64_t YIELD_MAX_TIME_SPENT_NS = 100'000'000L;
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round,
     // if it runs in the worker thread owned by other workgroup, which has running drivers.
-    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 5'000'000L;
+    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT_NS = 5'000'000L;
 
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);

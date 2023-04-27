@@ -93,7 +93,7 @@ private:
 
 private:
     // The maximum duration that a driver could stay in local_driver_queue
-    static constexpr int64_t LOCAL_MAX_WAIT_TIME_SPENT = 1'000'000L;
+    static constexpr int64_t LOCAL_MAX_WAIT_TIME_SPENT_NS = 1'000'000L;
 
     LimitSetter _num_threads_setter;
     std::unique_ptr<DriverQueue> _driver_queue;

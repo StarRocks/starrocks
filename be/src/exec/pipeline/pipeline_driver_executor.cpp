@@ -229,7 +229,7 @@ StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverR
             if (driver->source_operator()->has_output()) {
                 return driver;
             } else {
-                if (driver->driver_acct().get_local_queue_time_spent() > LOCAL_MAX_WAIT_TIME_SPENT) {
+                if (driver->driver_acct().get_local_queue_time_spent() > LOCAL_MAX_WAIT_TIME_SPENT_NS) {
                     driver->driver_acct().clean_local_queue_infos();
                     driver->set_driver_state(DriverState::INPUT_EMPTY);
                     _blocked_driver_poller->add_blocked_driver(driver);

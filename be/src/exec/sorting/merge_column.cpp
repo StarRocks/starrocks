@@ -340,7 +340,7 @@ ChunkUniquePtr SortedRun::clone_slice() const {
     }
 }
 
-std::pair<ChunkPtr, Columns> SortedRun::steal_chunk(bool steal_orderby, size_t size, size_t skipped_rows) {
+std::pair<ChunkPtr, Columns> SortedRun::steal(bool steal_orderby, size_t size, size_t skipped_rows) {
     if (empty()) {
         return {};
     }

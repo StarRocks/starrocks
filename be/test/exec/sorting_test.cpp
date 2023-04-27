@@ -257,7 +257,7 @@ TEST(SortingTest, steal_chunk) {
         SortedRun run(chunk, chunk->columns());
         ChunkPtr sum = chunk->clone_empty();
         while (!run.empty()) {
-            ChunkPtr stealed = run.steal_chunk(false, chunk_size).first;
+            ChunkPtr stealed = run.steal_chunk(chunk_size);
             sum->append(*stealed);
         }
         ASSERT_EQ(chunk->num_rows(), sum->num_rows());

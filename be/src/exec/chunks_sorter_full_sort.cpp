@@ -269,7 +269,7 @@ Status ChunksSorterFullSort::get_next(ChunkPtr* chunk, bool* eos) {
     }
     size_t chunk_size = _state->chunk_size();
     SortedRun& run = _merged_runs.front();
-    *chunk = run.steal_chunk(false, chunk_size).first;
+    *chunk = run.steal_chunk(chunk_size);
     if (*chunk != nullptr) {
         if (!_early_materialized_slots.empty()) {
             *chunk = _late_materialize(*chunk);

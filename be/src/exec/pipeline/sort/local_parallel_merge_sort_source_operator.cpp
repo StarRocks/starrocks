@@ -82,8 +82,7 @@ OperatorPtr LocalParallelMergeSortSourceOperatorFactory::create(int32_t degree_o
 
     auto chunk_provider_factory = [](ChunksSorter* chunks_sorter) {
         return ([chunks_sorter](bool only_check_if_has_data, ChunkPtr* chunk, bool* eos) {
-            if (chunks_sorter->spiller() != nullptr && chunks_sorter->spiller()->spilled() &&
-                !chunks_sorter->spiller()->has_output_data()) {
+            if (!chunks_sorter->has_output()) {
                 return false;
             }
             if (!only_check_if_has_data) {
