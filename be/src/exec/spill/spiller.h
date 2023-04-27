@@ -104,9 +104,9 @@ public:
     // prepared for as read
     template <class TaskExecutor, class MemGuard>
     Status flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
-    template<class MemGuard>
+    template <class MemGuard>
     Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state, IOTaskExecutor& executor,
-                                    const MemGuard& guard) {
+                                   const MemGuard& guard) {
         auto flush_call_back = [this, callback, state, &executor, guard]() {
             RETURN_IF_ERROR(callback());
             if (!_is_cancel && spilled()) {

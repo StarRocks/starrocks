@@ -56,9 +56,7 @@ public:
     bool has_output_data() { return _stream && _stream->is_ready(); }
 
     bool restore_finished() const { return _running_restore_tasks == 0; }
-    uint64_t running_restore_tasks() const {
-        return _running_restore_tasks.load();
-    }
+    uint64_t running_restore_tasks() const { return _running_restore_tasks.load(); }
 
     bool has_restore_task() const { return _running_restore_tasks > 0; }
 
@@ -98,9 +96,7 @@ public:
     T as() {
         return down_cast<T>(this);
     }
-    uint64_t running_flush_tasks() const {
-        return _running_flush_tasks.load();
-    }
+    uint64_t running_flush_tasks() const { return _running_flush_tasks.load(); }
 
 protected:
     Status _decrease_running_flush_tasks();
@@ -288,8 +284,7 @@ private:
     // 2. If our input is ordered, we can use some sorting-based algorithm to split the partition. This way the probe side can do full streaming of the data
     template <class MemGuard>
     Status _split_partition(SerdeContext& context, SpillerReader* reader, SpilledPartition* partition,
-                            SpilledPartition* left_partition, SpilledPartition* right_partition,
-                            MemGuard& guard);
+                            SpilledPartition* left_partition, SpilledPartition* right_partition, MemGuard& guard);
 
     void _add_partition(SpilledPartitionPtr&& partition);
     void _remove_partition(const SpilledPartition* partition);

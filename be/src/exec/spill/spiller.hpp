@@ -23,9 +23,9 @@
 #include "common/status.h"
 #include "exec/spill/common.h"
 #include "exec/spill/serde.h"
+#include "exec/spill/spill_components.h"
 #include "exec/spill/spiller.h"
 #include "util/defer_op.h"
-#include "exec/spill/spill_components.h"
 
 namespace starrocks::spill {
 template <class TaskExecutor, class MemGuard>
@@ -284,7 +284,7 @@ Status PartitionedSpillerWriter::_spill_partition(SerdeContext& ctx, SpilledPart
 template <class MemGuard>
 Status PartitionedSpillerWriter::_split_partition(SerdeContext& spill_ctx, SpillerReader* reader,
                                                   SpilledPartition* partition, SpilledPartition* left_partition,
-                                                  SpilledPartition* right_partition,  MemGuard& guard) {
+                                                  SpilledPartition* right_partition, MemGuard& guard) {
     size_t current_level = partition->level;
     size_t restore_rows = 0;
     while (true) {
