@@ -27,6 +27,7 @@ import com.starrocks.sql.ast.ShowStorageVolumesStmt;
 import com.starrocks.sql.ast.StatementBase;
 
 import java.util.List;
+import java.util.Map;
 
 public class StorageVolumeAnalyzer {
     public static void analyze(StatementBase stmt, ConnectContext session) {
@@ -64,6 +65,11 @@ public class StorageVolumeAnalyzer {
             String svName = statement.getName();
             if (Strings.isNullOrEmpty(svName)) {
                 throw new SemanticException("'storage volume name' can not be null or empty");
+            }
+            Map<String, String> properties = statement.getProperties();
+            String comment = statement.getComment();
+            if (properties.isEmpty() && comment.isEmpty()) {
+                throw new SemanticException("properties and comment are empty");
             }
             return null;
         }

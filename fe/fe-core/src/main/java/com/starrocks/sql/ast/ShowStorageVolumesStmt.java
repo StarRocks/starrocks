@@ -23,15 +23,11 @@ import com.starrocks.sql.parser.NodePosition;
 
 public class ShowStorageVolumesStmt extends ShowStmt {
     private final String pattern;
+    private static final String SV_COL = "Storage Volume";
 
     private static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
-                    .addColumn(new Column("Name", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("Type", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("IsDefault", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Locations", ScalarType.createVarchar(20)))
-                    .addColumn(new Column("Params", ScalarType.createVarchar(256)))
-                    .addColumn(new Column("Comment", ScalarType.createVarchar(20)))
+                    .addColumn(new Column(SV_COL, ScalarType.createVarchar(256)))
                     .build();
 
     public ShowStorageVolumesStmt(String pattern, NodePosition pos) {

@@ -82,7 +82,7 @@ public class CreateStorageVolumeStmt extends DdlStmt {
         }
         sb.append(")");
         if (!comment.isEmpty()) {
-            sb.append(" COMMENT = '").append(comment).append("'");
+            sb.append(" COMMENT '").append(comment).append("'");
         }
         sb.append(" PROPERTIES (").
                 append(new PrintableMap<>(properties, "=", true, false)).append(")");

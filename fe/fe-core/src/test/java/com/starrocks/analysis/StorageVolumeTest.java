@@ -48,7 +48,7 @@ public class StorageVolumeTest {
         stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof CreateStorageVolumeStmt);
         Assert.assertEquals("CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_1 " +
-                "TYPE = s3 LOCATIONS = ('s3://xxx') COMMENT = 'comment' PROPERTIES ("
+                "TYPE = s3 LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES ("
                 + "\"aws.s3.endpoint\" = \"endpoint\", \"aws.s3.region\" = \"us-west-2\", \"enabled\" = \"false\")",
                 stmt.toSql());
     }
@@ -56,13 +56,11 @@ public class StorageVolumeTest {
     @Test
     public void testAlterStorageVolumeParserAndAnalyzer() {
         String sql = "ALTER STORAGE VOLUME storage_volume_1";
-        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
-        Assert.assertTrue(stmt instanceof AlterStorageVolumeStmt);
-        Assert.assertEquals("ALTER STORAGE VOLUME storage_volume_1", stmt.toSql());
+        AnalyzeTestUtil.analyzeFail(sql, "properties and comment are empty");
 
         sql = "ALTER STORAGE VOLUME storage_volume_1 COMMENT 'comment'" +
                 "SET (\"aws.s3.region\"=\"us-west-2\", \"enabled\"=\"false\")";
-        stmt = AnalyzeTestUtil.analyzeSuccess(sql);
+        StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof AlterStorageVolumeStmt);
         Assert.assertEquals("ALTER STORAGE VOLUME storage_volume_1 COMMENT 'comment' SET " +
                 "(\"aws.s3.region\" = \"us-west-2\", \"enabled\" = \"false\")", stmt.toSql());

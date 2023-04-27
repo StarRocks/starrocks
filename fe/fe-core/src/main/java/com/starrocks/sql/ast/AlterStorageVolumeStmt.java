@@ -38,6 +38,14 @@ public class AlterStorageVolumeStmt extends DdlStmt {
         return storageVolumeName;
     }
 
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public String getComment() {
+        return comment;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAlterStorageVolumeStatement(this, context);
