@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.tree;
 
 import com.google.common.base.Preconditions;
@@ -106,9 +105,8 @@ public class DictMappingRewriter {
                     hasApplied = hasApplied || context.hasAppliedOperator;
                     disableApplied = disableApplied || context.hasUnsupportedOperator;
                 }
-                Preconditions.checkState(hasApplied);
-                if (!disableApplied) {
-                    context.hasAppliedOperator = true;
+                if (!disableApplied || !hasApplied) {
+                    context.hasAppliedOperator = hasApplied;
                     return operator;
                 } else {
                     context.hasAppliedOperator = false;
