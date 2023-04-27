@@ -32,13 +32,17 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.FsBroker;
+<<<<<<< HEAD
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
+=======
+>>>>>>> c5c90a68b ([Enhancement] Add hint to insert into error msg if thrift server pool is exhausted (#21964))
 import com.starrocks.common.Config;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThriftServer;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.Counter;
@@ -258,6 +262,8 @@ public class Coordinator {
     private final Map<Integer, TNetworkAddress> channelIdToBEPort = Maps.newHashMap();
     // used only by channel stream load, records the mapping from be port to be's webserver port
     private final Map<TNetworkAddress, TNetworkAddress> bePortToBeWebServerPort = Maps.newHashMap();
+
+    private boolean thriftServerHighLoad;
 
     // Used for new planner
     public Coordinator(ConnectContext context, List<PlanFragment> fragments, List<ScanNode> scanNodes,
@@ -2564,14 +2570,14 @@ public class Coordinator {
      * the caller should check queryStatus for result.
      *
      * We divide the entire waiting process into multiple rounds,
-     * with a maximum of 30 seconds per round. And after each round of waiting,
+     * with a maximum of 5 seconds per round. And after each round of waiting,
      * check the status of the BE. If the BE status is abnormal, the wait is ended
      * and the result is returned. Otherwise, continue to the next round of waiting.
      * This method mainly avoids the problem that the Coordinator waits for a long time
      * after some BE can no long return the result due to some exception, such as BE is down.
      */
     public boolean join(int timeoutS) {
-        final long fixedMaxWaitTime = 30;
+        final long fixedMaxWaitTime = 5;
 
         long leftTimeoutS = timeoutS;
         while (leftTimeoutS > 0) {
@@ -2588,6 +2594,11 @@ public class Coordinator {
 
             if (!checkBackendState()) {
                 return true;
+            }
+
+            if (ThriftServer.getExecutor() != null
+                    && ThriftServer.getExecutor().getPoolSize() >= Config.thrift_server_max_worker_threads) {
+                thriftServerHighLoad = true;
             }
 
             leftTimeoutS -= waitTime;
@@ -2788,6 +2799,7 @@ public class Coordinator {
         }
     }
 
+<<<<<<< HEAD
     // fragment instance exec param, it is used to assemble
     // the per-instance TPlanFragmentExecParas, as a member of
     // FragmentExecParams
@@ -2871,6 +2883,10 @@ public class Coordinator {
 
     private int getFragmentBucketNum(PlanFragmentId fragmentId) {
         return fragmentIdToBucketNumMap.get(fragmentId);
+=======
+    public boolean isThriftServerHighLoad() {
+        return this.thriftServerHighLoad;
+>>>>>>> c5c90a68b ([Enhancement] Add hint to insert into error msg if thrift server pool is exhausted (#21964))
     }
 
     // record backend execute state
