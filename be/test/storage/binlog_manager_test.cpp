@@ -871,7 +871,7 @@ TEST_F(BinlogManagerTest, test_init) {
             std::rand(), _binlog_file_dir, 100 * 1024 * 1024, 1024 * 1024, LZ4_FRAME, rowset_fetcher);
 
     std::vector<BinlogFileMetaPBPtr> expect_metas;
-    std::list<int64_t> valid_versions;
+    std::vector<int64_t> valid_versions;
 
     // file1: all data is valid
     std::vector<PartialRowsetInfo> binlog_file_info_1;

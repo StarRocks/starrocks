@@ -227,7 +227,7 @@ public:
     // Core ideas for the recovery
     // 1. use min_valid_lsn and sorted_valid_versions to decide what data is valid, and ensure the completeness
     // 2. recover from the higher version to the lower so that remove duplicate data (such as version 5)
-    Status init(BinlogLsn min_valid_lsn, std::list<int64_t>& sorted_valid_versions);
+    Status init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted_valid_versions);
 
     //  The process of an ingestion is as following, and protected by Tablet#_meta_lock to ensure there is
     //  no concurrent ingestion for duplicate key table

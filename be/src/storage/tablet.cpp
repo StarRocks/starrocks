@@ -283,7 +283,7 @@ Status Tablet::finish_load_rowsets() {
 
     // find valid versions
     BinlogLsn min_lsn = _tablet_meta->get_binlog_min_lsn();
-    std::list<int64_t> valid_versions;
+    std::vector<int64_t> valid_versions;
     for (auto& item : _inc_rs_version_map) {
         int64_t version = item.first.first;
         if (version < min_lsn.version()) {
@@ -291,7 +291,7 @@ Status Tablet::finish_load_rowsets() {
         }
         valid_versions.push_back(version);
     }
-    valid_versions.sort();
+    std::sort(valid_versions.begin(), valid_versions.end());
 
     // TabletMeta#binlog_min_lsn may be not accurate for the minimum version. Consider that when
     // enable binlog in Tablet#update_binlog_config, we don't know the first incremental version

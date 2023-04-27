@@ -43,7 +43,7 @@ BinlogManager::~BinlogManager() {
     }
 }
 
-Status BinlogManager::init(BinlogLsn min_valid_lsn, std::list<int64_t>& sorted_valid_versions) {
+Status BinlogManager::init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted_valid_versions) {
     // 1. list all of binlog files
     std::list<int64_t> binlog_file_ids;
     Status status = BinlogUtil::list_binlog_file_ids(_path, &binlog_file_ids);
