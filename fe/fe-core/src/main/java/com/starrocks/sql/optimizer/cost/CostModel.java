@@ -131,7 +131,7 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
             if (node.getTable().isMaterializedView()) {
-                ColumnRefSet usedColumns = node.getUsedColumns();
+                ColumnRefSet usedColumns = statistics.getUsedColumns();
                 Projection projection = node.getProjection();
                 if (projection != null) {
                     // remove projection keys
