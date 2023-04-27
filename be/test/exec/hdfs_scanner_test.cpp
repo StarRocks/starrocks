@@ -2402,4 +2402,37 @@ TEST_F(HdfsScannerTest, TestParquetTimestampToDatetime) {
     scanner->close(_runtime_state);
 }
 
+TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
+    SlotDesc parquet_descs[] = {{"Id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+
+    const std::string parquet_file =
+            "./be/test/formats/parquet/test_data/iceberg_schema_evolution/add_struct_subfield.parquet";
+
+    _create_runtime_state("Asia/Shanghai");
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    TIcebergSchema schema = TIcebergSchema{};
+
+    TIcebergSchemaField field_id{};
+    field_id.__set_field_id(1);
+    field_id.__set_name("Id");
+
+    std::vector<TIcebergSchemaField> fields{field_id};
+    schema.__set_fields(fields);
+    param->iceberg_schema = &schema;
+
+    _debug_rows_per_call = 10;
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 1);
+    EXPECT_EQ(scanner->raw_rows_read(), 1);
+    EXPECT_EQ(_debug_row_output, "[1]\n");
+    scanner->close(_runtime_state);
+}
+
 } // namespace starrocks

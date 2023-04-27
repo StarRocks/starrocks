@@ -1323,7 +1323,7 @@ public class ExpressionAnalyzer {
                 node.setType(Type.BIGINT);
                 node.setIntValue(session.getConnectionId());
                 node.setStrValue("");
-            } else if (funcType.equalsIgnoreCase("CURRENT_CATALOG")) {
+            } else if (funcType.equalsIgnoreCase("CATALOG")) {
                 node.setType(Type.VARCHAR);
                 node.setStrValue(session.getCurrentCatalog());
             }
