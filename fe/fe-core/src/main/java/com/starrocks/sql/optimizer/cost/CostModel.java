@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -129,6 +130,15 @@ public class CostModel {
         public CostEstimate visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
+            if (node.getTable().isMaterializedView()) {
+                ColumnRefSet usedColumns = node.getUsedColumns();
+                Projection projection = node.getProjection();
+                if (projection != null) {
+                    // remove projection keys
+                    usedColumns.except(projection.getColumnRefMap().keySet());
+                }
+                return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
+            }
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
 
