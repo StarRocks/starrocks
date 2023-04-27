@@ -168,6 +168,17 @@ public class AnalyzeManager implements Writable {
         }
     }
 
+    public void dropExternalStats(String tableUUID) {
+        List<AnalyzeStatus> expireList = analyzeStatusMap.values().stream().
+                filter(status -> status instanceof ExternalAnalyzeStatus).
+                filter(status -> ((ExternalAnalyzeStatus) status).getTableUUID() == tableUUID).
+                collect(Collectors.toList());
+
+        expireList.forEach(status -> analyzeStatusMap.remove(status.getId()));
+        StatisticExecutor statisticExecutor = new StatisticExecutor();
+        statisticExecutor.dropTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
+    }
+
     public void addBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
         basicStatsMetaMap.put(basicStatsMeta.getTableId(), basicStatsMeta);
         GlobalStateMgr.getCurrentState().getEditLog().logAddBasicStatsMeta(basicStatsMeta);

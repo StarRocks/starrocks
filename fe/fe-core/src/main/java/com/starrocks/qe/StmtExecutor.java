@@ -879,6 +879,8 @@ public class StmtExecutor {
                     catalogName, db.getId(), table.getId(), db, table,
                     analyzeStmt.getColumnNames(),
                     analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
+            analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
+            GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
         } else {
             //Only for send sync command to client
             analyzeStatus = new AnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
@@ -897,7 +899,11 @@ public class StmtExecutor {
             } catch (RejectedExecutionException e) {
                 analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
                 analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
-                GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+                if (analyzeStmt.isExternal()) {
+                    GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
+                } else {
+                    GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+                }
             }
         } else {
             executeAnalyze(false, analyzeStmt, analyzeStatus, db, table);
@@ -967,14 +973,18 @@ public class StmtExecutor {
 
     private void handleDropStatsStmt() {
         DropStatsStmt dropStatsStmt = (DropStatsStmt) parsedStmt;
-        OlapTable table = (OlapTable) MetaUtils.getTable(context, dropStatsStmt.getTableName());
-        List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
-                .collect(Collectors.toList());
+        Table table = MetaUtils.getTable(context, dropStatsStmt.getTableName());
+        if (dropStatsStmt.isExternal()) {
+            GlobalStateMgr.getCurrentAnalyzeMgr().dropExternalStats(table.getUUID());
+        } else {
+            List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
+                    .collect(Collectors.toList());
 
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
-        GlobalStateMgr.getCurrentAnalyzeMgr()
-                .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
-        GlobalStateMgr.getCurrentStatisticStorage().expireTableAndColumnStatistics(table, columns);
+            GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeStatus(table.getId());
+            GlobalStateMgr.getCurrentAnalyzeMgr()
+                    .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
+            GlobalStateMgr.getCurrentStatisticStorage().expireTableAndColumnStatistics(table, columns);
+        }
     }
 
     private void handleDropHistogramStmt() {

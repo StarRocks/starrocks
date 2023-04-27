@@ -43,6 +43,10 @@ public class ExternalAnalyzeStatus extends AnalyzeStatus {
         this.table = table;
     }
 
+    public String getTableUUID() {
+        return table.getUUID();
+    }
+
     @Override
     public ShowResultSet toShowResult() {
         String dbName = db.getOriginName();

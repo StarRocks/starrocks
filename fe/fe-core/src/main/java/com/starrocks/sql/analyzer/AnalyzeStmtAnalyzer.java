@@ -242,6 +242,9 @@ public class AnalyzeStmtAnalyzer {
         @Override
         public Void visitDropStatsStatement(DropStatsStmt statement, ConnectContext session) {
             MetaUtils.normalizationTableName(session, statement.getTableName());
+            if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
+                statement.setExternal(true);
+            }
             return null;
         }
 

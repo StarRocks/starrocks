@@ -110,6 +110,16 @@ public class StatisticExecutor {
         }
     }
 
+    public void dropTableStatistics(ConnectContext statsConnectCtx, String tableUUID) {
+        String sql = StatisticSQLBuilder.buildDropExternalStatSQL(tableUUID);
+        LOG.debug("Expire statistic SQL: {}", sql);
+
+        boolean result = executeDML(statsConnectCtx, sql);
+        if (!result) {
+            LOG.warn("Execute statistic table expire fail.");
+        }
+    }
+
     public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
         String sql = StatisticSQLBuilder.buildDropPartitionSQL(pids);
         LOG.debug("Expire partition statistic SQL: {}", sql);
