@@ -134,7 +134,11 @@ public class CostModel {
                 ColumnRefSet usedColumns = statistics.getUsedColumns();
                 Projection projection = node.getProjection();
                 if (projection != null) {
-                    // remove projection keys
+                    // we will add a projection on top of rewritten mv plan to keep the output columns the same as
+                    // original query.
+                    // excludes this projection keys when costing mv,
+                    // or the cost of mv may be larger than origal query,
+                    // which will lead to mismatch of mv
                     usedColumns.except(projection.getColumnRefMap().keySet());
                 }
                 return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
