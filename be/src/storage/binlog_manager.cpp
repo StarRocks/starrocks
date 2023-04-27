@@ -58,7 +58,7 @@ Status BinlogManager::init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted
 
     // 2. recover binlog from the largest version to the smallest version
     std::vector<int64_t> useless_file_ids;
-    std::vector<BinlogFileMetaPBPtr> recovered_file_metas;
+    std::vector<BinlogFileMetaPBPtr> recovered_file_metas(binlog_file_ids.size());
     auto version_it = sorted_valid_versions.rbegin();
     std::list<int64_t>::reverse_iterator file_id_it = binlog_file_ids.rbegin();
     int64_t num_versions_recovered = 0;
@@ -88,6 +88,9 @@ Status BinlogManager::init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted
     }
 
     // 3. construct metas according to the recovery result
+
+    // file metas are pushed back to recovered_file_metas in the descending order of file ids,
+    // and we want to recover them in the ascending order, so reverse the vector first
     std::reverse(recovered_file_metas.begin(), recovered_file_metas.end());
     BinlogBuildResult build_result;
     build_result.next_file_id = binlog_file_ids.empty() ? BINLOG_MIN_FILE_ID : (*binlog_file_ids.rbegin() + 1);
@@ -99,9 +102,11 @@ Status BinlogManager::init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted
         useless_file_ids.push_back(*file_id_it);
         file_id_it++;
     }
-    std::reverse(useless_file_ids.begin(), useless_file_ids.end());
-    for (auto it : useless_file_ids) {
-        _unused_binlog_file_ids.blocking_put(it);
+
+    // file ids are pushed back to useless_file_ids in descending order, and we want to delete
+    // them in ascending order, so traverse the vector in the reverse order
+    for (auto it = useless_file_ids.rbegin(); it != useless_file_ids.rend(); it++) {
+        _unused_binlog_file_ids.blocking_put(*it);
     }
 
     std::string version_details;
