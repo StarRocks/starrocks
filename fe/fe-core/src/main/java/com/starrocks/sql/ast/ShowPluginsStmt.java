@@ -39,6 +39,7 @@ public class ShowPluginsStmt extends ShowStmt {
     public ShowPluginsStmt() {
         this(NodePosition.ZERO);
     }
+
     public ShowPluginsStmt(NodePosition pos) {
         super(pos);
     }

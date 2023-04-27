@@ -29,6 +29,7 @@
 #include "storage/tablet_updates.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
+#include "util/xxh3.h"
 
 namespace starrocks {
 
@@ -99,7 +100,7 @@ template <typename Key>
 class HashIndexImpl : public HashIndex {
 private:
     phmap::parallel_flat_hash_map<Key, RowIdPack4, StdHashWithSeed<Key, PhmapSeed1>, phmap::priv::hash_default_eq<Key>,
-                                  TraceAlloc<phmap::priv::Pair<const Key, RowIdPack4>>, 4, phmap::NullMutex, false>
+                                  TraceAlloc<phmap::priv::Pair<const Key, RowIdPack4>>, 4, phmap::NullMutex, true>
             _map;
 
 public:
@@ -240,7 +241,7 @@ struct FixSlice {
 
 template <size_t S>
 struct FixSliceHash {
-    size_t operator()(const FixSlice<S>& v) const { return crc_hash_64(v.v, 4 * S, 0x811C9DC5); }
+    size_t operator()(const FixSlice<S>& v) const { return XXH3_64bits(v.v, 4 * S); }
 };
 
 template <size_t S>
@@ -248,7 +249,7 @@ class FixSliceHashIndex : public HashIndex {
 private:
     phmap::parallel_flat_hash_map<FixSlice<S>, RowIdPack4, FixSliceHash<S>, phmap::priv::hash_default_eq<FixSlice<S>>,
                                   TraceAlloc<phmap::priv::Pair<const FixSlice<S>, RowIdPack4>>, 4, phmap::NullMutex,
-                                  false>
+                                  true>
             _map;
 
 public:
@@ -533,7 +534,7 @@ public:
 };
 
 struct StringHasher1 {
-    size_t operator()(const string& v) const { return crc_hash_64(v.data(), v.length(), 0x811C9DC5); }
+    size_t operator()(const string& v) const { return XXH3_64bits(v.data(), v.length()); }
 };
 
 class SliceHashIndex : public HashIndex {
@@ -541,7 +542,7 @@ private:
     using StringMap =
             phmap::parallel_flat_hash_map<string, tablet_rowid_t, StringHasher1, phmap::priv::hash_default_eq<string>,
                                           TraceAlloc<phmap::priv::Pair<const string, tablet_rowid_t>>, 4,
-                                          phmap::NullMutex, false>;
+                                          phmap::NullMutex, true>;
     StringMap _map;
     size_t _total_length = 0;
 
@@ -1039,7 +1040,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     int64_t apply_version = 0;
     std::vector<RowsetSharedPtr> rowsets;
     std::vector<uint32_t> rowset_ids;
-    RETURN_IF_ERROR(tablet->updates()->_get_apply_version_and_rowsets(&apply_version, &rowsets, &rowset_ids));
+    RETURN_IF_ERROR(tablet->updates()->get_apply_version_and_rowsets(&apply_version, &rowsets, &rowset_ids));
 
     size_t total_data_size = 0;
     size_t total_segments = 0;

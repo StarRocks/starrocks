@@ -343,6 +343,12 @@ under the License.
             <artifactId>log4j-slf4j-impl</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-1.2-api -->
+        <dependency>
+            <groupId>org.apache.logging.log4j</groupId>
+            <artifactId>log4j-1.2-api</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/io.netty/netty-all -->
         <dependency>
             <groupId>io.netty</groupId>
@@ -562,6 +568,10 @@ under the License.
                     <groupId>org.slf4j</groupId>
                     <artifactId>slf4j-reload4j</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>ch.qos.reload4j</groupId>
+                    <artifactId>reload4j</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 
@@ -569,6 +579,12 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>ch.qos.reload4j</groupId>
+                    <artifactId>reload4j</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
@@ -587,6 +603,13 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-azure</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.google.cloud.bigdataoss/gcs-connector -->
+        <dependency>
+            <groupId>com.google.cloud.bigdataoss</groupId>
+            <artifactId>gcs-connector</artifactId>
+            <classifier>shaded</classifier>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.antlr/antlr4 -->
@@ -682,12 +705,12 @@ under the License.
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starclient</artifactId>
-            <version>0.2.6</version>
+            <version>0.2.7</version>
         </dependency>
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starmanager</artifactId>
-            <version>0.2.6</version>
+            <version>0.2.7</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-api -->
@@ -739,6 +762,12 @@ under the License.
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-dbcp2</artifactId>
             <scope>test</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.groovy/groovy-groovysh -->
+        <dependency>
+            <groupId>org.apache.groovy</groupId>
+            <artifactId>groovy-groovysh</artifactId>
         </dependency>
 
         <dependency>

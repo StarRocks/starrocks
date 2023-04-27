@@ -53,6 +53,7 @@ private:
     ActiveInputSet _active_inputs;
 };
 
+class ConnectorScanOperatorAdaptiveProcessor;
 class ConnectorScanOperator : public ScanOperator {
 public:
     ConnectorScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
@@ -63,9 +64,9 @@ public:
     Status do_prepare(RuntimeState* state) override;
     void do_close(RuntimeState* state) override;
     ChunkSourcePtr create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) override;
+
     connector::ConnectorType connector_type();
 
-    // TODO: refactor it into the base class
     void attach_chunk_source(int32_t source_index) override;
     void detach_chunk_source(int32_t source_index) override;
     bool has_shared_chunk_source() const override;
@@ -77,20 +78,32 @@ public:
     ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
+
+    int available_pickup_morsel_count() override;
+    void begin_pull_chunk(ChunkPtr res) override;
+    void begin_driver_process() override;
+    void end_pull_chunk(int64_t time) override;
+    void end_driver_process(PipelineDriver* driver) override;
+    bool is_running_all_io_tasks() const override;
+
+public:
+    mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
+    bool _enable_adaptive_io_tasks = true;
 };
 
 class ConnectorChunkSource : public ChunkSource {
 public:
-    ConnectorChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                         ScanOperator* op, ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
+    ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                         ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
 
     ~ConnectorChunkSource() override;
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
+    const std::string get_custom_coredump_msg() const override;
 
 protected:
-    virtual bool _reach_eof() { return _limit != -1 && _rows_read >= _limit; }
+    virtual bool _reach_eof() const { return _limit != -1 && _rows_read >= _limit; }
     Status _open_data_source(RuntimeState* state);
 
     connector::DataSourcePtr _data_source;
@@ -114,6 +127,7 @@ private:
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
+    ConnectorScanOperator* _op = nullptr;
 };
 
 } // namespace pipeline

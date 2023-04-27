@@ -88,7 +88,7 @@ public class WebBaseAction extends BaseAction {
             + "  <script type=\"text/javascript\" src=\"/static?res=jquery.js\"></script>"
             + "  <script type=\"text/javascript\" src=\"/static?res=jquery.dataTables.js\"></script>"
             + "  <script type=\"text/javascript\" src=\"/static?res=datatables_bootstrap.js\"></script>"
-
+            + "  <script type=\"text/javascript\" src=\"/static?res=starrocks.js\"></script>"
             + "  <script type=\"text/javascript\"> "
             + "    $(document).ready(function() { "
             + "      $('#table_id').dataTable({ "
@@ -199,6 +199,7 @@ public class WebBaseAction extends BaseAction {
             ctx.setRemoteIP(authInfo.remoteIp);
             ctx.setCurrentUserIdentity(currentUser);
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+            // TODO(yiming): set role ids for ephemeral user
             ctx.setCurrentRoleIds(currentUser);
 
             ctx.setThreadLocalInfo();

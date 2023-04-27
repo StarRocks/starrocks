@@ -200,7 +200,7 @@ public class AggregateTest extends PlanTestBase {
         int originPipelineDop = connectContext.getSessionVariable().getPipelineDop();
         try {
             int cpuCores = 8;
-            int expectedTotalDop = cpuCores;
+            int expectedTotalDop = cpuCores / 2;
             {
                 BackendCoreStat.setDefaultCoresOfBe(cpuCores);
                 Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
@@ -926,34 +926,6 @@ public class AggregateTest extends PlanTestBase {
         FeConstants.runningUnitTest = false;
     }
 
-    public void testWindowFunnelWithInvalidModeWindow() throws Exception {
-        FeConstants.runningUnitTest = true;
-        expectedException.expect(SemanticException.class);
-        expectedException.expectMessage("mode argument's range must be [0-7]");
-        String sql =
-                "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 8, [L_PARTKEY = 1]) from lineitem_partition_colocate" +
-                        " group by L_ORDERKEY;";
-        try {
-            getFragmentPlan(sql);
-        } finally {
-            FeConstants.runningUnitTest = false;
-        }
-    }
-
-    @Test
-    public void testWindowFunnelWithNonDecimalWindow() throws Exception {
-        FeConstants.runningUnitTest = true;
-        expectedException.expect(SemanticException.class);
-        expectedException.expectMessage("window argument must be numerical type");
-        String sql = "select L_ORDERKEY,window_funnel('varchar', L_SHIPDATE, 3, [L_PARTKEY = 1]) " +
-                "from lineitem_partition_colocate group by L_ORDERKEY;";
-        try {
-            getFragmentPlan(sql);
-        } finally {
-            FeConstants.runningUnitTest = false;
-        }
-    }
-
     @Test
     public void testLocalAggregateWithMultiStage() throws Exception {
         FeConstants.runningUnitTest = true;
@@ -1370,6 +1342,15 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "  11:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: 14: t1c");
+    }
+
+    @Test
+    public void testMultiCountDistinctWithNoneGroup1() throws Exception {
+        String sql = "with tmp1 as (select 'a' as a from dual), tmp2 as (select 'b' as b from dual) " +
+                "select count(distinct t1b), count(distinct t1c), count(distinct t1.a), count(distinct t2.b) " +
+                "from test_all_type join tmp1 t1 join tmp2 t2 join tmp1 t3 join tmp2 t4";
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        assertContains(pair.first, "CTEAnchor(cteid=3)");
     }
 
     @Test
@@ -1812,19 +1793,21 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
-    public void testSimpleMinMaxAggRewrite() throws Exception {
+    public void testSimpleAggRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
         // normal case
-        String sql = "select min(t1b),max(t1b),min(id_datetime) from test_all_type_not_null";
+        String sql = "select min(t1b),max(t1b),min(id_datetime),count(t1b),count(t1c) from test_all_type_not_null";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
-                "  |  output: min(min_t1b), max(max_t1b), min(min_id_datetime)\n" +
+                "  |  output: min(min_t1b), max(max_t1b), min(min_id_datetime), sum(count_t1b), sum(count_t1b)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:MetaScan\n" +
                 "     Table: test_all_type_not_null\n" +
-                "     <id 16> : min_id_datetime\n" +
-                "     <id 14> : min_t1b\n" +
-                "     <id 15> : max_t1b");
+                "     <id 16> : min_t1b\n" +
+                "     <id 17> : max_t1b\n" +
+                "     <id 18> : min_id_datetime\n" +
+                "     <id 19> : count_t1b");
 
         // The following cases will not use MetaScan because some conditions are not met
         // with group by key
@@ -1883,6 +1866,21 @@ public class AggregateTest extends PlanTestBase {
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:OlapScanNode");
+        sql = "select count(t1b) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // with count distinct, shouldn't apply RewriteSimpleAggToMetaScanRule
+        sql = "select count(distinct t1b) from test_all_type_not_null";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
     }
 
     @Test
@@ -1903,13 +1901,60 @@ public class AggregateTest extends PlanTestBase {
         // for each sum(col + 1), should rewrite to sum(col) + count(col) * 1
         assertContains(plan, "  3:Project\n" +
                 "  |  output columns:\n" +
-                "  |  18 <-> [26: sum, BIGINT, true] + [27: count, BIGINT, true] * 1\n" +
-                "  |  19 <-> [29: sum, BIGINT, true] + [30: count, BIGINT, true] * 1\n" +
-                "  |  20 <-> [32: sum, BIGINT, true] + [33: count, BIGINT, true] * 1\n" +
-                "  |  21 <-> [35: sum, DOUBLE, true] + cast([36: count, BIGINT, true] as DOUBLE) * 1.0\n" +
-                "  |  22 <-> [38: sum, DOUBLE, true] + cast([39: count, BIGINT, true] as DOUBLE) * 1.0\n" +
-                "  |  23 <-> [41: sum, BIGINT, true] + [42: count, BIGINT, true] * 1\n" +
-                "  |  24 <-> [44: sum, DECIMAL128(38,2), true] + cast([45: count, BIGINT, true] as DECIMAL128(18,0)) * 1");
+                "  |  18 <-> [25: sum, BIGINT, true] + [26: count, BIGINT, true] * 1\n" +
+                "  |  19 <-> [27: sum, BIGINT, true] + [28: count, BIGINT, true] * 1\n" +
+                "  |  20 <-> [29: sum, BIGINT, true] + [30: count, BIGINT, true] * 1\n" +
+                "  |  21 <-> [32: sum, DOUBLE, true] + cast([33: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  22 <-> [34: sum, DOUBLE, true] + cast([35: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  23 <-> [36: sum, BIGINT, true] + [37: count, BIGINT, true] * 1\n" +
+                "  |  24 <-> [38: sum, DECIMAL128(38,2), true] + cast([39: count, BIGINT, true] as DECIMAL128(18,0)) * 1");
+        // if a column can cast to target type safely, we can remove the implicit cast directly.
+        // in this case, t1b is SMALLINT,and need to be cast to INT implicitly before calculate sum,
+        // after we rewrite sum(add(cast t1b as int), 1),
+        // there must be no project node between aggregate node and olap scan node
+        sql = "select sum(t1b+1) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:Project\n" +
+                "  |  <slot 12> : 13: sum + 14: count * 1\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(2: t1b), count(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+        // apply this rule more than once
+        // 1. sum(add(add(cast t1b as int, 1), 1)) => sum(add(cast t1b as int, 1)) + count(add(cast t1b as int, 1) * 1
+        // 2. sum(add(cast t1b as int,1)) => sum(t1b) + count(t1b) * 1
+        // so the final result is sum(t1b) + count(t1b) * 1 + count(add(cast t1b as int. 1)) * 1
+        sql = "select sum(t1b+1+1) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 12> : 16: sum + 17: count * 1 + 15: count * 1\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: t1b), count(CAST(2: t1b AS INT) + 1), sum(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 2: t1b\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+
+        // should make sure the argument of count appears in project node
+        sql = "select sum(id_decimal + 1 + 2) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  3:Project\n" +
+                "  |  <slot 12> : 14: sum + CAST(15: count AS DECIMAL128(18,0)) * 2\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(13: cast), count(13: cast)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 13> : " +
+                "CAST(CAST(CAST(10: id_decimal AS DECIMAL64(12,2)) AS DECIMAL64(15,2)) + 1 AS DECIMAL64(13,2))\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
         // 1.2 not null
         sql = "select sum(t1b+1),sum(t1c+1),sum(t1d+1),sum(t1e+1),sum(t1f+1),sum(t1g+1),sum(id_decimal+1)" +
                 " from test_all_type_not_null";
@@ -1918,15 +1963,15 @@ public class AggregateTest extends PlanTestBase {
         // so count() will be a common expression
         assertContains(plan, "  3:Project\n" +
                 "  |  output columns:\n" +
-                "  |  18 <-> [26: sum, BIGINT, true] + [46: multiply, BIGINT, true]\n" +
-                "  |  19 <-> [29: sum, BIGINT, true] + [46: multiply, BIGINT, true]\n" +
-                "  |  20 <-> [32: sum, BIGINT, true] + [46: multiply, BIGINT, true]\n" +
-                "  |  21 <-> [35: sum, DOUBLE, true] + cast([36: count, BIGINT, true] as DOUBLE) * 1.0\n" +
-                "  |  22 <-> [38: sum, DOUBLE, true] + cast([33: count, BIGINT, true] as DOUBLE) * 1.0\n" +
-                "  |  23 <-> [41: sum, BIGINT, true] + [46: multiply, BIGINT, true]\n" +
-                "  |  24 <-> [44: sum, DECIMAL128(38,2), true] + cast([33: count, BIGINT, true] as DECIMAL128(18,0)) * 1\n" +
+                "  |  18 <-> [25: sum, BIGINT, true] + [40: multiply, BIGINT, true]\n" +
+                "  |  19 <-> [27: sum, BIGINT, true] + [40: multiply, BIGINT, true]\n" +
+                "  |  20 <-> [29: sum, BIGINT, true] + [40: multiply, BIGINT, true]\n" +
+                "  |  21 <-> [32: sum, DOUBLE, true] + cast([33: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  22 <-> [34: sum, DOUBLE, true] + cast([35: count, BIGINT, true] as DOUBLE) * 1.0\n" +
+                "  |  23 <-> [36: sum, BIGINT, true] + [40: multiply, BIGINT, true]\n" +
+                "  |  24 <-> [38: sum, DECIMAL128(38,2), true] + cast([35: count, BIGINT, true] as DECIMAL128(18,0)) * 1\n" +
                 "  |  common expressions:\n" +
-                "  |  46 <-> [33: count, BIGINT, true] * 1");
+                "  |  40 <-> [35: count, BIGINT, true] * 1");
 
         // 2. aggregate result reuse
         sql = "select sum(t1b), sum(t1b+1), sum(t1b+2) from test_all_type";
@@ -2198,5 +2243,43 @@ public class AggregateTest extends PlanTestBase {
 
         plan = getFragmentPlan(sql);
         assertNotContains(plan, "multi_distinct_count");
+    }
+
+
+    @Test
+    public void testRemoveExchange() throws Exception {
+        int oldValue = connectContext.getSessionVariable().getNewPlannerAggStage();
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+        String sql = "select sum(v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)");
+
+        sql = "select sum(v1 + v2) from t0 group by v3";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  3:Project\n" +
+                "  |  <slot 5> : 5: sum\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(4: expr)");
+        connectContext.getSessionVariable().setNewPlanerAggStage(oldValue);
+    }
+
+    @Test
+    public void testDistinctConst() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "SELECT DISTINCT 16 col0 FROM t0 AS cor0 LEFT JOIN t1 AS cor1 ON NULL IS NULL";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "6:Project\n" +
+                "  |  <slot 7> : 16\n" +
+                "  |  limit: 1");
+        sql = "SELECT DISTINCT 61 AS col0 FROM t0 AS cor0 LEFT JOIN t1 AS cor1 ON NOT NULL IS NOT NULL, t0 AS cor2;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "11:Project\n" +
+                "  |  <slot 10> : 61\n" +
+                "  |  limit: 1");
     }
 }

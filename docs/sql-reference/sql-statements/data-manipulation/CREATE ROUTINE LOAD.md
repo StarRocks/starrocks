@@ -100,8 +100,11 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 | max_error_number          | No           | The maximum number of error data rows allowed within an error detection window. If the number of error data rows exceeds this value, the load job will pause. You can execute [SHOW ROUTINE LOAD](./SHOW%20ROUTINE%20LOAD.md)  and view the error logs by using `ErrorLogUrls`.  After that, you can correct the error in Kafka according to the error logs. The default value is `0`, which means error rows are not allowed.<br>**NOTE** <br>Error data rows do not include data rows that are filtered out by the WHERE clause. |
 | strict_mode               | No           | Specifies whether to enable the [strict mode](../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`. When the strict mode is enabled, if the value for a column in the loaded data is `NULL` but the target table does not allow a `NULL` value for this column, the data row will be filtered out. |
 | timezone                  | No           | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime(), alignment_timestamp(), and from_unixtime(). The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../administration/timezone.md). |
-| merge_condition           | No           | Specifies the name of the column you want to use as the condition to determine whether to update data. Data will be updated only when the value of the data to be loaded into this column is greater than or equal to the current value of this column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md).<br>**NOTE**<br>Only tables that use the Primary Key model support conditional updates. The column that you specify cannot be a primary key column. |
+| merge_condition           | No           | Specifies the name of the column you want to use as the condition to determine whether to update data. Data will be updated only when the value of the data to be loaded into this column is greater than or equal to the current value of this column. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md).<br>**NOTE**<br>Only Primary Key tables support conditional updates. The column that you specify cannot be a primary key column. |
 | format                    | No           | The format of the data to be loaded. Valid values: `CSV` and `JSON`. Default value: `CSV`. |
+| trim_space                | No           | Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br>For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br>Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (<code class="language-text">&#124;</code>) as the column separator and double quotation marks (`"`) as the `enclose`-specified character: <code class="language-text">&#124; "Love StarRocks" &#124;</code>. If you set `trim_space` to `true`, StarRocks processes the preceding field values as <code class="language-text">&#124;"Love StarRocks"&#124;</code>. |
+| enclose                   | No           | Specifies the character that is used to wrap the field values in the data file according to [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).<br>All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.<br>If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file. |
+| escape                    | No           | Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br>**NOTE**<br>The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br>Two examples are as follows:<br><ul><li>When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.</li><li>Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.</li></ul> |
 | strip_outer_array         | No           | Specifies whether to strip the outermost array structure of the JSON-formatted data. Valid values: `true` and `false`. Default value: `false`. In real-world business scenarios, JSON-formatted data may have an outermost array structure as indicated by a pair of square brackets `[]`. In this situation, we recommend that you set this parameter to `true`, so StarRocks removes the outermost square brackets `[]` and loads each inner array as a separate data record. If you set this parameter to `false`, StarRocks parses the entire JSON-formatted data into one array and loads the array as a single data record. Use the JSON-formatted data `[{"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]` as an example. If you set this parameter to `true`, `{"category" : 1, "author" : 2}` and `{"category" : 3, "author" : 4}` are parsed as two separate data records and are loaded into two StarRocks data rows. |
 | jsonpaths                 | No           | The names of the fields that you want to load from JSON-formatted data. The value of this parameter is a valid JsonPath expression. For more information, see [Configure column mapping for loading JSON-formatted data](#configure-column-mapping-for-loading-json-formatted-data) in this topic. |
 | json_root                 | No           | The root element of the JSON-formatted data to load. StarRocks extracts the elements of the root node through `json_root` for parsing. By default, the value of this parameter is empty, indicating that all JSON-formatted data will be loaded. For more information, see [Specify the root element of the JSON-formatted data to be loaded](#specify-the-root-element-of-the-json-formatted-data-to-be-loaded) in this topic. |
@@ -414,7 +417,7 @@ PROPERTIES
 "property.security.protocol" = "ssl",
 -- The location of the CA certificate.
 "property.ssl.ca.location" = "FILE:ca-cert",
--- If authentication is enabled for Kafka clients, you need to configure the following properties：
+-- If authentication is enabled for Kafka clients, you need to configure the following properties:
 -- The location of the Kafka client's public key.
 "property.ssl.certificate.location" = "FILE:client.pem",
 -- The location of the Kafka client's private key.
@@ -429,7 +432,40 @@ FROM KAFKA
 );
 ```
 
-### Load  JSON-formatted data 
+#### Setting trim_space, enclose, and escape
+
+Suppose you want to load CSV-formatted data from a Kafka topic named `test_csv`. Every message in the dataset includes six columns: order ID, payment date, customer name, nationality, gender, and price.
+
+```Plaintext
+ "2020050802" , "2020-05-08" , "Johann Georg Faust" , "Deutschland" , "male" , "895"
+ "2020050802" , "2020-05-08" , "Julien Sorel" , "France" , "male" , "893"
+ "2020050803" , "2020-05-08" , "Dorian Grey\,Lord Henry" , "UK" , "male" , "1262"
+ "2020050901" , "2020-05-09" , "Anna Karenina" , "Russia" , "female" , "175"
+ "2020051001" , "2020-05-10" , "Tess Durbeyfield" , "US" , "female" , "986"
+ "2020051101" , "2020-05-11" , "Edogawa Conan" , "japan" , "male" , "8924"
+```
+
+If you want to load all data from the Kafka topic `test_csv` into `example_tbl1`, with the intention of removing the spaces preceding and following column separators and setting `enclose` to `"` and `escape` to `\`, run the following command:
+
+```SQL
+CREATE ROUTINE LOAD example_db.example_tbl1_test_csv ON example_tbl1
+COLUMNS TERMINATED BY ",",
+COLUMNS (order_id, pay_dt, customer_name, nationality, gender, price)
+PROPERTIES
+(
+    "trim_space"="true",
+    "enclose"="\"",
+    "escape"="\\",
+)
+FROM KAFKA
+(
+    "kafka_broker_list" ="<kafka_broker1_ip>:<kafka_broker1_port>,<kafka_broker2_ip>:<kafka_broker2_port>",
+    "kafka_topic"="test_csv",
+    "property.kafka_default_offsets"="OFFSET_BEGINNING"
+);
+```
+
+### Load  JSON-formatted data
 
 #### StarRocks table column names consistent with JSON key names
 

@@ -68,14 +68,6 @@ StarRocks supports creating asynchronous materialized views on one or more base 
 
 ### Before you begin
 
-#### Enable the asynchronous materialized view feature
-
-To use the asynchronous materialized view feature, you need to set the FE configuration item `enable_experimental_mv` to `true` using the following statement:
-
-```SQL
-ADMIN SET FRONTEND CONFIG ("enable_experimental_mv"="true");
-```
-
 #### Prepare base tables
 
 The following examples involve two base tables:
@@ -243,6 +235,63 @@ Currently, StarRocks supports rewriting queries on asynchronous materialized vie
   where empid < 5;
   ```
 
+### Rewrite queries in View Delta Join scenarios
+
+StarRocks now supports rewriting queries based on asynchronous materialized views with Delta Join, which means that the queried tables are a subset of the materialized view's base tables. For example, queries of the form `table_a INNER JOIN table_b` can be rewritten by materialized views of the form `table_a INNER JOIN table_b INNER JOIN/LEFT OUTER JOIN table_c`, where `table_b INNER JOIN/LEFT OUTER JOIN table_c` is the Delta Join. This feature allows transparent acceleration for such queries, thereby preserving the flexibility of the query and avoiding the huge cost of building wide tables.
+
+View Delta Join queries can be rewritten only when the following requirements are met:
+
+- The Delta Join must be Inner Join or Left Outer Join.
+- If the Delta Join is Inner Join, the keys to be joined must be the corresponding Foreign/Primary/Unique Key and NOT NULL.
+
+  For example, the materialized view is of the form `A INNER JOIN B ON (A.a1 = B.b1) INNER JOIN C ON (B.b2 = C.c1)`, and the query is of the form `A INNER JOIN B ON (A.a1 = B.b1)`. In this case, `B INNER JOIN C ON (B.b2 = C.c1)` is the Delta Join. `B.b2` must be the Foreign Key of B and must be NOT NULL, and `C.c1` must be the Primary Key or Unique Key of C.
+
+- If the Delta Join is Left Outer Join, the keys to be joined must be the corresponding Foreign/Primary/Unique Key.
+
+  For example, the materialized view is of the form `A INNER JOIN B ON (A.a1 = B.b1) LEFT OUTER JOIN C ON (B.b2 = C.c1)`, and the query is of the form `A INNER JOIN B ON (A.a1 = B.b1)`. In this case, `B LEFT OUTER JOIN C ON (B.b2 = C.c1)` is the Delta Join. `B.b2` must be the Foreign Key of B, and `C.c1` must be the Primary Key or Unique Key of C.
+
+To implement the above constraints, you must define the Foreign Key constraints of a table using the property `foreign_key_constraints` when creating the table. For more information, see [CREATE TABLE - PROPERTIES](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md#parameters).
+
+> **CAUTION**
+>
+> The Foreign Key constraints are only used for query rewrite. Foreign Key constraint checks are not guaranteed when data is loaded into the table. You must ensure the data loaded into the table meets the constraints.
+
+The following example defines multiple Foreign Keys when creating the table `lineorder`:
+
+```SQL
+CREATE TABLE `lineorder` (
+  `lo_orderkey` int(11) NOT NULL COMMENT "",
+  `lo_linenumber` int(11) NOT NULL COMMENT "",
+  `lo_custkey` int(11) NOT NULL COMMENT "",
+  `lo_partkey` int(11) NOT NULL COMMENT "",
+  `lo_suppkey` int(11) NOT NULL COMMENT "",
+  `lo_orderdate` int(11) NOT NULL COMMENT "",
+  `lo_orderpriority` varchar(16) NOT NULL COMMENT "",
+  `lo_shippriority` int(11) NOT NULL COMMENT "",
+  `lo_quantity` int(11) NOT NULL COMMENT "",
+  `lo_extendedprice` int(11) NOT NULL COMMENT "",
+  `lo_ordtotalprice` int(11) NOT NULL COMMENT "",
+  `lo_discount` int(11) NOT NULL COMMENT "",
+  `lo_revenue` int(11) NOT NULL COMMENT "",
+  `lo_supplycost` int(11) NOT NULL COMMENT "",
+  `lo_tax` int(11) NOT NULL COMMENT "",
+  `lo_commitdate` int(11) NOT NULL COMMENT "",
+  `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 192
+PROPERTIES (
+-- Define Foreign Keys in foreign_key_constraints
+"foreign_key_constraints" = "
+    (lo_custkey) REFERENCES customer(c_custkey);
+    (lo_partkey) REFERENCES ssb.part(p_partkey);
+    (lo_suppkey) REFERENCES supplier(s_suppkey);
+    (lo_orderdate) REFERENCES dates(d_datekey)
+"
+);
+```
+
 ### Configure query rewrite
 
 You can configure the asynchronous materialized view query rewrite through the following session variables:
@@ -310,24 +359,24 @@ You can alter the property of an asynchronous materialized view using [ALTER MAT
 
 ### Show asynchronous materialized views
 
-You can view the asynchronous materialized views in your database by using [SHOW MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md) or querying the system metadata table in Information Schema.
+You can view the asynchronous materialized views in your database by using [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md) or querying the system metadata table in Information Schema.
 
 - Check all asynchronous materialized views in your database.
 
   ```SQL
-  SHOW MATERIALIZED VIEW;
+  SHOW MATERIALIZED VIEWS;
   ```
 
 - Check a specific asynchronous materialized view.
 
   ```SQL
-  SHOW MATERIALIZED VIEW WHERE NAME = "order_mv";
+  SHOW MATERIALIZED VIEWS WHERE NAME = "order_mv";
   ```
 
 - Check specific asynchronous materialized views by matching the name.
 
   ```SQL
-  SHOW MATERIALIZED VIEW WHERE NAME LIKE "order%";
+  SHOW MATERIALIZED VIEWS WHERE NAME LIKE "order%";
   ```
 
 - Check all asynchronous materialized views by querying the metadata table in Information Schema.

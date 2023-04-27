@@ -92,6 +92,10 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
         Map<ColumnRefOperator, Column> newScanColumnRefs = Maps.newHashMap();
 
         Map<ColumnRefOperator, CallOperator> aggs = agg.getAggregations();
+        // this variable is introduced to solve compatibility issues,
+        // see more details in the description of https://github.com/StarRocks/starrocks/pull/17619
+        boolean hasCountAgg = aggs.values().stream().anyMatch(aggCall -> aggCall.getFnName().equals(FunctionSet.COUNT));
+
         ColumnRefOperator countPlaceHolderColumn = null;
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggs.entrySet()) {
             CallOperator aggCall = kv.getValue();
@@ -126,7 +130,14 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             }
 
             aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
-            newScanColumnRefs.put(metaColumn, metaScan.getColRefToColumnMetaMap().get(usedColumn));
+            Column c = metaScan.getColRefToColumnMetaMap().get(usedColumn);
+            if (hasCountAgg) {
+                Column copiedColumn = new Column(c);
+                copiedColumn.setIsAllowNull(true);
+                newScanColumnRefs.put(metaColumn, copiedColumn);
+            } else {
+                newScanColumnRefs.put(metaColumn, c);
+            }
 
             Function aggFunction = aggCall.getFunction();
             String newAggFnName = aggCall.getFnName();
@@ -145,7 +156,6 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
                 newAggFnName = FunctionSet.SUM;
                 newAggReturnType = Type.BIGINT;
             }
-
             CallOperator newAggCall = new CallOperator(newAggFnName, newAggReturnType,
                     Collections.singletonList(metaColumn), aggFunction);
             newAggCalls.put(kv.getKey(), newAggCall);

@@ -51,6 +51,7 @@ struct AutoIncrementPartialUpdateState {
     uint32_t id;
     uint32_t segment_id;
     std::vector<uint32_t> rowids;
+    std::unique_ptr<Column> delete_pks;
     bool skip_rewrite;
     AutoIncrementPartialUpdateState() : rowset(nullptr), schema(nullptr), id(0), segment_id(0), skip_rewrite(false) {}
 
@@ -65,6 +66,7 @@ struct AutoIncrementPartialUpdateState {
         src_rss_rowids.clear();
         rowids.clear();
         write_column.reset();
+        delete_pks.reset();
 
         rowset = nullptr;
         schema = nullptr;
@@ -84,7 +86,7 @@ public:
     Status load(Tablet* tablet, Rowset* rowset);
 
     Status apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
-                 EditVersion latest_applied_version, const PrimaryIndex& index);
+                 EditVersion latest_applied_version, const PrimaryIndex& index, std::unique_ptr<Column>& delete_pks);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
     const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }

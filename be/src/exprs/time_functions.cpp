@@ -20,6 +20,7 @@
 #include "column/column_viewer.h"
 #include "exprs/binary_function.h"
 #include "exprs/unary_function.h"
+#include "gen_cpp/InternalService_constants.h"
 #include "runtime/datetime_value.h"
 #include "runtime/runtime_state.h"
 #include "types/date_value.h"
@@ -958,13 +959,14 @@ DEFINE_TIME_BINARY_FN(seconds_diff, TYPE_DATETIME, TYPE_DATETIME, TYPE_BIGINT);
 /*
  * definition for to_unix operators(SQL TYPE: DATETIME)
  */
-StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime(FunctionContext* context, const Columns& columns) {
+template <LogicalType TIMESTAMP_TYPE>
+StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_datetime(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
     auto date_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_INT> result(size);
+    ColumnBuilder<TIMESTAMP_TYPE> result(size);
     for (int row = 0; row < size; ++row) {
         if (date_viewer.is_null(row)) {
             result.append_null();
@@ -982,7 +984,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime(FunctionContext* contex
             result.append_null();
         } else {
             timestamp = timestamp < 0 ? 0 : timestamp;
-            timestamp = timestamp > INT_MAX ? 0 : timestamp;
+            timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
             result.append(timestamp);
         }
     }
@@ -990,16 +992,25 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime(FunctionContext* contex
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_64(FunctionContext* context, const Columns& columns) {
+    return _t_to_unix_from_datetime<TYPE_BIGINT>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_32(FunctionContext* context, const Columns& columns) {
+    return _t_to_unix_from_datetime<TYPE_INT>(context, columns);
+}
+
 /*
  * definition for to_unix operators(SQL TYPE: DATE)
  */
-StatusOr<ColumnPtr> TimeFunctions::to_unix_from_date(FunctionContext* context, const Columns& columns) {
+template <LogicalType TIMESTAMP_TYPE>
+StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_date(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
     auto date_viewer = ColumnViewer<TYPE_DATE>(columns[0]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_INT> result(size);
+    ColumnBuilder<TIMESTAMP_TYPE> result(size);
     for (int row = 0; row < size; ++row) {
         if (date_viewer.is_null(row)) {
             result.append_null();
@@ -1017,7 +1028,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_date(FunctionContext* context, c
             result.append_null();
         } else {
             timestamp = timestamp < 0 ? 0 : timestamp;
-            timestamp = timestamp > INT_MAX ? 0 : timestamp;
+            timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
             result.append(timestamp);
         }
     }
@@ -1025,7 +1036,16 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_date(FunctionContext* context, c
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::to_unix_from_date_64(FunctionContext* context, const Columns& columns) {
+    return _t_to_unix_from_date<TYPE_BIGINT>(context, columns);
+}
+StatusOr<ColumnPtr> TimeFunctions::to_unix_from_date_32(FunctionContext* context, const Columns& columns) {
+    return _t_to_unix_from_date<TYPE_INT>(context, columns);
+}
+
+template <LogicalType TIMESTAMP_TYPE>
+StatusOr<ColumnPtr> TimeFunctions::_t_to_unix_from_datetime_with_format(FunctionContext* context,
+                                                                        const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
@@ -1033,7 +1053,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format(FunctionCon
     auto formatViewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
 
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_INT> result(size);
+    ColumnBuilder<TIMESTAMP_TYPE> result(size);
     for (int row = 0; row < size; ++row) {
         if (date_viewer.is_null(row) || formatViewer.is_null(row)) {
             result.append_null();
@@ -1058,19 +1078,39 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format(FunctionCon
         }
 
         timestamp = timestamp < 0 ? 0 : timestamp;
-        timestamp = timestamp > INT_MAX ? 0 : timestamp;
+        timestamp = timestamp > MAX_UNIX_TIMESTAMP ? 0 : timestamp;
         result.append(timestamp);
     }
 
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format_64(FunctionContext* context,
+                                                                        const Columns& columns) {
+    return _t_to_unix_from_datetime_with_format<TYPE_BIGINT>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::to_unix_from_datetime_with_format_32(FunctionContext* context,
+                                                                        const Columns& columns) {
+    return _t_to_unix_from_datetime_with_format<TYPE_INT>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_64(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 0);
-    auto result = Int32Column::create();
-    result->append(context->state()->timestamp_ms() / 1000);
+    int64_t value = context->state()->timestamp_ms() / 1000;
+    auto result = Int64Column::create();
+    result->append(value);
     return ConstColumn::create(result, 1);
 }
+
+StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_32(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 0);
+    int64_t value = context->state()->timestamp_ms() / 1000;
+    auto result = Int32Column::create();
+    result->append(value);
+    return ConstColumn::create(result, 1);
+}
+
 /*
  * end definition for to_unix operators
  */
@@ -1078,13 +1118,13 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now(FunctionContext* context, con
 /*
  * definition for from_unix operators
  */
-template <LogicalType Type>
+template <LogicalType TIMESTAMP_TYPE>
 StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 1);
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnViewer<Type> data_column(columns[0]);
+    ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
@@ -1095,8 +1135,7 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
         }
 
         auto date = data_column.value(row);
-        // if date > INT_MAX(INT64_MAX), then date < 0
-        if (date < 0) {
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
             result.append_null();
             continue;
         }
@@ -1114,11 +1153,12 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime(FunctionContext* context, const Columns& columns) {
-    return _t_from_unix_to_datetime<TYPE_INT>(context, columns);
-}
 StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_64(FunctionContext* context, const Columns& columns) {
     return _t_from_unix_to_datetime<TYPE_BIGINT>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_32(FunctionContext* context, const Columns& columns) {
+    return _t_from_unix_to_datetime<TYPE_INT>(context, columns);
 }
 
 std::string TimeFunctions::convert_format(const Slice& format) {
@@ -1180,12 +1220,13 @@ Status TimeFunctions::from_unix_close(FunctionContext* context, FunctionContext:
     return Status::OK();
 }
 
-StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_general(FunctionContext* context, const Columns& columns) {
+template <LogicalType TIMESTAMP_TYPE>
+StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_general(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnViewer<TYPE_INT> data_column(columns[0]);
+    ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
     ColumnViewer<TYPE_VARCHAR> format_column(columns[1]);
 
     auto size = columns[0]->size();
@@ -1198,7 +1239,7 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_general(FunctionContext
 
         auto date = data_column.value(row);
         auto format = format_column.value(row);
-        if (date < 0 || date > INT_MAX || format.empty()) {
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP || format.empty()) {
             result.append_null();
             continue;
         }
@@ -1227,13 +1268,14 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_general(FunctionContext
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_const(std::string& format_content, FunctionContext* context,
-                                                               const Columns& columns) {
+template <LogicalType TIMESTAMP_TYPE>
+StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format_const(std::string& format_content, FunctionContext* context,
+                                                                  const Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
 
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnViewer<TYPE_INT> data_column(columns[0]);
+    ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
 
     auto size = columns[0]->size();
     ColumnBuilder<TYPE_VARCHAR> result(size);
@@ -1244,7 +1286,7 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_const(std::string& form
         }
 
         auto date = data_column.value(row);
-        if (date < 0 || date > INT_MAX) {
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
             result.append_null();
             continue;
         }
@@ -1266,17 +1308,25 @@ StatusOr<ColumnPtr> TimeFunctions::from_unix_with_format_const(std::string& form
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format(FunctionContext* context,
-                                                                     const starrocks::Columns& columns) {
+template <LogicalType TIMESTAMP_TYPE>
+StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_with_format(FunctionContext* context,
+                                                            const starrocks::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
     auto* state = reinterpret_cast<FromUnixState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-
     if (state->const_format) {
         std::string format_content = state->format_content;
-        return from_unix_with_format_const(format_content, context, columns);
+        return _t_from_unix_with_format_const<TIMESTAMP_TYPE>(format_content, context, columns);
     }
+    return _t_from_unix_with_format_general<TIMESTAMP_TYPE>(context, columns);
+}
 
-    return from_unix_with_format_general(context, columns);
+StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format_64(FunctionContext* context,
+                                                                        const starrocks::Columns& columns) {
+    return _t_from_unix_with_format<TYPE_BIGINT>(context, columns);
+}
+StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_with_format_32(FunctionContext* context,
+                                                                        const starrocks::Columns& columns) {
+    return _t_from_unix_with_format<TYPE_INT>(context, columns);
 }
 
 /*
@@ -2055,5 +2105,212 @@ std::string TimeFunctions::info_reported_by_time_slice = "time used with time_sl
 #undef DEFINE_TIME_BINARY_FN_WITH_IMPL
 #undef DEFINE_TIME_STRING_UNARY_FN
 #undef DEFINE_TIME_UNARY_FN_EXTEND
+
+static int weekday_from_dow_abbreviation(const std::string& dow) {
+    const int err_tag = -1, base = 1000;
+    if (dow.length() < 2) {
+        return err_tag;
+    }
+    switch (dow[0] + dow[1] * base) {
+    case 'S' + 'u' * base:
+        return (dow == "Su" || dow == "Sun" || dow == "Sunday") ? 0 : err_tag;
+    case 'M' + 'o' * base:
+        return (dow == "Mo" || dow == "Mon" || dow == "Monday") ? 1 : err_tag;
+    case 'T' + 'u' * base:
+        return (dow == "Tu" || dow == "Tue" || dow == "Tuesday") ? 2 : err_tag;
+    case 'W' + 'e' * base:
+        return (dow == "We" || dow == "Wed" || dow == "Wednesday") ? 3 : err_tag;
+    case 'T' + 'h' * base:
+        return (dow == "Th" || dow == "Thu" || dow == "Thursday") ? 4 : err_tag;
+    case 'F' + 'r' * base:
+        return (dow == "Fr" || dow == "Fri" || dow == "Friday") ? 5 : err_tag;
+    case 'S' + 'a' * base:
+        return (dow == "Sa" || dow == "Sat" || dow == "Saturday") ? 6 : err_tag;
+    default:
+        return err_tag;
+    }
+}
+
+// next_day
+StatusOr<ColumnPtr> TimeFunctions::next_day(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (wdc == nullptr) {
+        return next_day_common(context, columns);
+    }
+    return next_day_wdc(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::next_day_wdc(FunctionContext* context, const Columns& columns) {
+    auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (wdc->dow_weekday == -2) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
+    }
+    auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_DATE> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (time_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        TimestampValue time = time_viewer.value(row);
+        int datetime_weekday = ((DateValue)time).weekday();
+        auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, (6 + wdc->dow_weekday - datetime_weekday) % 7 + 1);
+        result.append(date);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::next_day_common(FunctionContext* context, const Columns& columns) {
+    auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
+    auto dow_str = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_DATE> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (time_viewer.is_null(row) || dow_str.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        TimestampValue time = time_viewer.value(row);
+        auto dow = dow_str.value(row).to_string();
+        int dow_weekday = weekday_from_dow_abbreviation(dow);
+        if (dow_weekday == -1) {
+            return Status::InvalidArgument(dow + " not supported in next_day dow_string");
+        }
+        int datetime_weekday = ((DateValue)time).weekday();
+        auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, (6 + dow_weekday - datetime_weekday) % 7 + 1);
+        result.append(date);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+Status TimeFunctions::next_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_constant_column(1)) {
+        return Status::OK();
+    }
+
+    ColumnPtr column = context->get_constant_column(1);
+    if (column->only_null()) {
+        auto* wdc = new WeekDayCtx();
+        wdc->dow_weekday = -2;
+        context->set_function_state(scope, wdc);
+        return Status::OK();
+    }
+
+    Slice slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+    auto dow = slice.to_string();
+    int dow_weekday = weekday_from_dow_abbreviation(dow);
+    if (dow_weekday == -1) {
+        return Status::InvalidArgument(dow + " not supported in next_day dow_string");
+    }
+    auto* wdc = new WeekDayCtx();
+    wdc->dow_weekday = dow_weekday;
+    context->set_function_state(scope, wdc);
+    return Status::OK();
+}
+
+Status TimeFunctions::next_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        if (wdc != nullptr) {
+            delete wdc;
+        }
+    }
+
+    return Status::OK();
+}
+
+// previous_day
+StatusOr<ColumnPtr> TimeFunctions::previous_day(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (wdc == nullptr) {
+        return previous_day_common(context, columns);
+    }
+    return previous_day_wdc(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::previous_day_wdc(FunctionContext* context, const Columns& columns) {
+    auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (wdc->dow_weekday == -2) {
+        return ColumnHelper::create_const_null_column(columns[0]->size());
+    }
+    auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_DATE> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (time_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        TimestampValue time = time_viewer.value(row);
+        int datetime_weekday = ((DateValue)time).weekday();
+        auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, -((6 + datetime_weekday - wdc->dow_weekday) % 7 + 1));
+        result.append(date);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+StatusOr<ColumnPtr> TimeFunctions::previous_day_common(FunctionContext* context, const Columns& columns) {
+    auto time_viewer = ColumnViewer<TYPE_DATETIME>(columns[0]);
+    auto dow_str = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_DATE> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (time_viewer.is_null(row) || dow_str.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+        TimestampValue time = time_viewer.value(row);
+        auto dow = dow_str.value(row).to_string();
+        int dow_weekday = weekday_from_dow_abbreviation(dow);
+        if (dow_weekday == -1) {
+            return Status::InvalidArgument(dow + " not supported in previous_day dow_string");
+        }
+        int datetime_weekday = ((DateValue)time).weekday();
+        auto date = (DateValue)timestamp_add<TimeUnit::DAY>(time, -((6 + datetime_weekday - dow_weekday) % 7 + 1));
+        result.append(date);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+Status TimeFunctions::previous_day_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL || !context->is_constant_column(1)) {
+        return Status::OK();
+    }
+
+    ColumnPtr column = context->get_constant_column(1);
+    if (column->only_null()) {
+        auto* wdc = new WeekDayCtx();
+        wdc->dow_weekday = -2;
+        context->set_function_state(scope, wdc);
+        return Status::OK();
+    }
+
+    Slice slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column);
+    auto dow = slice.to_string();
+    int dow_weekday = weekday_from_dow_abbreviation(dow);
+    if (dow_weekday == -1) {
+        return Status::InvalidArgument(dow + " not supported in previous_day dow_string");
+    }
+    auto* wdc = new WeekDayCtx();
+    wdc->dow_weekday = dow_weekday;
+    context->set_function_state(scope, wdc);
+    return Status::OK();
+}
+
+Status TimeFunctions::previous_day_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* wdc = reinterpret_cast<WeekDayCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        if (wdc != nullptr) {
+            delete wdc;
+        }
+    }
+
+    return Status::OK();
+}
 
 } // namespace starrocks

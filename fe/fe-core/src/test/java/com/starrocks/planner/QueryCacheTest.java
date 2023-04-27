@@ -75,8 +75,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`c1`, `c2`, `c3`, `c4`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
 
         String createTbl1StmtStr = "" +
@@ -100,8 +99,7 @@ public class QueryCacheTest {
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"colocate_with\" = \"cg0\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"colocate_with\" = \"cg0\"\n" +
                 ");";
 
         String createTbl2StmtStr = "" +
@@ -117,8 +115,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`c1`, `c2`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
 
         String createTbl3StmtStr = "" +
@@ -137,8 +134,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`c1`, `c2`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
 
         String createTbl4StmtStr = "" +
@@ -155,8 +151,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
 
         String createTbl5StmtStr = "" +
@@ -173,8 +168,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
         String createTbl6StmtStr = "" +
                 "CREATE TABLE if not exists t6(\n" +
@@ -190,8 +184,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
         String createTbl7StmtStr = "" +
                 "CREATE TABLE if not exists t7(\n" +
@@ -207,8 +200,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`c1`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
 
         String createTbl8StmtStr = "" +
@@ -226,7 +218,6 @@ public class QueryCacheTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
@@ -377,7 +368,6 @@ public class QueryCacheTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"enable_persistent_index\" = \"false\"\n" +
                 ");";
 
@@ -393,8 +383,7 @@ public class QueryCacheTest {
                 "DISTRIBUTED BY HASH(`REGION_CODE`, `REGION_NAME`) BUCKETS 10\n" +
                 "PROPERTIES(\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"default\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");";
 
         ctx = UtFrameUtils.createDefaultCtx();
@@ -532,8 +521,9 @@ public class QueryCacheTest {
     @Test
     public void testNoGroupBy() throws Exception {
         ctx.getSessionVariable().setNewPlanerAggStage(2);
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
         List<String> aggrFunctions =
-                Lists.newArrayList("count(v1)", "sum(v1)", "avg(v1)", "count(distinct v1)",
+                Lists.newArrayList("sum(v1)", "avg(v1)", "count(distinct v1)",
                         "variance(v1)", "stddev(v1)", "ndv(v1)", "hll_raw_agg(hll_hash(v1))",
                         "bitmap_union(bitmap_hash(v1))", "hll_union_agg(hll_hash(v1))",
                         "bitmap_union_count(bitmap_hash(v1))");
@@ -542,13 +532,14 @@ public class QueryCacheTest {
         for (String agg : aggrFunctions) {
             testNoGroupBy(agg, whereClauses);
         }
-        // min/max without filters will use meta scan, so we should test them separately
-        aggrFunctions = Lists.newArrayList("max(v1)", "min(v1)");
+        // count/min/max without filters will use meta scan, so we should test them separately
+        aggrFunctions = Lists.newArrayList("count(v1)", "max(v1)", "min(v1)");
         whereClauses = Lists.newArrayList("where dt between '2022-01-02' and '2022-01-03'",
                 "where dt between '2022-01-01' and '2022-01-31'", "where dt between '2022-01-04' and '2022-01-06'");
         for (String agg : aggrFunctions) {
             testNoGroupBy(agg, whereClauses);
         }
+        ctx.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(false);
     }
 
     @Test

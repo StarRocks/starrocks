@@ -40,14 +40,6 @@
 #include "runtime/stream_load/stream_load_context.h"
 #include "util/defer_op.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-#include "libserdes/serdes-avro.h"
-#ifdef __cplusplus
-}
-#endif
-
 namespace starrocks {
 
 Status KafkaDataConsumerGroup::assign_topic_partitions(StreamLoadContext* ctx) {
@@ -112,25 +104,6 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
             VLOG(1) << "submit a data consumer: " << consumer->id() << ", group id: " << _grp_id;
         }
     }
-
-    char errstr[512];
-
-    serdes_conf_t* sconf = nullptr;
-    serdes_t* serdes = nullptr;
-    if (ctx->format == TFileFormatType::FORMAT_AVRO) {
-        sconf = serdes_conf_new(NULL, 0, "schema.registry.url", ctx->kafka_info->confluent_schema_registry_url.c_str(),
-                                NULL);
-        serdes = serdes_new(sconf, errstr, sizeof(errstr));
-        if (!serdes) {
-            LOG(ERROR) << "failed to create serdes handle: " << errstr;
-            return Status::InternalError("failed to create serdes handle");
-        }
-    }
-    DeferOp serdesDeleter([&] {
-        if (serdes != nullptr) {
-            free(serdes);
-        }
-    });
 
     // consuming from queue and put data to stream load pipe
     int64_t left_time = ctx->max_interval_s * 1000;
@@ -221,6 +194,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
         if (res) {
             VLOG(3) << "get kafka message"
                     << ", partition: " << msg->partition() << ", offset: " << msg->offset() << ", len: " << msg->len();
+            DeferOp msgDeleter([&] { delete msg; });
 
             if (msg->err() == RdKafka::ERR__PARTITION_EOF) {
                 // For transaction producer, producer will append one control msg to the group of msgs,
@@ -238,32 +212,8 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 }
             } else {
                 Status st = Status::OK();
-                if (ctx->format == TFileFormatType::FORMAT_AVRO) {
-                    // We must ensure the msg len > 0.
-                    if (msg->len() > 0) {
-                        avro_value_t avro;
-                        DeferOp op([&] { avro_value_decref(&avro); });
-                        serdes_schema_t* schema;
-                        serdes_err_t err = serdes_deserialize_avro(serdes, &avro, &schema, msg->payload(), msg->len(),
-                                                                   errstr, sizeof(errstr));
-                        if (err) {
-                            auto err_msg = strings::Substitute("serdes deserialize avro failed: $0", errstr);
-                            LOG(ERROR) << err_msg;
-                            return Status::InternalError(err_msg);
-                        }
-                        char* as_json;
-                        if (avro_value_to_json(&avro, 1, &as_json)) {
-                            auto err_msg = strings::Substitute("avro to json failed: $0", avro_strerror());
-                            LOG(ERROR) << err_msg;
-                            return Status::InternalError(err_msg);
-                        }
-                        st = (kafka_pipe.get()->*append_data)(as_json, strlen(as_json), row_delimiter);
-                        free(as_json);
-                    }
-                } else {
-                    st = (kafka_pipe.get()->*append_data)(static_cast<const char*>(msg->payload()),
-                                                          static_cast<size_t>(msg->len()), row_delimiter);
-                }
+                st = (kafka_pipe.get()->*append_data)(static_cast<const char*>(msg->payload()),
+                                                      static_cast<size_t>(msg->len()), row_delimiter);
                 if (st.ok()) {
                     received_rows++;
                     left_bytes -= msg->len();
@@ -282,7 +232,6 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     }
                 }
             }
-            delete msg;
         } else {
             // queue is empty and shutdown
             eos = true;

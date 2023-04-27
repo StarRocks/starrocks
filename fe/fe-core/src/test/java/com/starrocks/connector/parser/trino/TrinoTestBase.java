@@ -18,9 +18,13 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -62,8 +66,7 @@ public class TrinoTestBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `t1` (\n" +
@@ -75,8 +78,7 @@ public class TrinoTestBase {
                 "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `t2` (\n" +
@@ -88,8 +90,7 @@ public class TrinoTestBase {
                 "DISTRIBUTED BY HASH(`v7`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `tall` (\n" +
@@ -109,8 +110,7 @@ public class TrinoTestBase {
                 "DISTRIBUTED BY HASH(`ta`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE region ( R_REGIONKEY  INTEGER NOT NULL,\n" +
@@ -123,8 +123,7 @@ public class TrinoTestBase {
                 "DISTRIBUTED BY HASH(`r_regionkey`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE supplier ( S_SUPPKEY     INTEGER NOT NULL,\n" +
@@ -141,8 +140,7 @@ public class TrinoTestBase {
                 "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE partsupp ( PS_PARTKEY     INTEGER NOT NULL,\n" +
@@ -157,8 +155,7 @@ public class TrinoTestBase {
                 "DISTRIBUTED BY HASH(`ps_partkey`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE orders  ( O_ORDERKEY       INTEGER NOT NULL,\n" +
@@ -177,8 +174,7 @@ public class TrinoTestBase {
                 "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE customer ( C_CUSTKEY     INTEGER NOT NULL,\n" +
@@ -196,8 +192,7 @@ public class TrinoTestBase {
                 "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `nation` (\n" +
@@ -212,8 +207,7 @@ public class TrinoTestBase {
                 "DISTRIBUTED BY HASH(`N_NATIONKEY`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE part  ( P_PARTKEY     INTEGER NOT NULL,\n" +
@@ -232,8 +226,7 @@ public class TrinoTestBase {
                 "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE lineitem ( L_ORDERKEY    INTEGER NOT NULL,\n" +
@@ -259,8 +252,7 @@ public class TrinoTestBase {
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 20\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("create table test_array(c0 INT, " +
@@ -278,13 +270,46 @@ public class TrinoTestBase {
 
         starRocksAssert.withTable("create table test_map(c0 int, " +
                 "c1 map<int,int>, " +
-                "c2 array<map<int,int>>) " +
+                "c2 array<map<int,int>>, " +
+                "c3 map<varchar(65533), date>) " +
                 "engine=olap distributed by hash(c0) buckets 10 " +
                 "properties('replication_num'='1');");
 
         FeConstants.runningUnitTest = false;
 
         connectContext.getSessionVariable().setSqlDialect("trino");
+    }
+
+    public static StatementBase analyzeSuccess(String originStmt) {
+        try {
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
+                    connectContext.getSessionVariable()).get(0);
+            Analyzer.analyze(statementBase, connectContext);
+            return statementBase;
+        } catch (Exception ex) {
+            ex.printStackTrace();
+            Assert.fail();
+            throw ex;
+        }
+    }
+
+    public static void analyzeFail(String originStmt) {
+        analyzeFail(originStmt, "");
+    }
+
+    public static void analyzeFail(String originStmt, String exceptMessage) {
+        try {
+            StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse(originStmt,
+                    connectContext.getSessionVariable()).get(0);
+            Analyzer.analyze(statementBase, connectContext);
+            Assert.fail("Miss semantic error exception");
+        } catch (ParsingException | SemanticException | UnsupportedException e) {
+            if (!exceptMessage.equals("")) {
+                Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
+            }
+        } catch (Exception e) {
+            Assert.fail("analyze exception");
+        }
     }
 
     public String getFragmentPlan(String sql) throws Exception {

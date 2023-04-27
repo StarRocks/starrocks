@@ -36,7 +36,6 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
@@ -45,6 +44,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.thrift.TStorageType;
 import mockit.Expectations;

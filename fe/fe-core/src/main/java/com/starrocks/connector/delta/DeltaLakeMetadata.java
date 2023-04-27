@@ -62,9 +62,13 @@ public class DeltaLakeMetadata implements ConnectorMetadata {
     public Table getTable(String dbName, String tblName) {
         try {
             Table table = hmsOps.getTable(dbName, tblName);
+            if (table == null) {
+                return null;
+            }
             HiveTable hiveTable = (HiveTable) table;
             String path = hiveTable.getTableLocation();
-            return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tblName, path, configuration);
+            long createTime = table.getCreateTime();
+            return DeltaUtils.convertDeltaToSRTable(catalogName, dbName, tblName, path, configuration, createTime);
         } catch (Exception e) {
             LOG.warn(e.getMessage());
             return null;

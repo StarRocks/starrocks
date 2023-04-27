@@ -1,6 +1,6 @@
 # Load data from HDFS or cloud storage
 
-StarRocks provides the loading method MySQL-based Broker Load to help you load dozens to hundreds of gigabytes of data from HDFS or cloud storage into StarRocks.
+StarRocks provides the loading method MySQL-based Broker Load to help you load a large amount of data from HDFS or cloud storage into StarRocks.
 
 Broker Load runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You need to use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) statement or the `curl` command to check the result of the job.
 
@@ -46,9 +46,13 @@ Broker Load supports the following storage systems:
 
 - HDFS
 
-- Amazon S3
+- AWS S3
 
 - Google GCS
+
+- Other S3-compatible storage system such as MinIO
+
+- Microsoft Azure Storage
 
 ## How it works
 
@@ -70,7 +74,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 1. In your StarRocks database `test_db`, create StarRocks tables.
 
-   a. Create a table named `table1` that uses the Primary Key model. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+   a. Create a table named `table1` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table1`
@@ -84,7 +88,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    DISTRIBUTED BY HASH(`id`) BUCKETS 10;
    ```
 
-   b. Create a table named `table2` that uses the Primary Key model. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
+   b. Create a table named `table2` that uses the Primary Key table. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table2`
@@ -114,7 +118,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
    200,'Beijing'
    ```
 
-3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your Amazon S3 bucket `bucket_s3`, and to the `input` folder of your Google GCS bucket `bucket_gcs`.
+3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `input` folder of your AWS S3 bucket `bucket_s3`, and to the `input` folder of your Google GCS bucket `bucket_gcs`.
 
 #### Load data from HDFS
 
@@ -135,8 +139,7 @@ LOAD LABEL test_db.label1
 )
 WITH BROKER
 (
-    "username" = "hdfs_username",
-    "password" = "hdfs_password"
+    StorageCredentialParams
 )
 PROPERTIES
 (
@@ -144,9 +147,9 @@ PROPERTIES
 );
 ```
 
-#### Load data from Amazon S3
+#### Load data from AWS S3
 
-Execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your Amazon S3 bucket `bucket_s3` into `table1` and `table2`, respectively:
+Execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your AWS S3 bucket `bucket_s3` into `table1` and `table2`, respectively:
 
 ```SQL
 LOAD LABEL test_db.label2
@@ -163,16 +166,13 @@ LOAD LABEL test_db.label2
 )
 WITH BROKER
 (
-    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
-    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
+    StorageCredentialParams
 );
 ```
 
 > **NOTE**
 >
-> - Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
-> - If the IAM role associated with your Amazon EC2 instance is granted permission to access your Amazon S3 bucket, you can leave `aws.s3.access_key` and `aws.s3.secret_key` unspecified.
+> Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as the file path with `s3a://`.
 
 #### Load data from Google GCS
 
@@ -181,31 +181,87 @@ Execute the following statement to load `file1.csv` and `file2.csv` from the `in
 ```SQL
 LOAD LABEL test_db.label3
 (
-    DATA INFILE("s3a://bucket_gcs/input/file1.csv")
+    DATA INFILE("gs://bucket_gcs/input/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
     (id, name, score)
     ,
-    DATA INFILE("s3a://bucket_gcs/input/file2.csv")
+    DATA INFILE("gs://bucket_gcs/input/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
     (id, city)
 )
 WITH BROKER
 (
-    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
-    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.s3a.endpoint" = "storage.googleapis.com"
+    StorageCredentialParams
 );
 ```
 
 > **NOTE**
 >
-> Broker Load supports accessing Google GCS only according to the S3A protocol. Therefore, when you load data from Google GCS, you must replace the prefix in the GCS URI you pass as a file path into `DATA INFILE` with `s3a://`.
+> Broker Load supports accessing Google GCS only according to the gs protocol. Therefore, when you load data from Google GCS, you must include `gs://` as the prefix in the GCS URI that you pass as the file path.
+
+#### Load data from other S3-compatible storage system
+
+Use MinIO as an example. You can execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your MinIO bucket `bucket_minio` into `table1` and `table2`, respectively:
+
+```SQL
+LOAD LABEL test_db.label7
+(
+    DATA INFILE("obs://bucket_minio/input/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    (id, name, score)
+    ,
+    DATA INFILE("obs://bucket_minio/input/file2.csv")
+    INTO TABLE table2
+    COLUMNS TERMINATED BY ","
+    (id, city)
+)
+WITH BROKER
+(
+    StorageCredentialParams
+);
+```
+
+#### Load data from Microsoft Azure Storage
+
+Execute the following statement to load `file1.csv` and `file2.csv` from the specified paths of your Azure Storage:
+
+```SQL
+LOAD LABEL test_db.label8
+(
+    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/file1.csv")
+    INTO TABLE table1
+    COLUMNS TERMINATED BY ","
+    (id, name, score)
+    ,
+    DATA INFILE("wasb[s]://<container>@<storage_account>.blob.core.windows.net/<path>/file2.csv")
+    INTO TABLE table2
+    COLUMNS TERMINATED BY ","
+    (id, city)
+)
+WITH BROKER
+(
+    StorageCredentialParams
+);
+```
+
+> **NOTICE**
+  >
+  > When you load data from Azure Storage, you need to determine which prefix to use based on the access protocol and specific storage service that you use. The preceding example uses Blob Storage as an example.
+  >
+  > - When you load data from Blob Storage, you must include `wasb://` or `wasbs://` as a prefix in the file path based on the protocol that is used to access your storage account:
+  >   - If your Blob Storage allows access only through HTTP, use `wasb://` as the prefix, for example, `wasb://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`.
+  >   - If your Blob Storage allows access only through HTTPS, use `wasbs://` as the prefix, for example, `wasbs://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`
+  > - When you load data from Data Lake Storage Gen1, you must include `adl://` as a prefix in the file path, for example, `adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>`.
+  > - When you load data from Data Lake Storage Gen2, you must include `abfs://` or `abfss://` as a prefix in the file path based on the protocol that is used to access your storage account:
+  >   - If your Data Lake Storage Gen2 allows access only via HTTP, use `abfs://` as the prefix, for example, `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
+  >   - If your Data Lake Storage Gen2 allows access only via HTTPS, use `abfss://` as the prefix, for example, `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
 
 #### Query data
 
-After the load of data from your HDFS cluster, Amazon S3 bucket, or Google GCS bucket is complete, you can use the SELECT statement to query the data of the StarRocks tables to verify that the load is successful.
+After the load of data from your HDFS cluster, AWS S3 bucket, or Google GCS bucket is complete, you can use the SELECT statement to query the data of the StarRocks tables to verify that the load is successful.
 
 1. Execute the following statement to query the data of `table1`:
 
@@ -236,7 +292,7 @@ After the load of data from your HDFS cluster, Amazon S3 bucket, or Google GCS b
 
 #### Usage notes
 
-The preceding load examples show how to load multiple data files into multiple destination tables. You can also load a single data file or all data files from a specified path into a single destination table. Suppose your Amazon S3 bucket `bucket_s3` contains a folder named `input`. The `input` folder contains multiple data files, one of which is named `file1.csv`. These data files consist of the same number of columns as `table1` and the columns from each of these data files can be mapped one on one in sequence to the columns from `table1`.
+The preceding load examples show how to load multiple data files into multiple destination tables. You can also load a single data file or all data files from a specified path into a single destination table. Suppose your AWS S3 bucket `bucket_s3` contains a folder named `input`. The `input` folder contains multiple data files, one of which is named `file1.csv`. These data files consist of the same number of columns as `table1` and the columns from each of these data files can be mapped one on one in sequence to the columns from `table1`.
 
 To load `file1.csv` into `table1`, execute the following statement:
 
@@ -250,10 +306,8 @@ LOAD LABEL test_db.label_7
 )
 WITH BROKER 
 (
-    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
-    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
-)；
+    StorageCredentialParams
+);
 ```
 
 To load all data files from the `input` folder into `table1`, execute the following statement:
@@ -268,10 +322,8 @@ LOAD LABEL test_db.label_8
 )
 WITH BROKER 
 (
-    "aws.s3.access_key" = "xxxxxxxxxxxxxxxxxxxx",
-    "aws.s3.secret_key" = "yyyyyyyyyyyyyyyyyyyy",
-    "aws.s3.endpoint" = "s3.ap-northeast-1.amazonaws.com"
-)；
+    StorageCredentialParams
+);
 ```
 
 ### View a load job

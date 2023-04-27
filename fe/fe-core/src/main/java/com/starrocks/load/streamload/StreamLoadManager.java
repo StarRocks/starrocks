@@ -141,6 +141,10 @@ public class StreamLoadManager {
 
     public void unprotectedCheckMeta(Database db, String tblName)
             throws UserException {
+        if (tblName == null) {
+            throw new AnalysisException("Table name must be specified when calling /begin/transaction/ first time");
+        }
+
         Table table = db.getTable(tblName);
         if (table == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
@@ -153,7 +157,7 @@ public class StreamLoadManager {
                     tblName, tblName));
         }
 
-        if (!table.isOlapOrLakeTable()) {
+        if (!table.isOlapOrCloudNativeTable()) {
             throw new AnalysisException("Only olap/lake table support stream load");
         }
     }
@@ -193,7 +197,8 @@ public class StreamLoadManager {
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(task);
     }
 
-    public TNetworkAddress executeLoadTask(String label, int channelId, HttpHeaders headers, TransactionResult resp)
+    public TNetworkAddress executeLoadTask(String label, int channelId, HttpHeaders headers,
+                                           TransactionResult resp, String dbName, String tableName)
             throws UserException {
         boolean needUnLock = true;
         readLock();
@@ -202,6 +207,18 @@ public class StreamLoadManager {
                 throw new UserException("stream load task " + label + " does not exist");
             }
             StreamLoadTask task = idToStreamLoadTask.get(label);
+
+            // check whether the database and table are consistent with the transaction,
+            // for single database and single table are supported so far
+            if (!task.getDBName().equals(dbName)) {
+                throw new UserException(
+                        String.format("Request table %s not equal transaction table %s", dbName, task.getDBName()));
+            }
+            if (!task.getTableName().equals(tableName)) {
+                throw new UserException(
+                        String.format("Request table %s not equal transaction table %s", tableName, task.getTableName()));
+            }
+
             readUnlock();
             needUnLock = false;
             TNetworkAddress redirectAddress = task.tryLoad(channelId, resp);

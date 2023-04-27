@@ -47,6 +47,11 @@ public class QueryDetailQueueTest {
                 System.currentTimeMillis(), -1, -1, QueryDetail.QueryMemState.RUNNING,
                 "testDb", "select * from table1 limit 1",
                 "root", "");
+        startQueryDetail.setScanRows(100);
+        startQueryDetail.setScanBytes(10001);
+        startQueryDetail.setReturnRows(1);
+        startQueryDetail.setCpuCostNs(1002);
+        startQueryDetail.setMemCostBytes(100003);
         QueryDetailQueue.addAndRemoveTimeoutQueryDetail(startQueryDetail);
 
         List<QueryDetail> queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime() - 1);
@@ -62,7 +67,12 @@ public class QueryDetailQueueTest {
                 + "\"startTime\":" + startQueryDetail.getStartTime() + ",\"endTime\":-1,\"latency\":-1,"
                 + "\"state\":\"RUNNING\",\"database\":\"testDb\","
                 + "\"sql\":\"select * from table1 limit 1\","
-                + "\"user\":\"root\"}]";
+                + "\"user\":\"root\","
+                + "\"scanRows\":100,"
+                + "\"scanBytes\":10001,"
+                + "\"returnRows\":1,"
+                + "\"cpuCostNs\":1002,"
+                + "\"memCostBytes\":100003}]";
         Assert.assertEquals(jsonString, queryDetailString);
 
         queryDetails = QueryDetailQueue.getQueryDetailsAfterTime(startQueryDetail.getEventTime());

@@ -18,7 +18,9 @@
 
 #include "column/column.h"
 #include "column/type_traits.h"
+#include "exprs/table_function/generate_series.h"
 #include "exprs/table_function/json_each.h"
+#include "exprs/table_function/list_rowsets.h"
 #include "exprs/table_function/multi_unnest.h"
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/unnest.h"
@@ -98,6 +100,44 @@ TableFunctionResolver::TableFunctionResolver() {
 
     TableFunctionPtr func_json_each = std::make_shared<JsonEach>();
     add_function_mapping("json_each", {TYPE_JSON}, {TYPE_VARCHAR, TYPE_JSON}, func_json_each);
+
+    // ----=====---- generate_series ----====----
+    // implicit step size
+    add_function_mapping("generate_series", {TYPE_TINYINT, TYPE_TINYINT}, {TYPE_TINYINT},
+                         std::make_shared<GenerateSeries<TYPE_TINYINT>>());
+
+    add_function_mapping("generate_series", {TYPE_SMALLINT, TYPE_SMALLINT}, {TYPE_SMALLINT},
+                         std::make_shared<GenerateSeries<TYPE_SMALLINT>>());
+
+    add_function_mapping("generate_series", {TYPE_INT, TYPE_INT}, {TYPE_INT},
+                         std::make_shared<GenerateSeries<TYPE_INT>>());
+
+    add_function_mapping("generate_series", {TYPE_BIGINT, TYPE_BIGINT}, {TYPE_BIGINT},
+                         std::make_shared<GenerateSeries<TYPE_BIGINT>>());
+
+    add_function_mapping("generate_series", {TYPE_LARGEINT, TYPE_LARGEINT}, {TYPE_LARGEINT},
+                         std::make_shared<GenerateSeries<TYPE_LARGEINT>>());
+
+    // explicit step size
+    add_function_mapping("generate_series", {TYPE_TINYINT, TYPE_TINYINT, TYPE_TINYINT}, {TYPE_TINYINT},
+                         std::make_shared<GenerateSeries<TYPE_TINYINT>>());
+
+    add_function_mapping("generate_series", {TYPE_SMALLINT, TYPE_SMALLINT, TYPE_SMALLINT}, {TYPE_SMALLINT},
+                         std::make_shared<GenerateSeries<TYPE_SMALLINT>>());
+
+    add_function_mapping("generate_series", {TYPE_INT, TYPE_INT, TYPE_INT}, {TYPE_INT},
+                         std::make_shared<GenerateSeries<TYPE_INT>>());
+
+    add_function_mapping("generate_series", {TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT}, {TYPE_BIGINT},
+                         std::make_shared<GenerateSeries<TYPE_BIGINT>>());
+
+    add_function_mapping("generate_series", {TYPE_LARGEINT, TYPE_LARGEINT, TYPE_LARGEINT}, {TYPE_LARGEINT},
+                         std::make_shared<GenerateSeries<TYPE_LARGEINT>>());
+
+    // ----=====---- list_rowsets ----====----
+    add_function_mapping("list_rowsets", {TYPE_BIGINT, TYPE_BIGINT},
+                         {TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT, TYPE_BIGINT, TYPE_BOOLEAN, TYPE_VARCHAR},
+                         std::make_shared<ListRowsets>());
 }
 
 TableFunctionResolver::~TableFunctionResolver() = default;

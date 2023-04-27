@@ -14,7 +14,7 @@
 
 package com.starrocks.privilege;
 
-import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
@@ -31,6 +31,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class PrivilegeActions {
     private static final Logger LOG = LogManager.getLogger(PrivilegeActions.class);
@@ -45,12 +46,12 @@ public class PrivilegeActions {
         } catch (PrivObjNotFoundException e) {
             LOG.info("Object not found when checking action[{}] on {} {}, message: {}",
                     privilegeType, objectType.name().replace("_", " "),
-                    Joiner.on(".").join(objectTokens), e.getMessage());
+                    getFullyQualifiedNameFromListAllowNull(objectTokens), e.getMessage());
             return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking action[{}] on {} {}",
                     privilegeType, objectType.name().replace("_", " "),
-                    Joiner.on(".").join(objectTokens), e);
+                    getFullyQualifiedNameFromListAllowNull(objectTokens), e);
             return false;
         }
     }
@@ -129,7 +130,6 @@ public class PrivilegeActions {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context.getCurrentUserIdentity(),
                     context.getCurrentRoleIds());
             // 1. check for specified action on any table in this db
-
             if (manager.provider.isAvailablePrivType(ObjectType.TABLE, privilegeType)) {
                 PEntryObject allTableInDbObject = manager.provider.generateObject(
                         ObjectType.TABLE,
@@ -173,6 +173,12 @@ public class PrivilegeActions {
         }
     }
 
+    private static String getFullyQualifiedNameFromListAllowNull(List<String> objectTokens) {
+        return objectTokens.stream()
+                .map(e -> e == null ? "null" : e)
+                .collect(Collectors.joining("."));
+    }
+
     private static boolean checkAnyActionOnObject(UserIdentity currentUser, Set<Long> roleIds, ObjectType objectType,
                                                   List<String> objectTokens) {
         AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
@@ -183,11 +189,11 @@ public class PrivilegeActions {
             return manager.provider.searchAnyActionOnObject(objectType, pEntryObject, collection);
         } catch (PrivObjNotFoundException e) {
             LOG.info("Object not found when checking any action on {} {}, message: {}",
-                    objectType.name(), Joiner.on(".").join(objectTokens), e.getMessage());
+                    objectType.name(), getFullyQualifiedNameFromListAllowNull(objectTokens), e.getMessage());
             return true;
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when checking any action on {} {}",
-                    objectType.name(), Joiner.on(".").join(objectTokens), e);
+                    objectType.name(), getFullyQualifiedNameFromListAllowNull(objectTokens), e);
             return false;
         }
     }
@@ -283,10 +289,10 @@ public class PrivilegeActions {
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:
-            case LAKE:
+            case CLOUD_NATIVE:
                 return checkAnyActionOnTable(currentUser, roleIds, dbName, tbl.getName());
             case MATERIALIZED_VIEW:
-            case LAKE_MATERIALIZED_VIEW:
+            case CLOUD_NATIVE_MATERIALIZED_VIEW:
                 return checkAnyActionOnMaterializedView(currentUser, roleIds, dbName, tbl.getName());
             case VIEW:
                 return checkAnyActionOnView(currentUser, roleIds, dbName, tbl.getName());
@@ -314,20 +320,24 @@ public class PrivilegeActions {
 
     public static boolean checkAnyActionOnOrInDb(UserIdentity userIdentity, Set<Long> roleIds,
                                                  String catalogName, String db) {
-
-        Database database = GlobalStateMgr.getCurrentState().getDb(db);
-        if (database == null) {
+        Preconditions.checkNotNull(db, "db should not null");
+        if (checkAnyActionOnDb(userIdentity, roleIds, catalogName, db)
+                || checkAnyActionOnTable(userIdentity, roleIds, catalogName, db, "*")) {
             return true;
         }
 
-        // check for any action on db or table/view/mv/function
-        return checkAnyActionOnDb(userIdentity, roleIds, catalogName, db)
-                || checkAnyActionOnTable(userIdentity, roleIds, catalogName, db, "*")
-                || (CatalogMgr.isInternalCatalog(catalogName) &&
-                (checkAnyActionOnView(userIdentity, roleIds, db, "*")
-                        || checkAnyActionOnMaterializedView(userIdentity, roleIds, db, "*")
-                        || checkAnyActionOnFunction(userIdentity, roleIds, database.getId(),
-                        PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID)));
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            Database database = GlobalStateMgr.getCurrentState().getDb(db);
+            if (database == null) {
+                return true;
+            }
+
+            return checkAnyActionOnView(userIdentity, roleIds, db, "*")
+                    || checkAnyActionOnMaterializedView(userIdentity, roleIds, db, "*")
+                    || checkAnyActionOnFunction(userIdentity, roleIds, database.getId(),
+                    PrivilegeBuiltinConstants.ALL_FUNCTIONS_ID);
+        }
+        return false;
     }
 
     /**

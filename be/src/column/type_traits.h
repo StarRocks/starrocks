@@ -105,9 +105,21 @@ struct RunTimeTypeTraits<TYPE_TINYINT> {
 };
 
 template <>
+struct RunTimeTypeTraits<TYPE_UNSIGNED_TINYINT> {
+    using CppType = uint8_t;
+    using ColumnType = UInt8Column;
+};
+
+template <>
 struct RunTimeTypeTraits<TYPE_SMALLINT> {
     using CppType = int16_t;
     using ColumnType = Int16Column;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_UNSIGNED_SMALLINT> {
+    using CppType = uint16_t;
+    using ColumnType = UInt16Column;
 };
 
 template <>
@@ -117,9 +129,21 @@ struct RunTimeTypeTraits<TYPE_INT> {
 };
 
 template <>
+struct RunTimeTypeTraits<TYPE_UNSIGNED_INT> {
+    using CppType = uint32_t;
+    using ColumnType = UInt32Column;
+};
+
+template <>
 struct RunTimeTypeTraits<TYPE_BIGINT> {
     using CppType = int64_t;
     using ColumnType = Int64Column;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_UNSIGNED_BIGINT> {
+    using CppType = uint64_t;
+    using ColumnType = UInt64Column;
 };
 
 template <>
@@ -240,6 +264,12 @@ template <>
 struct RunTimeTypeTraits<TYPE_MAP> {
     using CppType = DatumMap;
     using ColumnType = MapColumn;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_ARRAY> {
+    using CppType = DatumArray;
+    using ColumnType = ArrayColumn;
 };
 
 template <LogicalType Type>

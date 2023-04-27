@@ -96,6 +96,13 @@ struct TypeDescriptor {
         return ret;
     }
 
+    static TypeDescriptor create_varbinary_type(int len) {
+        TypeDescriptor ret;
+        ret.type = TYPE_VARBINARY;
+        ret.len = len;
+        return ret;
+    }
+
     static TypeDescriptor create_json_type() {
         TypeDescriptor res;
         res.type = TYPE_JSON;
@@ -221,13 +228,6 @@ struct TypeDescriptor {
         } else {
             return type == o.type;
         }
-    }
-
-    bool is_implicit_castable(const TypeDescriptor& from) const {
-        if (is_decimal_type()) {
-            return precision == from.precision && scale == from.scale;
-        }
-        return false;
     }
 
     bool operator==(const TypeDescriptor& o) const {

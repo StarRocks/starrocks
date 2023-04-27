@@ -19,6 +19,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 
 public class PrivilegeCollectionTest {
 
@@ -238,6 +239,15 @@ public class PrivilegeCollectionTest {
         collection.merge(createTable);
         Assert.assertTrue(collection.allowGrant(db, Arrays.asList(drop), Arrays.asList(db1)));
         Assert.assertTrue(collection.check(db, drop, db1));
+
+        PrivilegeCollection systemCollection1 = new PrivilegeCollection();
+        systemCollection1.grant(ObjectType.SYSTEM, Arrays.asList(PrivilegeType.NODE),
+                Collections.singletonList(null), true);
+
+        PrivilegeCollection systemCollection2 = new PrivilegeCollection();
+        systemCollection2.grant(ObjectType.SYSTEM, Arrays.asList(PrivilegeType.OPERATE),
+                Collections.singletonList(null), false);
+        systemCollection1.merge(systemCollection2);
     }
 
     @Test

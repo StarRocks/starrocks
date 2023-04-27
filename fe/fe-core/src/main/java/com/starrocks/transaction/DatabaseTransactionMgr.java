@@ -852,7 +852,7 @@ public class DatabaseTransactionMgr {
                             if (successHealthyReplicaNum != replicaNum
                                     && CollectionUtils.isNotEmpty(unfinishedBackends)
                                     && currentTs
-                                    - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
+                                    - txn.getCommitTime() < Config.quorum_publish_wait_time_ms) {
 
                                 // if all unfinished backends already down through heartbeat detect, we don't need to wait anymore
                                 for (Long backendID : unfinishedBackends) {
@@ -945,7 +945,7 @@ public class DatabaseTransactionMgr {
                         return;
                     }
 
-                    if (table.isCloudNativeTable()) {
+                    if (table.isCloudNativeTableOrMaterializedView()) {
                         continue;
                     }
 
@@ -1139,7 +1139,7 @@ public class DatabaseTransactionMgr {
                     continue;
                 }
                 partitionCommitInfo.setVersion(partition.getNextVersion());
-                partitionCommitInfo.setVersionTime(table.isLakeTable() ? 0 : commitTs);
+                partitionCommitInfo.setVersionTime(table.isCloudNativeTable() ? 0 : commitTs);
             }
         }
 
@@ -1226,6 +1226,12 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         abortTransaction(transactionId, reason, null);
+    }
+
+    public void abortAllRunningTransaction() throws UserException {
+        for (Map.Entry<Long, TransactionState> entry : idToRunningTransactionState.entrySet()) {
+            abortTransaction(entry.getKey(), "The cluster is under safe mode!", null);
+        }
     }
 
     public void abortTransaction(long transactionId, String reason, TxnCommitAttachment txnCommitAttachment)

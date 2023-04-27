@@ -49,7 +49,7 @@ public:
 
     // Append a Chunk for sort.
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
-    Status done(RuntimeState* state) override;
+    Status do_done(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
 
     size_t get_output_rows() const override;

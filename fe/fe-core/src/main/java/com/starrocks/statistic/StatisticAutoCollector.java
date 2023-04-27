@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.statistic;
 
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -34,8 +33,9 @@ import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
-public class StatisticAutoCollector extends LeaderDaemon {
+public class StatisticAutoCollector extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticAutoCollector.class);
 
     private static final StatisticExecutor STATISTIC_EXECUTOR = new StatisticExecutor();
@@ -67,6 +67,7 @@ public class StatisticAutoCollector extends LeaderDaemon {
         initDefaultJob();
 
         if (Config.enable_collect_full_statistic) {
+            LOG.info("auto collect full statistic on all databases start");
             List<StatisticsCollectJob> allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                     new AnalyzeJob(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID, null,
                             AnalyzeType.FULL, ScheduleType.SCHEDULE,
@@ -84,14 +85,19 @@ public class StatisticAutoCollector extends LeaderDaemon {
                 statsConnectCtx.setThreadLocalInfo();
                 STATISTIC_EXECUTOR.collectStatistics(statsConnectCtx, statsJob, analyzeStatus, true);
             }
+            LOG.info("auto collect full statistic on all databases end");
         } else {
             List<AnalyzeJob> allAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
             allAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
+            String jobIds = allAnalyzeJobs.stream().map(j -> String.valueOf(j.getId()))
+                    .collect(Collectors.joining(", "));
+            LOG.info("auto collect statistic on analyze job[{}] start", jobIds);
             for (AnalyzeJob analyzeJob : allAnalyzeJobs) {
                 ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                 statsConnectCtx.setThreadLocalInfo();
                 analyzeJob.run(statsConnectCtx, STATISTIC_EXECUTOR);
             }
+            LOG.info("auto collect statistic on analyze job[{}] end", jobIds);
         }
     }
 

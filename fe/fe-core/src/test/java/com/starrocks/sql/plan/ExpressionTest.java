@@ -455,9 +455,9 @@ public class ExpressionTest extends PlanTestBase {
     public void testFunctionNullable() throws Exception {
         String sql = "select UNIX_TIMESTAMP(\"2015-07-28 19:41:12\", \"22\");";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains(
+        Assert.assertTrue(plan, plan.contains(
                 "signature:unix_timestamp(VARCHAR, VARCHAR), scalar_fn:TScalarFunction(symbol:), "
-                + "id:0, fid:50303, could_apply_dict_optimize:false, ignore_nulls:false), has_nullable_child:false, "
+                + "id:50287, fid:50287, could_apply_dict_optimize:false, ignore_nulls:false), has_nullable_child:false, "
                 + "is_nullable:true"));
     }
 
@@ -689,10 +689,10 @@ public class ExpressionTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("  2:SORT\n" +
                 "  |  order by: <slot 8> 8: array_sum ASC\n" +
                 "  |  offset:"));
-        Assert.assertTrue(plan.contains("  1:Project\n" +
+        Assert.assertTrue(plan, plan.contains("  1:Project\n" +
                 "  |  <slot 6> : 2: c1\n" +
                 "  |  <slot 8> : array_sum(array_map(<slot 4> -> " +
-                "CAST(<slot 4> AS SMALLINT) + 1, ARRAY<tinyint(4)>[1]))"));
+                "CAST(<slot 4> AS SMALLINT) + 1, [1]))"));
     }
 
     @Test
@@ -1243,6 +1243,18 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select tc from tall qualify dense_rank() OVER(PARTITION by ta order by tg) > 1;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "predicates: 11: dense_rank() > 1");
+
+        // for alias
+        sql = "select ta as col1 from tall qualify dense_rank() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: dense_rank() > 1");
+
+        // for where and having
+        sql = "select tc from tall WHERE tb <> '' HAVING tc > 3\n" +
+                "qualify dense_rank() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: dense_rank() > 1");
+        assertContains(plan, "PREDICATES: 3: tc > 3, CAST(2: tb AS VARCHAR(1048576)) != ''");
 
         sql = "select tc from tall qualify qualify row_number() OVER(PARTITION by ta order by tg) = 1;";
         plan = getFragmentPlan(sql);

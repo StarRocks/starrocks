@@ -31,6 +31,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/logging.h"
+#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -85,7 +86,9 @@ static void dump_trace_info() {
         // dump query_id and fragment id
         auto query_id = CurrentThread::current().query_id();
         auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
-        char buffer[256] = {};
+        const std::string custom_coredump_msg = CurrentThread::current().get_custom_coredump_msg();
+        const uint32_t MAX_BUFFER_SIZE = 512;
+        char buffer[MAX_BUFFER_SIZE] = {};
 
         // write build version
         int res = get_build_version(buffer, sizeof(buffer));
@@ -97,6 +100,13 @@ static void dump_trace_info() {
         res = sprintf(buffer + res, "fragment_instance:") + res;
         res = print_unique_id(buffer + res, fragment_instance_id) + res;
         res = sprintf(buffer + res, "\n") + res;
+
+        // print for lake filename
+        if (!custom_coredump_msg.empty()) {
+            // Avoid buffer overflow, because custom coredump msg's length in not fixed
+            res = snprintf(buffer + res, MAX_BUFFER_SIZE - res, "%s\n", custom_coredump_msg.c_str()) + res;
+        }
+
         wt = write(STDERR_FILENO, buffer, res);
         // dump memory usage
         // copy trackers

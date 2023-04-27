@@ -23,6 +23,7 @@ public class AddFollowerClause extends FrontendClause {
     public AddFollowerClause(String hostPort) {
         this(hostPort, NodePosition.ZERO);
     }
+
     public AddFollowerClause(String hostPort, NodePosition pos) {
         super(hostPort, FrontendNodeType.FOLLOWER, pos);
     }

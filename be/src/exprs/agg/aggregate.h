@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <new>
 #include <type_traits>
 
 #include "column/column.h"
@@ -132,6 +133,16 @@ public:
         for (size_t i = 0; i < chunk_size; i++) {
             if (selection[i] == 0) {
                 this->finalize_to_column(ctx, agg_states[i] + state_offset, to);
+            }
+        }
+    }
+
+    virtual void batch_serialize_with_selection(FunctionContext* ctx, size_t chunk_size,
+                                                const Buffer<AggDataPtr>& agg_states, size_t state_offset, Column* to,
+                                                const std::vector<uint8_t>& selection) const {
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (selection[i] == 0) {
+                this->serialize_to_column(ctx, agg_states[i] + state_offset, to);
             }
         }
     }
@@ -282,7 +293,7 @@ protected:
 public:
     static constexpr bool pod_state() { return std::is_trivially_destructible_v<State>; }
 
-    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const final { new (ptr) State; }
+    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override { new (ptr) State; }
 
     void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const final { data(ptr).~State(); }
 
@@ -324,6 +335,16 @@ public:
         for (size_t i = 0; i < chunk_size; i++) {
             if (selection[i] == 0) {
                 static_cast<const Derived*>(this)->finalize_to_column(ctx, agg_states[i] + state_offset, to);
+            }
+        }
+    }
+
+    void batch_serialize_with_selection(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                                        size_t state_offset, Column* to,
+                                        const std::vector<uint8_t>& selection) const override {
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (selection[i] == 0) {
+                static_cast<const Derived*>(this)->serialize_to_column(ctx, agg_states[i] + state_offset, to);
             }
         }
     }

@@ -73,9 +73,10 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
     _peak_scan_task_queue_size_counter = _unique_metrics->AddHighWaterMarkCounter(
             "PeakScanTaskQueueSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+    _peak_io_tasks_counter = _unique_metrics->AddHighWaterMarkCounter(
+            "PeakIOTasks", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG));
 
     RETURN_IF_ERROR(do_prepare(state));
-
     return Status::OK();
 }
 
@@ -110,6 +111,10 @@ size_t ScanOperator::_buffer_unplug_threshold() const {
     size_t threshold = buffer_capacity() / _dop / 2;
     threshold = std::max<size_t>(1, std::min<size_t>(kIOTaskBatchSize, threshold));
     return threshold;
+}
+
+bool ScanOperator::is_running_all_io_tasks() const {
+    return _num_running_io_tasks >= _io_tasks_per_scan_operator;
 }
 
 bool ScanOperator::has_output() const {
@@ -150,9 +155,11 @@ bool ScanOperator::has_output() const {
     if (buffer_full) {
         return chunk_number > 0;
     }
-    if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
+
+    if (is_running_all_io_tasks()) {
         return false;
     }
+
     // Can pick up more morsels or submit more tasks
     if (!_morsel_queue->empty()) {
         return true;
@@ -220,16 +227,15 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     _peak_buffer_size_counter->set(buffer_size());
 
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
-
     ChunkPtr res = get_chunk_from_buffer();
-    if (res == nullptr) {
-        return nullptr;
+    if (res != nullptr) {
+        begin_pull_chunk(res);
+        // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
+        auto [tablet_id, is_eos] = _should_emit_eos(res);
+        eval_runtime_bloom_filters(res.get());
+        res->owner_info().set_owner_id(tablet_id, is_eos);
     }
 
-    // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
-    auto [tablet_id, is_eos] = _should_emit_eos(res);
-    eval_runtime_bloom_filters(res.get());
-    res->owner_info().set_owner_id(tablet_id, is_eos);
     return res;
 }
 
@@ -250,33 +256,48 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
 
     return 1000'000L * global_rf_collector->scan_wait_timeout_ms();
 }
-
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
+    // to sure to put it here for updating state.
+    // because we want to update state based on raw data.
+    int total_cnt = available_pickup_morsel_count();
+
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
     }
     if (_unpluging && num_buffered_chunks() >= _buffer_unplug_threshold()) {
         return Status::OK();
     }
-
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
-    int cnt = _io_tasks_per_scan_operator;
 
+    int cnt = _io_tasks_per_scan_operator;
+    int to_sched[_io_tasks_per_scan_operator];
+    int size = 0;
+
+    // pick up already started chunk source.
     while (--cnt >= 0) {
         _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
         int i = _chunk_source_idx;
         if (_is_io_task_running[i]) {
+            total_cnt -= 1;
             continue;
         }
-
         if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
             RETURN_IF_ERROR(_trigger_next_scan(state, i));
+            total_cnt -= 1;
         } else {
-            RETURN_IF_ERROR(_pickup_morsel(state, i));
+            to_sched[size++] = i;
         }
     }
 
+    size = std::min(size, total_cnt);
+    // pick up new chunk source.
+    for (int i = 0; i < size; i++) {
+        int idx = to_sched[i];
+        RETURN_IF_ERROR(_pickup_morsel(state, idx));
+    }
+
+    _peak_io_tasks_counter->set(_num_running_io_tasks);
     return Status::OK();
 }
 
@@ -355,6 +376,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             SCOPED_THREAD_LOCAL_OPERATOR_MEM_TRACKER_SETTER(this);
 
             auto& chunk_source = _chunk_sources[chunk_source_index];
+            SCOPED_SET_CUSTOM_COREDUMP_MSG(chunk_source->get_custom_coredump_msg());
+
             [[maybe_unused]] std::string category;
             category = fmt::sprintf("chunk_source_%d_0x%x", get_plan_node_id(), query_trace_ctx.id);
             QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
@@ -458,7 +481,6 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
 
     if (morsel != nullptr) {
         COUNTER_UPDATE(_morsels_counter, 1);
-
         _chunk_sources[chunk_source_index] = create_chunk_source(std::move(morsel), chunk_source_index);
         auto status = _chunk_sources[chunk_source_index]->prepare(state);
         if (!status.ok()) {

@@ -70,6 +70,7 @@ class NullableAggregateFunctionBase : public AggregateFunctionStateHelper<State>
 public:
     explicit NullableAggregateFunctionBase(NestedAggregateFunctionPtr nested_function_)
             : nested_function(std::move(nested_function_)) {}
+    // as array_agg is not nullable, so it needn't create() here.
 
     std::string get_name() const override { return "nullable " + nested_function->get_name(); }
 
@@ -857,6 +858,7 @@ public:
                 const auto* nullable_column = down_cast<const NullableColumn*>(i.get());
                 data_columns.emplace_back(nullable_column->data_column());
                 if (i->has_null()) {
+                    dst_nullable_column->set_has_null(true);
                     const NullData& src_null_data = nullable_column->immutable_null_column_data();
 
                     // for one row, every columns should be probing to obtain null column.

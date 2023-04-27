@@ -22,19 +22,17 @@
 #include "exprs/literal.h"
 #include "exprs/runtime_filter.h"
 #include "gen_cpp/RuntimeFilter_types.h"
+#include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_filter_cache.h"
+#include "runtime/runtime_state.h"
 #include "simd/simd.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
 #include "util/time.h"
 
 namespace starrocks {
-
-// 0x1. initial global runtime filter impl
-// 0x2. change simd-block-filter hash function.
-static const uint8_t RF_VERSION = 0x2;
 
 struct FilterBuilder {
     template <LogicalType ltype>
@@ -53,21 +51,30 @@ JoinRuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* p
 }
 
 size_t RuntimeFilterHelper::max_runtime_filter_serialized_size(const JoinRuntimeFilter* rf) {
-    size_t size = sizeof(RF_VERSION);
+    size_t size = RF_VERSION_SZ;
     size += rf->max_serialized_size();
     return size;
 }
-size_t RuntimeFilterHelper::serialize_runtime_filter(const JoinRuntimeFilter* rf, uint8_t* data) {
+
+size_t RuntimeFilterHelper::serialize_runtime_filter(int rf_version, const JoinRuntimeFilter* rf, uint8_t* data) {
     size_t offset = 0;
     // put version at the head.
-    memcpy(data + offset, &RF_VERSION, sizeof(RF_VERSION));
-    offset += sizeof(RF_VERSION);
-    offset += rf->serialize(data + offset);
+    memcpy(data + offset, &rf_version, RF_VERSION_SZ);
+    offset += RF_VERSION_SZ;
+    offset += rf->serialize(rf_version, data + offset);
     return offset;
 }
 
-void RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRuntimeFilter** rf, const uint8_t* data,
-                                                     size_t size) {
+size_t RuntimeFilterHelper::serialize_runtime_filter(RuntimeState* state, const JoinRuntimeFilter* rf, uint8_t* data) {
+    int32_t rf_version = RF_VERSION;
+    if (state->func_version() >= TFunctionVersion::RUNTIME_FILTER_SERIALIZE_VERSION_2) {
+        rf_version = RF_VERSION_V2;
+    }
+    return serialize_runtime_filter(rf_version, rf, data);
+}
+
+int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRuntimeFilter** rf, const uint8_t* data,
+                                                    size_t size) {
     *rf = nullptr;
 
     size_t offset = 0;
@@ -76,21 +83,31 @@ void RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRunti
     uint8_t version = 0;
     memcpy(&version, data, sizeof(version));
     offset += sizeof(version);
-    if (version != RF_VERSION) {
+    if (version != RF_VERSION && version != RF_VERSION_V2) {
         // version mismatch and skip this chunk.
-        return;
+        LOG(WARNING) << "unrecognized version:" << version;
+        return 0;
     }
 
     // peek logical type.
-    LogicalType type;
-    memcpy(&type, data + offset, sizeof(type));
-    JoinRuntimeFilter* filter = create_join_runtime_filter(pool, type);
+    LogicalType ltype = TYPE_UNKNOWN;
+    if (version == RF_VERSION) {
+        RuntimeFilterSerializeType::PrimitiveType type;
+        memcpy(&type, data + offset, sizeof(type));
+        ltype = RuntimeFilterSerializeType::from_serialize_type(type);
+    } else {
+        TPrimitiveType::type type;
+        memcpy(&type, data + offset, sizeof(type));
+        ltype = thrift_to_type(type);
+    }
+    JoinRuntimeFilter* filter = create_join_runtime_filter(pool, ltype);
     DCHECK(filter != nullptr);
     if (filter != nullptr) {
-        offset += filter->deserialize(data + offset);
+        offset += filter->deserialize(version, data + offset);
         DCHECK(offset == size);
         *rf = filter;
     }
+    return version;
 }
 
 JoinRuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* pool, LogicalType type) {
@@ -336,6 +353,12 @@ Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescri
         RuntimeFilterProbeDescriptor* rf_desc = it.second;
         RETURN_IF_ERROR(rf_desc->prepare(state, row_desc, profile));
     }
+    if (state != nullptr) {
+        const TQueryOptions& options = state->query_options();
+        if (options.__isset.runtime_filter_early_return_selectivity) {
+            _early_return_selectivity = options.runtime_filter_early_return_selectivity;
+        }
+    }
     return Status::OK();
 }
 Status RuntimeFilterProbeCollector::open(RuntimeState* state) {
@@ -480,8 +503,8 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
         auto true_count = SIMD::count_nonzero(selection);
         eval_context.run_filter_nums += 1;
         double selectivity = true_count * 1.0 / chunk_size;
-        if (selectivity <= 0.5) {     // useful filter
-            if (selectivity < 0.05) { // very useful filter, could early return
+        if (selectivity <= 0.5) {                          // useful filter
+            if (selectivity < _early_return_selectivity) { // very useful filter, could early return
                 seletivity_map.clear();
                 seletivity_map.emplace(selectivity, rf_desc);
                 chunk->filter(selection);

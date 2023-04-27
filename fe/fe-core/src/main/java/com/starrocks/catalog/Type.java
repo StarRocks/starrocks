@@ -773,11 +773,6 @@ public abstract class Type implements Cloneable {
                 && !isFunctionType() && !isBinaryType();
     }
 
-    public boolean isKeyType() {
-        // TODO(zhuming): support define a key column of type array.
-        return !(isFloatingPointType() || isComplexType() || isOnlyMetricType() || isJsonType() || isBinaryType());
-    }
-
     public boolean canBeWindowFunctionArgumentTypes() {
         return !(isNull() || isChar() || isTime() || isComplexType()
                 || isPseudoType() || isFunctionType() || isBinaryType());
@@ -978,6 +973,15 @@ public abstract class Type implements Cloneable {
      * Subclasses should override this method to add themselves to the thrift container.
      */
     public abstract void toThrift(TTypeDesc container);
+
+    /**
+     * Returns true if the other can be fully compatible with this type.
+     * fully compatible means that all possible values of this type can be represented by the other type,
+     * and no null values will be produced if we cast this as the other.
+     * This is closely related to the implementation by BE.
+     * @TODO: the currently implementation is conservative, we can add more rules later.
+     */
+    public abstract boolean isFullyCompatible(Type other);
 
     /**
      * Returns true if this type is equal to t, or if t is a wildcard variant of this

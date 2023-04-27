@@ -361,7 +361,6 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-
     // ------------------------------------------- Admin Statement -----------------------------------------------------
 
     public R visitAdminSetConfigStatement(AdminSetConfigStmt statement, C context) {
@@ -570,7 +569,7 @@ public abstract class AstVisitor<R, C> {
         return visitShowStatement(statement, context);
     }
 
-    // ---------------------------------------- Privilege Statement ----------------------------------------------------
+    // ---------------------------------------- Authz Statement ----------------------------------------------------
 
     public R visitBaseCreateAlterUserStmt(BaseCreateAlterUserStmt statement, C context) {
         return visitStatement(statement, context);
@@ -636,6 +635,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ---------------------------------------- Backup Restore Statement -----------------------------------------------
 
     public R visitBackupStatement(BackupStmt statement, C context) {
@@ -689,6 +692,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitExecuteAsStatement(ExecuteAsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitExecuteScriptStatement(ExecuteScriptStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
@@ -800,6 +807,10 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    public R visitAlterTableCommentClause(AlterTableCommentClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     public R visitSwapTableClause(SwapTableClause clause, C context) {
         return visitNode(clause, context);
     }
@@ -841,6 +852,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitRollupRenameClause(RollupRenameClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
+    public R visitCompactionClause(CompactionClause clause, C context) {
         return visitNode(clause, context);
     }
 
@@ -917,6 +932,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitTableFunction(TableFunctionRelation node, C context) {
+        return visitRelation(node, context);
+    }
+
+    public R visitNormalizedTableFunction(NormalizedTableFunctionRelation node, C context) {
         return visitRelation(node, context);
     }
 

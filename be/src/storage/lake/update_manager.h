@@ -23,6 +23,8 @@
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/types_fwd.h"
 #include "util/dynamic_cache.h"
+#include "util/mem_info.h"
+#include "util/parse_util.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -98,8 +100,17 @@ public:
 
     void expire_cache();
 
+    void evict_cache(int64_t memory_urgent_level, int64_t memory_high_level);
+
     // check if pk index's cache ref == ref_cnt
     bool TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt);
+
+    Status update_primary_index_memory_limit(int32_t update_memory_limit_percent) {
+        int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
+        int32_t update_mem_percent = std::max(std::min(100, update_memory_limit_percent), 0);
+        _index_cache.set_capacity(byte_limits * update_mem_percent);
+        return Status::OK();
+    }
 
 private:
     // print memory tracker state

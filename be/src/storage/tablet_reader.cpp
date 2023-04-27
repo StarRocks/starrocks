@@ -334,10 +334,15 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
     PredicateParser pred_parser(_tablet->tablet_schema());
 
     std::shared_lock header_lock(_tablet->get_header_lock());
-    for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {
-        if (pred_pb.version() > _delete_predicates_version.second) {
+    // here we can not use DeletePredicatePB from  _tablet->delete_predicates() because
+    // _rowsets maybe stale rowset, and stale rowset's delete predicates may be removed
+    // from _tablet->delete_predicates() after compation
+    for (const RowsetSharedPtr& rowset : _rowsets) {
+        const RowsetMetaSharedPtr& rowset_meta = rowset->rowset_meta();
+        if (!rowset_meta->has_delete_predicate()) {
             continue;
         }
+        const DeletePredicatePB& pred_pb = rowset_meta->delete_predicate();
 
         ConjunctivePredicates conjunctions;
         for (int i = 0; i != pred_pb.sub_predicates_size(); ++i) {
@@ -401,9 +406,10 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
     values.reserve(input.size());
     const auto& sort_key_idxes = tablet_schema.sort_key_idxes();
     DCHECK(sort_key_idxes.empty() || sort_key_idxes.size() >= input.size());
+
     if (sort_key_idxes.size() > 0) {
-        for (int i = 0; i < input.size(); i++) {
-            schema.append_sort_key_idx(i);
+        for (auto idx : sort_key_idxes) {
+            schema.append_sort_key_idx(idx);
         }
     }
     for (size_t i = 0; i < input.size(); i++) {

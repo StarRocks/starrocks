@@ -111,8 +111,8 @@ void HdfsInputStream::set_size(int64_t value) {
 }
 
 StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {
-    // `GetReadStatistics` is not supported in Juicefs and Azure hadoop sdk, and will cause Be crashed
-    if (fs::is_jfs_uri(_file_name) || fs::is_azure_uri(_file_name)) {
+    // `GetReadStatistics` is not supported in Juicefs & Azure hadoop sdk & GCS sdk, and will cause Be crashed
+    if (fs::is_jfs_uri(_file_name) || fs::is_azure_uri(_file_name) || fs::is_gcs_uri(_file_name)) {
         return nullptr;
     }
 
@@ -138,7 +138,9 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
 class HDFSWritableFile : public WritableFile {
 public:
     HDFSWritableFile(hdfsFS fs, hdfsFile file, std::string path, size_t offset)
-            : _fs(fs), _file(file), _path(std::move(path)), _offset(offset) {}
+            : _fs(fs), _file(file), _path(std::move(path)), _offset(offset) {
+        FileSystem::on_file_write_open(this);
+    }
 
     ~HDFSWritableFile() override { (void)HDFSWritableFile::close(); }
 
@@ -197,6 +199,7 @@ Status HDFSWritableFile::close() {
     if (_closed) {
         return Status::OK();
     }
+    FileSystem::on_file_write_close(this);
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
         int r = hdfsHSync(_fs, _file);
         if (r != 0) {
@@ -371,6 +374,18 @@ Status HdfsFileSystem::iterate_dir2(const std::string& dir, const std::function<
         } else {
             dir_size = dir.size() + 1;
         }
+
+        const std::string local_fs("file:/");
+        if (dir.compare(0, local_fs.length(), local_fs) == 0) {
+            std::string mName(fileinfo[i].mName);
+            std::size_t found = mName.rfind("/");
+            if (found == std::string::npos) {
+                return Status::InvalidArgument("parse path fail {}"_format(dir));
+            }
+
+            dir_size = found + 1;
+        }
+
         std::string_view name(fileinfo[i].mName + dir_size);
         DirEntry entry{.name = name,
                        .mtime = fileinfo[i].mLastMod,

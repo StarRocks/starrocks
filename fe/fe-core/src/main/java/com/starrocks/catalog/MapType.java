@@ -170,6 +170,20 @@ public class MapType extends Type {
     }
 
     @Override
+    public boolean isFullyCompatible(Type other) {
+        if (!other.isMapType()) {
+            return false;
+        }
+
+        if (equals(other)) {
+            return true;
+        }
+
+        MapType t = (MapType) other;
+        return keyType.isFullyCompatible(t.getKeyType()) && valueType.isFullyCompatible(t.getValueType());
+    }
+
+    @Override
     public MapType clone() {
         MapType clone = (MapType) super.clone();
         clone.keyType = this.keyType.clone();

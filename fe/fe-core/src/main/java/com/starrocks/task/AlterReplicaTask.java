@@ -50,6 +50,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAlterMaterializedViewParam;
+import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
 import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
@@ -78,20 +79,22 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private final TTabletType tabletType;
     private final long txnId;
     private final Map<String, Expr> defineExprs;
+    private final TAlterTabletMaterializedColumnReq materializedColumnReq;
 
     public static AlterReplicaTask alterLocalTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
                                                     long rollupTabletId, long baseTabletId, long newReplicaId, int newSchemaHash,
-                                                    int baseSchemaHash, long version, long jobId) {
+                                                    int baseSchemaHash, long version, long jobId,
+                                                    TAlterTabletMaterializedColumnReq materializedColumnReq) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
-                null, TTabletType.TABLET_TYPE_DISK, 0);
+                null, TTabletType.TABLET_TYPE_DISK, 0, materializedColumnReq);
     }
 
     public static AlterReplicaTask alterLakeTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
                                                    long rollupTabletId, long baseTabletId, long version, long jobId, long txnId) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
-                null, TTabletType.TABLET_TYPE_LAKE, txnId);
+                null, TTabletType.TABLET_TYPE_LAKE, txnId, null);
     }
 
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
@@ -100,13 +103,13 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                                                      long jobId, Map<String, Expr> defineExprs) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
-                defineExprs, TTabletType.TABLET_TYPE_DISK, 0);
+                defineExprs, TTabletType.TABLET_TYPE_DISK, 0, null);
     }
 
     private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
                              long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
                              long jobId, AlterJobV2.JobType jobType, Map<String, Expr> defineExprs, TTabletType tabletType,
-                             long txnId) {
+                             long txnId, TAlterTabletMaterializedColumnReq materializedColumnReq) {
         super(null, backendId, TTaskType.ALTER, dbId, tableId, partitionId, rollupIndexId, rollupTabletId);
 
         this.baseTabletId = baseTabletId;
@@ -123,6 +126,8 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
 
         this.tabletType = tabletType;
         this.txnId = txnId;
+
+        this.materializedColumnReq = materializedColumnReq;
     }
 
     public long getBaseTabletId() {
@@ -166,6 +171,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 req.addToMaterialized_view_params(mvParam);
             }
         }
+        req.setMaterialized_column_req(materializedColumnReq);
         req.setTablet_type(tabletType);
         req.setTxn_id(txnId);
         return req;
@@ -189,7 +195,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
      *      So the replica's version should be larger than X. So we don't need to modify the replica version
      *      because its already looks like normal.
      */
-    public void handleFinishAlterTask() throws MetaNotFoundException {
+    public void handleFinishAlterTask() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb(getDbId());
         if (db == null) {
             throw new MetaNotFoundException("database " + getDbId() + " does not exist");
@@ -211,7 +217,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
             }
             Tablet tablet = index.getTablet(getTabletId());
             Preconditions.checkNotNull(tablet, getTabletId());
-            if (!tbl.isLakeTable()) {
+            if (!tbl.isCloudNativeTable()) {
                 Replica replica = ((LocalTablet) tablet).getReplicaById(getNewReplicaId());
                 if (replica == null) {
                     throw new MetaNotFoundException("replica " + getNewReplicaId() + " does not exist");
@@ -257,8 +263,11 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     public void run() {
         try {
             handleFinishAlterTask();
-        } catch (MetaNotFoundException e) {
-            LOG.warn("failed to handle finish alter task: {}, {}", getSignature(), e.getMessage());
+        } catch (Exception e) {
+            String errMsg = "failed to handle finish alter task: " + getSignature() + ", " + e.getMessage();
+            LOG.warn(errMsg);
+            setErrorMsg(errMsg);
+            setFailed(true);
         }
     }
 

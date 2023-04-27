@@ -1,0 +1,11 @@
+{
+    "type": "record",
+    "name": "basic",
+    "fields" : [
+        {"name": "booleantype", "type" : "boolean"},
+        {"name": "longtype", "type": "long"},
+        {"name": "doubletype", "type": "double"},
+        {"name": "stringtype", "type": "string"},
+        {"name": "enumtype", "type": {"type": "enum", "name": "ThirdEnum", "symbols" : ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"]}}  
+    ]
+}

@@ -15,8 +15,10 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -33,9 +35,11 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 
 public class IcebergApiConverterTest {
 
@@ -138,5 +142,29 @@ public class IcebergApiConverterTest {
         partitionName = convertIcebergPartitionToPartitionName(partitionSpec, DataFiles.data(partitionSpec,
                 "id=1/ts=2022-08-01"));
         Assert.assertEquals("id=1/ts=2022-08-01", partitionName);
+    }
+
+    @Test
+    public void testToIcebergApiSchema() {
+        List<Column> columns = Lists.newArrayList();
+        Column col = new Column("c1", Type.INT);
+        columns.add(col);
+
+        Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
+        List<Types.NestedField> fields = schema.columns();
+        Assert.assertEquals(1, fields.size());
+        Assert.assertEquals(Types.IntegerType.get(), fields.get(0).type());
+        Assert.assertEquals(1, fields.get(0).fieldId());
+
+        PartitionSpec spec = IcebergApiConverter.parsePartitionFields(schema, Lists.newArrayList("c1"));
+        Assert.assertTrue(spec.isPartitioned());
+        Assert.assertEquals(1, spec.fields().size());
+    }
+
+    @Test
+    public void testRebuildCreateTableProperties() {
+        Map<String, String> source = ImmutableMap.of("file_format", "orc");
+        Map<String, String> target = IcebergApiConverter.rebuildCreateTableProperties(source);
+        Assert.assertEquals("orc", target.get(DEFAULT_FILE_FORMAT));
     }
 }

@@ -156,9 +156,9 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
             throw new MetaNotFoundException("table " + routineLoadJob.getTableId() + " does not exist");
         }
         tRoutineLoadTask.setTbl(tbl.getName());
-        // label = job_name+job_id+task_id+txn_id
+        // label = job_name+job_id+task_id
         String label =
-                Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id), txnId);
+                Joiner.on("-").join(routineLoadJob.getName(), routineLoadJob.getId(), DebugUtil.printId(id));
         tRoutineLoadTask.setLabel(label);
         tRoutineLoadTask.setAuth_code(routineLoadJob.getAuthCode());
         TKafkaLoadInfo tKafkaLoadInfo = new TKafkaLoadInfo();
@@ -181,6 +181,9 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
             tRoutineLoadTask.setFormat(TFileFormatType.FORMAT_AVRO);
         } else {
             tRoutineLoadTask.setFormat(TFileFormatType.FORMAT_CSV_PLAIN);
+        }
+        if (Math.abs(routineLoadJob.getMaxFilterRatio() - 1) > 0.001) {
+            tRoutineLoadTask.setMax_filter_ratio(routineLoadJob.getMaxFilterRatio());
         }
         return tRoutineLoadTask;
     }

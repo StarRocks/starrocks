@@ -50,7 +50,9 @@ private:
 
 class MemoryWritableFile final : public WritableFile {
 public:
-    MemoryWritableFile(std::string path, InodePtr inode) : _path(std::move(path)), _inode(std::move(inode)) {}
+    MemoryWritableFile(std::string path, InodePtr inode) : _path(std::move(path)), _inode(std::move(inode)) {
+        FileSystem::on_file_write_open(this);
+    }
 
     Status append(const Slice& data) override {
         if (_closed) return Status::IOError(fmt::format("{} has been closed", _path));
@@ -73,6 +75,7 @@ public:
 
     Status close() override {
         _closed = true;
+        FileSystem::on_file_write_close(this);
         return Status::OK();
     }
 

@@ -278,7 +278,7 @@ public class ColocateMetaService {
                     writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                     return;
                 }
-                if (!table.isLakeTable()) {
+                if (!table.isCloudNativeTable()) {
                     response.appendContent("Not-supported table type");
                     writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
                     return;
@@ -342,6 +342,14 @@ public class ColocateMetaService {
                     backendsPerBucketSeq.size() + " vs. " + bucketsNum);
             updateBackendPerBucketSeq(groupId, backendsPerBucketSeq);
             LOG.info("the group {} backendsPerBucketSeq meta has been changed to {}", groupId, backendsPerBucketSeq);
+
+            List<ColocateTableIndex.GroupId> colocateWithGroupsInOtherDb =
+                    colocateIndex.getColocateWithGroupsInOtherDb(groupId);
+            for (GroupId gid : colocateWithGroupsInOtherDb) {
+                updateBackendPerBucketSeq(gid, backendsPerBucketSeq);
+                LOG.info("the group {} backendsPerBucketSeq meta has been changed to {}",
+                        gid, backendsPerBucketSeq);
+            }
 
             sendResult(request, response);
         }

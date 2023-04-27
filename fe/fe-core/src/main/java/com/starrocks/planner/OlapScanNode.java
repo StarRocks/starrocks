@@ -68,6 +68,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
@@ -460,7 +461,7 @@ public class OlapScanNode extends ScanNode {
                 LOG.error("no queryable replica found in tablet {}. visible version {} replicas:{}",
                         tabletId, visibleVersion, replicaInfos);
                 if (LOG.isDebugEnabled()) {
-                    if (olapTable.isCloudNativeTable()) {
+                    if (olapTable.isCloudNativeTableOrMaterializedView()) {
                         LOG.debug("tablet: {}, shard: {}, backends: {}", tabletId, ((LakeTablet) tablet).getShardId(),
                                 tablet.getBackendIds());
                     } else {
@@ -721,6 +722,13 @@ public class OlapScanNode extends ScanNode {
                             .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
             }
+
+            if (!bucketColumns.isEmpty() && FeConstants.showLocalShuffleColumnsInExplain) {
+                output.append(prefix).append("LocalShuffleColumns:\n");
+                for (ColumnRefOperator col : bucketColumns) {
+                    output.append(prefix).append("- ").append(col.toString()).append("\n");
+                }
+            }
         }
 
         return output.toString();
@@ -737,24 +745,26 @@ public class OlapScanNode extends ScanNode {
         List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
         if (selectedIndexId != -1) {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
-            if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
-                for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
-                    Column col = indexMeta.getSchema().get(sortKeyIdx);
-                    keyColumnNames.add(col.getName());
-                    keyColumnTypes.add(col.getPrimitiveType().toThrift());
-                }
-            } else {
-                for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
-                    if (!col.isKey()) {
-                        break;
+            if (indexMeta != null) {
+                if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
+                    for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+                        Column col = indexMeta.getSchema().get(sortKeyIdx);
+                        keyColumnNames.add(col.getName());
+                        keyColumnTypes.add(col.getPrimitiveType().toThrift());
                     }
-                    keyColumnNames.add(col.getName());
-                    keyColumnTypes.add(col.getPrimitiveType().toThrift());
+                } else {
+                    for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
+                        if (!col.isKey()) {
+                            break;
+                        }
+                        keyColumnNames.add(col.getName());
+                        keyColumnTypes.add(col.getPrimitiveType().toThrift());
+                    }
                 }
             }
         }
 
-        if (olapTable.isCloudNativeTable()) {
+        if (olapTable.isCloudNativeTableOrMaterializedView()) {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
             msg.lake_scan_node =
                     new TLakeScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
@@ -779,7 +789,7 @@ public class OlapScanNode extends ScanNode {
             if (!bucketExprs.isEmpty()) {
                 msg.lake_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
             }
-        } else { // If you find yourself changing this code block, see also the above code block, i.e, if (olapTable.isLakeTable) { ... }.
+        } else { // If you find yourself changing this code block, see also the above code block
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
                     new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
@@ -868,7 +878,7 @@ public class OlapScanNode extends ScanNode {
     @Override
     public boolean canDoReplicatedJoin() {
         // TODO(wyb): necessary to support?
-        if (olapTable.isCloudNativeTable()) {
+        if (olapTable.isCloudNativeTableOrMaterializedView()) {
             return false;
         }
         ConnectContext ctx = ConnectContext.get();
@@ -1111,7 +1121,7 @@ public class OlapScanNode extends ScanNode {
         List<Integer> dictIntIds = dictStringIds.stream().map(dictStringIdToIntIds::get).collect(Collectors.toList());
         scanNode.setDict_string_ids(dictStringIds);
         scanNode.setDict_int_ids(dictIntIds);
-        planNode.setNode_type(olapTable.isCloudNativeTable() ?
+        planNode.setNode_type(olapTable.isCloudNativeTableOrMaterializedView() ?
                 TPlanNodeType.LAKE_SCAN_NODE : TPlanNodeType.OLAP_SCAN_NODE);
         planNode.setOlap_scan_node(scanNode);
         normalizeConjuncts(normalizer, planNode, conjuncts);

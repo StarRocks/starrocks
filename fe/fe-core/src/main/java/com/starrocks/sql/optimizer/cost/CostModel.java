@@ -129,7 +129,6 @@ public class CostModel {
         public CostEstimate visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
-
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
 
@@ -246,7 +245,7 @@ public class CostModel {
         // 2. distinct cardinality of group-by column is less than 10000 and avgDistValuesPerGroup > 100
         // Bad cases as follows: this Rule is conservative, the cases except good cases are all bad cases.
         private double computeDataSkewPenaltyOfGroupByCountDistinct(PhysicalHashAggregateOperator node,
-                                                            Statistics inputStatistics) {
+                                                                    Statistics inputStatistics) {
             DataSkewInfo skewInfo = node.getDistinctColumnDataSkew();
             if (skewInfo.getStage() != 1) {
                 return skewInfo.getPenaltyFactor();
@@ -257,19 +256,30 @@ public class CostModel {
             }
 
             ColumnStatistic distColStat = inputStatistics.getColumnStatistic(skewInfo.getSkewColumnRef());
-            ColumnStatistic groupByColStat = inputStatistics.getColumnStatistic(node.getGroupBys().get(0));
+            List<ColumnStatistic> groupByStats = node.getGroupBys().subList(0, node.getGroupBys().size() - 1)
+                    .stream().map(inputStatistics::getColumnStatistic).collect(Collectors.toList());
 
-            if (distColStat.isUnknownValue() || distColStat.isUnknown() || groupByColStat.isUnknown() ||
-                    groupByColStat.isUnknownValue()) {
+            if (distColStat.isUnknownValue() || distColStat.isUnknown() ||
+                    groupByStats.stream().anyMatch(groupStat -> groupStat.isUnknown() || groupStat.isUnknownValue())) {
                 return 1.5;
             }
-            double groupByColDistinctValues = Math.max(1, groupByColStat.getDistinctValuesCount());
+            double groupByColDistinctValues = 1.0;
+            for (ColumnStatistic groupStat : groupByStats) {
+                groupByColDistinctValues *= groupStat.getDistinctValuesCount();
+            }
+            groupByColDistinctValues =
+                    Math.max(1.0, Math.min(groupByColDistinctValues, inputStatistics.getOutputRowCount()));
+
             final double groupByColDistinctHighWaterMark = 10000;
             final double groupByColDistinctLowWaterMark = 100;
-            final double avgDistValuesPerGroup = distColStat.getDistinctValuesCount() / groupByColDistinctValues;
+            final double distColDistinctValuesCountWaterMark = 10000000;
+            final double distColDistinctValuesCount = distColStat.getDistinctValuesCount();
+            final double avgDistValuesPerGroup = distColDistinctValuesCount / groupByColDistinctValues;
 
-            if ((groupByColDistinctValues <= groupByColDistinctLowWaterMark) ||
-                    (groupByColDistinctValues < groupByColDistinctHighWaterMark && avgDistValuesPerGroup > 100)) {
+            if (distColDistinctValuesCount > distColDistinctValuesCountWaterMark &&
+                    ((groupByColDistinctValues <= groupByColDistinctLowWaterMark) ||
+                            (groupByColDistinctValues < groupByColDistinctHighWaterMark &&
+                                    avgDistValuesPerGroup > 100))) {
                 return 0.5;
             } else {
                 return 1.5;
@@ -357,7 +367,7 @@ public class CostModel {
 
             Preconditions.checkState(!(join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()),
                     "should be handled by nestloopjoin");
-            HashJoinCostModel joinCostModel = new HashJoinCostModel(context, inputProperties, eqOnPredicates);
+            HashJoinCostModel joinCostModel = new HashJoinCostModel(context, inputProperties, eqOnPredicates, statistics);
             return CostEstimate.of(joinCostModel.getCpuCost(), joinCostModel.getMemCost(), 0);
         }
 
@@ -401,7 +411,12 @@ public class CostModel {
 
             // Right cross join could not be parallelized, so apply more punishment
             if (join.getJoinType().isRightJoin()) {
-                cpuCost *= StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                // Add more punishment when right size is 10x greater than left size.
+                if (rightSize > 10 * leftSize) {
+                    cpuCost *= StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                } else {
+                    cpuCost += StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                }
                 memCost += rightSize;
             }
             if (join.getJoinType().isOuterJoin() || join.getJoinType().isSemiJoin() ||

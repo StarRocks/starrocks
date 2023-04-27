@@ -171,7 +171,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
 
             this.inPredicate = BinaryPredicateOperator.eq(in.getChild(0), in.getChild(1));
             this.correlationPredicate = apply.getCorrelationConjuncts();
-            this.cteId = factory.getNextRelationId();
+            this.cteId = context.getCteContext().getNextCteId();
 
             this.distinctAggregateOutputs = Lists.newArrayList();
         }

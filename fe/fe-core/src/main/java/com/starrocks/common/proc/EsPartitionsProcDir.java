@@ -44,7 +44,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.external.elasticsearch.EsShardPartitions;
+import com.starrocks.connector.elasticsearch.EsShardPartitions;
 
 import java.util.ArrayList;
 import java.util.List;

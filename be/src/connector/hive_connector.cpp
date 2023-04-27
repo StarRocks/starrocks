@@ -42,6 +42,10 @@ DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_
     return std::make_unique<HiveDataSource>(this, scan_range);
 }
 
+const TupleDescriptor* HiveDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_hdfs_scan_node.tuple_id);
+}
+
 // ================================
 
 HiveDataSource::HiveDataSource(const HiveDataSourceProvider* provider, const TScanRange& scan_range)
@@ -162,7 +166,7 @@ Status HiveDataSource::_init_partition_values() {
             const ColumnPtr& data_column = const_column->data_column();
             ColumnPtr& chunk_part_column = partition_chunk->get_column_by_slot_id(slot_id);
             if (data_column->is_nullable()) {
-                chunk_part_column->append_nulls(1);
+                chunk_part_column->append_default();
             } else {
                 chunk_part_column->append(*data_column, 0, 1);
             }
@@ -519,6 +523,12 @@ Status HiveDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
     return Status::OK();
 }
 
+const std::string HiveDataSource::get_custom_coredump_msg() const {
+    const std::string path = !_scan_range.relative_path.empty() ? _scan_range.relative_path : _scan_range.full_path;
+    return strings::Substitute("Hive file path: $0, partition id: $1, length: $2, offset: $3", path,
+                               _scan_range.partition_id, _scan_range.length, _scan_range.offset);
+}
+
 int64_t HiveDataSource::raw_rows_read() const {
     if (_scanner == nullptr) return 0;
     return _scanner->raw_rows_read();
@@ -534,6 +544,11 @@ int64_t HiveDataSource::num_bytes_read() const {
 int64_t HiveDataSource::cpu_time_spent() const {
     if (_scanner == nullptr) return 0;
     return _scanner->cpu_time_spent();
+}
+
+int64_t HiveDataSource::io_time_spent() const {
+    if (_scanner == nullptr) return 0;
+    return _scanner->io_time_spent();
 }
 
 } // namespace starrocks::connector

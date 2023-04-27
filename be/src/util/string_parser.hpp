@@ -570,6 +570,11 @@ inline int StringParser::StringParseTraits<int8_t>::max_ascii_len() {
 }
 
 template <>
+inline int StringParser::StringParseTraits<uint8_t>::max_ascii_len() {
+    return 3;
+}
+
+template <>
 inline int StringParser::StringParseTraits<int16_t>::max_ascii_len() {
     return 5;
 }

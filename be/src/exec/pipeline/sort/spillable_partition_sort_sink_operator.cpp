@@ -24,6 +24,7 @@
 #include "exec/spillable_chunks_sorter_sort.h"
 #include "gen_cpp/InternalService_types.h"
 #include "storage/chunk_helper.h"
+#include "util/defer_op.h"
 
 namespace starrocks::pipeline {
 Status SpillablePartitionSortSinkOperator::prepare(RuntimeState* state) {
@@ -49,10 +50,9 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
     if (state->is_cancelled()) {
         _is_finished = true;
         _chunks_sorter->cancel();
+        _chunks_sorter->spill_channel()->set_finishing();
         return Status::Cancelled("runtime state is cancelled");
     }
-
-    RETURN_IF_ERROR(_chunks_sorter->done(state));
 
     // channnel:
     //
@@ -73,19 +73,26 @@ Status SpillablePartitionSortSinkOperator::set_finishing(RuntimeState* state) {
                 state, *io_executor, spill::MemTrackerGuard(tls_mem_tracker));
     };
 
-    if (_chunks_sorter->spill_channel()->is_working()) {
-        std::function<StatusOr<ChunkPtr>()> task = [state, io_executor,
-                                                    set_call_back_function]() -> StatusOr<ChunkPtr> {
-            RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-            return Status::EndOfFile("eos");
-        };
+    Status ret_status;
+    auto defer = DeferOp([&]() {
+        Status st = [&]() {
+            if (_chunks_sorter->spill_channel()->is_working()) {
+                std::function<StatusOr<ChunkPtr>()> task = [state, io_executor,
+                                                            set_call_back_function]() -> StatusOr<ChunkPtr> {
+                    RETURN_IF_ERROR(set_call_back_function(state, io_executor));
+                    return Status::EndOfFile("eos");
+                };
+                _chunks_sorter->spill_channel()->add_spill_task({task});
+            } else {
+                RETURN_IF_ERROR(set_call_back_function(state, io_executor));
+            }
+            return Status::OK();
+        }();
+        ret_status = ret_status.ok() ? st : ret_status;
+    });
 
-        _chunks_sorter->spill_channel()->add_spill_task({task});
-    } else {
-        RETURN_IF_ERROR(set_call_back_function(state, io_executor));
-    }
-
-    return Status::OK();
+    ret_status = _chunks_sorter->done(state);
+    return ret_status;
 }
 
 Status SpillablePartitionSortSinkOperator::set_finished(RuntimeState* state) {
@@ -127,12 +134,10 @@ Status SpillablePartitionSortSinkOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->spill_file_size = state->spill_mem_table_size();
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
-    _spill_options->chunk_builder = [&]() {
-        return ChunkHelper::new_chunk(*_materialized_tuple_desc, _state->chunk_size());
-    };
+    _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
     _spill_options->name = "local-sort-spill";
     _spill_options->plan_node_id = _plan_node_id;
-
+    _spill_options->encode_level = state->spill_encode_level();
     return Status::OK();
 }
 

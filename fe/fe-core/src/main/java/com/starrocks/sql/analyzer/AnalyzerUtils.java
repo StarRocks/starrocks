@@ -17,9 +17,11 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Predicate;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
@@ -38,9 +40,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -147,7 +152,7 @@ public class AnalyzerUtils {
             dbName = context.getDatabase();
         }
 
-        Database db = context.getGlobalStateMgr().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         if (db == null) {
             return null;
         }
@@ -368,24 +373,7 @@ public class AnalyzerUtils {
         @Override
         public Void visitTable(TableRelation node, Void context) {
             Table table = node.getTable();
-            if (table == null) {
-                tables.put(node.getName(), null);
-                return null;
-            }
-            // For external tables, their db/table names are case-insensitive, need to get real names of them.
-            if (table.isHiveTable() || table.isHudiTable()) {
-                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-                TableName tableName = new TableName(hiveMetaStoreTable.getCatalogName(), hiveMetaStoreTable.getDbName(),
-                        hiveMetaStoreTable.getTableName());
-                tables.put(tableName, table);
-            } else if (table.isIcebergTable()) {
-                IcebergTable icebergTable = (IcebergTable) table;
-                TableName tableName = new TableName(icebergTable.getCatalogName(), icebergTable.getRemoteDbName(),
-                        icebergTable.getRemoteTableName());
-                tables.put(tableName, table);
-            } else {
-                tables.put(node.getName(), table);
-            }
+            tables.put(node.getName(), table);
             return null;
         }
     }
@@ -408,9 +396,15 @@ public class AnalyzerUtils {
         return tables;
     }
 
-    public static Map<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
-        Map<String, TableRelation> tableRelations = Maps.newHashMap();
+    public static Multimap<String, TableRelation> collectAllTableRelation(StatementBase statementBase) {
+        Multimap<String, TableRelation> tableRelations = ArrayListMultimap.create();
         new AnalyzerUtils.TableRelationCollector(tableRelations).visit(statementBase);
+        return tableRelations;
+    }
+
+    public static List<TableRelation> collectTableRelations(StatementBase statementBase) {
+        List<TableRelation> tableRelations = Lists.newArrayList();
+        new AnalyzerUtils.TableRelationsCollector(tableRelations).visit(statementBase);
         return tableRelations;
     }
 
@@ -424,6 +418,10 @@ public class AnalyzerUtils {
         new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
     }
 
+    public static void collectSpecifyExternalTables(StatementBase statementBase, List<Table> tables, Predicate<Table> filter) {
+        new ExternalTableCollector(tables, filter).visit(statementBase);
+    }
+
     public static Map<TableName, SubqueryRelation> collectAllSubQueryRelation(QueryStatement queryStatement) {
         Map<TableName, SubqueryRelation> subQueryRelations = Maps.newHashMap();
         new AnalyzerUtils.SubQueryRelationCollector(subQueryRelations).visit(queryStatement);
@@ -433,6 +431,12 @@ public class AnalyzerUtils {
     public static Map<TableName, Table> collectAllTableAndView(StatementBase statementBase) {
         Map<TableName, Table> tables = Maps.newHashMap();
         new AnalyzerUtils.TableAndViewCollector(tables).visit(statementBase);
+        return tables;
+    }
+
+    public static Map<TableName, Table> collectAllConnectorTableAndView(StatementBase statementBase) {
+        Map<TableName, Table> tables = Maps.newHashMap();
+        new AnalyzerUtils.ConnectorTableAndViewCollector(tables).visit(statementBase);
         return tables;
     }
 
@@ -448,6 +452,36 @@ public class AnalyzerUtils {
         }
     }
 
+    private static class ConnectorTableAndViewCollector extends TableAndViewCollector {
+        public ConnectorTableAndViewCollector(Map<TableName, Table> dbs) {
+            super(dbs);
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            Table table = node.getTable();
+            if (table == null) {
+                tables.put(node.getName(), null);
+                return null;
+            }
+            // For external tables, their db/table names are case-insensitive, need to get real names of them.
+            if (table.isHiveTable() || table.isHudiTable()) {
+                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
+                TableName tableName = new TableName(hiveMetaStoreTable.getCatalogName(), hiveMetaStoreTable.getDbName(),
+                        hiveMetaStoreTable.getTableName());
+                tables.put(tableName, table);
+            } else if (table.isIcebergTable()) {
+                IcebergTable icebergTable = (IcebergTable) table;
+                TableName tableName = new TableName(icebergTable.getCatalogName(), icebergTable.getRemoteDbName(),
+                        icebergTable.getRemoteTableName());
+                tables.put(tableName, table);
+            } else {
+                tables.put(node.getName(), table);
+            }
+            return null;
+        }
+    }
+
     private static class NonOlapTableCollector extends TableCollector {
         public NonOlapTableCollector(Map<TableName, Table> tables) {
             super(tables);
@@ -455,7 +489,12 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            if (!node.getTable().isOlapTable() && tables.isEmpty()) {
+            if (!tables.isEmpty()) {
+                return null;
+            }
+            // if olap table has MV, we remove it
+            if (!node.getTable().isOlapTable() ||
+                    !node.getTable().getRelatedMaterializedViews().isEmpty()) {
                 tables.put(node.getName(), node.getTable());
             }
             return null;
@@ -477,6 +516,25 @@ public class AnalyzerUtils {
                 // Only copy the necessary olap table meta to avoid the lock when plan query
                 OlapTable copied = table.copyOnlyForQuery();
                 node.setTable(copied);
+            }
+            return null;
+        }
+    }
+
+    private static class ExternalTableCollector extends TableCollector {
+        List<Table> tables;
+        Predicate<Table> predicate;
+
+        public ExternalTableCollector(List<Table> tables, Predicate<Table> filter) {
+            this.tables = tables;
+            this.predicate = filter;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            Table table = node.getTable();
+            if (predicate.test(table)) {
+                tables.add(table);
             }
             return null;
         }
@@ -509,9 +567,9 @@ public class AnalyzerUtils {
 
     private static class TableRelationCollector extends TableCollector {
 
-        private final Map<String, TableRelation> tableRelations;
+        private final Multimap<String, TableRelation> tableRelations;
 
-        public TableRelationCollector(Map<String, TableRelation> tableRelations) {
+        public TableRelationCollector(Multimap<String, TableRelation> tableRelations) {
             super(null);
             this.tableRelations = tableRelations;
         }
@@ -520,6 +578,22 @@ public class AnalyzerUtils {
         public Void visitTable(TableRelation node, Void context) {
             String tblName = node.getTable() != null ? node.getTable().getName() : node.getName().getTbl();
             tableRelations.put(tblName, node);
+            return null;
+        }
+    }
+
+    private static class TableRelationsCollector extends TableCollector {
+
+        private final List<TableRelation> tableRelations;
+
+        public TableRelationsCollector(List<TableRelation> tableRelations) {
+            super(null);
+            this.tableRelations = tableRelations;
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            tableRelations.add(node);
             return null;
         }
     }
@@ -577,6 +651,9 @@ public class AnalyzerUtils {
             }
         } else if (srcType.isArrayType()) {
             newType = new ArrayType(transformType(((ArrayType) srcType).getItemType()));
+        } else if (srcType.isMapType()) {
+            newType = new MapType(transformType(((MapType) srcType).getKeyType()),
+                    transformType(((MapType) srcType).getValueType()));
         } else {
             throw new SemanticException("Unsupported CTAS transform type: %s", srcType);
         }
@@ -696,7 +773,7 @@ public class AnalyzerUtils {
 
                 SingleRangePartitionDesc singleRangePartitionDesc =
                         new SingleRangePartitionDesc(true, partitionName, partitionKeyDesc, partitionProperties);
-
+                singleRangePartitionDesc.setSystem(true);
                 AddPartitionClause addPartitionClause =
                         new AddPartitionClause(singleRangePartitionDesc, distributionDesc,
                                 partitionProperties, false);
@@ -747,4 +824,32 @@ public class AnalyzerUtils {
         }
         return null;
     }
+
+    public static Type replaceNullType2Boolean(Type type) {
+        if (type.isNull()) {
+            return Type.BOOLEAN;
+        } else if (type.isArrayType()) {
+            Type childType = ((ArrayType) type).getItemType();
+            Type newType = replaceNullType2Boolean(childType);
+            if (!childType.equals(newType)) {
+                return new ArrayType(newType);
+            }
+        } else if (type.isMapType()) {
+            Type keyType = ((MapType) type).getKeyType();
+            Type valueType = ((MapType) type).getValueType();
+            Type nkt = replaceNullType2Boolean(keyType);
+            Type nvt = replaceNullType2Boolean(valueType);
+            if (!keyType.equals(nkt) || !valueType.equals(nvt)) {
+                return new MapType(nkt, nvt);
+            }
+        } else if (type.isStructType()) {
+            ArrayList<StructField> newFields = Lists.newArrayList();
+            for (StructField sf : ((StructType) type).getFields()) {
+                newFields.add(new StructField(sf.getName(), replaceNullType2Boolean(sf.getType()), sf.getComment()));
+            }
+            return new StructType(newFields);
+        }
+        return type;
+    }
+
 }

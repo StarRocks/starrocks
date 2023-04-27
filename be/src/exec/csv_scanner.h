@@ -47,18 +47,23 @@ public:
 private:
     class ScannerCSVReader : public CSVReader {
     public:
-        ScannerCSVReader(std::shared_ptr<SequentialFile> file, const CSVParseOptions& parse_options)
+        ScannerCSVReader(std::shared_ptr<SequentialFile> file, RuntimeState* state,
+                         const CSVParseOptions& parse_options)
                 : CSVReader(parse_options) {
             _file = std::move(file);
+            _state = state;
         }
 
         void set_counter(ScannerCounter* counter) { _counter = counter; }
 
         Status _fill_buffer() override;
 
+        const std::string& filename();
+
     private:
         std::shared_ptr<SequentialFile> _file;
         ScannerCounter* _counter = nullptr;
+        RuntimeState* _state = nullptr;
     };
 
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots);

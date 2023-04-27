@@ -91,7 +91,7 @@ public class JDBCConnector implements Connector {
     public ConnectorMetadata getMetadata() {
         if (metadata == null) {
             try {
-                metadata = new JDBCMetadata(properties);
+                metadata = new JDBCMetadata(properties, catalogName);
             } catch (StarRocksConnectorException e) {
                 LOG.error("Failed to create jdbc metadata on [catalog : {}]", catalogName, e);
                 throw e;

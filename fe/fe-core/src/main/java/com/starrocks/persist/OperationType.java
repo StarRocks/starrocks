@@ -294,6 +294,7 @@ public class OperationType {
     public static final short OP_DROP_ROLE_V2 = 10266;
     public static final short OP_AUTH_UPGRADE_V2 = 10267;
     public static final short OP_UPDATE_USER_PROP_V2 = 10268;
+    public static final short OP_CREATE_SECURITY_INTEGRATION = 10269;
 
     // integrate with starmgr
     public static final short OP_STARMGR = 11000;
@@ -309,14 +310,6 @@ public class OperationType {
     public static final short OP_ALTER_LOAD_JOB = 11100;
     public static final short OP_ALTER_TABLE_PROPERTIES = 11101;
 
-    // warehouse
-    public static final short OP_CREATE_WH = 11110;
-    public static final short OP_DROP_WH = 11111;
-    public static final short OP_ALTER_WH_ADD_CLUSTER = 11112;
-    public static final short OP_ALTER_WH_REMOVE_CLUSTER = 11113;
-    public static final short OP_ALTER_WH_MOD_PROP = 11114;
-    public static final short OP_SUSPEND_WH = 11115;
-    public static final short OP_RESUME_WH = 11116;
 
     // constraint properties
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;

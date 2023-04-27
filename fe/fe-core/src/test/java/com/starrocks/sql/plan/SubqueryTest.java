@@ -16,8 +16,10 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
@@ -232,8 +234,9 @@ public class SubqueryTest extends PlanTestBase {
                     ")IS NULL";
 
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  18:Project\n" +
+            assertContains(plan, "18:Project\n" +
                     "  |  <slot 15> : 1\n" +
+                    "  |  limit: 1\n" +
                     "  |  \n" +
                     "  17:NESTLOOP JOIN\n" +
                     "  |  join op: INNER JOIN\n" +
@@ -251,8 +254,9 @@ public class SubqueryTest extends PlanTestBase {
                     "IS NULL";
 
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  18:Project\n" +
+            assertContains(plan, "18:Project\n" +
                     "  |  <slot 15> : 1\n" +
+                    "  |  limit: 1\n" +
                     "  |  \n" +
                     "  17:NESTLOOP JOIN\n" +
                     "  |  join op: INNER JOIN\n" +
@@ -328,16 +332,14 @@ public class SubqueryTest extends PlanTestBase {
                 "    ) IS NULL\n" +
                 "  );";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "20:HASH JOIN\n" +
+        assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: v9 = 13: v4\n" +
                 "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)\n" +
                 "  |  \n" +
-                "  |----19:EXCHANGE\n" +
-                "  |    \n" +
-                "  13:NESTLOOP JOIN");
-        assertContains(plan, "13:NESTLOOP JOIN\n" +
+                "  |----12:EXCHANGE");
+        assertContains(plan, "20:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT OUTER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: CAST(5: v8 AS DOUBLE) = CAST('' AS DOUBLE)");
@@ -1840,5 +1842,40 @@ public class SubqueryTest extends PlanTestBase {
                 "  |    25:EXCHANGE\n" +
                 "  |    \n" +
                 "  21:EXCHANGE");
+    }
+
+    @Test
+    public void testCaseWhenSubquery1() throws Exception {
+        String sql = "with tmp as (select 8 id, 'season' type1, 'a.season' pretype, 'season' ranktype from dual ) " +
+                "select case when id = abs(0) then 'a' " +
+                "else concat( case when a.pretype is not null then CONCAT(',', a.ranktype) " +
+                "else null end, " +
+                "case when exists (select 1 from tmp) then (select type1 from tmp) " +
+                "else null end) end from tmp a;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "14:Project\n" +
+                "  |  <slot 24> : if(CAST(7: expr AS SMALLINT) = abs(0), " +
+                "'a', concat(if(9: expr IS NOT NULL, concat(',', 10: expr), NULL), if(17: expr, 22: expr, NULL)))");
+    }
+
+    @Test
+    public void testCaseWhenSubquery2() throws Exception {
+        String sql = "with tmp as (select 8 id, 'season' type1, 'a.season' pretype, 'season' ranktype from dual ) " +
+                "select case when id = abs(0) then 'a' else case when exists (select 1 from tmp) " +
+                "then (select type1 from tmp) > (select pretype from tmp) else null end end from tmp a;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "20:Project\n" +
+                "  |  <slot 30> : if(CAST(7: expr AS SMALLINT) = abs(0), 'a', " +
+                "CAST(if(17: expr, 23: expr > 27: expr, NULL) AS VARCHAR))");
+    }
+
+    @Test
+    public void testCaseWhenSubquery3() throws Exception {
+        String sql = "with tmp as (select 8 id, 'season' type1, 'a.season' pretype, 'season' ranktype from dual ) " +
+                "select case when id = abs(0) then 'a' else " +
+                "case when exists (select 1 from tmp) then id in (select id > (select type1 from tmp) from tmp )" +
+                " else null end end from tmp a;";
+        Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+        assertContains(pair.first, "CTEAnchor(cteid=2)");
     }
 }

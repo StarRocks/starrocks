@@ -62,6 +62,7 @@ import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -255,9 +256,16 @@ public class Analyzer {
 
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
-            CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
-            QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
-            Analyzer.analyze(queryStatement, context);
+            if (statement.getCreateTableAsSelectStmt() != null) {
+                CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
+                QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
+                Analyzer.analyze(queryStatement, context);
+            } else if (statement.getInsertStmt() != null) {
+                InsertStmt insertStmt = statement.getInsertStmt();
+                InsertAnalyzer.analyze(insertStmt, context);
+            } else {
+                throw new SemanticException("Submit task statement is not supported");
+            }
             OriginStatement origStmt = statement.getOrigStmt();
             String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
             statement.setSqlText(sqlText);
@@ -567,7 +575,6 @@ public class Analyzer {
             return null;
         }
 
-
         // ------------------------------------------- Cluster Management Statement ----------------------------------------
 
         @Override
@@ -716,6 +723,14 @@ public class Analyzer {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }
+
+        @Override
+        public Void visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement,
+                                                            ConnectContext context) {
+            SecurityIntegrationStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
 
         // ---------------------------------------- Backup Restore Statement -------------------------------------------
 

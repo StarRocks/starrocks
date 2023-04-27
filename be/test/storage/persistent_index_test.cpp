@@ -1129,7 +1129,7 @@ TabletSharedPtr create_tablet(int64_t tablet_id, int32_t schema_hash) {
     request.__set_version(1);
     request.__set_version_hash(0);
     request.tablet_schema.schema_hash = schema_hash;
-    request.tablet_schema.short_key_column_count = 6;
+    request.tablet_schema.short_key_column_count = 1;
     request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
     request.tablet_schema.storage_type = TStorageType::COLUMN;
 
@@ -1495,7 +1495,8 @@ PARALLEL_TEST(PersistentIndexTest, test_get_move_buckets) {
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_flush_l1_advance) {
-    config::l0_max_mem_usage = 1048576;
+    config::l0_max_mem_usage = 10240;
+    config::max_tmp_l1_num = 10;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_flush_l1_advance";
     const std::string kIndexFile = "./PersistentIndexTest_test_flush_l1_advance/index.l0.0.0";
@@ -1533,8 +1534,8 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_l1_advance) {
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
         ASSERT_OK(index.prepare(EditVersion(1, 0)));
-        const int N = 100000;
-        for (int i = 0; i < 5; i++) {
+        const int N = 10000;
+        for (int i = 0; i < 50; i++) {
             vector<Key> keys(N);
             vector<Slice> key_slices;
             vector<IndexValue> values;

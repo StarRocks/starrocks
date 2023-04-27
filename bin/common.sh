@@ -42,6 +42,19 @@ jdk_version() {
     echo "$result"
 }
 
+jvm_arch() {
+    march=`uname -m`
+    case $march in
+      aarch64 | arm64)
+        jvm_arch=aarch64
+        ;;
+      *)
+        jvm_arch=amd64
+        ;;
+    esac
+    echo $jvm_arch
+}
+
 export_env_from_conf() {
     while read line; do
         envline=`echo $line | sed 's/[[:blank:]]*=[[:blank:]]*/=/g' | sed 's/^[[:blank:]]*//g' | egrep "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`
@@ -169,4 +182,11 @@ export_shared_envvars() {
 export_cachelib_lib_path() {
     CACHELIB_DIR=$STARROCKS_HOME/lib/cachelib
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CACHELIB_DIR/lib64
+}
+
+update_submodules()
+{
+    pushd ${STARROCKS_HOME} &>/dev/null
+    git submodule update --init --recursive
+    popd
 }

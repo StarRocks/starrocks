@@ -212,11 +212,11 @@ public class ShowTabletStmt extends ShowStmt {
         db.readLock();
         try {
             Table table = db.getTable(tableName);
-            if (table == null || !table.isNativeTable()) {
+            if (table == null || !table.isNativeTableOrMaterializedView()) {
                 return ImmutableList.of();
             }
 
-            if (table.isCloudNativeTable()) {
+            if (table.isCloudNativeTableOrMaterializedView()) {
                 return LakeTabletsProcNode.TITLE_NAMES;
             } else {
                 return LocalTabletsProcDir.TITLE_NAMES;

@@ -77,6 +77,8 @@ namespace pipeline {
 class QueryContext;
 }
 
+constexpr int64_t kRpcHttpMinSize = ((1L << 31) - (1L << 10));
+
 // A collection of items that are part of the global state of a
 // query and shared across all execution nodes of that query.
 class RuntimeState {
@@ -221,58 +223,73 @@ public:
 
     void add_export_output_file(const std::string& file) { _export_output_files.push_back(file); }
 
-    void set_load_job_id(int64_t job_id) { _load_job_id = job_id; }
+    void set_txn_id(int64_t txn_id) { _txn_id = txn_id; }
 
-    int64_t load_job_id() const { return _load_job_id; }
+    int64_t load_job_id() const { return _txn_id; }
+
+    void set_db(const std::string& db) { _db = db; }
+
+    const std::string& db() const { return _db; }
+
+    void set_load_label(const std::string& label) { _load_label = label; }
+
+    const std::string& load_label() const { return _load_label; }
 
     const std::string& get_error_log_file_path() const { return _error_log_file_path; }
+
+    const std::string& get_rejected_record_file_path() const { return _rejected_record_file_path; }
 
     // is_summary is true, means we are going to write the summary line
     void append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary = false);
 
     bool has_reached_max_error_msg_num(bool is_summary = false);
 
+    Status create_rejected_record_file();
+
+    bool enable_log_rejected_record() {
+        return _query_options.log_rejected_record_num == -1 ||
+               _query_options.log_rejected_record_num > _num_log_rejected_rows;
+    }
+
+    void append_rejected_record_to_file(const std::string& record, const std::string& error_msg,
+                                        const std::string& source);
+
     int64_t num_bytes_load_from_source() const noexcept { return _num_bytes_load_from_source.load(); }
 
     int64_t num_rows_load_from_source() const noexcept { return _num_rows_load_total_from_source.load(); }
 
-    int64_t num_bytes_load_from_sink() const noexcept { return _num_bytes_load_from_sink.load(); }
+    int64_t num_bytes_load_sink() const noexcept { return _num_bytes_load_sink.load(); }
 
-    int64_t num_rows_load_from_sink() const noexcept { return _num_rows_load_from_sink.load(); }
+    int64_t num_rows_load_sink() const noexcept { return _num_rows_load_sink.load(); }
 
     int64_t num_rows_load_filtered() const noexcept { return _num_rows_load_filtered.load(); }
 
     int64_t num_rows_load_unselected() const noexcept { return _num_rows_load_unselected.load(); }
 
-    int64_t num_rows_load_sink_success() const noexcept {
-        return num_rows_load_from_sink() - num_rows_load_filtered() - num_rows_load_unselected();
-    }
+    int64_t num_bytes_scan_from_source() const noexcept { return _num_bytes_scan_from_source.load(); }
 
     void update_num_bytes_load_from_source(int64_t bytes_load) { _num_bytes_load_from_source.fetch_add(bytes_load); }
 
-    void set_update_num_bytes_load_from_source(int64_t bytes_load) { _num_bytes_load_from_source.store(bytes_load); }
-
     void update_num_rows_load_from_source(int64_t num_rows) { _num_rows_load_total_from_source.fetch_add(num_rows); }
 
-    void set_num_rows_load_from_source(int64_t num_rows) { _num_rows_load_total_from_source.store(num_rows); }
+    void update_num_bytes_load_sink(int64_t bytes_load) { _num_bytes_load_sink.fetch_add(bytes_load); }
 
-    void update_num_bytes_load_from_sink(int64_t bytes_load) { _num_bytes_load_from_sink.fetch_add(bytes_load); }
-
-    void set_update_num_bytes_load_from_sink(int64_t bytes_load) { _num_bytes_load_from_sink.store(bytes_load); }
-
-    void update_num_rows_load_from_sink(int64_t num_rows) { _num_rows_load_from_sink.fetch_add(num_rows); }
-
-    void set_num_rows_load_from_sink(int64_t num_rows) { _num_rows_load_from_sink.store(num_rows); }
+    void update_num_rows_load_sink(int64_t num_rows) { _num_rows_load_sink.fetch_add(num_rows); }
 
     void update_num_rows_load_filtered(int64_t num_rows) { _num_rows_load_filtered.fetch_add(num_rows); }
 
     void update_num_rows_load_unselected(int64_t num_rows) { _num_rows_load_unselected.fetch_add(num_rows); }
 
+    void update_num_bytes_scan_from_source(int64_t scan_bytes) { _num_bytes_scan_from_source.fetch_add(scan_bytes); }
+
     void update_report_load_status(TReportExecStatusParams* load_params) {
-        load_params->__set_loaded_rows(num_rows_load_from_sink());
-        load_params->__set_sink_load_bytes(num_bytes_load_from_sink());
+        load_params->__set_loaded_rows(num_rows_load_sink());
+        load_params->__set_sink_load_bytes(num_bytes_load_sink());
         load_params->__set_source_load_rows(num_rows_load_from_source());
         load_params->__set_source_load_bytes(num_bytes_load_from_source());
+        load_params->__set_filtered_rows(num_rows_load_filtered());
+        load_params->__set_unselected_rows(num_rows_load_unselected());
+        load_params->__set_source_scan_bytes(num_bytes_scan_from_source());
     }
 
     void set_per_fragment_instance_idx(int idx) { _per_fragment_instance_idx = idx; }
@@ -297,6 +314,9 @@ public:
     double spill_mem_limit_threshold() const { return _query_options.spill_mem_limit_threshold; }
 
     int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
+
+    int64_t spill_operator_max_bytes() const { return _query_options.spill_operator_max_bytes; }
+    int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
@@ -353,6 +373,12 @@ public:
 
     Status reset_epoch();
 
+    int64_t get_rpc_http_min_size() {
+        return _query_options.__isset.rpc_http_min_size ? _query_options.rpc_http_min_size : kRpcHttpMinSize;
+    }
+
+    bool use_page_cache();
+
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -376,6 +402,10 @@ private:
 
     // Logs error messages.
     std::vector<std::string> _error_log;
+
+    std::mutex _rejected_record_lock;
+    std::string _rejected_record_file_path;
+    std::unique_ptr<std::ofstream> _rejected_record_file;
 
     // _error_log[_unreported_error_idx+] has been not reported to the coordinator.
     int _unreported_error_idx;
@@ -440,17 +470,21 @@ private:
     std::atomic<int64_t> _num_bytes_load_from_source{0}; // total bytes load from source node (file scan node, olap scan
                                                          // node)
 
-    std::atomic<int64_t> _num_rows_load_from_sink{0};  // total rows load from sink node (tablet sink node)
-    std::atomic<int64_t> _num_bytes_load_from_sink{0}; // total bytes load from sink node (tablet sink node)
+    std::atomic<int64_t> _num_rows_load_sink{0};  // total rows sink to storage
+    std::atomic<int64_t> _num_bytes_load_sink{0}; // total bytes sink to storage
 
-    std::atomic<int64_t> _num_rows_load_filtered{0};   // unqualified rows
-    std::atomic<int64_t> _num_rows_load_unselected{0}; // rows filtered by predicates
+    std::atomic<int64_t> _num_rows_load_filtered{0};     // unqualified rows
+    std::atomic<int64_t> _num_rows_load_unselected{0};   // rows filtered by predicates
+    std::atomic<int64_t> _num_bytes_scan_from_source{0}; // total bytes scan from source node
 
     std::atomic<int64_t> _num_print_error_rows{0};
+    std::atomic<int64_t> _num_log_rejected_rows{0}; // rejected rows
 
     std::vector<std::string> _export_output_files;
 
-    int64_t _load_job_id = 0;
+    int64_t _txn_id = 0;
+    std::string _load_label;
+    std::string _db;
 
     std::string _error_log_file_path;
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path
@@ -502,6 +536,15 @@ private:
             break;                                                                                                  \
         case MemTracker::SCHEMA_CHANGE_TASK:                                                                        \
             str << "You can change the limit by modify BE config [memory_limitation_per_thread_for_schema_change]"; \
+            break;                                                                                                  \
+        case MemTracker::RESOURCE_GROUP:                                                                            \
+            /* TODO: make default_wg configuable. */                                                                \
+            if (tracker->label() == "default_wg") {                                                                 \
+                str << "Mem usage has exceed the limit of query pool";                                              \
+            } else {                                                                                                \
+                str << "Mem usage has exceed the limit of the resource group [" << tracker->label() << "]. "        \
+                    << "You can change the limit by modify [mem_limit] of this group";                              \
+            }                                                                                                       \
             break;                                                                                                  \
         default:                                                                                                    \
             break;                                                                                                  \

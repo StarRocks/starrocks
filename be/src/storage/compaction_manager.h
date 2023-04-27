@@ -100,6 +100,14 @@ public:
 
     Status update_max_threads(int max_threads);
 
+    double max_score();
+
+    double last_score();
+
+    int64_t base_compaction_concurrency();
+
+    int64_t cumulative_compaction_concurrency();
+
 private:
     CompactionManager(const CompactionManager& compaction_manager) = delete;
     CompactionManager(CompactionManager&& compaction_manager) = delete;
@@ -133,6 +141,10 @@ private:
     int32_t _max_dispatch_count = 0;
 
     int32_t _max_task_num = 0;
+    int64_t _base_compaction_concurrency = 0;
+    int64_t _cumulative_compaction_concurrency = 0;
+    double _last_score = 0;
+
     bool _disable_update_tablet = false;
 
     std::atomic<bool> _bg_worker_stopped{false};

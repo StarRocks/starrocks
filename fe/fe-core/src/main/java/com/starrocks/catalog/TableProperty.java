@@ -53,7 +53,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TWriteQuorumType;
 
 import java.io.DataInput;
@@ -108,16 +107,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private boolean isInMemory = false;
 
     private boolean enablePersistentIndex = false;
-
-    /*
-     * the default storage format of this table.
-     * DEFAULT: depends on BE's config 'default_rowset_type'
-     * V1: alpha rowset
-     * V2: beta rowset
-     *
-     * This property should be set when creating the table, and can only be changed to V2 using Alter Table stmt.
-     */
-    private TStorageFormat storageFormat = TStorageFormat.DEFAULT;
 
     /*
      * the default storage volume of this table.
@@ -290,6 +279,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildPartitionLiveNumber() {
+        if (partitionTTLNumber != INVALID) {
+            return this;
+        }
         partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER,
                 String.valueOf(INVALID)));
         return this;
@@ -334,12 +326,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildInMemory() {
         isInMemory = Boolean.parseBoolean(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_INMEMORY, "false"));
-        return this;
-    }
-
-    public TableProperty buildStorageFormat() {
-        storageFormat = TStorageFormat.valueOf(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT,
-                TStorageFormat.DEFAULT.name()));
         return this;
     }
 
@@ -459,10 +445,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return enableReplicatedStorage;
     }
 
-    public TStorageFormat getStorageFormat() {
-        return storageFormat;
-    }
-
     public String getStorageVolume() {
         return storageVolume;
     }
@@ -543,7 +525,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildDynamicProperty();
         buildReplicationNum();
         buildInMemory();
-        buildStorageFormat();
         buildStorageVolume();
         buildEnablePersistentIndex();
         buildCompressionType();

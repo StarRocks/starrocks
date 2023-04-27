@@ -83,7 +83,8 @@ import org.apache.hadoop.hive.metastore.api.UnknownTableException;
 import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
 import org.apache.hadoop.hive.metastore.partition.spec.PartitionSpecProxy;
 import org.apache.hadoop.util.ReflectionUtils;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
 import java.io.IOException;
@@ -111,7 +112,7 @@ import static org.apache.hadoop.hive.metastore.TableType.MANAGED_TABLE;
  */
 public class GlueMetastoreClientDelegate {
 
-    private static final Logger LOGGER = Logger.getLogger(GlueMetastoreClientDelegate.class);
+    private static final Logger LOGGER = LogManager.getLogger(GlueMetastoreClientDelegate.class);
 
     private static final List<Role> IMPLICIT_ROLES = Lists.newArrayList(new Role(PUBLIC, 0, PUBLIC));
     public static final int MILLISECOND_TO_SECOND_FACTOR = 1000;

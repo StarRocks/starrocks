@@ -45,6 +45,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.platform.commons.util.Preconditions;
 
 import java.util.List;
 
@@ -79,6 +80,8 @@ public class ShowMaterializedViewTest {
 
         stmt = (ShowMaterializedViewsStmt) UtFrameUtils.parseStmtWithNewParser(
                 "SHOW MATERIALIZED VIEWS FROM abc where name = 'mv1';", ctx);
+        Preconditions.notNull(stmt.toSelectStmt().getOrigStmt(), "stmt's original stmt should not be null");
+
         Assert.assertEquals("abc", stmt.getDb());
         Assert.assertEquals(
                 "SELECT information_schema.materialized_views.MATERIALIZED_VIEW_ID AS id, " +
@@ -105,7 +108,7 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.TABLE_ROWS AS rows, " +
                         "information_schema.materialized_views.MATERIALIZED_VIEW_DEFINITION AS text " +
                         "FROM information_schema.materialized_views " +
-                        "WHERE information_schema.materialized_views.TABLE_NAME = 'mv1'",
+                        "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') AND (information_schema.materialized_views.TABLE_NAME = 'mv1')",
                 AstToStringBuilder.toString(stmt.toSelectStmt()));
         checkShowMaterializedViewsStmt(stmt);
     }

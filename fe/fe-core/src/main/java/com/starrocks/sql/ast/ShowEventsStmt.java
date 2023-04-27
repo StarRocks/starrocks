@@ -48,6 +48,7 @@ public class ShowEventsStmt extends ShowStmt {
     public ShowEventsStmt(NodePosition pos) {
         super(pos);
     }
+
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;

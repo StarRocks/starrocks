@@ -70,34 +70,36 @@ void CompactionManager::_schedule() {
     while (!_stop.load(std::memory_order_consume)) {
         ++_round;
         _wait_to_run();
-        std::shared_ptr<CompactionTask> compaction_task = _try_get_next_compaction_task();
-        if (!compaction_task) {
+        CompactionCandidate compaction_candidate;
+
+        if (!pick_candidate(&compaction_candidate)) {
             std::unique_lock<std::mutex> lk(_mutex);
             _cv.wait_for(lk, 1000ms);
         } else {
-            if (compaction_task->compaction_type() == CompactionType::BASE_COMPACTION) {
-                StarRocksMetrics::instance()->tablet_base_max_compaction_score.set_value(
-                        compaction_task->compaction_score());
+            if (compaction_candidate.type == CompactionType::BASE_COMPACTION) {
+                StarRocksMetrics::instance()->tablet_base_max_compaction_score.set_value(compaction_candidate.score);
             } else {
                 StarRocksMetrics::instance()->tablet_cumulative_max_compaction_score.set_value(
-                        compaction_task->compaction_score());
+                        compaction_candidate.score);
             }
 
-            compaction_task->set_task_id(next_compaction_task_id());
+            auto task_id = next_compaction_task_id();
             LOG(INFO) << "submit task to compaction pool"
-                      << ", task_id:" << compaction_task->task_id()
-                      << ", tablet_id:" << compaction_task->tablet()->tablet_id()
-                      << ", compaction_type:" << starrocks::to_string(compaction_task->compaction_type())
-                      << ", compaction_score:" << compaction_task->compaction_score() << " for round:" << _round
+                      << ", task_id:" << task_id << ", tablet_id:" << compaction_candidate.tablet->tablet_id()
+                      << ", compaction_type:" << starrocks::to_string(compaction_candidate.type)
+                      << ", compaction_score:" << compaction_candidate.score << " for round:" << _round
                       << ", task_queue_size:" << candidates_size();
-            auto st = _compaction_pool->submit_func([compaction_task] { compaction_task->start(); });
+            auto st = _compaction_pool->submit_func([compaction_candidate, task_id] {
+                auto compaction_task = compaction_candidate.tablet->create_compaction_task();
+                if (compaction_task != nullptr) {
+                    compaction_task->set_task_id(task_id);
+                    compaction_task->start();
+                }
+            });
             if (!st.ok()) {
-                LOG(WARNING) << "submit compaction task " << compaction_task->task_id()
+                LOG(WARNING) << "submit compaction task " << task_id
                              << " to compaction pool failed. status:" << st.to_string();
-                compaction_task->tablet()->reset_compaction();
-                CompactionCandidate candidate;
-                candidate.tablet = compaction_task->tablet();
-                update_candidates({candidate});
+                update_tablet_async(compaction_candidate.tablet);
             }
         }
     }
@@ -266,6 +268,7 @@ bool CompactionManager::pick_candidate(CompactionCandidate* candidate) {
         if (_check_precondition(*iter)) {
             *candidate = *iter;
             _compaction_candidates.erase(iter);
+            _last_score = candidate->score;
             return true;
         }
         iter++;
@@ -314,6 +317,9 @@ void CompactionManager::update_tablet_async(TabletSharedPtr tablet) {
 }
 
 void CompactionManager::update_tablet(TabletSharedPtr tablet) {
+    if (tablet == nullptr) {
+        return;
+    }
     if (_disable_update_tablet) {
         return;
     }
@@ -343,8 +349,10 @@ bool CompactionManager::register_task(CompactionTask* compaction_task) {
     }
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
         _data_dir_to_cumulative_task_num_map[data_dir]++;
+        _cumulative_compaction_concurrency++;
     } else {
         _data_dir_to_base_task_num_map[data_dir]++;
+        _base_compaction_concurrency++;
     }
     return true;
 }
@@ -360,8 +368,10 @@ void CompactionManager::unregister_task(CompactionTask* compaction_task) {
         DataDir* data_dir = tablet->data_dir();
         if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
             _data_dir_to_cumulative_task_num_map[data_dir]--;
+            _cumulative_compaction_concurrency--;
         } else {
             _data_dir_to_base_task_num_map[data_dir]--;
+            _base_compaction_concurrency--;
         }
     }
 }
@@ -371,6 +381,8 @@ void CompactionManager::clear_tasks() {
     _running_tasks.clear();
     _data_dir_to_cumulative_task_num_map.clear();
     _data_dir_to_base_task_num_map.clear();
+    _base_compaction_concurrency = 0;
+    _cumulative_compaction_concurrency = 0;
 }
 
 Status CompactionManager::update_max_threads(int max_threads) {
@@ -379,6 +391,30 @@ Status CompactionManager::update_max_threads(int max_threads) {
     } else {
         return Status::InternalError("Thread pool not exist");
     }
+}
+
+double CompactionManager::max_score() {
+    std::lock_guard lg(_candidates_mutex);
+    if (_compaction_candidates.empty()) {
+        return 0;
+    }
+
+    return _compaction_candidates.begin()->score;
+}
+
+double CompactionManager::last_score() {
+    std::lock_guard lg(_candidates_mutex);
+    return _last_score;
+}
+
+int64_t CompactionManager::base_compaction_concurrency() {
+    std::lock_guard lg(_tasks_mutex);
+    return _base_compaction_concurrency;
+}
+
+int64_t CompactionManager::cumulative_compaction_concurrency() {
+    std::lock_guard lg(_tasks_mutex);
+    return _cumulative_compaction_concurrency;
 }
 
 } // namespace starrocks

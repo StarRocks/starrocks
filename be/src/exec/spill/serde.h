@@ -18,10 +18,11 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exec/spill/block_manager.h"
+#include "gen_cpp/types.pb.h"
 #include "util/raw_container.h"
 
 namespace starrocks::spill {
-class SpilledOptions;
+class ChunkBuilder;
 
 enum class SerdeType {
     BY_COLUMN,
@@ -29,20 +30,26 @@ enum class SerdeType {
 
 struct SerdeContext {
     std::string serialize_buffer;
-    raw::RawString compress_buffer;
 };
-
+class Spiller;
 // Serde is used to serialize and deserialize spilled data.
+class Serde;
+using SerdePtr = std::shared_ptr<Serde>;
 class Serde {
 public:
+    Serde(Spiller* parent) : _parent(parent) {}
     virtual ~Serde() = default;
 
+    virtual Status prepare() = 0;
     // serialize chunk and append the serialized data into block
     virtual Status serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) = 0;
     // deserialize data from block, return the chunk after deserialized
-    virtual StatusOr<ChunkUniquePtr> deserialize(SerdeContext& ctx, const BlockPtr block) = 0;
-};
-using SerdePtr = std::shared_ptr<Serde>;
+    virtual StatusOr<ChunkUniquePtr> deserialize(SerdeContext& ctx, BlockReader* reader) = 0;
 
-StatusOr<SerdePtr> create_serde(SpilledOptions* options);
+    static StatusOr<SerdePtr> create_serde(Spiller* parent);
+
+protected:
+    Spiller* _parent = nullptr;
+};
+
 } // namespace starrocks::spill

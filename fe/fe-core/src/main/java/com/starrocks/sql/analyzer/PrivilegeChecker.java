@@ -91,6 +91,7 @@ import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExecuteScriptStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
@@ -773,6 +774,15 @@ public class PrivilegeChecker {
         }
 
         @Override
+        public Void visitExecuteScriptStatement(ExecuteScriptStmt statement, ConnectContext session) {
+            if (!GlobalStateMgr.getCurrentState().getAuth()
+                    .checkGlobalPriv(session, PrivPredicate.ADMIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "EXECUTE SCRIPT");
+            }
+            return null;
+        }
+
+        @Override
         public Void visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext session) {
             String db = statement.getDb();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
@@ -1079,7 +1089,7 @@ public class PrivilegeChecker {
                     }
 
                     for (Table table : sortedTables) {
-                        if (!table.isNativeTable()) {
+                        if (!table.isNativeTableOrMaterializedView()) {
                             continue;
                         }
 
@@ -1137,7 +1147,7 @@ public class PrivilegeChecker {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
                     }
 
-                    if (!table.isNativeTable()) {
+                    if (!table.isNativeTableOrMaterializedView()) {
                         ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
                     }
 

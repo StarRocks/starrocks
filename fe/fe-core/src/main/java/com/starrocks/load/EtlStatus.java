@@ -48,6 +48,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.loadv2.dpp.DppResult;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TEtlState;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.collections.map.HashedMap;
 
@@ -66,6 +67,7 @@ public class EtlStatus implements Writable {
 
     private TEtlState state;
     private String trackingUrl;
+    private List<String> rejectedRecordPaths = Lists.newArrayList();
 
     /**
      * This field is useless in RUNTIME
@@ -122,6 +124,14 @@ public class EtlStatus implements Writable {
 
     public void setTrackingUrl(String trackingUrl) {
         this.trackingUrl = Strings.nullToEmpty(trackingUrl);
+    }
+
+    public List<String> getRejectedRecordPaths() {
+        return rejectedRecordPaths;
+    }
+
+    public void setRejectedRecordPaths(List<String> rejectedRecordPaths) {
+        this.rejectedRecordPaths = rejectedRecordPaths;
     }
 
     public Map<String, String> getCounters() {
@@ -267,6 +277,14 @@ public class EtlStatus implements Writable {
         this.loadStatistic.totalFileSizeB = filesize;
     }
 
+    public void updateScanRangeNum(long numScanRange) {
+        this.loadStatistic.numScanRange += numScanRange;
+    }
+
+    public long totalScanRangeNum() {
+        return this.loadStatistic.numScanRange;
+    }
+
     @Override
     public int hashCode() {
         return Objects.hashCode(trackingUrl);
@@ -341,6 +359,11 @@ public class EtlStatus implements Writable {
         public int fileNum = 0;
         @SerializedName("totalFileSizeB")
         public long totalFileSizeB = 0;
+        @SerializedName("numScanRange")
+        public long numScanRange = 0;
+
+        @SerializedName("sourceScanBytesCounterTbl")
+        private Table<String, String, Long> sourceScanBytesCounterTbl = HashBasedTable.create();
 
         @SerializedName("sinkBytesCounterTbl")
         private Table<String, String, Long> sinkBytesCounterTbl = HashBasedTable.create();
@@ -350,6 +373,12 @@ public class EtlStatus implements Writable {
 
         @SerializedName("sourceBytesCounterTbl")
         private Table<String, String, Long> sourceBytesCounterTbl = HashBasedTable.create();
+
+        @SerializedName("filteredRowsCounterTbl")
+        private Table<String, String, Long> filteredRowsCounterTbl = HashBasedTable.create();
+
+        @SerializedName("unselectedRowsCounterTbl")
+        private Table<String, String, Long> unselectedRowsCounterTbl = HashBasedTable.create();
 
         @SerializedName("loadFinish")
         private boolean loadFinish = false;
@@ -361,12 +390,16 @@ public class EtlStatus implements Writable {
             sinkBytesCounterTbl.rowMap().remove(loadStr);
             sourceRowsCounterTbl.rowMap().remove(loadStr);
             sourceBytesCounterTbl.rowMap().remove(loadStr);
+            sourceScanBytesCounterTbl.rowMap().remove(loadStr);
 
             for (TUniqueId fragId : fragmentIds) {
                 counterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
                 sinkBytesCounterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
                 sourceRowsCounterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
                 sourceBytesCounterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
+                filteredRowsCounterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
+                unselectedRowsCounterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
+                sourceScanBytesCounterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
             }
             
             allBackendIds.put(loadStr, relatedBackendIds);
@@ -381,6 +414,9 @@ public class EtlStatus implements Writable {
             sinkBytesCounterTbl.rowMap().remove(loadStr);
             sourceRowsCounterTbl.rowMap().remove(loadStr);
             sourceBytesCounterTbl.rowMap().remove(loadStr);
+            filteredRowsCounterTbl.rowMap().remove(loadStr);
+            unselectedRowsCounterTbl.rowMap().remove(loadStr);
+            sourceScanBytesCounterTbl.rowMap().remove(loadStr);
             
             unfinishedBackendIds.remove(loadStr);
             allBackendIds.remove(loadStr);
@@ -388,6 +424,30 @@ public class EtlStatus implements Writable {
 
         public synchronized long totalFileSize() {
             return totalFileSizeB;
+        }
+
+        public synchronized long totalFilteredRows() {
+            long totalRows = 0;
+            for (long rows : filteredRowsCounterTbl.values()) {
+                totalRows += rows;
+            }
+            return totalRows;
+        }
+
+        public synchronized long totalUnselectedRows() {
+            long totalRows = 0;
+            for (long rows : unselectedRowsCounterTbl.values()) {
+                totalRows += rows;
+            }
+            return totalRows;
+        }
+
+        public synchronized long sourceScanBytes() {
+            long totalsourceScanBytes = 0;
+            for (long scanBytes : sourceScanBytesCounterTbl.values()) {
+                totalsourceScanBytes += scanBytes;
+            }
+            return totalsourceScanBytes;
         }
 
         public synchronized long totalSourceLoadBytes() {
@@ -434,36 +494,21 @@ public class EtlStatus implements Writable {
             return loadFinish;
         }
 
-        public synchronized void updateLoadProgress(long backendId, TUniqueId loadId, TUniqueId fragmentId,
-                                                    long sinkRows, long sinkBytes, long sourceRows, 
-                                                    long sourceBytes, boolean isDone) {
-            String loadStr = DebugUtil.printId(loadId);
-            String fragmentStr = DebugUtil.printId(fragmentId);
+        public synchronized void updateLoadProgress(TReportExecStatusParams params) {
+            String loadStr = DebugUtil.printId(params.query_id);
+            String fragmentStr = DebugUtil.printId(params.fragment_instance_id);
             if (counterTbl.contains(loadStr, fragmentStr)) {
-                counterTbl.put(loadStr, fragmentStr, sinkRows);
-                sinkBytesCounterTbl.put(loadStr, fragmentStr, sinkBytes);
-                sourceRowsCounterTbl.put(loadStr, fragmentStr, sourceRows);
-                sourceBytesCounterTbl.put(loadStr, fragmentStr, sourceBytes);
+                counterTbl.put(loadStr, fragmentStr, params.loaded_rows);
+                sinkBytesCounterTbl.put(loadStr, fragmentStr, params.sink_load_bytes);
+                sourceRowsCounterTbl.put(loadStr, fragmentStr, params.source_load_rows);
+                sourceBytesCounterTbl.put(loadStr, fragmentStr, params.source_load_bytes);
+                filteredRowsCounterTbl.put(loadStr, fragmentStr, params.filtered_rows);
+                unselectedRowsCounterTbl.put(loadStr, fragmentStr, params.unselected_rows);
+                sourceScanBytesCounterTbl.put(loadStr, fragmentStr, params.source_scan_bytes);
             }
 
-            if (isDone && unfinishedBackendIds.containsKey(loadStr)) {
-                unfinishedBackendIds.get(loadStr).remove(backendId);
-            }
-        }
-
-        public synchronized void updateLoadProgress(long backendId, TUniqueId loadId, TUniqueId fragmentId,
-                                                    long rows, boolean isDone) {
-            String loadStr = DebugUtil.printId(loadId);
-            String fragmentStr = DebugUtil.printId(fragmentId);
-            if (counterTbl.contains(loadStr, fragmentStr)) {
-                counterTbl.put(loadStr, fragmentStr, rows);
-                sinkBytesCounterTbl.put(loadStr, fragmentStr, 0L);
-                sourceRowsCounterTbl.put(loadStr, fragmentStr, 0L);
-                sourceBytesCounterTbl.put(loadStr, fragmentStr, 0L);
-            }
-
-            if (isDone && unfinishedBackendIds.containsKey(loadStr)) {
-                unfinishedBackendIds.get(loadStr).remove(backendId);
+            if (params.done && unfinishedBackendIds.containsKey(loadStr)) {
+                unfinishedBackendIds.get(loadStr).remove(params.backend_id);
             }
         }
 
@@ -521,6 +566,15 @@ public class EtlStatus implements Writable {
             }
             if (!json.contains("sourceBytesCounterTbl")) {
                 loadStatistic.sourceBytesCounterTbl = HashBasedTable.create();
+            }
+            if (!json.contains("filteredRowsCounterTbl")) {
+                loadStatistic.filteredRowsCounterTbl = HashBasedTable.create();
+            }
+            if (!json.contains("unselectedRowsCounterTbl")) {
+                loadStatistic.unselectedRowsCounterTbl = HashBasedTable.create();
+            }
+            if (!json.contains("sourceScanBytesCounterTbl")) {
+                loadStatistic.sourceScanBytesCounterTbl = HashBasedTable.create();
             }
             if (!json.contains("loadFinish")) {
                 loadStatistic.loadFinish = false;

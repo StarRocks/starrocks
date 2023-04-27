@@ -433,9 +433,10 @@ public class ColumnTypeConverter {
                     structFields.add(new StructField(fieldName, fieldType));
                 }
                 return new StructType(structFields);
+            case BINARY:
+                return Type.VARBINARY;
             case TIME:
             case FIXED:
-            case BINARY:
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }

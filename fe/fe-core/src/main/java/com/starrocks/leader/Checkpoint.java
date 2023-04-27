@@ -36,7 +36,7 @@ package com.starrocks.leader;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.journal.Journal;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.MetaCleaner;
@@ -56,7 +56,7 @@ import java.util.List;
 /**
  * Checkpoint daemon is running on master node. handle the checkpoint work for starrocks.
  */
-public class Checkpoint extends LeaderDaemon {
+public class Checkpoint extends FrontendDaemon {
     public static final Logger LOG = LogManager.getLogger(Checkpoint.class);
     private static final int PUT_TIMEOUT_SECOND = 3600;
     private static final int CONNECT_TIMEOUT_SECOND = 1;

@@ -57,18 +57,79 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "array_distinct(array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR");
 
         sql = "select concat(array[1,2,3], array[4,5,6]) from test_array";
-        assertPlanContains(sql, "array_concat(ARRAY<tinyint(4)>[1,2,3], ARRAY<tinyint(4)>[4,5,6])");
+        assertPlanContains(sql, "array_concat([1,2,3], [4,5,6])");
+
+        sql = "select concat(c1, c2) from test_array";
+        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>))");
+
+        sql = "select concat(c1, c2, array[1,2], array[3,4]) from test_array";
+        assertPlanContains(sql, "array_concat(2: c1, CAST(3: c2 AS ARRAY<VARCHAR>), CAST([1,2] AS ARRAY<VARCHAR>), " +
+                "CAST([3,4] AS ARRAY<VARCHAR>)");
+
+        sql = "select concat(c2, 2) from test_array";
+        assertPlanContains(sql, "array_concat(3: c2, CAST([2] AS ARRAY<INT>))");
 
         sql = "select contains(array[1,2,3], 1)";
-        assertPlanContains(sql, "array_contains(ARRAY<tinyint(4)>[1,2,3], 1)");
-
-        sql = "select contains_sequence(c1, array['1','2']) from test_array";
-        assertPlanContains(sql, "array_contains_all(2: c1, ARRAY<varchar>['1','2'])");
-
-        sql = "select contains_sequence(c1, array['1','2']) from test_array";
-        assertPlanContains(sql, "array_contains_all(2: c1, ARRAY<varchar>['1','2'])");
+        assertPlanContains(sql, "array_contains([1,2,3], 1)");
 
         sql = "select slice(array[1,2,3,4], 2, 2)";
-        assertPlanContains(sql, "array_slice(ARRAY<tinyint(4)>[1,2,3,4], 2, 2)");
+        assertPlanContains(sql, "array_slice([1,2,3,4], 2, 2)");
+    }
+
+    @Test
+    public void testDateFnTransform() throws Exception {
+        String sql = "select to_unixtime(TIMESTAMP '2023-04-22 00:00:00');";
+        assertPlanContains(sql, "1682092800");
+
+        sql = "select date_parse('2022/10/20/05', '%Y/%m/%d/%H');";
+        assertPlanContains(sql, "2022-10-20 05:00:00");
+
+        sql = "SELECT date_parse('20141221','%Y%m%d');";
+        assertPlanContains(sql, "'2014-12-21'");
+
+        sql = "select date_parse('2014-12-21 12:34:56', '%Y-%m-%d %H:%i:%s');";
+        assertPlanContains(sql, "2014-12-21 12:34:56");
+
+        sql = "select day_of_week(timestamp '2022-03-06 01:02:03');";
+        assertPlanContains(sql, "dayofweek('2022-03-06 01:02:03')");
+
+        sql = "select dow(timestamp '2022-03-06 01:02:03');";
+        assertPlanContains(sql, "dayofweek('2022-03-06 01:02:03')");
+
+        sql = "select dow(date '2022-03-06');";
+        assertPlanContains(sql, "dayofweek('2022-03-06 00:00:00')");
+
+        sql = "select day_of_month(timestamp '2022-03-06 01:02:03');";
+        assertPlanContains(sql, "dayofmonth('2022-03-06 01:02:03')");
+
+        sql = "select day_of_month(date '2022-03-06');";
+        assertPlanContains(sql, "dayofmonth('2022-03-06 00:00:00')");
+
+        sql = "select day_of_year(timestamp '2022-03-06 01:02:03');";
+        assertPlanContains(sql, "dayofyear('2022-03-06 01:02:03')");
+
+        sql = "select day_of_year(date '2022-03-06');";
+        assertPlanContains(sql, "dayofyear('2022-03-06 00:00:00')");
+
+        sql = "select doy(timestamp '2022-03-06 01:02:03');";
+        assertPlanContains(sql, "dayofyear('2022-03-06 01:02:03')");
+
+        sql = "select doy(date '2022-03-06');";
+        assertPlanContains(sql, "dayofyear('2022-03-06 00:00:00')");
+    }
+
+    @Test
+    public void testStringFnTransform() throws Exception {
+        String sql = "select chr(56)";
+        assertPlanContains(sql, "char(56)");
+
+        sql = "select codepoint('a')";
+        assertPlanContains(sql, "ascii('a')");
+
+        sql = "select position('aa' in 'bccaab');";
+        assertPlanContains(sql, "locate('aa', 'bccaab')");
+
+        sql = "select strpos('bccaab', 'aa');";
+        assertPlanContains(sql, "locate('aa', 'bccaab')");
     }
 }

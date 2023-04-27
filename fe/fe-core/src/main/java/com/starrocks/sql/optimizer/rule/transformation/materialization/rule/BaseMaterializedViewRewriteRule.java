@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -37,6 +38,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule {
 
@@ -94,23 +96,43 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
         }
         final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
+        List<ScalarOperator> onPredicates = collectOnPredicate(queryExpression);
+        onPredicates = onPredicates.stream().map(MvUtils::canonizePredicate).collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         for (MaterializationContext mvContext : mvCandidateContexts) {
-            MvRewriteContext mvRewriteContext =
-                    new MvRewriteContext(mvContext, queryTables, queryExpression, queryColumnRefRewriter, queryPredicateSplit);
+            MvRewriteContext mvRewriteContext = new MvRewriteContext(
+                    mvContext, queryTables, queryExpression, queryColumnRefRewriter, queryPredicateSplit, onPredicates);
             MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
             OptExpression candidate = mvRewriter.rewrite();
             if (candidate != null) {
-                candidate = postRewriteMV(context, candidate);
+                candidate = postRewriteMV(context, mvRewriteContext, candidate);
                 if (queryExpression.getGroupExpression() != null) {
                     int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
                     mvContext.addMatchedGroup(currentRootGroupId);
                 }
                 results.add(candidate);
+                mvContext.updateMVUsedCount();
             }
         }
 
         return results;
+    }
+
+    private List<ScalarOperator> collectOnPredicate(OptExpression optExpression) {
+        List<ScalarOperator> onPredicates = Lists.newArrayList();
+        collectOnPredicate(optExpression, onPredicates);
+        return onPredicates;
+    }
+
+    private void collectOnPredicate(OptExpression optExpression, List<ScalarOperator> onPredicates) {
+        if (optExpression.getOp() instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOperator = optExpression.getOp().cast();
+            onPredicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
+        } else {
+            for (OptExpression child : optExpression.getInputs()) {
+                collectOnPredicate(child, onPredicates);
+            }
+        }
     }
 
     /**
@@ -119,12 +141,13 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
      * 2. partition prune
      * 3. bucket prune
      */
-    private OptExpression postRewriteMV(OptimizerContext context, OptExpression candidate) {
+    private OptExpression postRewriteMV(
+            OptimizerContext optimizerContext, MvRewriteContext mvRewriteContext, OptExpression candidate) {
         if (candidate == null) {
             return null;
         }
         candidate = new MVColumnPruner().pruneColumns(candidate);
-        candidate = new MVPartitionPruner().prunePartition(context, candidate);
+        candidate = new MVPartitionPruner(optimizerContext, mvRewriteContext).prunePartition(candidate);
         return candidate;
     }
 

@@ -78,6 +78,7 @@ jobs:
     name: BE FILTER
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
+      output2: ${{ steps.be-changes-info.outputs.thirdparty }}
     steps:
       - uses: dorny/paths-filter@v2
         id: changes
@@ -88,16 +89,24 @@ jobs:
             - 'gensrc/**'
             - 'run-be-ut.sh'
             - 'build.sh'
+            - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+            thirdparty:
+            - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
       - name: BE CHECK INFO
         id: be-changes-info
         run: |
           echo "be=${{ steps.changes.outputs.be }}" >> $GITHUB_OUTPUT
+          echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
 
   clang-format:
     runs-on: self-hosted
     needs: be-checker
     name: Clang-Format
+    env:
+      PR_NUMBER: ${{ github.event.number }}
     if: ${{ needs.be-checker.outputs.output1 == 'true' }}
     steps:
       - name: Clean Workspace
@@ -107,24 +116,86 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
       - name: Checkout PR
-        uses: dawidd6/action-checkout-pr@v1
-        with:
-          pr: ${{ github.event.number }}
-          
+        run: |
+          BRANCH=${{steps.branch.outputs.branch}}
+          git checkout $BRANCH;
+          git pull;
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout $BRANCH_NAME;
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+
       - name: Run Clang-Format
         run: |
           export PATH=/var/lib/llvm/bin:$PATH
           bash build-support/check-format.sh
 
+  thirdparty-update:
+    runs-on: self-hosted
+    needs: [ be-checker, clang-format ]
+    name: Thirdparty Update
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
+    outputs:
+      ip: ${{ steps.update-image.outputs.ip }}
+      instance_id: ${{ steps.update-image.outputs.instance_id }}
+      image_cache_id: ${{ steps.update-image.outputs.image_cache_id }}
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Update Image
+        id: update-image
+        run: |
+          set -ex
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+            rm -rf ./elastic-service
+            cp -rf /var/lib/elastic-service ./elastic-service
+            cd elastic-service && git pull
+            ./bin/elastic-cluster.sh --template thirdparty
+            ip=$(grep hosts conf/starrocks_deploy.conf | head -n 1 | awk '{print $NF}')
+            instance_id=$(grep instances conf/starrocks_deploy.conf | head -n 1 | awk '{print $NF}')
+            echo "ip=${ip}" >> $GITHUB_OUTPUT
+            echo "instance_id=${instance_id}" >> $GITHUB_OUTPUT
+            sleep 30
+            sudo ssh-keygen -f "/root/.ssh/known_hosts" -R "${ip}" || true
+            sshpass -p ${{ secrets.PASSWORD }} scp -o StrictHostKeyChecking=no -r bin/elastic-build-thirdparty.sh root@$ip:/home/disk1/
+            sshpass -p ${{ secrets.PASSWORD }} ssh -o StrictHostKeyChecking=no root@$ip "cd /home/disk1; ./elastic-build-thirdparty.sh $BRANCH $PR_NUMBER"
+            image_cache_id=$(python3 lib/eci_imagecache.py create $BRANCH-$PR_NUMBER)
+            echo "image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+              cd elastic-service
+              python3 lib/ecs_lib.py delete_instances conf/starrocks_deploy.conf
+          fi
+
   be-ut:
     runs-on: self-hosted
-    needs: [ clang-format ]
+    needs: [ be-checker, thirdparty-update ]
     timeout-minutes: 90
     name: BE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
     steps:
       - name: BRANCH INFO
         id: branch
@@ -141,6 +212,10 @@ jobs:
           rm -rf ./elastic-service
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+              export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+              export image_tag=$BRANCH-$PR_NUMBER
+          fi
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be
 
       - name: clean ECI
@@ -148,6 +223,20 @@ jobs:
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+
+      - name: Upload log
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: BE UT LOG
+          path: ${{ steps.run_ut.outputs.RES_LOG }}
+          retention-days: 1
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -f ${{ steps.run_ut.outputs.RES_FILE }}
+          rm -f ${{ steps.run_ut.outputs.RES_LOG }}
 
   fe-checker:
     runs-on: ubuntu-latest
@@ -220,14 +309,32 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
-      - name: Clean Workspace
-        uses: AutoModality/action-clean@v1.1.0
+      - name: clean
+        run: |
+          set -x
+          echo ${{ github.workspace }}
+          rm -rf ${{ github.workspace }}/*
 
       - name: BRANCH INFO
         id: branch
         run: |
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Checkout PR
+        run: |
+          BRANCH=${{steps.branch.outputs.branch}}
+          git checkout $BRANCH;
+          git pull;
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout $BRANCH_NAME;
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
 
       - name: UPDATE ECI & RUN UT
         id: run_ut
@@ -238,7 +345,7 @@ jobs:
           rm -rf ./elastic-service
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release
 
       - name: Clean ECI
         if: always()
@@ -246,7 +353,43 @@ jobs:
           echo ${{ steps.run_ut.outputs.ECI_ID }}
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
+      - name: Prepare coverage files
+        run: |
+          cd ${{ github.workspace }}/fe/fe-core
+          cp -rf ${{ steps.run_ut.outputs.COV_DIR }} target/
+
+      - name: Coverage Report
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ${{ github.workspace }}/fe/fe-core/target/${{ steps.run_ut.outputs.COV_FILE }}
+          dry_run: false
+          name: fe-ut
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Incremental Coverage Report
+        run: |
+          set -ex
+          rm -rf ./coverchecker
+          ln -s /var/local/env/coverchecker ./coverchecker && cd coverchecker && git pull
+          time_count=0
+          pull_status=1
+          export JAVA_HOME=/var/local/env/jdk1.8.0_202;
+          export PATH=$JAVA_HOME/bin:$PATH;
+          while (( $pull_status != 0 )); do
+            if (( $time_count == 3 )); then
+              exit 1
+            fi
+            timeout 180 java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
+              --cover ${{ github.workspace }}/fe/fe-core/target/result/ --github-token ${{ secrets.PAT }} \
+              --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
+            pull_status=$?
+            time_count=`expr $time_count + 1`
+          done
+
       - name: UT Report
+        if: always()
         uses: mikepenz/action-junit-report@v3
         with:
           check_name: 'FE UT Report'
@@ -254,15 +397,28 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/*.xml
 
-      - name: Clean Report
-        run: rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v3
+        with:
+          name: FE UT LOG
+          path: ${{ steps.run_ut.outputs.RES_LOG }}
+          retention-days: 1
 
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
+          rm -f ${{ steps.run_ut.outputs.RES_FILE }}
+          rm -f ${{ steps.run_ut.outputs.RES_LOG }}
+          rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
   build:
     runs-on: self-hosted
-    needs: [be-checker, fe-checker, be-ut, fe-ut]
+    needs: [be-checker, fe-checker, be-ut, fe-ut, thirdparty-update]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
     outputs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
     if: always() && (needs.be-ut.result == 'success' && needs.fe-ut.result == 'success') || (needs.be-checker.outputs.output1 != 'true' && needs.fe-ut.result == 'success') || (needs.fe-checker.outputs.output1 != 'true' && needs.be-ut.result == 'success')
@@ -284,6 +440,10 @@ jobs:
           rm -rf ./elastic-service
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+              export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+              export image_tag=$BRANCH-$PR_NUMBER
+          fi
           ./bin/elastic-build.sh --pr ${PR_NUMBER}
 
       - name: build result
@@ -296,6 +456,12 @@ jobs:
           echo ${{ steps.run_build.outputs.ECI_ID }}
           eci rm ${{ steps.run_build.outputs.ECI_ID }}
 
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -f ${{ steps.run_build.outputs.RES_FILE }}
+          rm -f ${{ steps.run_build.outputs.RES_LOG }}
+
   deploy:
     runs-on: self-hosted
     if: always() && needs.build.result == 'success'
@@ -307,6 +473,7 @@ jobs:
     outputs:
       fe: ${{steps.deploy_sr.outputs.fe}}
       be: ${{steps.deploy_sr.outputs.be}}
+      deploy_conf_file: ${{steps.apply_resource.outputs.deploy_conf_file}}
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
@@ -325,7 +492,8 @@ jobs:
           cp -rf /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
           ./bin/elastic-cluster.sh --template admit-default
-          cp conf/starrocks_deploy.conf /var/lib/elastic-service/conf/starrocks_deploy.conf
+          cp conf/starrocks_deploy.conf /var/local/env/${PR_NUMBER}-starrocks_deploy.conf
+          echo "deploy_conf_file=/var/local/env/${PR_NUMBER}-starrocks_deploy.conf" >> $GITHUB_OUTPUT
 
       - name: Deploy SR
         id: deploy_sr
@@ -352,6 +520,14 @@ jobs:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
 
+      - name: Prepare Tools
+        run: |
+          cd ${{ github.workspace }}
+          rm -rf .actions
+          mkdir -p .actions/nose-report-action
+          cd .actions/nose-report-action
+          git clone https://github.com/StarRocks/action-junit-report.git .
+
       - name: Run Case
         run: |
           set -x
@@ -370,10 +546,100 @@ jobs:
           ./bin/run-admit.sh
 
       - name: Publish Test Results
-        uses: mikepenz/action-junit-report@v3
+        uses: ./.actions/nose-report-action
         if: success() || failure()
         with:
           check_name: 'Admit Test Results'
+          fail_on_failure: true
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'StarRocksTest/result/*.xml'
+
+  SQL-Tester:
+    runs-on: self-hosted
+    name: SQL-Tester
+    needs: deploy
+    if: always() && needs.deploy.result == 'success'
+    timeout-minutes: 30
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      CLUSTER_NAME: admit-default
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
+      - name: Checkout PR
+        run: |
+          BRANCH=${{steps.branch.outputs.branch}}
+          git checkout $BRANCH;
+          git pull;
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout $BRANCH_NAME;
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+
+      - name: Prepare Tools
+        run: |
+          cd ${{ github.workspace }}
+          rm -rf .actions
+          mkdir -p .actions/nose-report-action
+          cd .actions/nose-report-action
+          git clone https://github.com/StarRocks/action-junit-report.git .
+
+      - name: Run Case (${{ needs.deploy.outputs.fe }})
+        run: |
+          cd ${{ github.workspace }}
+          rm -rf ./elastic-service
+          ln -s /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          ./bin/run-sql-tester.sh
+
+      - name: UT Reports
+        uses: ./.actions/nose-report-action
+        if: success() || failure()
+        with:
+          check_name: 'SQL-Tester Results'
+          fail_on_failure: true
+          detailed_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          report_paths: 'test/*.xml'
+
+  Teardown:
+    runs-on: self-hosted
+    name: Teardown
+    needs: [ deploy, SQL-Tester, admit ]
+    if: always() && needs.deploy.outputs.deploy_conf_file != ''
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
+      CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
+    steps:
+      - name: Backup SR Info
+        run: |
+          rm -rf ./elastic-service
+          cp -rf /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          ./bin/backup_log_cores.sh --branch $BRANCH --pr $PR_NUMBER --build Release --conf $CONF_FILE
+
+      - name: Clean ECS
+        run: |
+          cd elastic-service
+          python3 lib/ecs_lib.py delete_instances $CONF_FILE
+
+      - name: Clean TMP
+        run: |
+          rm -f $CONF_FILE

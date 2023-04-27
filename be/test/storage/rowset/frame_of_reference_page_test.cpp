@@ -50,7 +50,6 @@
 #include "util/logging.h"
 
 using starrocks::PageBuilderOptions;
-using starrocks::PageDecoderOptions;
 using starrocks::operator<<;
 
 namespace starrocks {
@@ -81,8 +80,7 @@ public:
         LOG(INFO) << "FrameOfReference Encoded size for " << size << " values: " << s.slice().size
                   << ", original size:" << size * sizeof(CppType);
 
-        PageDecoderOptions decoder_options;
-        PageDecoderType for_page_decoder(s.slice(), decoder_options);
+        PageDecoderType for_page_decoder(s.slice());
         Status status = for_page_decoder.init();
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, for_page_decoder.current_index());
@@ -124,8 +122,7 @@ public:
         LOG(INFO) << "FrameOfReference Encoded size for " << size << " values: " << s.slice().size
                   << ", original size:" << size * sizeof(CppType);
 
-        PageDecoderOptions decoder_options;
-        PageDecoderType for_page_decoder(s.slice(), decoder_options);
+        PageDecoderType for_page_decoder(s.slice());
         Status status = for_page_decoder.init();
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(0, for_page_decoder.current_index());

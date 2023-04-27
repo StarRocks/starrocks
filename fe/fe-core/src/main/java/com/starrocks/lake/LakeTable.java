@@ -50,6 +50,7 @@ import java.util.Map;
 
 /**
  * Metadata for StarRocks lake table
+ * todo: Rename to CloudNativeTable
  */
 public class LakeTable extends OlapTable {
 
@@ -58,7 +59,7 @@ public class LakeTable extends OlapTable {
     public LakeTable(long id, String tableName, List<Column> baseSchema, KeysType keysType, PartitionInfo partitionInfo,
                      DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
         super(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
-                GlobalStateMgr.getCurrentState().getClusterId(), indexes, TableType.LAKE);
+                GlobalStateMgr.getCurrentState().getClusterId(), indexes, TableType.CLOUD_NATIVE);
     }
 
     public LakeTable(long id, String tableName, List<Column> baseSchema, KeysType keysType, PartitionInfo partitionInfo,
@@ -93,13 +94,11 @@ public class LakeTable extends OlapTable {
     }
 
     @Override
-    public void setStorageInfo(FilePathInfo pathInfo, boolean enableCache, long cacheTtlS, boolean asyncWriteBack) {
-        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().setEnableCache(enableCache).setTtlSeconds(cacheTtlS)
-                .setAsyncWriteBack(asyncWriteBack).build();
+    public void setStorageInfo(FilePathInfo pathInfo, StorageCacheInfo storageCacheInfo) {
         if (tableProperty == null) {
             tableProperty = new TableProperty(new HashMap<>());
         }
-        tableProperty.setStorageInfo(new StorageInfo(pathInfo, cacheInfo));
+        tableProperty.setStorageInfo(new StorageInfo(pathInfo, storageCacheInfo.getCacheInfo()));
     }
 
     @Override

@@ -73,14 +73,35 @@ public class TableFunction extends Function {
     }
 
     public static void initBuiltins(FunctionSet functionSet) {
-        TableFunction unnestFunction = new TableFunction(new FunctionName("unnest"), Lists.newArrayList("unnest"),
+        TableFunction unnest = new TableFunction(new FunctionName("unnest"), Lists.newArrayList("unnest"),
                 Lists.newArrayList(Type.ANY_ARRAY), Lists.newArrayList(Type.ANY_ELEMENT), true);
-        functionSet.addBuiltin(unnestFunction);
+        functionSet.addBuiltin(unnest);
 
-        TableFunction jsonEachFunction =
-                new TableFunction(new FunctionName("json_each"), Lists.newArrayList("key", "value"),
-                        Lists.newArrayList(Type.JSON), Lists.newArrayList(Type.VARCHAR, Type.JSON));
-        functionSet.addBuiltin(jsonEachFunction);
+        TableFunction jsonEach = new TableFunction(new FunctionName("json_each"), Lists.newArrayList("key", "value"),
+                Lists.newArrayList(Type.JSON), Lists.newArrayList(Type.VARCHAR, Type.JSON));
+        functionSet.addBuiltin(jsonEach);
+
+        for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
+            // generate_series with default step size: 1
+            TableFunction func = new TableFunction(new FunctionName("generate_series"),
+                                                   Lists.newArrayList("generate_series"),
+                                                   Lists.newArrayList(type, type),
+                                                   Lists.newArrayList(type));
+            functionSet.addBuiltin(func);
+
+            // generate_series with explicit step size
+            func = new TableFunction(new FunctionName("generate_series"),
+                    Lists.newArrayList("generate_series"),
+                    Lists.newArrayList(type, type, type),
+                    Lists.newArrayList(type));
+            functionSet.addBuiltin(func);
+        }
+
+        TableFunction listRowsets = new TableFunction(new FunctionName("list_rowsets"),
+                Lists.newArrayList("id", "segments", "rows", "size", "overlapped", "delete_predicate"),
+                Lists.newArrayList(/*tablet_id*/Type.BIGINT, /*tablet_version*/Type.BIGINT),
+                Lists.newArrayList(Type.BIGINT, Type.BIGINT, Type.BIGINT, Type.BIGINT, Type.BOOLEAN, Type.STRING));
+        functionSet.addBuiltin(listRowsets);
     }
 
     public List<Type> getTableFnReturnTypes() {

@@ -172,6 +172,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected int desireTaskConcurrentNum; // optional
     protected JobState state = JobState.NEED_SCHEDULE;
     protected LoadDataSourceType dataSourceType;
+    protected double maxFilterRatio = 1;
     // max number of error data in max batch rows * 10
     // maxErrorNum / (maxBatchRows * 10) = max error rate of routine load job
     // if current error rate is more than max error rate, the job will be paused
@@ -205,6 +206,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     private static final String PROPS_STRIP_OUTER_ARRAY = "strip_outer_array";
     private static final String PROPS_JSONPATHS = "jsonpaths";
     private static final String PROPS_JSONROOT = "json_root";
+
+    private String confluentSchemaRegistryUrl;
 
     // for csv
     protected boolean trimspace = false;
@@ -298,13 +301,16 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (stmt.getMaxErrorNum() != -1) {
             this.maxErrorNum = stmt.getMaxErrorNum();
         }
+        this.maxFilterRatio = stmt.getMaxFilterRatio();
         if (stmt.getMaxBatchIntervalS() != -1) {
             this.taskSchedIntervalS = stmt.getMaxBatchIntervalS();
         }
         if (stmt.getMaxBatchRows() != -1) {
             this.maxBatchRows = stmt.getMaxBatchRows();
         }
+        jobProperties.put(LoadStmt.LOG_REJECTED_RECORD_NUM, String.valueOf(stmt.getLogRejectedRecordNum()));
         jobProperties.put(LoadStmt.PARTIAL_UPDATE, String.valueOf(stmt.isPartialUpdate()));
+        jobProperties.put(LoadStmt.PARTIAL_UPDATE_MODE, String.valueOf(stmt.getPartialUpdateMode()));
         jobProperties.put(LoadStmt.TIMEZONE, stmt.getTimezone());
         jobProperties.put(LoadStmt.STRICT_MODE, String.valueOf(stmt.isStrictMode()));
         if (stmt.getMergeConditionStr() != null) {
@@ -337,6 +343,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             }
         } else if (stmt.getFormat().equals("avro")) {
             jobProperties.put(PROPS_FORMAT, "avro");
+            if (!Strings.isNullOrEmpty(stmt.getJsonPaths())) {
+                jobProperties.put(PROPS_JSONPATHS, stmt.getJsonPaths());
+            } else {
+                jobProperties.put(PROPS_JSONPATHS, "");
+            }
+            this.confluentSchemaRegistryUrl = stmt.getConfluentSchemaRegistryUrl();
         } else {
             throw new UserException("Invalid format type.");
         }
@@ -365,6 +377,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (routineLoadDesc.getPartitionNames() != null) {
             partitions = routineLoadDesc.getPartitionNames();
         }
+    }
+
+    public String getConfluentSchemaRegistryUrl() {
+        return confluentSchemaRegistryUrl;
+    }
+
+    public void setConfluentSchemaRegistryUrl(String confluentSchemaRegistryUrl) {
+        this.confluentSchemaRegistryUrl = confluentSchemaRegistryUrl;
     }
 
     @Override
@@ -522,12 +542,29 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         return Boolean.valueOf(value);
     }
 
+    public String getPartialUpdateMode() {
+        return jobProperties.get(LoadStmt.PARTIAL_UPDATE_MODE);
+    }
+
     public RoutineLoadProgress getProgress() {
         return progress;
     }
 
+    public double getMaxFilterRatio() {
+        return maxFilterRatio;
+    }
+
     public long getMaxBatchRows() {
         return maxBatchRows;
+    }
+
+    public long getLogRejectedRecordNum() {
+        String v = jobProperties.get(LoadStmt.LOG_REJECTED_RECORD_NUM);
+        if (v == null) {
+            return 0;
+        } else {
+            return Long.valueOf(v);
+        }
     }
 
     public long getTaskSchedIntervalS() {
@@ -736,8 +773,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             if (table == null) {
                 throw new MetaNotFoundException("table " + this.tableId + " does not exist");
             }
+            StreamLoadInfo info = StreamLoadInfo.fromRoutineLoadJob(this);
+            info.setTxnId(txnId);
             StreamLoadPlanner planner =
-                    new StreamLoadPlanner(db, (OlapTable) table, StreamLoadInfo.fromRoutineLoadJob(this));
+                    new StreamLoadPlanner(db, (OlapTable) table, info);
             TExecPlanFragmentParams planParams = planner.plan(loadId);
             planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
             // add table indexes to transaction state
@@ -747,6 +786,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 throw new MetaNotFoundException("txn does not exist: " + txnId);
             }
             txnState.addTableIndexes(planner.getDestTable());
+
+            planParams.setImport_label(txnState.getLabel());
+            planParams.setDb_name(db.getFullName());
+            planParams.setLoad_job_id(txnId);
 
             return planParams;
         } finally {
@@ -1047,6 +1090,17 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
         routineLoadTaskInfo.setTxnStatus(txnStatus);
 
+        if (TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr) == 
+                                            TransactionState.TxnStatusChangeReason.FILTERED_ROWS) {
+            updateState(JobState.PAUSED,
+                        new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR, txnStatusChangeReasonStr),
+                        false /* not replay */);
+            LOG.warn(
+                    "routine load task [job name {}, task id {}] aborted because of {}, change state to PAUSED",
+                     name, routineLoadTaskInfo.getId().toString(), txnStatusChangeReasonStr);
+            return;
+        }
+
         if (state == JobState.RUNNING) {
             if (txnStatus == TransactionStatus.ABORTED) {
                 RoutineLoadTaskInfo newRoutineLoadTaskInfo = unprotectRenewTask(
@@ -1079,7 +1133,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                     tblName, tblName));
         }
 
-        if (!table.isOlapOrLakeTable()) {
+        if (!table.isOlapOrCloudNativeTable()) {
             throw new AnalysisException("Only olap/lake table support routine load");
         }
 
@@ -1384,6 +1438,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             jobProperties.put("rowDelimiter", rowDelimiter == null ? "\t" : rowDelimiter.toString());
         }
         jobProperties.put("maxErrorNum", String.valueOf(maxErrorNum));
+        jobProperties.put("maxFilterRatio", String.valueOf(maxFilterRatio));
         jobProperties.put("maxBatchIntervalS", String.valueOf(taskSchedIntervalS));
         jobProperties.put("maxBatchRows", String.valueOf(maxBatchRows));
         jobProperties.put("currentTaskConcurrentNum", String.valueOf(currentTaskConcurrentNum));
@@ -1641,6 +1696,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY)) {
             this.maxErrorNum = Long.parseLong(
                     copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY));
+        }
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY)) {
+            this.maxFilterRatio = Double.parseDouble(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.MAX_FILTER_RATIO_PROPERTY));
         }
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY)) {
             this.taskSchedIntervalS = Long.parseLong(

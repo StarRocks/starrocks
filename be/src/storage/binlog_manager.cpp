@@ -25,17 +25,18 @@ RowsetSharedPtr DupKeyRowsetFetcher::get_rowset(int64_t rowset_id) {
     return _tablet.get_inc_rowset_by_version(Version(rowset_id, rowset_id));
 }
 
-BinlogManager::BinlogManager(int64_t _tablet_id, std::string path, int64_t max_file_size, int32_t max_page_size,
+BinlogManager::BinlogManager(int64_t tablet_id, std::string path, int64_t max_file_size, int32_t max_page_size,
                              CompressionTypePB compression_type, std::shared_ptr<RowsetFetcher> rowset_fetcher)
-        : _tablet_id(_tablet_id),
+        : _tablet_id(tablet_id),
           _path(std::move(path)),
           _max_file_size(max_file_size),
           _max_page_size(max_page_size),
           _compression_type(compression_type),
-          _rowset_fetcher(rowset_fetcher) {}
+          _rowset_fetcher(rowset_fetcher),
+          _unused_binlog_file_ids(UINT64_MAX) {}
 
 BinlogManager::~BinlogManager() {
-    std::lock_guard lock(_meta_lock);
+    std::unique_lock lock(_meta_lock);
     if (_active_binlog_writer != nullptr) {
         _active_binlog_writer->close(true);
         _active_binlog_writer.reset();
@@ -47,9 +48,9 @@ StatusOr<BinlogBuilderParamsPtr> BinlogManager::begin_ingestion(int64_t version)
     DCHECK_EQ(-1, _ingestion_version);
 
     std::shared_lock meta_lock(_meta_lock);
-    if (!_binlog_file_metas.empty()) {
-        BinlogFileMetaPBPtr file_meta = _binlog_file_metas.rbegin()->second;
-        int64_t max_version = file_meta->end_version();
+    if (!_alive_binlog_files.empty()) {
+        BinlogFilePtr binlog_file = _alive_binlog_files.rbegin()->second;
+        int64_t max_version = binlog_file->file_meta()->end_version();
         if (max_version >= version) {
             VLOG(3) << "The version already existed in binlog, tablet: " << _tablet_id
                     << ", max version: " << max_version << ", new version: " << version;
@@ -65,8 +66,8 @@ StatusOr<BinlogBuilderParamsPtr> BinlogManager::begin_ingestion(int64_t version)
     params->compression_type = _compression_type;
     params->start_file_id = _next_file_id;
     if (_active_binlog_writer != nullptr) {
-        params->active_file_meta = _binlog_file_metas.rbegin()->second;
-        params->active_file_writer.swap(_active_binlog_writer);
+        params->active_file_meta = _alive_binlog_files.rbegin()->second->file_meta();
+        params->active_file_writer = _active_binlog_writer;
     }
     return params;
 }
@@ -114,10 +115,11 @@ void BinlogManager::_apply_build_result(BinlogBuildResult* result) {
     std::unique_lock lock(_meta_lock);
     for (auto& meta : result->metas) {
         int128_t lsn = BinlogUtil::get_lsn(meta->start_version(), meta->start_seq_id());
-        auto it = _binlog_file_metas.find(lsn);
-        bool override_meta = it != _binlog_file_metas.end();
+        auto it = _alive_binlog_files.find(lsn);
+        bool override_meta = it != _alive_binlog_files.end();
         if (override_meta) {
-            BinlogFileMetaPBPtr& old_file_meta = it->second;
+            BinlogFilePtr binlog_file = it->second;
+            BinlogFileMetaPBPtr& old_file_meta = binlog_file->file_meta();
             std::unordered_set<int64_t> old_rowsets;
             for (auto rowset_id : old_file_meta->rowsets()) {
                 old_rowsets.emplace(rowset_id);
@@ -125,29 +127,206 @@ void BinlogManager::_apply_build_result(BinlogBuildResult* result) {
 
             for (auto rowset_id : meta->rowsets()) {
                 if (old_rowsets.count(rowset_id) == 0) {
-                    if (_rowset_count_map.count(rowset_id) == 0) {
-                        _total_rowset_disk_size += _rowset_fetcher->get_rowset(rowset_id)->data_disk_size();
+                    if (_alive_rowset_count_map.count(rowset_id) == 0) {
+                        _total_alive_rowset_data_size += _rowset_fetcher->get_rowset(rowset_id)->data_disk_size();
                     }
-                    _rowset_count_map[rowset_id] += 1;
+                    _alive_rowset_count_map[rowset_id] += 1;
                 }
             }
 
-            _total_binlog_file_disk_size += meta->file_size() - old_file_meta->file_size();
-            _binlog_file_metas[lsn] = meta;
+            _total_alive_binlog_file_size += meta->file_size() - old_file_meta->file_size();
+            binlog_file->update_file_meta(meta);
         } else {
-            _binlog_file_metas[lsn] = meta;
+            _alive_binlog_files[lsn] = std::make_shared<BinlogFile>(meta);
             for (auto rowset_id : meta->rowsets()) {
-                if (_rowset_count_map.count(rowset_id) == 0) {
-                    _total_rowset_disk_size += _rowset_fetcher->get_rowset(rowset_id)->data_disk_size();
+                if (_alive_rowset_count_map.count(rowset_id) == 0) {
+                    _total_alive_rowset_data_size += _rowset_fetcher->get_rowset(rowset_id)->data_disk_size();
                 }
-                _rowset_count_map[rowset_id] += 1;
+                _alive_rowset_count_map[rowset_id] += 1;
             }
-            _total_binlog_file_disk_size += meta->file_size();
+            _total_alive_binlog_file_size += meta->file_size();
         }
     }
 
     _next_file_id = result->next_file_id;
     _active_binlog_writer = result->active_writer;
+}
+
+void BinlogManager::check_expire_and_capacity(int64_t current_second, int64_t binlog_ttl_second,
+                                              int64_t binlog_max_size) {
+    std::unique_lock lock(_meta_lock);
+    _check_wait_reader_binlog_files();
+    _check_alive_binlog_files(current_second, binlog_ttl_second, binlog_max_size);
+
+    LOG(INFO) << "Check binlog expire and capacity, tablet: " << _tablet_id
+              << ", num alive binlog files: " << _alive_binlog_files.size()
+              << ", num alive rowset: " << _alive_rowset_count_map.size()
+              << ", total_alive_binlog_file_size: " << _total_alive_binlog_file_size
+              << ", total_alive_rowset_data_size: " << _total_alive_rowset_data_size << ", "
+              << ", num wait reader binlog files: " << _wait_reader_binlog_files.size()
+              << ", num wait reader rowset: " << _wait_reader_rowset_count_map.size()
+              << ", total_wait_reader_binlog_file_size: " << _total_wait_reader_binlog_file_size
+              << ", total_wait_reader_rowset_data_size: " << _total_wait_reader_rowset_data_size;
+}
+
+void BinlogManager::_check_wait_reader_binlog_files() {
+    int64_t first_file_id = -1;
+    int64_t last_file_id = -1;
+    int64_t num_files = 0;
+    while (!_wait_reader_binlog_files.empty()) {
+        auto& binlog_file = _wait_reader_binlog_files.front();
+        if (binlog_file->reader_count() > 0) {
+            break;
+        }
+        auto& file_meta = binlog_file->file_meta();
+        _total_wait_reader_binlog_file_size -= file_meta->file_size();
+        for (int64_t rowset_id : file_meta->rowsets()) {
+            int32_t count = --_wait_reader_rowset_count_map[rowset_id];
+            if (count == 0) {
+                _wait_reader_rowset_count_map.erase(rowset_id);
+                _total_wait_reader_rowset_data_size -= _rowset_fetcher->get_rowset(rowset_id)->data_disk_size();
+            }
+        }
+        _unused_binlog_file_ids.blocking_put(file_meta->id());
+        if (first_file_id == -1) {
+            first_file_id = file_meta->id();
+        }
+        last_file_id = file_meta->id();
+        num_files += 1;
+
+        _wait_reader_binlog_files.pop_front();
+
+        VLOG(3) << "Binlog file finished to wait readers, tablet: " << _tablet_id << ", file id: " << file_meta->id();
+    }
+    LOG(INFO) << "Check wait reader binlog files, tablet: " << _tablet_id << ", num unused files: " << num_files
+              << ", first_file_id: " << first_file_id << ", last_file_id: " << last_file_id
+              << ", num of still wait files: " << _wait_reader_binlog_files.size();
+}
+
+void BinlogManager::_check_alive_binlog_files(int64_t current_second, int64_t binlog_ttl_second,
+                                              int64_t binlog_max_size) {
+    int64_t expiration_time = current_second - binlog_ttl_second;
+    int64_t active_file_id = _active_binlog_writer != nullptr ? _active_binlog_writer->file_id() : -1;
+    // binlog files should be deleted in the order by the file id, and if there are previous
+    // binlog files waiting for readers, the latter should also wait for the readers
+    bool need_wait_reader = !_wait_reader_binlog_files.empty();
+    int64_t first_file_id = -1;
+    int64_t last_file_id = -1;
+    int64_t num_files = 0;
+    int64_t num_unused_files = 0;
+    for (auto it = _alive_binlog_files.begin(); it != _alive_binlog_files.end();) {
+        auto& binlog_file = it->second;
+        auto& meta = binlog_file->file_meta();
+        // skip to clean up the active file
+        if (meta->id() == active_file_id) {
+            break;
+        }
+        bool expired = meta->end_timestamp_in_us() / 1000000 < expiration_time;
+        bool overcapacity = _total_alive_binlog_file_size + _total_alive_rowset_data_size > binlog_max_size;
+        if (!expired && !overcapacity) {
+            break;
+        }
+
+        if (binlog_file->reader_count() > 0) {
+            need_wait_reader = true;
+        }
+
+        _total_alive_binlog_file_size -= meta->file_size();
+        if (need_wait_reader) {
+            _wait_reader_binlog_files.push_back(binlog_file);
+            _total_wait_reader_binlog_file_size += meta->file_size();
+        } else {
+            _unused_binlog_file_ids.blocking_put(meta->id());
+        }
+
+        for (int64_t rowset_id : meta->rowsets()) {
+            auto rit = _alive_rowset_count_map.find(rowset_id);
+            DCHECK(rit != _alive_rowset_count_map.end());
+            rit->second--;
+            if (rit->second == 0) {
+                _alive_rowset_count_map.erase(rowset_id);
+                _total_alive_rowset_data_size -= _rowset_fetcher->get_rowset(rowset_id)->data_disk_size();
+            }
+            if (need_wait_reader) {
+                int32_t wait_count = ++_wait_reader_rowset_count_map[rowset_id];
+                if (wait_count == 1) {
+                    _total_wait_reader_rowset_data_size += _rowset_fetcher->get_rowset(rowset_id)->data_disk_size();
+                }
+            }
+        }
+
+        if (first_file_id == -1) {
+            first_file_id = meta->id();
+        }
+        last_file_id = meta->id();
+        num_files += 1;
+        num_unused_files += need_wait_reader ? 0 : 1;
+
+        it = _alive_binlog_files.erase(it);
+
+        VLOG(3) << "Binlog file is not alive, tablet: " << _tablet_id << ", file_id: " << meta->id()
+                << ", expired: " << expired << ", overcapacity: " << overcapacity
+                << ", need_wait_reader: " << need_wait_reader;
+    }
+
+    LOG(INFO) << "Check alive binlog files, tablet: " << _tablet_id << ", num files: " << num_files
+              << ", first file id: " << first_file_id << ", last file id: " << last_file_id
+              << ", num unused files: " << num_unused_files;
+}
+
+void BinlogManager::delete_unused_binlog() {
+    StatusOr<std::shared_ptr<FileSystem>> status_or = FileSystem::CreateSharedFromString(_path);
+    if (!status_or.ok()) {
+        LOG(ERROR) << "Failed to delete unused binlog, tablet: " << _tablet_id << ", " << status_or.status();
+        return;
+    }
+    std::shared_ptr<FileSystem> fs = status_or.value();
+    int64_t file_id;
+    int32_t total_num = 0;
+    int32_t fail_num = 0;
+    while (_unused_binlog_file_ids.try_get(&file_id) == 1) {
+        total_num += 1;
+        std::string file_path = BinlogUtil::binlog_file_path(_path, file_id);
+        // TODO use path gc to clean up binlog files if fail to delete
+        Status st = fs->delete_file(file_path);
+        if (st.ok()) {
+            VLOG(3) << "Delete binlog file, tablet: " << _tablet_id << ", file path: " << file_path;
+        } else {
+            LOG(WARNING) << "Fail to delete binlog file, tablet:  " << _tablet_id << ", file path: " << file_path
+                         << ", " << st;
+            fail_num += 1;
+        }
+    }
+
+    LOG(INFO) << "Delete unused binlog files, tablet: " << _tablet_id << ", total files: " << total_num
+              << ", failed to delete: " << fail_num;
+}
+
+void BinlogManager::delete_all_binlog() {
+    {
+        std::unique_lock lock(_meta_lock);
+        while (!_wait_reader_binlog_files.empty()) {
+            auto& binlog_file = _wait_reader_binlog_files.front();
+            _unused_binlog_file_ids.blocking_put(binlog_file->file_meta()->id());
+            _wait_reader_binlog_files.pop_front();
+        }
+        for (auto it = _alive_binlog_files.begin(); it != _alive_binlog_files.end(); it++) {
+            _unused_binlog_file_ids.blocking_put(it->second->file_meta()->id());
+        }
+        _alive_binlog_files.clear();
+        _alive_rowset_count_map.clear();
+        _total_alive_binlog_file_size = 0;
+        _total_alive_rowset_data_size = 0;
+        _wait_reader_rowset_count_map.clear();
+        _total_wait_reader_binlog_file_size = 0;
+        _total_wait_reader_rowset_data_size = 0;
+    }
+    delete_unused_binlog();
+}
+
+bool BinlogManager::is_rowset_used(int64_t rowset_id) {
+    std::shared_lock lock(_meta_lock);
+    return _alive_rowset_count_map.count(rowset_id) >= 1 || _wait_reader_rowset_count_map.count(rowset_id) >= 1;
 }
 
 StatusOr<int64_t> BinlogManager::register_reader(std::shared_ptr<BinlogReader> reader) {
@@ -164,38 +343,39 @@ void BinlogManager::unregister_reader(int64_t reader_id) {
     _binlog_readers.erase(reader_id);
 }
 
-StatusOr<BinlogFileMetaPBPtr> BinlogManager::find_binlog_meta(int64_t version, int64_t seq_id) {
+StatusOr<BinlogFileReadHolderPtr> BinlogManager::find_binlog_file(int64_t version, int64_t seq_id) {
     std::shared_lock lock(_meta_lock);
     int128_t lsn = BinlogUtil::get_lsn(version, seq_id);
     // find the first file whose start lsn is greater than the target
-    auto upper = _binlog_file_metas.upper_bound(lsn);
-    if (upper == _binlog_file_metas.begin()) {
+    auto upper = _alive_binlog_files.upper_bound(lsn);
+    if (upper == _alive_binlog_files.begin()) {
         return Status::NotFound(fmt::format("Can't find file meta for version {}, seq_id {}", version, seq_id));
     }
 
-    BinlogFileMetaPBPtr file_meta;
-    if (upper == _binlog_file_metas.end()) {
-        file_meta = _binlog_file_metas.rbegin()->second;
+    BinlogFilePtr binlog_file;
+    if (upper == _alive_binlog_files.end()) {
+        binlog_file = _alive_binlog_files.rbegin()->second;
     } else {
-        file_meta = (--upper)->second;
+        binlog_file = (--upper)->second;
     }
 
-    if (file_meta->end_version() < version) {
+    if (binlog_file->file_meta()->end_version() < version) {
         return Status::NotFound(fmt::format("Can't find file meta for version {}, seq_id {}", version, seq_id));
     }
 
-    return file_meta;
+    return binlog_file->new_read_holder();
 }
 
 BinlogRange BinlogManager::current_binlog_range() {
     std::shared_lock lock(_meta_lock);
-    if (_binlog_file_metas.empty()) {
+    if (_alive_binlog_files.empty()) {
         return {0, 0, -1, -1};
     }
 
-    BinlogFileMetaPBPtr& start = _binlog_file_metas.begin()->second;
-    BinlogFileMetaPBPtr& end = _binlog_file_metas.rbegin()->second;
-    return BinlogRange(start->start_version(), start->start_seq_id(), end->end_version(), end->end_seq_id());
+    BinlogFilePtr& start = _alive_binlog_files.begin()->second;
+    BinlogFilePtr& end = _alive_binlog_files.rbegin()->second;
+    return BinlogRange(start->file_meta()->start_version(), start->file_meta()->start_seq_id(),
+                       end->file_meta()->end_version(), end->file_meta()->end_seq_id());
 }
 
 void BinlogManager::close_active_writer() {

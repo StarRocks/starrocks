@@ -109,12 +109,8 @@ CONF_Int32(push_worker_count_normal_priority, "3");
 // The count of thread to high priority batch load.
 CONF_Int32(push_worker_count_high_priority, "3");
 
-#ifdef BE_TEST
-CONF_Int32(transaction_publish_version_worker_count, "1");
-#else
 // The count of thread to publish version per transaction
-CONF_Int32(transaction_publish_version_worker_count, "8");
-#endif
+CONF_mInt32(transaction_publish_version_worker_count, "0");
 
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
@@ -125,11 +121,11 @@ CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
 CONF_Int32(alter_tablet_worker_count, "3");
 // The count of parallel clone task per storage path
-CONF_Int32(parallel_clone_task_per_path, "2");
-// The count of thread to clone.
+CONF_mInt32(parallel_clone_task_per_path, "8");
+// The count of thread to clone. Deprecated
 CONF_Int32(clone_worker_count, "3");
 // The count of thread to clone.
-CONF_Int32(storage_medium_migrate_count, "1");
+CONF_Int32(storage_medium_migrate_count, "3");
 // The count of thread to check consistency.
 CONF_Int32(check_consistency_worker_count, "1");
 // The count of thread to upload.
@@ -467,9 +463,10 @@ CONF_mInt64(write_buffer_size, "104857600");
 // NOTICE(cmy): set these default values very large because we don't want to
 // impact the load performace when user upgrading StarRocks.
 // user should set these configs properly if necessary.
+CONF_Int32(query_max_memory_limit_percent, "90");
 CONF_Int64(load_process_max_memory_limit_bytes, "107374182400"); // 100GB
 CONF_Int32(load_process_max_memory_limit_percent, "30");         // 30%
-CONF_Bool(enable_new_load_on_memory_limit_exceeded, "false");
+CONF_mBool(enable_new_load_on_memory_limit_exceeded, "true");
 CONF_Int64(compaction_max_memory_limit, "-1");
 CONF_Int32(compaction_max_memory_limit_percent, "100");
 CONF_Int64(compaction_memory_limit_per_worker, "2147483648"); // 2GB
@@ -505,7 +502,7 @@ CONF_mInt32(max_consumer_num_per_group, "3");
 CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
 
 // The size of thread pool for routine load task.
-// this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
+// this should be larger than FE config 'max_routine_load_task_num_per_be' (default 5).
 CONF_Int32(routine_load_thread_pool_size, "10");
 
 // kafka reqeust timeout
@@ -740,29 +737,27 @@ CONF_Bool(object_storage_endpoint_use_https, "false");
 // https://hadoop.apache.org/docs/current2/hadoop-aws/tools/hadoop-aws/index.html
 CONF_Bool(object_storage_endpoint_path_style_access, "false");
 
+// orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
 CONF_Int32(orc_file_cache_max_size, "8388608");
 CONF_Int32(orc_natural_read_size, "8388608");
 CONF_mBool(orc_coalesce_read_enable, "true");
 
-// parquet reader, each column will reserve X bytes for read
-// but with coalesce read enabled, this value is not used.
-CONF_mInt32(parquet_buffer_stream_reserve_size, "1048576");
+// parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_mInt32(parquet_header_max_size, "16384");
 CONF_Bool(parquet_late_materialization_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
-
-CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 CONF_Int32(io_tasks_per_scan_operator, "4");
-CONF_Bool(connector_chunk_source_accumulate_chunk_enable, "true");
-CONF_Bool(connector_dynamic_chunk_buffer_limiter_enable, "true");
-CONF_Bool(connector_min_max_predicate_from_runtime_filter_enable, "true");
-CONF_Bool(scan_node_always_shared_scan, "false");
-CONF_Bool(connector_scan_node_always_shared_scan, "true");
+CONF_Int32(connector_io_tasks_per_scan_operator, "16");
+CONF_Int32(connector_io_tasks_min_size, "2");
+CONF_Int32(connector_io_tasks_adjust_interval_ms, "50");
+CONF_Int32(connector_io_tasks_adjust_step, "1");
+CONF_Int32(connector_io_tasks_adjust_smooth, "4");
+CONF_Int32(connector_io_tasks_slow_io_latency_ms, "50");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
@@ -804,6 +799,19 @@ CONF_Int32(starlet_port, "9070");
 CONF_Int32(starlet_cache_thread_num, "64");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
+// Cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
+CONF_Int32(starlet_cache_check_interval, "900");
+// Cache backend cache evictor interval (in seconds)
+CONF_Int32(starlet_cache_evict_interval, "60");
+// Cache will start evict cache files if free space belows this value(percentage)
+CONF_Double(starlet_cache_evict_low_water, "0.1");
+// Cache will stop evict cache files if free space is above this value(percentage)
+CONF_Double(starlet_cache_evict_high_water, "0.2");
+// type:Integer. cache directory allocation policy. (0:default, 1:random, 2:round-robin)
+CONF_Int32(starlet_cache_dir_allocate_policy, "0");
+// Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
+// Only support in S3/HDFS currently.
+CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
 #endif
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -811,7 +819,10 @@ CONF_Int64(lake_gc_metadata_max_versions, "10");
 CONF_Int64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
 CONF_Int64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
 // This value should be much larger than the maximum timeout of loading/compaction/schema change jobs.
+// The actual effective value is max(lake_gc_segment_expire_seconds, 86400)
 CONF_Int64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
+CONF_Bool(lake_compaction_check_txn_log_first, "false");
+CONF_Int64(experimental_lake_segment_gc_max_retries, "3");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -837,8 +848,11 @@ CONF_Int16(jdbc_minimum_idle_connections, "1");
 CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
 // spill dirs
-CONF_String(spill_local_storage_dir, "spill");
-CONF_mBool(experimental_spill_skip_sync, "false");
+CONF_String(spill_local_storage_dir, "${STARROCKS_HOME}/spill");
+// when spill occurs, whether enable skip synchronous flush
+CONF_mBool(experimental_spill_skip_sync, "true");
+// spill Initial number of partitions
+CONF_mInt32(spill_init_partition, "4");
 // The maximum size of a single log block container file, this is not a hard limit.
 // If the file size exceeds this limit, a new file will be created to store the block.
 CONF_Int64(spill_max_log_block_container_bytes, "10737418240"); // 10GB
@@ -883,6 +897,8 @@ CONF_Int64(block_cache_max_concurrent_inserts, "1000000");
 // Once this is reached, requests will be rejected until the parcel memory usage gets under the limit.
 CONF_Int64(block_cache_max_parcel_memory_mb, "256");
 CONF_Bool(block_cache_report_stats, "false");
+// cachelib, starcache
+CONF_String(block_cache_engine, "starcache");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
@@ -905,7 +921,11 @@ CONF_Int32(exception_stack_level, "1");
 CONF_String(exception_stack_white_list, "std::");
 CONF_String(exception_stack_black_list, "apache::thrift::,ue2::,arangodb::");
 
-CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache=128M}");
+// PK table's tabletmeta object size may got very large(lot's of edit versions), so it may not fit into block cache
+// that may impact BE load dir time when restart. here we change num_shard_bits to 0 to disable block cache sharding,
+// so large tabletmeta object can fit in block cache. After we optimize PK table's tabletmeta object size, we can
+// revert this config change.
+CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={capacity=256M;num_shard_bits=0}}");
 
 // limit local exchange buffer's memory size per driver
 CONF_Int64(local_exchange_buffer_mem_limit_per_driver, "134217728"); // 128MB
@@ -917,5 +937,15 @@ CONF_Int64(binlog_file_max_size, "536870912");
 CONF_Int32(binlog_page_max_size, "1048576");
 
 CONF_mInt64(txn_info_history_size, "20000");
+CONF_mInt64(file_write_history_size, "10000");
+
+CONF_mInt32(update_cache_evict_internal_sec, "11");
+CONF_mBool(enable_auto_evict_update_cache, "true");
+
+CONF_Bool(enable_preload_column_mode_update_cache, "true");
+
+CONF_mInt64(load_tablet_timeout_seconds, "30");
+
+CONF_mBool(enable_pk_value_column_zonemap, "true");
 
 } // namespace starrocks::config

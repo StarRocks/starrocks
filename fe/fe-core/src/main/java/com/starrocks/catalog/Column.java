@@ -38,7 +38,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotRef;
@@ -53,6 +52,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.thrift.TColumn;
 
 import java.io.DataInput;
@@ -107,6 +107,8 @@ public class Column implements Writable {
     // Currently, analyzed define expr is only used when creating materialized views, so the define expr in RollupJob must be analyzed.
     // In other cases, such as define expr in `MaterializedIndexMeta`, it may not be analyzed after being relayed.
     private Expr defineExpr; // use to define column in materialize view
+    @SerializedName(value = "materializedColumnExpr")
+    private Expr materializedColumnExpr;
 
     public Column() {
         this.name = "";
@@ -169,6 +171,7 @@ public class Column implements Writable {
         this.isAutoIncrement = false;
         this.comment = comment;
         this.stats = new ColumnStats();
+        this.materializedColumnExpr = null;
     }
 
     public Column(Column column) {
@@ -311,6 +314,10 @@ public class Column implements Writable {
         return comment;
     }
 
+    public boolean isMaterializedColumn() {
+        return materializedColumnExpr != null;
+    }
+
     public int getOlapColumnIndexSize() {
         PrimitiveType type = this.getPrimitiveType();
         if (type == PrimitiveType.CHAR) {
@@ -343,6 +350,10 @@ public class Column implements Writable {
     }
 
     public void checkSchemaChangeAllowed(Column other) throws DdlException {
+        if (other.isMaterializedColumn()) {
+            return;
+        }
+
         if (Strings.isNullOrEmpty(other.name)) {
             throw new DdlException("Dest column name is empty");
         }
@@ -435,6 +446,17 @@ public class Column implements Writable {
         defineExpr = expr;
     }
 
+    public Expr materializedColumnExpr() {
+        if (materializedColumnExpr == null) {
+            return null;
+        }
+        return materializedColumnExpr.clone();
+    }
+
+    public void setMaterializedColumnExpr(Expr expr) {
+        materializedColumnExpr = expr;
+    }
+
     public SlotRef getRefColumn() {
         List<Expr> slots = new ArrayList<>();
         if (defineExpr == null) {
@@ -443,6 +465,16 @@ public class Column implements Writable {
             defineExpr.collect(SlotRef.class, slots);
             Preconditions.checkArgument(slots.size() == 1);
             return (SlotRef) slots.get(0);
+        }
+    }
+
+    public List<SlotRef> getMaterializedColumnRef() {
+        List<SlotRef> slots = new ArrayList<>();
+        if (materializedColumnExpr == null) {
+            return null;
+        } else {
+            materializedColumnExpr.collect(SlotRef.class, slots);
+            return slots;
         }
     }
 
@@ -471,6 +503,8 @@ public class Column implements Writable {
         } else if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
                 getPrimitiveType() != PrimitiveType.BITMAP) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
+        } else if (isMaterializedColumn()) {
+            sb.append("AS " + materializedColumnExpr.toSql() + " ");
         }
         sb.append("COMMENT \"").append(comment).append("\"");
 
@@ -562,6 +596,9 @@ public class Column implements Writable {
         if (isAutoIncrement) {
             sb.append("AUTO_INCREMENT ");
         }
+        if (isMaterializedColumn()) {
+            sb.append("AS " + materializedColumnExpr.toSql() + " ");
+        }
         if (defaultValue != null && getPrimitiveType() != PrimitiveType.HLL &&
                 getPrimitiveType() != PrimitiveType.BITMAP) {
             sb.append("DEFAULT \"").append(defaultValue).append("\" ");
@@ -614,13 +651,23 @@ public class Column implements Writable {
             return false;
         }
 
-        if (this.getStrLen() != other.getStrLen()) {
+        if (this.getType().isScalarType() && other.getType().isScalarType()) {
+            if (this.getStrLen() != other.getStrLen()) {
+                return false;
+            }
+            if (this.getPrecision() != other.getPrecision()) {
+                return false;
+            }
+            if (this.getScale() != other.getScale()) {
+                return false;
+            }
+        }
+
+        if (this.isMaterializedColumn() && !other.isMaterializedColumn()) {
             return false;
         }
-        if (this.getPrecision() != other.getPrecision()) {
-            return false;
-        }
-        if (this.getScale() != other.getScale()) {
+        if (this.isMaterializedColumn() &&
+                !this.materializedColumnExpr().equals(other.materializedColumnExpr())) {
             return false;
         }
 

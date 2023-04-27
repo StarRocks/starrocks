@@ -15,6 +15,7 @@
 package com.starrocks.sql.common;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.BaseMessage;
+
 public interface ParserErrorMsg {
 
     // --------- error in building AST phase ---------
@@ -37,15 +38,15 @@ public interface ParserErrorMsg {
     String tokenExceedLimit();
 
     @BaseMessage("The inserted rows are {0} exceeded the maximum limit {1}, please consider modify " +
-            "''expr_children_limit'' in BE conf")
+            "''expr_children_limit'' in FE conf")
     String insertRowsExceedLimit(long a0, int a1);
 
     @BaseMessage("The number of exprs are {0} exceeded the maximum limit {1}, please consider modify " +
-            "''expr_children_limit'' in BE conf")
+            "''expr_children_limit'' in FE conf")
     String exprsExceedLimit(long a0, int a1);
 
     @BaseMessage("The number of children in expr are {0} exceeded the maximum limit {1}, please consider modify " +
-            "''expr_children_limit'' in BE conf")
+            "''expr_children_limit'' in FE conf")
     String argsOfExprExceedLimit(long a0, int a1);
 
     @BaseMessage("Invalid db name format ''{0}''")
@@ -93,8 +94,14 @@ public interface ParserErrorMsg {
     @BaseMessage("Sql to be add black list is empty")
     String emptySql();
 
-    @BaseMessage("Column ''{0}'' can not be AUTO_INCREMENT when {1} COLUMN.")
+    @BaseMessage("Column ''{0}'' can not be AUTO_INCREMENT when {1} COLUMN")
     String autoIncrementForbid(String a0, String a1);
+
+    @BaseMessage("Column ''{0}'' can not be MATERIALIZED COLUMN when {1}")
+    String materializedColumnForbid(String a0, String a1);
+
+    @BaseMessage("{0} can not be set when {1}")
+    String materializedColumnLimit(String a0, String a1);
 
     @BaseMessage("No tables used")
     String noTableUsed();
@@ -114,9 +121,17 @@ public interface ParserErrorMsg {
     @BaseMessage("Binary literal can only contain hexadecimal digits and an even number of digits")
     String invalidBinaryFormat();
 
-    @BaseMessage("Refresh start time must be after current time")
-    String invalidStartTime();
+    @BaseMessage("Invalid map format, which should be key:value")
+    String invalidMapFormat();
 
+    @BaseMessage("{0} must be nullable column")
+    String foundNotNull(String a0);
+
+    @BaseMessage("{0} has no default values")
+    String hasDefaultValue(String a0);
+
+    @BaseMessage("{0} can not be KEY")
+    String isKey(String a0);
 
     // --------- error in analyzing phase ---------
     @BaseMessage("Invalid {0} id format ''{1}''")

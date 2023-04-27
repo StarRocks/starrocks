@@ -186,7 +186,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public String getTableIdentifier() {
-        return Joiner.on(":").join(hiveTableName, createTime);
+        return Joiner.on(":").join(name, createTime);
     }
 
     public static HudiTableType fromInputFormat(String inputFormat) {

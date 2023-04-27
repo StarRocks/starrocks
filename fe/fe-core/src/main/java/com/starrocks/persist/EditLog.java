@@ -92,7 +92,6 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
@@ -105,7 +104,6 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -151,54 +149,6 @@ public class EditLog {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
                             .initTransactionId(id + 1);
                     break;
-                }
-                case OperationType.OP_CREATE_WH: {
-                    Warehouse wh = (Warehouse) journal.getData();
-                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replayCreateWarehouse(wh);
-                    break;
-                }
-                case OperationType.OP_ALTER_WH_ADD_CLUSTER: {
-                    AlterWhClusterOplog log = (AlterWhClusterOplog) journal.getData();
-                    String warehouseName = log.getWarehouseName();
-                    Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
-                    warehouse.replayAddCluster(log);
-                    break;
-                }
-                case OperationType.OP_ALTER_WH_REMOVE_CLUSTER: {
-                    AlterWhClusterOplog log = (AlterWhClusterOplog) journal.getData();
-                    String warehouseName = log.getWarehouseName();
-                    Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
-                    warehouse.replayRemoveCluster(log);
-                    break;
-                }
-                case OperationType.OP_ALTER_WH_MOD_PROP: {
-                    AlterWhPropertyOplog log = (AlterWhPropertyOplog) journal.getData();
-                    String warehouseName = log.getWarehouseName();
-                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replayModifyProperty(warehouseName, log.getProperties());
-                    break;
-                }
-                case OperationType.OP_SUSPEND_WH: {
-                    OpWarehouseLog log = (OpWarehouseLog) journal.getData();
-                    String warehouseName = log.getWarehouseName();
-                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replaySuspendWarehouse(warehouseName);
-                    break;
-                }
-                case OperationType.OP_RESUME_WH: {
-                    ResumeWarehouseLog log = (ResumeWarehouseLog) journal.getData();
-                    String warehouseName = log.getWarehouseName();
-                    Map<Long, com.starrocks.warehouse.Cluster> clusterMap = log.getClusters();
-                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replayResumeWarehouse(warehouseName, clusterMap);
-                    break;
-                }
-                case OperationType.OP_DROP_WH: {
-                    OpWarehouseLog log = (OpWarehouseLog) journal.getData();
-                    String warehouseName = log.getWarehouseName();
-                    WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
-                    warehouseMgr.replayDropWarehouse(warehouseName);
                 }
                 case OperationType.OP_SAVE_AUTO_INCREMENT_ID:
                 case OperationType.OP_DELETE_AUTO_INCREMENT_ID: {
@@ -994,6 +944,12 @@ public class EditLog {
                     globalStateMgr.getAuthenticationManager().replayDropUser(userIdentity);
                     break;
                 }
+                case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
+                    SecurityIntegrationInfo info = (SecurityIntegrationInfo) journal.getData();
+                    globalStateMgr.getAuthenticationManager().replayCreateSecurityIntegration(
+                            info.name, info.propertyMap);
+                    break;
+                }
                 case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
                     globalStateMgr.getAuthorizationManager().replayUpdateRolePrivilegeCollection(info);
@@ -1088,7 +1044,7 @@ public class EditLog {
     /**
      * wait for JournalWriter commit all logs
      */
-    public void waitInfinity(long startTime, Future<Boolean> task) {
+    public static void waitInfinity(long startTime, Future<Boolean> task) {
         boolean result;
         int cnt = 0;
         while (true) {
@@ -1122,33 +1078,6 @@ public class EditLog {
         logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
     }
 
-    public void logCreateWarehouse(Warehouse warehouse) {
-        logEdit(OperationType.OP_CREATE_WH, warehouse);
-    }
-
-    public void logAddCluster(AlterWhClusterOplog log) {
-        logEdit(OperationType.OP_ALTER_WH_ADD_CLUSTER, log);
-    }
-
-    public void logRemoveCluster(AlterWhClusterOplog log) {
-        logEdit(OperationType.OP_ALTER_WH_REMOVE_CLUSTER, log);
-    }
-
-    public void logModifyWhProperty(AlterWhPropertyOplog log) {
-        logEdit(OperationType.OP_ALTER_WH_MOD_PROP, log);
-    }
-
-    public void logSuspendWarehouse(OpWarehouseLog log) {
-        logEdit(OperationType.OP_SUSPEND_WH, log);
-    }
-
-    public void logResumeWarehouse(ResumeWarehouseLog log) {
-        logEdit(OperationType.OP_RESUME_WH, log);
-    }
-
-    public void logDropWarehouse(OpWarehouseLog log) {
-        logEdit(OperationType.OP_DROP_WH, log);
-    }
     public void logSaveAutoIncrementId(AutoIncrementInfo info) {
         logEdit(OperationType.OP_SAVE_AUTO_INCREMENT_ID, info);
     }
@@ -1729,6 +1658,11 @@ public class EditLog {
 
     public void logDropUser(UserIdentity userIdentity) {
         logEdit(OperationType.OP_DROP_USER_V2, userIdentity);
+    }
+
+    public void logCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
+        SecurityIntegrationInfo info = new SecurityIntegrationInfo(name, propertyMap);
+        logEdit(OperationType.OP_CREATE_SECURITY_INTEGRATION, info);
     }
 
     public void logUpdateUserPrivilege(

@@ -7,7 +7,7 @@ Shows certain indicators of the StarRocks cluster.
 ## Syntax
 
 ```SQL
-SHOW PROC { '/auth' | '/backends' | '/compute_nodes' | '/dbs' 
+SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' 
           | '/jobs' | '/statistic' | '/tasks' | '/frontends' 
           | '/brokers' | '/resources' | '/load_error_hub' 
           | '/transactions' | '/monitor' | '/current_queries' 
@@ -19,7 +19,6 @@ SHOW PROC { '/auth' | '/backends' | '/compute_nodes' | '/dbs'
 
 | **Parameter**                | **Description**                                              |
 | ---------------------------- | ------------------------------------------------------------ |
-| '/auth'                      | Shows the user privilege and authentication information in the cluster. |
 | '/backends'                  | Shows the information of BE nodes in the cluster.            |
 | '/compute_nodes'             | Shows the information of CN nodes in the cluster.            |
 | '/dbs'                       | Shows the information of databases in the cluster.           |
@@ -41,39 +40,37 @@ SHOW PROC { '/auth' | '/backends' | '/compute_nodes' | '/dbs'
 
 ## Examples
 
-Example 1: Shows the user privilege and authentication information in the cluster.
+Example 1: Shows the information of BE nodes in the cluster.
 
 ```Plain
-mysql> SHOW PROC '/auth';
-+-------------------------------------+----------+------------+-------------------+----------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------+---------------+
-| UserIdentity                        | Password | AuthPlugin | UserForAuthPlugin | GlobalPrivs                                                                | DatabasePrivs                                                                                                                                                                         | TablePrivs | ResourcePrivs |
-+-------------------------------------+----------+------------+-------------------+----------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------+---------------+
-| 'root'@'%'                          | Yes      | NULL       | NULL              | Node_priv Admin_priv  (false)                                              | NULL                                                                                                                                                                                  | NULL       | NULL          |
-| 'default_cluster:johndoe'@'%'       | Yes      | NULL       | NULL              | Admin_priv Select_priv Load_priv Alter_priv Create_priv Drop_priv  (false) | information_schema: Select_priv  (false)                                                                                                                                              | NULL       | NULL          |
-| 'default_cluster:katherine'@'%'     | Yes      | NULL       | NULL              |  (false)                                                                   | information_schema: Select_priv  (false)                                                                                                                                              | NULL       | NULL          |
-+-------------------------------------+----------+------------+-------------------+----------------------------------------------------------------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+------------+---------------+
-```
-
-| **Return**        | **Description**                                              |
-| ----------------- | ------------------------------------------------------------ |
-| UserIdentity      | User identity, shown as `username@'userhost'` or `username@['domain']`. |
-| Password          | If the user connects to the cluster using password.          |
-| AuthPlugin        | Authentication plugin the user adopted, including `mysql_native_password` and `authentication_ldap_simple`. |
-| UserForAuthPlugin | Distinguished Name (DN) of the user if they connect to the cluster via LDAP. |
-| GlobalPrivs       | Global privileges owned by the user.                         |
-| DatabasePrivs     | Database-level privileges owned by the user.                 |
-| TablePrivs        | Table-level privileges owned by the user.                    |
-| ResourcePrivs     | Resource-level privileges owned by the user.                 |
-
-Example 2: Shows the information of BE nodes in the cluster.
-
-```Plain
-mysql> SHOW PROC '/backends';
-+-----------+---------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+-----------+------------------+---------------+---------------+---------+----------------+--------+-------------------+--------------------------------------------------------+-------------------+-------------+----------+
-| BackendId | IP            | HeartbeatPort | BePort | HttpPort | BrpcPort | LastStartTime       | LastHeartbeat       | Alive | SystemDecommissioned | ClusterDecommissioned | TabletNum | DataUsedCapacity | AvailCapacity | TotalCapacity | UsedPct | MaxDiskUsedPct | ErrMsg | Version           | Status                                                 | DataTotalCapacity | DataUsedPct | CpuCores |
-+-----------+---------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+-----------+------------------+---------------+---------------+---------+----------------+--------+-------------------+--------------------------------------------------------+-------------------+-------------+----------+
-| 56038515  | xxx.xx.xx.xxx | 9052          | 9060   | 8097     | 8059     | 2022-10-09 19:57:57 | 2022-10-10 16:23:24 | true  | false                | false                 | 47015     | 67.952 GB        | 1.089 TB      | 1.968 TB      | 44.69 % | 44.69 %        |        | UNKNOWN-de75d4fbb | {"lastSuccessReportTabletsTime":"2022-10-10 16:22:44"} | 1.155 TB          | 5.74 %      | 104      |
-+-----------+---------------+---------------+--------+----------+----------+---------------------+---------------------+-------+----------------------+-----------------------+-----------+------------------+---------------+---------------+---------+----------------+--------+-------------------+--------------------------------------------------------+-------------------+-------------+----------+
+mysql> SHOW PROC '/backends'\G
+*************************** 1. row ***************************
+            BackendId: 10004
+                   IP: xxx.xx.92.200
+        HeartbeatPort: 9354
+               BePort: 9360
+             HttpPort: 8338
+             BrpcPort: 8360
+        LastStartTime: 2023-04-21 09:56:10
+        LastHeartbeat: 2023-04-21 09:56:10
+                Alive: true
+ SystemDecommissioned: false
+ClusterDecommissioned: false
+            TabletNum: 2199
+     DataUsedCapacity: 0.000 
+        AvailCapacity: 584.578 GB
+        TotalCapacity: 1.968 TB
+              UsedPct: 71.00 %
+       MaxDiskUsedPct: 71.00 %
+               ErrMsg: 
+              Version: BRANCH-3.0-RELEASE-8eb8705
+               Status: {"lastSuccessReportTabletsTime":"N/A"}
+    DataTotalCapacity: 584.578 GB
+          DataUsedPct: 0.00 %
+             CpuCores: 16
+    NumRunningQueries: 0
+           MemUsedPct: 0.52 %
+           CpuUsedPct: 0.0 %
 ```
 
 | **Return**            | **Description**                                              |
@@ -101,8 +98,11 @@ mysql> SHOW PROC '/backends';
 | DataTotalCapacity     | Total of used and available data storage capacity. The sum of `DataUsedCapacity` and `AvailCapacity`. |
 | DataUsedPct           | Percentage at which the data storage takes up the total data capacity (DataUsedCapacity/DataTotalCapacity). |
 | CpuCores              | Number of CPU cores in the BE node.                          |
+| NumRunningQueries     | The number of queries currently running in the cluster.      |
+| MemUsedPct            | The current memory usage percentage.                                 |
+| CpuUsedPct            | The current CPU usage percentage.                                    |
 
-Example 3: Shows the information of databases in the cluster.
+Example 2: Shows the information of databases in the cluster.
 
 ```Plain
 mysql> SHOW PROC '/dbs';
@@ -127,7 +127,7 @@ mysql> SHOW PROC '/dbs';
 | LastConsistencyCheckTime | The last time when consistency check is executed. |
 | ReplicaQuota             | Data replica quota of the database.               |
 
-Example 4: Shows the information of jobs in the cluster.
+Example 3: Shows the information of jobs in the cluster.
 
 ```Plain
 mysql> SHOW PROC '/jobs';
@@ -163,19 +163,29 @@ mysql> SHOW PROC '/jobs/10005';
 | Cancelled  | Number of jobs that are cancelled. |
 | Total      | Total number of jobs.              |
 
-Example 5: Shows the statistics of each database in the cluster.
+Example 4: Shows the statistics of each database in the cluster.
 
 ```Plain
 mysql> SHOW PROC '/statistic';
-+---------+------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+
-| DbId    | DbName                 | TableNum | PartitionNum | IndexNum | TabletNum | ReplicaNum | UnhealthyTabletNum | InconsistentTabletNum | CloningTabletNum |
-+---------+------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+
-| 1275196 | _statistics_           | 3        | 3            | 3        | 30        | 90         | 30                 | 0                     | 0                |
-| 108518  | db2222                 | 25       | 25           | 25       | 298       | 318        | 298                | 0                     | 0                |
-| 836881  | example_db             | 7        | 10           | 13       | 409       | 409        | 409                | 0                     | 0                |
-| 1849142 | g1                     | 3        | 3            | 3        | 30        | 90         | 30                 | 10                    | 0                |
-| Total   | 41                     | 366      | 4771         | 4774     | 98628     | 167553     | 98628              | 11                    | 0                |
-+---------+------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+
++--------+----------------------------------------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+---------------------+
+| DbId   | DbName                                                   | TableNum | PartitionNum | IndexNum | TabletNum | ReplicaNum | UnhealthyTabletNum | InconsistentTabletNum | CloningTabletNum | ErrorStateTabletNum |
++--------+----------------------------------------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+---------------------+
+| 10004  | _statistics_                                             | 3        | 3            | 3        | 30        | 60         | 0                  | 0                     | 0                | 0                   |
+| 1      | information_schema                                       | 0        | 0            | 0        | 0         | 0          | 0                  | 0                     | 0                | 0                   |
+| 92498  | stream_load_test_db_03afc714_b1cb_11ed_a82c_00163e237e98 | 0        | 0            | 0        | 0         | 0          | 0                  | 0                     | 0                | 0                   |
+| 92542  | stream_load_test_db_79876e92_b1da_11ed_b50e_00163e237e98 | 1        | 1            | 1        | 3         | 3          | 0                  | 0                     | 0                | 0                   |
+| 115476 | testdb                                                   | 0        | 0            | 0        | 0         | 0          | 0                  | 0                     | 0                | 0                   |
+| 10002  | zq_test                                                  | 8        | 8            | 8        | 5043      | 7063       | 0                  | 0                     | 0                | 2                   |
+| Total  | 6                                                        | 12       | 12           | 12       | 5076      | 7126       | 0                  | 0                     | 0                | 2                   |
++--------+----------------------------------------------------------+----------+--------------+----------+-----------+------------+--------------------+-----------------------+------------------+---------------------+
+7 rows in set (0.01 sec)
+
+mysql> show proc '/statistic/10002';
++------------------+---------------------+----------------+-------------------+
+| UnhealthyTablets | InconsistentTablets | CloningTablets | ErrorStateTablets |
++------------------+---------------------+----------------+-------------------+
+| []               | []                  | []             | [116703, 116706]  |
++------------------+---------------------+----------------+-------------------+
 ```
 
 | **Return**            | **Description**                                              |
@@ -189,9 +199,11 @@ mysql> SHOW PROC '/statistic';
 | ReplicaNum            | Number of replicas in the database.                          |
 | UnhealthyTabletNum    | Number of unfinished (unhealthy) tablets in the database during data redistribution. |
 | InconsistentTabletNum | Number of inconsistent tablets in the database.              |
-| CloningTabletNum      | Number of tablets that are being cloned in the database      |
+| CloningTabletNum      | Number of tablets that are being cloned in the database.     |
+| ErrorStateTabletNum   | In a Primary Key type table, the number of tablets in Error state. |
+| ErrorStateTablets     | In a Primary Key type table, the IDs of the tablets in Error state. |
 
-Example 6: Shows the total number of all generic tasks and the failed tasks in the cluster.
+Example 5: Shows the total number of all generic tasks and the failed tasks in the cluster.
 
 ```Plain
 mysql> SHOW PROC '/tasks';
@@ -234,7 +246,7 @@ mysql> SHOW PROC '/tasks';
 | FailedNum  | Number of failed tasks. |
 | TotalNum   | Total number of tasks.  |
 
-Example 7: Shows the information of FE nodes in the cluster.
+Example 6: Shows the information of FE nodes in the cluster.
 
 ```Plain
 mysql> SHOW PROC '/frontends';
@@ -264,7 +276,7 @@ mysql> SHOW PROC '/frontends';
 | StartTime         | Time when the FE node is started.                      |
 | Version           | StarRocks version of the FE node.                      |
 
-Example 8: Shows the information of Broker nodes in the cluster.
+Example 7: Shows the information of Broker nodes in the cluster.
 
 ```Plain
 mysql> SHOW PROC '/brokers';
@@ -287,7 +299,7 @@ mysql> SHOW PROC '/brokers';
 | LastUpdateTime | The last time when the broker node was updated.              |
 | ErrMsg         | Error message in the broker node.                            |
 
-Example 9: Shows the information of resources in the cluster.
+Example 8: Shows the information of resources in the cluster.
 
 ```Plain
 mysql> SHOW PROC '/resources';
@@ -306,7 +318,7 @@ mysql> SHOW PROC '/resources';
 | Key          | Resource key.   |
 | Value        | Resource value. |
 
-Example 10: Shows the information of transactions in the cluster.
+Example 9: Shows the information of transactions in the cluster.
 
 ```Plain
 mysql> SHOW PROC '/transactions';
@@ -335,7 +347,7 @@ mysql> SHOW PROC '/transactions/10005';
 | State      | The state of the transaction. |
 | Number     | Number of transactions.       |
 
-Example 11: Shows the monitoring information in the cluster.
+Example 10: Shows the monitoring information in the cluster.
 
 ```Plain
 mysql> SHOW PROC '/monitor';
@@ -351,7 +363,7 @@ mysql> SHOW PROC '/monitor';
 | Name       | JVM name.        |
 | Info       | JVM information. |
 
-Example 12: Shows the load balance information in the cluster.
+Example 11: Shows the load balance information in the cluster.
 
 ```Plain
 mysql> SHOW PROC '/cluster_balance';
@@ -373,7 +385,7 @@ mysql> SHOW PROC '/cluster_balance';
 | Item       | Sub-command item in `cluster_balance `.          |
 | Number     | Number of each sub-command in `cluster_balance`. |
 
-Example 13: Shows the information of Colocate Join groups in the cluster.
+Example 12: Shows the information of Colocate Join groups in the cluster.
 
 ```Plain
 mysql> SHOW PROC '/colocation_group';
@@ -402,7 +414,7 @@ mysql> SHOW PROC '/colocation_group';
 | DistCols       | Distribution column of the Colocate Join Group. |
 | IsStable       | If the Colocate Join Group is stable.           |
 
-Example 14: Shows the information of catalogs in the cluster.
+Example 13: Shows the information of catalogs in the cluster.
 
 ```Plain
 mysql> SHOW PROC '/catalog';

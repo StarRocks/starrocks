@@ -2,7 +2,7 @@
 
 ## Description
 
-Displays the authentication information of the current user or all users in the current cluster. Each user has permissions to view their authentication information. Only users with the global `GRANT_PRIV` permission can view the authentication information of all users or the authentication information of specified users.
+Displays the authentication information of the current user or all users in the current cluster. Each user has privilege to view their authentication information. Only users with the global `GRANT` privilege and the `user_admin role` can view the authentication information of all users or the authentication information of specified users.
 
 ## Syntax
 
@@ -57,7 +57,7 @@ SHOW ALL AUTHENTICATION;
 +---------------+----------+-------------------------+-------------------+
 ```
 
-Example 3：Display the authentication information of a specified user.
+Example 3: Display the authentication information of a specified user.
 
 ```Plain
 SHOW AUTHENTICATION FOR root;

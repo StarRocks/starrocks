@@ -44,7 +44,6 @@ public class SystemVariable extends SetListItem {
     }
 
 
-
     public String getVariable() {
         return variable;
     }

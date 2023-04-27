@@ -53,6 +53,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
@@ -64,10 +65,12 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
@@ -75,6 +78,7 @@ import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.validator.routines.InetAddressValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -121,6 +125,7 @@ public class SystemInfoService {
 
     public void addComputeNodes(List<Pair<String, Integer>> hostPortPairs)
             throws DdlException {
+
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
             if (getBackendWithHeartbeatPort(pair.first, pair.second) != null) {
@@ -165,11 +170,17 @@ public class SystemInfoService {
 
         setComputeNodeOwner(newComputeNode);
 
+        // add it to warehouse
+        if (Config.only_use_compute_node) {
+            Warehouse currentWarehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                    getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            currentWarehouse.getAnyAvailableCluster().addNode(newComputeNode.getId());
+        }
+
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
         LOG.info("finished to add {} ", newComputeNode);
     }
-
     private void setComputeNodeOwner(ComputeNode computeNode) {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
@@ -323,6 +334,14 @@ public class SystemInfoService {
         } else {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
         }
+
+        // drop it from warehouse
+        if (Config.only_use_compute_node) {
+            Warehouse currentWarehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                    getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            currentWarehouse.getAnyAvailableCluster().dropNode(dropComputeNode.getId());
+        }
+
         // log
         GlobalStateMgr.getCurrentState().getEditLog()
                 .logDropComputeNode(new DropComputeNodeLog(dropComputeNode.getId()));
@@ -364,7 +383,7 @@ public class SystemInfoService {
             db.readLock();
             try {
                 db.getTables().stream()
-                        .filter(table -> table.isLocalTable())
+                        .filter(table -> table.isOlapTableOrMaterializedView())
                         .map(table -> (OlapTable) table)
                         .filter(table -> table.getTableProperty().getReplicationNum() == 1)
                         .forEach(table -> {
@@ -508,6 +527,16 @@ public class SystemInfoService {
         return -1L;
     }
 
+    public long getComputeNodeIdWithStarletPort(String host, int starletPort) {
+        ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
+        for (ComputeNode cn : idToComputeNode.values()) {
+            if (cn.getHost().equals(host) && cn.getStarletPort() == starletPort) {
+                return cn.getId();
+            }
+        }
+        return -1L;
+    }
+
     public static TNetworkAddress toBrpcHost(TNetworkAddress host) throws Exception {
         ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(
                 host.getHostname(), host.getPort());
@@ -582,6 +611,10 @@ public class SystemInfoService {
         return idToBackendRef.size();
     }
 
+    public int getAliveComputeNodeNumber() {
+        return getComputeNodeIds(true).size();
+    }
+
     public ComputeNode getComputeNodeWithBePort(String host, int bePort) {
         ImmutableMap<Long, ComputeNode> idToComputeNode = idToComputeNodeRef;
         for (ComputeNode computeNode : idToComputeNode.values()) {
@@ -653,6 +686,21 @@ public class SystemInfoService {
         }
         return backendIds;
     }
+
+    public List<Long> getAvailableComputeNodeIds() {
+        ImmutableMap<Long, ComputeNode>  idToComputeNode = idToComputeNodeRef;
+        List<Long> computeNodeIds = Lists.newArrayList(idToComputeNode.keySet());
+
+        Iterator<Long> iter = computeNodeIds.iterator();
+        while (iter.hasNext()) {
+            ComputeNode cn = this.getComputeNode(iter.next());
+            if (cn == null || !cn.isAvailable()) {
+                iter.remove();
+            }
+        }
+        return computeNodeIds;
+    }
+
 
     public List<Backend> getBackends() {
         return idToBackendRef.values().asList();
@@ -964,6 +1012,13 @@ public class SystemInfoService {
                 // cluster is not created. CN in cluster will be updated in loadCluster.
             }
         }
+
+        // add it to warehouse
+        if (Config.only_use_compute_node) {
+            String currentWh = ConnectContext.get().getCurrentWarehouse();
+            Warehouse currentWarehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(currentWh);
+            currentWarehouse.getAnyAvailableCluster().addNode(newComputeNode.getId());
+        }
     }
 
     public void replayAddBackend(Backend newBackend) {
@@ -997,8 +1052,9 @@ public class SystemInfoService {
         LOG.debug("replayDropComputeNode: {}", computeNodeId);
         // update idToComputeNode
         Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
-        copiedComputeNodes.remove(computeNodeId);
+        ComputeNode cn = copiedComputeNodes.remove(computeNodeId);
         idToComputeNodeRef = ImmutableMap.copyOf(copiedComputeNodes);
+
 
         // update cluster
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
@@ -1006,6 +1062,13 @@ public class SystemInfoService {
             cluster.removeComputeNode(computeNodeId);
         } else {
             LOG.error("Cluster DEFAULT_CLUSTER " + DEFAULT_CLUSTER + " no exist.");
+        }
+
+        // drop it from warehouse
+        if (Config.only_use_compute_node) {
+            Warehouse currentWarehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                    getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            currentWarehouse.getAnyAvailableCluster().dropNode(cn.getId());
         }
     }
 
@@ -1082,6 +1145,10 @@ public class SystemInfoService {
     }
 
     public void checkClusterCapacity() throws DdlException {
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            return;
+        }
+
         if (getClusterAvailableCapacityB() <= 0L) {
             throw new DdlException("Cluster has no available capacity");
         }
@@ -1108,6 +1175,11 @@ public class SystemInfoService {
         return selectedBackends.get(0).getId();
     }
 
+    public String getBackendHostById(long backendId) {
+        Backend backend = getBackend(backendId);
+        return backend == null ? null : backend.getHost();
+    }
+
     /*
      * Check if the specified disks' capacity has reached the limit.
      * bePathsMap is (BE id -> list of path hash)
@@ -1117,13 +1189,15 @@ public class SystemInfoService {
      */
     public Status checkExceedDiskCapacityLimit(Multimap<Long, Long> bePathsMap, boolean floodStage) {
         LOG.debug("pathBeMap: {}", bePathsMap);
-        ImmutableMap<Long, DiskInfo> pathHashToDiskInfo = pathHashToDishInfoRef;
-        for (Long beId : bePathsMap.keySet()) {
-            for (Long pathHash : bePathsMap.get(beId)) {
-                DiskInfo diskInfo = pathHashToDiskInfo.get(pathHash);
-                if (diskInfo != null && diskInfo.exceedLimit(floodStage)) {
-                    return new Status(TStatusCode.CANCELLED,
-                            "disk " + pathHash + " on backend " + beId + " exceed limit usage");
+        if (RunMode.getCurrentRunMode() != RunMode.SHARED_DATA) {
+            ImmutableMap<Long, DiskInfo> pathHashToDiskInfo = pathHashToDishInfoRef;
+            for (Long beId : bePathsMap.keySet()) {
+                for (Long pathHash : bePathsMap.get(beId)) {
+                    DiskInfo diskInfo = pathHashToDiskInfo.get(pathHash);
+                    if (diskInfo != null && diskInfo.exceedLimit(floodStage)) {
+                        return new Status(TStatusCode.CANCELLED,
+                                "disk " + pathHash + " on backend " + beId + " exceed limit usage");
+                    }
                 }
             }
         }

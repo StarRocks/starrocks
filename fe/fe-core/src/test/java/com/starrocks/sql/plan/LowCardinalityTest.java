@@ -46,8 +46,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE table_int (id_int INT, id_bigint BIGINT) " +
@@ -71,8 +70,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE lineorder_flat (\n" +
@@ -120,8 +118,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(LO_ORDERKEY) BUCKETS 48\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         FeConstants.USE_MOCK_DICT_MANAGER = true;
@@ -436,9 +433,9 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select count(distinct S_NATIONKEY) from supplier group by S_ADDRESS";
         plan = getThriftPlan(sql);
         System.out.println(plan);
-        Assert.assertTrue(plan.contains(
+        Assert.assertTrue(plan, plan.contains(
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
-                        "query_global_dicts:[TGlobalDict(columnId:11, strings:[6D 6F 63 6B], ids:[1])]"));
+                        "query_global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])]"));
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -586,7 +583,7 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select coalesce(l.S_ADDRESS,l.S_NATIONKEY), upper(r.P_MFGR),r.P_MFGR " +
                 "from supplier l join part_v2 r on l.s_suppkey = r.P_PARTKEY";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  5:Decode\n" +
+        Assert.assertTrue(plan, plan.contains("  5:Decode\n" +
                 "  |  <dict id 21> : <string id 11>\n" +
                 "  |  <dict id 22> : <string id 20>\n" +
                 "  |  string functions:\n" +
@@ -1554,13 +1551,13 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select max(upper(S_ADDRESS)), min(upper(S_ADDRESS)), max(S_ADDRESS), sum(S_SUPPKEY + 1) from supplier";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                "  |  output: count(*), max(19: upper), min(19: upper), max(18: S_ADDRESS), sum(15: S_SUPPKEY)\n" +
+                "  |  output: max(18: upper), min(18: upper), max(17: S_ADDRESS), sum(1: S_SUPPKEY), count(*)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  1:Project\n" +
-                "  |  <slot 15> : 1: S_SUPPKEY\n" +
-                "  |  <slot 18> : 18: S_ADDRESS\n" +
-                "  |  <slot 19> : DictExpr(18: S_ADDRESS,[upper(<place-holder>)])");
+                "  |  <slot 1> : 1: S_SUPPKEY\n" +
+                "  |  <slot 17> : 17: S_ADDRESS\n" +
+                "  |  <slot 18> : DictExpr(17: S_ADDRESS,[upper(<place-holder>)])");
     }
 
     @Test
@@ -1708,5 +1705,88 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  offset: 0\n" +
                 "  |  limit: 20");
 
+    }
+
+    @Test
+    public void testNeedDecode_1() throws Exception {
+        String sql = "with cte_1 as (\n" +
+                "    select\n" +
+                "        t0.P_NAME as a,\n" +
+                "        t0.P_BRAND as b,\n" +
+                "        t1.s_name as c,\n" +
+                "        t1.s_address as d,\n" +
+                "        t1.s_address as e,\n" +
+                "        t1.s_nationkey as f\n" +
+                "    from\n" +
+                "        part_v2 t0\n" +
+                "        left join supplier_nullable t1 on t0.P_SIZE > t1.s_suppkey\n" +
+                ")\n" +
+                "select\n" +
+                "    cte_1.b,\n" +
+                "    if(\n" +
+                "        cte_1.d in ('hz', 'bj'),\n" +
+                "        cte_1.b,\n" +
+                "        if (cte_1.e in ('hz'), 1035, cte_1.f)\n" +
+                "    ),\n" +
+                "    count(distinct if(cte_1.c = '', cte_1.e, null))\n" +
+                "from\n" +
+                "    cte_1\n" +
+                "group by\n" +
+                "    cte_1.b,\n" +
+                "    if(\n" +
+                "        cte_1.d in ('hz', 'bj'),\n" +
+                "        cte_1.b,\n" +
+                "        if (cte_1.e in ('hz'), 1035, cte_1.f)\n" +
+                "    );";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "6:Project\n" +
+                "  |  <slot 22> : 22\n" +
+                "  |  <slot 37> : if(31: S_ADDRESS IN ('hz', 'bj'), 22, CAST(if(31: S_ADDRESS = 'hz', " +
+                "1035, 32: S_NATIONKEY) AS VARCHAR))\n" +
+                "  |  <slot 38> : if(30: S_NAME = '', 31: S_ADDRESS, NULL)\n" +
+                "  |  \n" +
+                "  5:Decode\n" +
+                "  |  <dict id 40> : <string id 22>");
+    }
+
+    @Test
+    public void testNeedDecode_2() throws Exception {
+        String sql = "with cte_1 as (\n" +
+                "    select\n" +
+                "        t0.P_NAME as a,\n" +
+                "        t0.P_BRAND as b,\n" +
+                "        t1.s_name as c,\n" +
+                "        t1.s_address as d,\n" +
+                "        t1.s_address as e,\n" +
+                "        t1.s_nationkey as f\n" +
+                "    from\n" +
+                "        part_v2 t0\n" +
+                "        left join supplier_nullable t1 on t0.P_SIZE > t1.s_suppkey\n" +
+                ")\n" +
+                "select\n" +
+                "    if(\n" +
+                "        cte_1.d in ('hz', 'bj'),\n" +
+                "        cte_1.b,\n" +
+                "        if (cte_1.e in ('hz'), 1035, cte_1.f)\n" +
+                "    ),\n" +
+                "    count(distinct if(cte_1.c = '', cte_1.e, null))\n" +
+                "from\n" +
+                "    cte_1\n" +
+                "group by\n" +
+                "    if(\n" +
+                "        cte_1.d in ('hz', 'bj'),\n" +
+                "        cte_1.b,\n" +
+                "        if (cte_1.e in ('hz'), 1035, cte_1.f)\n" +
+                "    );";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "6:Project\n" +
+                "  |  <slot 37> : if(31: S_ADDRESS IN ('hz', 'bj'), 22, CAST(if(31: S_ADDRESS = 'hz', 1035, " +
+                "32: S_NATIONKEY) AS VARCHAR))\n" +
+                "  |  <slot 38> : if(30: S_NAME = '', 31: S_ADDRESS, NULL)\n" +
+                "  |  \n" +
+                "  5:Decode\n" +
+                "  |  <dict id 40> : <string id 22>");
     }
 }

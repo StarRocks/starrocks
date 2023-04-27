@@ -59,13 +59,13 @@ import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.Property;
 import com.starrocks.thrift.TCompressionType;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -80,7 +80,6 @@ import java.util.regex.Matcher;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
-
 
 public class PropertyAnalyzer {
     private static final Logger LOG = LogManager.getLogger(PropertyAnalyzer.class);
@@ -114,12 +113,6 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_COMPRESSION = "compression";
 
     public static final String PROPERTIES_COLOCATE_MV = "colocate_mv";
-    /*
-     * for upgrade alpha rowset to beta rowset, valid value: v1, v2
-     * v1: alpha rowset
-     * v2: beta rowset
-     */
-    public static final String PROPERTIES_STORAGE_FORMAT = "storage_format";
 
     public static final String PROPERTIES_INMEMORY = "in_memory";
 
@@ -151,10 +144,10 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
     public static final String PROPERTIES_ENABLE_ASYNC_WRITE_BACK = "enable_async_write_back";
-    public static final String PROPERTIES_PARTITION_TTL_NUMBER  = "partition_ttl_number";
-    public static final String PROPERTIES_PARTITION_LIVE_NUMBER  = "partition_live_number";
-    public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT  = "auto_refresh_partitions_limit";
-    public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
+    public static final String PROPERTIES_PARTITION_TTL_NUMBER = "partition_ttl_number";
+    public static final String PROPERTIES_PARTITION_LIVE_NUMBER = "partition_live_number";
+    public static final String PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT = "auto_refresh_partitions_limit";
+    public static final String PROPERTIES_PARTITION_REFRESH_NUMBER = "partition_refresh_number";
     public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
 
@@ -289,7 +282,8 @@ public class PropertyAnalyzer {
     public static int analyzeAutoRefreshPartitionsLimit(Map<String, String> properties, MaterializedView mv)
             throws AnalysisException {
         if (mv.getRefreshScheme().getType() == MaterializedView.RefreshType.MANUAL) {
-            throw new AnalysisException("The auto_refresh_partitions_limit property does not support manual refresh mode.");
+            throw new AnalysisException(
+                    "The auto_refresh_partitions_limit property does not support manual refresh mode.");
         }
         int autoRefreshPartitionsLimit = -1;
         if (properties != null && properties.containsKey(PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
@@ -349,7 +343,7 @@ public class PropertyAnalyzer {
         boolean forceExternalTableQueryRewrite = false;
         if (properties != null && properties.containsKey(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)) {
             forceExternalTableQueryRewrite = Boolean.parseBoolean(properties.
-                        get(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE));
+                    get(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE));
             properties.remove(PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
         }
         return forceExternalTableQueryRewrite;
@@ -387,10 +381,14 @@ public class PropertyAnalyzer {
         if (replicationNum <= 0) {
             throw new AnalysisException("Replication num should larger than 0");
         }
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+
+        List<Long> backendIds = Config.only_use_compute_node ?
+                GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds() :
+                GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             if (RunMode.defaultReplicationNum() > backendIds.size()) {
-                throw new AnalysisException("Number of available BE nodes is " + backendIds.size()
+                throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
                         + ", less than " + RunMode.defaultReplicationNum());
             }
         } else {
@@ -582,29 +580,6 @@ public class PropertyAnalyzer {
         return timeout;
     }
 
-    // analyzeStorageFormat will parse the storage format from properties
-    // sql: alter table tablet_name set ("storage_format" = "v2")
-    // Use this sql to convert all tablets(base and rollup index) to a new format segment
-    public static TStorageFormat analyzeStorageFormat(Map<String, String> properties) throws AnalysisException {
-        String storageFormat;
-        if (properties != null && properties.containsKey(PROPERTIES_STORAGE_FORMAT)) {
-            storageFormat = properties.get(PROPERTIES_STORAGE_FORMAT);
-            properties.remove(PROPERTIES_STORAGE_FORMAT);
-        } else {
-            return TStorageFormat.DEFAULT;
-        }
-
-        if (storageFormat.equalsIgnoreCase("v1")) {
-            return TStorageFormat.V1;
-        } else if (storageFormat.equalsIgnoreCase("v2")) {
-            return TStorageFormat.V2;
-        } else if (storageFormat.equalsIgnoreCase("default")) {
-            return TStorageFormat.DEFAULT;
-        } else {
-            throw new AnalysisException("unknown storage format: " + storageFormat);
-        }
-    }
-
     // analyzeCompressionType will parse the compression type from properties
     public static TCompressionType analyzeCompressionType(Map<String, String> properties) throws AnalysisException {
         TCompressionType compressionType = TCompressionType.LZ4_FRAME;
@@ -729,7 +704,8 @@ public class PropertyAnalyzer {
                 }
                 Matcher foreignKeyMatcher = ForeignKeyConstraint.FOREIGN_KEY_PATTERN.matcher(trimed);
                 if (!foreignKeyMatcher.find() || foreignKeyMatcher.groupCount() != 7) {
-                    throw new AnalysisException(String.format("invalid foreign key constraint:%s", foreignKeyConstraintDesc));
+                    throw new AnalysisException(
+                            String.format("invalid foreign key constraint:%s", foreignKeyConstraintDesc));
                 }
                 String sourceColumns = foreignKeyMatcher.group(1);
                 String tablePath = foreignKeyMatcher.group(4);
@@ -771,16 +747,17 @@ public class PropertyAnalyzer {
                 }
                 Database parentDb = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
                 if (parentDb == null) {
-                    throw new AnalysisException(String.format("catalog: %s, database: %s do not exist", catalogName, dbName));
+                    throw new AnalysisException(
+                            String.format("catalog: %s, database: %s do not exist", catalogName, dbName));
                 }
-                Table parentTable =
-                        GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, parentTableName);
+                Table parentTable = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .getTable(catalogName, dbName, parentTableName);
                 if (parentTable == null) {
                     throw new AnalysisException(String.format("catalog:%s, database: %s, table:%s do not exist",
                             catalogName, dbName, parentTableName));
                 }
 
-                if (!baseTable.isLocalTable()) {
+                if (!baseTable.isOlapTableOrMaterializedView()) {
                     throw new AnalysisException("now do not support add foreign key on external table");
                 }
 
@@ -798,7 +775,8 @@ public class PropertyAnalyzer {
                 KeysType parentTableKeyType =
                         parentOlapTable.getIndexMetaByIndexId(parentOlapTable.getBaseIndexId()).getKeysType();
                 if (parentTableKeyType == KeysType.AGG_KEYS) {
-                    throw new AnalysisException(String.format("do not support reference agg table:%s", parentTable.getName()));
+                    throw new AnalysisException(
+                            String.format("do not support reference agg table:%s", parentTable.getName()));
                 } else if (parentTableKeyType == KeysType.DUP_KEYS) {
                     if (!parentOlapTable.hasUniqueConstraints()) {
                         throw new AnalysisException(
@@ -813,8 +791,9 @@ public class PropertyAnalyzer {
                             }
                         }
                         if (!matched) {
-                            throw new AnalysisException(String.format("columns:%s are not dup table:%s's unique constraint",
-                                    parentColumns, parentTable.getName()));
+                            throw new AnalysisException(
+                                    String.format("columns:%s are not dup table:%s's unique constraint", parentColumns,
+                                            parentTable.getName()));
                         }
                     }
                 } else {
@@ -847,11 +826,43 @@ public class PropertyAnalyzer {
                 foreignKeyConstraints.add(foreignKeyConstraint);
             }
             if (foreignKeyConstraints.isEmpty()) {
-                throw new AnalysisException(String.format("invalid foreign key constrain:%s", foreignKeyConstraintsDesc));
+                throw new AnalysisException(
+                        String.format("invalid foreign key constrain:%s", foreignKeyConstraintsDesc));
             }
             properties.remove(PROPERTIES_FOREIGN_KEY_CONSTRAINT);
         }
 
         return foreignKeyConstraints;
+    }
+
+    // analyze enable storage cache and cache ttl, and whether allow async write back
+    public static StorageCacheInfo analyzeStorageCacheInfo(Map<String, String> properties) throws AnalysisException {
+        boolean enableStorageCache =
+                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, true);
+
+        long storageCacheTtlS = 0;
+        boolean isTtlSet = properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL);
+        if (isTtlSet) {
+            storageCacheTtlS = analyzeLongProp(properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+            if (storageCacheTtlS < -1) {
+                throw new AnalysisException("Storage cache ttl should not be less than -1");
+            }
+            if (!enableStorageCache && storageCacheTtlS != 0) {
+                throw new AnalysisException("Storage cache ttl should be 0 when cache is disabled");
+            }
+            if (enableStorageCache && storageCacheTtlS == 0) {
+                throw new AnalysisException("Storage cache ttl should not be 0 when cache is enabled");
+            }
+        } else {
+            storageCacheTtlS = enableStorageCache ? Config.lake_default_storage_cache_ttl_seconds : 0L;
+        }
+
+        boolean enableAsyncWriteBack =
+                analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK, false);
+        if (!enableStorageCache && enableAsyncWriteBack) {
+            throw new AnalysisException("enable_async_write_back can't be turned on when cache is disabled");
+        }
+
+        return new StorageCacheInfo(enableStorageCache, storageCacheTtlS, enableAsyncWriteBack);
     }
 }

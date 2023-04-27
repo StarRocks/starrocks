@@ -28,6 +28,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter.h"
 #include "runtime/descriptors.h"
+#include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -121,7 +122,9 @@ public:
     // Append a Chunk for sort.
     virtual Status update(RuntimeState* state, const ChunkPtr& chunk) = 0;
     // Finish seeding Chunk, and get sorted data with top OFFSET rows have been skipped.
-    virtual Status done(RuntimeState* state) = 0;
+    virtual Status do_done(RuntimeState* state) = 0;
+
+    Status done(RuntimeState* state);
 
     // get_next only works after done().
     virtual Status get_next(ChunkPtr* chunk, bool* eos) = 0;

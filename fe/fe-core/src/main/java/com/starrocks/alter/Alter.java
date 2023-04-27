@@ -86,10 +86,12 @@ import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
+import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -126,16 +128,20 @@ public class Alter {
     private AlterHandler materializedViewHandler;
     private SystemHandler clusterHandler;
 
+    private CompactionHandler compactionHandler;
+
     public Alter() {
         schemaChangeHandler = new SchemaChangeHandler();
         materializedViewHandler = new MaterializedViewHandler();
         clusterHandler = new SystemHandler();
+        compactionHandler = new CompactionHandler();
     }
 
     public void start() {
         schemaChangeHandler.start();
         materializedViewHandler.start();
         clusterHandler.start();
+        compactionHandler = new CompactionHandler();
     }
 
     public void processCreateMaterializedView(CreateMaterializedViewStmt stmt)
@@ -465,6 +471,7 @@ public class Alter {
         if (currentTask != null) {
             currentTask.setDefinition("insert overwrite " + materializedView.getName() + " " +
                     materializedView.getViewDefineSql());
+            currentTask.setPostRun(TaskBuilder.getAnalyzeMVStmt(materializedView.getName()));
         }
     }
 
@@ -556,8 +563,8 @@ public class Alter {
                 ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
 
-            if (!table.isOlapOrLakeTable()) {
-                throw new DdlException("Do not support alter non-OLAP or non-LAKE table[" + tableName + "]");
+            if (!table.isOlapOrCloudNativeTable()) {
+                throw new DdlException("Do not support alter non-native table[" + tableName + "]");
             }
             olapTable = (OlapTable) table;
 
@@ -624,7 +631,11 @@ public class Alter {
                 processRename(db, olapTable, alterClauses);
             } else if (currentAlterOps.hasSwapOp()) {
                 processSwap(db, olapTable, alterClauses);
+            } else if (currentAlterOps.hasAlterCommentOp()) {
+                processAlterComment(db, olapTable, alterClauses);
             } else if (currentAlterOps.contains(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC)) {
+                needProcessOutsideDatabaseLock = true;
+            } else if (currentAlterOps.contains(AlterOpType.COMPACT)) {
                 needProcessOutsideDatabaseLock = true;
             } else {
                 throw new DdlException("Invalid alter operations: " + currentAlterOps);
@@ -656,7 +667,7 @@ public class Alter {
                 // currently, only in memory property could reach here
                 Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY));
                 olapTable = (OlapTable) db.getTable(tableName);
-                if (olapTable.isLakeTable()) {
+                if (olapTable.isCloudNativeTable()) {
                     throw new DdlException("Lake table not support alter in_memory");
                 }
 
@@ -682,7 +693,7 @@ public class Alter {
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
 
                 olapTable = (OlapTable) db.getTable(tableName);
-                if (olapTable.isLakeTable()) {
+                if (olapTable.isCloudNativeTable()) {
                     throw new DdlException("Lake table not support alter in_memory or enable_persistent_index or write_quorum");
                 }
 
@@ -712,6 +723,10 @@ public class Alter {
                 } else {
                     throw new DdlException("Invalid alter operation: " + alterClause.getOpType());
                 }
+            } else if (alterClause instanceof CompactionClause) {
+                String s = (((CompactionClause) alterClause).isBaseCompaction() ? "base" : "cumulative")
+                        + " compact " + tableName + " partitions: " + ((CompactionClause) alterClause).getPartitionNames();
+                compactionHandler.process(alterClauses, db, olapTable);
             }
         }
 
@@ -733,7 +748,7 @@ public class Alter {
         String origTblName = origTable.getName();
         String newTblName = clause.getTblName();
         Table newTbl = db.getTable(newTblName);
-        if (newTbl == null || !newTbl.isOlapOrLakeTable()) {
+        if (newTbl == null || !newTbl.isOlapOrCloudNativeTable()) {
             throw new DdlException("Table " + newTblName + " does not exist or is not OLAP/LAKE table");
         }
         OlapTable olapNewTbl = (OlapTable) newTbl;
@@ -871,6 +886,17 @@ public class Alter {
 
     public ShowResultSet processAlterCluster(AlterSystemStmt stmt) throws UserException {
         return clusterHandler.process(Arrays.asList(stmt.getAlterClause()), null, null);
+    }
+
+    private void processAlterComment(Database db, OlapTable table, List<AlterClause> alterClauses) throws DdlException {
+        for (AlterClause alterClause : alterClauses) {
+            if (alterClause instanceof AlterTableCommentClause) {
+                GlobalStateMgr.getCurrentState().alterTableComment(db, table, (AlterTableCommentClause) alterClause);
+                break;
+            } else {
+                throw new DdlException("Unsupported alter table clause " + alterClause);
+            }
+        }
     }
 
     private void processRename(Database db, OlapTable table, List<AlterClause> alterClauses) throws DdlException {

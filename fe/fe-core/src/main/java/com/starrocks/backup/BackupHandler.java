@@ -54,7 +54,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AbstractBackupStmt;
 import com.starrocks.sql.ast.BackupStmt;
@@ -88,7 +88,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class BackupHandler extends LeaderDaemon implements Writable {
+public class BackupHandler extends FrontendDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(BackupHandler.class);
 
     public static final int SIGNATURE_VERSION = 1;
@@ -420,7 +420,7 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         if (backupMeta != null) {
             for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
                 Table remoteTbl = backupMeta.getTable(tblInfo.name);
-                if (remoteTbl.isLakeTable()) {
+                if (remoteTbl.isCloudNativeTable()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, remoteTbl.getName());
                 }
             }

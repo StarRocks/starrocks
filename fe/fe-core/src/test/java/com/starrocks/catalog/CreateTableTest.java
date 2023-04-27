@@ -42,9 +42,11 @@ import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.system.Backend;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -86,8 +88,56 @@ public class CreateTableTest {
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
     }
 
+    @Test(expected = DdlException.class)
+    public void testNotSpecifyReplicateNum() throws Exception {
+        createTable(
+                "CREATE TABLE test.`duplicate_table_with_null` ( `k1`  date, `k2`  datetime,`k3`  " +
+                        "char(20), `k4`  varchar(20), `k5`  boolean, `k6`  tinyint, `k7`  smallint, " +
+                        "`k8`  int, `k9`  bigint, `k10` largeint, `k11` float, `k12` double, " +
+                        "`k13` decimal(27,9)) DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) PARTITION BY " +
+                        "time_slice(k2, interval 1 hour) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`); "
+        );
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testCreateUnsupportedType() throws Exception {
+        createTable(
+                "CREATE TABLE test.ods_warehoused (\n" +
+                        " warehouse_id                                bigint(20)                 COMMENT        ''\n" +
+                        ",company_id                                        bigint(20)                 COMMENT        ''\n" +
+                        ",company_name                                string                        COMMENT        ''\n" +
+                        ",is_sort_express_by_cost        tinyint(1)                COMMENT        ''\n" +
+                        ",is_order_intercepted                tinyint(1)                COMMENT        ''\n" +
+                        ",intercept_time_type                tinyint(3)                 COMMENT        ''\n" +
+                        ",intercept_time                                time                        COMMENT        ''\n" +
+                        ",intercept_begin_time                time                        COMMENT        ''\n" +
+                        ",intercept_end_time                        time                        COMMENT        ''\n" +
+                        ")\n" +
+                        "PRIMARY KEY(warehouse_id)\n" +
+                        "COMMENT \"\"\n" +
+                        "DISTRIBUTED BY HASH(warehouse_id)\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
+        );
+    }
+
     @Test
     public void testNormal() throws DdlException {
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable(
+                        "CREATE TABLE test.case_insensitive (\n" +
+                                "    A1 TINYINT,\n" +
+                                "    A2 DATE\n" +
+                                ") ENGINE=OLAP\n" +
+                                "DUPLICATE KEY(A1)\n" +
+                                "COMMENT \"OLAP\"\n" +
+                                "PARTITION BY RANGE (a2) (\n" +
+                                "START (\"2021-01-01\") END (\"2022-01-01\") EVERY (INTERVAL 1 year)\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(A1) BUCKETS 20\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");"));
 
         ExceptionChecker.expectThrowsNoException(
                 () -> createTable(
@@ -282,6 +332,50 @@ public class CreateTableTest {
                 () -> createTable("create table test.atbl14 (k1 int, k2 int, k3 float) duplicate key(k1)\n"
                         + "partition by range(k1) (partition p1 values less than(\"10\") ('wrong_key' = 'value'))\n"
                         + "distributed by hash(k2) buckets 1 properties('replication_num' = '1'); "));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Illege expression type for Materialized Column "
+                                + "Column Type: INT, Expression Type: DOUBLE",
+                        () -> createTable("CREATE TABLE test.atbl15 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                                          + "mc INT AS (array_avg(array_data)) ) Primary KEY (id) \n"
+                                          + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized Column must be nullable column.",
+                        () -> createTable("CREATE TABLE test.atbl16 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                                          + "mc DOUBLE NOT NULL AS (array_avg(array_data)) ) \n"
+                                          + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                                          + " ('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Input 'AS' is not "
+                                + "valid at this position.",
+                        () -> createTable("CREATE TABLE test.atbl17 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                                        + "mc DOUBLE AUTO_INCREMENT AS (array_avg(array_data)) ) \n"
+                                        + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                                        + "('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Input 'AS' is not "
+                                + "valid at this position.",
+                        () -> createTable("CREATE TABLE test.atbl18 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                                          + "mc DOUBLE DEFAULT '1.0' AS (array_avg(array_data)) ) \n"
+                                          + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                                          + "('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to AUTO_INCREMENT columns",
+                        () -> createTable("CREATE TABLE test.atbl19 ( id BIGINT NOT NULL,  incr BIGINT AUTO_INCREMENT, \n"
+                                          + "array_data ARRAY<int> NOT NULL, mc BIGINT AS (incr) )\n"
+                                          + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES"
+                                          + "('replication_num' = '1');\n"));
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Expression can not refers to other materialized columns",
+                        () -> createTable("CREATE TABLE test.atbl20 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                                          + "mc DOUBLE AS (array_avg(array_data)), \n"
+                                          + "mc_1 DOUBLE AS (mc) ) Primary KEY (id) \n"
+                                          + "DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES('replication_num' = '1');\n"));
+        
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Materialized Column don't support aggregation function",
+                        () -> createTable("CREATE TABLE test.atbl21 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, \n"
+                                          + "mc BIGINT AS (sum(id)) ) \n"
+                                          + "Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES \n"
+                                          + "('replication_num' = '1');\n"));
     }
 
     @Test
@@ -430,6 +524,22 @@ public class CreateTableTest {
         Assert.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
     }
 
+    @Test
+    public void testDecimal() throws Exception {
+        String sql = "CREATE TABLE create_decimal_tbl\n" +
+                "(\n" +
+                "    c1 decimal(38, 1),\n" +
+                "    c2 numeric(38, 1),\n" +
+                "    c3 number(38, 1) \n" +
+                ")\n" +
+                "DUPLICATE KEY(c1)\n" +
+                "DISTRIBUTED BY HASH(c1) BUCKETS 1\n" +
+                "PROPERTIES(\"replication_num\" = \"1\");";
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+    }
+
     @Test(expected = AnalysisException.class)
     public void testCreateSumSmallTypeAgg() throws Exception {
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -474,8 +584,7 @@ public class CreateTableTest {
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"in_memory\" = \"false\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"in_memory\" = \"false\"\n" +
                 ");";
         starRocksAssert.withTable(sql);
         final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
@@ -495,8 +604,7 @@ public class CreateTableTest {
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"in_memory\" = \"false\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"in_memory\" = \"false\"\n" +
                 ");";
         starRocksAssert.withTable(sql);
         final Table table = starRocksAssert.getCtx().getGlobalStateMgr().getDb(connectContext.getDatabase())
@@ -512,8 +620,7 @@ public class CreateTableTest {
                 "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"in_memory\" = \"false\",\n" +
-                "    \"storage_format\" = \"DEFAULT\"\n" +
+                "    \"in_memory\" = \"false\"\n" +
                 ");";
         starRocksAssert.withTable(sql2);
 
@@ -535,8 +642,7 @@ public class CreateTableTest {
                         "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
                         "PROPERTIES (\n" +
                         "    \"replication_num\" = \"1\",\n" +
-                        "    \"in_memory\" = \"false\",\n" +
-                        "    \"storage_format\" = \"DEFAULT\"\n" +
+                        "    \"in_memory\" = \"false\"\n" +
                         ");"));
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Default function uuid() for type INT is not supported",
@@ -549,8 +655,7 @@ public class CreateTableTest {
                         "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
                         "PROPERTIES (\n" +
                         "    \"replication_num\" = \"1\",\n" +
-                        "    \"in_memory\" = \"false\",\n" +
-                        "    \"storage_format\" = \"DEFAULT\"\n" +
+                        "    \"in_memory\" = \"false\"\n" +
                         ");"));
 
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
@@ -564,30 +669,29 @@ public class CreateTableTest {
                         "DISTRIBUTED BY HASH(`k1`) BUCKETS 2\n" +
                         "PROPERTIES (\n" +
                         "    \"replication_num\" = \"1\",\n" +
-                        "    \"in_memory\" = \"false\",\n" +
-                        "    \"storage_format\" = \"DEFAULT\"\n" +
+                        "    \"in_memory\" = \"false\"\n" +
                         ");"));
     }
 
     @Test
-    public void testCreateBinaryTable() {
+    public void testCreateVarBinaryTable() {
         // duplicate table
         ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table test.binary_tbl\n" +
+                "create table test.varbinary_tbl\n" +
                         "(k1 int, j varbinary(10))\n" +
                         "duplicate key(k1)\n" +
                         "partition by range(k1)\n" +
                         "(partition p1 values less than(\"10\"))\n" +
                         "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
         ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table test.binary_tbl1\n" +
+                "create table test.varbinary_tbl1\n" +
                         "(k1 int, j varbinary)\n" +
                         "duplicate key(k1)\n" +
                         "partition by range(k1)\n" +
                         "(partition p1 values less than(\"10\"))\n" +
                         "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
         ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table test.binary_tbl2\n" +
+                "create table test.varbinary_tbl2\n" +
                         "(k1 int, j varbinary(1), j1 varbinary(10), j2 varbinary)\n" +
                         "duplicate key(k1)\n" +
                         "partition by range(k1)\n" +
@@ -595,19 +699,19 @@ public class CreateTableTest {
                         "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
         // default table
         ExceptionChecker.expectThrowsNoException(() -> createTable(
-                "create table test.binary_tbl3\n"
+                "create table test.varbinary_tbl3\n"
                         + "(k1 int, k2 varbinary)\n"
                         + "distributed by hash(k1) buckets 1\n"
                         + "properties('replication_num' = '1');"));
 
         // unique key table
-        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.binary_tbl4 \n" +
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.varbinary_tbl4 \n" +
                 "(k1 int(40), j varbinary, j1 varbinary(1), j2 varbinary(10))\n" +
                 "unique key(k1)\n" +
                 "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
 
         // primary key table
-        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.binary_tbl5 \n" +
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.varbinary_tbl5 \n" +
                 "(k1 int(40), j varbinary, j1 varbinary, j2 varbinary(10))\n" +
                 "primary key(k1)\n" +
                 "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
@@ -615,22 +719,90 @@ public class CreateTableTest {
         // failed
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Invalid data type of key column 'k2': 'VARBINARY'",
-                () -> createTable("create table test.binary_tbl0\n"
+                () -> createTable("create table test.varbinary_tbl0\n"
                         + "(k1 int, k2 varbinary)\n"
                         + "duplicate key(k1, k2)\n"
                         + "distributed by hash(k1) buckets 1\n"
                         + "properties('replication_num' = '1');"));
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "VARBINARY(10) column can not be distribution column",
-                () -> createTable("create table test.binary_tbl0 \n"
+                () -> createTable("create table test.varbinary_tbl0 \n"
                         + "(k1 int, k2 varbinary(10) )\n"
                         + "duplicate key(k1)\n"
                         + "distributed by hash(k2) buckets 1\n"
                         + "properties('replication_num' = '1');"));
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Column[j] type[VARBINARY] cannot be a range partition key",
-                () -> createTable("create table test.binary_tbl0 \n" +
+                () -> createTable("create table test.varbinary_tbl0 \n" +
                         "(k1 int(40), j varbinary, j1 varbinary(20), j2 varbinary)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1, j)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+    }
+
+    @Test
+    public void testCreateBinaryTable() {
+        // duplicate table
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl\n" +
+                        "(k1 int, j binary(10))\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl1\n" +
+                        "(k1 int, j binary)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl2\n" +
+                        "(k1 int, j binary(1), j1 binary(10), j2 binary)\n" +
+                        "duplicate key(k1)\n" +
+                        "partition by range(k1)\n" +
+                        "(partition p1 values less than(\"10\"))\n" +
+                        "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+        // default table
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "create table test.binary_tbl3\n"
+                        + "(k1 int, k2 binary)\n"
+                        + "distributed by hash(k1) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
+
+        // unique key table
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.binary_tbl4 \n" +
+                "(k1 int(40), j binary, j1 binary(1), j2 binary(10))\n" +
+                "unique key(k1)\n" +
+                "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+
+        // primary key table
+        ExceptionChecker.expectThrowsNoException(() -> createTable("create table test.binary_tbl5 \n" +
+                "(k1 int(40), j binary, j1 binary, j2 binary(10))\n" +
+                "primary key(k1)\n" +
+                "distributed by hash(k1) buckets 1\n" + "properties('replication_num' = '1');"));
+
+        // failed
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Invalid data type of key column 'k2': 'VARBINARY'",
+                () -> createTable("create table test.binary_tbl0\n"
+                        + "(k1 int, k2 binary)\n"
+                        + "duplicate key(k1, k2)\n"
+                        + "distributed by hash(k1) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "VARBINARY(10) column can not be distribution column",
+                () -> createTable("create table test.binary_tbl0 \n"
+                        + "(k1 int, k2 binary(10) )\n"
+                        + "duplicate key(k1)\n"
+                        + "distributed by hash(k2) buckets 1\n"
+                        + "properties('replication_num' = '1');"));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Column[j] type[VARBINARY] cannot be a range partition key",
+                () -> createTable("create table test.binary_tbl0 \n" +
+                        "(k1 int(40), j binary, j1 binary(20), j2 binary)\n" +
                         "duplicate key(k1)\n" +
                         "partition by range(k1, j)\n" +
                         "(partition p1 values less than(\"10\"))\n" +
@@ -641,13 +813,70 @@ public class CreateTableTest {
      * Disable varbinary on unique/primary/aggregate key
      */
     @Test
+    public void testAlterVarBinaryTable() {
+        // use json as bloomfilter
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_varbinary_bf(\n" +
+                        "k1 INT,\n" +
+                        "k2 INT,\n" +
+                        "k3 VARBINARY\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")"
+        ));
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Invalid bloom filter column 'k3': unsupported type VARBINARY",
+                () -> alterTableWithNewParser("ALTER TABLE test.t_varbinary_bf set (\"bloom_filter_columns\"= \"k3\");"));
+
+        // Modify column in unique key
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_varbinary_unique_key (\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "UNIQUE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")"
+        ));
+        // Add column in unique key
+        ExceptionChecker.expectThrowsNoException(
+                () -> alterTableWithNewParser("ALTER TABLE test.t_varbinary_unique_key ADD COLUMN k3 VARBINARY(12)"));
+
+        // Add column in primary key
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.t_varbinary_primary_key (\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "PRIMARY KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+        ExceptionChecker.expectThrowsNoException(
+                () -> alterTableWithNewParser("ALTER TABLE test.t_varbinary_primary_key ADD COLUMN k3 VARBINARY(21)"));
+    }
+
+    /**
+     * Disable binary on unique/primary/aggregate key
+     */
+    @Test
     public void testAlterBinaryTable() {
         // use json as bloomfilter
         ExceptionChecker.expectThrowsNoException(() -> createTable(
                 "CREATE TABLE test.t_binary_bf(\n" +
                         "k1 INT,\n" +
                         "k2 INT,\n" +
-                        "k3 VARBINARY\n" +
+                        "k3 BINARY\n" +
                         ") ENGINE=OLAP\n" +
                         "DUPLICATE KEY(k1)\n" +
                         "COMMENT \"OLAP\"\n" +
@@ -675,7 +904,7 @@ public class CreateTableTest {
         ));
         // Add column in unique key
         ExceptionChecker.expectThrowsNoException(
-                () -> alterTableWithNewParser("ALTER TABLE test.t_binary_unique_key ADD COLUMN k3 VARBINARY(12)"));
+                () -> alterTableWithNewParser("ALTER TABLE test.t_binary_unique_key ADD COLUMN k3 BINARY(12)"));
 
         // Add column in primary key
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -760,6 +989,32 @@ public class CreateTableTest {
         Assert.assertTrue(table.isBinlogEnabled());
         Assert.assertEquals(0, table.getBinlogVersion());
         Assert.assertEquals(200, table.getCurBinlogConfig().getBinlogMaxSize());
+    }
+
+    @Test
+    public void testTemporaryTable() throws Exception {
+        Config.enable_experimental_temporary_table = true;
+        createTable(
+                "CREATE TABLE test.base_tbl (\n" +
+                        "k1 INT,\n" +
+                        "k2 VARCHAR(20)\n" +
+                        ") ENGINE=OLAP\n" +
+                        "DUPLICATE KEY(k1)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(k1) BUCKETS 3\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ")"
+        );
+
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(
+                "create temporary table test.temp_table select * from test.base_tbl",
+                connectContext);
+        // String sql = stmt.toSql();
+        // Assert.assertEquals("hehe", sql);
+
+        // drop table
+        UtFrameUtils.parseStmtWithNewParser("drop temporary table test.base_tbl", connectContext);
     }
 
     @Test
@@ -949,6 +1204,103 @@ public class CreateTableTest {
     }
 
     @Test
+    public void testAutomaticPartitionTableLimit() {
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.site_access_part_partition(\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "    START (\"2023-05-01\") END (\"2023-05-03\") EVERY (INTERVAL 1 month)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.site_access_interval_not_1 (\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "    START (\"2023-05-01\") END (\"2023-10-01\") EVERY (INTERVAL 2 month)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE test.site_access_granularity_does_not_match (\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "    START (\"2023-05-01\") END (\"2023-10-01\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrowsNoException(() -> createTable(
+                "CREATE TABLE test.site_access_granularity_does_not_match (\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "    START (\"2023-05-01\") END (\"2023-10-01\") EVERY (INTERVAL 1 month)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+        ExceptionChecker.expectThrows(AnalysisException.class, () -> createTable(
+                "CREATE TABLE site_access_use_time_slice (\n" +
+                        "    event_day datetime,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY time_slice(event_day, interval 1 day)(\n" +
+                        "\tSTART (\"2023-05-01\") END (\"2023-05-03\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"
+        ));
+
+    }
+
+    @Test
     public void testCannotCreateOlapTable() {
         new MockUp<RunMode>() {
             @Mock
@@ -976,6 +1328,20 @@ public class CreateTableTest {
                                 "PROPERTIES (\n" +
                                 "\"storage_volume\" = \"local\"\n" +
                                 ");"
+                ));
+    }
+
+    @Test
+    public void testCreateTableInSystemDb() {
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Can't create table 'goods' (errno: create denied)",
+                () -> createTable(
+                        "CREATE TABLE information_schema.goods(\n" +
+                                "    item_id1          INT,\n" +
+                                "    item_name         STRING,\n" +
+                                "    price             FLOAT\n" +
+                                ") DISTRIBUTED BY HASH(item_id1)\n" +
+                                "PROPERTIES(\"replication_num\" = \"1\");"
                 ));
     }
 }

@@ -142,7 +142,8 @@ public class TransactionState implements Writable {
         TIMEOUT,
         OFFSET_OUT_OF_RANGE,
         PAUSE,
-        NO_PARTITIONS;
+        NO_PARTITIONS,
+        FILTERED_ROWS;
 
         public static TxnStatusChangeReason fromString(String reasonString) {
             if (Strings.isNullOrEmpty(reasonString)) {
@@ -164,6 +165,8 @@ public class TransactionState implements Writable {
                     return "Offset out of range";
                 case NO_PARTITIONS:
                     return "all partitions have no load data";
+                case FILTERED_ROWS:
+                    return "too many filtered rows";
                 default:
                     return this.name();
             }
@@ -929,7 +932,7 @@ public class TransactionState implements Writable {
     }
 
     public boolean allPublishTasksFinishedOrQuorumWaitTimeout(Set<Long> publishErrorReplicas) {
-        boolean timeout = System.currentTimeMillis() - getCommitTime() > Config.quorom_publish_wait_time_ms;
+        boolean timeout = System.currentTimeMillis() - getCommitTime() > Config.quorum_publish_wait_time_ms;
         for (PublishVersionTask publishVersionTask : getPublishVersionTasks().values()) {
             if (publishVersionTask.isFinished()) {
                 publishErrorReplicas.addAll(publishVersionTask.getErrorReplicas());

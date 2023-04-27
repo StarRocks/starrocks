@@ -16,48 +16,26 @@
 
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <unordered_map>
+#include <utility>
 
 #include "common/config.h"
+#include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
+#include "gutil/casts.h"
 #include "io/input_stream.h"
 #include "runtime/exec_env.h"
 #include "storage/options.h"
 #include "util/uid_util.h"
 
 namespace starrocks::spill {
-
-class LogBlockReader {
-public:
-    LogBlockReader(std::unique_ptr<io::InputStreamWrapper> readable, size_t length)
-            : _readable(std::move(readable)), _length(length) {}
-    ~LogBlockReader() = default;
-
-    Status read_fully(void* data, int64_t count) {
-        DCHECK(_readable != nullptr);
-        if (_offset + count > _length) {
-            return Status::EndOfFile("no more data in this block");
-        }
-        ASSIGN_OR_RETURN(auto read_len, _readable->read(data, count));
-        RETURN_IF(read_len == 0, Status::EndOfFile("no more data in this block"));
-        RETURN_IF(read_len != count,
-                  Status::InternalError(
-                          fmt::format("block's length is mismatched, expected: {}, actual: {}", count, read_len)));
-        _offset += count;
-        return Status::OK();
-    }
-
-private:
-    std::unique_ptr<io::InputStreamWrapper> _readable;
-    size_t _offset = 0;
-    size_t _length;
-};
-
 class LogBlockContainer {
 public:
-    LogBlockContainer(Dir* dir, TUniqueId query_id, int32_t plan_node_id, std::string plan_node_name, uint64_t id)
+    LogBlockContainer(Dir* dir, const TUniqueId& query_id, int32_t plan_node_id, std::string plan_node_name,
+                      uint64_t id)
             : _dir(dir),
               _query_id(query_id),
               _plan_node_id(plan_node_id),
@@ -95,7 +73,7 @@ public:
 
     Status flush();
 
-    StatusOr<std::unique_ptr<LogBlockReader>> get_block_reader(size_t offset, size_t length);
+    StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable(size_t offset, size_t length);
 
     static StatusOr<LogBlockContainerPtr> create(Dir* dir, TUniqueId query_id, int32_t plan_node_id,
                                                  const std::string& plan_node_name, uint64_t id);
@@ -117,6 +95,9 @@ Status LogBlockContainer::open() {
     std::string file_path = path();
     WritableFileOptions opt;
     opt.mode = FileSystem::CREATE_OR_OPEN;
+    if (config::experimental_spill_skip_sync) {
+        opt.sync_on_close = false;
+    }
     ASSIGN_OR_RETURN(_writable_file, _dir->fs()->new_writable_file(opt, file_path));
     TRACE_SPILL_LOG << "create new container file: " << file_path;
     _has_open = true;
@@ -137,14 +118,17 @@ Status LogBlockContainer::append_data(const std::vector<Slice>& data) {
 }
 
 Status LogBlockContainer::flush() {
+    if (config::experimental_spill_skip_sync) {
+        return Status::OK();
+    }
     return _writable_file->flush(WritableFile::FLUSH_ASYNC);
 }
 
-StatusOr<std::unique_ptr<LogBlockReader>> LogBlockContainer::get_block_reader(size_t offset, size_t length) {
+StatusOr<std::unique_ptr<io::InputStreamWrapper>> LogBlockContainer::get_readable(size_t offset, size_t length) {
     std::string file_path = path();
     ASSIGN_OR_RETURN(auto f, _dir->fs()->new_sequential_file(file_path));
     RETURN_IF_ERROR(f->skip(offset));
-    return std::make_unique<LogBlockReader>(std::move(f), length);
+    return f;
 }
 
 StatusOr<LogBlockContainerPtr> LogBlockContainer::create(Dir* dir, TUniqueId query_id, int32_t plan_node_id,
@@ -154,18 +138,29 @@ StatusOr<LogBlockContainerPtr> LogBlockContainer::create(Dir* dir, TUniqueId que
     return container;
 }
 
+class LogBlockReader final : public BlockReader {
+public:
+    LogBlockReader(const Block* block) : _block(block) {}
+    ~LogBlockReader() override = default;
+
+    Status read_fully(void* data, int64_t count) override;
+
+    std::string debug_string() override { return _block->debug_string(); }
+
+private:
+    const Block* _block = nullptr;
+    std::unique_ptr<io::InputStreamWrapper> _readable;
+    size_t _offset = 0;
+    size_t _length = 0;
+};
+
 class LogBlock : public Block {
 public:
-    LogBlock(LogBlockContainerPtr container, size_t offset) : _container(container), _offset(offset) {}
+    LogBlock(LogBlockContainerPtr container, size_t offset) : _container(std::move(container)), _offset(offset) {}
 
-    virtual ~LogBlock() override {
-        if (_reader != nullptr) {
-            _reader.reset();
-        }
-    }
+    ~LogBlock() override = default;
 
     size_t offset() const { return _offset; }
-    size_t length() const { return _length; }
 
     LogBlockContainerPtr container() const { return _container; }
 
@@ -174,31 +169,48 @@ public:
         std::for_each(data.begin(), data.end(), [&](const Slice& slice) { total_size += slice.size; });
         RETURN_IF_ERROR(_container->ensure_preallocate(total_size));
         RETURN_IF_ERROR(_container->append_data(data));
-        _length += total_size;
+        _size += total_size;
         return Status::OK();
     }
 
     Status flush() override { return _container->flush(); }
 
-    Status read_fully(void* data, int64_t count) override {
-        if (_reader == nullptr) {
-            ASSIGN_OR_RETURN(_reader, _container->get_block_reader(_offset, _length));
-        }
-        return _reader->read_fully(data, count);
+    StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable() const {
+        return _container->get_readable(_offset, _size);
     }
 
-    std::string debug_string() override {
-        return fmt::format("LogBlock[container={}, offset={}, len={}]", _container->path(), _offset, _length);
+    std::shared_ptr<BlockReader> get_reader() override { return std::make_shared<LogBlockReader>(this); }
+
+    std::string debug_string() const override {
+        return fmt::format("LogBlock:{}[container={}, offset={}, len={}]", (void*)this, _container->path(), _offset,
+                           _size);
     }
 
 private:
     LogBlockContainerPtr _container;
-    size_t _offset;
-    size_t _length = 0;
-    std::unique_ptr<LogBlockReader> _reader;
+    size_t _offset{};
 };
 
-LogBlockManager::LogBlockManager(TUniqueId query_id) : _query_id(query_id) {
+Status LogBlockReader::read_fully(void* data, int64_t count) {
+    if (_readable == nullptr) {
+        auto log_block = down_cast<const LogBlock*>(_block);
+        ASSIGN_OR_RETURN(_readable, log_block->get_readable());
+        _length = log_block->size();
+    }
+
+    if (_offset + count > _length) {
+        return Status::EndOfFile("no more data in this block");
+    }
+
+    ASSIGN_OR_RETURN(auto read_len, _readable->read(data, count));
+    RETURN_IF(read_len == 0, Status::EndOfFile("no more data in this block"));
+    RETURN_IF(read_len != count, Status::InternalError(fmt::format(
+                                         "block's length is mismatched, expected: {}, actual: {}", count, read_len)));
+    _offset += count;
+    return Status::OK();
+}
+
+LogBlockManager::LogBlockManager(TUniqueId query_id) : _query_id(std::move(query_id)) {
     _max_container_bytes = config::spill_max_log_block_container_bytes > 0 ? config::spill_max_log_block_container_bytes
                                                                            : kDefaultMaxContainerBytes;
 }

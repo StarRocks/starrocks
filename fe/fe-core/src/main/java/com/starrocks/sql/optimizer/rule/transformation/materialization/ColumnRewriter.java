@@ -56,7 +56,7 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
-    public ColumnRefOperator rewriteViewToQuery(ColumnRefOperator colRef) {
+    public ColumnRefOperator rewriteViewToQuery(final ColumnRefOperator colRef) {
         if (colRef == null) {
             return null;
         }
@@ -120,6 +120,13 @@ public class ColumnRewriter {
         private boolean enableEquivalenceClassesRewrite;
         private boolean useQueryEquivalenceClasses;
 
+        public ColumnWriterBuilder() {
+            this.enableRelationRewrite = false;
+            this.viewToQuery = false;
+            this.enableEquivalenceClassesRewrite = false;
+            this.useQueryEquivalenceClasses = false;
+        }
+
         ColumnWriterBuilder withRewriteContext(RewriteContext rewriteContext) {
             this.rewriteContext = rewriteContext;
             return this;
@@ -134,6 +141,7 @@ public class ColumnRewriter {
             this.viewToQuery = viewToQuery;
             return this;
         }
+
         ColumnWriterBuilder withEnableEquivalenceClassesRewrite(boolean enableEquivalenceClassesRewrite) {
             this.enableEquivalenceClassesRewrite = enableEquivalenceClassesRewrite;
             return this;
@@ -193,7 +201,10 @@ public class ColumnRewriter {
                 if (relationColumns == null) {
                     return result;
                 }
-                result = relationColumns.getOrDefault(columnRef.getName(), columnRef);
+                if (!relationColumns.containsKey(columnRef.getName())) {
+                    return result;
+                }
+                result = relationColumns.get(columnRef.getName());
             }
             if (enableEquivalenceClassesRewrite && equivalenceClasses != null) {
                 Set<ColumnRefOperator> equalities = equivalenceClasses.getEquivalenceClass(result);

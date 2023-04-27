@@ -121,17 +121,16 @@ TEST_F(TabletBinlogTest, test_generate_binlog) {
         }
         RowsetSharedPtr rowset;
         create_rowset(_tablet, segment_rows, &rowset);
-        int64_t timestamp = rowset->creation_time() * 1000000;
         ASSERT_OK(_tablet->add_inc_rowset(rowset, version));
-
+        int64_t timestamp = rowset->creation_time() * 1000000;
         version_infos.push_back(DupKeyVersionInfo(version, num_segments, num_rows_per_segment, timestamp));
     }
 
     BinlogManager* binlog_manager = _tablet->binlog_manager();
-    std::map<int128_t, BinlogFileMetaPBPtr>& lsn_map = binlog_manager->file_metas();
+    std::map<int128_t, BinlogFilePtr>& lsn_map = binlog_manager->alive_binlog_files();
     std::vector<BinlogFileMetaPBPtr> file_metas;
     for (auto it : lsn_map) {
-        file_metas.push_back(it.second);
+        file_metas.push_back(it.second->file_meta());
     }
     verify_dup_key_multiple_versions(version_infos, _tablet->schema_hash_path(), file_metas);
 }
@@ -149,9 +148,8 @@ TEST_F(TabletBinlogTest, test_publish_out_of_order) {
             }
             RowsetSharedPtr rowset;
             create_rowset(_tablet, segment_rows, &rowset);
-            int64_t timestamp = rowset->creation_time() * 1000000;
             ASSERT_OK(_tablet->add_inc_rowset(rowset, sub_version));
-
+            int64_t timestamp = rowset->creation_time() * 1000000;
             if (k == 1) {
                 version_infos.push_back(DupKeyVersionInfo(sub_version, num_segments, num_rows_per_segment, timestamp));
             }
@@ -159,10 +157,10 @@ TEST_F(TabletBinlogTest, test_publish_out_of_order) {
     }
 
     BinlogManager* binlog_manager = _tablet->binlog_manager();
-    std::map<int128_t, BinlogFileMetaPBPtr>& lsn_map = binlog_manager->file_metas();
+    std::map<int128_t, BinlogFilePtr>& lsn_map = binlog_manager->alive_binlog_files();
     std::vector<BinlogFileMetaPBPtr> file_metas;
     for (auto it : lsn_map) {
-        file_metas.push_back(it.second);
+        file_metas.push_back(it.second->file_meta());
     }
     verify_dup_key_multiple_versions(version_infos, _tablet->schema_hash_path(), file_metas);
 }

@@ -58,7 +58,7 @@ public class PlainPasswordAuthenticationProviderTest {
     }
 
     @Test
-    public void testAuthentica() throws Exception {
+    public void testAuthentication() throws Exception {
         UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test", "%");
         String[] passwords = {"asdf123", "starrocks", "testtest"};
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
@@ -99,5 +99,29 @@ public class PlainPasswordAuthenticationProviderTest {
             Assert.assertTrue(e.getMessage().contains("password mismatch!"));
         }
 
+        try {
+            provider.authenticate(
+                    testUser.getQualifiedUser(),
+                    "10.1.1.1",
+                    MysqlPassword.scramble(seed, "bb"),
+                    seed,
+                    info);
+
+        } catch (AuthenticationException e) {
+            Assert.fail();
+        }
+
+        try {
+            byte[] remotePassword = "bb".getBytes(StandardCharsets.UTF_8);
+            provider.authenticate(
+                    testUser.getQualifiedUser(),
+                    "10.1.1.1",
+                    remotePassword,
+                    null,
+                    info);
+
+        } catch (AuthenticationException e) {
+            Assert.fail();
+        }
     }
 }

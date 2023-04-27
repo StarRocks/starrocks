@@ -174,13 +174,21 @@ public class StreamLoadPlanner {
         TWriteQuorumType writeQuorum = destTable.writeQuorum();
 
         List<Long> partitionIds = getAllPartitionIds();
+        boolean enableAutomaticPartition;
+        if (streamLoadInfo.isSpecifiedPartitions()) {
+            enableAutomaticPartition = false;
+        } else {
+            enableAutomaticPartition = destTable.supportedAutomaticPartition();
+        }
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
-                destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement());
+                destTable.enableReplicatedStorage(), scanNode.nullExprInAutoIncrement(),
+                enableAutomaticPartition);
         if (missAutoIncrementColumn.size() == 1 && missAutoIncrementColumn.get(0) == Boolean.TRUE) {
             olapTableSink.setMissAutoIncrementColumn();
         }
         olapTableSink.init(loadId, streamLoadInfo.getTxnId(), db.getId(), streamLoadInfo.getTimeout());
         Load.checkMergeCondition(streamLoadInfo.getMergeConditionStr(), destTable, olapTableSink.missAutoIncrementColumn());
+        olapTableSink.setPartialUpdateMode(streamLoadInfo.getPartialUpdateMode());
         olapTableSink.complete(streamLoadInfo.getMergeConditionStr());
 
         // for stream load, we only need one fragment, ScanNode -> DataSink.
@@ -225,10 +233,11 @@ public class StreamLoadPlanner {
         queryOptions.setQuery_type(TQueryType.LOAD);
         queryOptions.setQuery_timeout(streamLoadInfo.getTimeout());
         queryOptions.setLoad_transmission_compression_type(streamLoadInfo.getTransmisionCompressionType());
+        queryOptions.setLog_rejected_record_num(streamLoadInfo.getLogRejectedRecordNum());
 
         // Disable load_dop for LakeTable temporary, because BE's `LakeTabletsChannel` does not support
         // parallel send from a single sender.
-        if (streamLoadInfo.getLoadParallelRequestNum() != 0 && !destTable.isCloudNativeTable()) {
+        if (streamLoadInfo.getLoadParallelRequestNum() != 0 && !destTable.isCloudNativeTableOrMaterializedView()) {
             // only dup_keys can use parallel write since other table's the order of write is important
             if (destTable.getKeysType() == KeysType.DUP_KEYS) {
                 queryOptions.setLoad_dop(streamLoadInfo.getLoadParallelRequestNum());
@@ -260,8 +269,8 @@ public class StreamLoadPlanner {
     private List<Long> getAllPartitionIds() throws DdlException {
         List<Long> partitionIds = Lists.newArrayList();
 
-        PartitionNames partitionNames = streamLoadInfo.getPartitions();
-        if (partitionNames != null) {
+        if (streamLoadInfo.isSpecifiedPartitions()) {
+            PartitionNames partitionNames = streamLoadInfo.getPartitions();
             for (String partName : partitionNames.getPartitionNames()) {
                 Partition part = destTable.getPartition(partName, partitionNames.isTemp());
                 if (part == null) {

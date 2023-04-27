@@ -25,8 +25,10 @@
 #include "arrow/array/builder_base.h"
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
+#include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exec/arrow_to_starrocks_converter.h"
+#include "exec/parquet_scanner.h"
 #include "runtime/datetime_value.h"
 
 #define ASSERT_STATUS_OK(stmt)    \
@@ -73,10 +75,10 @@ void add_arrow_to_column(Column* column, size_t num_elements, ArrowCppType value
     auto array = create_constant_array<ArrowType>(num_elements, value, counter);
     auto conv_func = get_arrow_converter(AT, LT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
-    Filter filter;
-    filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
-    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr));
+    Filter filter; // its size should be equal with counter
+    filter.resize(array->length() + column->size(), 1);
+    ASSERT_STATUS_OK(
+            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr));
     ASSERT_EQ(column->size(), counter);
     auto* data = &(down_cast<ColumnType*>(column)->get_data().front());
     for (auto i = 0; i < num_elements; ++i) {
@@ -101,9 +103,8 @@ void add_arrow_to_nullable_column(Column* column, size_t num_elements, ArrowCppT
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
     Filter filter;
     filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
-    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), data_column, data_column->size(), null_data,
-                               filter_data, nullptr));
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), data_column, data_column->size(), null_data, &filter,
+                               nullptr, nullptr));
     ASSERT_EQ(data_column->size(), counter);
     auto* data = &(down_cast<ColumnType*>(data_column)->get_data().front());
     for (auto i = 0; i < num_elements; ++i) {
@@ -242,19 +243,19 @@ void add_arrow_to_binary_column(Column* column, size_t num_elements, ArrowCppTyp
     auto conv_func = get_arrow_converter(AT, LT, false, strict_mode);
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
-    auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr);
+    filter.resize(array->length() + column->size(), 1);
+    auto status =
+            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr);
     ASSERT_TRUE(status.ok());
     auto* binary_column = down_cast<ColumnType*>(column);
     for (auto i = 0; i < num_elements; ++i) {
         auto idx = counter - num_elements + i;
         auto s = binary_column->get_slice(idx);
         if (fail) {
-            ASSERT_EQ(filter[i], 0);
+            ASSERT_EQ(filter[idx], 0);
             ASSERT_EQ(s.size, 0);
         } else {
-            ASSERT_EQ(filter[i], 1);
+            ASSERT_EQ(filter[idx], 1);
             ASSERT_EQ(s.to_string(), value);
         }
     }
@@ -294,23 +295,22 @@ void add_arrow_to_nullable_binary_column(Column* column, size_t num_elements, Ar
     fill_null_column(array.get(), 0, array->length(), null_column, null_column->size());
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
-    auto status = conv_func(array.get(), 0, array->length(), binary_column, binary_column->size(), null_data,
-                            filter_data, nullptr);
+    filter.resize(array->length() + binary_column->size(), 1);
+    auto status = conv_func(array.get(), 0, array->length(), binary_column, binary_column->size(), null_data, &filter,
+                            nullptr, nullptr);
     ASSERT_TRUE(status.ok());
     for (auto i = 0; i < num_elements; ++i) {
         auto idx = counter - num_elements + i;
         auto s = binary_column->get_slice(idx);
         if (i % 2 == 0) {
-            ASSERT_EQ(filter_data[i], 1);
+            ASSERT_EQ(filter[idx], 1);
             ASSERT_EQ(null_data[i], DATUM_NULL);
             ASSERT_EQ(s.size, 0);
         } else if (fail) {
-            ASSERT_EQ(filter_data[i], strict_mode ? 0 : 1);
+            ASSERT_EQ(filter[idx], strict_mode ? 0 : 1);
             ASSERT_EQ(s.size, 0);
         } else {
-            ASSERT_EQ(filter_data[i], 1);
+            ASSERT_EQ(filter[idx], 1);
             ASSERT_EQ(null_data[i], DATUM_NOT_NULL);
             ASSERT_EQ(s.to_string(), value);
         }
@@ -482,9 +482,9 @@ void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_ele
     auto conv_func = get_arrow_converter(ArrowTypeId::FIXED_SIZE_BINARY, LT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
-    auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr);
+    filter.resize(array->length() + column->size(), 1);
+    auto status =
+            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(column->size(), counter);
     auto* binary_column = down_cast<ColumnType*>(column);
@@ -493,10 +493,10 @@ void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_ele
         auto idx = counter - num_elements + i;
         auto s = binary_column->get_slice(idx);
         if (fail) {
-            ASSERT_EQ(filter[i], 0);
+            ASSERT_EQ(filter[idx], 0);
             ASSERT_EQ(s.size, 0);
         } else {
-            ASSERT_EQ(filter[i], 1);
+            ASSERT_EQ(filter[idx], 1);
             ASSERT_TRUE(memequal(s.data, slice_size, value.data(), slice_size));
         }
     }
@@ -518,17 +518,16 @@ void add_fixed_size_binary_array_to_nullable_binary_column(Column* column, size_
     fill_null_column(array.get(), 0, array->length(), null_column, null_column->size());
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
-    auto status = conv_func(array.get(), 0, array->length(), binary_column, binary_column->size(), null_data,
-                            filter_data, nullptr);
+    filter.resize(array->length() + binary_column->size(), 1);
+    auto status = conv_func(array.get(), 0, array->length(), binary_column, binary_column->size(), null_data, &filter,
+                            nullptr, nullptr);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(binary_column->size(), counter);
     auto slice_size = std::min((std::string::size_type)bytes_width, value.size());
     for (auto i = 0; i < num_elements; ++i) {
         auto idx = counter - num_elements + i;
         auto s = binary_column->get_slice(idx);
-        ASSERT_EQ(filter[i], 1);
+        ASSERT_EQ(filter[idx], 1);
         if (i % 2 == 0) {
             ASSERT_EQ(null_data[i], DATUM_NULL);
             ASSERT_EQ(s.size, 0);
@@ -699,9 +698,9 @@ void add_arrow_to_datetime_column(std::shared_ptr<ArrowType> type, Column* colum
     auto conv_func = get_arrow_converter(AT, LT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
-    auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr);
+    filter.resize(array->length() + column->size(), 1);
+    auto status =
+            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr);
     if (fail) {
         ASSERT_FALSE(status.ok());
         return;
@@ -732,10 +731,9 @@ void add_arrow_to_nullable_datetime_column(std::shared_ptr<ArrowType> type, Colu
     fill_null_column(array.get(), 0, num_elements, null_column, null_column->size());
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
+    filter.resize(array->length() + datetime_column->size(), 1);
     auto status = conv_func(array.get(), 0, array->length(), datetime_column, datetime_column->size(), null_data,
-                            filter_data, nullptr);
+                            &filter, nullptr, nullptr);
     if (fail) {
         ASSERT_FALSE(status.ok());
         return;
@@ -920,9 +918,9 @@ void add_arrow_to_decimal_column(const std::shared_ptr<arrow::Decimal128Type>& t
     auto conv_func = get_arrow_converter(ArrowTypeId::DECIMAL, LT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
-    auto status = conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr);
+    filter.resize(array->length() + column->size(), 1);
+    auto status =
+            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(column->size(), counter);
     auto* decimal_column = down_cast<ColumnType*>(column);
@@ -932,7 +930,7 @@ void add_arrow_to_decimal_column(const std::shared_ptr<arrow::Decimal128Type>& t
         if (!fail) {
             ASSERT_EQ(decimal_data[idx], expect_value);
         } else {
-            ASSERT_EQ(filter_data[i], 0);
+            ASSERT_EQ(filter[idx], 0);
         }
     }
 }
@@ -952,10 +950,9 @@ void add_arrow_to_nullable_decimal_column(const std::shared_ptr<arrow::Decimal12
     fill_null_column(array.get(), 0, array->length(), null_column, null_column->size());
     auto* null_data = &null_column->get_data().front() + counter - num_elements;
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
-    auto status = conv_func(array.get(), 0, array->length(), decimal_column, decimal_column->size(), null_data,
-                            filter_data, nullptr);
+    filter.resize(array->length() + decimal_column->size(), 1);
+    auto status = conv_func(array.get(), 0, array->length(), decimal_column, decimal_column->size(), null_data, &filter,
+                            nullptr, nullptr);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(decimal_column->size(), counter);
     auto* decimal_data = &decimal_column->get_data().front();
@@ -1186,7 +1183,7 @@ PARALLEL_TEST(ArrowConverterTest, test_decimal128) {
 }
 
 static std::shared_ptr<arrow::Array> create_map_array(int64_t num_elements, const std::map<std::string, int>& value,
-                                                      size_t& counter) {
+                                                      size_t& counter, bool null_dup = false) {
     auto key_builder = std::make_shared<arrow::StringBuilder>();
     auto item_builder = std::make_shared<arrow::Int32Builder>();
     arrow::TypeTraits<arrow::MapType>::BuilderType builder(arrow::default_memory_pool(), key_builder, item_builder);
@@ -1196,8 +1193,16 @@ static std::shared_ptr<arrow::Array> create_map_array(int64_t num_elements, cons
         for (auto& [key, value] : value) {
             key_builder->Append(key);
             item_builder->Append(value);
+            if (null_dup) {
+                key_builder->Append(key);
+                item_builder->Append(value);
+            }
         }
         counter += 1;
+        if (null_dup) {
+            builder.AppendNull();
+            counter++;
+        }
     }
     return builder.Finish().ValueOrDie();
 }
@@ -1226,9 +1231,9 @@ void add_arrow_map_to_json_column(Column* column, size_t num_elements, const std
     ASSERT_TRUE(conv_func != nullptr);
 
     Filter filter;
-    filter.resize(array->length(), 1);
-    auto* filter_data = &filter.front();
-    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, filter_data, nullptr));
+    filter.resize(array->length() + column->size(), 1);
+    ASSERT_STATUS_OK(
+            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, nullptr));
     ASSERT_EQ(column->size(), counter);
     for (auto i = 0; i < num_elements; ++i) {
         const JsonValue* json = column->get(i).get_json();
@@ -1249,6 +1254,159 @@ PARALLEL_TEST(ArrowConverterTest, test_map_to_json) {
     for (int i = 1; i < 10; i++) {
         add_arrow_map_to_json_column(json_column.get(), i, map_value, counter);
     }
+}
+
+static std::shared_ptr<arrow::Array> create_list_array(int64_t num_elements, ssize_t& counter, bool add_null = false) {
+    auto value_builder = std::make_shared<arrow::UInt64Builder>();
+    int fix_size = 10;
+    arrow::TypeTraits<arrow::FixedSizeListType>::BuilderType builder(arrow::default_memory_pool(), value_builder,
+                                                                     fix_size);
+    for (auto num = 0; num < num_elements; num = num + fix_size) {
+        builder.Append();
+        for (int i = 0; i < fix_size; i++) {
+            value_builder->Append(counter);
+            counter += 1;
+        }
+        if (add_null) {
+            builder.AppendNull();
+        }
+    }
+    return builder.Finish().ValueOrDie();
+}
+
+PARALLEL_TEST(ArrowConverterTest, test_convert_list_array) {
+    TypeDescriptor array_type(TYPE_ARRAY);
+    array_type.children.push_back(TypeDescriptor(LogicalType::TYPE_BIGINT));
+    auto column = ColumnHelper::create_column(array_type, false);
+    column->reserve(4096);
+    ssize_t counter = 0;
+    int num = 100;
+    auto array = create_list_array(num, counter);
+    auto conv_func = get_arrow_converter(ArrowTypeId::LIST, TYPE_ARRAY, false, false);
+    ASSERT_TRUE(conv_func != nullptr);
+    ASSERT_EQ(num, counter);
+    Filter filter;
+    filter.resize(array->length() + column->size(), 1);
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column.get(), column->size(), nullptr, &filter, nullptr,
+                               &array_type));
+    ASSERT_EQ(column->size(), 10);
+}
+
+static std::shared_ptr<arrow::Array> create_nest_list_array(int64_t num_elements, ssize_t& counter) {
+    int fix_size = 5;
+    int fix_size1 = 10;
+    auto value_builder = std::make_shared<arrow::UInt64Builder>();
+    auto builder = std::make_shared<arrow::FixedSizeListBuilder>(arrow::default_memory_pool(), value_builder, fix_size);
+    arrow::TypeTraits<arrow::FixedSizeListType>::BuilderType builder1(arrow::default_memory_pool(), builder, fix_size1);
+
+    for (auto num1 = 0; num1 < num_elements; num1 += fix_size1) {
+        builder1.Append();
+        for (auto num = 0; num < fix_size1; num += fix_size) {
+            builder->Append();
+            for (int i = 0; i < fix_size; i++) {
+                value_builder->Append(counter);
+                counter += 1;
+            }
+        }
+    }
+    return builder1.Finish().ValueOrDie();
+}
+
+PARALLEL_TEST(ArrowConverterTest, test_convert_nest_list_array) {
+    TypeDescriptor array_type0(TYPE_ARRAY);
+    array_type0.children.push_back(TypeDescriptor(LogicalType::TYPE_BIGINT));
+    TypeDescriptor array_type(TYPE_ARRAY);
+    array_type.children.push_back(array_type0);
+
+    auto column = ColumnHelper::create_column(array_type, false);
+    column->reserve(4096);
+    ssize_t counter = 0;
+    int num = 100;
+    auto array = create_nest_list_array(num, counter);
+    auto conv_func = get_arrow_converter(ArrowTypeId::LIST, TYPE_ARRAY, false, false);
+    ASSERT_TRUE(conv_func != nullptr);
+    ASSERT_EQ(num, counter);
+    Filter filter;
+    filter.resize(array->length() + column->size(), 1);
+    ASSERT_STATUS_OK(conv_func(array.get(), 0, array->length(), column.get(), column->size(), nullptr, &filter, nullptr,
+                               &array_type));
+    ASSERT_EQ(column->size(), 10);
+}
+
+PARALLEL_TEST(ArrowConverterTest, test_convert_nullable_list_array) {
+    TypeDescriptor array_type(TYPE_ARRAY);
+    array_type.children.push_back(TypeDescriptor(LogicalType::TYPE_BIGINT));
+    auto column = ColumnHelper::create_column(array_type, true);
+    column->reserve(4096);
+    ssize_t counter = 0;
+    int num = 100;
+    auto array = create_list_array(num, counter, true);
+    auto conv_func = get_arrow_converter(ArrowTypeId::LIST, TYPE_ARRAY, true, false);
+    ASSERT_TRUE(conv_func != nullptr);
+    ASSERT_EQ(num, counter);
+    Filter filter;
+    filter.resize(array->length() + column->size(), 1);
+    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(conv_func, array->length(), array.get(), &array_type,
+                                                             column, 0, column->size(), &filter, nullptr));
+    ASSERT_EQ(column->size(), 20);
+    ASSERT_EQ(down_cast<NullableColumn*>(column.get())->null_count(), 10);
+}
+
+void convert_arrow_map_to_map_column(Column* column, size_t num_elements, const std::map<std::string, int>& value,
+                                     size_t& counter, const TypeDescriptor& type) {
+    ASSERT_EQ(column->size(), counter);
+    auto array = create_map_array(num_elements, value, counter);
+    auto conv_func = get_arrow_converter(ArrowTypeId::MAP, TYPE_MAP, false, false);
+    ASSERT_TRUE(conv_func != nullptr);
+
+    Filter filter;
+    filter.resize(array->length() + column->size(), 1);
+    ASSERT_STATUS_OK(
+            conv_func(array.get(), 0, array->length(), column, column->size(), nullptr, &filter, nullptr, &type));
+    ASSERT_EQ(column->size(), counter);
+}
+
+PARALLEL_TEST(ArrowConverterTest, test_convert_map) {
+    TypeDescriptor map_type(TYPE_MAP);
+    map_type.children.emplace_back(TYPE_VARCHAR);
+    map_type.children.emplace_back(TYPE_INT);
+
+    auto map_column = ColumnHelper::create_column(map_type, false);
+    map_column->reserve(4096);
+    size_t counter = 0;
+    std::map<std::string, int> map_value = {
+            {"hehe", 1},
+            {"haha", 2},
+    };
+    for (int i = 1; i < 10; i++) {
+        convert_arrow_map_to_map_column(map_column.get(), i, map_value, counter, map_type);
+    }
+}
+
+PARALLEL_TEST(ArrowConverterTest, test_convert_nullable_map) {
+    TypeDescriptor map_type(TYPE_MAP);
+    map_type.children.emplace_back(TYPE_VARCHAR);
+    map_type.children.emplace_back(TYPE_INT);
+
+    auto map_column = ColumnHelper::create_column(map_type, true);
+    map_column->reserve(4096);
+    size_t counter = 0;
+    std::map<std::string, int> map_value = {
+            {"hehe", 1},
+            {"haha", 2},
+    };
+    int num_elements = 10;
+    auto array = create_map_array(num_elements, map_value, counter, true);
+    auto conv_func = get_arrow_converter(ArrowTypeId::MAP, TYPE_MAP, true, false);
+    ASSERT_TRUE(conv_func != nullptr);
+
+    Filter filter;
+    filter.resize(array->length() + map_column->size(), 1);
+    ASSERT_STATUS_OK(ParquetScanner::convert_array_to_column(conv_func, array->length(), array.get(), &map_type,
+                                                             map_column, 0, map_column->size(), &filter, nullptr));
+    ASSERT_EQ(map_column->size(), counter);
+    ASSERT_EQ(down_cast<NullableColumn*>(map_column.get())->null_count(), num_elements);
+    ASSERT_EQ(map_column->debug_item(0), "{'haha':2,'haha':2,'hehe':1,'hehe':1}");
 }
 
 } // namespace starrocks

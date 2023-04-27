@@ -39,10 +39,10 @@ import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
-import com.starrocks.external.elasticsearch.EsMajorVersion;
-import com.starrocks.external.elasticsearch.EsMetaStateTracker;
-import com.starrocks.external.elasticsearch.EsRestClient;
-import com.starrocks.external.elasticsearch.EsTablePartitions;
+import com.starrocks.connector.elasticsearch.EsMajorVersion;
+import com.starrocks.connector.elasticsearch.EsMetaStateTracker;
+import com.starrocks.connector.elasticsearch.EsRestClient;
+import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TEsTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -72,6 +72,7 @@ public class EsTable extends Table {
     public static final String PASSWORD = "password";
     public static final String INDEX = "index";
     public static final String TYPE = "type";
+    public static final String CATALOG_TYPE = "es.type";
     public static final String TRANSPORT = "transport";
     public static final String VERSION = "version";
     public static final String DOC_VALUES_MODE = "doc_values_mode";
@@ -129,15 +130,27 @@ public class EsTable extends Table {
 
     // record the latest and recently exception when sync ES table metadata (mapping, shard location)
     private Throwable lastMetaDataSyncException = null;
+    // used for catalog to identify the remote table.
+    private String catalogName = null;
+    private String dbName = null;
 
     public EsTable() {
         super(TableType.ELASTICSEARCH);
     }
 
-    public EsTable(long id, String name, List<Column> schema,
-                   Map<String, String> properties, PartitionInfo partitionInfo) throws DdlException {
+    public EsTable(long id, String name, List<Column> schema, Map<String, String> properties,
+                   PartitionInfo partitionInfo) throws DdlException {
         super(id, name, TableType.ELASTICSEARCH, schema);
         this.partitionInfo = partitionInfo;
+        validate(properties);
+    }
+
+    public EsTable(long id, String catalogName, String dbName, String name, List<Column> schema, Map<String, String> properties,
+                    PartitionInfo partitionInfo) throws DdlException {
+        super(id, name, TableType.ELASTICSEARCH, schema);
+        this.partitionInfo = partitionInfo;
+        this.catalogName = catalogName;
+        this.dbName = dbName;
         validate(properties);
     }
 
@@ -238,7 +251,16 @@ public class EsTable extends Table {
 
         if (!Strings.isNullOrEmpty(properties.get(TYPE))
                 && !Strings.isNullOrEmpty(properties.get(TYPE).trim())) {
-            mappingType = properties.get(TYPE).trim();
+            // just for compatible external es table definition
+            // type in catalog means that such as es/hive/iceberg, but type in table properties also can be defined.
+            if (!"es".equalsIgnoreCase(properties.get(TYPE).trim())) {
+                mappingType = properties.get(TYPE).trim();
+            } else {
+                if (!Strings.isNullOrEmpty(properties.get(CATALOG_TYPE))
+                        && !Strings.isNullOrEmpty(properties.get(CATALOG_TYPE).trim())) {
+                    mappingType = properties.get(CATALOG_TYPE).trim();
+                }
+            }
         } else {
             mappingType = null;
         }
@@ -306,6 +328,16 @@ public class EsTable extends Table {
                 fullSchema.size(), 0, getName(), "");
         tTableDescriptor.setEsTable(tEsTable);
         return tTableDescriptor;
+    }
+
+    // TODO, identify the remote table that created after deleted
+    @Override
+    public String getUUID() {
+        if (!Strings.isNullOrEmpty(catalogName)) {
+            return String.join(".", catalogName, dbName, name);
+        } else {
+            return Long.toString(id);
+        }
     }
 
     @Override

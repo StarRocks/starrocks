@@ -46,7 +46,7 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.consistency.CheckConsistencyJob.JobState;
 import com.starrocks.persist.ConsistencyCheckInfo;
@@ -65,7 +65,7 @@ import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class ConsistencyChecker extends LeaderDaemon {
+public class ConsistencyChecker extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(ConsistencyChecker.class);
 
     private static final int MAX_JOB_NUM = 100;
@@ -283,7 +283,7 @@ public class ConsistencyChecker extends LeaderDaemon {
                         // Because some tablets of the not NORMAL table may just a temporary presence in memory,
                         // if we check those tablets and log FinishConsistencyCheck to bdb,
                         // it will throw NullPointerException when replaying the log.
-                        if (!table.isLocalTable() || ((OlapTable) table).getState() != OlapTableState.NORMAL) {
+                        if (!table.isOlapTableOrMaterializedView() || ((OlapTable) table).getState() != OlapTableState.NORMAL) {
                             continue;
                         }
                         tableQueue.add(table);

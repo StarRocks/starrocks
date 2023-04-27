@@ -168,7 +168,8 @@ public class ReorderJoinRule extends Rule {
                 enumerate(new JoinReorderLeftDeep(context), context, innerJoinRoot, multiJoinNode);
                 // If there is no statistical information, the DP and greedy reorder algorithm are disabled,
                 // and the query plan degenerates to the left deep tree
-                if (Utils.hasUnknownColumnsStats(input) && !FeConstants.runningUnitTest) {
+                if (Utils.hasUnknownColumnsStats(innerJoinRoot) &&
+                        (!FeConstants.runningUnitTest || FeConstants.isReplayFromQueryDump)) {
                     continue;
                 }
 
@@ -254,8 +255,7 @@ public class ReorderJoinRule extends Rule {
                         .withOperator((LogicalJoinOperator) optExpression.getOp())
                         .setProjection(new Projection(newOutputColumns.getStream()
                                 .map(optimizerContext.getColumnRefFactory()::getColumnRef)
-                                .collect(Collectors.toMap(Function.identity(), Function.identity())),
-                                new HashMap<>()))
+                                .collect(Collectors.toMap(Function.identity(), Function.identity()))))
                         .build();
             }
 

@@ -21,7 +21,9 @@ namespace starrocks {
 class OutputStreamAdapter : public WritableFile {
 public:
     explicit OutputStreamAdapter(std::unique_ptr<io::OutputStream> os, std::string name)
-            : _os(std::move(os)), _name(std::move(name)) {}
+            : _os(std::move(os)), _name(std::move(name)) {
+        FileSystem::on_file_write_open(this);
+    }
 
     Status append(const Slice& data) override {
         auto st = _os->write(data.data, data.size);
@@ -38,7 +40,10 @@ public:
 
     Status pre_allocate(uint64_t size) override { return Status::NotSupported("OutputStreamAdapter::pre_allocate"); }
 
-    Status close() override { return _os->close(); }
+    Status close() override {
+        FileSystem::on_file_write_close(this);
+        return _os->close();
+    }
 
     // NOTE: unlike posix file, the file cannot be writen anymore after `flush`ed.
     Status flush(FlushMode mode) override { return _os->close(); }

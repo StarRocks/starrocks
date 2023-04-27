@@ -227,7 +227,8 @@ static std::string get_iterate_upper_bound(const std::string& prefix) {
 }
 
 Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,
-                        std::function<bool(std::string_view, std::string_view)> const& func) {
+                        std::function<bool(std::string_view, std::string_view)> const& func, int64_t timeout_sec) {
+    int64_t t_start = MonotonicMillis();
     rocksdb::ColumnFamilyHandle* handle = _handles[column_family_index];
     auto opts = ReadOptions();
     std::string upper_bound = get_iterate_upper_bound(prefix);
@@ -242,17 +243,39 @@ Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string
     } else {
         it->Seek(prefix);
     }
-    for (; it->Valid(); it->Next()) {
-        if (!prefix.empty()) {
-            if (!it->key().starts_with(prefix)) {
-                return Status::OK();
+    // if limit time is less than or equal to zero, it means no limit
+    if (timeout_sec <= 0) {
+        for (; it->Valid(); it->Next()) {
+            if (!prefix.empty()) {
+                if (!it->key().starts_with(prefix)) {
+                    return Status::OK();
+                }
+            }
+            std::string_view key(it->key().data(), it->key().size());
+            std::string_view value(it->value().data(), it->value().size());
+            bool ret = func(key, value);
+            if (!ret) {
+                break;
             }
         }
-        std::string_view key(it->key().data(), it->key().size());
-        std::string_view value(it->value().data(), it->value().size());
-        bool ret = func(key, value);
-        if (!ret) {
-            break;
+    } else {
+        for (; it->Valid(); it->Next()) {
+            if (!prefix.empty()) {
+                if (!it->key().starts_with(prefix)) {
+                    return Status::OK();
+                }
+            }
+            std::string_view key(it->key().data(), it->key().size());
+            std::string_view value(it->value().data(), it->value().size());
+            bool ret = func(key, value);
+            if (!ret) {
+                break;
+            }
+            if (MonotonicMillis() - t_start > timeout_sec * 1000) {
+                LOG(WARNING) << "rocksdb iterate timeout: " << MonotonicMillis() - t_start
+                             << ", limit: " << timeout_sec * 1000;
+                return Status::TimedOut("rocksdb iterate timeout");
+            }
         }
     }
     LOG_IF(WARNING, !it->status().ok()) << it->status().ToString();
@@ -286,8 +309,12 @@ Status KVStore::compact() {
     return to_status(st);
 }
 
-Status KVStore::flush() {
+Status KVStore::flushWAL() {
     return to_status(_db->FlushWAL(true));
+}
+
+Status KVStore::flushMemTable() {
+    return to_status(_db->Flush(rocksdb::FlushOptions()));
 }
 
 std::string KVStore::get_stats() {

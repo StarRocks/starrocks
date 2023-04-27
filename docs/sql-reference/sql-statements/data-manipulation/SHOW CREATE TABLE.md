@@ -1,6 +1,6 @@
 # SHOW CREATE TABLE
 
-Returns the CREATE TABLE statement that was used to create a given table. The SHOW CREATE TABLE statement requires you to have the `SELECT_PRIV` permission on the table. Note that the CREATE TABLE statements of tables managed by an [external catalog](../../../using_starrocks/catalog/catalog_overview.md#catalog) and stored in Apache Hive™, Apache Iceberg, or Apache Hudi cannot be displayed.
+Returns the CREATE TABLE statement that was used to create a given table. In versions earlier than v3.0, the SHOW CREATE TABLE statement requires you to have the `SELECT_PRIV` privilege on the table. Since v3.0, the SHOW CREATE TABLE statement requires you to have the `SELECT` privilege on the table. Note that from v3.0 onwards you can use the SHOW CREATE TABLE statement to view the CREATE TABLE statements of the tables that are managed by an external catalog and are stored in Apache Hive™, Apache Iceberg, Apache Hudi, or Delta Lake.
 
 ## Syntax
 

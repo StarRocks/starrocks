@@ -228,6 +228,27 @@ constexpr bool is_scalar_logical_type(LogicalType ltype) {
     }
 }
 
+constexpr size_t type_estimated_overhead_bytes(LogicalType ltype) {
+    switch (ltype) {
+    case TYPE_VARCHAR:
+    case TYPE_CHAR:
+    case TYPE_ARRAY:
+        return 128;
+    case TYPE_JSON:
+        // 1KB.
+        return 1024;
+    case TYPE_HLL:
+        // 16KB.
+        return 16 * 1024;
+    case TYPE_OBJECT:
+    case TYPE_PERCENTILE:
+        // 1MB.
+        return 1024 * 1024;
+    default:
+        return 0;
+    }
+}
+
 VALUE_GUARD(LogicalType, BigIntLTGuard, lt_is_bigint, TYPE_BIGINT)
 VALUE_GUARD(LogicalType, BooleanLTGuard, lt_is_boolean, TYPE_BOOLEAN)
 VALUE_GUARD(LogicalType, LargeIntLTGuard, lt_is_largeint, TYPE_LARGEINT)
@@ -248,6 +269,7 @@ VALUE_GUARD(LogicalType, BinaryLTGuard, lt_is_binary, TYPE_BINARY, TYPE_VARBINAR
 VALUE_GUARD(LogicalType, JsonGuard, lt_is_json, TYPE_JSON)
 VALUE_GUARD(LogicalType, FunctionGuard, lt_is_function, TYPE_FUNCTION)
 VALUE_GUARD(LogicalType, ObjectFamilyLTGuard, lt_is_object_family, TYPE_JSON, TYPE_HLL, TYPE_OBJECT, TYPE_PERCENTILE)
+VALUE_GUARD(LogicalType, ArrayGuard, lt_is_array, TYPE_ARRAY)
 VALUE_GUARD(LogicalType, MapGuard, lt_is_map, TYPE_MAP)
 VALUE_GUARD(LogicalType, StructGurad, lt_is_struct, TYPE_STRUCT)
 
@@ -258,6 +280,7 @@ VALUE_GUARD(LogicalType, DecimalV2LTGuard, lt_is_decimalv2, TYPE_DECIMALV2)
 VALUE_GUARD(LogicalType, DecimalOfAnyVersionLTGuard, lt_is_decimal_of_any_version, TYPE_DECIMALV2, TYPE_DECIMAL32,
             TYPE_DECIMAL64, TYPE_DECIMAL128)
 VALUE_GUARD(LogicalType, DateOrDateTimeLTGuard, lt_is_date_or_datetime, TYPE_DATE, TYPE_DATETIME)
+VALUE_GUARD(LogicalType, CollectionLTGuard, lt_is_conllection, TYPE_ARRAY, TYPE_MAP, TYPE_STRUCT)
 
 UNION_VALUE_GUARD(LogicalType, IntegralLTGuard, lt_is_integral, lt_is_boolean_struct, lt_is_integer_struct)
 
@@ -294,6 +317,9 @@ LogicalType scalar_field_type_to_logical_type(LogicalType field_type);
 
 // Return length of fixed-length type, return 0 for dynamic length type
 size_t get_size_of_fixed_length_type(LogicalType ltype);
+
+// return types that can be sorted
+const std::vector<LogicalType>& sortable_types();
 
 } // namespace starrocks
 

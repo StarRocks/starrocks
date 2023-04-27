@@ -92,6 +92,11 @@ public:
         return ArrayArithmetic::template array_max<type>(context, columns);
     }
 
+    template <LogicalType type>
+    static StatusOr<ColumnPtr> array_generate(FunctionContext* context, const Columns& columns) {
+        return ArrayGenerate<type>::process(context, columns);
+    }
+
     DEFINE_VECTORIZED_FN(concat);
 
     DEFINE_VECTORIZED_FN(array_cum_sum_bigint);
@@ -101,6 +106,11 @@ public:
     DEFINE_VECTORIZED_FN(array_contains_all);
     DEFINE_VECTORIZED_FN(array_map);
     DEFINE_VECTORIZED_FN(array_filter);
+
+    // array function for nested type(Array/Map/Struct)
+    DEFINE_VECTORIZED_FN(array_distinct_any_type);
+    DEFINE_VECTORIZED_FN(array_reverse_any_types);
+    DEFINE_VECTORIZED_FN(array_intersect_any_type);
 };
 
 } // namespace starrocks

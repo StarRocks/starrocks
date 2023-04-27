@@ -19,10 +19,9 @@
 
 namespace starrocks::pipeline {
 
-MetaChunkSource::MetaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+MetaChunkSource::MetaChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                                  MetaScanContextPtr scan_ctx)
-        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()),
-          _scan_ctx(scan_ctx) {}
+        : ChunkSource(op, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()), _scan_ctx(scan_ctx) {}
 
 MetaChunkSource::~MetaChunkSource() {}
 

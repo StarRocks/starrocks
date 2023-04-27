@@ -123,11 +123,18 @@ public class Database extends MetaObject implements Writable {
     // but that'ok to meet our needs.
     private volatile boolean exist = true;
 
+    // For external database location like hdfs://name_node:9000/user/hive/warehouse/test.db/
+    private String location;
+
     public Database() {
         this(0, null);
     }
 
     public Database(long id, String name) {
+        this(id, name, "");
+    }
+
+    public Database(long id, String name, String location) {
         this.id = id;
         this.fullQualifiedName = name;
         if (this.fullQualifiedName == null) {
@@ -138,6 +145,7 @@ public class Database extends MetaObject implements Writable {
         this.nameToTable = new ConcurrentHashMap<>();
         this.dataQuotaBytes = FeConstants.DEFAULT_DB_DATA_QUOTA_BYTES;
         this.replicaQuotaSize = FeConstants.DEFAULT_DB_REPLICA_QUOTA_SIZE;
+        this.location = location;
     }
 
     private String getOwnerInfo(Thread owner) {
@@ -323,6 +331,15 @@ public class Database extends MetaObject implements Writable {
         return fullQualifiedName;
     }
 
+    public String getLocation() {
+        return location;
+    }
+
+    public Database setLocation(String location) {
+        this.location = location;
+        return this;
+    }
+
     public void setNameWithLock(String newName) {
         writeLock();
         try {
@@ -367,7 +384,7 @@ public class Database extends MetaObject implements Writable {
         readLock();
         try {
             for (Table table : this.idToTable.values()) {
-                if (!table.isLocalTable()) {
+                if (!table.isOlapTableOrMaterializedView()) {
                     continue;
                 }
 
@@ -385,7 +402,7 @@ public class Database extends MetaObject implements Writable {
         readLock();
         try {
             for (Table table : this.idToTable.values()) {
-                if (!table.isLocalTable()) {
+                if (!table.isOlapTableOrMaterializedView()) {
                     continue;
                 }
 
@@ -514,7 +531,6 @@ public class Database extends MetaObject implements Writable {
         }
 
         if (table instanceof OlapTable && table.hasAutoIncrementColumn()) {
-            GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, isReplay);
             if (!isReplay) {
                 ((OlapTable) table).sendDropAutoIncrementMapTask();
             }
@@ -528,6 +544,7 @@ public class Database extends MetaObject implements Writable {
             Table oldTable = GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table);
             runnable = (oldTable != null) ? oldTable.delete(isReplay) : null;
         } else {
+            GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, isReplay);
             runnable = table.delete(isReplay);
         }
 
@@ -581,6 +598,10 @@ public class Database extends MetaObject implements Writable {
 
     public List<Table> getTables() {
         return new ArrayList<Table>(idToTable.values());
+    }
+
+    public int getTableNumber() {
+        return idToTable.size();
     }
 
     public List<Table> getViews() {

@@ -133,22 +133,29 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         // check cte is disabled or hasNoGroup false
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
+        List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
+                .filter(CallOperator::isDistinct).collect(Collectors.toList());
+        boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getChildren().size() > 1);
+        if (hasMultiColumns && distinctAggOperatorList.size() > 1) {
+            return true;
+        }
+
         if (!context.getSessionVariable().isCboCteReuse()) {
             return false;
+        }
+
+        if (agg.hasSkew() && distinctAggOperatorList.size() > 1 && !agg.getGroupingKeys().isEmpty()) {
+            return true;
         }
 
         if (agg.getLimit() >= 0) {
             return false;
         }
 
-        List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
-                .filter(CallOperator::isDistinct).collect(Collectors.toList());
-        boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getChildren().size() > 1);
-
         if (!hasMultiColumns && agg.getGroupingKeys().size() > 1) {
             return false;
         }
-        
+
         return distinctAggOperatorList.size() > 1 || agg.getAggregations().values().stream()
                 .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG));
     }
@@ -157,7 +164,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
         // define cteId
-        int cteId = columnRefFactory.getNextRelationId();
+        int cteId = context.getCteContext().getNextCteId();
 
         // build logic cte produce operator
         OptExpression cteProduce = OptExpression.create(new LogicalCTEProduceOperator(cteId), input.getInputs());

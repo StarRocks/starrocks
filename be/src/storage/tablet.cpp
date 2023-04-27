@@ -209,13 +209,9 @@ Status Tablet::revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowset
         StorageEngine::instance()->add_unused_rowset(it->second);
         _rs_version_map.erase(it);
     }
-    for (auto& [v, rowset] : _inc_rs_version_map) {
-        StorageEngine::instance()->add_unused_rowset(rowset);
-    }
     for (auto& [v, rowset] : _stale_rs_version_map) {
         StorageEngine::instance()->add_unused_rowset(rowset);
     }
-    _inc_rs_version_map.clear();
     _stale_rs_version_map.clear();
 
     for (auto& rs_meta : rowsets_to_clone) {
@@ -379,13 +375,9 @@ Status Tablet::support_binlog() {
     return Status::InternalError("Not support binlog, keys type: " + KeysType_Name(keys_type()));
 }
 
-bool Tablet::binlog_enable() {
+StatusOr<bool> Tablet::_prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version) {
     auto config = _tablet_meta->get_binlog_config();
-    return config != nullptr && config->binlog_enable;
-}
-
-StatusOr<bool> Tablet::prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version) {
-    if (!binlog_enable()) {
+    if (config == nullptr || !config->binlog_enable) {
         return false;
     }
 
@@ -421,13 +413,11 @@ StatusOr<bool> Tablet::prepare_binlog_if_needed(const RowsetSharedPtr& rowset, i
     return true;
 }
 
-void Tablet::commit_binlog(int64_t version) {
-    if (binlog_enable()) {
-        _binlog_manager->commit_ingestion(version);
-    }
+void Tablet::_commit_binlog(int64_t version) {
+    _binlog_manager->commit_ingestion(version);
 }
 
-void Tablet::abort_binlog(const RowsetSharedPtr& rowset, int64_t version) {
+void Tablet::_abort_binlog(const RowsetSharedPtr& rowset, int64_t version) {
     _binlog_manager->delete_ingestion(version);
     rowset->close();
 }
@@ -438,15 +428,18 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     std::unique_lock wrlock(_meta_lock);
 
     Version rowset_version(version, version);
+    // rowset is already set version here, memory is changed, if save failed it maybe a fatal error
+    // Note make rowset visible before generate binlog to update create time to the visible time
+    // which will be used by binlog
+    rowset->make_visible(rowset_version);
+
     // Status::OK() means the full data set does not contain the version
     Status contain_status = _contains_version(rowset_version);
     bool need_binlog = false;
     if (contain_status.ok()) {
-        ASSIGN_OR_RETURN(need_binlog, prepare_binlog_if_needed(rowset, version));
+        ASSIGN_OR_RETURN(need_binlog, _prepare_binlog_if_needed(rowset, version));
     }
 
-    // rowset is already set version here, memory is changed, if save failed it maybe a fatal error
-    rowset->make_visible(rowset_version);
     auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
     // No matter whether contains the version, the rowset meta should always be saved. TxnManager::publish_txn
     // will remove the in-memory txn information if Status::AlreadlyExist, but not the committed rowset meta
@@ -456,7 +449,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
     auto st = RowsetMetaManager::save(data_dir()->get_meta(), tablet_uid(), rowset_meta_pb);
     if (!st.ok()) {
         if (need_binlog) {
-            abort_binlog(rowset, version);
+            _abort_binlog(rowset, version);
         }
 
         LOG(WARNING) << "Fail to save committed rowset. "
@@ -478,7 +471,7 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
         // BinlogManager#commit_ingestion needs the data disk size of rowset, and will
         // look up _inc_rs_version_map for the rowset, so should commit binlog after
         // _inc_rs_version_map is updated
-        commit_binlog(version);
+        _commit_binlog(version);
     }
 
     _timestamped_version_tracker.add_version(rowset->version());
@@ -513,17 +506,45 @@ void Tablet::_delete_stale_rowset_by_version(const Version& version) {
     VLOG(3) << "delete stale rowset. tablet=" << full_name() << ", version=" << version;
 }
 
+void Tablet::_delete_unused_binlog() {
+    if (_binlog_manager == nullptr) {
+        return;
+    }
+
+    bool binlog_enable = false;
+    {
+        int64_t now = UnixSeconds();
+        std::shared_lock rdlock(_meta_lock);
+        auto config = _tablet_meta->get_binlog_config();
+        binlog_enable = config != nullptr && config->binlog_enable;
+        if (binlog_enable) {
+            _binlog_manager->check_expire_and_capacity(now, config->binlog_ttl_second, config->binlog_max_size);
+        }
+    }
+
+    if (binlog_enable) {
+        _binlog_manager->delete_unused_binlog();
+    }
+}
+
 void Tablet::delete_expired_inc_rowsets() {
+    _delete_unused_binlog();
     int64_t now = UnixSeconds();
     std::vector<Version> expired_versions;
     std::unique_lock wrlock(_meta_lock);
     for (auto& rs_meta : _tablet_meta->all_inc_rs_metas()) {
         int64_t diff = now - rs_meta->creation_time();
-        if (diff >= config::inc_rowset_expired_sec) {
+        bool inc_rowset_expired = diff >= config::inc_rowset_expired_sec;
+        bool binlog_unused = _binlog_manager == nullptr || !_binlog_manager->is_rowset_used(rs_meta->start_version());
+        if (inc_rowset_expired && binlog_unused) {
             Version version(rs_meta->version());
             expired_versions.emplace_back(version);
             VLOG(3) << "find expire incremental rowset. tablet=" << full_name() << ", version=" << version
                     << ", exist_sec=" << diff;
+        } else {
+            VLOG(3) << "incremental rowset still used. tablet=" << full_name() << ", version=" << rs_meta->version()
+                    << ", exist_sec=" << diff << ", inc_rowset_expired: " << inc_rowset_expired
+                    << ", binlog_unused: " << binlog_unused;
         }
     }
 
@@ -842,7 +863,10 @@ int64_t Tablet::max_continuous_version() const {
     } else {
         std::shared_lock rdlock(_meta_lock);
         int64_t v = _timestamped_version_tracker.get_max_continuous_version();
-        DCHECK_EQ(v, _max_continuous_version_from_beginning_unlocked().second);
+        if (tablet_state() == TABLET_RUNNING) {
+            // only check when tablet in running state
+            DCHECK_EQ(v, _max_continuous_version_from_beginning_unlocked().second);
+        }
         return v;
     }
 }
@@ -887,6 +911,10 @@ void Tablet::calculate_cumulative_point() {
 
 // NOTE: only used when create_table, so it is sure that there is no concurrent reader and writer.
 void Tablet::delete_all_files() {
+    if (_binlog_manager != nullptr) {
+        _binlog_manager->delete_all_binlog();
+    }
+
     // Release resources like memory and disk space.
     // we have to call list_versions first, or else error occurs when
     // removing hash_map item and iterating hash_map concurrently.
@@ -1285,8 +1313,6 @@ std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
             _compaction_task = _compaction_context->policy->create_compaction(
                     std::static_pointer_cast<Tablet>(shared_from_this()));
         }
-    }
-    if (_compaction_task && _compaction_task.use_count() == 1) {
         return _compaction_task;
     } else {
         return nullptr;
@@ -1359,6 +1385,9 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
     info.create_time = _tablet_meta->creation_time();
     info.state = _state;
     info.type = keys_type();
+    info.data_dir = data_dir()->path();
+    info.shard_id = shard_id();
+    info.schema_hash = schema_hash();
     if (_updates != nullptr) {
         _updates->get_basic_info_extra(info);
     } else {
@@ -1369,6 +1398,18 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
         info.num_row = _tablet_meta->num_rows();
         info.data_size = _tablet_meta->tablet_footprint();
     }
+}
+
+std::string Tablet::schema_debug_string() const {
+    return _tablet_meta->tablet_schema().debug_string();
+}
+
+std::string Tablet::debug_string() const {
+    if (_updates) {
+        return _updates->debug_string();
+    }
+    // TODO: add more debug info
+    return string();
 }
 
 } // namespace starrocks

@@ -108,8 +108,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         String createMVSQL = "create materialized view mvs as select v1,sum(v2) from test_insert_mv_sum group by v1";
@@ -147,8 +146,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         String createMVSQL =
@@ -203,8 +201,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE `ti2` (\n" +
@@ -216,8 +213,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         String explainString = getInsertExecPlan("insert into ti1 select * from ti2");
@@ -320,7 +316,7 @@ public class InsertPlanTest extends PlanTestBase {
                 ") ENGINE=OLAP DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) " +
                 "COMMENT \"OLAP\" DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) " +
                 "BUCKETS 3 " +
-                "PROPERTIES ( \"replication_num\" = \"1\", \"storage_format\" = \"v2\" );");
+                "PROPERTIES ( \"replication_num\" = \"1\" );");
         String sql = "insert into duplicate_table_with_default values " +
                 "('2020-06-25', '2020-06-25 00:16:23', 'beijing', 'haidian', 0, 87, -31785, " +
                 "default, default, -18446744073709550633, default, default, -2.18);";
@@ -452,8 +448,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"colocate_with\" = \"edu\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE `user_info` (\n" +
                 "  `distinct_id` bigint(20) NULL ,\n" +
@@ -733,6 +728,18 @@ public class InsertPlanTest extends PlanTestBase {
                 "  |  <slot 7> : CAST(1 AS BIGINT)\n" +
                 "  |  <slot 8> : NULL\n" +
                 "  |  <slot 9> : NULL"));
+    }
+
+    @Test
+    public void testInsertMapColumn() throws Exception {
+        String explainString = getInsertExecPlan("insert into tmap values (2,2,{})");
+        Assert.assertTrue(explainString.contains("2 | 2 | {}"));
+
+        explainString = getInsertExecPlan("insert into tmap values (2,2,null)");
+        Assert.assertTrue(explainString.contains("2 | 2 | NULL"));
+
+        explainString = getInsertExecPlan("insert into tmap values (2,2,{2:2})");
+        Assert.assertTrue(explainString.contains("2 | 2 | {2:'2'}")); // implicit cast
     }
 
     @Test

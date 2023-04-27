@@ -42,8 +42,8 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.THdfsProperties;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -85,7 +85,7 @@ public class LakeBackupJob extends BackupJob {
                 status = new Status(Status.ErrCode.NOT_FOUND, "table " + tblName + " does not exist");
                 return;
             }
-            if (!tbl.isLakeTable()) {
+            if (!tbl.isCloudNativeTable()) {
                 status = new Status(Status.ErrCode.COMMON_ERROR, "table " + tblName
                         + " is not LAKE table");
                 return;
@@ -110,7 +110,7 @@ public class LakeBackupJob extends BackupJob {
                                        long visibleVersion, int schemaHash) {
         try {
             Backend backend = GlobalStateMgr.getCurrentSystemInfo()
-                    .getBackend(((LakeTablet) tablet).getPrimaryBackendId());
+                    .getBackend(((LakeTablet) tablet).getPrimaryComputeNodeId());
             LakeTableSnapshotInfo snapshotInfo = new LakeTableSnapshotInfo(dbId,
                     tbl.getId(), partition.getId(), index.getId(), tablet.getId(),
                     backend.getId(), schemaHash, visibleVersion);

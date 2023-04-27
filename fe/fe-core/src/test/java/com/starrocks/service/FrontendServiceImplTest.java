@@ -31,9 +31,13 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TCreatePartitionRequest;
 import com.starrocks.thrift.TCreatePartitionResult;
+import com.starrocks.thrift.TGetTablesParams;
+import com.starrocks.thrift.TListTableStatusResult;
 import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
+import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -193,7 +197,7 @@ public class FrontendServiceImplTest {
                         ")\n" +
                         "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
                         "PARTITION BY date_trunc('day', event_day) (\n" +
-                        "START (\"2015-06-01\") END (\"2022-12-01\") EVERY (INTERVAL 1 month)\n" +
+                        "START (\"2020-06-01\") END (\"2022-06-05\") EVERY (INTERVAL 1 day)\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
                         "PROPERTIES (\n" +
@@ -221,11 +225,16 @@ public class FrontendServiceImplTest {
                         "    pv BIGINT DEFAULT '0'\n" +
                         ")\n" +
                         "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
-                        "PARTITION BY time_slice(event_day, interval 5 day) (\n" +
-                        "START (\"2015-01-01\") END (\"2022-01-01\") EVERY (INTERVAL 1 year)\n" +
-                        ")\n" +
+                        "PARTITION BY time_slice(event_day, interval 5 day)\n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
-                        "PROPERTIES(\"replication_num\" = \"1\");");
+                        "PROPERTIES(\"replication_num\" = \"1\");")
+                .withView("create view v as select * from site_access_empty")
+                .withView("create view v1 as select current_role()")
+                .withView("create view v2 as select current_user()")
+                .withView("create view v3 as select database()")
+                .withView("create view v4 as select user()")
+                .withView("create view v5 as select CONNECTION_ID()")
+                .withView("create view v6 as select CATALOG()");
     }
 
     @AfterClass
@@ -380,6 +389,7 @@ public class FrontendServiceImplTest {
         List<List<String>> partitionValues = Lists.newArrayList();
         List<String> values = Lists.newArrayList();
         values.add("1991-04-24");
+        values.add("1991-04-25");
         partitionValues.add(values);
 
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
@@ -394,6 +404,20 @@ public class FrontendServiceImplTest {
         Config.max_automatic_partition_number = 4096;
     }
 
+    @Test
+    public void testListTableStatus() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetTablesParams request = new TGetTablesParams();
+        request.setDb("test");
+        TUserIdentity tUserIdentity = new TUserIdentity();
+        tUserIdentity.setUsername("root");
+        tUserIdentity.setHost("%");
+        tUserIdentity.setIs_domain(false);
+        request.setCurrent_user_ident(tUserIdentity);
+        request.setType(TTableType.VIEW);
+        TListTableStatusResult result = impl.listTableStatus(request);
+        Assert.assertEquals(7, result.tables.size());
+    }
 
     @Test
     public void testCreatePartitionApiHour() throws TException {
@@ -476,5 +500,48 @@ public class FrontendServiceImplTest {
                         "PARTITION BY date_trunc('hour', event_day)\n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
                         "PROPERTIES(\"replication_num\" = \"1\");");
+    }
+
+    @Test(expected = AnalysisException.class)
+    public void testUnsupportedAutomaticTableGranularityDoesNotMatch() throws Exception {
+        starRocksAssert.withDatabase("test2").useDatabase("test2")
+                .withTable("CREATE TABLE site_access_granularity_does_not_match(\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "    START (\"2023-05-01\") END (\"2023-05-03\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");");
+    }
+
+    @Test(expected = AnalysisException.class)
+    public void testUnsupportedAutomaticTableGranularityDoesNotMatch2() throws Exception {
+        starRocksAssert.withDatabase("test2").useDatabase("test2")
+                .withTable("CREATE TABLE site_access_granularity_does_not_match2(\n" +
+                        "    event_day DATE NOT NULL,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ") \n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY date_trunc('month', event_day)(\n" +
+                        "   START (\"2022-05-01\") END (\"2022-05-03\") EVERY (INTERVAL 1 day),\n" +
+                        "    START (\"2023-05-01\") END (\"2023-05-03\") EVERY (INTERVAL 1 day)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES(\n" +
+                        "    \"partition_live_number\" = \"3\",\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");");
     }
 }

@@ -25,6 +25,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Reference;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNode;
+import com.starrocks.plugin.AuditEvent;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -93,8 +94,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "`k11` float, `k12` double, `k13` decimal(27,9) ) " +
                 "ENGINE=OLAP DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) " +
                 "COMMENT \"OLAP\" DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) " +
-                "BUCKETS 3 PROPERTIES ( \"replication_num\" = \"1\", " +
-                "\"storage_format\" = \"v2\" );");
+                "BUCKETS 3 PROPERTIES ( \"replication_num\" = \"1\");");
 
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW bitmap_mv\n" +
                 "                             AS\n" +
@@ -126,7 +126,6 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
         FeConstants.runningUnitTest = true;
@@ -325,17 +324,14 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         };
         String sql = "select count(distinct v2) from t0 group by v3";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  2:Project\n" +
-                "  |  <slot 2> : 2: v2\n" +
-                "  |  <slot 3> : 3: v3\n" +
-                "  |  <slot 5> : CAST(murmur_hash3_32(CAST(2: v2 AS VARCHAR)) % 512 AS SMALLINT)\n" +
-                "  |  \n" +
-                "  1:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
-                "  |  group by: 3: v3, 2: v2");
-        assertContains(plan, "  STREAM DATA SINK\n" +
-                        "    EXCHANGE ID: 06\n" +
-                        "    HASH_PARTITIONED: 3: v3");
+                "  |  group by: 2: v2, 3: v3");
+        assertContains(plan, "  PARTITION: HASH_PARTITIONED: 3: v3\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    UNPARTITIONED");
     }
 
     @Test
@@ -907,6 +903,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=" + tabletIdsStrList.get(1) + "\n" +
                     "     actualRows=0, avgRowSize=4.0\n" +
+                    "     LocalShuffleColumns:\n" +
+                    "     - 5: v4\n" +
                     "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)");
@@ -917,6 +915,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=" + tabletIdsStrList.get(0) + "\n" +
                     "     actualRows=0, avgRowSize=4.0\n" +
+                    "     LocalShuffleColumns:\n" +
+                    "     - 1: v1\n" +
                     "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)");
@@ -1042,6 +1042,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                 "     tabletList=" + tabletIdsStrList.get(0) + "\n" +
                 "     actualRows=0, avgRowSize=1.0\n" +
+                "     LocalShuffleColumns:\n" +
+                "     - 1: v4\n" +
                 "     cardinality: 400000");
 
         assertContains(plan, "  5:EXCHANGE\n" +
@@ -2313,5 +2315,32 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  0:OlapScanNode");
         }
+    }
+
+    @Test
+    public void testPlanCost() throws Exception {
+        String plan = getVerboseExplain("select t1a, v1 " +
+                "from t0 join [broadcast] test_all_type " +
+                "join [shuffle] (select 1 as v1_c1 where false) v1 on t1a=v1 and t1a=v1_c1");
+        assertContains(plan, "  9:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+                "  |  equal join conjunct: [4: t1a, VARCHAR, true] = [16: cast, VARCHAR(1048576), false]\n" +
+                "  |  output columns: 1, 4\n" +
+                "  |  cardinality: 9000\n" +
+                "  |  \n" +
+                "  |----8:EXCHANGE\n" +
+                "  |       distribution type: SHUFFLE\n" +
+                "  |       partition exprs: [16: cast, VARCHAR(1048576), false]\n" +
+                "  |       cardinality: 1\n" +
+                "  |    \n" +
+                "  6:EXCHANGE\n" +
+                "     distribution type: SHUFFLE\n" +
+                "     partition exprs: [4: t1a, VARCHAR, true]\n" +
+                "     cardinality: 9000");
+
+        AuditEvent event = connectContext.getAuditEventBuilder().build();
+        Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
+        Assert.assertTrue("planCpuCosts should be > 1, but: " + event.planCpuCosts, event.planCpuCosts > 1);
+
     }
 }

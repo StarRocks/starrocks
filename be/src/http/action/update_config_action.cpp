@@ -41,6 +41,8 @@
 #include <mutex>
 #include <string>
 
+#include "agent/agent_common.h"
+#include "agent/agent_server.h"
 #include "common/configbase.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -50,11 +52,13 @@
 #include "http/http_request.h"
 #include "http/http_status.h"
 #include "storage/compaction_manager.h"
+#include "storage/lake/update_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/page_cache.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
+#include "storage/update_manager.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
@@ -98,6 +102,22 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("update_compaction_num_threads_per_disk", [&]() {
             StorageEngine::instance()->increase_update_compaction_thread(
                     config::update_compaction_num_threads_per_disk);
+        });
+        _config_callback.emplace("update_memory_limit_percent", [&]() {
+            StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
+                    config::update_memory_limit_percent);
+#if defined(USE_STAROS) && !defined(BE_TEST)
+            _exec_env->lake_update_manager()->update_primary_index_memory_limit(config::update_memory_limit_percent);
+#endif
+        });
+        _config_callback.emplace("transaction_publish_version_worker_count", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+            thread_pool->update_max_threads(
+                    std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
+        });
+        _config_callback.emplace("parallel_clone_task_per_path", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
+                                                                 config::parallel_clone_task_per_path);
         });
     });
 

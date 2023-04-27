@@ -32,6 +32,7 @@
 #include "storage/lake/update_manager.h"
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
+#include "testutil/sync_point.h"
 #include "util/uid_util.h"
 
 namespace starrocks::lake {
@@ -66,6 +67,8 @@ public:
 
 protected:
     constexpr static const char* const kTestDir = "./lake_gc_test";
+
+    void test_concurrent_gc_base(int max_retries, bool datagc_should_success);
 };
 
 // NOLINTNEXTLINE
@@ -376,6 +379,98 @@ TEST_F(GCTest, test_delvec_gc) {
             ASSERT_ERROR(fs->path_exists(location));
         }
     }
+}
+
+TEST_F(GCTest, test_concurrent_gc) {
+    test_concurrent_gc_base(1, true);
+}
+
+TEST_F(GCTest, test_concurrent_gc_no_retry) {
+    test_concurrent_gc_base(0, false);
+}
+
+void GCTest::test_concurrent_gc_base(int max_retries, bool datagc_should_success) {
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+
+    config::lake_gc_segment_expire_seconds = 0;
+    config::lake_gc_metadata_max_versions = 1;
+    config::experimental_lake_segment_gc_max_retries = max_retries;
+
+    // LocationProvider and TabletManager of worker A
+    auto lp = std::make_unique<TestLocationProvider>(kTestDir);
+    auto um = std::make_unique<lake::UpdateManager>(lp.get());
+    auto tablet_mgr = std::make_unique<lake::TabletManager>(lp.get(), um.get(), 0);
+    lp->_owned_shards.insert(tablet_id);
+
+    auto segments = std::vector<std::string>();
+    for (int i = 0; i < 3; i++) {
+        segments.emplace_back(random_segment_filename());
+        auto location = tablet_mgr->segment_location(tablet_id, segments.back());
+        ASSIGN_OR_ABORT(auto wf, fs->new_writable_file(location));
+        ASSERT_OK(wf->append("content"));
+        ASSERT_OK(wf->close());
+    }
+
+    // Generate a metadata of version 1, segments[0] and segments[1] are referenced in the metadata
+    {
+        auto metadata = std::make_shared<TabletMetadata>();
+        metadata->set_id(tablet_id);
+        metadata->set_version(1);
+        metadata->set_next_rowset_id(2);
+        metadata->add_rowsets()->add_segments(segments[0]);
+        metadata->add_rowsets()->add_segments(segments[1]);
+        ASSERT_OK(tablet_mgr->put_tablet_metadata(metadata));
+    }
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->LoadDependency({
+            {"CloudNative::GC::find_orphan_datafiles:finished_list_meta", "GCTest::test_concurrent_gc:begin_write"},
+            {"GCTest::test_concurrent_gc:finish_write", "CloudNative::GC::delete_tablet_metadata:enter"},
+            {"CloudNative::GC::delete_tablet_metadata:return", "CloudNative::GC::find_orphan_datafiles:check_meta"},
+    });
+
+    // This thread will generate a metadata of version 2, segments[0] and segments[2] are referenced in
+    // the metadata
+    auto write_thread = std::thread([&]() {
+        TEST_SYNC_POINT("GCTest::test_concurrent_gc:begin_write");
+        auto metadata_v2 = std::make_shared<TabletMetadata>();
+        metadata_v2->set_id(tablet_id);
+        metadata_v2->set_version(2);
+        metadata_v2->set_next_rowset_id(4);
+        metadata_v2->add_rowsets()->add_segments(segments[0]);
+        metadata_v2->add_rowsets()->add_segments(segments[2]);
+        ASSERT_OK(tablet_mgr->put_tablet_metadata(metadata_v2));
+        TEST_SYNC_POINT("GCTest::test_concurrent_gc:finish_write");
+    });
+
+    auto datagc_thread = std::thread([&]() {
+        if (datagc_should_success) {
+            EXPECT_OK(datafile_gc(kTestDir, tablet_mgr.get()));
+        } else {
+            EXPECT_ERROR(datafile_gc(kTestDir, tablet_mgr.get()));
+        }
+    });
+
+    // This thread is used to simulate concurrent metadata GC on another node.
+    // This thread will remove the metadata of version 1.
+    auto metagc_thread = std::thread([&]() { CHECK_OK(metadata_gc(kTestDir, tablet_mgr.get(), 0)); });
+
+    write_thread.join();
+    datagc_thread.join();
+    metagc_thread.join();
+
+    EXPECT_TRUE(fs->path_exists(tablet_mgr->tablet_metadata_location(tablet_id, 1)).is_not_found());
+    EXPECT_TRUE(fs->path_exists(tablet_mgr->tablet_metadata_location(tablet_id, 2)).ok());
+    EXPECT_TRUE(fs->path_exists(tablet_mgr->segment_location(tablet_id, segments[0])).ok());
+    if (datagc_should_success) {
+        EXPECT_TRUE(fs->path_exists(tablet_mgr->segment_location(tablet_id, segments[1])).is_not_found());
+    } else {
+        EXPECT_TRUE(fs->path_exists(tablet_mgr->segment_location(tablet_id, segments[1])).ok());
+    }
+    EXPECT_TRUE(fs->path_exists(tablet_mgr->segment_location(tablet_id, segments[2])).ok());
+
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 } // namespace starrocks::lake

@@ -53,6 +53,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
@@ -89,6 +90,7 @@ import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -348,88 +350,16 @@ public class SparkLoadPendingTask extends LoadTask {
 
         List<String> partitionColumnRefs = Lists.newArrayList();
         List<EtlPartition> etlPartitions = Lists.newArrayList();
-        if (type == PartitionType.RANGE) {
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
-            for (Column column : rangePartitionInfo.getPartitionColumns()) {
-                partitionColumnRefs.add(column.getName());
-            }
-
-            List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges = null;
-            try {
-                sortedRanges = rangePartitionInfo.getSortedRangeMap(partitionIds);
-            } catch (AnalysisException e) {
-                throw new LoadException(e.getMessage());
-            }
-            for (Map.Entry<Long, Range<PartitionKey>> entry : sortedRanges) {
-                long partitionId = entry.getKey();
-                Partition partition = table.getPartition(partitionId);
-                if (partition == null) {
-                    throw new LoadException("partition does not exist. id: " + partitionId);
-                }
-
-                // bucket num
-                int bucketNum = partition.getDistributionInfo().getBucketNum();
-
-                // is min|max partition
-                Range<PartitionKey> range = entry.getValue();
-                boolean isMaxPartition = range.upperEndpoint().isMaxValue();
-                boolean isMinPartition = range.lowerEndpoint().isMinValue();
-
-                // start keys
-                List<LiteralExpr> rangeKeyExprs = null;
-                List<Object> startKeys = Lists.newArrayList();
-                if (!isMinPartition) {
-                    rangeKeyExprs = range.lowerEndpoint().getKeys();
-                    for (int i = 0; i < rangeKeyExprs.size(); ++i) {
-                        LiteralExpr literalExpr = rangeKeyExprs.get(i);
-
-                        Object keyValue;
-                        if (literalExpr instanceof DateLiteral) {
-                            keyValue = convertDateLiteralToNumber((DateLiteral) literalExpr);
-                        } else {
-                            keyValue = literalExpr.getRealObjectValue();
-                        }
-
-                        startKeys.add(keyValue);
-                    }
-                }
-
-                // end keys
-                // is empty list when max partition
-                List<Object> endKeys = Lists.newArrayList();
-                if (!isMaxPartition) {
-                    rangeKeyExprs = range.upperEndpoint().getKeys();
-                    for (int i = 0; i < rangeKeyExprs.size(); ++i) {
-                        LiteralExpr literalExpr = rangeKeyExprs.get(i);
-
-                        Object keyValue;
-                        if (literalExpr instanceof DateLiteral) {
-                            keyValue = convertDateLiteralToNumber((DateLiteral) literalExpr);
-                        } else {
-                            keyValue = literalExpr.getRealObjectValue();
-                        }
-                        endKeys.add(keyValue);
-                    }
-                }
-
-                etlPartitions.add(new EtlPartition(partitionId, startKeys, endKeys, isMinPartition, isMaxPartition, bucketNum));
-            }
-        } else {
-            Preconditions.checkState(type == PartitionType.UNPARTITIONED);
-            Preconditions.checkState(partitionIds.size() == 1);
-
-            for (Long partitionId : partitionIds) {
-                Partition partition = table.getPartition(partitionId);
-                if (partition == null) {
-                    throw new LoadException("partition does not exist. id: " + partitionId);
-                }
-
-                // bucket num
-                int bucketNum = partition.getDistributionInfo().getBucketNum();
-
-                etlPartitions.add(new EtlPartition(partitionId, Lists.newArrayList(), Lists.newArrayList(),
-                        true, true, bucketNum));
-            }
+        switch (type) {
+            case RANGE:
+                etlPartitions = initEtlRangePartition(partitionColumnRefs, table, partitionIds);
+                break;
+            case LIST:
+                etlPartitions = initEtlListPartition(partitionColumnRefs, table, partitionIds);
+                break;
+            case UNPARTITIONED:
+                etlPartitions = initEtlUnPartitioned(table, partitionIds);
+                break;
         }
 
         // distribution column refs
@@ -441,6 +371,147 @@ public class SparkLoadPendingTask extends LoadTask {
         }
 
         return new EtlPartitionInfo(type.typeString, partitionColumnRefs, distributionColumnRefs, etlPartitions);
+    }
+
+    private List<EtlPartition> initEtlListPartition(
+            List<String> partitionColumnRefs, OlapTable table, Set<Long> partitionIds) throws LoadException {
+        ListPartitionInfo listPartitionInfo = (ListPartitionInfo) table.getPartitionInfo();
+        for (Column column : listPartitionInfo.getPartitionColumns()) {
+            partitionColumnRefs.add(column.getName());
+        }
+        List<EtlPartition> etlPartitions = Lists.newArrayList();
+        Map<Long, List<List<LiteralExpr>>> multiLiteralExprValues = listPartitionInfo.getMultiLiteralExprValues();
+        Map<Long, List<LiteralExpr>>  literalExprValues = listPartitionInfo.getLiteralExprValues();
+        for (Long partitionId : partitionIds) {
+            Partition partition = table.getPartition(partitionId);
+            if (partition == null) {
+                throw new LoadException("partition does not exist. id: " + partitionId);
+            }
+            // bucket num
+            int bucketNum = partition.getDistributionInfo().getBucketNum();
+            // list partition values
+            List<List<LiteralExpr>> multiValueList = multiLiteralExprValues.get(partitionId);
+            List<List<Object>> inKeys = Lists.newArrayList();
+            if (multiValueList != null && !multiValueList.isEmpty()) {
+                for (List<LiteralExpr> list : multiValueList) {
+                    inKeys.add(initItemOfInKeys(list));
+                }
+            }
+            List<LiteralExpr> valueList = literalExprValues.get(partitionId);
+            if (valueList != null && !valueList.isEmpty()) {
+                for (LiteralExpr literalExpr : valueList) {
+                    inKeys.add(initItemOfInKeys(Lists.newArrayList(literalExpr)));
+                }
+            }
+            etlPartitions.add(new EtlPartition(partitionId, inKeys, bucketNum));
+        }
+        return etlPartitions;
+    }
+
+    private List<Object> initItemOfInKeys(List<LiteralExpr> list) {
+        List<Object> curList = new ArrayList<>();
+        for (LiteralExpr literalExpr : list) {
+            Object keyValue;
+            if (literalExpr instanceof DateLiteral) {
+                keyValue = convertDateLiteralToNumber((DateLiteral) literalExpr);
+            } else {
+                keyValue = literalExpr.getRealObjectValue();
+            }
+            curList.add(keyValue);
+        }
+        return curList;
+    }
+
+    private List<EtlPartition> initEtlRangePartition(
+            List<String> partitionColumnRefs, OlapTable table, Set<Long> partitionIds) throws LoadException {
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
+        List<EtlPartition> etlPartitions = Lists.newArrayList();
+        for (Column column : rangePartitionInfo.getPartitionColumns()) {
+            partitionColumnRefs.add(column.getName());
+        }
+
+        List<Map.Entry<Long, Range<PartitionKey>>> sortedRanges = null;
+        try {
+            sortedRanges = rangePartitionInfo.getSortedRangeMap(partitionIds);
+        } catch (AnalysisException e) {
+            throw new LoadException(e.getMessage());
+        }
+        for (Map.Entry<Long, Range<PartitionKey>> entry : sortedRanges) {
+            long partitionId = entry.getKey();
+            Partition partition = table.getPartition(partitionId);
+            if (partition == null) {
+                throw new LoadException("partition does not exist. id: " + partitionId);
+            }
+
+            // bucket num
+            int bucketNum = partition.getDistributionInfo().getBucketNum();
+
+            // is min|max partition
+            Range<PartitionKey> range = entry.getValue();
+            boolean isMaxPartition = range.upperEndpoint().isMaxValue();
+            boolean isMinPartition = range.lowerEndpoint().isMinValue();
+
+            // start keys
+            List<LiteralExpr> rangeKeyExprs = null;
+            List<Object> startKeys = Lists.newArrayList();
+            if (!isMinPartition) {
+                rangeKeyExprs = range.lowerEndpoint().getKeys();
+                for (int i = 0; i < rangeKeyExprs.size(); ++i) {
+                    LiteralExpr literalExpr = rangeKeyExprs.get(i);
+
+                    Object keyValue;
+                    if (literalExpr instanceof DateLiteral) {
+                        keyValue = convertDateLiteralToNumber((DateLiteral) literalExpr);
+                    } else {
+                        keyValue = literalExpr.getRealObjectValue();
+                    }
+
+                    startKeys.add(keyValue);
+                }
+            }
+
+            // end keys
+            // is empty list when max partition
+            List<Object> endKeys = Lists.newArrayList();
+            if (!isMaxPartition) {
+                rangeKeyExprs = range.upperEndpoint().getKeys();
+                for (int i = 0; i < rangeKeyExprs.size(); ++i) {
+                    LiteralExpr literalExpr = rangeKeyExprs.get(i);
+
+                    Object keyValue;
+                    if (literalExpr instanceof DateLiteral) {
+                        keyValue = convertDateLiteralToNumber((DateLiteral) literalExpr);
+                    } else {
+                        keyValue = literalExpr.getRealObjectValue();
+                    }
+                    endKeys.add(keyValue);
+                }
+            }
+
+            etlPartitions.add(new EtlPartition(partitionId, startKeys, endKeys, isMinPartition, isMaxPartition, bucketNum));
+        }
+        return etlPartitions;
+    }
+
+    private List<EtlPartition> initEtlUnPartitioned(OlapTable table, Set<Long> partitionIds) throws LoadException {
+        PartitionType type = table.getPartitionInfo().getType();
+        List<EtlPartition> etlPartitions = Lists.newArrayList();
+        Preconditions.checkState(type == PartitionType.UNPARTITIONED);
+        Preconditions.checkState(partitionIds.size() == 1);
+
+        for (Long partitionId : partitionIds) {
+            Partition partition = table.getPartition(partitionId);
+            if (partition == null) {
+                throw new LoadException("partition does not exist. id: " + partitionId);
+            }
+
+            // bucket num
+            int bucketNum = partition.getDistributionInfo().getBucketNum();
+
+            etlPartitions.add(new EtlPartition(partitionId, Lists.newArrayList(), Lists.newArrayList(),
+                    true, true, bucketNum));
+        }
+        return etlPartitions;
     }
 
     private EtlFileGroup createEtlFileGroup(BrokerFileGroup fileGroup, Set<Long> tablePartitionIds,

@@ -121,7 +121,7 @@ public class StarRocksFE {
             // check meta dir
             MetaHelper.checkMetaDir();
 
-            LOG.info("StarRocks FE starting...");
+            LOG.info("StarRocks FE starting, version: {}-{}", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH);
 
             FrontendOptions.init(args);
             ExecuteEnv.setup();
@@ -182,6 +182,7 @@ public class StarRocksFE {
             }
         } catch (Throwable e) {
             LOG.error("StarRocksFE start failed", e);
+            System.exit(-1);
         }
     }
 
@@ -236,12 +237,12 @@ public class StarRocksFE {
 
         // version
         if (cmd.hasOption('v') || cmd.hasOption("version")) {
-            return new CommandLineOptions(true, "", null);
+            return new CommandLineOptions(true, null);
         } else if (cmd.hasOption('b') || cmd.hasOption("bdb")) {
             if (cmd.hasOption('l') || cmd.hasOption("listdb")) {
                 // list bdb je databases
                 BDBToolOptions bdbOpts = new BDBToolOptions(true, "", false, "", "", 0, 0);
-                return new CommandLineOptions(false, "", bdbOpts);
+                return new CommandLineOptions(false, bdbOpts);
             } else if (cmd.hasOption('d') || cmd.hasOption("db")) {
                 // specify a database
                 String dbName = cmd.getOptionValue("db");
@@ -252,7 +253,7 @@ public class StarRocksFE {
 
                 if (cmd.hasOption('s') || cmd.hasOption("stat")) {
                     BDBToolOptions bdbOpts = new BDBToolOptions(false, dbName, true, "", "", 0, 0);
-                    return new CommandLineOptions(false, "", bdbOpts);
+                    return new CommandLineOptions(false, bdbOpts);
                 } else {
                     String fromKey = "";
                     String endKey = "";
@@ -291,7 +292,7 @@ public class StarRocksFE {
                     BDBToolOptions bdbOpts =
                             new BDBToolOptions(false, dbName, false, fromKey, endKey, metaVersion,
                                     starrocksMetaVersion);
-                    return new CommandLineOptions(false, "", bdbOpts);
+                    return new CommandLineOptions(false, bdbOpts);
                 }
             } else {
                 System.err.println("Invalid options when running bdb je tools");
@@ -303,11 +304,10 @@ public class StarRocksFE {
                 System.err.println("Missing helper node");
                 System.exit(-1);
             }
-            return new CommandLineOptions(false, helperNode, null);
         }
 
         // helper node is null, means no helper node is specified
-        return new CommandLineOptions(false, null, null);
+        return new CommandLineOptions(false, null);
     }
 
     private static void checkCommandLineOptions(CommandLineOptions cmdLineOpts) {

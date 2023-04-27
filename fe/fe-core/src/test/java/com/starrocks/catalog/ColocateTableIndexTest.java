@@ -257,7 +257,7 @@ public class ColocateTableIndexTest {
             }
 
             @Mock
-            public boolean isLakeTable() {
+            public boolean isCloudNativeTable() {
                 return true;
             }
 

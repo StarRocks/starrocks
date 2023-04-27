@@ -59,7 +59,7 @@ public class ResourceGroupAnalyzer {
                 String key = ((SlotRef) lhs).getColumnName();
                 String value = ((StringLiteral) rhs).getValue();
                 if (key.equalsIgnoreCase(ResourceGroup.USER)) {
-                    if (!ResourceGroupClassifier.USE_ROLE_PATTERN.matcher(value).matches()) {
+                    if (!ResourceGroupClassifier.USER_PATTERN.matcher(value).matches()) {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.USER,
                                         eqPred.toSql()));

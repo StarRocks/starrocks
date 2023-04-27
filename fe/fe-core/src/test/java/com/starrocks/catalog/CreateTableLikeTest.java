@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
@@ -252,12 +253,10 @@ public class CreateTableLikeTest {
                 "DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
                 "COMMENT \"OLAP\"\n" +
                 "PARTITION BY date_trunc('day', k1)\n" +
-                "(PARTITION p20200101 VALUES [(\"2020-01-01\"), (\"2020-01-02\")))\n" +
                 "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 2 \n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"V2\",\n" +
                 "\"enable_persistent_index\" = \"false\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
@@ -291,7 +290,7 @@ public class CreateTableLikeTest {
         String existedDbName2 = "test";
         String newTblName2 = "testAbTbl2_like";
         String existedTblName2 = "testAbTbl1";
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Unknown database 'fake_test'",
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Unknown database 'fake_test'",
                 () -> checkCreateOlapTableLike(createTableSql2, createTableLikeSql2, newDbName2, existedDbName2,
                         newTblName2, existedTblName2));
     }

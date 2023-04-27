@@ -112,7 +112,7 @@ public class ShardDeleterTest {
 
         new Expectations() {
             {
-                starOSAgent.getPrimaryBackendIdByShard(anyLong);
+                starOSAgent.getPrimaryComputeNodeIdByShard(anyLong);
                 minTimes = 0;
                 result = 1;
 

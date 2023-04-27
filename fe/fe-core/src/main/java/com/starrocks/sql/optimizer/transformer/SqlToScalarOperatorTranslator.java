@@ -39,6 +39,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
@@ -190,6 +191,8 @@ public final class SqlToScalarOperatorTranslator {
 
         public final boolean hasSubquery;
         public final boolean useSemiAnti;
+
+        // only for recording outer exprs to an un-correlate subquery in a predicate
         public final List<Expr> outerExprs;
 
         public Context() {
@@ -208,15 +211,39 @@ public final class SqlToScalarOperatorTranslator {
             if (!hasSubquery) {
                 return this;
             }
-            List<Expr> outerExprs = Collections.emptyList();
-            if (node.getChildren().stream().anyMatch(Subquery.class::isInstance)) {
-                outerExprs = node.getChildren().stream().filter(c -> !(c instanceof Subquery))
-                        .collect(Collectors.toList());
-            }
+            List<Expr> res = findOuterExprs(node);
             if (!this.useSemiAnti && outerExprs.isEmpty()) {
                 return this;
             }
-            return new Context(true, false, outerExprs);
+            return new Context(true, false, res);
+        }
+
+        private List<Expr> findOuterExprs(Expr node) {
+            List<Expr> res = Lists.newArrayList();
+            if (node instanceof Predicate && node.getChildren().stream().anyMatch(Subquery.class::isInstance)) {
+                for (Expr child : node.getChildren()) {
+                    if (collectSubqueryNum(child) == 0) {
+                        res.add(child);
+                    }
+                }
+            }
+            return res;
+        }
+
+        private int collectSubqueryNum(Expr node) {
+            int num = 0;
+            for (Expr child : node.getChildren()) {
+                if (num > 0) {
+                    return num;
+                }
+
+                if (child instanceof Subquery) {
+                    num++;
+                } else {
+                    num += collectSubqueryNum(child);
+                }
+            }
+            return num;
         }
     }
 

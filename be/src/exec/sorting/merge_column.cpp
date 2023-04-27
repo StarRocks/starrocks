@@ -386,6 +386,16 @@ int SortedRun::compare_row(const SortDescs& desc, const SortedRun& rhs, size_t l
     return 0;
 }
 
+bool SortedRun::is_sorted(const SortDescs& desc) const {
+    for (size_t row = range.first; row + 1 < range.second; row++) {
+        if (compare_row(desc, *this, row, row + 1) > 0) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
 int SortedRun::debug_dump() const {
     for (int i = start_index(); i < end_index(); i++) {
         LOG(INFO) << fmt::format("row {}: {}", i, chunk->debug_row(i));
@@ -425,17 +435,16 @@ void SortedRuns::clear() {
 bool SortedRuns::is_sorted(const SortDescs& sort_desc) const {
     for (int i = 0; i < chunks.size(); i++) {
         auto& run = chunks[i];
+        if (!run.is_sorted(sort_desc)) {
+            return false;
+        }
         if (i > 0) {
             auto& prev = chunks[i - 1];
-            int x = prev.compare_row(sort_desc, run, prev.end_index() - 1, run.start_index());
-            if (x > 0) {
-                return false;
-            }
-        }
-        for (int row = run.start_index() + 1; row < run.end_index(); row++) {
-            int x = run.compare_row(sort_desc, run, row - 1, row);
-            if (x > 0) {
-                return false;
+            if (!prev.empty()) {
+                int x = prev.compare_row(sort_desc, run, prev.end_index() - 1, run.start_index());
+                if (x > 0) {
+                    return false;
+                }
             }
         }
     }

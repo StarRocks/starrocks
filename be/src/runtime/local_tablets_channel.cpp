@@ -482,7 +482,6 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.timeout_ms = params.timeout_ms();
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
-        options.abort_delete = params.abort_delete();
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);
@@ -499,6 +498,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
             options.replica_state = Peer;
         }
         options.merge_condition = params.merge_condition();
+        options.partial_update_mode = params.partial_update_mode();
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         if (res.status().ok()) {
@@ -520,20 +520,23 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     for (size_t i = 0; i < tablet_ids.size(); ++i) {
         _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
     }
-    std::stringstream ss;
-    ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id()) << " open delta writer: ";
-    for (auto& [tablet_id, delta_writer] : _delta_writers) {
-        ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
+    if (_is_replicated_storage) {
+        std::stringstream ss;
+        ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id()) << " open "
+           << _delta_writers.size() << " delta writer: ";
+        for (auto& [tablet_id, delta_writer] : _delta_writers) {
+            ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
+        }
+        ss << " " << failed_tablet_ids.size() << " failed_tablets: ";
+        for (auto& tablet_id : failed_tablet_ids) {
+            ss << tablet_id << ",";
+        }
+        if (_is_incremental_channel) {
+            ss << " on incremental channel";
+        }
+        ss << " _num_remaining_senders: " << _num_remaining_senders;
+        LOG(INFO) << ss.str();
     }
-    ss << " failed_tablets: ";
-    for (auto& tablet_id : failed_tablet_ids) {
-        ss << tablet_id << ",";
-    }
-    if (_is_incremental_channel) {
-        ss << " on incremental channel";
-    }
-    ss << " _num_remaining_senders: " << _num_remaining_senders;
-    LOG(INFO) << ss.str();
     return Status::OK();
 }
 
@@ -662,7 +665,6 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         options.timeout_ms = params.timeout_ms();
         options.write_quorum = params.write_quorum();
         options.miss_auto_increment_column = params.miss_auto_increment_column();
-        options.abort_delete = params.abort_delete();
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);

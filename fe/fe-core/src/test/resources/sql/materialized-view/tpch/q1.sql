@@ -20,7 +20,6 @@ group by
 order by
     l_returnflag,
     l_linestatus;
-
 [result]
 TOP-N (order by [[10: l_returnflag ASC NULLS FIRST, 11: l_linestatus ASC NULLS FIRST]])
     TOP-N (order by [[10: l_returnflag ASC NULLS FIRST, 11: l_linestatus ASC NULLS FIRST]])

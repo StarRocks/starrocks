@@ -49,6 +49,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.ShardDeleter;
 import com.starrocks.lake.Utils;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -58,7 +59,6 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.AlterReplicaTask;
 import com.starrocks.task.CreateReplicaTask;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
@@ -76,6 +76,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
@@ -120,8 +121,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     // The schema change job will wait all transactions before this txn id finished, then send the schema change tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
-    @SerializedName(value = "storageFormat")
-    private TStorageFormat storageFormat = TStorageFormat.DEFAULT;
     @SerializedName(value = "startTime")
     private long startTime;
 
@@ -149,10 +148,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
 
     void setStartTime(long startTime) {
         this.startTime = startTime;
-    }
-
-    void setStorageFormat(TStorageFormat storageFormat) {
-        this.storageFormat = storageFormat;
     }
 
     void addTabletIdMap(long partitionId, long shadowIdxId, long shadowTabletId, long originTabletId) {
@@ -244,6 +239,11 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
     }
 
     @VisibleForTesting
+    public static Future<Boolean> writeEditLogAsync(LakeTableSchemaChangeJob job) {
+        return GlobalStateMgr.getCurrentState().getEditLog().logAlterJobNoWait(job);
+    }
+
+    @VisibleForTesting
     public static long getNextTransactionId() {
         return GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
     }
@@ -305,7 +305,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
                         Long baseTabletId = partitionIndexTabletMap.row(partitionId).get(shadowIdxId).get(shadowTabletId);
                         assert baseTabletId != null;
                         createReplicaTask.setBaseTablet(baseTabletId, 0/*unused*/);
-                        createReplicaTask.setStorageFormat(this.storageFormat);
                         batchTask.addTask(createReplicaTask);
                     }
                 }
@@ -451,6 +450,8 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             return;
         }
 
+        long startWriteTs;
+        Future<Boolean> editLogFuture;
         // Replace the current index with shadow index.
         Set<String> modifiedColumns;
         List<MaterializedIndex> droppedIndexes;
@@ -465,7 +466,25 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             modifiedColumns = collectModifiedColumnsForRelatedMVs(table);
             // Below this point, all query and load jobs will use the new schema.
             droppedIndexes = visualiseShadowIndex(table);
+
+            // update colocation info and inactivate related mv
+            try {
+                GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo(table, true, null);
+            } catch (DdlException e) {
+                // log an error if update colocation info failed, schema change already succeeded
+                LOG.error("table {} update colocation info failed after schema change, {}.", tableId, e.getMessage());
+            }
+
+            inactiveRelatedMv(modifiedColumns, table);
+
+            this.jobState = JobState.FINISHED;
+            this.finishedTimeMs = System.currentTimeMillis();
+
+            startWriteTs = System.nanoTime();
+            editLogFuture = writeEditLogAsync(this);
         }
+
+        EditLog.waitInfinity(startWriteTs, editLogFuture);
 
         // Delete tablet and shards
         List<Long> unusedShards = new ArrayList<>();
@@ -475,29 +494,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
         // TODO: what if unusedShards deletion is partially successful?
         ShardDeleter.dropTabletAndDeleteShard(unusedShards, GlobalStateMgr.getCurrentStarOSAgent());
-
-        // update colocation info and inactivate related mv
-        try (WriteLockedDatabase db = getWriteLockedDatabase(dbId)) {
-            LakeTable table = (db != null) ? db.getTable(tableId) : null;
-            if (table != null) {
-                try {
-                    GlobalStateMgr.getCurrentColocateIndex().updateLakeTableColocationInfo((OlapTable) table,
-                            true /* isJoin */, null /* expectGroupId */);
-                } catch (DdlException e) {
-                    // log an error if update colocation info failed, schema change already succeeded
-                    LOG.error("table {} update colocation info failed after schema change, {}.", tableId, e.getMessage());
-                }
-
-                inactiveRelatedMv(modifiedColumns, table);
-            } else {
-                LOG.info("database or table has been dropped while trying to update colocation info for job {}.", jobId);
-            }
-        }
-
-        this.jobState = JobState.FINISHED;
-        this.finishedTimeMs = System.currentTimeMillis();
-
-        writeEditLog(this);
 
         if (span != null) {
             span.end();
@@ -655,7 +651,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
             this.indexChange = other.indexChange;
             this.indexes = other.indexes;
             this.watershedTxnId = other.watershedTxnId;
-            this.storageFormat = other.storageFormat;
             this.startTime = other.startTime;
             this.commitVersionMap = other.commitVersionMap;
             // this.schemaChangeBatchTask = other.schemaChangeBatchTask;
@@ -809,11 +804,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         // update index
         if (indexChange) {
             table.setIndexes(indexes);
-        }
-
-        // set storage format of table, only set if format is v2
-        if (storageFormat == TStorageFormat.V2) {
-            table.setStorageFormat(storageFormat);
         }
 
         table.setState(OlapTable.OlapTableState.NORMAL);

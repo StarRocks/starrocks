@@ -50,6 +50,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -75,6 +76,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
+import com.starrocks.sql.ast.UnitIdentifier;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.parser.ParsingException;
 import io.trino.sql.tree.AliasedRelation;
@@ -88,6 +90,7 @@ import io.trino.sql.tree.Cast;
 import io.trino.sql.tree.CoalesceExpression;
 import io.trino.sql.tree.ComparisonExpression;
 import io.trino.sql.tree.Cube;
+import io.trino.sql.tree.CurrentTime;
 import io.trino.sql.tree.DataType;
 import io.trino.sql.tree.DateTimeDataType;
 import io.trino.sql.tree.DereferenceExpression;
@@ -107,9 +110,11 @@ import io.trino.sql.tree.GroupingElement;
 import io.trino.sql.tree.GroupingOperation;
 import io.trino.sql.tree.GroupingSets;
 import io.trino.sql.tree.Identifier;
+import io.trino.sql.tree.IfExpression;
 import io.trino.sql.tree.InListExpression;
 import io.trino.sql.tree.InPredicate;
 import io.trino.sql.tree.Intersect;
+import io.trino.sql.tree.IntervalLiteral;
 import io.trino.sql.tree.IsNotNullPredicate;
 import io.trino.sql.tree.IsNullPredicate;
 import io.trino.sql.tree.Join;
@@ -122,6 +127,7 @@ import io.trino.sql.tree.LogicalExpression;
 import io.trino.sql.tree.LongLiteral;
 import io.trino.sql.tree.Node;
 import io.trino.sql.tree.NotExpression;
+import io.trino.sql.tree.NullIfExpression;
 import io.trino.sql.tree.NumericParameter;
 import io.trino.sql.tree.Query;
 import io.trino.sql.tree.QuerySpecification;
@@ -138,6 +144,8 @@ import io.trino.sql.tree.SubqueryExpression;
 import io.trino.sql.tree.SubscriptExpression;
 import io.trino.sql.tree.Table;
 import io.trino.sql.tree.TableSubquery;
+import io.trino.sql.tree.TimestampLiteral;
+import io.trino.sql.tree.Trim;
 import io.trino.sql.tree.Union;
 import io.trino.sql.tree.WhenClause;
 import io.trino.sql.tree.Window;
@@ -159,6 +167,7 @@ import static com.starrocks.analysis.AnalyticWindow.BoundaryType.FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.PRECEDING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
@@ -296,15 +305,7 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
         // from == null means a statement without from or from dual, add a single row of null values here
         if (from == null) {
-            ArrayList<Expr> row = new ArrayList<>();
-            List<String> columnNames = new ArrayList<>();
-            row.add(NullLiteral.create(Type.NULL));
-            columnNames.add("");
-            List<ArrayList<Expr>> rows = new ArrayList<>();
-            rows.add(row);
-            ValuesRelation valuesRelation = new ValuesRelation(rows, columnNames);
-            valuesRelation.setNullValues(true);
-            from = valuesRelation;
+            from = ValuesRelation.newDualRelation();
         }
 
         SelectRelation resultSelectRelation = new SelectRelation(
@@ -712,6 +713,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         try {
             if (SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_DOUBLE_LITERAL)) {
                 return new FloatLiteral(node.getValue());
+            } else if (Double.isInfinite(node.getValue())) {
+                throw new SemanticException("Numeric overflow " + node.getValue());
             } else {
                 BigDecimal decimal = BigDecimal.valueOf(node.getValue());
                 int precision = DecimalLiteral.getRealPrecision(decimal);
@@ -769,6 +772,21 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitIntervalLiteral(IntervalLiteral node, ParseTreeContext context) {
+        return new com.starrocks.sql.ast.IntervalLiteral(new com.starrocks.analysis.StringLiteral(node.getValue()),
+                new UnitIdentifier(node.getStartField().toString()));
+    }
+
+    @Override
+    protected ParseNode visitTimestampLiteral(TimestampLiteral node, ParseTreeContext context) {
+        try {
+            return new DateLiteral(node.getValue(), Type.DATETIME);
+        } catch (AnalysisException e) {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
+        }
+    }
+
+    @Override
     protected ParseNode visitCoalesceExpression(CoalesceExpression node, ParseTreeContext context) {
         List<Expr> children = visit(node, context, Expr.class);
         FunctionName fnName = FunctionName.createFnName("coalesce");
@@ -787,6 +805,21 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitArithmeticBinary(ArithmeticBinaryExpression node, ParseTreeContext context) {
         Expr left = (Expr) visit(node.getLeft(), context);
         Expr right = (Expr) visit(node.getRight(), context);
+
+        if (left instanceof com.starrocks.sql.ast.IntervalLiteral) {
+            return new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), right,
+                    ((com.starrocks.sql.ast.IntervalLiteral) left).getValue(),
+                    ((com.starrocks.sql.ast.IntervalLiteral) left).getUnitIdentifier().getDescription(),
+                    true);
+        }
+
+        if (right instanceof com.starrocks.sql.ast.IntervalLiteral) {
+            return new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), left,
+                    ((com.starrocks.sql.ast.IntervalLiteral) right).getValue(),
+                    ((com.starrocks.sql.ast.IntervalLiteral) right).getUnitIdentifier().getDescription(),
+                    false);
+        }
+
         return new ArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), left, right);
     }
 
@@ -882,6 +915,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitCurrentTime(CurrentTime node, ParseTreeContext context) {
+        return new FunctionCallExpr(node.getFunction().getName(), new ArrayList<>());
+    }
+
+    @Override
     protected ParseNode visitSearchedCaseExpression(SearchedCaseExpression node, ParseTreeContext context) {
         return new CaseExpr(null, visit(node.getWhenClauses(), context, CaseWhenClause.class),
                 (Expr) processOptional(node.getDefaultValue(), context));
@@ -895,6 +933,38 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitNullIfExpression(NullIfExpression node, ParseTreeContext context) {
+        List<Expr> arguments = visit(ImmutableList.of(node.getFirst(), node.getSecond()), context, Expr.class);
+        return new FunctionCallExpr("nullif", arguments);
+    }
+
+    @Override
+    protected ParseNode visitIfExpression(IfExpression node, ParseTreeContext context) {
+        List<Node> children = Lists.newArrayList();
+        children.add(node.getCondition());
+        children.add(node.getTrueValue());
+        if (node.getFalseValue().isPresent()) {
+            children.add(node.getFalseValue().get());
+        } else {
+            children.add(new io.trino.sql.tree.NullLiteral());
+        }
+        List<Expr> arguments = visit(children, context, Expr.class);
+        return new FunctionCallExpr("if", arguments);
+    }
+
+    @Override
+    protected ParseNode visitTrim(Trim node, ParseTreeContext context) {
+        Expr trimSource = (Expr) visit(node.getTrimSource(), context);
+        Expr trimCharacter = (Expr) processOptional(node.getTrimCharacter(), context);
+        List<Expr> arguments = Lists.newArrayList();
+        arguments.add(trimSource);
+        if (trimCharacter != null) {
+            arguments.add(trimCharacter);
+        }
+        return new FunctionCallExpr(node.getSpecification().getFunctionName(), arguments);
+    }
+
+    @Override
     protected ParseNode visitWhenClause(WhenClause node, ParseTreeContext context) {
         return new CaseWhenClause((Expr) visit(node.getOperand(), context), (Expr) visit(node.getResult(), context));
     }
@@ -903,7 +973,6 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitCast(Cast node, ParseTreeContext context) {
         return new CastExpr(new TypeDef(getType(node.getType())), (Expr) visit(node.getExpression(), context));
     }
-
 
     public Type getType(DataType dataType) {
         if (dataType instanceof GenericDataType) {
@@ -923,9 +992,15 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
 
     private Type getGenericDataType(GenericDataType dataType) {
         int length = -1;
+        int precision = -1;
+        int scale = -1;
         String typeName = dataType.getName().getValue().toLowerCase();
         if (!dataType.getArguments().isEmpty() && dataType.getArguments().get(0) instanceof NumericParameter) {
             length = Integer.parseInt(((NumericParameter) dataType.getArguments().get(0)).getValue());
+            precision = length;
+            if (dataType.getArguments().size() > 1 && dataType.getArguments().get(1) instanceof NumericParameter) {
+                scale = Integer.parseInt(((NumericParameter) dataType.getArguments().get(1)).getValue());
+            }
         }
         if (typeName.equals("varchar")) {
             ScalarType type = ScalarType.createVarcharType(length);
@@ -939,6 +1014,16 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
                 type.setAssignedStrLenInColDefinition();
             }
             return type;
+        } else if (typeName.equals("decimal")) {
+            if (precision != -1) {
+                if (scale != -1) {
+                    return ScalarType.createUnifiedDecimalType(precision, scale);
+                }
+                return ScalarType.createUnifiedDecimalType(precision, 0);
+            }
+            return ScalarType.createUnifiedDecimalType(38, 0);
+        } else if (typeName.contains("decimal")) {
+            throw new SemanticException("Unknown type: %s", typeName);
         } else {
             // this contains datetime/date/numeric type
             return ScalarType.createType(typeName);

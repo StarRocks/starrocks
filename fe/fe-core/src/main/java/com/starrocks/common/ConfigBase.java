@@ -45,14 +45,18 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.reflect.Field;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class ConfigBase {
     private static final Logger LOG = LogManager.getLogger(ConfigBase.class);
+
+    public static final String AUTHENTICATION_CHAIN_MECHANISM_NATIVE = "native";
 
     @Retention(RetentionPolicy.RUNTIME)
     public static @interface ConfField {
@@ -61,8 +65,9 @@ public class ConfigBase {
         String comment() default "";
 
         /**
-         * alias for a configuration defined in Config, use for compatibility reason.
-         * when changing a configuration name, you can put the old name in alias annotation.<p>
+         * alias for a configuration defined in Config, used for compatibility reason.
+         * when changing a configuration name, you can put the old name in alias annotation.
+         * <p>
          * usage: @ConfField(alias = {"old_name1", "old_name2"})
          *
          * @return an array of alias names
@@ -138,7 +143,7 @@ public class ConfigBase {
                         map.put(f.getName(), Arrays.toString((String[]) f.get(null)));
                         break;
                     default:
-                        throw new Exception("unknown type: " + f.getType().getSimpleName());
+                        throw new InvalidConfException("unknown type: " + f.getType().getSimpleName());
                 }
             } else {
                 map.put(f.getName(), f.get(null).toString());
@@ -147,7 +152,7 @@ public class ConfigBase {
         return map;
     }
 
-    private void replacedByEnv() throws Exception {
+    private void replacedByEnv() throws InvalidConfException {
         Pattern pattern = Pattern.compile("\\$\\{([^\\}]*)\\}");
         for (String key : props.stringPropertyNames()) {
             String value = props.getProperty(key);
@@ -158,7 +163,7 @@ public class ConfigBase {
                 if (envValue != null) {
                     value = value.replace("${" + m.group(1) + "}", envValue);
                 } else {
-                    throw new Exception("no such env variable: " + m.group(1));
+                    throw new InvalidConfException("no such env variable: " + m.group(1));
                 }
             }
             props.setProperty(key, value);
@@ -198,13 +203,34 @@ public class ConfigBase {
         }
     }
 
-    public static void setConfigField(Field f, String confVal) throws IllegalAccessException, Exception {
+    private static void validateConfValue(Field f, String[] arrayArgs, String confVal)
+            throws InvalidConfException {
+        switch (f.getName()) {
+            case "authentication_chain":
+                Set<String> argsSet = new HashSet<>(Arrays.asList(arrayArgs));
+                if (!f.getType().equals(String[].class)
+                        || argsSet.size() != arrayArgs.length
+                        || !argsSet.contains(AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                    throw new InvalidConfException("'authentication_chain' configuration invalid, " +
+                            "'native' must be in the list, and cannot have duplicates, current value: "
+                            + confVal);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    public static void setConfigField(Field f, String confVal) throws Exception {
         confVal = confVal.trim();
+        boolean isEmpty = confVal.isEmpty();
 
         String[] sa = confVal.split(",");
         for (int i = 0; i < sa.length; i++) {
             sa[i] = sa[i].trim();
         }
+
+        validateConfValue(f, sa, confVal);
 
         // set config field
         switch (f.getType().getSimpleName()) {
@@ -227,58 +253,58 @@ public class ConfigBase {
                 f.set(null, confVal);
                 break;
             case "short[]":
-                short[] sha = new short[sa.length];
+                short[] sha = isEmpty ? new short[0] : new short[sa.length];
                 for (int i = 0; i < sha.length; i++) {
                     sha[i] = Short.parseShort(sa[i]);
                 }
                 f.set(null, sha);
                 break;
             case "int[]":
-                int[] ia = new int[sa.length];
+                int[] ia = isEmpty ? new int[0] : new int[sa.length];
                 for (int i = 0; i < ia.length; i++) {
                     ia[i] = Integer.parseInt(sa[i]);
                 }
                 f.set(null, ia);
                 break;
             case "long[]":
-                long[] la = new long[sa.length];
+                long[] la = isEmpty ? new long[0] : new long[sa.length];
                 for (int i = 0; i < la.length; i++) {
                     la[i] = Long.parseLong(sa[i]);
                 }
                 f.set(null, la);
                 break;
             case "double[]":
-                double[] da = new double[sa.length];
+                double[] da = isEmpty ? new double[0] : new double[sa.length];
                 for (int i = 0; i < da.length; i++) {
                     da[i] = Double.parseDouble(sa[i]);
                 }
                 f.set(null, da);
                 break;
             case "boolean[]":
-                boolean[] ba = new boolean[sa.length];
+                boolean[] ba = isEmpty ? new boolean[0] : new boolean[sa.length];
                 for (int i = 0; i < ba.length; i++) {
                     ba[i] = Boolean.parseBoolean(sa[i]);
                 }
                 f.set(null, ba);
                 break;
             case "String[]":
-                f.set(null, sa);
+                f.set(null, isEmpty ? new String[0] : sa);
                 break;
             default:
-                throw new Exception("unknown type: " + f.getType().getSimpleName());
+                throw new InvalidConfException("unknown type: " + f.getType().getSimpleName());
         }
     }
 
-    public static synchronized void setMutableConfig(String key, String value) throws DdlException {
+    public static synchronized void setMutableConfig(String key, String value) throws InvalidConfException {
         Field field = allMutableConfigs.get(key);
         if (field == null) {
-            throw new DdlException("Config '" + key + "' does not exist or is not mutable");
+            throw new InvalidConfException("Config '" + key + "' does not exist or is not mutable");
         }
 
         try {
             ConfigBase.setConfigField(field, value);
         } catch (Exception e) {
-            throw new DdlException("Failed to set config '" + key + "'. err: " + e.getMessage());
+            throw new InvalidConfException("Failed to set config '" + key + "'. err: " + e.getMessage());
         }
 
         LOG.info("set config {} to {}", key, value);
@@ -298,7 +324,7 @@ public class ConfigBase {
         return false;
     }
 
-    public static synchronized List<List<String>> getConfigInfo(PatternMatcher matcher) throws DdlException {
+    public static synchronized List<List<String>> getConfigInfo(PatternMatcher matcher) throws InvalidConfException {
         List<List<String>> configs = Lists.newArrayList();
         Field[] fields = configFields;
         for (Field f : fields) {
@@ -336,13 +362,13 @@ public class ConfigBase {
                             confVal = Arrays.toString((String[]) f.get(null));
                             break;
                         default:
-                            throw new DdlException("Unknown type: " + f.getType().getSimpleName());
+                            throw new InvalidConfException("Unknown type: " + f.getType().getSimpleName());
                     }
                 } else {
                     confVal = String.valueOf(f.get(null));
                 }
             } catch (IllegalArgumentException | IllegalAccessException e) {
-                throw new DdlException("Failed to get config '" + confKey + "'. err: " + e.getMessage());
+                throw new InvalidConfException("Failed to get config '" + confKey + "'. err: " + e.getMessage());
             }
 
             config.add(confKey);

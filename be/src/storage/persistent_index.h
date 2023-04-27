@@ -33,7 +33,11 @@ class Column;
 
 // Add version for persistent index file to support future upgrade compatibility
 // There is only one version for now
-enum PersistentIndexFileVersion { UNKNOWN = 0, PERSISTENT_INDEX_VERSION_1, PERSISTENT_INDEX_VERSION_2 };
+enum PersistentIndexFileVersion {
+    PERSISTENT_INDEX_VERSION_UNKNOWN = 0,
+    PERSISTENT_INDEX_VERSION_1,
+    PERSISTENT_INDEX_VERSION_2
+};
 
 static constexpr uint64_t NullIndexValue = -1;
 
@@ -56,6 +60,7 @@ struct IndexValue {
 
 static constexpr size_t kIndexValueSize = 8;
 static_assert(sizeof(IndexValue) == kIndexValueSize);
+constexpr static size_t kSliceMaxFixLength = 64;
 
 uint64_t key_index_hash(const void* data, size_t len);
 
@@ -172,6 +177,8 @@ public:
 
     // get the number of entries in the index (including NullIndexValue)
     virtual size_t size() const = 0;
+
+    virtual size_t usage() const = 0;
 
     virtual size_t capacity() = 0;
 
@@ -309,7 +316,6 @@ private:
     void _init_loop_helper();
 
 private:
-    constexpr static size_t kSliceMaxFixLength = 64;
     uint32_t _fixed_key_size = -1;
     uint64_t _offset = 0;
     uint64_t _page_size = 0;
@@ -586,12 +592,13 @@ private:
     Status _flush_l0();
 
     Status _merge_compaction_internal(ImmutableIndexWriter* writer, int l1_start_idx, int l1_end_idx,
-                                      size_t total_usage, size_t total_size, bool keep_delete);
+                                      std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat,
+                                      bool keep_delete);
     Status _merge_compaction_advance();
     // merge l0 and l1 into new l1, then clear l0
     Status _merge_compaction();
 
-    Status _load(const PersistentIndexMetaPB& index_meta);
+    Status _load(const PersistentIndexMetaPB& index_meta, bool reload = false);
     Status _reload(const PersistentIndexMetaPB& index_meta);
 
     // commit index meta
@@ -604,6 +611,8 @@ private:
     Status _get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
                                      std::map<size_t, KeysInfo>& keys_info_by_key_size);
 
+    Status _update_usage_and_size_by_key_length(std::vector<std::pair<int64_t, int64_t>>& add_usage_and_size);
+
     // index storage directory
     std::string _path;
     size_t _key_size = 0;
@@ -615,6 +624,11 @@ private:
     std::unique_ptr<ShardByLengthMutableIndex> _l0;
     // add all l1 into vector
     std::vector<std::unique_ptr<ImmutableIndex>> _l1_vec;
+    // The usage and size is not exactly accurate after reload persistent index from disk becaues
+    // we ignore the overlap kvs between l0 and l1. The general accuracy can already be used as a
+    // reference to estimate nshard and npages We don't persist the overlap kvs info to reduce the
+    // write cost of PersistentIndexMeta
+    std::map<uint32_t, std::pair<int64_t, int64_t>> _usage_and_size_by_key_length;
     std::vector<int> _l1_merged_num;
     bool _has_l1 = false;
     std::shared_ptr<FileSystem> _fs;

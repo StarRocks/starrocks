@@ -139,8 +139,12 @@ public:
             c1->set_name("c1");
             c1->set_type("INT");
             c1->set_is_key(false);
-            c1->set_aggregation("REPLACE");
             c1->set_is_nullable(false);
+            if (GetParam().keys_type == DUP_KEYS) {
+                c1->set_aggregation("NONE");
+            } else {
+                c1->set_aggregation("REPLACE");
+            }
         }
 
         _base_tablet_schema = TabletSchema::create(*base_schema);
@@ -176,8 +180,12 @@ public:
             c1->set_name("c1");
             c1->set_type("INT");
             c1->set_is_key(false);
-            c1->set_aggregation("MAX");
             c1->set_is_nullable(false);
+            if (GetParam().keys_type == DUP_KEYS) {
+                c1->set_aggregation("NONE");
+            } else {
+                c1->set_aggregation("REPLACE");
+            }
         }
         {
             auto c2 = new_schema->add_column();
@@ -186,7 +194,11 @@ public:
             c2->set_type("INT");
             c2->set_is_key(false);
             c2->set_is_nullable(false);
-            c2->set_aggregation("REPLACE");
+            if (GetParam().keys_type == DUP_KEYS) {
+                c2->set_aggregation("NONE");
+            } else {
+                c2->set_aggregation("REPLACE");
+            }
             c2->set_default_value("10");
         }
 
@@ -195,7 +207,7 @@ public:
     }
 
 protected:
-    constexpr static const char* const kTestGroupPath = "test_lake_linked_schema_change";
+    constexpr static const char* const kTestGroupPath = "test_lake_direct_schema_change_2";
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
@@ -386,7 +398,11 @@ public:
             c1->set_type("INT");
             c1->set_is_key(false);
             c1->set_is_nullable(false);
-            c1->set_aggregation("REPLACE");
+            if (GetParam().keys_type == DUP_KEYS) {
+                c1->set_aggregation("NONE");
+            } else {
+                c1->set_aggregation("REPLACE");
+            }
         }
 
         _base_tablet_schema = TabletSchema::create(*base_schema);
@@ -422,7 +438,11 @@ public:
             c1->set_type("BIGINT");
             c1->set_is_key(false);
             c1->set_is_nullable(false);
-            c1->set_aggregation("REPLACE");
+            if (GetParam().keys_type == DUP_KEYS) {
+                c1->set_aggregation("NONE");
+            } else {
+                c1->set_aggregation("REPLACE");
+            }
         }
 
         _new_tablet_schema = TabletSchema::create(*new_schema);
@@ -624,7 +644,11 @@ public:
             c2->set_type("INT");
             c2->set_is_key(false);
             c2->set_is_nullable(false);
-            c2->set_aggregation("REPLACE");
+            if (GetParam().keys_type == DUP_KEYS) {
+                c2->set_aggregation("NONE");
+            } else {
+                c2->set_aggregation("REPLACE");
+            }
         }
 
         _base_tablet_schema = TabletSchema::create(*base_schema);
@@ -670,7 +694,11 @@ public:
             c2->set_is_key(false);
             c2->set_is_nullable(false);
             c2->set_default_value("10");
-            c2->set_aggregation("REPLACE");
+            if (GetParam().keys_type == DUP_KEYS) {
+                c2->set_aggregation("NONE");
+            } else {
+                c2->set_aggregation("REPLACE");
+            }
         }
 
         _new_tablet_schema = TabletSchema::create(*new_schema);

@@ -168,155 +168,170 @@ If you intend to set the number of buckets, StarRocks 2.4 and later versions sup
 
 ### Create partitions
 
-You can partition a table in threes ways by using `PARTITION BY RANGE` clause:
+Since version 3.0, StarRocks supports [automatic partitioning](./automatic_partitioning.md) during data loading. You no longer need to create a large number of partitions in advance. This on-demand partition creation method can help you reduce the O&M costs.
+> **NOTICE**
+>
+> Currently, StarRocks's shared-data mode does not support this feature.
 
-- Partition a table with the LESS THAN clause. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
+If you need to create partitions in advance, you can use other partition creation methods, such as enabling dynamic partitioning and manually creating partitions.
 
-  ```SQL
-  PARTITION BY RANGE (k1, k2, ...)
-  (
-      PARTITION partition_name1 VALUES LESS THAN ("value1", "value2", ...),
-      PARTITION partition_name2 VALUES LESS THAN ("value1", "value2", ...),
-      PARTITION partition_name3 VALUES LESS THAN (MAXVALUE)
-  )
-  ```
+- Dynamic partitioning
 
-- Partition a table by specifying values of a fixed range. For more information, see CREATE TABLE.
+  StarRocks supports [dynamic partitioning](./dynamic_partitioning.md), which can automatically manage the time to live (TTL) of partitions, such as partitioning new input data in tables and deleting expired partitions. This feature significantly reduces maintenance costs.
 
-  ```SQL
-  PARTITION BY RANGE (k1, k2, k3, ...)
-  (
-      PARTITION partition_name1 VALUES [("k1-lower1", "k2-lower1", "k3-lower1",...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)],
-      PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", MAXVALUE, )],
-      "k3-upper1-2", ...
-  )
-  ```
+- Manually create partitions
 
-- Partition a table by specifying START, END, and EVERY. You can create multiple partitions at a time by using this method. For more information, see CREATE TABLE.
+  - Partition a table with the LESS THAN clause. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
-  ```SQL
-  PARTITION BY RANGE (k1, k2, ...) 
-  (
-      START ("value1") END ("value2") EVERY (INTERVAL value3 day)
-  )
-  ```
+    ```SQL
+    PARTITION BY RANGE (k1, k2, ...)
+    (
+        PARTITION partition_name1 VALUES LESS THAN ("value1", "value2", ...),
+        PARTITION partition_name2 VALUES LESS THAN ("value1", "value2", ...),
+        PARTITION partition_name3 VALUES LESS THAN (MAXVALUE)
+    )
+    ```
 
-#### Examples
+  - Partition a table by specifying values of a fixed range. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
-The following examples demonstrate how to partition a table by specifying START, END, and EVERY.
+    ```SQL
+    PARTITION BY RANGE (k1, k2, k3, ...)
+    (
+        PARTITION partition_name1 VALUES [("k1-lower1", "k2-lower1", "k3-lower1",...), ("k1-upper1", "k2-upper1", "k3-upper1", ...)],
+        PARTITION partition_name2 VALUES [("k1-lower1-2", "k2-lower1-2", ...), ("k1-upper1-2", MAXVALUE, )],
+        "k3-upper1-2", ...
+    )
+    ```
 
-- The data type of the partitioning column is DATE and you specify the time range of partitioning via START and END and define the time range via EVERY. Example:
+  - Create multiple partitions at a time.
 
-   ```SQL
-  CREATE TABLE site_access (
-      datekey DATE,
-      site_id INT,
-      city_code SMALLINT,
-      user_name VARCHAR(32),
-      pv BIGINT DEFAULT '0'
-  )
-  ENGINE=olap
-  DUPLICATE KEY(datekey, site_id, city_code, user_name)
-  PARTITION BY RANGE (datekey) (
-      START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
-  )
-  DISTRIBUTED BY HASH(site_id) BUCKETS 10
-  PROPERTIES ("replication_num" = "1" 
-  );
-  ```
+    Partition a table by specifying START, END, and EVERY. You can create multiple partitions at a time by using this method. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
-  The PARTITION BY RANGE clause in this example is equal to the following:
+    ```SQL
+    PARTITION BY RANGE (k1, k2, ...) 
+    (
+        START ("value1") END ("value2") EVERY (INTERVAL value3 day)
+    )
+    ```
 
-  ```SQL
-  PARTITION BY RANGE (datekey) (
-  PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02')),
-  PARTITION p20210102 VALUES [('2021-01-02'), ('2021-01-03')),
-  PARTITION p20210103 VALUES [('2021-01-03'), ('2021-01-04'))
-  )
-  ```
+    **Examples**
 
-- The data type of the partitioning column is DATE and you specify different EVERY clauses for different time ranges (which cannot overlap with each other). Example:
+    The following examples demonstrate how to partition a table by specifying START, END, and EVERY.
 
-  ```SQL
-  CREATE TABLE site_access(
-      datekey DATE,
-      site_id INT,
-      city_code SMALLINT,
-      user_name VARCHAR(32),
-      pv BIGINT DEFAULT '0'
-  )
-  ENGINE=olap
-  DUPLICATE KEY(datekey, site_id, city_code, user_name)
-  PARTITION BY RANGE (datekey) 
-  (
-      START ("2019-01-01") END ("2021-01-01") EVERY (INTERVAL 1 YEAR),
-      START ("2021-01-01") END ("2021-05-01") EVERY (INTERVAL 1 MONTH),
-      START ("2021-05-01") END ("2021-05-04") EVERY (INTERVAL 1 DAY)
-  )
-  DISTRIBUTED BY HASH(site_id) BUCKETS 10
-  PROPERTIES(
-      "replication_num" = "1"
-  );
-  ```
+    - The data type of the partitioning column is DATE and you specify the time range of partitioning via START and END and define the time range via EVERY. Example:
 
-  The PARTITION BY RANGE clause in this example is equal to the following:
+      ```SQL
+      CREATE TABLE site_access (
+          datekey DATE,
+          site_id INT,
+          city_code SMALLINT,
+          user_name VARCHAR(32),
+          pv BIGINT DEFAULT '0'
+      )
+      ENGINE=olap
+      DUPLICATE KEY(datekey, site_id, city_code, user_name)
+      PARTITION BY RANGE (datekey) (
+          START ("2021-01-01") END ("2021-01-04") EVERY (INTERVAL 1 DAY)
+      )
+      DISTRIBUTED BY HASH(site_id) BUCKETS 10
+      PROPERTIES ("replication_num" = "1" 
+      );
+      ```
 
-  ```SQL
-  PARTITION BY RANGE (datekey) (
-  PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
-  PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
-  PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
-  PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
-  PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
-  PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
-  PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
-  PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
-  PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
-  )
-  ```
+      The PARTITION BY RANGE clause in this example is equal to the following:
 
-- The data type of the partitioning column is INT and you specify the value range of partitioning by using START and END and define the incremental value via EVERY. Example:
-  > Note: Do not double quote the incremental value defined by EVERY.
+      ```SQL
+      PARTITION BY RANGE (datekey) (
+      PARTITION p20210101 VALUES [('2021-01-01'), ('2021-01-02')),
+      PARTITION p20210102 VALUES [('2021-01-02'), ('2021-01-03')),
+      PARTITION p20210103 VALUES [('2021-01-03'), ('2021-01-04'))
+      )
+      ```
 
-  ```SQL
-  CREATE TABLE site_access (
-      datekey INT,
-      site_id INT,
-      city_code SMALLINT,
-      user_name VARCHAR(32),
-      pv BIGINT DEFAULT '0'
-  )
-  ENGINE=olap
-  DUPLICATE KEY(datekey, site_id, city_code, user_name)
-  PARTITION BY RANGE (datekey) (START ("1") END ("5") EVERY (1)
-  )
-  DISTRIBUTED BY HASH(site_id) BUCKETS 10
-  PROPERTIES ("replication_num" = "1"
-  );
-  ```
+    - The data type of the partitioning column is DATE and you specify different EVERY clauses for different time ranges (which cannot overlap with each other). Example:
 
-  The PARTITION BY RANGE clause in this example is equal to the following:
+      ```SQL
+      CREATE TABLE site_access(
+          datekey DATE,
+          site_id INT,
+          city_code SMALLINT,
+          user_name VARCHAR(32),
+          pv BIGINT DEFAULT '0'
+      )
+      ENGINE=olap
+      DUPLICATE KEY(datekey, site_id, city_code, user_name)
+      PARTITION BY RANGE (datekey) 
+      (
+          START ("2019-01-01") END ("2021-01-01") EVERY (INTERVAL 1 YEAR),
+          START ("2021-01-01") END ("2021-05-01") EVERY (INTERVAL 1 MONTH),
+          START ("2021-05-01") END ("2021-05-04") EVERY (INTERVAL 1 DAY)
+      )
+      DISTRIBUTED BY HASH(site_id) BUCKETS 10
+      PROPERTIES(
+          "replication_num" = "1"
+      );
+      ```
 
-   ```SQL
-  PARTITION BY RANGE (datekey) (
-  PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
-  PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
-  PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
-  PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
-  PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
-  PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
-  PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
-  PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
-  PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
-  )
-  ```
+      The PARTITION BY RANGE clause in this example is equal to the following:
 
-- After a table is created, you can use the [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) statement to add partitions for the table.
+      ```SQL
+      PARTITION BY RANGE (datekey) (
+      PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
+      PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
+      PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
+      PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
+      PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
+      PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
+      PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
+      PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
+      PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
+      )
+      ```
 
-  ```SQL
-  ALTER TABLE site_access 
-  ADD PARTITIONS START ("2021-01-04") END ("2021-01-06") EVERY (INTERVAL 1 DAY);
-  ```
+    - The data type of the partitioning column is INT and you specify the value range of partitioning by using START and END and define the incremental value via EVERY. Example:
+      > **NOTE**
+      >
+      > Do not double quote the incremental value defined by EVERY.
+
+      ```SQL
+      CREATE TABLE site_access (
+          datekey INT,
+          site_id INT,
+          city_code SMALLINT,
+          user_name VARCHAR(32),
+          pv BIGINT DEFAULT '0'
+      )
+      ENGINE=olap
+      DUPLICATE KEY(datekey, site_id, city_code, user_name)
+      PARTITION BY RANGE (datekey) (START ("1") END ("5") EVERY (1)
+      )
+      DISTRIBUTED BY HASH(site_id) BUCKETS 10
+      PROPERTIES ("replication_num" = "1"
+      );
+      ```
+
+      The PARTITION BY RANGE clause in this example is equal to the following:
+
+      ```SQL
+      PARTITION BY RANGE (datekey) (
+      PARTITION p2019 VALUES [('2019-01-01'), ('2020-01-01')),
+      PARTITION p2020 VALUES [('2020-01-01'), ('2021-01-01')),
+      PARTITION p202101 VALUES [('2021-01-01'), ('2021-02-01')),
+      PARTITION p202102 VALUES [('2021-02-01'), ('2021-03-01')),
+      PARTITION p202103 VALUES [('2021-03-01'), ('2021-04-01')),
+      PARTITION p202104 VALUES [('2021-04-01'), ('2021-05-01')),
+      PARTITION p20210501 VALUES [('2021-05-01'), ('2021-05-02')),
+      PARTITION p20210502 VALUES [('2021-05-02'), ('2021-05-03')),
+      PARTITION p20210503 VALUES [('2021-05-03'), ('2021-05-04'))
+      )
+      ```
+
+    - After a table is created, you can use the [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) statement to add partitions for the table.
+
+      ```SQL
+      ALTER TABLE site_access 
+      ADD PARTITIONS START ("2021-01-04") END ("2021-01-06") EVERY (INTERVAL 1 DAY);
+      ```
 
 ### Add a partition
 

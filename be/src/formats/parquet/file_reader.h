@@ -35,8 +35,11 @@ struct HdfsScannerContext;
 
 namespace starrocks::parquet {
 
-constexpr static const uint64_t FOOTER_BUFFER_SIZE = 16 * 1024;
+// contains magic number (4 bytes) and footer length (4 bytes)
+constexpr static const uint32_t PARQUET_FOOTER_SIZE = 8;
+constexpr static const uint64_t DEFAULT_FOOTER_BUFFER_SIZE = 16 * 1024;
 constexpr static const char* PARQUET_MAGIC_NUMBER = "PAR1";
+constexpr static const char* PARQUET_EMAIC_NUMBER = "PARE";
 
 class FileMetaData;
 
@@ -82,9 +85,11 @@ private:
     // get partition column idx in param.partition_columns
     int32_t _get_partition_column_idx(const std::string& col_name) const;
 
-    // check magic number of parquet file
-    // current olny support "PAR1"
-    static Status _check_magic(const uint8_t* file_magic);
+    // Get parquet footer size
+    StatusOr<uint32_t> _get_footer_read_size() const;
+
+    // Validate the magic bytes and get the length of metadata
+    StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
 
     // decode min/max value from row group stats
     static Status _decode_min_max_column(const ParquetField& field, const std::string& timezone,

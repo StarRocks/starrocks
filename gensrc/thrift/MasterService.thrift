@@ -60,6 +60,7 @@ struct TTabletInfo {
     15: optional bool enable_persistent_index
     16: optional Types.TVersion min_readable_version
     17: optional i64 binlog_config_version
+    18: optional bool is_error_state
 }
 
 struct TTabletVersionPair {

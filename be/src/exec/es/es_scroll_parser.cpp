@@ -61,6 +61,15 @@ std::string json_value_to_string(const rapidjson::Value& value) {
     return scratch_buffer.GetString();
 }
 
+#define RETURN_NULL_IF_STR_EMPTY(col, column)                                          \
+    do {                                                                               \
+        const std::string& null_str = json_value_to_string(col);                       \
+        if ((null_str.length() <= 0 || "\"\"" == null_str) && column->is_nullable()) { \
+            _append_null(column);                                                      \
+            return Status::OK();                                                       \
+        }                                                                              \
+    } while (false)
+
 #define RETURN_ERROR_IF_COL_IS_ARRAY(col, type)                               \
     do {                                                                      \
         if (col.IsArray()) {                                                  \
@@ -306,6 +315,9 @@ void ScrollParser::_append_null(Column* column) {
 Status ScrollParser::_append_value_from_json_val(Column* column, const TypeDescriptor& type_desc,
                                                  const rapidjson::Value& col, bool pure_doc_value) {
     LogicalType type = type_desc.type;
+    if (type != TYPE_CHAR && type != TYPE_VARCHAR) {
+        RETURN_NULL_IF_STR_EMPTY(col, column);
+    }
     switch (type) {
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
@@ -369,6 +381,10 @@ Status ScrollParser::_append_value_from_json_val(Column* column, const TypeDescr
     }
     case TYPE_ARRAY: {
         RETURN_IF_ERROR(_append_array_val(col, type_desc, column, pure_doc_value));
+        break;
+    }
+    case TYPE_JSON: {
+        RETURN_IF_ERROR(_append_json_val(col, type_desc, column, pure_doc_value));
         break;
     }
     default: {
@@ -555,6 +571,19 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
 
     size_t new_size = elements->size();
     offsets->append(new_size);
+    return Status::OK();
+}
+
+Status ScrollParser::_append_json_val(const rapidjson::Value& col, const TypeDescriptor& type_desc, Column* column,
+                                      bool pure_doc_value) {
+    std::string s = json_value_to_string(col);
+    Slice slice{s};
+    if (!col.IsObject()) {
+        return Status::InternalError("col: " + slice.to_string() + " is not an object");
+    }
+    ASSIGN_OR_RETURN(JsonValue json, JsonValue::parse_json_or_string(slice));
+    JsonValue* tmp = &json;
+    _append_data<TYPE_JSON>(column, tmp);
     return Status::OK();
 }
 

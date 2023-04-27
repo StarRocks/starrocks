@@ -36,9 +36,11 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -86,18 +88,29 @@ public class IcebergStatisticProvider {
         if (remoteFileDesc == null) {
             icebergFileStats =  new IcebergFileStats(1);
         } else {
+            // ScanTasks are splits of files, we need to avoid repetition.
+            Set<String> files = new HashSet<>();
             for (FileScanTask fileScanTask : remoteFileDesc.getIcebergScanTasks()) {
                 DataFile dataFile = fileScanTask.file();
                 // ignore this data file.
                 if (dataFile.recordCount() == 0) {
                     continue;
                 }
+                if (files.contains(dataFile.path().toString())) {
+                    continue;
+                }
+                files.add(dataFile.path().toString());
                 if (icebergFileStats == null) {
                     icebergFileStats = new IcebergFileStats(dataFile.recordCount());
                 } else {
                     icebergFileStats.incrementRecordCount(dataFile.recordCount());
                 }
             }
+        }
+
+        // all dataFile.recordCount() == 0
+        if (icebergFileStats == null || icebergFileStats.getRecordCount() == 0) {
+            return new IcebergFileStats(1);
         }
 
         return icebergFileStats;

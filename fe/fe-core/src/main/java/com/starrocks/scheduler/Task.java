@@ -56,6 +56,9 @@ public class Task implements Writable {
     @SerializedName("definition")
     private String definition;
 
+    @SerializedName("postRun")
+    private String postRun;
+
     @SerializedName("properties")
     private Map<String, String> properties;
 
@@ -175,6 +178,14 @@ public class Task implements Writable {
         this.createUser = createUser;
     }
 
+    public String getPostRun() {
+        return postRun;
+    }
+
+    public void setPostRun(String postRun) {
+        this.postRun = postRun;
+    }
+
     public static Task read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, Task.class);
@@ -186,4 +197,22 @@ public class Task implements Writable {
         Text.writeString(out, json);
     }
 
+    @Override
+    public String toString() {
+        return "Task{" +
+                "id=" + id +
+                ", name='" + name + '\'' +
+                ", type=" + type +
+                ", state=" + state +
+                ", schedule=" + schedule +
+                ", createTime=" + createTime +
+                ", dbName='" + dbName + '\'' +
+                ", definition='" + definition + '\'' +
+                ", postRun='" + postRun + '\'' +
+                ", properties=" + properties +
+                ", expireTime=" + expireTime +
+                ", source=" + source +
+                ", createUser='" + createUser + '\'' +
+                '}';
+    }
 }

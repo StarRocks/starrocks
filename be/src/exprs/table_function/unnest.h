@@ -29,19 +29,19 @@ namespace starrocks {
  */
 class Unnest final : public TableFunction {
 public:
-    std::pair<Columns, ColumnPtr> process(TableFunctionState* state, bool* eos) const override {
-        *eos = true;
+    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state) const override {
         if (state->get_columns().empty()) {
             return {};
         }
         Column* arg0 = state->get_columns()[0].get();
         auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(arg0));
+        state->set_processed_rows(arg0->size());
         Columns result;
         if (arg0->has_null()) {
             auto* nullable_array_column = down_cast<NullableColumn*>(arg0);
 
             auto offset_column = col_array->offsets_column();
-            ColumnPtr compacted_offset_column = offset_column->clone_empty();
+            auto compacted_offset_column = UInt32Column::create();
             compacted_offset_column->append_datum(Datum(0));
 
             ColumnPtr compacted_array_elements = col_array->elements_column()->clone_empty();

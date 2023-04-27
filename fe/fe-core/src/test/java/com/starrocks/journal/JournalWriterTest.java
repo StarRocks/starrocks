@@ -117,7 +117,7 @@ public class JournalWriterTest {
         JournalTask expectConsumedEntity = new JournalTask(makeBuffer(10), -1);
         journalQueue.add(expectConsumedEntity);
         JournalTask emergency = new JournalTask(makeBuffer(10), -1);
-        emergency.betterCommitBeforeTime = System.currentTimeMillis() - 10;
+        emergency.betterCommitBeforeTimeInNano = System.nanoTime() - 10;
         journalQueue.add(emergency);
         JournalTask expectNotConsumedEntity = new JournalTask(makeBuffer(10), -1);
         journalQueue.add(expectNotConsumedEntity);

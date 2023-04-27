@@ -87,6 +87,8 @@ public:
 
     void publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request);
 
+    void update_max_thread_by_type(int type, int new_val);
+
     ThreadPool* get_thread_pool(int type) const;
 
     DISALLOW_COPY_AND_MOVE(Impl);
@@ -102,6 +104,7 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_clear_transaction;
     std::unique_ptr<ThreadPool> _thread_pool_storage_medium_migrate;
     std::unique_ptr<ThreadPool> _thread_pool_check_consistency;
+    std::unique_ptr<ThreadPool> _thread_pool_compaction;
 
     std::unique_ptr<ThreadPool> _thread_pool_upload;
     std::unique_ptr<ThreadPool> _thread_pool_download;
@@ -151,12 +154,23 @@ void AgentServer::Impl::init_or_die() {
         CHECK(st.ok()) << st;                                                            \
     } while (false)
 
-        // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
-        // But it seems that there's no limit for the number of tablets of a partition.
-        // Since a large queue size brings a little overhead, a big one is chosen here.
-        BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", config::transaction_publish_version_worker_count,
-                                       config::transaction_publish_version_worker_count,
-                                       DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_publish_version);
+// The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
+// But it seems that there's no limit for the number of tablets of a partition.
+// Since a large queue size brings a little overhead, a big one is chosen here.
+#ifdef BE_TEST
+        BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", 1, 1, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                       _thread_pool_publish_version);
+#else
+        int max_publish_version_worker_count = config::transaction_publish_version_worker_count;
+        if (max_publish_version_worker_count <= 0) {
+            max_publish_version_worker_count = CpuInfo::num_cores();
+        }
+        max_publish_version_worker_count =
+                std::max(max_publish_version_worker_count, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
+                                       max_publish_version_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                       _thread_pool_publish_version);
+#endif
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("drop", config::drop_tablet_worker_count, config::drop_tablet_worker_count,
                                        std::numeric_limits<int>::max(), _thread_pool_drop);
@@ -180,6 +194,9 @@ void AgentServer::Impl::init_or_die() {
         BUILD_DYNAMIC_TASK_THREAD_POOL("check_consistency", config::check_consistency_worker_count,
                                        config::check_consistency_worker_count, std::numeric_limits<int>::max(),
                                        _thread_pool_check_consistency);
+
+        BUILD_DYNAMIC_TASK_THREAD_POOL("manual_compaction", 0, 1, std::numeric_limits<int>::max(),
+                                       _thread_pool_compaction);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("upload", config::upload_worker_count, config::upload_worker_count,
                                        std::numeric_limits<int>::max(), _thread_pool_upload);
@@ -253,6 +270,7 @@ void AgentServer::Impl::stop() {
         _thread_pool_clear_transaction->shutdown();
         _thread_pool_storage_medium_migrate->shutdown();
         _thread_pool_check_consistency->shutdown();
+        _thread_pool_compaction->shutdown();
         _thread_pool_upload->shutdown();
         _thread_pool_download->shutdown();
         _thread_pool_make_snapshot->shutdown();
@@ -320,6 +338,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TYPE(TTaskType::CLONE, clone_req);
             HANDLE_TYPE(TTaskType::STORAGE_MEDIUM_MIGRATE, storage_medium_migrate_req);
             HANDLE_TYPE(TTaskType::CHECK_CONSISTENCY, check_consistency_req);
+            HANDLE_TYPE(TTaskType::COMPACTION, compaction_req);
             HANDLE_TYPE(TTaskType::UPLOAD, upload_req);
             HANDLE_TYPE(TTaskType::DOWNLOAD, download_req);
             HANDLE_TYPE(TTaskType::MAKE_SNAPSHOT, snapshot_req);
@@ -420,6 +439,10 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TASK(TTaskType::CHECK_CONSISTENCY, all_tasks, run_check_consistency_task,
                         CheckConsistencyTaskRequest, check_consistency_req, _exec_env);
             break;
+        case TTaskType::COMPACTION:
+            HANDLE_TASK(TTaskType::COMPACTION, all_tasks, run_compaction_task, CompactionTaskRequest, compaction_req,
+                        _exec_env);
+            break;
         case TTaskType::UPLOAD:
             HANDLE_TASK(TTaskType::UPLOAD, all_tasks, run_upload_task, UploadAgentTaskRequest, upload_req, _exec_env);
             break;
@@ -517,6 +540,16 @@ void AgentServer::Impl::publish_cluster_state(TAgentResult& t_agent_result, cons
     status.to_thrift(&t_agent_result.status);
 }
 
+void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
+    switch (type) {
+    case TTaskType::CLONE:
+        _thread_pool_clone->update_max_threads(new_val);
+        break;
+    default:
+        break;
+    }
+}
+
 ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
     // TODO: more thread pools.
     switch (type) {
@@ -536,6 +569,8 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
         return _thread_pool_release_snapshot.get();
     case TTaskType::CHECK_CONSISTENCY:
         return _thread_pool_check_consistency.get();
+    case TTaskType::COMPACTION:
+        return _thread_pool_compaction.get();
     case TTaskType::UPLOAD:
         return _thread_pool_upload.get();
     case TTaskType::DOWNLOAD:
@@ -588,6 +623,10 @@ void AgentServer::release_snapshot(TAgentResult& agent_result, const std::string
 
 void AgentServer::publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request) {
     _impl->publish_cluster_state(agent_result, request);
+}
+
+void AgentServer::update_max_thread_by_type(int type, int new_val) {
+    _impl->update_max_thread_by_type(type, new_val);
 }
 
 ThreadPool* AgentServer::get_thread_pool(int type) const {

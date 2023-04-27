@@ -773,7 +773,7 @@ public class ReportHandler extends Daemon {
                         // so we do not delete it.
                         List<Replica> replicas = tablet.getImmutableReplicas();
                         if (replicas.size() <= 1) {
-                            LOG.error("backend [{}] invalid situation. tablet[{}] has few replica[{}], "
+                            LOG.debug("backend [{}] invalid situation. tablet[{}] has few replica[{}], "
                                             + "replica num setting is [{}]",
                                     backendId, tabletId, replicas.size(), replicationNum);
                             // there is a replica in FE, but not in BE and there is only one replica in this tablet
@@ -896,9 +896,9 @@ public class ReportHandler extends Daemon {
                 // continue to report them to FE forever and add some processing overhead(the tablet report
                 // process is protected with DB S lock).
                 addDropReplicaTask(batchTask, backendId, tabletId,
-                        -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId));
+                        -1 /* Unknown schema hash */, "not found in meta", invertedIndex.tabletForceDelete(tabletId, backendId));
                 if (!FeConstants.runningUnitTest) {
-                    invertedIndex.eraseTabletForceDelete(tabletId);
+                    invertedIndex.eraseTabletForceDelete(tabletId, backendId);
                 }
                 ++deleteFromBackendCounter;
                 --maxTaskSendPerBe;

@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
 
+#include <utility>
+
 #include "exec/pipeline/query_context.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
@@ -124,11 +126,12 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
 HashJoinBuildOperatorFactory::HashJoinBuildOperatorFactory(
         int32_t id, int32_t plan_node_id, HashJoinerFactoryPtr hash_joiner_factory,
         std::unique_ptr<PartialRuntimeFilterMerger>&& partial_rf_merger,
-        const TJoinDistributionMode::type distribution_mode)
+        const TJoinDistributionMode::type distribution_mode, SpillProcessChannelFactoryPtr spill_channel_factory)
         : OperatorFactory(id, "hash_join_build", plan_node_id),
           _hash_joiner_factory(std::move(hash_joiner_factory)),
           _partial_rf_merger(std::move(partial_rf_merger)),
-          _distribution_mode(distribution_mode) {}
+          _distribution_mode(distribution_mode),
+          _spill_channel_factory(std::move(spill_channel_factory)) {}
 
 Status HashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));

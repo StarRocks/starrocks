@@ -34,12 +34,40 @@ public class StructTypePlanTest extends PlanTestBase {
                 "c3 struct<a int, b int, c struct<a int, b int>, d array<int>>) " +
                 "duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
+        starRocksAssert.withTable("create table test1(c0 INT, " +
+                "c1 struct<a int, b array<struct<a int, b int>>>," +
+                "c2 struct<a int, b int>," +
+                "c2_0 struct<a int, b varchar(10)>, " +
+                "c3 struct<a int, b int, c struct<a int, b int>, d array<int>>) " +
+                "duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
         FeConstants.runningUnitTest = false;
     }
 
     @Before
     public void setup() throws Exception {
         connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
+    }
+
+    @Test
+    public void testStruct() throws Exception {
+        String sql = "select * from test1 union all select * from test1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:UNION\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  3:EXCHANGE");
+        sql = "select c2 from test1 union all select c2_0 from test1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:Project\n" +
+                "  |  <slot 6> : CAST(3: c2 AS STRUCT<col0 int(11), col1 varchar(10)>)\n" +
+                "  |  \n" +
+                "  1:OlapScanNode", "0:UNION\n" +
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  3:EXCHANGE");
     }
 
     @Test
@@ -163,7 +191,7 @@ public class StructTypePlanTest extends PlanTestBase {
     @Test
     public void testLambda() throws Exception {
         String sql = "select array_map(x->x, [])";
-        assertVerbosePlanContains(sql, "ARRAY<boolean>[]");
+        assertVerbosePlanContains(sql, "[]");
         sql = "select array_map(x->x+1, c3.d) from test";
         assertVerbosePlanContains(sql, "[STRUCT<d ARRAY<int(11)>>]");
         sql = "select array_sortby(x->x+1, c3.d) from test";
@@ -171,6 +199,6 @@ public class StructTypePlanTest extends PlanTestBase {
         sql = "select array_filter((x,y) -> x<y, c3.d, c3.d) from test";
         assertVerbosePlanContains(sql, "[STRUCT<d ARRAY<int(11)>>]");
         sql = "select map_values(col_map), map_keys(col_map) from (select map_from_arrays([],[]) as col_map)A";
-        assertPlanContains(sql, "ARRAY<boolean>[], ARRAY<boolean>[]");
+        assertPlanContains(sql, "[], []");
     }
 }

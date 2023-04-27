@@ -283,6 +283,8 @@ static Status add_adpative_nullable_column(Column* column, const TypeDescriptor&
         return add_adaptive_nullable_numeric_column<float>(column, type_desc, name, value);
     case TYPE_JSON:
         return add_adpative_nullable_native_json_column(column, type_desc, name, value);
+    case TYPE_VARBINARY:
+        return add_adpative_nullable_native_json_column(column, type_desc, name, value);
     case TYPE_ARRAY: {
         try {
             if (value->type() == simdjson::ondemand::json_type::array) {

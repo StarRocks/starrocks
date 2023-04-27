@@ -63,7 +63,7 @@ public class ConnectScheduler {
     private final AtomicInteger nextConnectionId;
 
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
-    private final Map<String, AtomicInteger> connByUser = Maps.newConcurrentMap();
+    private final Map<String, AtomicInteger> connCountByUser = Maps.newConcurrentMap();
     private final ExecutorService executor = ThreadPoolManager
             .newDaemonCacheThreadPool(Config.max_connection_scheduler_threads_num, "connect-scheduler-pool", true);
 
@@ -130,21 +130,21 @@ public class ConnectScheduler {
             return false;
         }
         // Check user
-        if (connByUser.get(ctx.getQualifiedUser()) == null) {
-            connByUser.put(ctx.getQualifiedUser(), new AtomicInteger(0));
+        if (connCountByUser.get(ctx.getQualifiedUser()) == null) {
+            connCountByUser.put(ctx.getQualifiedUser(), new AtomicInteger(0));
         }
-        int conns = connByUser.get(ctx.getQualifiedUser()).get();
-        long currentConns;
+        int currentConns = connCountByUser.get(ctx.getQualifiedUser()).get();
+        long currentMaxConns;
         if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
-            currentConns = ctx.getGlobalStateMgr().getAuthenticationManager().getMaxConn(ctx.getQualifiedUser());
+            currentMaxConns = ctx.getGlobalStateMgr().getAuthenticationManager().getMaxConn(ctx.getQualifiedUser());
         } else {
-            currentConns = ctx.getGlobalStateMgr().getAuth().getMaxConn(ctx.getQualifiedUser());
+            currentMaxConns = ctx.getGlobalStateMgr().getAuth().getMaxConn(ctx.getQualifiedUser());
         }
-        if (conns >= currentConns) {
+        if (currentConns >= currentMaxConns) {
             return false;
         }
         numberConnection.incrementAndGet();
-        connByUser.get(ctx.getQualifiedUser()).incrementAndGet();
+        connCountByUser.get(ctx.getQualifiedUser()).incrementAndGet();
         connectionMap.put((long) ctx.getConnectionId(), ctx);
         return true;
     }
@@ -152,7 +152,7 @@ public class ConnectScheduler {
     public void unregisterConnection(ConnectContext ctx) {
         if (connectionMap.remove((long) ctx.getConnectionId()) != null) {
             numberConnection.decrementAndGet();
-            AtomicInteger conns = connByUser.get(ctx.getQualifiedUser());
+            AtomicInteger conns = connCountByUser.get(ctx.getQualifiedUser());
             if (conns != null) {
                 conns.decrementAndGet();
             }

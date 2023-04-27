@@ -30,11 +30,13 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_window.cpp
   anyval_util.cpp
   base64.cpp
+  binary_functions.cpp
   expr_context.cpp
   expr.cpp
   function_context.cpp
   table_function/table_function_factory.cpp
   table_function/json_each.cpp
+  table_function/list_rowsets.cpp
   arithmetic_expr.cpp
   array_element_expr.cpp
   array_expr.cpp

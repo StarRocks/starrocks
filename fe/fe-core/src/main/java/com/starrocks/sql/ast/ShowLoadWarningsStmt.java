@@ -61,7 +61,6 @@ public class ShowLoadWarningsStmt extends ShowStmt {
     }
 
 
-
     public String getDbName() {
         return dbName;
     }

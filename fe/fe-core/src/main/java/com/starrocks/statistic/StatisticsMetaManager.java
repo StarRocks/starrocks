@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.statistic;
 
 import com.google.common.base.Preconditions;
@@ -29,7 +28,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -49,7 +48,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
-public class StatisticsMetaManager extends LeaderDaemon {
+public class StatisticsMetaManager extends FrontendDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticsMetaManager.class);
 
     // If all replicas are lost more than 3 times in a row, rebuild the statistics table
@@ -95,7 +94,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
         Preconditions.checkState(db != null);
         OlapTable table = (OlapTable) db.getTable(tableName);
         Preconditions.checkState(table != null);
-        if (table.isCloudNativeTable()) {
+        if (table.isCloudNativeTableOrMaterializedView()) {
             return true;
         }
 
@@ -131,7 +130,7 @@ public class StatisticsMetaManager extends LeaderDaemon {
     );
 
     private boolean createSampleStatisticsTable(ConnectContext context) {
-        LOG.info("create statistics table start");
+        LOG.info("create sample statistics table start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
         Map<String, String> properties = Maps.newHashMap();
@@ -153,16 +152,16 @@ public class StatisticsMetaManager extends LeaderDaemon {
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
         } catch (DdlException e) {
-            LOG.warn("Failed to create table" + e.getMessage());
+            LOG.warn("Failed to create sample statistics" + e.getMessage());
             return false;
         }
-        LOG.info("create statistics table done");
+        LOG.info("create sample statistics table done");
         refreshAnalyzeJob();
         return checkTableExist(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
     }
 
     private boolean createFullStatisticsTable(ConnectContext context) {
-        LOG.info("create statistics table v2 start");
+        LOG.info("create full statistics table start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.FULL_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.allowCreateLakeTable() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
@@ -179,21 +178,21 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 properties,
                 null,
                 "");
-   
+
         Analyzer.analyze(stmt, context);
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
         } catch (DdlException e) {
-            LOG.warn("Failed to create table" + e.getMessage());
+            LOG.warn("Failed to create full statistics table" + e.getMessage());
             return false;
         }
-        LOG.info("create statistics table done");
+        LOG.info("create full statistics table done");
         refreshAnalyzeJob();
         return checkTableExist(StatsConstants.FULL_STATISTICS_TABLE_NAME);
     }
 
     private boolean createHistogramStatisticsTable(ConnectContext context) {
-        LOG.info("create statistics table v2 start");
+        LOG.info("create histogram statistics table start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
         KeysType keysType = RunMode.allowCreateLakeTable() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
@@ -210,15 +209,15 @@ public class StatisticsMetaManager extends LeaderDaemon {
                 properties,
                 null,
                 "");
-        
+
         Analyzer.analyze(stmt, context);
         try {
             GlobalStateMgr.getCurrentState().createTable(stmt);
         } catch (DdlException e) {
-            LOG.warn("Failed to create table" + e.getMessage());
+            LOG.warn("Failed to create histogram statistics table" + e.getMessage());
             return false;
         }
-        LOG.info("create statistics table done");
+        LOG.info("create histogram statistics table done");
         for (Map.Entry<Pair<Long, String>, HistogramStatsMeta> entry :
                 GlobalStateMgr.getCurrentAnalyzeMgr().getHistogramStatsMetaMap().entrySet()) {
             HistogramStatsMeta histogramStatsMeta = entry.getValue();
@@ -301,7 +300,6 @@ public class StatisticsMetaManager extends LeaderDaemon {
         }
     }
 
-
     @Override
     protected void runAfterCatalogReady() {
         // To make UT pass, some UT will create database and table
@@ -317,7 +315,31 @@ public class StatisticsMetaManager extends LeaderDaemon {
         refreshStatisticsTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME);
 
+        GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentAnalyzeMgr().clearStatisticFromDroppedTable();
         GlobalStateMgr.getCurrentAnalyzeMgr().clearExpiredAnalyzeStatus();
+    }
+
+    public void createStatisticsTablesForTest() {
+        while (!checkDatabaseExist()) {
+            if (createDatabase()) {
+                break;
+            }
+            trySleep(1);
+        }
+
+        boolean existsSample = false;
+        boolean existsFull = false;
+        while (!existsSample || !existsFull) {
+            existsSample = checkTableExist(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
+            existsFull = checkTableExist(StatsConstants.FULL_STATISTICS_TABLE_NAME);
+            if (!existsSample) {
+                createTable(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME);
+            }
+            if (!existsFull) {
+                createTable(StatsConstants.FULL_STATISTICS_TABLE_NAME);
+            }
+            trySleep(1);
+        }
     }
 }

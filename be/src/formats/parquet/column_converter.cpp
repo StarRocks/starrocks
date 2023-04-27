@@ -427,7 +427,8 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         break;
     }
     case tparquet::Type::type::BYTE_ARRAY: {
-        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR) {
+        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR &&
+            col_type != LogicalType::TYPE_VARBINARY) {
             need_convert = true;
         }
         break;

@@ -16,11 +16,13 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateFunction;
@@ -232,6 +234,11 @@ public class FunctionAnalyzer {
             } else {
                 throw new SemanticException("window argument must be numerical type", windowArg.getPos());
             }
+
+            Expr timeExpr = functionCallExpr.getChild(1);
+            if (timeExpr.isConstant()) {
+                throw new SemanticException("time arg must be column", timeExpr.getPos());
+            }
         }
 
         if (fnName.getFunction().equals(FunctionSet.MAX_BY) || fnName.getFunction().equals(FunctionSet.MIN_BY)) {
@@ -345,14 +352,26 @@ public class FunctionAnalyzer {
                 throw new SemanticException("percentile_approx(expr, DOUBLE [, B]) requires two or three parameters",
                         functionCallExpr.getPos());
             }
-            if (!functionCallExpr.getChild(1).isConstant()) {
-                throw new SemanticException("percentile_approx requires second parameter must be a constant : "
-                        + functionCallExpr.toSql(), functionCallExpr.getChild(1).getPos());
+            if (!functionCallExpr.getChild(0).getType().isNumericType()) {
+                throw new SemanticException(
+                        "percentile_approx requires the first parameter's type is numeric type");
             }
+            if (!functionCallExpr.getChild(1).getType().isNumericType() || !functionCallExpr.getChild(1).isConstant()) {
+                throw new SemanticException(
+                        "percentile_approx requires the second parameter's type is numeric constant type");
+            }
+
+            double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
+            if (rate < 0 || rate > 1) {
+                throw new SemanticException(
+                        fnName + " second parameter'value must be between 0 and 1");
+            }
+
             if (functionCallExpr.getChildren().size() == 3) {
-                if (!functionCallExpr.getChild(2).isConstant()) {
-                    throw new SemanticException("percentile_approx requires the third parameter must be a constant : "
-                            + functionCallExpr.toSql(), functionCallExpr.getChild(2).getPos());
+                if (!functionCallExpr.getChild(2).getType().isNumericType() ||
+                        !functionCallExpr.getChild(2).isConstant()) {
+                    throw new SemanticException(
+                            "percentile_approx requires the third parameter's type is numeric constant type");
                 }
             }
         }
@@ -362,6 +381,22 @@ public class FunctionAnalyzer {
             if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() != 1) {
                 throw new SemanticException(fnName.getFunction() + " should run in new_planner_agg_stage = 1",
                         functionCallExpr.getPos());
+            }
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.PERCENTILE_DISC) ||
+                fnName.getFunction().equals(FunctionSet.PERCENTILE_CONT)) {
+            if (functionCallExpr.getChildren().size() != 2) {
+                throw new SemanticException(fnName + " requires two parameters");
+            }
+            if (!(functionCallExpr.getChild(1) instanceof DecimalLiteral) &&
+                    !(functionCallExpr.getChild(1) instanceof IntLiteral)) {
+                throw new SemanticException(fnName + " 's second parameter's data type is wrong ");
+            }
+            double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
+            if (rate < 0 || rate > 1) {
+                throw new SemanticException(
+                        fnName + " second parameter'value should be between 0 and 1");
             }
         }
     }

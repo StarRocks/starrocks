@@ -81,6 +81,7 @@ import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAuthorStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
@@ -407,6 +408,7 @@ public class ShowExecutorTest {
         ShowDbStmt stmt = new ShowDbStmt(null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchBlockCatalog());
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ShowResultSet resultSet = executor.execute();
     }
 
@@ -891,6 +893,18 @@ public class ShowExecutorTest {
     }
 
     @Test
+    public void testShowCharset() throws DdlException, AnalysisException {
+        // Dbeaver 23 Use
+        ShowCharsetStmt stmt = new ShowCharsetStmt();
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertTrue(resultSet.next());
+        List<List<String>> resultRows = resultSet.getResultRows();
+        Assert.assertTrue(resultRows.size() >= 1);
+        Assert.assertEquals(resultRows.get(0).get(0), "utf8");
+    }
+
+    @Test
     public void testShowEmpty() throws AnalysisException, DdlException {
         ShowProcedureStmt stmt = new ShowProcedureStmt();
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -1138,8 +1152,9 @@ public class ShowExecutorTest {
         Assert.assertEquals("test_hive", resultSet.getResultRows().get(0).get(0));
         Assert.assertEquals("CREATE EXTERNAL CATALOG `test_hive`\n" +
                 "comment \"hive_test\"\n" +
-                "PROPERTIES (\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
-                "\"type\"  =  \"hive\"\n)", resultSet.getResultRows().get(0).get(1));
+                "PROPERTIES (\"type\"  =  \"hive\",\n" +
+                "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\"\n" +
+                ")", resultSet.getResultRows().get(0).get(1));
     }
 
     @Test

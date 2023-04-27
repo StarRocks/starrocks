@@ -130,7 +130,7 @@ public class InformationSchemaDataSource {
                         tableConfigInfo.setTable_schema(dbName);
                         tableConfigInfo.setTable_name(table.getName());
 
-                        if (table.isNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
+                        if (table.isNativeTableOrMaterializedView() || table.getType() == TableType.OLAP_EXTERNAL) {
                             // OLAP (done)
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)
@@ -184,7 +184,7 @@ public class InformationSchemaDataSource {
         propsMap.put(PropertyAnalyzer.PROPERTIES_INMEMORY, String.valueOf(olapTable.isInMemory()));
 
         // enable storage cache && cache ttl
-        if (table.isLakeTable()) {
+        if (table.isCloudNativeTable()) {
             Map<String, String> storageProperties = olapTable.getProperties();
             propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
                     storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE));
@@ -193,9 +193,6 @@ public class InformationSchemaDataSource {
             propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK,
                     storageProperties.get(PropertyAnalyzer.PROPERTIES_ENABLE_ASYNC_WRITE_BACK));
         }
-
-        // storage type
-        propsMap.put(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT, olapTable.getStorageFormat().name());
 
         // enable_persistent_index
         propsMap.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
@@ -263,7 +260,9 @@ public class InformationSchemaDataSource {
 
         // SORT KEYS
         MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
-        if (index.getSortKeyIdxes() != null) {
+        if (index.getSortKeyIdxes() == null) {
+            tableConfigInfo.setSort_key(pkSb);
+        } else {
             List<String> sortKeysColumnNames = Lists.newArrayList();
             for (Integer i : index.getSortKeyIdxes()) {
                 sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
@@ -309,7 +308,7 @@ public class InformationSchemaDataSource {
                         info.setChecksum(DEFAULT_EMPTY_NUM);
                         info.setTable_comment(table.getComment());
 
-                        if (table.isNativeTable() || table.getType() == TableType.OLAP_EXTERNAL) {
+                        if (table.isNativeTableOrMaterializedView() || table.getType() == TableType.OLAP_EXTERNAL) {
                             // OLAP (done)
                             // OLAP_EXTERNAL (done)
                             // MATERIALIZED_VIEW (done)

@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -36,6 +35,7 @@ public class PartitionDesc implements ParseNode {
     protected PartitionType type;
 
     protected final NodePosition pos;
+    protected boolean isSystem = false;
 
     public PartitionDesc() {
         this(NodePosition.ZERO);
@@ -104,5 +104,13 @@ public class PartitionDesc implements ParseNode {
 
     public StorageCacheInfo getStorageCacheInfo() throws NotImplementedException {
         throw new NotImplementedException();
+    }
+
+    public boolean isSystem() {
+        return isSystem;
+    }
+
+    public void setSystem(boolean system) {
+        isSystem = system;
     }
 }

@@ -29,8 +29,8 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.external.elasticsearch.EsShardPartitions;
-import com.starrocks.external.elasticsearch.EsTablePartitions;
+import com.starrocks.connector.elasticsearch.EsShardPartitions;
+import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
@@ -241,7 +241,6 @@ public class OptExternalPartitionPruner {
             }
         }
     }
-
 
     private static void computeMinMaxConjuncts(LogicalScanOperator operator, OptimizerContext context)
             throws AnalysisException {

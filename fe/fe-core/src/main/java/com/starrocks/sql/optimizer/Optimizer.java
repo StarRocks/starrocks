@@ -48,7 +48,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
-import com.starrocks.sql.optimizer.rule.transformation.RewriteMinMaxAggToMetaScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
@@ -67,6 +67,7 @@ import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
+import com.starrocks.sql.optimizer.validate.PlanValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -184,11 +185,15 @@ public class Optimizer {
         final CostEstimate costs = Explain.buildCost(result);
         connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost())
                 .setPlanMemCosts(costs.getMemoryCost());
+        OptExpression finalPlan;
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.PhysicalRewrite")) {
-            OptExpression finalPlan = physicalRuleRewrite(rootTaskContext, result);
+            finalPlan = physicalRuleRewrite(rootTaskContext, result);
             OptimizerTraceUtil.logOptExpression(connectContext, "final plan after physical rewrite:\n%s", finalPlan);
             OptimizerTraceUtil.log(connectContext, context.getTraceInfo());
+        }
 
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.PlanValidate")) {
+            PlanValidator.getInstance().validatePlan(finalPlan, rootTaskContext);
             return finalPlan;
         }
     }
@@ -317,19 +322,24 @@ public class Optimizer {
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+        ruleRewriteIterative(tree, rootTaskContext, new RewriteSimpleAggToMetaScanRule());
 
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
 
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
-        ruleRewriteIterative(tree, rootTaskContext, new RewriteMinMaxAggToMetaScanRule());
 
         if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
         }
+
+        // NOTE: This rule should be after MV Rewrite because MV Rewrite cannot handle
+        // select count(distinct c) from t group by a, b
+        // if this rule has applied before MV.
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
+
         return tree.getInputs().get(0);
     }
 

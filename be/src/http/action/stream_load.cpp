@@ -520,6 +520,15 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
     if (!http_req->header(HTTP_MERGE_CONDITION).empty()) {
         request.__set_merge_condition(http_req->header(HTTP_MERGE_CONDITION));
     }
+    if (!http_req->header(HTTP_PARTIAL_UPDATE_MODE).empty()) {
+        if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "row") {
+            request.__set_partial_update_mode(TPartialUpdateMode::type::ROW_MODE);
+        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "auto") {
+            request.__set_partial_update_mode(TPartialUpdateMode::type::AUTO_MODE);
+        } else if (http_req->header(HTTP_PARTIAL_UPDATE_MODE) == "column") {
+            request.__set_partial_update_mode(TPartialUpdateMode::type::COLUMN_MODE);
+        }
+    }
     if (!http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE).empty()) {
         request.__set_transmission_compression_type(http_req->header(HTTP_TRANSMISSION_COMPRESSION_TYPE));
     }
@@ -529,6 +538,17 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             request.__set_load_dop(parallel_request_num);
         } catch (const std::invalid_argument& e) {
             return Status::InvalidArgument("Invalid load_dop format");
+        }
+    }
+    if (!http_req->header(HTTP_LOG_REJECTED_RECORD_NUM).empty()) {
+        try {
+            auto log_rejected_record_num = std::stoll(http_req->header(HTTP_LOG_REJECTED_RECORD_NUM));
+            if (log_rejected_record_num < -1) {
+                return Status::InvalidArgument("log_rejected_record_num must be equal or greater than -1");
+            }
+            request.__set_log_rejected_record_num(log_rejected_record_num);
+        } catch (const std::invalid_argument& e) {
+            return Status::InvalidArgument("Invalid log_rejected_record_num format");
         }
     }
     int32_t rpc_timeout_ms = config::txn_commit_rpc_timeout_ms;

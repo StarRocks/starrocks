@@ -49,16 +49,19 @@ import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
@@ -309,10 +312,10 @@ public class ConnectContext {
     public void setCurrentRoleIds(UserIdentity user) {
         try {
             Set<Long> defaultRoleIds;
-            if (this.getSessionVariable().isActivateAllRolesOnLogin()) {
-                defaultRoleIds = this.getGlobalStateMgr().getAuthorizationManager().getRoleIdsByUser(user);
+            if (GlobalVariable.isActivateAllRolesOnLogin()) {
+                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationManager().getRoleIdsByUser(user);
             } else {
-                defaultRoleIds = this.getGlobalStateMgr().getAuthorizationManager().getDefaultRoleIdsByUser(user);
+                defaultRoleIds = GlobalStateMgr.getCurrentState().getAuthorizationManager().getDefaultRoleIdsByUser(user);
             }
             this.currentRoleIds = defaultRoleIds;
         } catch (PrivilegeException e) {
@@ -582,7 +585,10 @@ public class ConnectContext {
     }
 
     public String getCurrentWarehouse() {
-        return currentWarehouse;
+        if (currentWarehouse != null) {
+            return currentWarehouse;
+        }
+        return WarehouseManager.DEFAULT_WAREHOUSE_NAME;
     }
 
     public void setCurrentWarehouse(String currentWarehouse) {
@@ -710,6 +716,16 @@ public class ConnectContext {
             LOG.warn("construct SSLChannelImp class failed");
             throw new IOException("construct SSLChannelImp class failed");
         }
+    }
+
+    public StmtExecutor executeSql(String sql) throws Exception {
+        StatementBase sqlStmt = SqlParser.parse(sql, getSessionVariable()).get(0);
+        sqlStmt.setOrigStmt(new OriginStatement(sql, 0));
+        StmtExecutor executor = new StmtExecutor(this, sqlStmt);
+        setExecutor(executor);
+        setThreadLocalInfo();
+        executor.execute();
+        return executor;
     }
 
     public class ThreadInfo {

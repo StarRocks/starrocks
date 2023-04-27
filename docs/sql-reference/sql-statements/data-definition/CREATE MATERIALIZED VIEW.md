@@ -20,13 +20,26 @@ In StarRocks v2.5, asynchronous async refresh materialized views support query r
 ## Syntax
 
 ```SQL
-CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
-[distribution_desc]
-[REFRESH refresh_scheme_desc]
-[partition_expression]
+CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]<mv_name>
+-- distribution_desc
+[DISTRIBUTED BY HASH(<bucket_key>) [BUCKETS <bucket_number>]]
+-- refresh_desc
+[REFRESH 
+-- refresh_moment
+    [IMMEDIATE | DEFERRED]
+-- refresh_scheme
+    [ASYNC | ASYNC (START <start_time>) EVERY INTERVAL <refresh_interval> | MANUAL]
+]
+-- partition_expression
+[PARTITION BY 
+    {<date_column> | date_trunc(fmt, <date_column>)}
+]
+-- order_by_expression
+[ORDER BY (<sort_key>)]
 [COMMENT ""]
 [PROPERTIES ("key"="value", ...)]
-AS (query)
+AS 
+<query_statement>
 ```
 
 Parameters in brackets [] is optional.
@@ -35,8 +48,8 @@ Parameters in brackets [] is optional.
 
 **mv_name** (required)
 
-- The name of the materialized view.
-- The naming requirements are as follows:
+The name of the materialized view. The naming requirements are as follows:
+
 - The name must consist of letters (a-z or A-Z), numbers (0-9) or underscores (_), and it can only start with a letter.
 - The length of the name cannot exceed 64 characters.
 
@@ -44,43 +57,16 @@ Parameters in brackets [] is optional.
 >
 > Multiple materialized views can be created on the same base table, but the names of the materialized views in the same database cannot be duplicated.
 
-**query** (required)
+**distribution_desc** (**Required** when creating asynchronous materialized view)
 
-The query statement to create the materialized view. Its result is the data in the materialized view. The syntax is as follows:
+The bucketing strategy of the materialized view, in the form of `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS <bucket_number>]`.
 
-```SQL
-SELECT select_expr[, select_expr ...]
-[GROUP BY column_name[, column_name ...]]
-[ORDER BY column_name[, column_name ...]]
-```
+**refresh_moment** (optional)
 
-- select_expr (required)
+The refresh moment of the materialized view. Default value: `IMMEDIATE`. Valid values:
 
-  All columns in the query statement, that is, all columns in the materialized view schema. This parameter supports the following values:
-
-  - Single column or aggregated column: a statement in the form of `SELECT a, b, c FROM table_a` (applicable to creating a single table materialized view) or `SELECT table_a.a, table_a.b, table_b.d,` (applicable to creating an asynchronous materialized view in StarRocks 2.4 or above only), where `a`, `b`, `c`, and `d` are the column names of the base tables. If you do not specify column names for the materialized view in the statement, the column names in the materialized view are also `a`, `b`, `c`, and `d`.
-  - Expression: an expression in the form of `SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a`, where `a+1`, `b+2` and `c*c` are expressions that contain the column names of the base tables, and `x`, `y` and `z` are the new column names of the materialized view.
-
-  > **CAUTION**
-  >
-  > - If the columns in the query statement are not simple columns, new column names must be specified for the materialized view.
-  > - This parameter must contain at least one single column, and all specified columns can only be specified once.
-
-- GROUP BY (optional)
-
-  The GROUP BY column of the materialized view. If this parameter is not specified, the data will not be grouped by default.
-
-- ORDER BY (optional)
-
-  The ORDER BY column of the materialized view.
-
-  - Columns in the ORDER BY clause must be declared in the same order as the columns in `select_expr`.
-  - If this parameter is not specified, the system will automatically supplement the ORDER BY column according to relevant rules. If the materialized view is created with the AGGREGATE KEY model, all GROUP BY columns are automatically used as sort columns. If the materialized view is not created with the AGGREGATE KEY model, the first 36 bytes are automatically used as the ORDER BY columns. If the number of auto-assigned ORDER BY columns is less than 3, the first three columns are used as ORDER BY columns.
-  - If the query statement contains a GROUP BY clause, the ORDER BY columns must be identical to the GROUP BY columns.
-
-**distribution_desc** (**required** when creating async refresh materialized view)
-
-The bucketing strategy of the materialized view, in the form of `DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]`.
+- `IMMEDIATE`: Refresh the materialized view immediately after it is created.
+- `DEFERRED`: The materialized view is not refreshed after it is created. You can manually refresh the materialized view or schedule regular refresh tasks.
 
 **refresh_scheme_desc** (optional)
 
@@ -100,6 +86,10 @@ The partitioning strategy of the materialized view. As for the current version o
 
 If this parameter is not specified, the materialized view adopts no partitioning strategy by default.
 
+**order_by** (optional)
+
+Specifies the sort key of materialized view. If you do not specify the sort key, StarRocks chooses some of the prefix columns from SELECT columns as the sort keys, for example, in `select a, b, c, d`, sort keys can be `a` and `b`. This parameter has been supported since StarRocks v3.0.
+
 **COMMENT** (optional)
 
 Comment on the materialized view.
@@ -115,6 +105,112 @@ Properties of the materialized view.
 - `excluded_trigger_tables`: If a base table of the materialized view is listed here, automatic refresh task will not be triggered when the data in the base table is changed. This parameter only applies to load-triggered refresh strategy, and is usually used together with the property `auto_refresh_partitions_limit`. Format: `[db_name.]table_name`. When the value is an empty string, any data change in all base tables triggers the refresh of the corresponding materialized view. Default is an empty string.
 - `auto_refresh_partitions_limit`: The number of most recent materialized view partitions that need to be refreshed when a materialized view refresh is triggered. You can use this property to limit the refresh range and reduce the refresh cost. However, because not all the partitions are refreshed, the data in the materialized view may not be consistent with the base table. Default: `-1`. When the value is `-1`, all partitions will be refreshed. When the value is a positive integer N, StarRocks sorts the existing partitions in chronological order, and refreshes N partitions from the most recent partition. If the number of partitions is less than N, StarRocks refreshes all existing partitions. If there are dynamic partitions created in advance in your materialized view, StarRocks refreshes the pre-created partitions first, and then the existing partitions. Therefore, when setting this parameter, make sure that you have reserved margins for pre-created dynamic partitions.
 
+**query_statement** (required)
+
+The query statement to create the materialized view. Its result is the data in the materialized view. The syntax is as follows:
+
+```SQL
+SELECT select_expr[, select_expr ...]
+[GROUP BY column_name[, column_name ...]]
+[ORDER BY column_name[, column_name ...]]
+```
+
+- select_expr (required)
+
+  All columns in the query statement, that is, all columns in the materialized view schema. This parameter supports the following values:
+
+  - Single column or aggregated column: a statement in the form of `SELECT a, b, c FROM table_a` (applicable to creating a single table materialized view) or `SELECT table_a.a, table_a.b, table_b.d,` (applicable to creating an asynchronous materialized view in StarRocks 2.4 or above only), where `a`, `b`, `c`, and `d` are the column names of the base tables. If you do not specify column names for the materialized view in the statement, the column names in the materialized view are also `a`, `b`, `c`, and `d`.
+  - Expression: an expression in the form of `SELECT a+1 AS x, b+2 AS y, c*c AS z FROM table_a`, where `a+1`, `b+2` and `c*c` are expressions that contain the column names of the base tables, and `x`, `y` and `z` are the new column names of the materialized view.
+
+  > **CAUTION**
+  >
+  > This parameter must contain at least one single column, and all specified columns can only be specified once.
+
+- GROUP BY (optional)
+
+  The GROUP BY column of the query. If this parameter is not specified, the data will not be grouped by default.
+
+- ORDER BY (optional)
+
+  The ORDER BY column of the query.
+
+  - Columns in the ORDER BY clause must be declared in the same order as the columns in `select_expr`.
+  - If this parameter is not specified, the system will automatically supplement the ORDER BY column according to relevant rules. If the materialized view is the AGGREGATE type, all GROUP BY columns are automatically used as sort keys. If the materialized view is not the AGGREGATE type, the system automatically chooses sort keys based on the prefix columns.
+  - If the query statement contains a GROUP BY clause, the ORDER BY columns must be identical to the GROUP BY columns.
+
+### Supported data types
+
+- Asynchronous materialized views created based on the StarRocks default catalog support the following data types:
+
+  - DATE
+  - DATETIME
+  - CHAR
+  - VARCHAR
+  - BOOLEAN
+  - TINYINT
+  - SMALLINT
+  - INT
+  - BIGINT
+  - LARGEINT
+  - FLOAT
+  - DOUBLE
+  - DECIMAL
+  - ARRAY
+  - JSON
+  - BITMAP
+  - HLL
+  - PERCENTILE
+
+> **NOTE**
+>
+> BITMAP, HLL, and PERCENTILE have been supported since v2.4.5.
+
+- Asynchronous materialized views created based on the StarRocks external catalogs support the following data types:
+
+  - Hive Catalog
+
+    - INT/INTEGER
+    - BIGINT
+    - TIMESTAMP
+    - STRING
+    - VARCHAR
+    - CHAR
+    - DOUBLE
+    - FLOAT
+    - DECIMAL
+    - ARRAY
+
+  - Hudi Catalog
+
+    - BOOLEAN
+    - INT
+    - DATE
+    - TimeMillis/TimeMicros
+    - TimestampMillis/TimestampMicros
+    - LONG
+    - FLOAT
+    - DOUBLE
+    - STRING
+    - ARRAY
+    - DECIMAL
+
+  - Iceberg Catalog
+
+    - BOOLEAN
+    - INT
+    - LONG
+    - FLOAT
+    - DOUBLE
+    - DECIMAL(P, S)
+    - DATE
+    - TIME
+    - TIMESTAMP
+    - STRING
+    - UUID
+    - FIXED(L)
+    - BINARY
+    - LIST
+
 ### Correspondence of aggregate functions
 
 When a query is executed with a materialized view, the original query statement will be automatically rewritten and used to query the intermediate results stored in the materialized view. The following table shows the correspondence between the aggregate function in the original query and the aggregate function used to construct the materialized view. You can select the corresponding aggregate function to build a materialized view according to your business scenario.
@@ -127,6 +223,14 @@ When a query is executed with a materialized view, the original query statement 
 | count                                                  | count                                           |
 | bitmap_union, bitmap_union_count, count(distinct)      | bitmap_union                                    |
 | hll_raw_agg, hll_union_agg, ndv, approx_count_distinct | hll_union                                       |
+
+
+## Relavant session variables
+
+The following variables control the behaviour of materialized view:
+
+- `analyze_mv`: Whether and how to analyze the materialized view after refresh. Valid values are an empty string (Do not analyze), `sample` (Sampled statistics collection), and `full` (Full statistics collection). Default is `sample`.
+- `enable_materialized_view_rewrite`: Whether to enable the automatic rewrite for materialized view. Valid values are `true` (Default since v2.5) and `false`.
 
 ## Usage notes
 

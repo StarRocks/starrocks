@@ -57,6 +57,7 @@ public class ScalarOperatorFunctionsTest {
     private static ConstantOperator O_DOUBLE_100;
     private static ConstantOperator O_BI_100;
     private static ConstantOperator O_BI_3;
+    private static ConstantOperator O_BI_10;
     private static ConstantOperator O_BI_131;
     private static ConstantOperator O_BI_NEG_3;
     private static ConstantOperator O_LI_100;
@@ -81,6 +82,7 @@ public class ScalarOperatorFunctionsTest {
         O_DOUBLE_100 = ConstantOperator.createFloat(100);
         O_BI_100 = ConstantOperator.createBigint(100);
         O_BI_3 = ConstantOperator.createBigint(3);
+        O_BI_10 = ConstantOperator.createBigint(10);
         O_BI_131 = ConstantOperator.createBigint(131);
         O_BI_NEG_3 = ConstantOperator.createBigint(-3);
         O_LI_100 = ConstantOperator.createLargeInt(new BigInteger("100"));
@@ -294,7 +296,7 @@ public class ScalarOperatorFunctionsTest {
                                 ConstantOperator.createVarchar("%Y-%m-%d"))
                         .getVarchar());
         assertEquals("000123", ScalarOperatorFunctions
-                .dateFormat(ConstantOperator.createDate(LocalDateTime.of(2022, 3, 13, 0, 0, 0, 123000)),
+                .dateFormat(ConstantOperator.createDate(LocalDateTime.of(2022, 3, 13, 0, 0, 0, 123000000)),
                         ConstantOperator.createVarchar("%f")).getVarchar());
 
         assertEquals("asdfafdfsçv",
@@ -353,11 +355,11 @@ public class ScalarOperatorFunctionsTest {
                         ConstantOperator.createVarchar("%Y%m%d")).getDatetime().toString());
 
         assertEquals("2013-05-17T12:35:10.000123", ScalarOperatorFunctions
-                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.123"),
+                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.000123"),
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s.%f")).getDatetime().toString());
 
         assertEquals("2013-05-17T12:35:10.000001", ScalarOperatorFunctions
-                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.00001"),
+                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.000001"),
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s.%f")).getDatetime().toString());
 
         assertEquals("2013-05-17T12:35:10", ScalarOperatorFunctions
@@ -528,16 +530,16 @@ public class ScalarOperatorFunctionsTest {
     public void unixTimestamp() {
         ConstantOperator codt = ConstantOperator.createDatetime(LocalDateTime.of(2050, 3, 23, 9, 23, 55));
 
-        assertEquals(0,
-                ScalarOperatorFunctions.unixTimestamp(codt).getInt());
-        assertEquals(1427073835,
-                ScalarOperatorFunctions.unixTimestamp(O_DT_20150323_092355).getInt());
+        assertEquals(2531611435L,
+                ScalarOperatorFunctions.unixTimestamp(codt).getBigint());
+        assertEquals(1427073835L,
+                ScalarOperatorFunctions.unixTimestamp(O_DT_20150323_092355).getBigint());
     }
 
     @Test
     public void fromUnixTime() throws AnalysisException {
         assertEquals("1970-01-01 08:00:10",
-                ScalarOperatorFunctions.fromUnixTime(O_INT_10).getVarchar());
+                ScalarOperatorFunctions.fromUnixTime(O_BI_10).getVarchar());
     }
 
     @Test
@@ -547,6 +549,24 @@ public class ScalarOperatorFunctionsTest {
         ctx.setStartTime();
         LocalDateTime now = LocalDateTime.of(LocalDate.now(), LocalTime.of(0, 0, 0));
         assertEquals(now, ScalarOperatorFunctions.curDate().getDate());
+    }
+
+    @Test
+    public void nextDay() {
+        assertEquals("2015-03-29T09:23:55", ScalarOperatorFunctions.nextDay(O_DT_20150323_092355,
+                ConstantOperator.createVarchar("Sunday")).getDate().toString());
+        Assert.assertThrows("undefine_dow not supported in next_day dow_string", IllegalArgumentException.class,
+                () -> ScalarOperatorFunctions.nextDay(O_DT_20150323_092355, ConstantOperator.createVarchar("undefine_dow"))
+                        .getVarchar());
+    }
+
+    @Test
+    public void previousDay() {
+        assertEquals("2015-03-22T09:23:55", ScalarOperatorFunctions.previousDay(O_DT_20150323_092355,
+                ConstantOperator.createVarchar("Sunday")).getDate().toString());
+        Assert.assertThrows("undefine_dow not supported in previous_day dow_string", IllegalArgumentException.class,
+                () -> ScalarOperatorFunctions.previousDay(O_DT_20150323_092355, ConstantOperator.createVarchar("undefine_dow"))
+                        .getVarchar());
     }
 
     @Test
@@ -1046,7 +1066,7 @@ public class ScalarOperatorFunctionsTest {
     @Test
     public void fromUnixTime2() throws AnalysisException {
         ConstantOperator date =
-                ScalarOperatorFunctions.fromUnixTime(O_INT_10, ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s"));
+                ScalarOperatorFunctions.fromUnixTime(O_BI_10, ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s"));
         assertTrue(date.toString().matches("1970-01-01 0.*:00:10"));
     }
 

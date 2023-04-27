@@ -159,6 +159,7 @@ public:
     bool is_already_exist() const { return code() == TStatusCode::ALREADY_EXIST; }
     bool is_io_error() const { return code() == TStatusCode::IO_ERROR; }
     bool is_not_supported() const { return code() == TStatusCode::NOT_IMPLEMENTED_ERROR; }
+    bool is_corruption() const { return code() == TStatusCode::CORRUPTION; }
 
     /// @return @c true if the status indicates Uninitialized.
     bool is_uninitialized() const { return code() == TStatusCode::UNINITIALIZED; }
@@ -286,6 +287,10 @@ inline std::ostream& operator<<(std::ostream& os, const Status& st) {
 
 inline const Status& to_status(const Status& st) {
     return st;
+}
+
+inline Status ignore_not_found(const Status& status) {
+    return status.is_not_found() ? Status::OK() : status;
 }
 
 template <typename T>

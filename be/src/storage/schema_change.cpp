@@ -40,6 +40,8 @@
 #include <vector>
 
 #include "exec/sorting/sorting.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "runtime/mem_pool.h"
@@ -308,6 +310,11 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
             return Status::InternalError(err_msg);
         }
 
+        if (auto st = _chunk_changer->fill_materialized_columns(new_chunk); !st.ok()) {
+            LOG(WARNING) << "fill materialized columns failed: " << st.get_error_msg();
+            return st;
+        }
+
         ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());
 
         if (st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
@@ -329,6 +336,10 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
                                                       base_tablet->tablet_id(), new_tablet->tablet_id());
             LOG(WARNING) << err_msg;
             return Status::InternalError(err_msg);
+        }
+        if (auto st = _chunk_changer->fill_materialized_columns(new_chunk); !st.ok()) {
+            LOG(WARNING) << "fill materialized columns failed: " << st.get_error_msg();
+            return st;
         }
         if (auto st = new_rowset_writer->add_chunk(*new_chunk); !st.ok()) {
             LOG(WARNING) << "rowset writer add chunk failed: " << st;
@@ -534,13 +545,44 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     sc_params.new_tablet = new_tablet;
     sc_params.chunk_changer = std::make_unique<ChunkChanger>(sc_params.new_tablet->tablet_schema());
 
+    // materialized column index in new schema
+    std::unordered_set<int> materialized_column_idxs;
+    if (request.materialized_column_req.mc_exprs.size() != 0) {
+        for (auto it : request.materialized_column_req.mc_exprs) {
+            materialized_column_idxs.insert(it.first);
+        }
+    }
+
     // primary key do not support materialized view, initialize materialized_params_map here,
     // just for later column_mapping of _parse_request.
     SchemaChangeUtils::init_materialized_params(request, &sc_params.materialized_params_map);
     Status status = SchemaChangeUtils::parse_request(base_tablet->tablet_schema(), new_tablet->tablet_schema(),
                                                      sc_params.chunk_changer.get(), sc_params.materialized_params_map,
                                                      !base_tablet->delete_predicates().empty(), &sc_params.sc_sorting,
-                                                     &sc_params.sc_directly);
+                                                     &sc_params.sc_directly, &materialized_column_idxs);
+
+    if (request.materialized_column_req.mc_exprs.size() != 0) {
+        // Currently, a schema change task for materialized column is just
+        // ADD/DROP/MODIFY a single materialized column, so it is impossible
+        // that sc_sorting == true, for materialized column can not be a KEY.
+        DCHECK_EQ(sc_params.sc_sorting, false);
+
+        sc_params.sc_directly = true;
+
+        sc_params.chunk_changer->init_runtime_state(request.materialized_column_req.query_options,
+                                                    request.materialized_column_req.query_globals);
+
+        for (auto it : request.materialized_column_req.mc_exprs) {
+            ExprContext* ctx = nullptr;
+            RETURN_IF_ERROR(Expr::create_expr_tree(sc_params.chunk_changer->get_object_pool(), it.second, &ctx,
+                                                   sc_params.chunk_changer->get_runtime_state()));
+            RETURN_IF_ERROR(ctx->prepare(sc_params.chunk_changer->get_runtime_state()));
+            RETURN_IF_ERROR(ctx->open(sc_params.chunk_changer->get_runtime_state()));
+
+            sc_params.chunk_changer->get_mc_exprs()->insert({it.first, ctx});
+        }
+    }
+
     if (!status.ok()) {
         LOG(WARNING) << "failed to parse the request. res=" << status.get_error_msg();
         return status;
@@ -549,15 +591,25 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         const auto& base_sort_key_idxes = base_tablet->tablet_schema().sort_key_idxes();
         const auto& new_sort_key_idxes = new_tablet->tablet_schema().sort_key_idxes();
-        if (std::mismatch(new_sort_key_idxes.begin(), new_sort_key_idxes.end(), base_sort_key_idxes.begin()).first !=
-            new_sort_key_idxes.end()) {
+        std::vector<int32_t> base_sort_key_unique_ids;
+        std::vector<int32_t> new_sort_key_unique_ids;
+        for (auto idx : base_sort_key_idxes) {
+            base_sort_key_unique_ids.emplace_back(base_tablet->tablet_schema().column(idx).unique_id());
+        }
+        for (auto idx : new_sort_key_idxes) {
+            new_sort_key_unique_ids.emplace_back(new_tablet->tablet_schema().column(idx).unique_id());
+        }
+        if (std::mismatch(new_sort_key_unique_ids.begin(), new_sort_key_unique_ids.end(),
+                          base_sort_key_unique_ids.begin())
+                    .first != new_sort_key_unique_ids.end()) {
             sc_params.sc_directly = !(sc_params.sc_sorting = true);
         }
         if (sc_params.sc_directly) {
             status = new_tablet->updates()->convert_from(base_tablet, request.alter_version,
                                                          sc_params.chunk_changer.get());
         } else if (sc_params.sc_sorting) {
-            status = new_tablet->updates()->reorder_from(base_tablet, request.alter_version);
+            status = new_tablet->updates()->reorder_from(base_tablet, request.alter_version,
+                                                         sc_params.chunk_changer.get());
         } else {
             status = new_tablet->updates()->link_from(base_tablet.get(), request.alter_version);
         }
@@ -800,6 +852,11 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             break;
         }
         LOG(INFO) << "new rowset has " << (*new_rowset)->num_segments() << " segments";
+        if (sc_params.rowsets_to_change[i]->rowset_meta()->has_delete_predicate()) {
+            (*new_rowset)
+                    ->mutable_delete_predicate()
+                    ->CopyFrom(sc_params.rowsets_to_change[i]->rowset_meta()->delete_predicate());
+        }
         status = sc_params.new_tablet->add_rowset(*new_rowset, false);
         if (status.is_already_exist()) {
             LOG(WARNING) << "version already exist, version revert occurred. "

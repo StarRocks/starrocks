@@ -18,6 +18,7 @@ package com.starrocks.qe;
 import com.starrocks.common.UserException;
 import com.starrocks.privilege.AuthorizationManager;
 import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetRoleType;
 import com.starrocks.sql.ast.UserIdentity;
@@ -41,7 +42,7 @@ public class SetRoleExecutor {
     }
 
     public static void execute(SetRoleStmt stmt, ConnectContext context) throws UserException, PrivilegeException {
-        AuthorizationManager manager = context.getGlobalStateMgr().getAuthorizationManager();
+        AuthorizationManager manager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
         UserIdentity user = context.getCurrentUserIdentity();
         Set<Long> roleIdsForUser = manager.getRoleIdsByUser(user);
         Set<Long> roleIds;

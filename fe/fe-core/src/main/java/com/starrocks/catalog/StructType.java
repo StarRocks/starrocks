@@ -74,8 +74,9 @@ public class StructType extends Type {
     // row(1, 'b') to create an unnamed struct type struct<int, string>
     public StructType(List<Type> fieldTypes) {
         ArrayList<StructField> newFields = new ArrayList<>();
-        for (Type fieldType : fieldTypes) {
-            newFields.add(new StructField(fieldType));
+        for (int i = 0; i < fieldTypes.size(); i++) {
+            Type fieldType = fieldTypes.get(i);
+            newFields.add(new StructField("col" + i, fieldType));
         }
         this.fields = newFields;
         selectedFields = new Boolean[fields.size()];
@@ -244,6 +245,28 @@ public class StructType extends Type {
     }
 
     @Override
+    public boolean isFullyCompatible(Type other) {
+        if (!other.isStructType()) {
+            return false;
+        }
+
+        if (equals(other)) {
+            return true;
+        }
+
+        StructType t = (StructType) other;
+        if (fields.size() != t.fields.size()) {
+            return false;
+        }
+        for (int i = 0; i < fields.size(); i++) {
+            if (!fields.get(i).getType().isFullyCompatible(t.fields.get(i).getType())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    @Override
     public StructType clone() {
         ArrayList<StructField> structFields = new ArrayList<>(fields.size());
         for (StructField field : fields) {
@@ -255,7 +278,7 @@ public class StructType extends Type {
     public static class StructTypeDeserializer implements JsonDeserializer<StructType> {
         @Override
         public StructType deserialize(JsonElement jsonElement, java.lang.reflect.Type type,
-                                   JsonDeserializationContext jsonDeserializationContext)
+                                      JsonDeserializationContext jsonDeserializationContext)
                 throws JsonParseException {
             JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
             JsonArray fields = dumpJsonObject.getAsJsonArray("fields");

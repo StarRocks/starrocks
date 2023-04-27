@@ -302,22 +302,23 @@ public class ScalarOperatorFunctions {
         return arg;
     }
 
-    @ConstantFunction(name = "unix_timestamp", argTypes = {}, returnType = INT)
+    @ConstantFunction(name = "unix_timestamp", argTypes = {}, returnType = BIGINT)
     public static ConstantOperator unixTimestampNow() {
         return unixTimestamp(now());
     }
 
     @ConstantFunction.List(list = {
-            @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = INT),
-            @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = INT)
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATETIME}, returnType = BIGINT),
+            @ConstantFunction(name = "unix_timestamp", argTypes = {DATE}, returnType = BIGINT)
     })
     public static ConstantOperator unixTimestamp(ConstantOperator arg) {
         LocalDateTime dt = arg.getDatetime();
         ZonedDateTime zdt = ZonedDateTime.of(dt, TimeUtils.getTimeZone().toZoneId());
-        if (zdt.toEpochSecond() > Integer.MAX_VALUE || zdt.toEpochSecond() < 0) {
-            return ConstantOperator.createInt(0);
+        long value = zdt.toEpochSecond();
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            value = 0;
         }
-        return ConstantOperator.createInt((int) zdt.toEpochSecond());
+        return ConstantOperator.createBigint(value);
     }
 
     @ConstantFunction.List(list = {
@@ -325,30 +326,39 @@ public class ScalarOperatorFunctions {
             @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT}, returnType = VARCHAR)
     })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime) throws AnalysisException {
-        // if unixTime < 0, we should return null, throw a exception and let BE process
         long value = 0;
-        if (unixTime.getValue() instanceof Integer) {
+        if (unixTime.getType().isInt()) {
             value = unixTime.getInt();
         } else {
             value = unixTime.getBigint();
         }
-        if (value < 0) {
-            throw new AnalysisException("unixtime should larger than zero");
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
                 LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
         return ConstantOperator.createVarchar(dl.toString());
     }
 
-    @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR)
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "from_unixtime", argTypes = {INT, VARCHAR}, returnType = VARCHAR),
+            @ConstantFunction(name = "from_unixtime", argTypes = {BIGINT, VARCHAR}, returnType = VARCHAR)
+    })
     public static ConstantOperator fromUnixTime(ConstantOperator unixTime, ConstantOperator fmtLiteral)
             throws AnalysisException {
-        // if unixTime < 0, we should return null, throw a exception and let BE process
-        if (unixTime.getInt() < 0) {
-            throw new AnalysisException("unixtime should larger than zero");
+        long value = 0;
+        if (unixTime.getType().isInt()) {
+            value = unixTime.getInt();
+        } else {
+            value = unixTime.getBigint();
+        }
+        if (value < 0 || value > TimeUtils.MAX_UNIX_TIMESTAMP) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
-                LocalDateTime.ofInstant(Instant.ofEpochSecond(unixTime.getInt()), TimeUtils.getTimeZone().toZoneId()));
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
         return dateFormat(dl, fmtLiteral);
     }
 
@@ -399,6 +409,80 @@ public class ScalarOperatorFunctions {
         LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime() / 1000 * 1000)
                 .atZone(ZoneOffset.UTC).toLocalDateTime();
         return ConstantOperator.createDatetime(utcStartTime);
+    }
+
+    @ConstantFunction(name = "next_day", argTypes = {DATETIME, VARCHAR}, returnType = DATE)
+    public static ConstantOperator nextDay(ConstantOperator date, ConstantOperator dow) {
+        int dateDowValue = date.getDate().getDayOfWeek().getValue();
+        switch (dow.getVarchar()) {
+            case "Sunday":
+            case "Sun":
+            case "Su":
+                return ConstantOperator.createDate(date.getDate().plusDays((13L - dateDowValue) % 7 + 1L));
+            case "Monday":
+            case "Mon":
+            case "Mo":
+                return ConstantOperator.createDate(date.getDate().plusDays((7L - dateDowValue) % 7 + 1L));
+            case "Tuesday":
+            case "Tue":
+            case "Tu":
+                return ConstantOperator.createDate(date.getDate().plusDays((8L - dateDowValue) % 7 + 1L));
+            case "Wednesday":
+            case "Wed":
+            case "We":
+                return ConstantOperator.createDate(date.getDate().plusDays((9L - dateDowValue) % 7 + 1L));
+            case "Thursday":
+            case "Thu":
+            case "Th":
+                return ConstantOperator.createDate(date.getDate().plusDays((10L - dateDowValue) % 7 + 1L));
+            case "Friday":
+            case "Fri":
+            case "Fr":
+                return ConstantOperator.createDate(date.getDate().plusDays((11L - dateDowValue) % 7 + 1L));
+            case "Saturday":
+            case "Sat":
+            case "Sa":
+                return ConstantOperator.createDate(date.getDate().plusDays((12L - dateDowValue) % 7 + 1L));
+            default:
+                throw new IllegalArgumentException(dow + " not supported in next_day dow_string");
+        }
+    }
+
+    @ConstantFunction(name = "previous_day", argTypes = {DATETIME, VARCHAR}, returnType = DATE)
+    public static ConstantOperator previousDay(ConstantOperator date, ConstantOperator dow) {
+        int dateDowValue = date.getDate().getDayOfWeek().getValue();
+        switch (dow.getVarchar()) {
+            case "Sunday":
+            case "Sun":
+            case "Su":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue - 1L) % 7 + 1L));
+            case "Monday":
+            case "Mon":
+            case "Mo":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 5L) % 7 + 1L));
+            case "Tuesday":
+            case "Tue":
+            case "Tu":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 4L) % 7 + 1L));
+            case "Wednesday":
+            case "Wed":
+            case "We":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 3L) % 7 + 1L));
+            case "Thursday":
+            case "Thu":
+            case "Th":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 2L) % 7 + 1L));
+            case "Friday":
+            case "Fri":
+            case "Fr":
+                return ConstantOperator.createDate(date.getDate().minusDays((dateDowValue + 1L) % 7 + 1L));
+            case "Saturday":
+            case "Sat":
+            case "Sa":
+                return ConstantOperator.createDate(date.getDate().minusDays(dateDowValue % 7 + 1L));
+            default:
+                throw new IllegalArgumentException(dow + " not supported in previous_day dow_string");
+        }
     }
 
     /**

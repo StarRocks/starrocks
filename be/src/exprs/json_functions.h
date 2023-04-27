@@ -216,6 +216,9 @@ public:
 
     static void parse_json_paths(const std::string& path_strings, std::vector<SimpleJsonPath>* parsed_paths);
 
+    // jsonpaths_to_string serializes json patsh to std::string. Setting sub_index to serializes paritially json paths.
+    static std::string jsonpaths_to_string(const std::vector<SimpleJsonPath>& jsonpaths, size_t sub_index = -1);
+
     template <typename ValueType>
     static std::string_view to_json_string(ValueType&& val, size_t limit) {
         std::string_view sv = simdjson::to_json_string(std::forward<ValueType>(val));

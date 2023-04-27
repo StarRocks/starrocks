@@ -25,6 +25,7 @@
 #include "storage/binlog_builder.h"
 #include "storage/binlog_file_writer.h"
 #include "storage/binlog_reader.h"
+#include "util/blocking_queue.hpp"
 
 namespace starrocks {
 
@@ -123,6 +124,50 @@ private:
     int64_t _end_seq_id;
 };
 
+// Hold a reference to the binlog file for read. The reference will be released
+// automatically in the destructor
+class BinlogFileReadHolder {
+public:
+    BinlogFileReadHolder(std::shared_ptr<std::atomic<int64_t>> _reader_count, BinlogFileMetaPBPtr file_meta)
+            : _reader_count(_reader_count), _file_meta(file_meta) {
+        _reader_count->fetch_add(1);
+    }
+
+    ~BinlogFileReadHolder() { _reader_count->fetch_sub(1); }
+
+    BinlogFileMetaPBPtr& file_meta() { return _file_meta; }
+
+private:
+    std::shared_ptr<std::atomic<int64_t>> _reader_count;
+    BinlogFileMetaPBPtr _file_meta;
+};
+
+using BinlogFileReadHolderPtr = std::shared_ptr<BinlogFileReadHolder>;
+
+// Representation of a binlog file. It includes the file meta, and a
+// reference count about how many readers are using it
+class BinlogFile {
+public:
+    BinlogFile(BinlogFileMetaPBPtr file_meta) : _file_meta(file_meta) {
+        _reader_count = std::make_shared<std::atomic<int64_t>>();
+    }
+
+    BinlogFileMetaPBPtr& file_meta() { return _file_meta; }
+
+    void update_file_meta(BinlogFileMetaPBPtr& file_meta) { _file_meta = file_meta; }
+
+    BinlogFileReadHolderPtr new_read_holder() {
+        return std::make_shared<BinlogFileReadHolder>(_reader_count, _file_meta);
+    }
+
+    int64_t reader_count() { return _reader_count->load(); }
+
+private:
+    BinlogFileMetaPBPtr _file_meta;
+    std::shared_ptr<std::atomic<int64_t>> _reader_count;
+};
+using BinlogFilePtr = std::shared_ptr<BinlogFile>;
+
 // Manages the binlog metas and files, including generation, deletion and read.
 class BinlogManager {
 public:
@@ -172,6 +217,21 @@ public:
     // Commit the result of pre-commit, and it's visible for reading
     void commit_ingestion(int64_t version);
 
+    // Check expiration and capacity. It should be protected by Tablet#_meta_lock outside
+    // because Tablet#_inc_rs_version_map may be visited. This method only updates metas
+    // of binlog files that should be deleted, but not do the deletion which will be done
+    // in delete_unused_binlog() later, so Tablet#_meta_lock will not be blocked too long.
+    void check_expire_and_capacity(int64_t current_second, int64_t binlog_ttl_second, int64_t binlog_max_size);
+
+    // Whether the rowset is used by the binlog.
+    bool is_rowset_used(int64_t rowset_id);
+
+    // Delete unused binlog files
+    void delete_unused_binlog();
+
+    // Delete all data, and only called in Tablet::delete_all_files currently
+    void delete_all_binlog();
+
     // Register the reader, and return a unique id allocated for this reader.
     StatusOr<int64_t> register_reader(std::shared_ptr<BinlogReader> reader);
 
@@ -180,13 +240,13 @@ public:
 
     // Find the binlog file which may contain the change event with given <version, seq_id>.
     // Return Status::NotFound if there is no such file.
-    StatusOr<BinlogFileMetaPBPtr> find_binlog_meta(int64_t version, int64_t seq_id);
+    StatusOr<BinlogFileReadHolderPtr> find_binlog_file(int64_t version, int64_t seq_id);
 
     std::string get_binlog_file_path(int64_t file_id) { return BinlogUtil::binlog_file_path(_path, file_id); }
 
     BinlogRange current_binlog_range();
 
-    // For testing
+    // Following methods are for testing currently
     int64_t next_file_id() { return _next_file_id; }
 
     int64_t ingestion_version() { return _ingestion_version; }
@@ -195,18 +255,30 @@ public:
 
     BinlogFileWriter* active_binlog_writer() { return _active_binlog_writer.get(); }
 
-    std::map<int128_t, BinlogFileMetaPBPtr>& file_metas() { return _binlog_file_metas; }
+    std::map<int128_t, BinlogFilePtr>& alive_binlog_files() { return _alive_binlog_files; }
 
-    std::unordered_map<int64_t, int32_t>& rowset_count_map() { return _rowset_count_map; }
+    std::unordered_map<int64_t, int32_t>& alive_rowset_count_map() { return _alive_rowset_count_map; }
 
-    int64_t total_binlog_file_disk_size() { return _total_binlog_file_disk_size; }
+    int64_t total_alive_binlog_file_size() { return _total_alive_binlog_file_size; }
 
-    int64_t total_rowset_disk_size() { return _total_rowset_disk_size; }
+    int64_t total_alive_rowset_data_size() { return _total_alive_rowset_data_size; }
+
+    std::deque<BinlogFilePtr>& wait_reader_binlog_files() { return _wait_reader_binlog_files; }
+
+    std::unordered_map<int64_t, int32_t>& wait_reader_rowset_count_map() { return _wait_reader_rowset_count_map; }
+
+    int64_t total_wait_reader_binlog_file_size() { return _total_wait_reader_binlog_file_size; }
+
+    int64_t total_wait_reader_rowset_data_size() { return _total_wait_reader_rowset_data_size; }
+
+    BlockingQueue<int64_t>& unused_binlog_file_ids() { return _unused_binlog_file_ids; }
 
     void close_active_writer();
 
 private:
     void _apply_build_result(BinlogBuildResult* result);
+    void _check_wait_reader_binlog_files();
+    void _check_alive_binlog_files(int64_t current_second, int64_t binlog_ttl_second, int64_t binlog_max_size);
 
     int64_t _tablet_id;
     // binlog storage directory
@@ -227,19 +299,33 @@ private:
 
     // protect following metas' read/write
     std::shared_mutex _meta_lock;
-    // mapping from start LSN(start_version, start_seq_id) of a binlog file to the file meta.
-    // A binlog file with a smaller start LSN also has a smaller file id. The file with the
-    // biggest start LSN is the meta of _active_binlog_writer if it's not null.
-    std::map<int128_t, BinlogFileMetaPBPtr> _binlog_file_metas;
+
+    // Alive binlog files (not expired and overcapacity), and can serve for read. Map from start
+    // LSN(start_version, start_seq_id) of a binlog file to the file meta. A binlog file with a
+    // smaller start LSN also has a smaller file id. The file with the biggest start LSN is the
+    // meta of _active_binlog_writer if it's not null.
+    std::map<int128_t, BinlogFilePtr> _alive_binlog_files;
+    // Alive rowsets. Map from rowset id to the number of binlog files using it in _alive_binlog_files
+    std::unordered_map<int64_t, int32_t> _alive_rowset_count_map;
+    // Disk size for alive binlog files
+    std::atomic<int64_t> _total_alive_binlog_file_size = 0;
+    // Disk size for alive rowsets
+    std::atomic<int64_t> _total_alive_rowset_data_size = 0;
+
     // the binlog file writer that can append data
     BinlogFileWriterPtr _active_binlog_writer;
 
-    // mapping from rowset id to the number of binlog files using it
-    std::unordered_map<int64_t, int32_t> _rowset_count_map;
+    // Binlog files and rowsets that have been expired or overcapacity, but still used by some readers,
+    // and can't be deleted immediately. Those binlog files can't serve for new read requests.
+    std::deque<BinlogFilePtr> _wait_reader_binlog_files;
+    std::unordered_map<int64_t, int32_t> _wait_reader_rowset_count_map;
+    // Disk size for wait reader binlog files
+    std::atomic<int64_t> _total_wait_reader_binlog_file_size = 0;
+    // Disk size for wait reader rowsets
+    std::atomic<int64_t> _total_wait_reader_rowset_data_size = 0;
 
-    // statistics for disk usage
-    int64_t _total_binlog_file_disk_size = 0;
-    int64_t _total_rowset_disk_size = 0;
+    // ids of unused binlog files that can be deleted
+    BlockingQueue<int64_t> _unused_binlog_file_ids;
 
     // Allocate an id for each binlog reader. Protected by _meta_lock
     int64_t _next_reader_id = 0;

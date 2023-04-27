@@ -16,15 +16,20 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ColumnPosition;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
@@ -41,7 +46,9 @@ import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropRollupClause;
@@ -54,20 +61,24 @@ import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 
 public class AlterTableStatementAnalyzer {
+    private static final Logger LOG = LogManager.getLogger(AlterTableStatementAnalyzer.class);
     public static void analyze(AlterTableStmt statement, ConnectContext context) {
         TableName tbl = statement.getTbl();
         MetaUtils.normalizationTableName(context, tbl);
         Table table = MetaUtils.getTable(context, tbl);
         if (table instanceof MaterializedView) {
             String msg = String.format("The '%s' cannot be alter by 'ALTER TABLE', because it is a materialized view," +
-                            "you can use 'ALTER MATERIALIZED VIEW' to alter it.", tbl.getTbl());
+                    "you can use 'ALTER MATERIALIZED VIEW' to alter it.", tbl.getTbl());
             throw new SemanticException(msg, tbl.getPos());
         }
         List<AlterClause> alterClauseList = statement.getOps();
@@ -75,12 +86,23 @@ public class AlterTableStatementAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_NO_ALTER_OPERATION);
         }
         AlterTableClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseAnalyzerVisitor();
+        alterTableClauseAnalyzerVisitor.setTable(table);
         for (AlterClause alterClause : alterClauseList) {
             alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
         }
     }
 
     static class AlterTableClauseAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+
+        private Table table;
+
+        public void setTable(Table table) {
+            this.table = table;
+        }
+
+        public Table getTable() {
+            return table;
+        }
 
         public void analyze(AlterClause statement, ConnectContext session) {
             visit(statement, session);
@@ -142,11 +164,6 @@ public class AlterTableStatementAnalyzer {
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_FPP)) {
                 // do nothing, these 2 properties will be analyzed when creating alter job
-            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT)) {
-                if (!properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).equalsIgnoreCase("v2")) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                            "Property " + PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT + " should be v2");
-                }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
                 if (WriteQuorum.findTWriteQuorumByName(properties.get(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) == null) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
@@ -279,12 +296,78 @@ public class AlterTableStatementAnalyzer {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
             }
 
+            if (columnDef.isMaterializedColumn()) {
+                if (!table.isOlapTable()) {
+                    throw new SemanticException("Materialized Column only support olap table");
+                }
+
+                clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
+
+                Expr expr = columnDef.materializedColumnExpr();
+                TableName tableName = new TableName(context.getDatabase(), table.getName());
+
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                        new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
+                                            tableName, null))
+                                .collect(Collectors.toList()))), context);
+    
+                // check if contain aggregation
+                List<FunctionCallExpr> funcs = Lists.newArrayList();
+                expr.collect(FunctionCallExpr.class, funcs);
+                for (FunctionCallExpr fn : funcs) {
+                    if (fn.isAggregateFunction()) {
+                        throw new SemanticException("Materialized Column don't support aggregation function");
+                    }
+                }
+                
+                // check if the expression refers to other materialized columns
+                List<SlotRef> slots = Lists.newArrayList();
+                expr.collect(SlotRef.class, slots);
+                if (slots.size() != 0) {
+                    for (SlotRef slot : slots) {
+                        Column refColumn = table.getColumn(slot.getColumnName());
+                        if (refColumn.isMaterializedColumn()) {
+                            throw new SemanticException("Expression can not refers to other materialized columns");
+                        }
+                        if (refColumn.isAutoIncrement()) {
+                            throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                        }
+                    }
+                }
+    
+                if (!columnDef.getType().matchesType(expr.getType())) {
+                    throw new SemanticException("Illege expression type for Materialized Column " +
+                                                "Column Type: " + columnDef.getType().toString() +
+                                                ", Expression Type: " + expr.getType().toString());
+                }
+                clause.setColumn(columnDef.toColumn());
+                return null;
+            }
+
             ColumnPosition colPos = clause.getColPos();
+            if (colPos == null && table instanceof OlapTable && ((OlapTable) table).hasMaterializedColumn()) {
+                List<Column> baseSchema = ((OlapTable) table).getBaseSchema();
+                if (baseSchema.size() > 1) {
+                    for (int columnIdx = 0; columnIdx < baseSchema.size() - 1; ++columnIdx) {
+                        if (!baseSchema.get(columnIdx).isMaterializedColumn() &&
+                                baseSchema.get(columnIdx + 1).isMaterializedColumn()) {
+                            clause.setColPos(new ColumnPosition(baseSchema.get(columnIdx).getName()));
+                            break;
+                        }
+                    }
+                }
+            }
             if (colPos != null) {
                 try {
                     colPos.analyze();
                 } catch (AnalysisException e) {
                     throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
+                }
+            }
+            if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
+                Column afterColumn = table.getColumn(colPos.getLastCol());
+                if (afterColumn.isMaterializedColumn()) {
+                    throw new SemanticException("Can not add column after Materialized Column");
                 }
             }
 
@@ -334,6 +417,19 @@ public class AlterTableStatementAnalyzer {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColFormat(clause.getColName()));
             }
             clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
+
+            for (Column column : table.getFullSchema()) {
+                if (column.isMaterializedColumn()) {
+                    List<SlotRef> slots = column.getMaterializedColumnRef();
+                    for (SlotRef slot : slots) {
+                        if (slot.getColumnName().equals(clause.getColName())) {
+                            throw new SemanticException("Column: " + clause.getColName() + " can not be dropped" +
+                                                        ", because expression of Materialized Column: " +
+                                                        column.getName() + " will refer to it");
+                        }
+                    }
+                }
+            }
             return null;
         }
 
@@ -349,12 +445,66 @@ public class AlterTableStatementAnalyzer {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnDef(e.getMessage()), columnDef.getPos());
             }
 
+            if (columnDef.isMaterializedColumn()) {
+                if (!(table instanceof OlapTable)) {
+                    throw new SemanticException("Materialized Column only support olap table");
+                }
+    
+                clause.setRollupName(Strings.emptyToNull(clause.getRollupName()));
+    
+                Expr expr = columnDef.materializedColumnExpr();
+                TableName tableName = new TableName(context.getDatabase(), table.getName());
+    
+                ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
+                        new RelationFields(table.getBaseSchema().stream().map(col -> new Field(col.getName(), col.getType(),
+                                            tableName, null))
+                                .collect(Collectors.toList()))), context);
+    
+                // check if contain aggregation
+                List<FunctionCallExpr> funcs = Lists.newArrayList();
+                expr.collect(FunctionCallExpr.class, funcs);
+                for (FunctionCallExpr fn : funcs) {
+                    if (fn.isAggregateFunction()) {
+                        throw new SemanticException("Materialized Column don't support aggregation function");
+                    }
+                }
+                
+                // check if the expression refers to other materialized columns
+                List<SlotRef> slots = Lists.newArrayList();
+                expr.collect(SlotRef.class, slots);
+                if (slots.size() != 0) {
+                    for (SlotRef slot : slots) {
+                        Column refColumn = table.getColumn(slot.getColumnName());
+                        if (refColumn.isMaterializedColumn()) {
+                            throw new SemanticException("Expression can not refers to other materialized columns");
+                        }
+                        if (refColumn.isAutoIncrement()) {
+                            throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                        }
+                    }
+                }
+    
+                if (!columnDef.getType().matchesType(expr.getType())) {
+                    throw new SemanticException("Illege expression type for Materialized Column " +
+                                                "Column Type: " + columnDef.getType().toString() +
+                                                ", Expression Type: " + expr.getType().toString());
+                }
+                clause.setColumn(columnDef.toColumn());
+                return null;
+            }
+
             ColumnPosition colPos = clause.getColPos();
             if (colPos != null) {
                 try {
                     colPos.analyze();
                 } catch (AnalysisException e) {
                     throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
+                }
+            }
+            if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
+                Column afterColumn = table.getColumn(colPos.getLastCol());
+                if (afterColumn.isMaterializedColumn()) {
+                    throw new SemanticException("Can not modify column after Materialized Column");
                 }
             }
 
@@ -496,6 +646,15 @@ public class AlterTableStatementAnalyzer {
                 clause.analyze(null);
             } catch (AnalysisException e) {
                 throw new SemanticException(e.getMessage());
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCompactionClause(CompactionClause clause, ConnectContext context) {
+            final List<String> partitionNames = clause.getPartitionNames();
+            if (partitionNames.stream().anyMatch(Strings::isNullOrEmpty)) {
+                throw new SemanticException("there are empty partition name");
             }
             return null;
         }

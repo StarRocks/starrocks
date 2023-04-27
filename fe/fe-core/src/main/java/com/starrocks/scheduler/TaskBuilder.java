@@ -24,6 +24,7 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.persist.TaskSchedule;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
@@ -39,11 +40,22 @@ public class TaskBuilder {
 
     public static Task buildTask(SubmitTaskStmt submitTaskStmt, ConnectContext context) {
         String taskName = submitTaskStmt.getTaskName();
+        String taskNamePrefix;
+        Constants.TaskSource taskSource;
+        if (submitTaskStmt.getInsertStmt() != null) {
+            taskNamePrefix = "insert-";
+            taskSource = Constants.TaskSource.INSERT;
+        } else if (submitTaskStmt.getCreateTableAsSelectStmt() != null) {
+            taskNamePrefix = "ctas-";
+            taskSource = Constants.TaskSource.CTAS;
+        } else {
+            throw new SemanticException("Submit task statement is not supported");
+        }
         if (taskName == null) {
-            taskName = "ctas-" + DebugUtil.printId(context.getExecutionId());
+            taskName = taskNamePrefix + DebugUtil.printId(context.getExecutionId());
         }
         Task task = new Task(taskName);
-        task.setSource(Constants.TaskSource.CTAS);
+        task.setSource(taskSource);
         task.setCreateTime(System.currentTimeMillis());
         task.setDbName(submitTaskStmt.getDbName());
         task.setDefinition(submitTaskStmt.getSqlText());
@@ -52,18 +64,37 @@ public class TaskBuilder {
         return task;
     }
 
+    public static String getAnalyzeMVStmt(String tableName) {
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx == null) {
+            return "";
+        }
+        String stmt;
+        String analyze = ctx.getSessionVariable().getAnalyzeForMV();
+        if ("sample".equalsIgnoreCase(analyze)) {
+            stmt = "ANALYZE SAMPLE TABLE " + tableName + " WITH ASYNC MODE";
+        } else if ("full".equalsIgnoreCase(analyze)) {
+            stmt = "ANALYZE TABLE " + tableName + " WITH ASYNC MODE";
+        } else {
+            stmt = "";
+        }
+        return stmt;
+    }
+
     public static Task buildMvTask(MaterializedView materializedView, String dbName) {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
         Map<String, String> taskProperties = Maps.newHashMap();
-        taskProperties.put(PartitionBasedMaterializedViewRefreshProcessor.MV_ID, String.valueOf(materializedView.getId()));
+        taskProperties.put(PartitionBasedMaterializedViewRefreshProcessor.MV_ID,
+                String.valueOf(materializedView.getId()));
         taskProperties.put(SessionVariable.ENABLE_INSERT_STRICT, "false");
         taskProperties.putAll(materializedView.getProperties());
 
         task.setProperties(taskProperties);
         task.setDefinition(
                 "insert overwrite " + materializedView.getName() + " " + materializedView.getViewDefineSql());
+        task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         return task;
     }
@@ -78,6 +109,7 @@ public class TaskBuilder {
         task.setProperties(previousTaskProperties);
         task.setDefinition(
                 "insert overwrite " + materializedView.getName() + " " + materializedView.getViewDefineSql());
+        task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
         return task;
     }

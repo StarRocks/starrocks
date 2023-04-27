@@ -128,6 +128,15 @@ void Chunk::set_num_rows(size_t count) {
     }
 }
 
+Status Chunk::update_rows(const Chunk& src, const uint32_t* indexes) {
+    DCHECK(_columns.size() == src.num_columns());
+    for (int i = 0; i < _columns.size(); i++) {
+        ColumnPtr& c = _columns[i];
+        RETURN_IF_ERROR(c->update_rows(*src.columns()[i], indexes));
+    }
+    return Status::OK();
+}
+
 std::string_view Chunk::get_column_name(size_t idx) const {
     DCHECK_LT(idx, _columns.size());
     return _schema->field(idx)->name();
@@ -169,6 +178,12 @@ void Chunk::append_tuple_column(const ColumnPtr& column, TupleId tuple_id) {
     _tuple_id_to_index[tuple_id] = _columns.size();
     _columns.emplace_back(column);
     check_or_die();
+}
+
+void Chunk::append_default() {
+    for (const auto& column : _columns) {
+        column->append_default();
+    }
 }
 
 void Chunk::remove_column_by_index(size_t idx) {
@@ -379,6 +394,18 @@ std::string Chunk::debug_row(size_t index) const {
         os << ", ";
     }
     os << _columns[_columns.size() - 1]->debug_item(index) << "]";
+    return os.str();
+}
+
+std::string Chunk::rebuild_csv_row(size_t index, const std::string& delimiter) const {
+    std::stringstream os;
+    for (size_t col = 0; col < _columns.size() - 1; ++col) {
+        os << _columns[col]->debug_item(index);
+        os << delimiter;
+    }
+    if (_columns.size() > 0) {
+        os << _columns[_columns.size() - 1]->debug_item(index);
+    }
     return os.str();
 }
 

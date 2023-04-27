@@ -60,13 +60,19 @@ protected:
         StoragePageCache::create_global_cache(&_tracker, 1000000000);
         _fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
+
+        _opts.fs = _fs.get();
+        _opts.use_page_cache = true;
+        _opts.kept_in_memory = false;
+        _opts.skip_fill_local_cache = false;
     }
     void TearDown() override { StoragePageCache::release_global_cache(); }
 
     void get_bitmap_reader_iter(std::string& file_name, const ColumnIndexMetaPB& meta, BitmapIndexReader** reader,
                                 BitmapIndexIterator** iter) {
+        _opts.file_name = file_name;
         *reader = new BitmapIndexReader();
-        ASSIGN_OR_ABORT(auto r, (*reader)->load(_fs.get(), file_name, meta.bitmap_index(), true, false));
+        ASSIGN_OR_ABORT(auto r, (*reader)->load(_opts, meta.bitmap_index()));
         ASSERT_TRUE(r);
         ASSERT_OK((*reader)->new_iterator(iter));
     }
@@ -91,6 +97,7 @@ protected:
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
     MemTracker _tracker;
     MemPool _pool;
+    IndexReadOptions _opts;
 };
 
 TEST_F(BitmapIndexTest, test_invert) {
@@ -249,6 +256,12 @@ TEST_F(BitmapIndexTest, test_concurrent_load) {
     ColumnIndexMetaPB meta;
     write_index_file<TYPE_BIGINT>(file_name, val, num_uint8_rows, 30, &meta);
 
+    IndexReadOptions opts;
+    opts.fs = _fs.get();
+    opts.file_name = file_name;
+    opts.use_page_cache = true;
+    opts.kept_in_memory = false;
+    opts.skip_fill_local_cache = false;
     auto reader = std::make_unique<BitmapIndexReader>();
     std::atomic<int> count{0};
     std::atomic<int> loads{0};
@@ -260,7 +273,7 @@ TEST_F(BitmapIndexTest, test_concurrent_load) {
             while (count.load() < count) {
                 ;
             }
-            ASSIGN_OR_ABORT(auto first_load, reader->load(_fs.get(), file_name, meta.bitmap_index(), false, false));
+            ASSIGN_OR_ABORT(auto first_load, reader->load(opts, meta.bitmap_index()));
             loads.fetch_add(first_load);
         });
     }

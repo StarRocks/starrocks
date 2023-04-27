@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.KeysDesc;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -25,9 +25,11 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -110,8 +112,7 @@ public class CTASAnalyzerTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"colocate_with\" = \"groupc1\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");")
                 .withTable("CREATE TABLE `customer` (\n" +
                         "  `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -129,8 +130,7 @@ public class CTASAnalyzerTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"colocate_with\" = \"groupa2\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");")
                 .withTable("CREATE TABLE `supplier` (\n" +
                         "  `s_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -147,8 +147,7 @@ public class CTASAnalyzerTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"colocate_with\" = \"groupa4\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");")
                 .withTable("CREATE TABLE `part` (\n" +
                         "  `p_partkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -167,8 +166,7 @@ public class CTASAnalyzerTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"colocate_with\" = \"groupa5\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");")
                 .withTable("CREATE TABLE `duplicate_table_with_null` (\n" +
                         "    `k1`  date,\n" +
@@ -189,8 +187,7 @@ public class CTASAnalyzerTest {
                         "COMMENT \"OLAP\"\n" +
                         "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3\n" +
                         "PROPERTIES (\n" +
-                        "    \"replication_num\" = \"1\",\n" +
-                        "    \"storage_format\" = \"v2\"\n" +
+                        "    \"replication_num\" = \"1\"\n" +
                         ");")
                 .withView("CREATE VIEW v1(vc1,vc2) as select k1+1,k2 from duplicate_table_with_null");
     }
@@ -321,8 +318,7 @@ public class CTASAnalyzerTest {
                 "DISTRIBUTED BY HASH(`c_2_9`, `c_2_12`, `c_2_0`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         String ctasSql = "CREATE TABLE `decimal_ctas1` as " +
@@ -427,8 +423,61 @@ public class CTASAnalyzerTest {
         ctasStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         columnDefs = ctasStmt.getCreateTableStmt().getColumnDefs();
-        Assert.assertTrue(columnDefs.get(0).isAllowNull());
-        Assert.assertTrue(columnDefs.get(1).isAllowNull());
+        Assert.assertFalse(columnDefs.get(0).isAllowNull());
+        Assert.assertFalse(columnDefs.get(1).isAllowNull());
         Assert.assertTrue(columnDefs.get(2).isAllowNull());
+    }
+
+    @Test
+    public void testCtasWithNullale() throws Exception {
+        {
+            String createSql = "create table emps (\n" +
+                    "    empid int null,\n" +
+                    "    deptno int null,\n" +
+                    "    name varchar(25) null,\n" +
+                    "    salary double\n" +
+                    ")\n" +
+                    "distributed by hash(`empid`) buckets 10\n" +
+                    "properties (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+            starRocksAssert.withTable(createSql);
+            String ctas = "create table ttt as" +
+                    " select empid,sum(salary),max(salary),min(length(name)),cast(avg(name) as int)" +
+                    " from emps group by 1 order by 1;";
+            CreateTableAsSelectStmt ctasStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctas, starRocksAssert.getCtx());
+            QueryStatement queryStatement = ctasStmt.getQueryStatement();
+            Assert.assertEquals(5, queryStatement.getQueryRelation().getOutputExpression().size());
+            Assert.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof SlotRef);
+            SlotRef col1 = (SlotRef) queryStatement.getQueryRelation().getOutputExpression().get(0);
+            Assert.assertTrue(col1.isNullable());
+            starRocksAssert.dropTable("emps");
+        }
+
+        {
+            String createSql = "create table emps (\n" +
+                    "    empid int not null,\n" +
+                    "    deptno int null,\n" +
+                    "    name varchar(25) null,\n" +
+                    "    salary double\n" +
+                    ")\n" +
+                    "distributed by hash(`empid`) buckets 10\n" +
+                    "properties (\n" +
+                    "\"replication_num\" = \"1\"\n" +
+                    ");";
+            starRocksAssert.withTable(createSql);
+            String ctas = "create table ttt as" +
+                    " select empid,sum(salary),max(salary),min(length(name)),cast(avg(name) as int)" +
+                    " from emps group by 1 order by 1;";
+            CreateTableAsSelectStmt ctasStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctas, starRocksAssert.getCtx());
+            QueryStatement queryStatement = ctasStmt.getQueryStatement();
+            Assert.assertEquals(5, queryStatement.getQueryRelation().getOutputExpression().size());
+            Assert.assertTrue(queryStatement.getQueryRelation().getOutputExpression().get(0) instanceof SlotRef);
+            SlotRef col1 = (SlotRef) queryStatement.getQueryRelation().getOutputExpression().get(0);
+            Assert.assertFalse(col1.isNullable());
+            starRocksAssert.dropTable("emps");
+        }
     }
 }

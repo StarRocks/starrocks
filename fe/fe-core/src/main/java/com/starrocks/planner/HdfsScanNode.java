@@ -23,9 +23,10 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.RemoteScanRangeLocations;
-import com.starrocks.connector.hive.HiveConnector;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.credential.CloudType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -53,11 +54,11 @@ import static com.starrocks.thrift.TExplainLevel.VERBOSE;
  * TODO: Dictionary pruning
  */
 public class HdfsScanNode extends ScanNode {
-    private RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
+    private final RemoteScanRangeLocations scanRangeLocations = new RemoteScanRangeLocations();
 
     private HiveTable hiveTable = null;
     private CloudConfiguration cloudConfiguration = null;
-    private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+    private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
 
     public HdfsScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -90,8 +91,7 @@ public class HdfsScanNode extends ScanNode {
         if (catalog == null) {
             return;
         }
-        HiveConnector connector = (HiveConnector) GlobalStateMgr.getCurrentState().getConnectorMgr().
-                getConnector(catalog);
+        Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalog);
         if (connector != null) {
             cloudConfiguration = connector.getCloudConfiguration();
         }

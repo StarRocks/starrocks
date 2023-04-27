@@ -145,7 +145,7 @@ public class LoadStmtAnalyzer {
                             if (table == null) {
                                 continue;
                             }
-                            if (table.isOlapOrLakeTable()) {
+                            if (table.isOlapOrCloudNativeTable()) {
                                 OlapTable olapTable = (OlapTable) table;
                                 if (olapTable.getPartitionInfo().getType() == PartitionType.EXPR_RANGE) {
                                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,

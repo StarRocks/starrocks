@@ -401,7 +401,7 @@ public class ShowStmtAnalyzer {
                         throw new SemanticException(String.format("Unknown proc node path: %s", procString));
                     }
                 } else {
-                    if (table.isNativeTable()) {
+                    if (table.isNativeTableOrMaterializedView()) {
                         node.setOlapTable(true);
                         OlapTable olapTable = (OlapTable) table;
                         Set<String> bfColumns = olapTable.getCopiedBfColumns();

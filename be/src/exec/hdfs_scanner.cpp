@@ -19,6 +19,7 @@
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "util/compression/stream_compression.h"
+
 namespace starrocks {
 
 class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
@@ -35,14 +36,6 @@ public:
         _stats->bytes_read += nread;
         return nread;
     }
-
-    // StatusOr<int64_t> read_at(int64_t offset, void* data, int64_t size) override {
-    //     SCOPED_RAW_TIMER(&_stats->io_ns);
-    //     _stats->io_count += 1;
-    //     ASSIGN_OR_RETURN(auto nread, _stream->read_at(offset, data, size));
-    //     _stats->bytes_read += nread;
-    //     return nread;
-    // }
 
     Status read_at_fully(int64_t offset, void* data, int64_t size) override {
         SCOPED_RAW_TIMER(&_stats->io_ns);
@@ -139,6 +132,7 @@ Status HdfsScanner::_build_scanner_context() {
 }
 
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
+    SCOPED_RAW_TIMER(&_total_running_time);
     RETURN_IF_CANCELLED(_runtime_state);
     Status status = do_get_next(runtime_state, chunk);
     if (status.ok()) {
@@ -156,6 +150,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
 }
 
 Status HdfsScanner::open(RuntimeState* runtime_state) {
+    SCOPED_RAW_TIMER(&_total_running_time);
     if (_opened) {
         return Status::OK();
     }
@@ -223,6 +218,10 @@ Status HdfsScanner::open_random_access_file() {
     if (_compression_type == CompressionTypePB::NO_COMPRESSION) {
         _shared_buffered_input_stream =
                 std::make_shared<io::SharedBufferedInputStream>(input_stream, filename, file_size);
+        io::SharedBufferedInputStream::CoalesceOptions options = {
+                .max_dist_size = config::io_coalesce_read_max_distance_size,
+                .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+        _shared_buffered_input_stream->set_coalesce_options(options);
         input_stream = _shared_buffered_input_stream;
 
         // input_stream = CacheInputStream(input_stream)

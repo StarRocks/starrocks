@@ -64,7 +64,7 @@ Describes the data file that you want to load. The `data_desc` descriptor can in
 -H "format: CSV | JSON"
 -H "column_separator: <column_separator>"
 -H "row_delimiter: <row_delimiter>"
--H "columns: <column1_name>[, <column2_name>，... ]"
+-H "columns: <column1_name>[, <column2_name>, ... ]"
 -H "partitions: <partition1_name>[, <partition2_name>, ...]"
 -H "jsonpaths: [ \"<json_path1>\"[, \"<json_path2>\", ...] ]"
 -H "strip_outer_array:  true | false"
@@ -88,11 +88,16 @@ The parameters in the `data_desc` descriptor can be divided into three types: co
 | ---------------- | -------- | ------------------------------------------------------------ |
 | column_separator | No       | The characters that are used in the data file to separate fields. If you do not specify this parameter, this parameter defaults to `\t`, which indicates tab.<br/>Make sure that the column separator you specify by using this parameter is the same as the column separator used in the data file.<br/>**NOTE**<br/>For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (\|), whose length does not exceed 50 bytes as a text delimiter. |
 | row_delimiter    | No       | The characters that are used in the data file to separate rows. If you do not specify this parameter, this parameter defaults to `\n`. |
+| skip_header      | No       | Specifies whether to skip the first rows of the data file when the data file is in CSV format. Type: INTEGER. Default value: `0`.<br>In some CSV-formatted data files, the first rows at the beginning are used to define metadata such as column names and column data types. By setting the `skip_header` parameter, you can enable StarRocks to skip the first rows of the data file during data loading. For example, if you set this parameter to `1`, StarRocks skips the first row of the data file during data loading.<br>The first rows at the beginning in the data file must be separated by using the row separator that you specify in the load statement or command. For example, for Stream Load, the `row_delimiter` parameter is used to specify the row separator. |
+| trim_space       | No       | Specifies whether to remove spaces preceding and following column separators from the data file when the data file is in CSV format. Type: BOOLEAN. Default value: `false`.<br>For some databases, spaces are added to column separators when you export data as a CSV-formatted data file. Such spaces are called leading spaces or trailing spaces depending on their locations. By setting the `trim_space` parameter, you can enable StarRocks to remove such unnecessary spaces during data loading.<br>Note that StarRocks does not remove the spaces (including leading spaces and trailing spaces) within a field wrapped in a pair of `enclose`-specified characters. For example, the following field values use pipe (<code class="language-text">&#124;</code>) as the column separator and double quotation marks (`"`) as the `enclose`-specified character:<br><code class="language-text">&#124;"Love StarRocks"&#124;</code> <br><code class="language-text">&#124;" Love StarRocks "&#124;</code> <br><code class="language-text">&#124; "Love StarRocks" &#124;</code> <br>If you set `trim_space` to `true`, StarRocks processes the preceding field values as follows:<br><code class="language-text">&#124;"Love StarRocks"&#124;</code> <br><code class="language-text">&#124;" Love StarRocks "&#124;</code> <br><code class="language-text">&#124;"Love StarRocks"&#124;</code> |
+| enclose          | No       | Specifies the character that is used to wrap the field values in the data file according to [RFC4180](https://www.rfc-editor.org/rfc/rfc4180) when the data file is in CSV format. Type: single-byte character. Default value: `NONE`. The most prevalent characters are single quotation mark (`'`) and double quotation mark (`"`).<br>All special characters (including row separators and column separators) wrapped by using the `enclose`-specified character are considered normal symbols. StarRocks can do more than RFC4180 as it allows you to specify any single-byte character as the `enclose`-specified character.<br>If a field value contains an `enclose`-specified character, you can use the same character to escape that `enclose`-specified character. For example, you set `enclose` to `"`, and a field value is `a "quoted" c`. In this case, you can enter the field value as `"a ""quoted"" c"` into the data file. |
+| escape           | No       | Specifies the character that is used to escape various special characters, such as row separators, column separators, escape characters, and `enclose`-specified characters, which are then considered by StarRocks to be common characters and are parsed as part of the field values in which they reside. Type: single-byte character. Default value: `NONE`. The most prevalent character is slash (`\`), which must be written as double slashes (`\\`) in SQL statements.<br>**NOTE**<br>The character specified by `escape` is applied to both inside and outside of each pair of `enclose`-specified characters.<br>Two examples are as follows:<ul><li>When you set `enclose` to `"` and `escape` to `\`, StarRocks parses `"say \"Hello world\""` into `say "Hello world"`.</li><li>Assume that the column separator is comma (`,`). When you set `escape` to `\`, StarRocks parses `a, b\, c` into two separate field values: `a` and `b, c`.</li></ul> |
 
 > **NOTE**
-  >
-  > - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
-  > - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
+>
+> - For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+> - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
+> - The format options, including `skip_header`, `trim_space`, `enclose`, and `escape`, are supported in v3.0 and later.
 
 #### JSON parameters
 
@@ -131,7 +136,7 @@ The following table describes the optional parameters.
 | strict_mode      | No       | Specifies whether to enable the [strict mode](../../../loading/load_concept/strict_mode.md). Valid values: `true` and `false`. Default value: `false`.  The value `true` specifies to enable the strict mode, and the value `false` specifies to disable the strict mode. |
 | timezone         | No       | The time zone used by the load job. Default value: `Asia/Shanghai`. The value of this parameter affects the results returned by functions such as strftime, alignment_timestamp, and from_unixtime. The time zone specified by this parameter is a session-level time zone. For more information, see [Configure a time zone](../../../administration/timezone.md). |
 | load_mem_limit   | No       | The maximum amount of memory that can be provisioned to the load job. Unit: bytes. By default, the maximum memory size for a load job is 2 GB. The value of this parameter cannot exceed the maximum amount of memory that can be provisioned to each BE. |
-| merge_condition  | No       | Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column. StarRocks supports conditional updates since v2.5. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md). <br/>**NOTE**<br/>The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key model support conditional updates. |
+| merge_condition  | No       | Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column. StarRocks supports conditional updates since v2.5. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md). <br/>**NOTE**<br/>The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key table support conditional updates. |
 
 ## Column mapping
 
@@ -297,7 +302,7 @@ If you want to load only the data records whose values in the first column of `e
 
 ```Bash
 curl --location-trusted -u root: -H "label:label4" \
-    -H "columns: col1, col2，col3]"\
+    -H "columns: col1, col2, col3]"\
     -H "where: col1 = 20180601" \
     -T example4.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table4/_stream_load
@@ -387,6 +392,23 @@ curl --location-trusted -u root: \
 > - The `bitmap_empty` function is used to fill the specified default value into `col2` of `table8`.
 
 For usage of the functions `to_bitmap` and `bitmap_empty`, see [to_bitmap](../../../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) and [bitmap_empty](../../../sql-reference/sql-functions/bitmap-functions/bitmap_empty.md).
+
+#### Setting `skip_header`, `trim_space`, `enclose`, and `escape`
+
+Your StarRocks database `test_db` contains a table named `table9`. The table consists of three columns, which are `col1`, `col2`, and `col3` in sequence.
+
+Your data file `example9.csv` also consists of three columns, which are mapped in sequence onto `col2`, `col1`, and `col3` of `table13`.
+
+If you want to load all data from `example9.csv` into `table9`, with the intention of skipping the first five rows of `example9.csv`, removing the spaces preceding and following column separators, and setting `enclose` to `\` and `escape` to `\`, run the following command:
+
+```Bash
+curl --location-trusted -u root: -H "label:3875" \
+    -H "trim_space: true" -H "skip_header: 5" \
+    -H "column_separator:," -H "enclose:\"" -H "escape:\\" \
+    -H "columns: col2, col1, col3" \
+    -T example9.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/tbl9/_stream_load
+```
 
 ### Load JSON data
 

@@ -117,6 +117,8 @@ public:
     size_t num_rows_per_row_block() const;
     size_t next_unique_id() const;
     size_t field_index(const string& field_name) const;
+    std::string schema_debug_string() const;
+    std::string debug_string() const;
 
     // operation in rowsets
     Status add_rowset(const RowsetSharedPtr& rowset, bool need_persist = true);
@@ -129,25 +131,6 @@ public:
     RowsetSharedPtr get_inc_rowset_by_version(const Version& version) const;
 
     RowsetSharedPtr rowset_with_max_version() const;
-
-    bool binlog_enable();
-
-    // The process to generate binlog when publishing a rowset. These methods are protected by _meta_lock
-    // prepare_binlog_if_needed: persist the binlog file before saving the rowset meta in add_inc_rowset()
-    //              but the in-memory binlog meta in BinlogManager is not modified, so the binlog
-    //              is not visible
-    // commit_binlog: if successful to save rowset meta in add_inc_rowset(), make the newly binlog
-    //              file visible. commit_binlog is expected to be always successful because it just
-    //              modifies the in-memory binlog metas
-    // abort_binlog: if failed to save rowset meta, clean up the binlog file generated in
-    //              prepare_binlog
-
-    // Prepare the binlog if needed. Return false if no need to prepare binlog, such as the binlog
-    // is disabled, otherwise will prepare the binlog. true will be returned if prepare successfully,
-    // other status if error happens during preparation.
-    StatusOr<bool> prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version);
-    void commit_binlog(int64_t version);
-    void abort_binlog(const RowsetSharedPtr& rowset, int64_t version);
 
     Status add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version);
     void delete_expired_inc_rowsets();
@@ -312,6 +295,24 @@ private:
     void _delete_stale_rowset_by_version(const Version& version);
     Status _capture_consistent_rowsets_unlocked(const vector<Version>& version_path,
                                                 vector<RowsetSharedPtr>* rowsets) const;
+
+    // The process to generate binlog when publishing a rowset. These methods are protected by _meta_lock
+    // _prepare_binlog_if_needed: persist the binlog file before saving the rowset meta in add_inc_rowset()
+    //              but the in-memory binlog meta in BinlogManager is not modified, so the binlog
+    //              is not visible
+    // _commit_binlog: if successful to save rowset meta in add_inc_rowset(), make the newly binlog
+    //              file visible. _commit_binlog is expected to be always successful because it just
+    //              modifies the in-memory binlog metas
+    // _abort_binlog: if failed to save rowset meta, clean up the binlog file generated in
+    //              prepare_binlog
+
+    // Prepare the binlog if needed. Return false if no need to prepare binlog, such as the binlog
+    // is disabled, otherwise will prepare the binlog. true will be returned if prepare successfully,
+    // other status if error happens during preparation.
+    StatusOr<bool> _prepare_binlog_if_needed(const RowsetSharedPtr& rowset, int64_t version);
+    void _commit_binlog(int64_t version);
+    void _abort_binlog(const RowsetSharedPtr& rowset, int64_t version);
+    void _delete_unused_binlog();
 
     friend class TabletUpdates;
     static const int64_t kInvalidCumulativePoint = -1;

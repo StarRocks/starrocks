@@ -63,6 +63,7 @@ import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.After;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -74,6 +75,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class OptimizerTaskTest {
     private ColumnRefFactory columnRefFactory;
@@ -740,33 +742,31 @@ public class OptimizerTaskTest {
         ColumnRefSet outputColumns = new ColumnRefSet(column2.getId());
 
         Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                outputColumns, columnRefFactory);
+        try {
+            optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            fail("invalid plan. can not optimize success");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 2: t2 in " +
+                    "expr '2: t2' is defined as INT, but the actual type is BIGINT"));
+        }
 
-        assertEquals(physicalTree.getLogicalProperty().getOutputColumns(), new ColumnRefSet(column2.getId()));
+        try {
+            ConnectContext tmp = UtFrameUtils.createDefaultCtx();
+            tmp.getSessionVariable().setMaxTransformReorderJoins(8);
+            tmp.getSessionVariable().setEnableReplicationJoin(false);
+            tmp.getSessionVariable().setJoinImplementationMode("auto");
+            tmp.getSessionVariable().setEnablePlanValidation(false);
+            tmp.setDumpInfo(new MockDumpInfo());
+            OptExpression expression1 = optimizer.optimize(tmp, expression, new PhysicalPropertySet(), outputColumns,
+                    columnRefFactory);
+            Map<ColumnRefOperator, CallOperator> aggs = ((PhysicalHashAggregateOperator) expression1.getOp()).getAggregations();
+            assertEquals(Type.INT, column2.getType());
+            assertEquals(Type.BIGINT, aggs.get(column2).getType());
+        } catch (Exception e) {
+            fail("sql should execute normally");
+        }
 
-        assertEquals(physicalTree.getLogicalProperty().getOutputColumns(),
-                new ColumnRefSet(Lists.newArrayList(column2)));
 
-        assertEquals(physicalTree.inputAt(0).getLogicalProperty().getOutputColumns(),
-                new ColumnRefSet(Lists.newArrayList(column2, column3)));
-
-        assertEquals(physicalTree.inputAt(0).inputAt(0).
-                        getLogicalProperty().getOutputColumns(),
-                new ColumnRefSet(Lists.newArrayList(column2, column3)));
-
-        assertEquals(physicalTree.inputAt(0).inputAt(0).inputAt(0).
-                        getLogicalProperty().getOutputColumns(),
-                new ColumnRefSet(Lists.newArrayList(column2, column3)));
-
-        Memo memo = optimizer.getContext().getMemo();
-        PhysicalOlapScanOperator
-                scan = (PhysicalOlapScanOperator) memo.getGroups().get(0).getPhysicalExpressions().get(0).getOp();
-        assertEquals(scan.getOutputColumns(), Lists.newArrayList(column2, column3));
-
-        assertEquals(optimizer.getContext().getMemo().getRootGroup().
-                getLogicalProperty().getOutputColumns(), new ColumnRefSet(column2.getId()));
-        ctx.getSessionVariable().setNewPlanerAggStage(0);
     }
 
     @Test
@@ -827,15 +827,13 @@ public class OptimizerTaskTest {
         ColumnRefSet outputColumns = new ColumnRefSet(column5.getId());
 
         Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                outputColumns, columnRefFactory);
-
-        assertEquals(physicalTree.getLogicalProperty().getOutputColumns(), new ColumnRefSet(column5.getId()));
-
-        Memo memo = optimizer.getContext().getMemo();
-        PhysicalOlapScanOperator
-                scan = (PhysicalOlapScanOperator) memo.getGroups().get(0).getPhysicalExpressions().get(0).getOp();
-        assertEquals(scan.getOutputColumns(), Lists.newArrayList(column1));
+        try {
+            optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            fail("invalid plan. can not optimize success");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 5: t5 in " +
+                    "expr '5: t5' is defined as INT, but the actual type is BIGINT"));
+        }
     }
 
     @Test
@@ -874,18 +872,15 @@ public class OptimizerTaskTest {
         ColumnRefSet outputColumns = new ColumnRefSet(column4.getId());
 
         Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                outputColumns, columnRefFactory);
+        try {
+            optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            fail("invalid plan. can not optimize success");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
+                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
+        }
 
-        assertEquals(physicalTree.getLogicalProperty().getOutputColumns(), new ColumnRefSet(column4.getId()));
 
-        Memo memo = optimizer.getContext().getMemo();
-        PhysicalOlapScanOperator
-                scan = (PhysicalOlapScanOperator) memo.getGroups().get(0).getPhysicalExpressions().get(0).getOp();
-        assertEquals(scan.getOutputColumns(), Lists.newArrayList(column1));
-
-        assertEquals(optimizer.getContext().getMemo().getRootGroup().
-                getLogicalProperty().getOutputColumns(), new ColumnRefSet(column4.getId()));
     }
 
     @Test
@@ -927,13 +922,15 @@ public class OptimizerTaskTest {
         ColumnRefSet outputColumns = new ColumnRefSet(column4.getId());
 
         Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                outputColumns, columnRefFactory);
+        try {
+            optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            fail("invalid plan. can not optimize success");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
+                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
+        }
 
-        assertEquals(physicalTree.getLogicalProperty().getOutputColumns(), new ColumnRefSet(column4.getId()));
 
-        Operator root = physicalTree.getOp();
-        assertEquals(root.getOpType(), OperatorType.PHYSICAL_LIMIT);
     }
 
     @Test
@@ -1097,22 +1094,13 @@ public class OptimizerTaskTest {
         ColumnRefSet outputColumns = new ColumnRefSet(Lists.newArrayList(column3));
 
         Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                outputColumns, columnRefFactory);
-
-        Operator operator = physicalTree.getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregateOperator globalAgg = (PhysicalHashAggregateOperator) operator;
-        assertTrue(globalAgg.getType().isGlobal());
-
-        operator = physicalTree.inputAt(0).getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
-
-        operator = physicalTree.inputAt(0).inputAt(0).getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregateOperator localAgg = (PhysicalHashAggregateOperator) operator;
-        assertTrue(localAgg.getType().isLocal());
-        ctx.getSessionVariable().setNewPlanerAggStage(0);
+        try {
+            optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            fail("invalid plan. can not optimize success");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
+                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
+        }
     }
 
     @Test
@@ -1169,29 +1157,16 @@ public class OptimizerTaskTest {
         ColumnRefSet outputColumns = new ColumnRefSet(Lists.newArrayList(column3, column2));
 
         Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                outputColumns, columnRefFactory);
+        try {
+            optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            fail("invalid plan. can not optimize success");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
+                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
+        }
 
-        Operator operator = physicalTree.getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregateOperator globalAgg = (PhysicalHashAggregateOperator) operator;
-        assertTrue(globalAgg.getType().isGlobal());
 
-        operator = physicalTree.inputAt(0).getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregateOperator interMediateAgg = (PhysicalHashAggregateOperator) operator;
-        assertTrue(interMediateAgg.getType().isDistinctGlobal());
 
-        operator = physicalTree.inputAt(0).inputAt(0).getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
-
-        operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregateOperator localAgg = (PhysicalHashAggregateOperator) operator;
-        assertTrue(localAgg.getType().isLocal());
-
-        operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
     }
 
     @Test
@@ -1248,37 +1223,15 @@ public class OptimizerTaskTest {
         ColumnRefSet outputColumns = new ColumnRefSet(Lists.newArrayList(column3));
 
         Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                outputColumns, columnRefFactory);
+        try {
+            optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            fail("invalid plan. can not optimize success");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
+                    "expr '3: t3' is defined as INT, but the actual type is BIGINT"));
+        }
 
-        Operator operator = physicalTree.getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregateOperator globalAgg = (PhysicalHashAggregateOperator) operator;
-        assertTrue(globalAgg.getType().isGlobal());
 
-        operator = physicalTree.inputAt(0).getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
-
-        operator = physicalTree.inputAt(0).inputAt(0).getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregateOperator distinctLocalAgg = (PhysicalHashAggregateOperator) operator;
-        assertTrue(distinctLocalAgg.getType().isDistinctLocal());
-
-        operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregateOperator distinctGlobalAgg = (PhysicalHashAggregateOperator) operator;
-        assertTrue(distinctGlobalAgg.getType().isDistinctGlobal());
-
-        operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
-
-        operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0).getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregateOperator localAgg = (PhysicalHashAggregateOperator) operator;
-        assertTrue(localAgg.getType().isLocal());
-
-        operator = physicalTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0).getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
     }
 
     @Test
@@ -1392,13 +1345,13 @@ public class OptimizerTaskTest {
         ColumnRefSet outputColumns = new ColumnRefSet(Lists.newArrayList(column6));
 
         Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, root, new PhysicalPropertySet(),
-                outputColumns, columnRefFactory);
-
-        Operator operator = physicalTree.getOp();
-        assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
-        PhysicalHashAggregateOperator globalAgg = (PhysicalHashAggregateOperator) operator;
-        assertEquals(globalAgg.getPredicate(), predicate);
+        try {
+            optimizer.optimize(ctx, root, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            fail("invalid plan. can not optimize success");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 5: t5 in " +
+                    "expr '5: t5' is defined as INT, but the actual type is BIGINT"));
+        }
     }
 
     @Test
@@ -1944,7 +1897,7 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo1;
                 minTimes = 0;
 
-                olapTable1.isNativeTable();
+                olapTable1.isNativeTableOrMaterializedView();
                 result = true;
                 minTimes = 0;
             }
@@ -1966,7 +1919,7 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo2;
                 minTimes = 0;
 
-                olapTable2.isNativeTable();
+                olapTable2.isNativeTableOrMaterializedView();
                 result = true;
                 minTimes = 0;
             }
@@ -2057,7 +2010,7 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo1;
                 minTimes = 0;
 
-                olapTable1.isNativeTable();
+                olapTable1.isNativeTableOrMaterializedView();
                 result = true;
                 minTimes = 0;
             }
@@ -2079,7 +2032,7 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo2;
                 minTimes = 0;
 
-                olapTable2.isNativeTable();
+                olapTable2.isNativeTableOrMaterializedView();
                 result = true;
                 minTimes = 0;
             }
@@ -2146,7 +2099,7 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo1;
                 minTimes = 0;
 
-                olapTable1.isNativeTable();
+                olapTable1.isNativeTableOrMaterializedView();
                 result = true;
                 minTimes = 0;
             }
@@ -2168,7 +2121,7 @@ public class OptimizerTaskTest {
                 result = hashDistributionInfo2;
                 minTimes = 0;
 
-                olapTable2.isNativeTable();
+                olapTable2.isNativeTableOrMaterializedView();
                 result = true;
                 minTimes = 0;
             }

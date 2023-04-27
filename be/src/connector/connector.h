@@ -50,6 +50,8 @@ public:
     virtual int64_t num_bytes_read() const = 0;
     // CPU time of this data source
     virtual int64_t cpu_time_spent() const = 0;
+    // IO time of this data source
+    virtual int64_t io_time_spent() const { return 0; }
 
     // following fields are set by framework
     // 1. runtime profile: any metrics you want to record
@@ -62,6 +64,8 @@ public:
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     Status parse_runtime_filters(RuntimeState* state);
     void update_has_any_predicate();
+    // Called frequently, don't do heavy work
+    virtual const std::string get_custom_coredump_msg() const { return ""; }
 
 protected:
     int64_t _read_limit = -1; // no limit
@@ -116,6 +120,10 @@ public:
     virtual Status init(ObjectPool* pool, RuntimeState* state) { return Status::OK(); }
 
     const std::vector<ExprContext*>& partition_exprs() const { return _partition_exprs; }
+
+    virtual const TupleDescriptor* tuple_descriptor(RuntimeState* state) const = 0;
+
+    virtual bool always_shared_scan() const { return true; }
 
 protected:
     std::vector<ExprContext*> _partition_exprs;
