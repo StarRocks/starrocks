@@ -25,9 +25,9 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeConfigsScanner::_s_columns[] = {
-        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"VALUE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},        {"NAME", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"VALUE", TYPE_VARCHAR, sizeof(StringValue), false},   {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"DEFAULT", TYPE_VARCHAR, sizeof(StringValue), false}, {"MUTABLE", TYPE_BOOLEAN, sizeof(bool), false},
 };
 
 SchemaBeConfigsScanner::SchemaBeConfigsScanner()
@@ -38,14 +38,8 @@ SchemaBeConfigsScanner::~SchemaBeConfigsScanner() = default;
 Status SchemaBeConfigsScanner::start(RuntimeState* state) {
     auto o_id = get_backend_id();
     _be_id = o_id.has_value() ? o_id.value() : -1;
-    _infos.clear();
-    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
-    for (const auto& it : *(config::full_conf_map)) {
-        auto& info = _infos.emplace_back();
-        info.first = it.first;
-        info.second = it.second;
-    }
     _cur_idx = 0;
+    _infos = config::list_configs();
     return Status::OK();
 }
 
@@ -54,9 +48,6 @@ Status SchemaBeConfigsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < _infos.size(); _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 3) {
-                return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
-            }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
             switch (slot_id) {
             case 1: {
@@ -66,18 +57,36 @@ Status SchemaBeConfigsScanner::fill_chunk(ChunkPtr* chunk) {
             }
             case 2: {
                 // name
-                Slice v(info.first);
+                Slice v(info.name);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
                 break;
             }
             case 3: {
                 // value
-                Slice v(info.second);
+                Slice v(info.value);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
                 break;
             }
-            default:
+            case 4: {
+                // type
+                Slice v(info.type);
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
                 break;
+            }
+            case 5: {
+                // default
+                Slice v(info.defval);
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&v);
+                break;
+            }
+            case 6: {
+                // mutable
+                bool v(info.valmutable);
+                fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&v);
+                break;
+            }
+            default:
+                return Status::InternalError(strings::Substitute("invalid slot id:$0", slot_id));
             }
         }
     }
