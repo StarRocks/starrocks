@@ -716,7 +716,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
          *
          * condition explain:
          * 1. only for PENDING task
-         * 2. repair task or balance task that dose not adopt strategy of TABLET_BALANCER_STRATEGY_DISK_AND_TABLET
+         * 2. repair task or balance task that does not adopt strategy of TABLET_BALANCER_STRATEGY_DISK_AND_TABLET
          */
         if (state == State.PENDING
                 && (type == Type.REPAIR)) {
