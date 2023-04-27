@@ -21,10 +21,10 @@
 
 package com.starrocks.clone;
 
+import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.clone.BackendLoadStatistic.Classification;
 import com.starrocks.clone.BalanceStatus.ErrCode;
-import com.starrocks.common.Config;
 import com.starrocks.thrift.TStorageMedium;
 
 public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> {
@@ -90,27 +90,17 @@ public class RootPathLoadStatistic implements Comparable<RootPathLoadStatistic> 
         return diskState;
     }
 
-    public BalanceStatus isFit(long tabletSize, boolean isSupplement) {
+    public BalanceStatus isFit(long tabletSize) {
         if (diskState == DiskState.OFFLINE) {
             return new BalanceStatus(ErrCode.COMMON_ERROR,
                     toString() + " does not fit tablet with size: " + tabletSize + ", offline");
         }
 
-        if (isSupplement) {
-            if ((usedCapacityB + tabletSize) / (double) capacityB > (Config.storage_flood_stage_usage_percent / 100.0)
-                    && capacityB - usedCapacityB - tabletSize < Config.storage_flood_stage_left_capacity_bytes) {
-                return new BalanceStatus(ErrCode.COMMON_ERROR,
-                        toString() + " does not fit tablet with size: " + tabletSize + ", limitation reached");
-            } else {
-                return BalanceStatus.OK;
-            }
-        }
-
-        if ((usedCapacityB + tabletSize) / (double) capacityB > (Config.storage_high_watermark_usage_percent / 100.0)
-                || capacityB - usedCapacityB - tabletSize < Config.storage_min_left_capacity_bytes) {
+        if (DiskInfo.exceedLimit(capacityB - usedCapacityB - tabletSize, capacityB, false)) {
             return new BalanceStatus(ErrCode.COMMON_ERROR,
                     toString() + " does not fit tablet with size: " + tabletSize);
         }
+
         return BalanceStatus.OK;
     }
 

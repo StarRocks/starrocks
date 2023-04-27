@@ -379,7 +379,7 @@ public class BackendLoadStatistic {
                 continue;
             }
 
-            BalanceStatus bStatus = pathStatistic.isFit(tabletSize, isSupplement);
+            BalanceStatus bStatus = pathStatistic.isFit(tabletSize);
             if (!bStatus.ok()) {
                 status.addErrMsgs(bStatus.getErrMsgs());
                 continue;
@@ -392,7 +392,7 @@ public class BackendLoadStatistic {
         // if this is a supplement task, ignore the storage medium
         if (isSupplement || !Config.enable_strict_storage_medium_check) {
             for (RootPathLoadStatistic filteredPathStatistic : mediumNotMatchedPath) {
-                BalanceStatus bStatus = filteredPathStatistic.isFit(tabletSize, isSupplement);
+                BalanceStatus bStatus = filteredPathStatistic.isFit(tabletSize);
                 if (!bStatus.ok()) {
                     status.addErrMsgs(bStatus.getErrMsgs());
                     continue;
