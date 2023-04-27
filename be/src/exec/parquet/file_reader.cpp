@@ -534,9 +534,21 @@ void FileReader::_append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, 
 const tparquet::ColumnMetaData* FileReader::_get_column_meta(const tparquet::RowGroup& row_group,
                                                              const std::string& col_name) {
     for (const auto& column : row_group.columns) {
+<<<<<<< HEAD:be/src/exec/parquet/file_reader.cpp
         // TODO: support not scalar type
         if (column.meta_data.path_in_schema[0] == col_name) {
             return &column.meta_data;
+=======
+        // TODO: support non-scalar type
+        if (case_sensitive) {
+            if (column.meta_data.path_in_schema[0] == col_name) {
+                return &column.meta_data;
+            }
+        } else {
+            if (boost::algorithm::iequals(column.meta_data.path_in_schema[0], col_name)) {
+                return &column.meta_data;
+            }
+>>>>>>> e0758e2d8 ([BugFix] Fix parquet column name case sensitive problem in min-max filter (#22626)):be/src/formats/parquet/file_reader.cpp
         }
     }
     return nullptr;
