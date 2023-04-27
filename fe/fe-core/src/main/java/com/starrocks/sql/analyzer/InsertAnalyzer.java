@@ -160,7 +160,8 @@ public class InsertAnalyzer {
                 LiteralExpr literalExpr = (LiteralExpr) partitionValue;
                 Column column = icebergTable.getColumn(actualName);
                 try {
-                    literalExpr.castTo(column.getType());
+                    Expr expr = LiteralExpr.create(literalExpr.getStringValue(), column.getType());
+                    insertStmt.getTargetPartitionNames().getPartitionColValues().set(i, expr);
                 } catch (AnalysisException e) {
                     throw new SemanticException(e.getMessage());
                 }
