@@ -163,6 +163,56 @@ public class CreateTableAutoTabletTest {
     }
 
     @Test
+    public void test1AutoTabletWithModifyDynamicPartitionProperty() throws Exception {
+        PseudoCluster cluster = PseudoCluster.getInstance();
+        cluster.runSql("db_for_auto_tablets",
+                " CREATE TABLE test_modify_dynamic_partition_property (" +
+                     "    k1 date," +
+                     "    k2 int(11)," +
+                     "    k3 smallint(6)," +
+                     "    v1 varchar(2048)," +
+                     "    v2 datetime" +
+                     "  ) ENGINE=OLAP" +
+                     "  DUPLICATE KEY(k1, k2, k3) " +
+                     "  PARTITION BY RANGE(k1)" +
+                     "  (PARTITION p20230306 VALUES [('2023-03-06'), ('2023-03-07')))" +
+                     "  DISTRIBUTED BY HASH(k2) BUCKETS 10" +
+                     "  PROPERTIES (" +
+                     "   'replication_num' = '1'," +
+                     "   'dynamic_partition.enable' = 'true'," +
+                     "   'dynamic_partition.time_unit' = 'DAY'," +
+                     "   'dynamic_partition.time_zone' = 'Asia/Shanghai'," +
+                     "   'dynamic_partition.start' = '-1'," +
+                     "   'dynamic_partition.end' = '3'," +
+                     "   'dynamic_partition.buckets' = '3'," +
+                     "   'dynamic_partition.prefix' = 'p');");
+        Thread.sleep(1000); // wait for the dynamic partition created
+        Database db = GlobalStateMgr.getCurrentState().getDb("db_for_auto_tablets");
+        if (db == null) {
+            return;
+        }
+
+        OlapTable table = (OlapTable) db.getTable("test_modify_dynamic_partition_property");
+        if (table == null) {
+            return;
+        }
+
+        cluster.runSql("db_for_auto_tablets", "ALTER TABLE test_modify_dynamic_partition_property SET ('dynamic_partition.enable' = 'false')");
+        cluster.runSql("db_for_auto_tablets", "ALTER TABLE test_modify_dynamic_partition_property ADD PARTITION p20230306 VALUES [('2023-03-06'), ('2023-03-07'))");
+        cluster.runSql("db_for_auto_tablets", "ALTER TABLE test_modify_dynamic_partition_property SET ('dynamic_partition.enable' = 'true')");
+
+        int bucketNum = 0;
+        db.readLock();
+        try {
+            Partition partition = table.getPartition("p20230306");
+            bucketNum = partition.getDistributionInfo().getBucketNum();
+        } finally {
+            db.readUnlock();
+        }
+        Assert.assertEquals(bucketNum, 20);
+    }
+
+    @Test
     public void test1AutoTabletWithColocate() throws Exception {
         PseudoCluster cluster = PseudoCluster.getInstance();
         cluster.runSql("db_for_auto_tablets",
