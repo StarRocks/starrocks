@@ -334,6 +334,11 @@ public class MaterializedViewRewriter {
 
             OptExpression rewrittenExpression = tryRewriteForRelationMapping(rewriteContext, compensationJoinColumns);
             if (rewrittenExpression != null) {
+                // copy limit into rewritten plan
+                // limit will affect the statistics of rewritten plan
+                if (rewriteContext.getQueryExpression().getOp().hasLimit()) {
+                    rewrittenExpression.getOp().setLimit(rewriteContext.getQueryExpression().getOp().getLimit());
+                }
                 return rewrittenExpression;
             }
         }
