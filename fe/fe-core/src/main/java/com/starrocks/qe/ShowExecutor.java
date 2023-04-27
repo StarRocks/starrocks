@@ -2494,12 +2494,19 @@ public class ShowExecutor {
     private void handleShowCreateExternalCatalog() {
         ShowCreateExternalCatalogStmt showStmt = (ShowCreateExternalCatalogStmt) stmt;
         String catalogName = showStmt.getCatalogName();
-        Catalog catalog = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
         List<List<String>> rows = Lists.newArrayList();
         if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(catalogName)) {
             resultSet = new ShowResultSet(stmt.getMetaData(), rows);
             return;
         }
+
+        Catalog catalog = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
+        if (catalog == null) {
+            rows.add(Lists.newArrayList(catalogName, "Error: catalog does not exist\n"));
+            resultSet = new ShowResultSet(stmt.getMetaData(), rows);
+            return;
+        }
+
         // Create external catalog catalogName (
         StringBuilder createCatalogSql = new StringBuilder();
         createCatalogSql.append("CREATE EXTERNAL CATALOG ")
