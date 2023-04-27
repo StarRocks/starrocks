@@ -2063,7 +2063,7 @@ public class Config extends ConfigBase {
     public static long lake_compaction_simple_selector_threshold_seconds = 300;
 
     @ConfField(mutable = true)
-    public static double lake_compaction_score_selector_min_score = 2.0;
+    public static double lake_compaction_score_selector_min_score = 10.0;
 
     /**
      * -1 means calculate the value in an adaptive way.
