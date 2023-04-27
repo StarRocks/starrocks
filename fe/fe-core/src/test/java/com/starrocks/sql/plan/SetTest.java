@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
@@ -562,7 +561,8 @@ public class SetTest extends PlanTestBase {
         String sql = "set @var = (select v1,v2 from test.t0)";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
         SetExecutor setExecutor = new SetExecutor(connectContext, (SetStmt) statementBase);
-        Assert.assertThrows("Scalar subquery should output one column", SemanticException.class, () -> setExecutor.execute());
+        Assert.assertThrows("Scalar subquery should output one column", SemanticException.class,
+                () -> setExecutor.execute());
         try {
             setExecutor.execute();
             Assert.fail();
@@ -581,5 +581,15 @@ public class SetTest extends PlanTestBase {
                 "  |----4:EXCHANGE\n" +
                 "  |    \n" +
                 "  2:EXCHANGE");
+    }
+
+    @Test
+    public void testUnionNull() throws Exception {
+        String sql = "SELECT DISTINCT NULL\n" +
+                "WHERE NULL\n" +
+                "UNION ALL\n" +
+                "SELECT DISTINCT NULL\n" +
+                "WHERE NULL";
+        getThriftPlan(sql);
     }
 }
