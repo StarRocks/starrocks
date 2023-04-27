@@ -825,6 +825,9 @@ CONF_mInt64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
 CONF_mBool(lake_compaction_check_txn_log_first, "false");
 CONF_mInt64(experimental_lake_segment_gc_max_retries, "3");
 CONF_mBool(experimental_lake_enable_fast_gc, "false");
+CONF_Int32(lake_tablet_writer_max_concurrency, "500");
+CONF_Int32(lake_publish_version_max_concurrency, "500");
+CONF_Int32(lake_compaction_max_concurrency, "100");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
