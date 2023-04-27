@@ -28,7 +28,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.ServerContext;
 import org.apache.thrift.server.TServerEventHandler;
-import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
 
@@ -57,9 +56,10 @@ public class ThriftServerEventProcessor implements TServerEventHandler {
     @Override
     public ServerContext createContext(TProtocol input, TProtocol output) {
         // param input is class org.apache.thrift.protocol.TBinaryProtocol
-        TSocket tSocket = null;
         TTransport transport = input.getTransport();
+        Preconditions.checkState(transport instanceof TSocket);
 
+<<<<<<< HEAD
         switch (thriftServer.getType()) {
             case THREADED:
                 // class org.apache.thrift.transport.TFramedTransport
@@ -79,13 +79,20 @@ public class ThriftServerEventProcessor implements TServerEventHandler {
             LOG.info("fail to get client socket. server type: {}", thriftServer.getType());
             return null;
         }
+=======
+        TSocket tSocket = (TSocket) transport;
+>>>>>>> c5c90a68b ([Enhancement] Add hint to insert into error msg if thrift server pool is exhausted (#21964))
         SocketAddress socketAddress = tSocket.getSocket().getRemoteSocketAddress();
         InetSocketAddress inetSocketAddress = null;
         if (socketAddress instanceof InetSocketAddress) {
             inetSocketAddress = (InetSocketAddress) socketAddress;
         } else {
+<<<<<<< HEAD
             LOG.info("fail to get client socket address. server type: {}",
                     thriftServer.getType());
+=======
+            LOG.warn("fail to get client socket address");
+>>>>>>> c5c90a68b ([Enhancement] Add hint to insert into error msg if thrift server pool is exhausted (#21964))
             return null;
         }
         TNetworkAddress clientAddress = new TNetworkAddress(
@@ -118,9 +125,9 @@ public class ThriftServerEventProcessor implements TServerEventHandler {
             return;
         }
 
+        Preconditions.checkState(serverContext instanceof ThriftServerContext);
         ThriftServerContext thriftServerContext = (ThriftServerContext) serverContext;
         TNetworkAddress clientAddress = thriftServerContext.getClient();
-        Preconditions.checkState(serverContext instanceof ThriftServerContext);
         connectionContext.set(new ThriftServerContext(clientAddress));
     }
 }

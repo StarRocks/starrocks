@@ -515,12 +515,6 @@ public class Config extends ConfigBase {
     public static int thrift_backlog_num = 1024;
 
     /**
-     * Define thrift server's server model, default is TThreadPoolServer model
-     */
-    @ConfField
-    public static String thrift_server_type = ThriftServer.THREAD_POOL;
-
-    /**
      * the timeout for thrift rpc call
      */
     @ConfField(mutable = true)
