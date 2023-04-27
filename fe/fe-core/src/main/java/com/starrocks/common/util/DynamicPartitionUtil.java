@@ -299,11 +299,6 @@ public class DynamicPartitionUtil {
             checkBuckets(bucketsValue);
             properties.remove(DynamicPartitionProperty.BUCKETS);
             analyzedProperties.put(DynamicPartitionProperty.BUCKETS, bucketsValue);
-        } else {
-            String bucketsValue = "0";
-            checkBuckets(bucketsValue);
-            properties.remove(DynamicPartitionProperty.BUCKETS);
-            analyzedProperties.put(DynamicPartitionProperty.BUCKETS, bucketsValue);
         }
         if (properties.containsKey(DynamicPartitionProperty.ENABLE)) {
             String enableValue = properties.get(DynamicPartitionProperty.ENABLE);
@@ -430,10 +425,14 @@ public class DynamicPartitionUtil {
             TableProperty tableProperty = olapTable.getTableProperty();
             if (tableProperty != null) {
                 tableProperty.modifyTableProperties(dynamicPartitionProperties);
-                tableProperty.buildDynamicProperty();
             } else {
-                olapTable.setTableProperty(new TableProperty(dynamicPartitionProperties).buildDynamicProperty());
+                tableProperty = new TableProperty(dynamicPartitionProperties);
+                olapTable.setTableProperty(tableProperty);
             }
+            if (!tableProperty.getProperties().containsKey(DynamicPartitionProperty.BUCKETS)) {
+                tableProperty.modifyTableProperties(DynamicPartitionProperty.BUCKETS, "0");
+            }
+            tableProperty.buildDynamicProperty();
         }
     }
 
