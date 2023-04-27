@@ -848,7 +848,6 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, MapGuard<LT>> {
                                                                     &child_type, kv_columns[i], child_array_start_idx,
                                                                     kv_size[i], &child_chunk_filter, ctx));
         }
-        col_map->remove_duplicated_keys();
         return Status::OK();
     }
 };
@@ -901,7 +900,6 @@ static const std::unordered_map<ArrowTypeId, LogicalType> global_strict_arrow_co
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DATETIME, ArrowTypeId::DATE64, ArrowTypeId::TIMESTAMP),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_DECIMAL128, ArrowTypeId::DECIMAL),
         STRICT_ARROW_CONV_ENTRY_R(TYPE_JSON, ArrowTypeId::STRUCT, ArrowTypeId::MAP, ArrowTypeId::LIST),
-        STRICT_ARROW_CONV_ENTRY_R(TYPE_MAP, ArrowTypeId::MAP),
 };
 
 static const std::unordered_map<int32_t, ConvertFunc> global_optimized_arrow_conv_table{
