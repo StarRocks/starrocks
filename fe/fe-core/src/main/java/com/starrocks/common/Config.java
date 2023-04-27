@@ -1189,6 +1189,14 @@ public class Config extends ConfigBase {
     public static long tablet_sched_storage_cooldown_second = -1L; // won't cool down by default
 
     /**
+     * If the tablet in scheduler queue has not been scheduled for tablet_sched_max_not_being_scheduled_interval_ms,
+     * its priority will upgrade.
+     * default is 15min
+     */
+    @ConfField(mutable = true)
+    public static long tablet_sched_max_not_being_scheduled_interval_ms = 15 * 60 * 1000;
+
+    /**
      * enable replicated storage as default table engine
      */
     @ConfField(mutable = true)
@@ -2097,7 +2105,7 @@ public class Config extends ConfigBase {
     public static long lake_compaction_simple_selector_threshold_seconds = 300;
 
     @ConfField(mutable = true)
-    public static double lake_compaction_score_selector_min_score = 2.0;
+    public static double lake_compaction_score_selector_min_score = 10.0;
 
     /**
      * -1 means calculate the value in an adaptive way.
@@ -2242,4 +2250,7 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static boolean enable_execute_script_on_frontend = true;
+
+    @ConfField(mutable = true)
+    public static short default_replication_num = 3;
 }
