@@ -165,6 +165,14 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
 
         sql("SELECT \n" +
                 "count(DISTINCT `order_id`) AS `order_num`, \n" +
+                "time_slice(`dt`, INTERVAL 5 minute) AS ds \n" +
+                "FROM `test_partition_expr_tbl1`\n" +
+                "WHERE time_slice(`dt`, INTERVAL 5 minute) BETWEEN '2023-04-11' AND '2023-04-12' or " +
+                "time_slice(`dt`, INTERVAL 5 minute) BETWEEN '2023-04-12' AND '2023-04-13'\n" +
+                "group by ds")
+                .match("test_partition_expr_mv1");
+        sql("SELECT \n" +
+                "count(DISTINCT `order_id`) AS `order_num`, \n" +
                 "time_slice(`dt`, INTERVAL 5 minute) AS `ts`\n" +
                 "FROM `test_partition_expr_tbl1`\n" +
                 "WHERE time_slice(dt, interval 5 minute) >= '2023-04-10 17:00:00' and time_slice(dt, interval 5 minute) < '2023-04-10 18:00:00'\n" +

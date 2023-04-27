@@ -159,6 +159,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
 
+    public static final String PROPERTIES_MV_REWRITE_STALENESS = "mv_rewrite_staleness";
+
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
         if (properties == null) {
@@ -337,6 +339,23 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_EXCLUDED_TRIGGER_TABLES);
         }
         return tables;
+    }
+
+    public static int analyzeMVRewriteStaleness(Map<String, String> properties)
+            throws AnalysisException {
+        int maxMVRewriteStaleness = INVALID;
+        if (properties != null && properties.containsKey(PROPERTIES_MV_REWRITE_STALENESS)) {
+            try {
+                maxMVRewriteStaleness = Integer.parseInt(properties.get(PROPERTIES_MV_REWRITE_STALENESS));
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Partition Refresh Number: " + e.getMessage());
+            }
+            if (maxMVRewriteStaleness != INVALID && maxMVRewriteStaleness < 0) {
+                throw new AnalysisException("Illegal maxMVRewriteStaleness: " + maxMVRewriteStaleness);
+            }
+            properties.remove(PROPERTIES_MV_REWRITE_STALENESS);
+        }
+        return maxMVRewriteStaleness;
     }
 
     public static boolean analyzeForceExternalTableQueryRewrite(Map<String, String> properties) {

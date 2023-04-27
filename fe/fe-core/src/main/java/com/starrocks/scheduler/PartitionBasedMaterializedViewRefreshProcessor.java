@@ -320,6 +320,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 throw new DmlException(
                         "update meta failed. materialized view:" + materializedView.getName() + " not exist");
             }
+            // invalid next refresh partition to refresh by force.
+            materializedView.setNextRefreshPartitionTs(-1);
+
             MaterializedView.AsyncRefreshContext refreshContext =
                     materializedView.getRefreshScheme().getAsyncRefreshContext();
 
