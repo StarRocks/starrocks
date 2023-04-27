@@ -84,7 +84,7 @@ public:
 private:
     using Base = FactoryMethod<DriverExecutor, GlobalDriverExecutor>;
     void _worker_thread();
-    StatusOr<DriverRawPtr> _get_next_driver(std::queue<DriverRawPtr>& local_mutable_driver_queue);
+    StatusOr<DriverRawPtr> _get_next_driver(std::queue<DriverRawPtr>& local_driver_queue);
     void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
     void _update_profile_by_level(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool done);
     void _remove_non_core_metrics(QueryContext* query_ctx, std::vector<RuntimeProfile*>& driver_profiles);
@@ -92,8 +92,8 @@ private:
     void _finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
 
 private:
-    // The maximum duration that a driver could stay in _mutable_driver_queue
-    static constexpr int64_t MUTABLE_MAX_WAIT_TIME_SPENT = 1'000'000L;
+    // The maximum duration that a driver could stay in local_driver_queue
+    static constexpr int64_t LOCAL_MAX_WAIT_TIME_SPENT = 1'000'000L;
 
     LimitSetter _num_threads_setter;
     std::unique_ptr<DriverQueue> _driver_queue;

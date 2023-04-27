@@ -88,7 +88,7 @@ void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* r
 void GlobalDriverExecutor::_worker_thread() {
     auto current_thread = Thread::current_thread();
     const int worker_id = _next_id++;
-    std::queue<DriverRawPtr> local_mutable_driver_queue;
+    std::queue<DriverRawPtr> local_driver_queue;
     while (true) {
         if (_num_threads_setter.should_shrink()) {
             break;
@@ -102,7 +102,7 @@ void GlobalDriverExecutor::_worker_thread() {
             current_thread->set_idle(true);
         }
 
-        auto maybe_driver = _get_next_driver(local_mutable_driver_queue);
+        auto maybe_driver = _get_next_driver(local_driver_queue);
         if (maybe_driver.status().is_cancelled()) {
             return;
         }
@@ -187,9 +187,9 @@ void GlobalDriverExecutor::_worker_thread() {
                 this->_driver_queue->put_back_from_executor(driver);
                 break;
             }
-            case MUTABLE_WAITING: {
-                driver->driver_acct().update_enter_mutable_queue_timestamp();
-                local_mutable_driver_queue.push(driver);
+            case LOCAL_WAITING: {
+                driver->driver_acct().update_enter_local_queue_timestamp();
+                local_driver_queue.push(driver);
                 break;
             }
             case FINISH:
@@ -208,7 +208,7 @@ void GlobalDriverExecutor::_worker_thread() {
             case PENDING_FINISH:
             case EPOCH_PENDING_FINISH:
             case PRECONDITION_BLOCK: {
-                driver->driver_acct().clean_mutable_infos();
+                driver->driver_acct().clean_local_queue_infos();
                 _blocked_driver_poller->add_blocked_driver(driver);
                 break;
             }
@@ -219,30 +219,31 @@ void GlobalDriverExecutor::_worker_thread() {
     }
 }
 
-StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverRawPtr>& local_mutable_driver_queue) {
+StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverRawPtr>& local_driver_queue) {
     DriverRawPtr driver = nullptr;
-    if (!local_mutable_driver_queue.empty()) {
-        const size_t mutable_driver_num = local_mutable_driver_queue.size();
-        for (size_t i = 0; i < mutable_driver_num; i++) {
-            driver = local_mutable_driver_queue.front();
-            local_mutable_driver_queue.pop();
+    if (!local_driver_queue.empty()) {
+        const size_t local_driver_num = local_driver_queue.size();
+        for (size_t i = 0; i < local_driver_num; i++) {
+            driver = local_driver_queue.front();
+            local_driver_queue.pop();
             if (driver->source_operator()->has_output()) {
                 return driver;
             } else {
-                if (driver->driver_acct().get_mutable_queue_time_spent() > MUTABLE_MAX_WAIT_TIME_SPENT) {
-                    driver->driver_acct().clean_mutable_infos();
+                if (driver->driver_acct().get_local_queue_time_spent() > LOCAL_MAX_WAIT_TIME_SPENT) {
+                    driver->driver_acct().clean_local_queue_infos();
                     driver->set_driver_state(DriverState::INPUT_EMPTY);
                     _blocked_driver_poller->add_blocked_driver(driver);
                 } else {
-                    local_mutable_driver_queue.push(driver);
+                    local_driver_queue.push(driver);
                 }
                 driver = nullptr;
             }
         }
     }
 
-    // If mutable driver queue is not empty, we cannot block here.
-    const bool need_block = local_mutable_driver_queue.empty();
+    // If local driver queue is not empty, we cannot block here. Otherwise these local drivers may not be scheduled until
+    // ready queue is not empty.
+    const bool need_block = local_driver_queue.empty();
     return this->_driver_queue->take(need_block);
 }
 

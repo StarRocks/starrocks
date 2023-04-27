@@ -1108,29 +1108,29 @@ void MergePathCascadeMerger::_init_late_materialization() {
     }
 
     const auto level_size = static_cast<size_t>(std::ceil(std::log2(_chunk_providers.size())));
-    std::unordered_set<SlotId> orderby_slots;
+    std::unordered_set<SlotId> early_materialized_slots;
     for (ExprContext* expr_ctx : _sort_exprs) {
         auto* expr = expr_ctx->root();
         if (expr->is_slotref()) {
-            orderby_slots.insert(down_cast<ColumnRef*>(expr)->slot_id());
+            early_materialized_slots.insert(down_cast<ColumnRef*>(expr)->slot_id());
         }
     }
-    size_t materialized_cost = 0;
+    size_t non_orderby_materialized_cost_per_level = 0;
     for (auto* slot : _tuple_desc->slots()) {
-        if (orderby_slots.count(slot->id()) > 0) {
+        if (early_materialized_slots.count(slot->id()) > 0) {
             continue;
         }
 
         // nullable column always contribute 1 byte to materialized cost.
-        materialized_cost += slot->is_nullable();
+        non_orderby_materialized_cost_per_level += slot->is_nullable();
         if (slot->type().is_string_type()) {
             // Slice is 16 bytes
-            materialized_cost += 16;
+            non_orderby_materialized_cost_per_level += 16;
         } else {
-            materialized_cost += std::max<int>(1, slot->type().get_slot_size());
+            non_orderby_materialized_cost_per_level += std::max<int>(1, slot->type().get_slot_size());
         }
     }
-    const size_t total_original_cost = materialized_cost * level_size;
+    const size_t total_original_cost = non_orderby_materialized_cost_per_level * level_size;
 
     // For late materialization, a auxiliary column(Int64Column) will be added to record the
     // original chunk id and row offset.
@@ -1149,8 +1149,8 @@ void MergePathCascadeMerger::_init_late_materialization() {
         locality_decay_factor = 5.5;
     }
     static TypeDescriptor s_auxiliary_column_type = TypeDescriptor(TYPE_BIGINT);
-    const size_t total_late_materialized_cost =
-            s_auxiliary_column_type.get_slot_size() * level_size + materialized_cost * locality_decay_factor;
+    const size_t total_late_materialized_cost = s_auxiliary_column_type.get_slot_size() * level_size +
+                                                non_orderby_materialized_cost_per_level * locality_decay_factor;
 
     _late_materialization = total_late_materialized_cost <= total_original_cost;
 }
