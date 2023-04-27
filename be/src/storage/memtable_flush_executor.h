@@ -57,6 +57,7 @@ struct FlushStatistic {
     int64_t flush_count = 0;
     int64_t flush_size_bytes = 0;
     int64_t cur_flush_count = 0;
+    std::atomic<int64_t> queueing_memtable_num = 0;
 };
 
 std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat);
