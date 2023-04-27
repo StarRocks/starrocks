@@ -516,7 +516,7 @@ const tparquet::ColumnMetaData* FileReader::_get_column_meta(const tparquet::Row
                 return &column.meta_data;
             }
         } else {
-            if (boost::algorithm::to_lower_copy(column.meta_data.path_in_schema[0]) == col_name) {
+            if (boost::algorithm::iequals(column.meta_data.path_in_schema[0], col_name)) {
                 return &column.meta_data;
             }
         }
