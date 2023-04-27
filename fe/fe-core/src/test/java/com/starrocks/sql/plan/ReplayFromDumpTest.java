@@ -239,8 +239,8 @@ public class ReplayFromDumpTest {
                 "  |  output exprs:\n" +
                 "  |      [391, INT, true] | [392, DECIMAL64(7,2), true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [325, INT, true] | [346, DECIMAL64(7,2), true]\n" +
-                "  |      [359, INT, true] | [380, DECIMAL64(7,2), true]"));
+                "  |      [325: ws_sold_date_sk, INT, true] | [346: ws_ext_sales_price, DECIMAL64(7,2), true]\n" +
+                "  |      [359: cs_sold_date_sk, INT, true] | [380: cs_ext_sales_price, DECIMAL64(7,2), true]"));
     }
 
     @Test
@@ -667,8 +667,10 @@ public class ReplayFromDumpTest {
                 "  |  output exprs:\n" +
                 "  |      [16, DATE, false] | [17, BIGINT, true] | [18, DECIMAL128(27,19), true]\n" +
                 "  |  child exprs:\n" +
-                "  |      [2, DATE, false] | [7, BIGINT, true] | [8, DECIMAL128(27,19), true]\n" +
-                "  |      [9, DATE, false] | [14, BIGINT, true] | [15, DECIMAL128(27,19), true]"));
+                "  |      [2: c_0_0, DATE, false] | [7: row_number(), BIGINT, true] " +
+                "| [8: last_value(4: c_0_2), DECIMAL128(27,19), true]\n" +
+                "  |      [9: c_0_0, DATE, false] | [14: row_number(), BIGINT, true] " +
+                "| [15: last_value(11: c_0_2), DECIMAL128(27,19), true]"));
     }
 
     @Test
@@ -690,7 +692,6 @@ public class ReplayFromDumpTest {
                 "  |  column statistics: \n" +
                 "  |  * auto_fill_col-->[1.0, 1.0, 0.0, 1.0, 1.0] ESTIMATE"));
     }
-
 
     @Test
     public void testCorrelatedPredicateRewrite() throws Exception {
