@@ -159,9 +159,9 @@ StarRocks 访问 Delta Lake 集群元数据服务的相关参数配置。
 
 StarRocks 访问 Delta Lake 集群文件存储的相关参数配置。
 
-只有当 Delta Lake 集群使用 AWS S3 作为文件存储时，才需要配置 `StorageCredentialParams`。
+如果您使用 HDFS 作为存储系统，则不需要配置 `StorageCredentialParams`。
 
-如果 Delta Lake 集群使用 AWS S3 以外的其他文件存储，则可以忽略 `StorageCredentialParams`。
+如果您使用 AWS S3、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、 或 GCS，则必须配置 `StorageCredentialParams`。
 
 ##### AWS S3
 
@@ -377,7 +377,7 @@ StarRocks 访问 Delta Lake 集群文件存储的相关参数配置。
 
 - 基于 Impersonation 进行认证和鉴权
 
-  - 使用 VM Instance 模拟 Service Account
+  - 使用 VM 实例模拟 Service Account
 
     ```SQL
     "gcp.gcs.use_compute_engine_service_account" = "true",
@@ -391,7 +391,7 @@ StarRocks 访问 Delta Lake 集群文件存储的相关参数配置。
     | gcp.gcs.use_compute_engine_service_account | false      | true         | 是否直接使用 Compute Engine 上面绑定的 Service Account。     |
     | gcp.gcs.impersonation_service_account      | ""         | "hello"      | 需要模拟的目标 Service Account。 |
 
-  - 使用一个 Service Account（即“Meta Service Account”）模拟另一个 Service Account（即“Data Service Account”）
+  - 使用一个 Service Account（暂时命名为“Meta Service Account”）模拟另一个 Service Account（暂时命名为“Data Service Account”）
 
     ```SQL
     "gcp.gcs.service_account_email" = "<google_service_account_email>",
@@ -683,7 +683,7 @@ PROPERTIES
 
 - 如果基于 Impersonation 进行认证和鉴权
 
-  - 使用 VM Instance 模拟 Service Account，可以按如下创建 Delta Lake Catalog：
+  - 使用 VM 实例模拟 Service Account，可以按如下创建 Delta Lake Catalog：
 
     ```SQL
     CREATE EXTERNAL CATALOG hive_catalog_hms

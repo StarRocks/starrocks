@@ -77,7 +77,9 @@
   + [Query Cache](/using_starrocks/query_cache.md)
   + [Sorted streaming aggregate](/using_starrocks/sorted_aggregate.md)
 + 外部系统集成
-  + [配置 AWS 认证方式](/integrations/authenticate_to_aws_resources.md)
+  + [配置 AWS 认证信息](/integrations/authenticate_to_aws_resources.md)
+  + [配置 Microsoft Azure Storage 认证信息](/integrations/authenticate_to_azure_storage.md)
+  + [配置 GCS 认证信息](/integrations/authenticate_to_gcs.md)
   + BI 集成
     + [Hex](/integrations/BI_integrations/Hex.md)
     + [Querybook](/integrations/BI_integrations/Querybook.md)

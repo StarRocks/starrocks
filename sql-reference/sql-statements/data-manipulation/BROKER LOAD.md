@@ -81,14 +81,14 @@ INTO TABLE <table_name>
   > **注意**
   >
   > - 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，文件路径里传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
-  > - 从 Blob Storage 导入数据时，需要根据使用的访问协议在文件路径里添加 `wasb://` 或 `wasbs://` 作为前缀：
-  >   - 如果使用 HTTP 协议进行访问，请使用 `wasb://` 作为前缀，例如，`wasb://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`。
-  >   - 如果使用 HTTPS 协议进行访问，请使用 `wasbs://` 作为前缀，例如，`wasbs://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`。
-  > - 从 Azure Data Lake Storage Gen1 导入数据时，需要在文件路径里添加 `adl://` 作为前缀，例如， `adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>`。
-  > - 从 Data Lake Storage Gen2 导入数据时，需要根据使用的访问协议在文件路径里添加 `abfs://` 或 `abfss://` 作为前缀：
-  >   - 如果使用 HTTP 协议进行访问，请使用 `abfs://` 作为前缀，例如，`abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
-  >   - 如果使用 HTTPS 协议进行访问，请使用 `abfss://` 作为前缀，例如，`abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
   > - 由于 Broker Load 只支持通过 gs 协议访问 Google GCS，因此当从 Google GCS 导入数据时，必须确保文件路径传入的目标文件的 GCS URI 使用 `gs://` 为前缀。
+  > - 从 Blob Storage 导入数据时，需要使用 wasb 或 wasbs 作为文件协议访问目标数据：
+  >   - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 wasb 文件协议，文件路径格式为 `wasb://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`。
+  >   - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 wasbs 文件协议，文件路径格式为 `wasbs://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`。
+  > - 从 Azure Data Lake Storage Gen1 导入数据时，需要使用 adl 作为文件协议访问目标数据，文件路径格式为 `adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>`。
+  > - 从 Data Lake Storage Gen2 导入数据时，需要使用 abfs 或 abfss 作为文件协议访问目标数据：
+  >   - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 abfs 文件协议，文件路径格式为 `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
+  >   - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 abfss 文件协议，文件路径格式为 `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
 
 - `INTO TABLE`
 
@@ -345,7 +345,7 @@ StarRocks 访问存储系统的认证配置。
 
 - 基于 Impersonation 进行认证和鉴权
 
-  - 使用 VM Instance 模拟 Service Account
+  - 使用 VM 实例模拟 Service Account
 
     ```SQL
     "gcp.gcs.use_compute_engine_service_account" = "true",
