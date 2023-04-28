@@ -47,9 +47,6 @@ public class FunctionName implements Writable {
     public FunctionName(String db, String fn) {
         db_ = db;
         fn_ = fn.toLowerCase();
-        if (db_ != null) {
-            db_ = db_.toLowerCase();
-        }
     }
 
     public FunctionName(String fn) {
@@ -58,7 +55,7 @@ public class FunctionName implements Writable {
     }
 
     public FunctionName(TFunctionName thriftName) {
-        db_ = thriftName.db_name.toLowerCase();
+        db_ = thriftName.db_name;
         fn_ = thriftName.function_name.toLowerCase();
     }
 
