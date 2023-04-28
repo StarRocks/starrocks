@@ -125,6 +125,7 @@ public:
         this->accumulated_time_spent += time_spent;
         this->accumulated_local_wait_time_spent += time_spent;
     }
+    // This method must be invoked when adding back to ready queue or pending queue.
     void clean_local_queue_infos() {
         this->accumulated_local_wait_time_spent = 0;
         this->enter_local_queue_timestamp = 0;

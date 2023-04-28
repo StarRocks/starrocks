@@ -184,6 +184,7 @@ void GlobalDriverExecutor::_worker_thread() {
             switch (driver_state) {
             case READY:
             case RUNNING: {
+                driver->driver_acct().clean_local_queue_infos();
                 this->_driver_queue->put_back_from_executor(driver);
                 break;
             }
@@ -208,7 +209,6 @@ void GlobalDriverExecutor::_worker_thread() {
             case PENDING_FINISH:
             case EPOCH_PENDING_FINISH:
             case PRECONDITION_BLOCK: {
-                driver->driver_acct().clean_local_queue_infos();
                 _blocked_driver_poller->add_blocked_driver(driver);
                 break;
             }
@@ -230,7 +230,6 @@ StatusOr<DriverRawPtr> GlobalDriverExecutor::_get_next_driver(std::queue<DriverR
                 return driver;
             } else {
                 if (driver->driver_acct().get_local_queue_time_spent() > LOCAL_MAX_WAIT_TIME_SPENT_NS) {
-                    driver->driver_acct().clean_local_queue_infos();
                     driver->set_driver_state(DriverState::INPUT_EMPTY);
                     _blocked_driver_poller->add_blocked_driver(driver);
                 } else {
