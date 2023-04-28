@@ -299,8 +299,25 @@ void DeltaWriter::_set_state(State state, const Status& st) {
     }
 }
 
+Status DeltaWriter::_check_partial_update_with_sort_key(const Chunk& chunk) {
+    if (_tablet->updates() != nullptr && _partial_schema_with_sort_key && _opt.slots != nullptr &&
+        _opt.slots->back()->col_name() == "__op") {
+        size_t op_column_id = chunk.num_columns() - 1;
+        auto op_column = chunk.get_column_by_index(op_column_id);
+        auto* ops = reinterpret_cast<const uint8_t*>(op_column->raw_data());
+        for (size_t i = 0; i < chunk.num_rows(); i++) {
+            if (ops[i] == TOpType::UPSERT)
+                ;
+            LOG(WARNING) << "table with sort key do not support partial update";
+            return Status::NotSupported("table with sort key do not support partial update");
+        }
+    }
+    return Status::OK();
+}
+
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+    RETURN_IF_ERROR(_check_partial_update_with_sort_key(chunk));
     // Delay the creation memtables until we write data.
     // Because for the tablet which doesn't have any written data, we will not use their memtables.
     if (_mem_table == nullptr) {

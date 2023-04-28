@@ -154,6 +154,7 @@ private:
     const char* _state_name(State state) const;
     const char* _replica_state_name(ReplicaState state) const;
     Status _fill_auto_increment_id(const Chunk& chunk);
+    Status _check_partial_update_with_sort_key(const Chunk& chunk);
 
     void _garbage_collection();
 
