@@ -87,6 +87,7 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.Queue;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -162,6 +163,8 @@ public class TabletScheduler extends LeaderDaemon {
     private ColocateTableIndex colocateTableIndex;
     private TabletSchedulerStat stat;
     private Rebalancer rebalancer;
+
+    private AtomicBoolean forceCleanSchedQ = new AtomicBoolean(false);
 
     // result of adding a tablet to pendingTablets
     public enum AddResult {
@@ -296,6 +299,10 @@ public class TabletScheduler extends LeaderDaemon {
         return AddResult.ADDED;
     }
 
+    public void forceCleanSchedQ() {
+        forceCleanSchedQ.set(true);
+    }
+
     public synchronized boolean containsTablet(long tabletId) {
         return allTabletIds.contains(tabletId);
     }
@@ -370,6 +377,8 @@ public class TabletScheduler extends LeaderDaemon {
                 LOG.warn("select balance tablets cost too much time: {} seconds", usedTS / 1000L);
             }
         }
+
+        handleForceCleanSchedQ();
 
         stat.counterTabletScheduleRound.incrementAndGet();
     }
@@ -1148,6 +1157,9 @@ public class TabletScheduler extends LeaderDaemon {
 
     private void deleteReplicaInternal(TabletSchedCtx tabletCtx, Replica replica, String reason, boolean force)
             throws SchedException {
+        if (Config.tablet_sched_always_force_decommission_replica) {
+            force = true;
+        }
         /*
          * Before deleting a replica, we should make sure that there is no running txn on it
          *  and no more txns will be on it.
@@ -1344,9 +1356,16 @@ public class TabletScheduler extends LeaderDaemon {
             }
 
             List<RootPathLoadStatistic> resultPaths = Lists.newArrayList();
+            // in the following two cases, it's not a replica supplement task
+            //   1. tabletCtx.getTabletStatus() == TabletStatus.REPLICA_RELOCATING, i.e. the source backend is
+            //      decommissioned manually.
+            //   2. it's a COLOCATE_MISMATCH task, but the task is created not because of unavailable backends,
+            //      but because of balancing needs.
+            boolean isSupplement = !(tabletCtx.getTabletStatus() == TabletStatus.REPLICA_RELOCATING ||
+                    (tabletCtx.getTabletStatus() == TabletStatus.COLOCATE_MISMATCH &&
+                            !tabletCtx.getRelocationForRepair()));
             BalanceStatus st = bes.isFit(tabletCtx.getTabletSize(), tabletCtx.getStorageMedium(),
-                    resultPaths, tabletCtx.getTabletStatus() != TabletStatus.REPLICA_RELOCATING
-                    /* if REPLICA_RELOCATING, then it is not a supplement task */);
+                    resultPaths, isSupplement);
             if (!st.ok()) {
                 LOG.debug("unable to find path for supplementing tablet: {}. {}", tabletCtx, st);
                 continue;
@@ -1549,13 +1568,35 @@ public class TabletScheduler extends LeaderDaemon {
         });
     }
 
+    public void handleForceCleanSchedQ() {
+        if (forceCleanSchedQ.get()) {
+            // trigger only once
+            forceCleanSchedQ.set(false);
+            List<TabletSchedCtx> cleanedTablets = Lists.newArrayList();
+            synchronized (this) {
+                LOG.info("forcefully clean all the tablets from pending and running queue for tablet scheduler," +
+                        " pending queue size {}, running queue size {}", pendingTablets.size(), runningTablets.size());
+                cleanedTablets.addAll(pendingTablets);
+                cleanedTablets.addAll(runningTablets.values());
+                pendingTablets.clear();
+                runningTablets.clear();
+                allTabletIds.clear();
+            }
+
+            cleanedTablets.forEach(t -> releaseTabletCtx(t, TabletSchedCtx.State.CANCELLED));
+        }
+    }
+
     public List<List<String>> getPendingTabletsInfo(int limit) {
         List<TabletSchedCtx> tabletCtxs = getCopiedTablets(pendingTablets, limit);
         return collectTabletCtx(tabletCtxs);
     }
 
     public List<List<String>> getRunningTabletsInfo(int limit) {
-        List<TabletSchedCtx> tabletCtxs = getCopiedTablets(runningTablets.values(), limit);
+        List<TabletSchedCtx> tabletCtxs;
+        synchronized (this) {
+            tabletCtxs = getCopiedTablets(runningTablets.values(), limit);
+        }
         return collectTabletCtx(tabletCtxs);
     }
 
@@ -1641,7 +1682,8 @@ public class TabletScheduler extends LeaderDaemon {
             tabletCtxs = all.collect(Collectors.toList());
         }
         TGetTabletScheduleResponse response = new TGetTabletScheduleResponse();
-        response.setTablet_schedules(tabletCtxs.stream().map(t -> t.toTabletScheduleThrift()).collect(Collectors.toList()));
+        response.setTablet_schedules(
+                tabletCtxs.stream().map(t -> t.toTabletScheduleThrift()).collect(Collectors.toList()));
         return response;
     }
 
