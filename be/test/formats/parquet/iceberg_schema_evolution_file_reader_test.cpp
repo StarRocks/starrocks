@@ -29,57 +29,11 @@
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
+#include "parquet_test_util/util.h"
 
 namespace starrocks::parquet {
 
 static HdfsScanStats g_hdfs_scan_stats{};
-
-class Utils {
-public:
-    struct SlotDesc {
-        std::string name;
-        TypeDescriptor type;
-    };
-
-    static TupleDescriptor* create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDesc* slot_descs) {
-        TDescriptorTableBuilder table_desc_builder;
-        TTupleDescriptorBuilder tuple_desc_builder;
-        int size = 0;
-        for (int i = 0;; i++) {
-            if (slot_descs[i].name == "") {
-                break;
-            }
-            TSlotDescriptorBuilder b2;
-            b2.column_name(slot_descs[i].name).type(slot_descs[i].type).id(i).nullable(true);
-            tuple_desc_builder.add_slot(b2.build());
-            size += 1;
-        }
-        tuple_desc_builder.build(&table_desc_builder);
-
-        std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-        std::vector<bool> nullable_tuples = std::vector<bool>{true};
-        DescriptorTbl* tbl = nullptr;
-        DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
-
-        RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
-        return row_desc->tuple_descriptors()[0];
-    }
-
-    static void make_column_info_vector(const TupleDescriptor* tuple_desc,
-                                        std::vector<HdfsScannerContext::ColumnInfo>* columns) {
-        columns->clear();
-        for (int i = 0; i < tuple_desc->slots().size(); i++) {
-            SlotDescriptor* slot = tuple_desc->slots()[i];
-            HdfsScannerContext::ColumnInfo c;
-            c.col_name = slot->col_name();
-            c.col_idx = i;
-            c.slot_id = slot->id();
-            c.col_type = slot->type();
-            c.slot_desc = slot;
-            columns->emplace_back(c);
-        }
-    }
-};
 
 class IcebergSchemaEvolutionTest : public testing::Test {
 public:
@@ -99,7 +53,7 @@ protected:
     //     optional int32 c = 5;
     //   }
     // }
-    const std::string add_struct_sufield_file_path =
+    const std::string add_struct_subfield_file_path =
             "./be/test/formats/parquet/test_data/iceberg_schema_evolution/add_struct_subfield.parquet";
 
     // message hive_schema {
@@ -138,9 +92,9 @@ protected:
 };
 
 TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
-    auto file = _create_file(add_struct_sufield_file_path);
+    auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_sufield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -197,7 +151,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_sufield_file_path));
+    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -220,9 +174,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructAddSubfield) {
 }
 
 TEST_F(IcebergSchemaEvolutionTest, TestStructDropSubfield) {
-    auto file = _create_file(add_struct_sufield_file_path);
+    auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_sufield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -265,7 +219,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructDropSubfield) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_sufield_file_path));
+    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -288,9 +242,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructDropSubfield) {
 }
 
 TEST_F(IcebergSchemaEvolutionTest, TestStructReorderSubfield) {
-    auto file = _create_file(add_struct_sufield_file_path);
+    auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_sufield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -333,7 +287,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructReorderSubfield) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_sufield_file_path));
+    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -356,9 +310,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructReorderSubfield) {
 }
 
 TEST_F(IcebergSchemaEvolutionTest, TestStructRenameSubfield) {
-    auto file = _create_file(add_struct_sufield_file_path);
+    auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_sufield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -415,7 +369,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructRenameSubfield) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_sufield_file_path));
+    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -438,9 +392,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestStructRenameSubfield) {
 }
 
 TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
-    auto file = _create_file(add_struct_sufield_file_path);
+    auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_sufield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -466,7 +420,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_sufield_file_path));
+    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -489,9 +443,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestAddColumn) {
 }
 
 TEST_F(IcebergSchemaEvolutionTest, TestDropColumn) {
-    auto file = _create_file(add_struct_sufield_file_path);
+    auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_sufield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -511,7 +465,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestDropColumn) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_sufield_file_path));
+    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -533,9 +487,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestDropColumn) {
 }
 
 TEST_F(IcebergSchemaEvolutionTest, TestRenameColumn) {
-    auto file = _create_file(add_struct_sufield_file_path);
+    auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_sufield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -555,7 +509,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestRenameColumn) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_sufield_file_path));
+    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -577,9 +531,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestRenameColumn) {
 }
 
 TEST_F(IcebergSchemaEvolutionTest, TestReorderColumn) {
-    auto file = _create_file(add_struct_sufield_file_path);
+    auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_sufield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -615,7 +569,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestReorderColumn) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_sufield_file_path));
+    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -638,9 +592,9 @@ TEST_F(IcebergSchemaEvolutionTest, TestReorderColumn) {
 }
 
 TEST_F(IcebergSchemaEvolutionTest, TestWidenColumnType) {
-    auto file = _create_file(add_struct_sufield_file_path);
+    auto file = _create_file(add_struct_subfield_file_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(add_struct_sufield_file_path));
+                                                    std::filesystem::file_size(add_struct_subfield_file_path));
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
@@ -670,7 +624,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWidenColumnType) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_sufield_file_path));
+    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -728,7 +682,7 @@ TEST_F(IcebergSchemaEvolutionTest, TestWithoutFieldId) {
 
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_sufield_file_path));
+    ctx->scan_ranges.emplace_back(_create_scan_range(add_struct_subfield_file_path));
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);

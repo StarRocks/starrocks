@@ -55,9 +55,9 @@ public:
     // Try to read values that can assemble up to num_rows rows. For example if we want to read
     // an array type, and stored value is [1, 2, 3], [4], [5, 6], when the input num_rows is 3,
     // this function will fill (1, 2, 3, 4, 5, 6) into 'dst'.
-    Status read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) {
+    StatusOr<size_t> read_records(size_t rows_to_read, ColumnContentType content_type, Column* dst) {
         reset();
-        return do_read_records(num_rows, content_type, dst);
+        return do_read_records(rows_to_read, content_type, dst);
     }
 
     // This function can only be called after calling read_values. This function returns the
@@ -74,25 +74,23 @@ public:
         return _reader->get_dict_codes(dict_values, dict_codes);
     }
 
+    // You need to make sure rows_to_skip will not out-of-bound access
+    // Only will return Status::OK() or Status::InternalError()
+    Status skip(size_t rows_to_skip) {
+        reset();
+        return do_skip(rows_to_skip);
+    }
+
 protected:
-    virtual bool page_selected(size_t num_values);
+    StatusOr<size_t> load_next_page(size_t values_to_skip = 0);
 
-    virtual Status do_read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) = 0;
+    virtual StatusOr<size_t> do_read_records(size_t rows_to_read, ColumnContentType content_type, Column* dst) = 0;
 
-    Status next_page(size_t records_to_read, ColumnContentType content_type, size_t* records_read, Column* dst);
-
-    void update_read_context(size_t records_read);
+    virtual Status do_skip(size_t rows_to_skip) = 0;
 
     std::unique_ptr<ColumnChunkReader> _reader;
     size_t _num_values_left_in_cur_page = 0;
-    size_t _num_values_skip_in_cur_page = 0;
     const ColumnReaderOptions& _opts;
-
-private:
-    Status _next_selected_page(size_t records_to_read, ColumnContentType content_type, size_t* records_to_skip,
-                               Column* dst);
-
-    Status _lazy_load_page_rows(size_t batch_size, ColumnContentType content_type, Column* dst);
 };
 
 } // namespace starrocks::parquet

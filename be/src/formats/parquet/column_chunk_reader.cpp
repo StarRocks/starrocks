@@ -59,8 +59,7 @@ Status ColumnChunkReader::init(int chunk_size) {
 }
 
 Status ColumnChunkReader::load_header() {
-    RETURN_IF_ERROR(_parse_page_header());
-    return Status::OK();
+    return _parse_page_header();
 }
 
 Status ColumnChunkReader::load_page() {
@@ -89,6 +88,10 @@ Status ColumnChunkReader::skip_page() {
 
     _page_parse_state = PAGE_DATA_PARSED;
     return Status::OK();
+}
+
+Status ColumnChunkReader::skip(size_t values_to_skip) {
+    return _cur_decoder->skip(values_to_skip);
 }
 
 Status ColumnChunkReader::_parse_page_header() {
@@ -202,7 +205,7 @@ Status ColumnChunkReader::_parse_data_page() {
         _decoders[static_cast<int>(encoding)] = std::move(decoder);
     }
 
-    _cur_decoder->set_type_legth(_type_length);
+    _cur_decoder->set_type_length(_type_length);
     _cur_decoder->set_data(_data);
 
     _page_parse_state = PAGE_DATA_PARSED;
@@ -236,7 +239,7 @@ Status ColumnChunkReader::_parse_dict_page() {
     RETURN_IF_ERROR(EncodingInfo::get(metadata().type, dict_encoding, &code_info));
     RETURN_IF_ERROR(code_info->create_decoder(&dict_decoder));
     dict_decoder->set_data(_data);
-    dict_decoder->set_type_legth(_type_length);
+    dict_decoder->set_type_length(_type_length);
 
     // initialize decoder
     std::unique_ptr<Decoder> decoder;

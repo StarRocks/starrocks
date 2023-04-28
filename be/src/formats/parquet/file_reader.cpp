@@ -508,6 +508,7 @@ Status FileReader::get_next(ChunkPtr* chunk) {
                 _scanner_ctx->update_partition_column_of_chunk(chunk, row_count);
                 _scan_row_count += (*chunk)->num_rows();
             }
+            chunk->get()->check_or_die();
             if (status.is_end_of_file()) {
                 _row_group_readers[_cur_row_group_idx]->close();
                 _cur_row_group_idx++;

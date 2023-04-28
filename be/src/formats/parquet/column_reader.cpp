@@ -82,22 +82,28 @@ public:
         return StoredColumnReader::create(_opts, field, chunk_metadata, &_reader);
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+    Status skip(const size_t rows_to_skip) override {
+        return _reader->skip(rows_to_skip);
+    }
+
+    StatusOr<size_t> prepare_batch(size_t rows_to_read, ColumnContentType content_type, Column* dst) override {
         DCHECK(_field->is_nullable ? dst->is_nullable() : true);
         if (!converter->need_convert) {
-            return _reader->read_records(num_records, content_type, dst);
+            return _reader->read_records(rows_to_read, content_type, dst);
         } else {
             SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
-            auto column = converter->create_src_column();
+            auto col = converter->create_src_column();
 
-            Status status = _reader->read_records(num_records, content_type, column.get());
-            if (!status.ok() && !status.is_end_of_file()) {
-                return status;
+            ASSIGN_OR_RETURN(size_t rows_read, _reader->read_records(rows_to_read, content_type, col.get()));
+//            if (!status.ok() && !status.is_end_of_file()) {
+//                return status;
+//            }
+
+            if (rows_read == 0) {
+                return 0;
             }
-
-            RETURN_IF_ERROR(converter->convert(column, dst));
-
-            return Status::OK();
+            RETURN_IF_ERROR(converter->convert(col, dst));
+            return rows_read;
         }
     }
 
@@ -137,7 +143,11 @@ public:
         return Status::OK();
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+    Status skip(const size_t rows_to_skip) override {
+        return _element_reader->skip(rows_to_skip);
+    }
+
+    StatusOr<size_t> prepare_batch(size_t rows_to_read, ColumnContentType content_type, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
         ArrayColumn* array_column = nullptr;
         if (dst->is_nullable()) {
@@ -150,7 +160,7 @@ public:
             array_column = down_cast<ArrayColumn*>(dst);
         }
         auto* child_column = array_column->elements_column().get();
-        auto st = _element_reader->prepare_batch(num_records, content_type, child_column);
+        ASSIGN_OR_RETURN(size_t rows_read, _element_reader->prepare_batch(rows_to_read, content_type, child_column));
 
         level_t* def_levels = nullptr;
         level_t* rep_levels = nullptr;
@@ -174,7 +184,7 @@ public:
             nullable_column->set_has_null(has_null);
         }
 
-        return st;
+        return rows_read;
     }
 
     Status finish_batch() override { return Status::OK(); }
@@ -211,7 +221,17 @@ public:
         return Status::OK();
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+    Status skip(const size_t rows_to_skip) override {
+        if (_key_reader != nullptr) {
+            RETURN_IF_ERROR(_key_reader->skip(rows_to_skip));
+        }
+        if (_value_reader != nullptr) {
+            RETURN_IF_ERROR(_value_reader->skip(rows_to_skip));
+        }
+        return Status::OK();
+    }
+
+    StatusOr<size_t> prepare_batch(size_t rows_to_read, ColumnContentType content_type, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
         MapColumn* map_column = nullptr;
         if (dst->is_nullable()) {
@@ -225,19 +245,22 @@ public:
         }
         auto* key_column = map_column->keys_column().get();
         auto* value_column = map_column->values_column().get();
-        Status st;
+
+        size_t rows_read = 0;
         if (_key_reader != nullptr) {
-            st = _key_reader->prepare_batch(num_records, content_type, key_column);
-            if (!st.ok() && !st.is_end_of_file()) {
-                return st;
+            ASSIGN_OR_RETURN(size_t key_rows_read, _key_reader->prepare_batch(rows_to_read, content_type, key_column));
+            if (rows_read == 0) {
+                rows_read = key_rows_read;
             }
+            DCHECK(rows_read == key_rows_read);
         }
 
         if (_value_reader != nullptr) {
-            st = _value_reader->prepare_batch(num_records, content_type, value_column);
-            if (!st.ok() && !st.is_end_of_file()) {
-                return st;
+            ASSIGN_OR_RETURN(size_t value_rows_read, _value_reader->prepare_batch(rows_to_read, content_type, value_column));
+            if (rows_read == 0) {
+                rows_read = value_rows_read;
             }
+            DCHECK(rows_read == value_rows_read);
         }
 
         // if neither key_reader not value_reader is nullptr , check the value_column size is the same with key_column
@@ -282,7 +305,7 @@ public:
             nullable_column->set_has_null(has_null);
         }
 
-        return st;
+        return rows_read;
     }
 
     Status finish_batch() override { return Status::OK(); }
@@ -337,7 +360,16 @@ public:
         return Status::InternalError("No existed parquet subfield column reader in StructColumn");
     }
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* dst) override {
+    Status skip(const size_t rows_to_skip) override {
+        for(const auto& reader : _child_readers) {
+            if (reader != nullptr) {
+                RETURN_IF_ERROR(reader->skip(rows_to_skip));
+            }
+        }
+        return Status::OK();
+    }
+
+    StatusOr<size_t> prepare_batch(size_t rows_to_read, ColumnContentType content_type, Column* dst) override {
         NullableColumn* nullable_column = nullptr;
         StructColumn* struct_column = nullptr;
         if (dst->is_nullable()) {
@@ -355,10 +387,15 @@ public:
         DCHECK_EQ(fields_column.size(), _child_readers.size());
 
         // Fill data for non-nullptr subfield column reader
+        size_t rows_read = 0;
         for (size_t i = 0; i < fields_column.size(); i++) {
             Column* child_column = fields_column[i].get();
             if (_child_readers[i] != nullptr) {
-                RETURN_IF_ERROR(_child_readers[i]->prepare_batch(num_records, content_type, child_column));
+                ASSIGN_OR_RETURN(size_t child_rows_read, _child_readers[i]->prepare_batch(rows_to_read, content_type, child_column))
+                if (rows_read == 0) {
+                    rows_read = child_rows_read;
+                }
+                DCHECK(rows_read == child_rows_read);
             }
         }
 
@@ -366,7 +403,7 @@ public:
         for (size_t i = 0; i < fields_column.size(); i++) {
             Column* child_column = fields_column[i].get();
             if (_child_readers[i] == nullptr) {
-                child_column->append_default(*num_records);
+                child_column->append_default(rows_read);
             }
         }
 
@@ -381,7 +418,7 @@ public:
             nullable_column->mutable_null_column()->swap_column(null_column);
             nullable_column->set_has_null(has_null);
         }
-        return Status::OK();
+        return rows_read;
     }
 
     Status finish_batch() override { return Status::OK(); }
@@ -415,9 +452,8 @@ private:
         size_t num_levels = 0;
         (*_def_rep_level_child_reader)->get_levels(&def_levels, &rep_levels, &num_levels);
 
-        // OptionalStoredColumnReader & RepeatedStoredColumnReader must have def_levels
-        DCHECK(def_levels != nullptr);
         if (def_levels == nullptr) {
+            // If subfields is required, def_levels is nullptr
             *has_null = false;
             return;
         }

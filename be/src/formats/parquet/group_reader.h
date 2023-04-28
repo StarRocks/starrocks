@@ -130,10 +130,8 @@ private:
     static bool _column_all_pages_dict_encoded(const tparquet::ColumnMetaData& column_metadata);
     void _init_read_chunk();
 
-    Status _read(const std::vector<int>& read_columns, size_t* row_count, ChunkPtr* chunk);
-    Status _lazy_skip_rows(const std::vector<int>& read_columns, const ChunkPtr& chunk, size_t chunk_size);
-    void _dict_filter(ChunkPtr* chunk, Filter* filter_ptr);
-    Status _dict_decode(ChunkPtr* chunk);
+    StatusOr<size_t> _read(const std::vector<int>& read_columns, size_t row_count, ChunkPtr* chunk);
+    Status _skip(const std::vector<int>& read_columns, size_t skip_num_rows);
     void _collect_field_io_range(const ParquetField& field, std::vector<io::SharedBufferedInputStream::IORange>* ranges,
                                  int64_t* end_offset);
 
@@ -148,8 +146,9 @@ private:
 
     // active columns that hold read_col index
     std::vector<int> _active_column_indices;
-    // lazy conlumns that hold read_col index
+    // lazy columns that hold read_col index
     std::vector<int> _lazy_column_indices;
+    size_t _previous_rows_to_skip = 0;
 
     // dict value is empty after conjunct eval, file group can be skipped
     bool _is_group_filtered = false;

@@ -129,6 +129,7 @@ public:
 
     size_t GetBatch(T* vals, size_t batch_num);
 
+    // Get the count of current repeated value
     size_t repeated_count() {
         if (repeat_count_ > 0) {
             return repeat_count_;
@@ -149,6 +150,7 @@ public:
         return literal_count_;
     }
 
+    // Get current repeated value, make sure that count equals repeated_count()
     T get_repeated_value(size_t count) {
         DCHECK_GE(repeat_count_, count);
         repeat_count_ -= count;

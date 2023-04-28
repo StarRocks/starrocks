@@ -23,13 +23,6 @@ struct HdfsScanStats;
 } // namespace starrocks
 
 namespace starrocks::parquet {
-struct ColumnReaderContext {
-    Buffer<uint8_t>* filter = nullptr;
-    size_t next_row = 0;
-    size_t rows_to_skip = 0;
-
-    void advance(size_t num_rows) { next_row += num_rows; }
-};
 
 struct ColumnReaderOptions {
     std::string timezone;
@@ -39,7 +32,6 @@ struct ColumnReaderOptions {
     RandomAccessFile* file = nullptr;
     io::SharedBufferedInputStream* sb_stream = nullptr;
     tparquet::RowGroup* row_group_meta = nullptr;
-    ColumnReaderContext* context = nullptr;
 };
 
 class ColumnReader {
@@ -55,13 +47,17 @@ public:
 
     virtual ~ColumnReader() = default;
 
-    virtual Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* column) = 0;
     virtual Status finish_batch() = 0;
 
-    Status next_batch(size_t* num_records, ColumnContentType content_type, Column* column) {
-        RETURN_IF_ERROR(prepare_batch(num_records, content_type, column));
-        return finish_batch();
+    virtual StatusOr<size_t> prepare_batch(size_t rows_to_read, ColumnContentType content_type, Column* dst) = 0;
+
+    StatusOr<size_t> next_batch(size_t rows_to_read, ColumnContentType content_type, Column* column) {
+        ASSIGN_OR_RETURN(size_t rows_read, prepare_batch(rows_to_read, content_type, column));
+        RETURN_IF_ERROR(finish_batch());
+        return rows_read;
     }
+
+    virtual Status skip(const size_t rows_to_skip) = 0;
 
     virtual void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) = 0;
 
@@ -76,6 +72,8 @@ public:
     virtual Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) {
         return Status::NotSupported("get_dict_codes is not supported");
     }
+
+
 
     std::unique_ptr<ColumnConverter> converter;
 };

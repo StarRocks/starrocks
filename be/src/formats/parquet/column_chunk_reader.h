@@ -111,12 +111,14 @@ public:
         return _cur_decoder->get_dict_codes(dict_values, dict_codes);
     }
 
+    Status skip(size_t values_to_skip);
+
 private:
+    // may return eof
     Status _parse_page_header();
     Status _parse_page_data();
 
     Status _try_load_dictionary();
-    Status _read_and_decompress_page_data();
     Status _parse_data_page();
     Status _parse_dict_page();
 

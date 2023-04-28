@@ -31,6 +31,7 @@ public:
     StatusOr<int64_t> position() override { return 0; }
     StatusOr<int64_t> get_size() override { return 0; }
     Status seek(int64_t offset) override { return Status::OK(); }
+
 };
 
 class MockColumnReader : public ColumnReader {
@@ -39,10 +40,11 @@ public:
     explicit MockColumnReader(tparquet::Type::type type) : _type(type) {}
     ~MockColumnReader() override = default;
 
-    Status prepare_batch(size_t* num_records, ColumnContentType content_type, Column* column) override {
+    StatusOr<size_t> prepare_batch(size_t rows_to_read, ColumnContentType content_type, Column* column) override {
         if (_step > 1) {
-            *num_records = 0;
-            return Status::EndOfFile("");
+//            *num_records = 0;
+//            return Status::EndOfFile("");
+            return 0;
         }
         size_t start = 0;
         size_t num_rows = 0;
@@ -69,11 +71,12 @@ public:
         }
 
         _step++;
-        *num_records = num_rows;
-        return Status::OK();
+        return num_rows;
     }
 
     Status finish_batch() override { return Status::OK(); }
+
+    Status skip(size_t num_rows) override { return Status::NotSupported("Not implement"); }
 
     void set_need_parse_levels(bool need_parse_levels) override{};
 

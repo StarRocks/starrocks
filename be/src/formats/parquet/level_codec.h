@@ -48,8 +48,10 @@ public:
             n = std::min((size_t)_num_levels, n);
             auto num_decoded = _rle_decoder.GetBatch(levels, n);
             _num_levels -= num_decoded;
+            DCHECK(_num_levels >= 0);
             return num_decoded;
         } else if (_encoding == tparquet::Encoding::BIT_PACKED) {
+            DCHECK(false);
         }
         return 0;
     }
