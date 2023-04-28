@@ -499,12 +499,14 @@ static void test_merge_path(const size_t num_cols, const size_t left_start, cons
     for (size_t processor_idx = 0; processor_idx < processor_num; processor_idx++) {
         ChunkPtr dest_chunk = primitive_dest_chunk->clone_empty_with_slot();
         Columns dest_orderby;
+        std::vector<int32_t> orderby_indexes;
         for (size_t col = 0; col < num_cols; col++) {
             auto column = ColumnHelper::create_column(type_desc, false);
             dest_orderby.push_back(std::move(column));
+            orderby_indexes.push_back(-1);
         }
         SortedRun dest_run(std::move(dest_chunk), std::move(dest_orderby));
-        dests.emplace_back(std::move(dest_run), dest_num_rows);
+        dests.emplace_back(std::move(dest_run), std::move(orderby_indexes), dest_num_rows);
     }
 
     std::vector<std::thread> threads;

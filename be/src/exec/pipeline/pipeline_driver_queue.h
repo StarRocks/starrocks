@@ -35,7 +35,7 @@ public:
     // *from_executor* means that the executor thread puts the driver back to the queue.
     virtual void put_back_from_executor(const DriverRawPtr driver) = 0;
 
-    virtual StatusOr<DriverRawPtr> take() = 0;
+    virtual StatusOr<DriverRawPtr> take(const bool block) = 0;
     virtual void cancel(DriverRawPtr driver) = 0;
 
     // Update statistics of the driver's workgroup,
@@ -78,7 +78,7 @@ public:
 
     void put(const DriverRawPtr driver);
     void cancel(const DriverRawPtr driver);
-    DriverRawPtr take();
+    DriverRawPtr take(const bool block);
     inline bool empty() const { return num_drivers == 0; }
 
     inline size_t size() const { return num_drivers; }
@@ -109,7 +109,7 @@ public:
     void update_statistics(const DriverRawPtr driver) override;
 
     // Return cancelled status, if the queue is closed.
-    StatusOr<DriverRawPtr> take() override;
+    StatusOr<DriverRawPtr> take(const bool block) override;
 
     void cancel(DriverRawPtr driver) override;
 
@@ -163,7 +163,7 @@ public:
     // Return cancelled status, if the queue is closed.
     // Firstly, select the work group with the minimum vruntime.
     // Secondly, select the proper driver from the driver queue of this work group.
-    StatusOr<DriverRawPtr> take() override;
+    StatusOr<DriverRawPtr> take(const bool block) override;
 
     void cancel(DriverRawPtr driver) override;
 
