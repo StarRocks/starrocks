@@ -50,6 +50,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.SystemId;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
@@ -117,7 +118,7 @@ public class StatisticProcDir implements ProcDirInterface {
         cloningTabletIds = AgentTaskQueue.getTabletIdsByType(TTaskType.CLONE);
         List<List<Comparable>> lines = new ArrayList<List<Comparable>>();
         for (Long dbId : dbIds) {
-            if (dbId == 0) {
+            if (dbId == SystemId.INFORMATION_SCHEMA_DB_ID) {
                 // skip information_schema database
                 continue;
             }
