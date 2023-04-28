@@ -41,6 +41,7 @@
 #include "http/action/compaction_action.h"
 #include "http/action/greplog_action.h"
 #include "http/action/health_action.h"
+#include "http/action/lake/dump_tablet_metadata_action.h"
 #include "http/action/meta_action.h"
 #include "http/action/metrics_action.h"
 #include "http/action/pipeline_blocking_drivers_action.h"
@@ -241,6 +242,13 @@ Status HttpServiceBE::start() {
     auto* greplog_action = new GrepLogAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/greplog", greplog_action);
     _http_handlers.emplace_back(greplog_action);
+
+#ifdef USE_STAROS
+    auto* lake_dump_metadata_action = new lake::DumpTabletMetadataAction(_env);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/cloudnative/dump_tablet_metadata/{TabletId}",
+                                      lake_dump_metadata_action);
+    _http_handlers.emplace_back(lake_dump_metadata_action);
+#endif
 
     RETURN_IF_ERROR(_ev_http_server->start());
     return Status::OK();
