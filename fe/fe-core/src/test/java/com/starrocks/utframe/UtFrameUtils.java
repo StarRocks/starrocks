@@ -156,8 +156,7 @@ public class UtFrameUtils {
             "DISTRIBUTED BY HASH(`table_id`, `column_name`, `db_id`) BUCKETS 10\n" +
             "PROPERTIES (\n" +
             "\"replication_num\" = \"1\",\n" +
-            "\"in_memory\" = \"false\",\n" +
-            "\"storage_format\" = \"DEFAULT\"\n" +
+            "\"in_memory\" = \"false\"\n" +
             ");";
 
     // Help to create a mocked ConnectContext.

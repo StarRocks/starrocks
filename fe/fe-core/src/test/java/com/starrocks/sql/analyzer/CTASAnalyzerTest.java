@@ -112,8 +112,7 @@ public class CTASAnalyzerTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"colocate_with\" = \"groupc1\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");")
                 .withTable("CREATE TABLE `customer` (\n" +
                         "  `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -131,8 +130,7 @@ public class CTASAnalyzerTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"colocate_with\" = \"groupa2\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");")
                 .withTable("CREATE TABLE `supplier` (\n" +
                         "  `s_suppkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -149,8 +147,7 @@ public class CTASAnalyzerTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"colocate_with\" = \"groupa4\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");")
                 .withTable("CREATE TABLE `part` (\n" +
                         "  `p_partkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -169,8 +166,7 @@ public class CTASAnalyzerTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"colocate_with\" = \"groupa5\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"DEFAULT\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");")
                 .withTable("CREATE TABLE `duplicate_table_with_null` (\n" +
                         "    `k1`  date,\n" +
@@ -191,8 +187,7 @@ public class CTASAnalyzerTest {
                         "COMMENT \"OLAP\"\n" +
                         "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3\n" +
                         "PROPERTIES (\n" +
-                        "    \"replication_num\" = \"1\",\n" +
-                        "    \"storage_format\" = \"v2\"\n" +
+                        "    \"replication_num\" = \"1\"\n" +
                         ");")
                 .withView("CREATE VIEW v1(vc1,vc2) as select k1+1,k2 from duplicate_table_with_null");
     }
@@ -323,8 +318,7 @@ public class CTASAnalyzerTest {
                 "DISTRIBUTED BY HASH(`c_2_9`, `c_2_12`, `c_2_0`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         String ctasSql = "CREATE TABLE `decimal_ctas1` as " +

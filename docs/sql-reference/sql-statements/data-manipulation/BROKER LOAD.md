@@ -78,7 +78,16 @@ DATA INFILE ("<file_path>"[, "<file_path>" ...])
   - `hdfs_host`: the FS port of the NameNode host in the HDFS cluster. The default port number is `9000`.
 
   > **NOTICE**
-  > Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as a file path into `DATA INFILE` with `s3a://`.
+  >
+  > - Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as the file path with `s3a://`.
+  > - Broker Load supports accessing Google GCS only according to the gs protocol. Therefore, when you load data from Google GCS, you must include `gs://` as the prefix in the GCS URI that you pass as the file path.
+  > - When you load data from Blob Storage, you must use the wasb or wasbs protocol to access your data:
+  >   - If your storage account allows access over HTTP, use the wasb protocol and write the file path as `wasb://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`.
+  >   - If your storage account allows access over HTTPS, use the wasbs protocol and write the file path as `wasbs://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`
+  > - When you load data from Data Lake Storage Gen1, you must use the adl protocol to access your data and write the file path as `adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>`.
+  > - When you load data from Data Lake Storage Gen2, you must use the abfs or abfss protocol to access your data:
+  >   - If your storage account allows access over HTTP, use the abfs protocol and write the file path as `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
+  >   - If your storage account allows access over HTTPS, use the abfss protocol and write the file path as `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
 
 - `INTO TABLE`
 
@@ -260,14 +269,14 @@ Open-source HDFS supports two authentication methods: simple authentication and 
 
 If you choose AWS S3 as your storage system, take one of the following actions:
 
-- To choose instance profile as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the instance profile-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-- To choose assumed role as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the assumed role-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
@@ -275,7 +284,7 @@ If you choose AWS S3 as your storage system, take one of the following actions:
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-- To choose IAM user as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the IAM user-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "false",
@@ -294,7 +303,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | aws.s3.access_key           | No       | The access key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
 
-For information about how to choose a credential method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 #### Google GCS
 
@@ -315,8 +324,8 @@ If you choose Google GCS as your storage system, take one of the following actio
 - To choose the service account-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "gcp.gcs.service_account_email" = "<google_service_account_email>"
-  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>"
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
   "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
   ```
 
@@ -330,10 +339,10 @@ If you choose Google GCS as your storage system, take one of the following actio
 
 - To choose the impersonation-based authentication method, configure `StorageCredentialParams` as follows:
 
-  - Make the VM instance impersonate the service account:
+  - Make a VM instance impersonate a service account:
 
     ```SQL
-    "gcp.gcs.use_compute_engine_service_account" = "true"
+    "gcp.gcs.use_compute_engine_service_account" = "true",
     "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
     ```
 
@@ -347,9 +356,9 @@ If you choose Google GCS as your storage system, take one of the following actio
   - Make a service account (named as meta service account) impersonate another service account (named as data service account):
 
     ```SQL
-    "gcp.gcs.service_account_email" = "<google_service_account_email>"
-    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>"
-    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>"
+    "gcp.gcs.service_account_email" = "<google_service_account_email>",
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
 
@@ -389,13 +398,6 @@ The following table describes the parameters you need to configure in `StorageCr
 ##### Azure Blob Storage
 
 If you choose Blob Storage as your storage system, take one of the following actions:
-
-> **NOTE**
->
-> When you load data from Blob Storage, you need to add a prefix to the file path (`DATA INFILE`). The prefix varies depending on the protocol that is used to access your storage account:
->
-> - If your Blob Storage allows access only through HTTP, use `wasb` as the prefix, for example, `wasb://<container>@<storage_account>.``blob.core.windows.net/<path>/<file_name>/*`.
-> - If your Blob Storage allows access only through HTTPS, use `wasbs` as the prefix, for example, `wasbs://<container>@<storage_account>.``blob.core.windows.net/<path>/<file_name>/*`.
 
 - To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
 
@@ -446,8 +448,8 @@ If you choose Data Lake Storage Gen1 as your storage system, take one of the fol
 - To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls1.oauth2_client_id" = "<application_client_id>"
-  "azure.adls1.oauth2_credential" = "<application_client_credential>"
+  "azure.adls1.oauth2_client_id" = "<application_client_id>",
+  "azure.adls1.oauth2_credential" = "<application_client_credential>",
   "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
   ```
 
@@ -466,8 +468,8 @@ If you choose Data Lake Storage Gen2 as your storage system, take one of the fol
 - To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true"
-  "azure.adls2.oauth2_tenant_id" = "<service_principle_tenant_id>"
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
   "azure.adls2.oauth2_client_id" = "<service_client_id>"
   ```
 
@@ -482,7 +484,7 @@ If you choose Data Lake Storage Gen2 as your storage system, take one of the fol
 - To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>"
+  "azure.adls2.storage_account" = "<storage_account_name>",
   "azure.adls2.shared_key" = "<shared_key>"
   ```
 
@@ -496,9 +498,9 @@ If you choose Data Lake Storage Gen2 as your storage system, take one of the fol
 - To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  "azure.adls2.oauth2_client_secret" = "<service_principle_client_secret>"
-  "azure.adls2.oauth2_client_endpoint" = "<service_principle_client_endpoint>"
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
   ```
 
   The following table describes the parameters you need to configure `in StorageCredentialParams`.

@@ -42,6 +42,7 @@ struct TabletScannerParams {
 
     bool skip_aggregation = false;
     bool need_agg_finalize = true;
+    bool update_num_scan_range = false;
 };
 
 class TabletScanner {
@@ -95,6 +96,7 @@ private:
     bool _skip_aggregation = false;
     bool _need_agg_finalize = false;
     bool _has_update_counter = false;
+    bool _update_num_scan_range = false;
 
     TabletReaderParams _params;
     std::shared_ptr<TabletReader> _reader;

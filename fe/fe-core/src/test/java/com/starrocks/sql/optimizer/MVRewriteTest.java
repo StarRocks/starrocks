@@ -1070,8 +1070,7 @@ public class MVRewriteTest {
                 ") ENGINE=OLAP\n" +
                 "DISTRIBUTED BY HASH(`is_finish`, `is_subscribe`, `dt`) BUCKETS 16\n" +
                 "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"replication_num\" = \"1\"\n" +
                 ");";
         starRocksAssert.withTable(createTableSQL);
         String createMVSQL = "CREATE materialized view kkk_mv as\n" +

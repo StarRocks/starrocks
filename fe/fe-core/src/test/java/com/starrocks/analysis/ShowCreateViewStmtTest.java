@@ -89,8 +89,7 @@ public class ShowCreateViewStmtTest {
                         "DISTRIBUTED BY HASH(`c1`, `c2`) BUCKETS 2\n" +
                         "PROPERTIES(\n" +
                         "\"replication_num\" = \"1\",\n" +
-                        "\"in_memory\" = \"false\",\n" +
-                        "\"storage_format\" = \"default\"\n" +
+                        "\"in_memory\" = \"false\"\n" +
                         ");");
     }
 

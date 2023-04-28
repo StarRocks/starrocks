@@ -164,11 +164,6 @@ public class AlterTableStatementAnalyzer {
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_COLUMNS)
                     || properties.containsKey(PropertyAnalyzer.PROPERTIES_BF_FPP)) {
                 // do nothing, these 2 properties will be analyzed when creating alter job
-            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT)) {
-                if (!properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT).equalsIgnoreCase("v2")) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
-                            "Property " + PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT + " should be v2");
-                }
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
                 if (WriteQuorum.findTWriteQuorumByName(properties.get(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) == null) {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,

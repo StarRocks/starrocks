@@ -234,7 +234,7 @@ public class FrontendServiceImplTest {
                 .withView("create view v3 as select database()")
                 .withView("create view v4 as select user()")
                 .withView("create view v5 as select CONNECTION_ID()")
-                .withView("create view v6 as select CURRENT_CATALOG()");
+                .withView("create view v6 as select CATALOG()");
     }
 
     @AfterClass

@@ -4,10 +4,15 @@ An Iceberg catalog is a kind of external catalog that enables you to query data 
 
 Also, you can directly transform and load data from Iceberg by using [INSERT INTO](../../../docs/sql-reference/sql-statements/data-manipulation/insert.md) based on Iceberg catalogs. StarRocks supports Iceberg catalogs from v2.4 onwards.
 
-To ensure successful SQL workloads on your Iceberg cluster, your StarRocks cluster needs to integrate with two important components:
+To ensure successful SQL workloads on your Hive cluster, your StarRocks cluster needs to integrate with two important components:
 
-- Object storage or distributed file system like AWS S3 or HDFS
+- Object storage or distributed file system like AWS S3, other S3-compatible storage system, Microsoft Azure Storage, Google GCS, or HDFS
+
 - Metastore like Hive metastore or AWS Glue
+
+  > **NOTE**
+  >
+  > If you choose AWS S3 as storage, you can use HMS or AWS Glue as metastore. If you choose any other storage system, you can only use HMS as metastore.
 
 ## Usage notes
 
@@ -24,17 +29,17 @@ Before you create an Iceberg catalog, make sure your StarRocks cluster can integ
 
 ### AWS IAM
 
-If your Iceberg cluster uses AWS S3 as storage or AWS Glue as metastore, choose your suitable credential method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources.
+If your Iceberg cluster uses AWS S3 as storage or AWS Glue as metastore, choose your suitable authentication method and make the required preparations to ensure that your StarRocks cluster can access the related AWS cloud resources.
 
-The following credential methods are recommended:
+The following authentication methods are recommended:
 
 - Instance profile
 - Assumed role
 - IAM user
 
-Of the above-mentioned three credential methods, instance profile is the most widely used.
+Of the above-mentioned three authentication methods, instance profile is the most widely used.
 
-For more information, see [Preparation about the credential in AWS IAM](../../integrations/authenticate_to_aws_resources.md).
+For more information, see [Preparation for authentication in AWS IAM](../../integrations/authenticate_to_aws_resources.md#preparation-for-authentication-in-aws-iam).
 
 ### HDFS
 
@@ -112,13 +117,13 @@ The following table describes the parameter you need to configure in `MetastoreP
 
 | Parameter                           | Required | Description                                                  |
 | ----------------------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.uris                 | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>","thrift://<metastore_IP_address_2>:<metastore_port_2>","thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
+| hive.metastore.uris                 | Yes      | The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br>If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. |
 
 ##### AWS Glue
 
-If you choose AWS Glue as the metastore of your data source, take one of the following actions:
+If you choose AWS Glue as the metastore of your data source, which is supported only when you choose AWS S3 as storage, take one of the following actions:
 
-- To choose instance profile as the credential method for accessing AWS Glue, configure `MetastoreParams` as follows:
+- To choose the instance profile-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
   "hive.metastore.type" = "glue",
@@ -126,7 +131,7 @@ If you choose AWS Glue as the metastore of your data source, take one of the fol
   "aws.glue.region" = "<aws_glue_region>"
   ```
 
-- To choose assumed role as the credential method for accessing AWS Glue, configure `MetastoreParams` as follows:
+- To choose the assumed role-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
   "hive.metastore.type" = "glue",
@@ -135,7 +140,7 @@ If you choose AWS Glue as the metastore of your data source, take one of the fol
   "aws.glue.region" = "<aws_glue_region>"
   ```
 
-- To choose IAM user as the credential method for accessing AWS Glue, configure `MetastoreParams` as follows:
+- To choose the IAM user-based authentication method, configure `MetastoreParams` as follows:
 
   ```SQL
   "aws.glue.use_instance_profile" = "false",
@@ -149,13 +154,13 @@ The following table describes the parameters you need to configure in `Metastore
 | Parameter                     | Required | Description                                                  |
 | ----------------------------- | -------- | ------------------------------------------------------------ |
 | hive.metastore.type           | Yes      | The type of metastore that you use for your Iceberg cluster. Set the value to `glue`. |
-| aws.glue.use_instance_profile | Yes      | Specifies whether to enable the credential methods instance profile and assumed role. Valid values: `true` and `false`. Default value: `false`. |
-| aws.glue.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you choose assumed role as the credential method for accessing AWS Glue, you must specify this parameter. |
+| aws.glue.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. |
+| aws.glue.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter. |
 | aws.glue.region               | Yes      | The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`. |
-| aws.glue.access_key           | No       | The access key of your AWS IAM user. If choose IAM user as the credential method for accessing AWS Glue, you must specify this parameter. |
-| aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you choose IAM user as the credential method for accessing AWS Glue, you must specify this parameter. |
+| aws.glue.access_key           | No       | The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
+| aws.glue.secret_key           | No       | The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. |
 
-For information about how to choose a credential method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
+For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
 ##### Custom metadata service
 
@@ -173,22 +178,22 @@ After you complete the preceding operations, you can create an Iceberg catalog a
 
 A set of parameters about how StarRocks integrates with your storage system. This parameter set is optional.
 
-You need to configure `StorageCredentialParams` only when your Iceberg cluster uses AWS S3 as storage.
+If you use HDFS as storage, you do not need to configure `StorageCredentialParams`.
 
-If your Iceberg cluster uses any other storage system, you can ignore `StorageCredentialParams`.
+If you use AWS S3, other S3-compatible storage system, Microsoft Azure Storage, or Google GCS as storage, you must `StorageCredentialParams`.
 
 ##### AWS S3
 
 If you choose AWS S3 as storage for your Iceberg cluster, take one of the following actions:
 
-- To choose instance profile as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the instance profile-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-- To choose assumed role as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the assumed role-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
@@ -196,7 +201,7 @@ If you choose AWS S3 as storage for your Iceberg cluster, take one of the follow
   "aws.s3.region" = "<aws_s3_region>"
   ```
 
-- To choose IAM user as the credential method for accessing AWS S3, configure `StorageCredentialParams` as follows:
+- To choose the IAM user-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "aws.s3.use_instance_profile" = "false",
@@ -209,13 +214,13 @@ The following table describes the parameters you need to configure in `StorageCr
 
 | Parameter                   | Required | Description                                                  |
 | --------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.use_instance_profile | Yes      | Specifies whether to enable the credential methods instance profile and assumed role. Valid values: `true` and `false`. Default value: `false`. |
-| aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you choose assumed role as the credential method for accessing AWS S3, you must specify this parameter. |
+| aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. |
+| aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
-| aws.s3.access_key           | No       | The access key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
-| aws.s3.secret_key           | No       | The secret key of your IAM user. If you choose IAM user as the credential method for accessing AWS S3, you must specify this parameter. |
+| aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
+| aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 
-For information about how to choose a credential method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
+For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
 ##### S3-compatible storage system
 
@@ -233,8 +238,8 @@ The following table describes the parameters you need to configure in `StorageCr
 
 | Parameter                        | Required | Description                                                  |
 | -------------------------------- | -------- | ------------------------------------------------------------ |
-| aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection. Valid values: `true` and `false`. Default value: `true`. |
-| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style URL access. Valid values: `true` and `false`. Default value: `false`. |
+| aws.s3.enable_ssl                | Yes      | Specifies whether to enable SSL connection.<br>Valid values: `true` and `false`. Default value: `true`. |
+| aws.s3.enable_path_style_access  | Yes      | Specifies whether to enable path-style access.<br>Valid values: `true` and `false`. Default value: `false`.<br>Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. |
 | aws.s3.endpoint                  | Yes      | The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3. |
 | aws.s3.access_key                | Yes      | The access key of your IAM user. |
 | aws.s3.secret_key                | Yes      | The secret key of your IAM user. |
@@ -294,8 +299,8 @@ If you choose Data Lake Storage Gen1 as storage for your Iceberg cluster, take o
 - To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls1.oauth2_client_id" = "<application_client_id>"
-  "azure.adls1.oauth2_credential" = "<application_client_credential>"
+  "azure.adls1.oauth2_client_id" = "<application_client_id>",
+  "azure.adls1.oauth2_credential" = "<application_client_credential>",
   "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
   ```
 
@@ -314,8 +319,8 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
 - To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true"
-  "azure.adls2.oauth2_tenant_id" = "<service_principle_tenant_id>"
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
   "azure.adls2.oauth2_client_id" = "<service_client_id>"
   ```
 
@@ -330,7 +335,7 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
 - To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>"
+  "azure.adls2.storage_account" = "<storage_account_name>",
   "azure.adls2.shared_key" = "<shared_key>"
   ```
 
@@ -344,9 +349,9 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
 - To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  "azure.adls2.oauth2_client_secret" = "<service_principle_client_secret>"
-  "azure.adls2.oauth2_client_endpoint" = "<service_principle_client_endpoint>
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>
   ```
 
   The following table describes the parameters you need to configure `in StorageCredentialParams`.
@@ -376,8 +381,8 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
 - To choose the service account-based authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "gcp.gcs.service_account_email" = "<google_service_account_email>"
-  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>"
+  "gcp.gcs.service_account_email" = "<google_service_account_email>",
+  "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
   "gcp.gcs.service_account_private_key" = "<google_service_private_key>"
   ```
 
@@ -391,10 +396,10 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
 
 - To choose the impersonation-based authentication method, configure `StorageCredentialParams` as follows:
 
-  - Make the VM instance impersonate the service account:
+  - Make a VM instance impersonate a service account:
   
     ```SQL
-    "gcp.gcs.use_compute_engine_service_account" = "true"
+    "gcp.gcs.use_compute_engine_service_account" = "true",
     "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
     ```
 
@@ -405,12 +410,12 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
     | gcp.gcs.use_compute_engine_service_account | false             | true                  | Specifies whether to directly use the service account that is bound to your Compute Engine. |
     | gcp.gcs.impersonation_service_account      | ""                | "hello"               | The service account that you want to impersonate.            |
 
-  - Make a service account (named as meta service account) impersonate another service account (named as data service account):
+  - Make a service account (temporarily named as meta service account) impersonate another service account (temporarily named as data service account):
 
     ```SQL
-    "gcp.gcs.service_account_email" = "<google_service_account_email>"
-    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>"
-    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>"
+    "gcp.gcs.service_account_email" = "<google_service_account_email>",
+    "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+    "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
     "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>"
     ```
 
@@ -452,7 +457,9 @@ For more information, see the "[Understand automatic asynchronous update](../cat
 
 The following examples create an Iceberg catalog named `iceberg_catalog_hms` or `iceberg_catalog_glue`, depending on the type of metastore you use, to query data from your Iceberg cluster.
 
-#### If you choose instance profile-based credential
+#### AWS S3
+
+##### If you choose instance profile-based credential
 
 - If you use Hive metastore in your Iceberg cluster, run a command like below:
 
@@ -482,7 +489,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   );
   ```
 
-#### If you choose assumed role-based credential
+##### If you choose assumed role-based credential
 
 - If you use Hive metastore in your HIceberg cluster, run a command like below:
 
@@ -515,7 +522,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   );
   ```
 
-#### If you choose IAM user-based credential
+##### If you choose IAM user-based credential
 
 - If you use Hive metastore in your Iceberg cluster, run a command like below:
 
@@ -550,6 +557,184 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
       "aws.glue.region" = "us-west-2"
   );
   ```
+
+#### S3-compatible storage system
+
+Use MinIO as an example. Run a command like below:
+
+```SQL
+CREATE EXTERNAL CATALOG hive_catalog_hms
+PROPERTIES
+(
+    "type" = "hive", 
+    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "aws.s3.enable_ssl" = "true",
+    "aws.s3.enable_path_style_access" = "true",
+    "aws.s3.endpoint" = "<s3_endpoint>",
+    "aws.s3.access_key" = "<iam_user_access_key>",
+    "aws.s3.secret_key" = "<iam_user_secret_key>"
+);
+```
+
+#### Microsoft Azure Storage
+
+##### Azure Blob Storage
+
+- If you choose the Shared Key authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  );
+  ```
+
+- If you choose the SAS Token authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.blob.account_name" = "<blob_storage_account_name>",
+      "azure.blob.container_name" = "<blob_container_name>",
+      "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  );
+  ```
+
+##### Azure Data Lake Storage Gen1
+
+- If you choose the Managed Service Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls1.use_managed_service_identity" = "true"    
+  );
+  ```
+
+- If you choose the Service Principal authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls1.oauth2_client_id" = "<application_client_id>",
+      "azure.adls1.oauth2_credential" = "<application_client_credential>",
+      "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
+  );
+  ```
+
+##### Azure Data Lake Storage Gen2
+
+- If you choose the Managed Identity authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.oauth2_use_managed_identity" = "true",
+      "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  );
+  ```
+
+- If you choose the Shared Key authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.storage_account" = "<storage_account_name>",
+      "azure.adls2.shared_key" = "<shared_key>"     
+  );
+  ```
+
+- If you choose the Service Principal authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "azure.adls2.oauth2_client_id" = "<service_client_id>",
+      "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+      "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint> 
+  );
+  ```
+
+#### Google GCS
+
+- If you choose the VM-based authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type" = "hive", 
+      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "gcp.gcs.use_compute_engine_service_account" = "true"    
+  );
+  ```
+
+- If you choose the service account-based authentication method, run a command like below:
+
+  ```SQL
+  CREATE EXTERNAL CATALOG hive_catalog_hms
+  PROPERTIES
+  (
+      "type"="hive", 
+      "hive.metastore.uris"="thrift://34.132.15.127:9083",
+      "gcp.gcs.service_account_email" = "<google_service_account_email>",
+      "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
+      "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
+  );
+  ```
+
+- If you choose the impersonation-based authentication method:
+
+  - If you make a VM instance impersonate a service account, run a command like below:
+
+    ```SQL
+    CREATE EXTERNAL CATALOG hive_catalog_hms
+    PROPERTIES
+    (
+        "type"="hive", 
+        "hive.metastore.uris"="thrift://34.132.15.127:9083",
+        "gcp.gcs.use_compute_engine_service_account" = "true",
+        "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
+    );
+    ```
+
+  - If you make a service account impersonate another service account, run a command like below:
+
+    ```SQL
+    CREATE EXTERNAL CATALOG hive_catalog_hms
+    PROPERTIES
+    (
+        "type"="hive", 
+        "hive.metastore.uris"="thrift://34.132.15.127:9083",
+        "gcp.gcs.service_account_email" = "<google_service_account_email>",
+        "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
+        "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
+        "gcp.gcs.impersonation_service_account" = "<data_google_service_account_email>",  
+    );
+    ```
 
 ## View Iceberg catalogs
 

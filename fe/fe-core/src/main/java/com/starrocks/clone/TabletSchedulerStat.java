@@ -97,8 +97,6 @@ public class TabletSchedulerStat {
      */
     @StatField("num of tablet priority upgraded")
     public AtomicLong counterTabletPrioUpgraded = new AtomicLong(0L);
-    @StatField("num of tablet priority downgraded")
-    public AtomicLong counterTabletPrioDowngraded = new AtomicLong(0L);
 
     /*
      * Clone task related
@@ -210,17 +208,5 @@ public class TabletSchedulerStat {
 
         snapshot();
         return sb.toString();
-    }
-
-    // for test
-    public static void main(String[] args) {
-        TabletSchedulerStat stat = new TabletSchedulerStat();
-
-        stat.counterCloneTask.addAndGet(300);
-        System.out.println(stat.incrementalBrief());
-
-        stat.counterCloneTask.addAndGet(3);
-        stat.counterTabletChecked.incrementAndGet();
-        System.out.println(stat.incrementalBrief());
     }
 }

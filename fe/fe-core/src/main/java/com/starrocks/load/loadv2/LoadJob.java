@@ -257,6 +257,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         loadingStatus.setLoadFileInfo(fileNum, fileSize);
     }
 
+    public void updateScanRangeNum(long scanRangeNum) {
+        loadingStatus.updateScanRangeNum(scanRangeNum);
+    }
+
     public TUniqueId getRequestId() {
         return requestId;
     }

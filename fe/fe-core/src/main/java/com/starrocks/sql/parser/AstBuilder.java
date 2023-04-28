@@ -141,6 +141,7 @@ import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
+import com.starrocks.sql.ast.CleanTabletSchedQClause;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.ColumnDef;
@@ -3298,6 +3299,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new CreateImageClause(createPos(context));
     }
 
+    @Override
+    public ParseNode visitCleanTabletSchedQClause(
+            StarRocksParser.CleanTabletSchedQClauseContext context) {
+        return new CleanTabletSchedQClause(createPos(context));
+    }
+
     // ---------Alter table clause---------
 
     @Override
@@ -4149,7 +4156,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return visit(context.keyPartitions());
         }
 
-        List<Identifier> identifierList = visit(context.identifier(), Identifier.class);
+        List<Identifier> identifierList = visit(context.identifierOrString(), Identifier.class);
         return new PartitionNames(context.TEMPORARY() != null,
                 identifierList.stream().map(Identifier::getValue).collect(toList()),
                 createPos(context));
@@ -4268,7 +4275,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDropFunctionStatement(StarRocksParser.DropFunctionStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        String functionName = qualifiedName.toString().toLowerCase();
+        String functionName = qualifiedName.toString();
         boolean isGlobal = context.GLOBAL() != null;
         FunctionName fnName = FunctionName.createFnName(functionName);
         if (isGlobal) {
@@ -4290,7 +4297,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        String functionName = qualifiedName.toString().toLowerCase();
+        String functionName = qualifiedName.toString();
 
         TypeDef returnTypeDef = new TypeDef(getType(context.returnType), createPos(context.returnType));
         TypeDef intermediateType = null;
@@ -5099,10 +5106,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSimpleFunctionCall(StarRocksParser.SimpleFunctionCallContext context) {
 
-        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        String fullFunctionName = getQualifiedName(context.qualifiedName()).toString();
         NodePosition pos = createPos(context);
 
-        FunctionName fnName = FunctionName.createFnName(functionName);
+        FunctionName fnName = FunctionName.createFnName(fullFunctionName);
+        String functionName = fnName.getFunction();
         if (functionName.equals(FunctionSet.TIME_SLICE) || functionName.equals(FunctionSet.DATE_SLICE)) {
             if (context.expression().size() == 2) {
                 Expr e1 = (Expr) visit(context.expression(0));
@@ -5186,6 +5194,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Expr e1 = (Expr) visit(context.expression(0));
             Expr e2 = context.expression().size() > 1 ? (Expr) visit(context.expression(1)) : null;
             return new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName.getFunction()), e1, e2, pos);
+        }
+
+        if (fnName.getFunction().equalsIgnoreCase("CONNECTION_ID")) {
+            return new InformationFunction("CONNECTION_ID");
         }
 
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,

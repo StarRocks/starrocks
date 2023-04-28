@@ -415,8 +415,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String SQL_QUOTE_SHOW_CREATE = "sql_quote_show_create";
 
-    public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
+    public static final String ENABLE_PLAN_VALIDATION = "enable_plan_validation";
 
+    public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1069,6 +1070,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW)
     private boolean cboPushDownDistinctBelowWindow = true;
+
+    @VarAttr(name = ENABLE_PLAN_VALIDATION, flag = VariableMgr.INVISIBLE)
+    private boolean enablePlanValidation = true;
+
+    private int exprChildrenLimit = -1;
+
+    public int getExprChildrenLimit() {
+        return exprChildrenLimit;
+    }
+
+    public void setExprChildrenLimit(int exprChildrenLimit) {
+        this.exprChildrenLimit = exprChildrenLimit;
+    }
 
     public void setFullSortMaxBufferedRows(long v) {
         fullSortMaxBufferedRows = v;
@@ -2049,6 +2063,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableStrictType = val;
     }
 
+    public boolean getEnablePlanValidation() {
+        return this.enablePlanValidation;
+    }
+
+    public void setEnablePlanValidation(boolean val) {
+        this.enablePlanValidation = val;
+    }
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {

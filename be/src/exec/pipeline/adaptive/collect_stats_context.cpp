@@ -219,7 +219,8 @@ bool RoundRobinState::is_upstream_finished(int32_t driver_seq) const {
 CollectStatsContext::CollectStatsContext(RuntimeState* const runtime_state, size_t max_dop,
                                          const AdaptiveDopParam& param)
         : _max_dop(max_dop),
-          _max_block_rows_per_driver_seq(param.max_block_rows_per_driver_seq),
+          _max_block_rows_per_driver_seq(param.max_block_rows_per_driver_seq > 0 ? param.max_block_rows_per_driver_seq
+                                                                                 : 1),
           _max_output_amplification_factor(param.max_output_amplification_factor),
           _buffer_chunk_queue_per_driver_seq(max_dop),
           _is_finishing_per_driver_seq(max_dop),
