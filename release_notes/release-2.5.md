@@ -1,5 +1,41 @@
 # StarRocks version 2.5
 
+## 2.5.5
+
+发布日期：2023 年 4 月 28 日
+
+### 新增特性
+
+新增对主键模型表 tablet 状态的监控，包括：
+
+- FE 新增 `err_state_metric` 监控项。
+- `SHOW PROC '/statistic/'` 返回结果中新增统计列 `ErrorStateTabletNum`，用于统计错误状态 (err_state) 的 Tablet 数量。
+- `SHOW PROC '/statistic/<db_id>/'` 返回结果中新增统计列 `ErrorStateTablets`，用于展示当前数据库下处于错误状态的 Tablet ID。[# 19517](https://github.com/StarRocks/starrocks/pull/19517)
+
+更多信息，参见 [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW%20PROC.md)。
+
+### 功能优化
+
+- 优化添加多个 BE 时的磁盘均衡速度。[# 19418](https://github.com/StarRocks/starrocks/pull/19418)
+- 优化 `storage_medium` 的推导机制。当 BE 同时使用 SSD 和 HDD 作为存储介质时，根据 `storage_cooldown_time` 的配置来决定默认存储类型。如果配置了 `storage_cooldown_time`，StarRocks 设置 `storage_medium` 为 `SSD`。如果未配置，则设置 `storage_medium` 为 `HDD`。[#18649](https://github.com/StarRocks/starrocks/pull/18649)
+- 通过禁止收集 Unique Key 表的 Value 列统计信息来优化 Unique Key 表性能。[# 19563](https://github.com/StarRocks/starrocks/pull/19563)
+
+### 问题修复
+
+- 对于 Colocation 表，可以通过命令手动指定副本状态为 bad：`ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "10003", "backend_id" = "10001", "status" = "bad");`，如果 BE 数量小于等于副本数量，则该副本无法被修复。[# 17876](https://github.com/StarRocks/starrocks/issues/17876)
+- 启动 BE 后进程存在但是端口无法启动。[# 19347](https://github.com/StarRocks/starrocks/pull/19347)
+- 子查询使用窗口函数时，聚合结果不准确。[# 19725](https://github.com/StarRocks/starrocks/issues/19725)
+- 首次刷新物化视图时 `auto_refresh_partitions_limit` 设置的限制不生效，导致所有分区都做了刷新。  [# 19759](https://github.com/StarRocks/starrocks/issues/19759)
+- 查询 CSV 格式的 Hive 表时，由于 ARRAY 数组中嵌套了复杂数据类型 (MAP 和 STRUCT)而导致的问题。[# 20233](https://github.com/StarRocks/starrocks/pull/20233)
+- 使用 Spark connector 查询超时。[# 20264](https://github.com/StarRocks/starrocks/pull/20264)
+- 两副本的表如果其中一个副本出现问题，无法自动修复。[# 20681](https://github.com/StarRocks/starrocks/pull/20681)
+- 物化视图查询改写失败而导致查询失败。[# 19549](https://github.com/StarRocks/starrocks/issues/19549)
+- 因 db 锁引起的 metrics 接口超时。[# 20790](https://github.com/StarRocks/starrocks/pull/20790)
+- Broadcast Join 查询结果错误。[# 20952](https://github.com/StarRocks/starrocks/issues/20952)
+- 建表时使用不支持的数据类型时返回空指针。[# 20999](https://github.com/StarRocks/starrocks/issues/20999)
+- 开启 Query Cache 后使用 window_funnel 函数导致的问题。[# 21474](https://github.com/StarRocks/starrocks/issues/21474)
+- CTE 优化查询改写后导致选择优化计划耗时过长。[# 16515](https://github.com/StarRocks/starrocks/pull/16515)
+
 ## 2.5.4
 
 发布日期： 2023 年 4 月 4 日
