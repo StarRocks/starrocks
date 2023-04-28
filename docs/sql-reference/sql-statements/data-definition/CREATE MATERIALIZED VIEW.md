@@ -240,7 +240,8 @@ The following variables control the behaviour of materialized view:
 
   - Synchronous materialized views only support aggregate functions on a single column. Query statements in the form of `sum(a+b)` are not supported.
   - Synchronous materialized views support only one aggregate function for each column of the base table. Query statements such as `select sum(a), min(a) from table` are not supported.
-  - Synchronous materialized views do not support clauses such as JOIN, WHERE, and GROUP BY.
+  - When creating a synchronous materialized view with an aggregate function, you must specify the GROUP BY clause, and specify at least one GROUP BY column in SELECT.
+  - Synchronous materialized views do not support clauses such as JOIN, WHERE, and the HAVING clause of GROUP BY.
   - When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you must ensure that all synchronous materialized views of the base table do not contain the dropped column, otherwise the drop operation will fail. Before you drop the column, you must first drop all synchronous materialized views that contain the column.
   - Creating too many synchronous materialized views for a table will affect the data load efficiency. When data is being loaded to the base table, the data in synchronous materialized view and base table will be updated synchronously. If a base table contains `n` synchronous materialized views, the efficiency of loading data into the base table is about the same as the efficiency of loading data into `n` tables.
 
