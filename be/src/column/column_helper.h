@@ -31,6 +31,7 @@
 #include "gutil/bits.h"
 #include "gutil/casts.h"
 #include "gutil/cpu.h"
+#include "gutil/strings/fastmem.h"
 #include "types/logical_type.h"
 #include "util/phmap/phmap.h"
 
@@ -363,7 +364,7 @@ public:
                 // all no hit, pass
             } else if (mask == 0xffffffff) {
                 // all hit, copy all
-                memmove(data + result_offset, data + start_offset, kBatchNums * data_type_size);
+                strings::memcpy_inlined(data + result_offset, data + start_offset, kBatchNums * data_type_size);
                 result_offset += kBatchNums;
 
             } else {
@@ -424,7 +425,7 @@ public:
             if (vmaxvq_u8(filter) == 0) {
                 // skip
             } else if (vminvq_u8(filter)) {
-                memmove(data + result_offset, data + start_offset, kBatchNums * data_type_size);
+                strings::memcpy_inlined(data + result_offset, data + start_offset, kBatchNums * data_type_size);
                 result_offset += kBatchNums;
             } else {
                 for (int i = 0; i < kBatchNums; ++i) {
