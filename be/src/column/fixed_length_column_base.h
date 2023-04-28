@@ -133,9 +133,12 @@ public:
     }
 
     size_t append_numbers(const void* buff, size_t length) override {
+        DCHECK(length % sizeof(ValueType) == 0);
         const size_t count = length / sizeof(ValueType);
-        const T* const ptr = reinterpret_cast<const T*>(buff);
-        _data.insert(_data.end(), ptr, ptr + count);
+        size_t dst_offset = _data.size();
+        raw::stl_vector_resize_uninitialized(&_data, _data.size() + count);
+        T* dst = _data.data() + dst_offset;
+        memcpy(dst, buff, length);
         return count;
     }
 

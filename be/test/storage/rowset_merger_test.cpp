@@ -248,7 +248,7 @@ TEST_F(RowsetMergerTest, horizontal_merge) {
     std::vector<int64_t> pks;
     for (int i = 0; i < num_segment; i++) {
         Int64Column deletes;
-        deletes.append_numbers(segments[i].data(), sizeof(int64_t) * segments[i].size() / 2);
+        deletes.append_numbers(segments[i].data(), sizeof(int64_t) * (segments[i].size() / 2));
         auto rs = create_rowset(_tablet, {}, &deletes);
         ASSERT_TRUE(_tablet->rowset_commit(i + 2 + num_segment, rs).ok());
         rowsets[i + num_segment] = rs;
@@ -297,7 +297,7 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     std::vector<int64_t> pks;
     for (int i = 0; i < num_segment; i++) {
         Int64Column deletes;
-        deletes.append_numbers(segments[i].data(), sizeof(int64_t) * segments[i].size() / 2);
+        deletes.append_numbers(segments[i].data(), sizeof(int64_t) * (segments[i].size() / 2));
         auto rs = create_rowset(_tablet, {}, &deletes);
         ASSERT_TRUE(_tablet->rowset_commit(i + 2 + num_segment, rs).ok());
         rowsets[i + num_segment] = rs;
@@ -310,8 +310,8 @@ TEST_F(RowsetMergerTest, vertical_merge) {
     TestRowsetWriter writer;
     Schema schema = ChunkHelper::convert_schema(_tablet->tablet_schema());
     ASSERT_TRUE(PrimaryKeyEncoder::create_column(schema, &writer.all_pks).ok());
-    writer.non_key_columns.emplace_back(std::move(Int16Column::create_mutable()));
-    writer.non_key_columns.emplace_back(std::move(Int32Column::create_mutable()));
+    writer.non_key_columns.emplace_back(Int16Column::create_mutable());
+    writer.non_key_columns.emplace_back(Int32Column::create_mutable());
     ASSERT_TRUE(compaction_merge_rowsets(*_tablet, version, rowsets, &writer, cfg).ok());
 
     ASSERT_EQ(pks.size(), writer.all_pks->size());
@@ -360,7 +360,7 @@ TEST_F(RowsetMergerTest, horizontal_merge_seq) {
     std::vector<int64_t> pks;
     for (int i = 0; i < num_segment; i++) {
         Int64Column deletes;
-        deletes.append_numbers(segments[i].data(), sizeof(int64_t) * segments[i].size() / 2);
+        deletes.append_numbers(segments[i].data(), sizeof(int64_t) * (segments[i].size() / 2));
         auto rs = create_rowset(_tablet, {}, &deletes);
         ASSERT_TRUE(_tablet->rowset_commit(i + 2 + num_segment, rs).ok());
         rowsets[i + num_segment] = rs;
@@ -408,7 +408,7 @@ TEST_F(RowsetMergerTest, vertical_merge_seq) {
     std::vector<int64_t> pks;
     for (int i = 0; i < num_segment; i++) {
         Int64Column deletes;
-        deletes.append_numbers(segments[i].data(), sizeof(int64_t) * segments[i].size() / 2);
+        deletes.append_numbers(segments[i].data(), sizeof(int64_t) * (segments[i].size() / 2));
         auto rs = create_rowset(_tablet, {}, &deletes);
         ASSERT_TRUE(_tablet->rowset_commit(i + 2 + num_segment, rs).ok());
         rowsets[i + num_segment] = rs;
