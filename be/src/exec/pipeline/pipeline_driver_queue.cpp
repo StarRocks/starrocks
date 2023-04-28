@@ -261,6 +261,9 @@ StatusOr<DriverRawPtr> WorkGroupDriverQueue::take(const bool block) {
                 continue;
             }
 
+            if (!block) {
+                return nullptr;
+            }
             // All the ready tasks are throttled, so wait until the new period or a new task comes.
             _cv.wait_for(lock, std::chrono::nanoseconds(sleep_ns));
         }
