@@ -30,8 +30,9 @@
 namespace starrocks::parquet {
 
 ChunkWriter::ChunkWriter(::parquet::RowGroupWriter* rg_writer, const std::vector<TypeDescriptor>& type_descs,
-                         const std::shared_ptr<::parquet::schema::GroupNode>& schema)
-        : _rg_writer(rg_writer), _type_descs(type_descs), _schema(schema) {
+                         const std::shared_ptr<::parquet::schema::GroupNode>& schema,
+                         const std::function<StatusOr<ColumnPtr>(Chunk*, size_t)>& eval_func)
+        : _rg_writer(rg_writer), _type_descs(type_descs), _schema(schema), _eval_func(eval_func) {
     int num_columns = rg_writer->num_columns();
     _estimated_buffered_bytes.resize(num_columns);
     std::fill(_estimated_buffered_bytes.begin(), _estimated_buffered_bytes.end(), 0);
@@ -52,7 +53,7 @@ Status ChunkWriter::write(Chunk* chunk) {
     };
 
     for (size_t i = 0; i < chunk->num_columns(); i++) {
-        auto col = chunk->get_column_by_index(i);
+        ASSIGN_OR_RETURN(auto col, _eval_func(chunk, i));
         auto level_builder = LevelBuilder(_type_descs[i], _schema->field(i));
         level_builder.write(ctx, col, write_leaf_column);
     }

@@ -129,6 +129,7 @@ protected:
     std::unique_ptr<ChunkWriter> _chunk_writer;
 
     std::vector<TypeDescriptor> _type_descs;
+    std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> _eval_func;
     std::shared_ptr<::parquet::FileMetaData> _file_metadata;
 
     const static int64_t kDefaultMaxRowGroupSize = 128 * 1024 * 1024; // 128MB
