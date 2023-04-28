@@ -777,10 +777,35 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
                     "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
                     "  |  pass-through-operands: all\n");
+<<<<<<< HEAD
             assertContains(unionPlan, "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)\n");
             assertContains(unionPlan, "     cardinality: 360000\n" +
+=======
+            assertContains(unionPlan, "  4:OlapScanNode\n" +
+                    "     table: t1, rollup: t1\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: 5: v4 + 2 IS NOT NULL\n" +
+                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                    "     tabletList=" + tabletIdsStrList.get(1) + "\n" +
+                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     LocalShuffleColumns:\n" +
+                    "     - 5: v4\n" +
+                    "     cardinality: 360000\n" +
+                    "     probe runtime filters:\n" +
+                    "     - filter_id = 0, probe_expr = (5: v4 + 2)");
+            assertContains(unionPlan, "  1:OlapScanNode\n" +
+                    "     table: t0, rollup: t0\n" +
+                    "     preAggregation: on\n" +
+                    "     Predicates: 1: v1 + 1 IS NOT NULL\n" +
+                    "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                    "     tabletList=" + tabletIdsStrList.get(0) + "\n" +
+                    "     actualRows=0, avgRowSize=4.0\n" +
+                    "     LocalShuffleColumns:\n" +
+                    "     - 1: v1\n" +
+                    "     cardinality: 360000\n" +
+>>>>>>> 2b625c845 ([BugFix] Clear bucketColumns if not all OlapScanNode use it (#22483) (#22548))
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)");
         }
@@ -892,7 +917,16 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue(plan, plan.contains("  0:OlapScanNode\n" +
                 "     table: t1, rollup: t1\n" +
                 "     preAggregation: on\n" +
+<<<<<<< HEAD
                 "     partitionsRatio=1/1, tabletsRatio=3/3\n"));
+=======
+                "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
+                "     tabletList=" + tabletIdsStrList.get(0) + "\n" +
+                "     actualRows=0, avgRowSize=1.0\n" +
+                "     LocalShuffleColumns:\n" +
+                "     - 1: v4\n" +
+                "     cardinality: 400000");
+>>>>>>> 2b625c845 ([BugFix] Clear bucketColumns if not all OlapScanNode use it (#22483) (#22548))
 
         Assert.assertTrue(plan.contains("5:EXCHANGE\n" +
                 "     cardinality: 400000\n" +
