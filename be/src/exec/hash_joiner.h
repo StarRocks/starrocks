@@ -119,8 +119,10 @@ struct HashJoinerParam {
     const TJoinDistributionMode::type _distribution_mode;
 };
 
-inline bool is_left_semi_join_or_inner_join(TJoinOp::type join_type) {
-    return join_type == TJoinOp::LEFT_SEMI_JOIN || join_type == TJoinOp::INNER_JOIN;
+inline bool could_short_circuit(TJoinOp::type join_type) {
+    return join_type == TJoinOp::INNER_JOIN || join_type == TJoinOp::LEFT_SEMI_JOIN ||
+           join_type == TJoinOp::RIGHT_SEMI_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
+           join_type == TJoinOp::RIGHT_OUTER_JOIN;
 }
 
 inline bool has_post_probe(TJoinOp::type join_type) {
@@ -334,9 +336,7 @@ private:
         size_t row_count = _hash_table_build_rows;
 
         // special cases of short-circuit break.
-        if (row_count == 0 && (_join_type == TJoinOp::INNER_JOIN || _join_type == TJoinOp::LEFT_SEMI_JOIN ||
-                               _join_type == TJoinOp::RIGHT_SEMI_JOIN || _join_type == TJoinOp::RIGHT_ANTI_JOIN ||
-                               _join_type == TJoinOp::RIGHT_OUTER_JOIN)) {
+        if (row_count == 0 && could_short_circuit(_join_type)) {
             _phase = HashJoinPhase::EOS;
             return;
         }

@@ -68,7 +68,7 @@ private:
     void set_spill_strategy(spill::SpillStrategy strategy) { _join_builder->set_spill_strategy(strategy); }
     spill::SpillStrategy spill_strategy() const { return _join_builder->spill_strategy(); }
 
-    SpillableHashJoinProbeOperator* raw() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
+    SpillableHashJoinProbeOperator* as_mutable() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
 
     // acquire next build-side partitions
     void _acquire_next_partitions();
