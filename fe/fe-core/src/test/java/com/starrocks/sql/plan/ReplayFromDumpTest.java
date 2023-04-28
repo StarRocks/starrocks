@@ -46,8 +46,24 @@ public class ReplayFromDumpTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
+        FeConstants.showLocalShuffleColumnsInExplain = false;
     }
 
+<<<<<<< HEAD
+=======
+    @Before
+    public void before() {
+        BackendCoreStat.reset();
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
+    }
+
+    @AfterClass
+    public static void afterClass() throws Exception {
+        connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
+        FeConstants.showLocalShuffleColumnsInExplain = true;
+    }
+
+>>>>>>> 2b625c845 ([BugFix] Clear bucketColumns if not all OlapScanNode use it (#22483) (#22548))
     public String getModelContent(String filename, String model) {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + filename + ".sql");
