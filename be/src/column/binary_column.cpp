@@ -172,11 +172,17 @@ void append_fixed_length(const Buffer<Slice>& strs, Bytes* bytes, typename Binar
 
     size_t offset = bytes->size();
     bytes->resize(size + copy_length);
-    for (const auto& s : strs) {
-        strings::memcpy_inlined(&(*bytes)[offset], s.data, copy_length);
-        offset += s.size;
-        offsets->emplace_back(offset);
+
+    size_t rows = strs.size();
+    size_t length = offsets->size();
+    raw::stl_vector_resize_uninitialized(offsets, offsets->size() + rows);
+
+    for (size_t i = 0; i < rows; ++i) {
+        memcpy(&(*bytes)[offset], strs[i].get_data(), copy_length);
+        offset += strs[i].get_size();
+        (*offsets)[length++] = offset;
     }
+
     bytes->resize(offset);
 }
 
