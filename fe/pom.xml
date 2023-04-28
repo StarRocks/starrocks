@@ -42,7 +42,7 @@ under the License.
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <jprotobuf.version>2.4.12</jprotobuf.version>
-        <log4j.version>2.17.1</log4j.version>
+        <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.13.4</jackson.version>
         <spark.version>3.4.0</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
@@ -377,6 +377,13 @@ under the License.
             <dependency>
                 <groupId>org.apache.logging.log4j</groupId>
                 <artifactId>log4j-slf4j-impl</artifactId>
+                <version>${log4j.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-slf4j2-impl -->
+            <dependency>
+                <groupId>org.apache.logging.log4j</groupId>
+                <artifactId>log4j-slf4j2-impl</artifactId>
                 <version>${log4j.version}</version>
             </dependency>
 
