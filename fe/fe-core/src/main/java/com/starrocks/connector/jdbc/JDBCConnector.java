@@ -49,6 +49,8 @@ public class JDBCConnector implements Connector {
         validate(JDBCResource.PASSWORD);
         validate(JDBCResource.DRIVER_URL);
 
+        // CHECK_SUM used to check the `Dirver` file's integrity in `be`, we only compute it when creating catalog,
+        // and put it into properties and then persisted, when `fe` replay create catalog, we can skip it.
         if (this.properties.get(JDBCResource.CHECK_SUM) == null) {
             computeDriverChecksum();
         }
