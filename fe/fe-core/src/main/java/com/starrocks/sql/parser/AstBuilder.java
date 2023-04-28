@@ -3839,7 +3839,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitDropFunctionStatement(StarRocksParser.DropFunctionStatementContext context) {
+<<<<<<< HEAD
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+=======
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        String functionName = qualifiedName.toString();
+        boolean isGlobal = context.GLOBAL() != null;
+        FunctionName fnName = FunctionName.createFnName(functionName);
+        if (isGlobal) {
+            if (!Strings.isNullOrEmpty(fnName.getDb())) {
+                throw new ParsingException(PARSER_ERROR_MSG.invalidUDFName(functionName), qualifiedName.getPos());
+            }
+            fnName.setAsGlobalFunction();
+        }
+>>>>>>> 96820572f ( [BugFix]Fix unrecognize database name with uppercase in udf FunctionName (#22631))
 
         return new DropFunctionStmt(FunctionName.createFnName(functionName),
                 getFunctionArgsDef(context.typeList()));
@@ -3853,7 +3866,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
 
+<<<<<<< HEAD
         TypeDef returnTypeDef = new TypeDef(getType(context.returnType));
+=======
+        QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+        String functionName = qualifiedName.toString();
+
+        TypeDef returnTypeDef = new TypeDef(getType(context.returnType), createPos(context.returnType));
+>>>>>>> 96820572f ( [BugFix]Fix unrecognize database name with uppercase in udf FunctionName (#22631))
         TypeDef intermediateType = null;
         if (context.intermediateType != null) {
             intermediateType = new TypeDef(getType(context.intermediateType));
@@ -4509,9 +4529,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSimpleFunctionCall(StarRocksParser.SimpleFunctionCallContext context) {
 
+<<<<<<< HEAD
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+=======
+        String fullFunctionName = getQualifiedName(context.qualifiedName()).toString();
+        NodePosition pos = createPos(context);
+>>>>>>> 96820572f ( [BugFix]Fix unrecognize database name with uppercase in udf FunctionName (#22631))
 
-        FunctionName fnName = FunctionName.createFnName(functionName);
+        FunctionName fnName = FunctionName.createFnName(fullFunctionName);
+        String functionName = fnName.getFunction();
         if (functionName.equals(FunctionSet.TIME_SLICE) || functionName.equals(FunctionSet.DATE_SLICE)) {
             if (context.expression().size() == 2) {
                 Expr e1 = (Expr) visit(context.expression(0));
