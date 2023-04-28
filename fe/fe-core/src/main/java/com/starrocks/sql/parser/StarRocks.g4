@@ -276,6 +276,14 @@ statement
     | setUserPropertyStatement
     | setWarehouseStatement
 
+    // Storage Volume Statement
+    | createStorageVolumeStatement
+    | alterStorageVolumeStatement
+    | dropStorageVolumeStatement
+    | showStorageVolumesStatement
+    | descStorageVolumeStatement
+    | setDefaultStorageVolumeStatement
+
     //Unsupported Statement
     | unsupportedStatement
     ;
@@ -688,6 +696,54 @@ suspendWarehouseStatement
 
 resumeWarehouseStatement
     : RESUME WAREHOUSE (IF EXISTS)? identifier
+    ;
+
+// ---------------------------------------- Storage Volume Statement ---------------------------------------------------
+
+createStorageVolumeStatement
+    : CREATE STORAGE VOLUME (IF NOT EXISTS)? storageVolumeName=identifierOrString typeDesc locationsDesc
+          comment? properties
+    ;
+
+typeDesc
+    : TYPE EQ identifier
+    ;
+
+locationsDesc
+    : LOCATIONS EQ stringList
+    ;
+
+showStorageVolumesStatement
+    : SHOW STORAGE VOLUMES (LIKE pattern=string)?
+    ;
+
+dropStorageVolumeStatement
+    : DROP STORAGE VOLUME (IF EXISTS)? storageVolumeName=identifierOrString
+    ;
+
+alterStorageVolumeStatement
+    : ALTER STORAGE VOLUME identifierOrString alterStorageVolumeClause (',' alterStorageVolumeClause)*
+    ;
+
+alterStorageVolumeClause
+    : modifyStorageVolumeCommentClause
+    | modifyStorageVolumePropertiesClause
+    ;
+
+modifyStorageVolumePropertiesClause
+    : SET propertyList
+    ;
+
+modifyStorageVolumeCommentClause
+    : COMMENT '=' string
+    ;
+
+descStorageVolumeStatement
+    : (DESC | DESCRIBE) STORAGE VOLUME identifierOrString
+    ;
+
+setDefaultStorageVolumeStatement
+    : SET identifierOrString AS DEFAULT STORAGE VOLUME
     ;
 
 // ------------------------------------------- Alter Clause ------------------------------------------------------------
@@ -2390,7 +2446,7 @@ nonReserved
     | IDENTIFIED | IMAGE | IMPERSONATE | INCREMENTAL | INDEXES | INSTALL | INTEGRATION | INTEGRATIONS | INTERMEDIATE
     | INTERVAL | ISOLATION
     | JOB
-    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL | LOW_PRIORITY | LOCK
+    | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
     | MASKING | MANUAL | MAP | MAPPING | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE | MINUS
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE
@@ -2407,7 +2463,7 @@ nonReserved
     | TRIM_SPACE
     | TRIGGERS | TRUNCATE | TYPE | TYPES
     | UNBOUNDED | UNCOMMITTED | UNSET | UNINSTALL | USAGE | USER | USERS | UNLOCK
-    | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE
+    | VALUE | VARBINARY | VARIABLES | VIEW | VIEWS | VERBOSE | VOLUME | VOLUMES
     | WARNINGS | WEEK | WHITELIST | WORK | WRITE  | WAREHOUSE | WAREHOUSES
     | YEAR
     | DOTDOTDOT
