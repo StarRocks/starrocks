@@ -858,9 +858,16 @@ public class QueryAnalyzer {
                     Table mvTable = materializedIndex.first;
                     Preconditions.checkState(mvTable != null);
                     Preconditions.checkState(mvTable instanceof OlapTable);
-                    OlapTable mvOlapTable = ((OlapTable) mvTable).copyOnlyForQuery();
-                    mvOlapTable.setBaseIndexId(materializedIndex.second.getId());
-                    table = mvOlapTable;
+                    try {
+                        // Add read lock to avoid concurrent problems.
+                        database.readLock();
+                        OlapTable mvOlapTable = ((OlapTable) mvTable).copyOnlyForQuery();
+                        // Copy the necessary olap table meta to avoid changing original meta;
+                        mvOlapTable.setBaseIndexId(materializedIndex.second.getId());
+                        table = mvOlapTable;
+                    } finally {
+                        database.readUnlock();
+                    }
                 }
             } else {
                 table = metadataMgr.getTable(catalogName, dbName, tbName);

@@ -302,6 +302,7 @@ public class Optimizer {
         }
 
         if (sessionVariable.isEnableSyncMaterializedViewRewrite()) {
+            // Add a config to decide whether to rewrite sync mv.
             tree = new MaterializedViewRule().transform(tree, context).get(0);
             deriveLogicalProperty(tree);
         }
