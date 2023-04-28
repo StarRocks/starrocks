@@ -82,6 +82,8 @@ private:
     void _init_aggregator_if_needed();
     void _aggregate(bool is_final);
 
+    bool _check_partial_update_with_sort_key(const Chunk& chunk);
+
     Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes);
 
     ChunkPtr _chunk;
