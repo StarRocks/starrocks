@@ -223,7 +223,7 @@ public class MysqlProtoTest {
         ConnectContext context = new ConnectContext(null);
         context.setGlobalStateMgr(globalStateMgr);
         context.setThreadLocalInfo();
-        Assert.assertTrue(MysqlProto.negotiate(context));
+        Assert.assertTrue(MysqlProto.negotiate(context).isSuccess());
     }
 
     @Test
@@ -234,7 +234,7 @@ public class MysqlProtoTest {
         ConnectContext context = new ConnectContext(null);
         context.setGlobalStateMgr(globalStateMgr);
         context.setThreadLocalInfo();
-        Assert.assertTrue(MysqlProto.negotiate(context));
+        Assert.assertTrue(MysqlProto.negotiate(context).isSuccess());
         ByteBuffer changeUserPacket = mockChangeUserPacket("change-user");
         Assert.assertTrue(MysqlProto.changeUser(context, changeUserPacket));
     }
@@ -256,7 +256,7 @@ public class MysqlProtoTest {
         mockAccess();
         ConnectContext context = new ConnectContext(null);
         context.setGlobalStateMgr(globalStateMgr);
-        Assert.assertTrue(MysqlProto.negotiate(context));
+        Assert.assertTrue(MysqlProto.negotiate(context).isSuccess());
     }
 
     @Test
@@ -265,7 +265,7 @@ public class MysqlProtoTest {
         mockPassword(true);
         mockAccess();
         ConnectContext context = new ConnectContext(null);
-        Assert.assertFalse(MysqlProto.negotiate(context));
+        Assert.assertFalse(MysqlProto.negotiate(context).isSuccess());
     }
 
     @Test
