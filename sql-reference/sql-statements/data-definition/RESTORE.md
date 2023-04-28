@@ -8,8 +8,32 @@
 
 > **注意**
 >
-> - 仅限拥有 ADMIN 权限的用户执行恢复功能。
-> - 单一数据库内，仅可同时执行一个备份或恢复作业，否则系统报错。
+> 单一数据库内，仅可同时执行一个备份或恢复作业，否则系统报错。
+
+## 权限要求
+
+3.0 之前的版本中，拥有 admin_priv 权限才可执行此操作。3.0 及之后的版本中，如需恢复整个数据库，需要拥有 System 级的 REPOSITORY 权限，以及创建数据库、创建表、导入数据的权限；如需恢复特定表，则需要拥有 System 级的 REPOSITORY 权限，以及对特定表的导入权限（INSERT）。例如：
+
+- 授予角色恢复指定表中数据的权限。
+
+    ```SQL
+    GRANT REPOSITORY ON SYSTEM TO ROLE recover_tbl;
+    GRANT INSERT ON TABLE <table_name> TO ROLE recover_tbl;
+    ```
+
+- 授予角色恢复指定数据库下所有数据的权限。
+
+    ```SQL
+    GRANT REPOSITORY ON SYSTEM TO ROLE recover_db;
+    GRANT INSERT ON ALL TABLES ALL DATABASES TO ROLE recover_db;
+    ```
+
+- 授予角色恢复 default_catalog 下全部数据库中数据的权限。
+
+    ```SQL
+    GRANT REPOSITORY ON SYSTEM TO ROLE recover_db;
+    GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover_db;
+    ```
 
 ## 语法
 

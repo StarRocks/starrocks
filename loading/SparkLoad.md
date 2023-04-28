@@ -158,9 +158,11 @@ PROPERTIES 是 Spark 资源相关参数，以下对重要参数进行说明：
 show resources;
 ~~~
 
-普通账户只能看到自己有 USAGE-PRIV 使用权限的资源。root 和 admin 账户可以看到所有的资源。
+> **注意**
+>
+> 普通用户只能看到自己有 USAGE 权限的资源。`db_admin` 角色可以看到全局资源。
 
-资源权限通过 GRANT REVOKE 来管理，目前仅支持 USAGE_PRIV 使用权限。可以将 USAGE-PRIV 权限赋予某个用户或者某个角色，角色的使用与之前一致。请参考 [GRANT USAGE_PRIV](../sql-reference/sql-statements/account-management/GRANT.md)。
+资源权限通过 GRANT 和 REVOKE 来管理。可以将相关权限赋予某个用户或者某个角色，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md)。
 
 ### 配置 Spark 客户端
 

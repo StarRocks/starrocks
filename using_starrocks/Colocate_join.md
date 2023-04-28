@@ -58,7 +58,7 @@ CG 内表的一致的数据分布定义和子表副本映射，能够保证分�
 
 ### 查看 Group 信息
 
-您可以通过以下命令查看集群内已存在的 Group 信息。
+您可以通过以下命令查看集群内已存在的 Group 信息。只有拥有 `root` 角色的用户才可以查看，不支持普通用户查看。
 
 ~~~sql
 SHOW PROC '/colocation_group';
@@ -116,10 +116,6 @@ mysql> SHOW PROC '/colocation_group/11912.11916';
 |------|------|
 | BucketIndex |分桶序列的下标。|
 | BackendIds |分桶中数据分片所在的 BE 节点 ID 列表。|
-
-> 注意
->
-> 以上命令需要 ADMIN 权限。暂不支持普通用户查看。
 
 ### 修改表 Group 属性
 
@@ -332,7 +328,7 @@ SET disable_colocate_join = TRUE;
 
 StarRocks 提供了多个与 Colocate Join 有关的 HTTP Restful API，用于查看和修改 Colocation Group。
 
-该 API 在 FE 端实现，您可以使用 `fe_host:fe_http_port` 进行访问。访问需要 ADMIN 权限。
+该 API 在 FE 端实现，您可以使用 `fe_host:fe_http_port` 进行访问。访问需要 `cluster_admin` 角色对应的权限。
 
 1. 查看集群的全部 Colocation 信息。
 

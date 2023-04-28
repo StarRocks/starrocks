@@ -210,7 +210,7 @@ StarRocks 支持单节点部署，所以 BE 最小配置个数是 1 个。BE 需
 
 ## 使用 Apache Superset 框架呈现 StarRocks 中的数据时，如何进行数据权限配置？
 
-创建一个新用户，然后通过给该用户授予表查询权限进行数据权限控制。
+创建一个新用户，然后通过给该用户授予表查询权限（SELECT）进行数据权限控制。
 
 ## 为什么将 `enable_profile` 指定为 `true` 后 profile 无法显示？
 

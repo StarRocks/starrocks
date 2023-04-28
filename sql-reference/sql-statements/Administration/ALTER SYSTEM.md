@@ -2,7 +2,11 @@
 
 ## 功能
 
-管理 StarRocks 集群中的 FE、BE 和 Broker。仅 root 用户有权限使用该语句。
+管理 StarRocks 集群中的 FE、BE 和 Broker。
+
+> **注意**
+>
+> 只有拥有 `cluster_admin` 角色的用户才可以执行集群管理相关操作。
 
 ## 语法和参数说明
 

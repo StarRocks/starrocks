@@ -4,6 +4,12 @@
 
 在当前会话下，激活当前用户拥有权限的角色。该命令从 3.0 版本开始支持。
 
+## 注意事项
+
+用户只能激活自己已有权限的角色。
+
+用户可以通过 [SHOW GRANTS](SHOW%20GRANTS.md) 查看拥有的角色，可以通过[SELECT CURRENT_ROLE](../../sql-functions/utility-functions/current_role.md) 查看当前激活的角色。
+
 ## 语法
 
 ```SQL
@@ -18,12 +24,6 @@ SET ROLE ALL;
 ## 参数说明
 
 `role_name`: 用户拥有的角色名。
-
-## 注意事项
-
-用户只能激活自己已有权限的角色。
-
-用户可以通过 `SHOW GRANTS` （链接）查看拥有的角色，可以通过`SELECT CURRENT_ROLE()` （链接）查看当前激活的角色。
 
 ## 示例
 

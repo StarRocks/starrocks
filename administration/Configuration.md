@@ -24,7 +24,7 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
 
 > **注意**
 >
-> 执行集群管理相关命令需要有管理员权限。
+> 只有拥有 `cluster_admin` 角色的用户才可以执行集群管理相关命令。
 
 ### 配置 FE 动态参数
 

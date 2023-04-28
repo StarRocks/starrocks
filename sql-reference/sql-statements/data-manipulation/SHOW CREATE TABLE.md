@@ -2,7 +2,12 @@
 
 ## 功能
 
-查看指定表的建表语句。3.0 版本之前，只有拥有该表 `SELECT_PRIV` 权限的用户才可以查看；自 3.0 版本起，只有拥有该表 `SELECT` 权限的用户才可以查看。注意使用 External Catalog 管理的表，包括 Apache Hive™ 、Apache Iceberg、Apache Hudi、Delta Lake 表，自 3.0 版本起支持使用该语句查看。
+查看指定表的建表语句。
+
+- 3.0 版本之前，只有拥有该表 SELECT_PRIV 权限的用户才可以查看。
+- 自 3.0 版本起，只有拥有该表 SELECT 权限的用户才可以查看。
+
+自 3.0 版本起支持使用该语句查看 External Catalog 下的表，包括 Apache Hive™ 、Apache Iceberg、Apache Hudi、Delta Lake 表。
 
 ## 语法
 

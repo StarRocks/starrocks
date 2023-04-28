@@ -8,9 +8,33 @@
 
 > **注意**
 >
-> - 仅限拥有 ADMIN 权限的用户执行备份功能。
 > - 单一数据库内，仅可同时执行一个备份或恢复作业，否则系统报错。
 > - 目前 StarRocks 不支持在备份数据时使用压缩算法。
+
+## 权限要求
+
+3.0 之前的版本中，拥有 admin_priv 权限才可执行此操作。3.0 及之后的版本中，如需备份指定数据表或整个数据库，需要拥有 System 级的 REPOSITORY 权限，以及对应表或对应数据库下所有表的 EXPORT 权限。例如：
+
+- 授予角色从指定的表中导出数据的权限。
+
+    ```SQL
+    GRANT REPOSITORY ON SYSTEM TO ROLE backup_tbl;
+    GRANT EXPORT ON TABLE <table_name> TO ROLE backup_tbl;
+    ```
+
+- 授予角色从指定数据下所有表中导出数据的权限。
+
+    ```SQL
+    GRANT REPOSITORY ON SYSTEM TO ROLE backup_db;
+    GRANT EXPORT ON ALL TABLES IN DATABASE <database_name> TO ROLE backup_db;
+    ```
+
+- 授予角色从所有数据库的所有表中导出数据的权限。
+
+    ```SQL
+    GRANT REPOSITORY ON SYSTEM TO ROLE backup;
+    GRANT EXPORT ON ALL TABLES IN ALL DATABASES TO ROLE backup;
+    ```
 
 ## 语法
 
