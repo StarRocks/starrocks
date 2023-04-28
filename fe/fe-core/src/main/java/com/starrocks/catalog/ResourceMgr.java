@@ -64,6 +64,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -208,6 +209,15 @@ public class ResourceMgr implements Writable {
         this.readLock();
         try {
             return nameToResource.containsKey(name);
+        } finally {
+            this.readUnlock();
+        }
+    }
+
+    public Set<String> getAllResourceName() {
+        this.readLock();
+        try {
+            return nameToResource.keySet();
         } finally {
             this.readUnlock();
         }

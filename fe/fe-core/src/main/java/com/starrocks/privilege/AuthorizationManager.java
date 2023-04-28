@@ -22,10 +22,10 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.system.SystemId;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.common.SystemId;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -134,7 +134,7 @@ public class AuthorizationManager {
             // 1. builtin root role
             RolePrivilegeCollection rolePrivilegeCollection =
                     initBuiltinRoleUnlocked(PrivilegeBuiltinConstants.ROOT_ROLE_ID,
-                    PrivilegeBuiltinConstants.ROOT_ROLE_NAME);
+                            PrivilegeBuiltinConstants.ROOT_ROLE_NAME);
             // GRANT ALL ON ALL
             for (ObjectType objectType : provider.getAllPrivObjectTypes()) {
                 initPrivilegeCollectionAllObjects(rolePrivilegeCollection, objectType,
@@ -913,6 +913,17 @@ public class AuthorizationManager {
                 users.add(userIdentity.toString());
             }
             return users;
+        } finally {
+            userReadUnlock();
+        }
+    }
+
+    public Set<UserIdentity> getAllUserIdentities() {
+        userReadLock();
+        try {
+            List<String> users = Lists.newArrayList();
+            Set<UserIdentity> userIdentities = userToPrivilegeCollection.keySet();
+            return userIdentities;
         } finally {
             userReadUnlock();
         }

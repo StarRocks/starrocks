@@ -19,10 +19,12 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.system.SystemId;
+import com.starrocks.catalog.system.info.InfoSchemaDb;
+import com.starrocks.catalog.system.starrocks.StarRocksDb;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -124,6 +126,11 @@ public class DropStmtAnalyzer {
             String dbName = statement.getDbName();
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, context.getQualifiedUser(), dbName);
+            } else if (dbName.equalsIgnoreCase(StarRocksDb.DATABASE_NAME)) {
+                Database db = GlobalStateMgr.getCurrentState().getDb(StarRocksDb.DATABASE_NAME.toLowerCase());
+                if (db.getId() == SystemId.STARROCKS_DB_ID) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, context.getQualifiedUser(), dbName);
+                }
             }
             return null;
         }

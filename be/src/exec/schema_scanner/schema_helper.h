@@ -73,6 +73,13 @@ public:
 
     static Status get_tablet_schedules(const std::string& ip, const int32_t port,
                                        const TGetTabletScheduleRequest& request, TGetTabletScheduleResponse* response);
+
+    static Status get_role_edges(const std::string& ip, const int32_t port, const TGetRoleEdgesRequest& request,
+                                 TGetRoleEdgesResponse* response);
+
+    static Status get_grants_to(const std::string& ip, const int32_t port,
+                                const TGetGrantsToRolesOrUserRequest& request,
+                                TGetGrantsToRolesOrUserResponse* response);
 };
 
 template <LogicalType SlotType>

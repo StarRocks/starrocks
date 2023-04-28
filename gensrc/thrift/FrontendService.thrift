@@ -1235,6 +1235,37 @@ struct TAllocateAutoIncrementIdResult {
     3: optional Status.TStatus status
 }
 
+struct TGetRoleEdgesRequest {
+
+}
+
+struct TGetRoleEdgesItem {
+    1: optional string from_role
+    2: optional string to_role
+    3: optional string to_user
+}
+struct TGetRoleEdgesResponse {
+    1: optional list<TGetRoleEdgesItem> role_edges
+}
+
+struct TGetGrantsToRolesOrUserRequest {
+    1: optional string type;
+}
+
+struct TGetGrantsToRolesOrUserItem {
+    1: optional string grantee
+    2: optional string object_catalog
+    3: optional string object_database
+    4: optional string object_name
+    5: optional string object_type
+    6: optional string privilege_type
+    7: optional bool is_grantable
+}
+
+struct TGetGrantsToRolesOrUserResponse {
+    1: optional list<TGetGrantsToRolesOrUserItem> grants_to
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -1302,5 +1333,8 @@ service FrontendService {
     TAllocateAutoIncrementIdResult allocAutoIncrementId (1:TAllocateAutoIncrementIdParam params)
 
     TGetTabletScheduleResponse getTabletSchedule(1: TGetTabletScheduleRequest request)
+
+    TGetRoleEdgesResponse getRoleEdges(1: TGetRoleEdgesRequest request)
+    TGetGrantsToRolesOrUserResponse getGrantsTo(1: TGetGrantsToRolesOrUserRequest request)
 }
 

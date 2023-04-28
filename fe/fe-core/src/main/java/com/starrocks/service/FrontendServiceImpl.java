@@ -66,6 +66,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.system.starrocks.GrantsTo;
+import com.starrocks.catalog.system.starrocks.RoleEdges;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.AuthenticationException;
@@ -154,8 +156,12 @@ import com.starrocks.thrift.TGetDBPrivsParams;
 import com.starrocks.thrift.TGetDBPrivsResult;
 import com.starrocks.thrift.TGetDbsParams;
 import com.starrocks.thrift.TGetDbsResult;
+import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
+import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGetLoadsParams;
 import com.starrocks.thrift.TGetLoadsResult;
+import com.starrocks.thrift.TGetRoleEdgesRequest;
+import com.starrocks.thrift.TGetRoleEdgesResponse;
 import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.thrift.TGetTablePrivsParams;
@@ -1946,5 +1952,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TGetTabletScheduleResponse response = GlobalStateMgr.getCurrentState().getTabletScheduler().getTabletSchedule(request);
         LOG.info("getTabletSchedule: {} return {} TabletSchedule", request, response.getTablet_schedulesSize());
         return response;
+    }
+
+    @Override
+    public TGetRoleEdgesResponse getRoleEdges(TGetRoleEdgesRequest request) {
+        return RoleEdges.getRoleEdges(request);
+    }
+
+    @Override
+    public TGetGrantsToRolesOrUserResponse getGrantsTo(TGetGrantsToRolesOrUserRequest request) {
+        return GrantsTo.getGrantsToRoles(request);
     }
 }

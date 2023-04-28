@@ -45,7 +45,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
@@ -572,10 +571,10 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             if (db == null) {
                 continue;
             }
-            String dbName = db.getFullName();
-            if (dbName.equals(InfoSchemaDb.DATABASE_NAME) || dbName.equals(StatsConstants.STATISTICS_DB_NAME)) {
+            if (db.isSystemDatabase() || db.getFullName().equals(StatsConstants.STATISTICS_DB_NAME)) {
                 continue;
             }
+
             db.readLock();
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getDb(dbId).getTables()) {

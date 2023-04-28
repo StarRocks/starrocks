@@ -66,7 +66,7 @@ public class UpdateDbUsedDataQuotaDaemon extends FrontendDaemon {
                 LOG.warn("Database [" + dbId + "] doese not exist, skip to update database used data quota");
                 continue;
             }
-            if (db.isInfoSchemaDb()) {
+            if (db.isSystemDatabase()) {
                 continue;
             }
             try {

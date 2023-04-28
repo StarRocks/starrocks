@@ -1446,7 +1446,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 continue;
             }
 
-            if (db.isInfoSchemaDb()) {
+            if (db.isSystemDatabase()) {
                 continue;
             }
 
@@ -1603,7 +1603,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 continue;
             }
 
-            if (db.isInfoSchemaDb()) {
+            if (db.isSystemDatabase()) {
                 continue;
             }
 

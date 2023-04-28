@@ -57,12 +57,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RandomDistributionInfo;
-import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.system.info.MaterializedViewsSystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.PatternMatcher;
@@ -1027,7 +1027,7 @@ public class ShowExecutorTest {
                 "AS select col1, col2 from table1;";
 
         Assert.assertTrue(resultSet.next());
-        List<Column> mvSchemaTable = SchemaTable.getSchemaTable("materialized_views").getFullSchema();
+        List<Column> mvSchemaTable = MaterializedViewsSystemTable.create().getFullSchema();
         Assert.assertEquals("1000", resultSet.getString(0));
         Assert.assertEquals("testDb", resultSet.getString(1));
         Assert.assertEquals("testMv", resultSet.getString(2));

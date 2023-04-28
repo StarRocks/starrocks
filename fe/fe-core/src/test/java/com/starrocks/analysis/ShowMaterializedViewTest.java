@@ -35,8 +35,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.system.info.MaterializedViewsSystemTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -114,7 +114,7 @@ public class ShowMaterializedViewTest {
     }
 
     private void checkShowMaterializedViewsStmt(ShowMaterializedViewsStmt stmt) {
-        Table schemaMVTable = SchemaTable.getSchemaTable("materialized_views");
+        Table schemaMVTable = MaterializedViewsSystemTable.create();
         Assert.assertEquals(schemaMVTable.getBaseSchema().size(), stmt.getMetaData().getColumnCount());
 
         List<Column> schemaCols = schemaMVTable.getFullSchema();

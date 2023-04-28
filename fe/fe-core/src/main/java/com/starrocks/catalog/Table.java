@@ -41,6 +41,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -502,7 +503,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             return "StarRocks";
         } else if (this instanceof MysqlTable) {
             return "MySQL";
-        } else if (this instanceof SchemaTable) {
+        } else if (this instanceof SystemTable) {
             return "MEMORY";
         } else if (this instanceof HiveTable) {
             return "Hive";

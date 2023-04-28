@@ -32,9 +32,13 @@
 // specific language governing permissions and limitations
 // under the License.
 
-package com.starrocks.catalog;
+package com.starrocks.catalog.system.info;
 
-import com.starrocks.common.SystemId;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
+import com.starrocks.catalog.system.SystemId;
+import com.starrocks.catalog.system.starrocks.StarRocksDb;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -46,7 +50,45 @@ public class InfoSchemaDb extends Database {
 
     public InfoSchemaDb() {
         super(SystemId.INFORMATION_SCHEMA_DB_ID, DATABASE_NAME);
-        initTables();
+
+        super.createTable(TablesSystemTable.create());
+        super.createTable(PartitionsSystemTableSystemTable.create());
+        super.createTable(TablePrivilegesSystemTable.create());
+        super.createTable(ColumnPrivilegesSystemTable.create());
+        super.createTable(ReferentialConstraintsSystemTable.create());
+        super.createTable(KeyColumnUsageSystemTable.create());
+        super.createTable(RoutinesSystemTable.create());
+        super.createTable(SchemataSystemTable.create());
+        super.createTable(SessionVariablesSystemTable.create());
+        super.createTable(GlobalVariablesSystemTable.create());
+        super.createTable(VerboseSessionVariablesSystemTable.create());
+        super.createTable(ColumnsSystemTable.create());
+        super.createTable(CharacterSetsSystemTable.create());
+        super.createTable(CollationsSystemTable.create());
+        super.createTable(TableConstraintsSystemTable.create());
+        super.createTable(EnginesSystemTable.create());
+        super.createTable(UserPrivilegesSystemTable.create());
+        super.createTable(SchemaPrivilegesSystemTable.create());
+        super.createTable(StatisticsSystemTable.create());
+        super.createTable(TriggersSystemTable.create());
+        super.createTable(EventsSystemTable.create());
+        super.createTable(ViewsSystemTable.create());
+        super.createTable(TasksSystemTable.create());
+        super.createTable(TaskRunsSystemTable.create());
+        super.createTable(MaterializedViewsSystemTable.create());
+        super.createTable(LoadsSystemTable.create());
+        super.createTable(LoadTrackingLogsSystemTable.create());
+        super.createTable(TablesConfigSystemTable.create());
+        super.createTable(BeCompactionsSystemTable.create());
+        super.createTable(BeTabletsSystemTable.create());
+        super.createTable(BeMetricsSystemTable.create());
+        super.createTable(BeTxnsSystemTable.create());
+        super.createTable(BeConfigsSystemTable.create());
+        super.createTable(FeTabletSchedulesSystemTable.create());
+        super.createTable(BeThreadsSystemTable.create());
+        super.createTable(BeLogsSystemTable.create());
+        super.createTable(BeBvarsSystemTable.create());
+        super.createTable(BeCloudNativeCompactionsSystemTable.create());
     }
 
     @Override
@@ -84,12 +126,6 @@ public class InfoSchemaDb extends Database {
         throw new IOException("Not support.");
     }
 
-    private void initTables() {
-        for (Table table : SchemaTable.TABLE_MAP.values()) {
-            super.createTable(table);
-        }
-    }
-
     @Override
     public Table getTable(String name) {
         return super.getTable(name.toLowerCase());
@@ -103,6 +139,6 @@ public class InfoSchemaDb extends Database {
         if (dbName == null) {
             return false;
         }
-        return DATABASE_NAME.equalsIgnoreCase(dbName);
+        return DATABASE_NAME.equalsIgnoreCase(dbName) || StarRocksDb.DATABASE_NAME.equalsIgnoreCase(dbName);
     }
 }

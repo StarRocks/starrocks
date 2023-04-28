@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.common;
+package com.starrocks.catalog.system;
 
 // used for system table.
 // cannot bigger than 10000(GlobalStateMgr.NEXT_ID_INIT_VALUE)
@@ -95,4 +95,10 @@ public class SystemId {
     public static final long BE_BVARS_ID = 38L;
 
     public static final long BE_CLOUD_NATIVE_COMPACTIONS = 39L;
+
+    public static final long STARROCKS_DB_ID = 100L;
+
+    public static final long ROLE_EDGES_ID = 101L;
+    public static final long GRANTS_TO_ROLES_ID = 102L;
+    public static final long GRANTS_TO_USERS_ID = 103L;
 }

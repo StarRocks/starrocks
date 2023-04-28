@@ -39,6 +39,8 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.system.info.InfoSchemaDb;
+import com.starrocks.catalog.system.starrocks.StarRocksDb;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -924,8 +926,9 @@ public class Database extends MetaObject implements Writable {
         return functions;
     }
 
-    public boolean isInfoSchemaDb() {
-        return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME);
+    public boolean isSystemDatabase() {
+        return fullQualifiedName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME) ||
+                fullQualifiedName.equalsIgnoreCase(StarRocksDb.DATABASE_NAME);
     }
 
     // the invoker should hold db's writeLock
