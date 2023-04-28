@@ -54,6 +54,22 @@ public class FunctionName implements Writable {
         fn_ = fn.toLowerCase();
     }
 
+<<<<<<< HEAD
+=======
+    public FunctionName(TFunctionName thriftName) {
+        db_ = thriftName.db_name;
+        fn_ = thriftName.function_name.toLowerCase();
+    }
+
+    // Same as FunctionName but for builtins and we'll leave the case
+    // as is since we aren't matching by string.
+    public static FunctionName createBuiltinName(String fn) {
+        FunctionName name = new FunctionName(fn);
+        name.fn_ = fn;
+        return name;
+    }
+
+>>>>>>> 96820572f ( [BugFix]Fix unrecognize database name with uppercase in udf FunctionName (#22631))
     public static FunctionName createFnName(String fn) {
         final String[] dbWithFn = fn.split("\\.");
         if (dbWithFn.length == 2) {
