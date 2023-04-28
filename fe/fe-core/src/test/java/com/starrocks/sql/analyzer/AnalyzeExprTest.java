@@ -295,14 +295,27 @@ public class AnalyzeExprTest {
     }
 
     @Test
-    public void testMapType() {
+    public void testMapTypeConstructor() {
         analyzeSuccess("select map()");
         analyzeSuccess("select map(NULL,NULL)");
         analyzeSuccess("select map(1,NULL)");
+        analyzeSuccess("select {}");
+        analyzeSuccess("select {NULL:NULL}");
+        analyzeSuccess("select map<int,map<varchar,int>>{2:{3:3}}");
 
         analyzeFail("select map(null)");
         analyzeFail("select map(1:4)");
         analyzeFail("select map(1,3,4)");
+        analyzeFail("select {)");
+        analyzeFail("select {NULL}");
+        analyzeFail("select {1,3}");
+        analyzeFail("select {1:3:3}");
+        analyzeFail("select {1:3,}");
+        analyzeFail("select map<hll,int>{1:3}");
+        analyzeFail("select map<map<int,int>,int>{{1:3}:11}");
+        analyzeFail("select map<int,map<int,int>>{2:{'3':3}}");
+        analyzeFail("select map<int,map<int,int>>{'2s':{3:3}}");
+        analyzeFail("select map<int,map<int,int>>{{3:3}:2}");
     }
 
 }

@@ -395,6 +395,7 @@ import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -5553,6 +5554,39 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             exprs = Collections.emptyList();
         }
         return new ArrayExpr(type, exprs, pos);
+    }
+
+    @Override
+    public ParseNode visitMapExpression(StarRocksParser.MapExpressionContext context) {
+        ArrayList<Expr> row = Lists.newArrayList();
+        Expr key = (Expr) visit(context.key);
+        Expr value = (Expr) visit(context.value);
+        row.add(key);
+        row.add(value);
+        return new ValueList(row, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitMapConstructor(StarRocksParser.MapConstructorContext context) {
+        NodePosition pos = createPos(context);
+        Type type = Type.ANY_MAP;
+        if (context.mapType() != null) {
+            type = getMapType(context.mapType());
+        }
+        List<Expr> exprs;
+        if (context.mapExpressionList() != null) {
+            List<ValueList> rowValues = visit(context.mapExpressionList().mapExpression(), ValueList.class);
+            List<List<Expr>> rows = rowValues.stream().map(ValueList::getRow).collect(toList());
+            exprs = rows.stream().flatMap(Collection::stream).collect(Collectors.toList());
+            int num = exprs.size();
+            if (num % 2 == 1) {
+                throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(num, "map()",
+                        "Arguments must be in key/value pairs"), pos);
+            }
+        } else {
+            exprs = Collections.emptyList();
+        }
+        return new MapExpr(type, exprs, pos);
     }
 
     @Override
