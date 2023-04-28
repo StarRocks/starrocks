@@ -9,8 +9,10 @@
 - UDWF：自定义窗口函数。
 - UDTF：自定义表值函数。
 
-> **说明**
-> 仅 admin 用户有权限使用该语句。
+> **注意**
+>
+> - 要创建全局 UDF，需要拥有 System 级 CREATE GLOBAL FUNCTION 权限。
+> - 要创建数据库级别的 UDF，需要拥有数据库级别的 CREATE FUNCTION 权限。
 
 ## 语法
 

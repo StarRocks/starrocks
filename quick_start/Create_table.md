@@ -2,6 +2,10 @@
 
 本文介绍如何在 StarRocks 中创建表以及进行相关操作。
 
+> **注意**
+>
+> 只有拥有 default_catalog 下 [CREATE DATABASE](../administration/privilege_item.md) 权限的用户才可以创建数据库。只有拥有该数据库 CREATE TABLE 权限的用户才可以在该数据库下创建表。
+
 ## 连接 StarRocks
 
 在成功 [部署 StarRocks 集群](Deploy.md) 后，您可以通过 MySQL 客户端连接任意一个 FE 节点的 `query_port`（默认为 `9030`）以连接 StarRocks。StarRocks 内置 `root` 用户，密码默认为空。
@@ -12,7 +16,7 @@ mysql -h <fe_host> -P9030 -u root
 
 ## 创建数据库
 
-使用 `root` 用户创建 `example_db` 数据库。
+创建 `example_db` 数据库。
 
 > **注意**
 >
@@ -236,9 +240,7 @@ CANCEL ALTER TABLE COLUMN FROM table_name\G;
 
 ## 创建用户并授权
 
-在 StarRocks 中，只有拥有 [CREATE_PRIV 权限](../administration/User_privilege.md) 的用户才可建立数据库。
-
-`example_db` 数据库创建完成之后，您可以使用 `root` 账户创建 `test` 账户，并授予其 `example_db` 的读写权限 。
+`example_db` 数据库创建完成之后，您可以创建 `test` 用户，并授予其 `example_db` 的读写权限。
 
 ```sql
 CREATE USER 'test' IDENTIFIED by '123456';

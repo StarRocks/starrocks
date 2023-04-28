@@ -6,8 +6,8 @@
 
 > 说明：
 >
-> - 仅 root 和 admin 用户可以创建资源。
-> - 仅 StarRocks 2.3 及以上版本支持创建 JDBC 资源。
+> - 只有拥有 System 级 CREATE RESOURCE 权限的用户才可以创建资源。
+> - StarRocks 2.3 及以上版本支持创建 JDBC 资源。
 
 ## 语法
 

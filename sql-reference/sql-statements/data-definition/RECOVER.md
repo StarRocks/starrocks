@@ -4,6 +4,10 @@
 
 恢复之前删除的 database、table 或者 partition。通过 [TRUNCATE TABLE](/sql-reference/sql-statements/data-definition/TRUNCATE%20TABLE.md) 命令删除数据无法恢复。
 
+> **注意**
+>
+> 只有拥有 default_catalog 的 CREATE DATABASE 权限才可以恢复数据库；同时需要拥有对应数据库的 CREATE TABLE 和对应表的 DROP 权限。
+
 ## 语法
 
 ### 恢复 database

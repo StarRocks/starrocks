@@ -242,7 +242,7 @@ SHOW PARTITIONS FROM starrocks_audit_db__.starrocks_audit_tbl__;
     - `frontend_host_port`：FE 节点 IP 地址和 HTTP 端口，格式为 `<fe_ip>:<fe_http_port>`。 默认值为 `127.0.0.1:8030`。
     - `database`：审计日志库名。
     - `table`：审计日志表名。
-    - `user`：集群用户名。 该用户必须具有对应表的导入权限（LOAD_PRIV）。
+    - `user`：集群用户名。该用户必须具有对应表的 INSERT 权限。
     - `password`：集群用户密码。
 
 4. 重新打包以上文件。

@@ -4,7 +4,9 @@
 
 取消指定的数据导出作业，状态为 `CANCELLED` 或 `FINISHED` 的导出作业不能取消。CANCEL EXPORT 是一个异步操作，执行后可使用 [SHOW EXPORT](/sql-reference/sql-statements/data-manipulation/SHOW%20EXPORT.md) 语句查看是否取消成功。当状态 (`State`) 为 `CANCELLED` 时，代表成功取消了导入作业。
 
-如使用该语句，用户需要有指定导出作业所在数据库的任意一种以下权限：`SELECT_PRIV`、`LOAD_PRIV`、`ALTER_PRIV`、`CREATE_PRIV`、`DROP_PRIV`、`USAGE_PRIV`。有关权限的说明，请参见 [GRANT](/sql-reference/sql-statements/account-management/GRANT.md)。
+> **注意**
+>
+> 要执行该操作，需要有对应表的 EXPORT 权限。
 
 ## 语法
 

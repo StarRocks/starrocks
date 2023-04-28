@@ -112,8 +112,9 @@
 
 ### 库级别用户自定义函数权限
 
+| 权限    | 用途                                                         |
+| ------- | ------------------------------------------------------------ |
 | USAGE | 使用该函数。                 |
-| ----- | ---------------------------- |
 | DROP  | 删除该函数。                 |
 | ALL   | 拥有对该函数的上述所有权限。 |
 
@@ -123,10 +124,10 @@
 
 | **操作**       | **涉及命令**                    | **升级前**                                                   | **升级后**                                                   |
 | -------------- | ------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------ |
-| 修改表         | ALTER TABLE，CANCEL ALTER TABlE | 拥有表或表所在数据库的 `LOAD_PRIV` 权限即可对表执行 `ALTER TABLE`，`CANCEL ALTER TABlE` 操作 | 您需要拥有对应表的 ALTER 权限才可以执行该操作。              |
+| 修改表         | ALTER TABLE，CANCEL ALTER TABLE | 拥有表或表所在数据库的 `LOAD_PRIV` 权限即可对表执行 `ALTER TABLE`，`CANCEL ALTER TABlE` 操作 | 您需要拥有对应表的 ALTER 权限才可以执行该操作。              |
 | 刷新外表       | REFRESH EXTERNAL TABLE          | 拥有外表的 `LOAD_PRIV` 权限即可对外表进行刷新。              | 您需要拥有对应外表的 ALTER 权限才可以对外表进行刷新。        |
 | 备份与恢复     | BACKUP，RESTORE                 | 拥有数据库的 `LOAD_PRIV` 权限即可对该数据库及其下的任意表进行备份恢复。 | 管理员需要重新对用户赋权，以保证用户可以执行`BACKUP`和`RESTORE`操作。 |
-| 删除后复原     | `RECOVER` 数据库或表            | 拥有对应数据库或表的 `ALTER_PRIV，CREATE_PRIV`，`DROP_PRIV` 权限即可对库或表进行复原。 | 您需要拥有 default_catalog 的 CREATE DATABASE 权限才可以恢复数据库；需要拥有对应数据库的 CREATE TABLE 和对应表的 DROP 权限。 |
+| 删除后复原     | RECOVER 数据库或表            | 拥有对应数据库或表的 `ALTER_PRIV，CREATE_PRIV`，`DROP_PRIV` 权限即可对库或表进行复原。 | 您需要拥有 default_catalog 的 CREATE DATABASE 权限才可以恢复数据库；需要拥有对应数据库的 CREATE TABLE 和对应表的 DROP 权限。 |
 | 创建、更改用户 | CREATE USER，ALTER USER         | 拥有数据库的 `GRANT_PRIV` 权限即可创建和更改用户。           | 您需要拥有 `user_admin` 角色才可以执行`CREATE USER`和`ALTER USER`操作。 |
 | 授予和收回权限 | GRANT，REVOKE                   | 拥有各对象的 `GRANT_PRIV` 权限即可将对应对象的权限授予给其他用户或角色。 | 升级后，您仍旧可以将您在该对象上已经拥有的权限赋予给其他用户或角色。<br>在新的权限系统中：<ul><li>拥有 `user_admin` 角色的用户才可以将任意权限授予给任意用户和角色。</li><li>当您的授权语句包含`WITH GRANT OPTION`时，您可以将该语句涉及的权限授予给其他用户或角色。 </li></ul>|
 

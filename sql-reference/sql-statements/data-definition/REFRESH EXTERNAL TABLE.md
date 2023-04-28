@@ -7,6 +7,10 @@
 - **外部表**：使用 Hive 外部表和 Hudi 外部表查询 Hive 和 Hudi 数据时， 可使用该语句更新缓存的 Hive 和 Hudi 元数据。
 - **External catalog**：使用 [Hive catalog](/data_source/catalog/hive_catalog.md) 和 [Hudi catalog](/data_source/catalog/hudi_catalog.md) 查询 Hive 和 Hudi 数据时，可使用该语句更新缓存的 Hive 和 Hudi 元数据。
 
+> **注意**
+>
+> 只有拥有对应外表 ALTER 权限的用户才可以执行该操作。
+
 ## 基本概念
 
 - **Hive 外部表**：在 StarRocks 中创建并保存的表，用于查询 Hive 集群中的数据。
@@ -46,7 +50,7 @@
 
 ## 注意事项
 
-只有拥有 `ALTER_PRIV` 权限的用户才可以执行该语句更新缓存的元数据。
+只有拥有外表 ALTER 权限的用户才可以执行该语句更新缓存的元数据。
 
 ## 示例
 

@@ -364,7 +364,7 @@ StarRocks 内提供了两种 Namespace 的 UDF：一种是 Database 级 Namespac
 
 > **注意**
 >
-> 在创建和使用 Global UDF 前，需要联系系统管理员获取系统级的 CREATE GLOBAL FUNCTION 权限。关于如何赋权，参见 [GRANT](/sql-reference/sql-statements/account-management/GRANT.md)。
+> 创建 Global UDF 需要有 System 级的 CREATE GLOBAL FUNCTION 权限；创建数据库级别的 UDF 需要有数据库级的 CREATE FUNCTION 权限；使用 UDF 需要有对应 UDF 的 USAGE 权限。关于如何赋权，参见 [GRANT](/sql-reference/sql-statements/account-management/GRANT.md)。
 
 JAR 包上传完成后，您需要在 StarRocks 中，按需创建相对应的 UDF。如果创建 Global UDF，只需要在 SQL 语句中带上 `GLOBAL` 关键字即可。
 

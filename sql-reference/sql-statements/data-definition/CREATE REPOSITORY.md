@@ -6,7 +6,7 @@
 
 > **注意**
 >
-> 仅拥有 ADMIN 权限的用户可以创建仓库。
+> 只有拥有 System 级 REPOSITORY 权限的用户才可以创建仓库。
 
 删除仓库操作请参考 [DROP REPOSITORY](../data-definition/DROP%20REPOSITORY.md) 章节。
 

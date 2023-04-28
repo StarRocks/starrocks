@@ -6,7 +6,7 @@
 
 ## 注意事项
 
-- 执行 DELETE 操作需要有对应数据库和表的操作权限。
+- 执行 DELETE 操作需要有对应表的 DELETE 权限。
 - 不建议您执行高频的 DELETE 操作。如需要，请在业务低峰期进行。
 - DELETE 删除的是表中数据，表依然存在。如果要删除表，参见 [DROP TABLE](../data-definition/DROP%20TABLE.md)。
 - 为防止误删整表，必须在 DELETE 语句中指定 WHERE 子句。

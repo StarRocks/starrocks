@@ -98,7 +98,7 @@ Flink 连接器支持两种数据读取方式：Flink SQL 和 Flink DataStream�
 | connector                   | 是       | STRING   | 固定设置为 `starrocks`。                                     |
 | scan-url                    | 是       | STRING   | FE 节点的连接地址，用于通过 Web 服务器访问 FE 节点。 格式如下：`<fe_host>:<fe_http_port>`。默认端口号为 `8030`。多个地址之间用逗号 (,) 分隔。例如 `192.168.xxx.xxx:8030,192.168.xxx.xxx:8030`。 |
 | jdbc-url                    | 是       | STRING   | FE 节点的连接地址，用于访问 FE 节点上的 MySQL 客户端。格式如下：`jdbc:mysql://<fe_host>:<fe_query_port>`。默认端口号为 `9030`。 |
-| username                    | 是       | STRING   | 用于访问 StarRocks 集群的用户名。该账号需具备待读取数据的 StarRocks 表的读权限。有关用户权限的说明，请参见[用户权限](../administration/User_privilege.md)。 |
+| username                    | 是       | STRING   | 用于访问 StarRocks 集群的用户名。该账号需具备待读取数据的 StarRocks 表的读权限。有关用户权限的说明，请参见[用户权限](../administration/privilege_overview.md)。 |
 | password                    | 是       | STRING   | 用于访问 StarRocks 集群的用户密码。                          |
 | database-name               | 是       | STRING   | 待读取数据的 StarRocks 数据库的名称。                        |
 | table-name                  | 是       | STRING   | 待读取数据的 StarRocks 表的名称。                            |

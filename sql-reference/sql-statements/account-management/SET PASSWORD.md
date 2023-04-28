@@ -4,6 +4,14 @@
 
 SET PASSWORD 命令可以用于修改一个用户的登录密码。
 
+您也可以使用 [ALTER USER](ALTER%20USER.md) 来修改用户密码。
+
+> **注意**
+>
+> - 任何用户都可以重置自己的密码。
+> - 只有 `user_admin` 角色才可以修改其他用户的密码。
+> - root 用户的密码仅 root 用户自身可以重置。具体信息，参见 [管理用户权限 - 重置丢失的 root 密码](../../../administration/User_privilege.md#修改用户)。
+
 ## 语法
 
 ```SQL
@@ -17,20 +25,18 @@ SET PASSWORD [FOR user_identity] =
 
 **PASSWORD()** 方式输入的是明文密码; 而直接使用字符串，需要传递的是已加密的密码。
 
-如果修改其他用户的密码，需要具有管理员权限。
-
 ## 示例
 
-1. 修改当前用户的密码
+示例一： 修改当前用户的密码。
 
-    ```SQL
-    SET PASSWORD = PASSWORD('123456');
-    SET PASSWORD = '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
-    ```
+```SQL
+SET PASSWORD = PASSWORD('123456');
+SET PASSWORD = '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
+```
 
-2. 修改指定用户密码
+示例二： 修改指定用户的密码。
 
-    ```SQL
-    SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');
-    SET PASSWORD FOR 'jack'@['domain'] = '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
-    ```
+```SQL
+SET PASSWORD FOR 'jack'@'192.%' = PASSWORD('123456');
+SET PASSWORD FOR 'jack'@['domain'] = '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
+```
