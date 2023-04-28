@@ -18,6 +18,7 @@ package com.starrocks.statistic;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ShowResultSet;
 
 import java.time.LocalDateTime;
@@ -45,6 +46,21 @@ public class ExternalAnalyzeStatus extends AnalyzeStatus {
 
     public String getTableUUID() {
         return table.getUUID();
+    }
+
+    @Override
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    @Override
+    public String getDbName() throws MetaNotFoundException {
+        return db.getOriginName();
+    }
+
+    @Override
+    public String getTableName() throws MetaNotFoundException {
+        return table.getName();
     }
 
     @Override

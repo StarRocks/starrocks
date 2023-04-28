@@ -19,7 +19,10 @@ import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -99,6 +102,30 @@ public class AnalyzeStatus implements Writable {
 
     public long getTableId() {
         return tableId;
+    }
+
+    public String getCatalogName() {
+        return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+    }
+
+    public String getDbName() throws MetaNotFoundException {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            throw new MetaNotFoundException("No found database: " + dbId);
+        }
+        return db.getOriginName();
+    }
+
+    public String getTableName() throws MetaNotFoundException {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            throw new MetaNotFoundException("No found database: " + dbId);
+        }
+        Table table = db.getTable(tableId);
+        if (table == null) {
+            throw new MetaNotFoundException("No found table: " + tableId);
+        }
+        return table.getName();
     }
 
     public List<String> getColumns() {
