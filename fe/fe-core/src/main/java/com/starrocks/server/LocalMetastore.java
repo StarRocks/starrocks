@@ -2823,7 +2823,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
                 materializedView.setReplicationNum(replicationNum);
             }
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS)) {
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
                 Integer maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
                 materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
             }

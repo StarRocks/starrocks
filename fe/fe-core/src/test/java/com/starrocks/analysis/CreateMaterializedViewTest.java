@@ -2797,7 +2797,7 @@ public class CreateMaterializedViewTest {
                 "') EVERY(INTERVAL 3 SECOND)\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"," +
-                "\"mv_rewrite_staleness\" = \"60\"\n" +
+                "\"mv_rewrite_staleness_second\" = \"60\"\n" +
                 ")\n" +
                 "as select tb1.k1, k2 s2 from tbl1 tb1;";
         try {

@@ -330,7 +330,7 @@ public class Alter {
             excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
         }
         int maxMVRewriteStaleness = INVALID;
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS)) {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
             maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
         }
         List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
@@ -392,9 +392,9 @@ public class Alter {
             materializedView.setForeignKeyConstraints(foreignKeyConstraints);
             isChanged = true;
         }
-        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS)) {
-            curProp.put(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS,
-                    propClone.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS));
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND,
+                    propClone.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND));
             materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
             isChanged = true;
         }

@@ -159,7 +159,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_FOREIGN_KEY_CONSTRAINT = "foreign_key_constraints";
     public static final String PROPERTIES_UNIQUE_CONSTRAINT = "unique_constraints";
 
-    public static final String PROPERTIES_MV_REWRITE_STALENESS = "mv_rewrite_staleness";
+    public static final String PROPERTIES_MV_REWRITE_STALENESS_SECOND = "mv_rewrite_staleness_second";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
@@ -344,16 +344,16 @@ public class PropertyAnalyzer {
     public static int analyzeMVRewriteStaleness(Map<String, String> properties)
             throws AnalysisException {
         int maxMVRewriteStaleness = INVALID;
-        if (properties != null && properties.containsKey(PROPERTIES_MV_REWRITE_STALENESS)) {
+        if (properties != null && properties.containsKey(PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
             try {
-                maxMVRewriteStaleness = Integer.parseInt(properties.get(PROPERTIES_MV_REWRITE_STALENESS));
+                maxMVRewriteStaleness = Integer.parseInt(properties.get(PROPERTIES_MV_REWRITE_STALENESS_SECOND));
             } catch (NumberFormatException e) {
-                throw new AnalysisException("Partition Refresh Number: " + e.getMessage());
+                throw new AnalysisException("Invalid maxMVRewriteStaleness Number: " + e.getMessage());
             }
             if (maxMVRewriteStaleness != INVALID && maxMVRewriteStaleness < 0) {
                 throw new AnalysisException("Illegal maxMVRewriteStaleness: " + maxMVRewriteStaleness);
             }
-            properties.remove(PROPERTIES_MV_REWRITE_STALENESS);
+            properties.remove(PROPERTIES_MV_REWRITE_STALENESS_SECOND);
         }
         return maxMVRewriteStaleness;
     }

@@ -315,8 +315,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "maxMVRewriteStaleness")
     private int maxMVRewriteStaleness = 0;
 
-    // The next timestamp, measured in seconds, determines when to check for
-    // partitions that need to be refreshed(unit: ms).
+    // The next timestamp(Unit: ms), determines when to check for partitions that need to
+    // be refreshed.
     private transient long nextRefreshPartitionTs = 0;
 
     // The partition names that need to be refreshed are based on an old value
@@ -878,10 +878,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE)).append("\"");
         }
         // mv_rewrite_staleness
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS)) {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(
-                    PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS).append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS)).append("\"");
+                    PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND).append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)).append("\"");
         }
 
         // unique constraints
@@ -936,7 +936,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Map<String, String> properties = this.getTableProperty().getProperties();
 
         // maxMVRewriteStaleness
-        propsMap.put(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS, String.valueOf(maxMVRewriteStaleness));
+        propsMap.put(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND, String.valueOf(maxMVRewriteStaleness));
 
         // NEED_SHOW_PROPS
         NEED_SHOW_PROPS.forEach(prop -> {
