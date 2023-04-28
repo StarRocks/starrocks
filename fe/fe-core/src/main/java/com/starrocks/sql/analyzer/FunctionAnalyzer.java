@@ -16,13 +16,11 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateFunction;
@@ -360,13 +358,6 @@ public class FunctionAnalyzer {
                 throw new SemanticException(
                         "percentile_approx requires the second parameter's type is numeric constant type");
             }
-
-            double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
-            if (rate < 0 || rate > 1) {
-                throw new SemanticException(
-                        fnName + " second parameter'value must be between 0 and 1");
-            }
-
             if (functionCallExpr.getChildren().size() == 3) {
                 if (!functionCallExpr.getChild(2).getType().isNumericType() ||
                         !functionCallExpr.getChild(2).isConstant()) {
@@ -389,14 +380,9 @@ public class FunctionAnalyzer {
             if (functionCallExpr.getChildren().size() != 2) {
                 throw new SemanticException(fnName + " requires two parameters");
             }
-            if (!(functionCallExpr.getChild(1) instanceof DecimalLiteral) &&
-                    !(functionCallExpr.getChild(1) instanceof IntLiteral)) {
+            if (!(functionCallExpr.getChild(1).getType().isNumericType()) ||
+                    !(functionCallExpr.getChild(1).isConstant())) {
                 throw new SemanticException(fnName + " 's second parameter's data type is wrong ");
-            }
-            double rate = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
-            if (rate < 0 || rate > 1) {
-                throw new SemanticException(
-                        fnName + " second parameter'value should be between 0 and 1");
             }
         }
     }

@@ -52,7 +52,12 @@ public:
         DCHECK(!columns[1]->is_null(0));
 
         data(state).percentile->add(implicit_cast<float>(column_value));
-        data(state).targetQuantile = columns[1]->get(0).get_double();
+        double targetQuantile = columns[1]->get(0).get_double();
+        if (targetQuantile < 0 || targetQuantile > 1) {
+            ctx->set_error("agg function percentile_approx's second parameter should be between 0 and 1");
+            return;
+        }
+        data(state).targetQuantile = targetQuantile;
         data(state).is_null = false;
     }
 

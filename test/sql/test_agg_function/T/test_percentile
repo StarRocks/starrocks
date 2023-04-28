@@ -1,0 +1,30 @@
+-- name: testPercentileParameter
+CREATE TABLE IF NOT EXISTS `lineorder` (
+    `lo_orderkey` int(11) NOT NULL COMMENT "",
+    `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into lineorder values(1,'test');
+SELECT percentile_cont(lo_orderkey, -1) FROM lineorder;
+SELECT percentile_disc(lo_orderkey, -1) FROM lineorder;
+SELECT percentile_approx(lo_orderkey, -1) FROM lineorder;
+
+-- name: testPercentileEmptyTable
+CREATE TABLE IF NOT EXISTS `lineorder` (
+    `lo_orderkey` int(11) NOT NULL COMMENT "",
+    `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+SELECT percentile_cont(lo_orderkey, -1) FROM lineorder;
+SELECT percentile_disc(lo_orderkey, -1) FROM lineorder;
+SELECT percentile_approx(lo_orderkey, -1) FROM lineorder;

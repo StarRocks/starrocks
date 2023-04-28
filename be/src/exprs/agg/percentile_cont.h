@@ -59,8 +59,12 @@ public:
 
         if (ctx->get_num_args() == 2) {
             const auto* rate = down_cast<const ConstColumn*>(columns[1]);
-            this->data(state).rate = rate->get(row_num).get_double();
-            DCHECK(this->data(state).rate >= 0 && this->data(state).rate <= 1);
+            double value = rate->get(row_num).get_double();
+            if (value < 0 || value > 1) {
+                ctx->set_error("percentile_cont/percentile_disc's second parameter should be between 0 and 1");
+                return;
+            }
+            this->data(state).rate = value;
         }
     }
 
@@ -147,8 +151,12 @@ public:
 
         if (ctx->get_num_args() == 2) {
             const auto* rate = down_cast<const ConstColumn*>(columns[1]);
-            this->data(state).rate = rate->get(row_num).get_double();
-            DCHECK(this->data(state).rate >= 0 && this->data(state).rate <= 1);
+            double value = rate->get(row_num).get_double();
+            if (value < 0 || value > 1) {
+                ctx->set_error("percentile_cont/percentile_disc's second parameter should be between 0 and 1");
+                return;
+            }
+            this->data(state).rate = value;
         }
     }
 
@@ -261,7 +269,12 @@ class PercentileContAggregateFunction final : public PercentileContDiscAggregate
         const double& rate = this->data(state).rate;
 
         ResultColumnType* column = down_cast<ResultColumnType*>(to);
-        DCHECK(!new_vector.empty());
+
+        // when called in emtpy table
+        if (new_vector.empty()) {
+            return;
+        }
+
         if (new_vector.size() == 1 || rate == 1) {
             column->append(new_vector.back());
             return;
@@ -269,6 +282,7 @@ class PercentileContAggregateFunction final : public PercentileContDiscAggregate
 
         double u = (new_vector.size() - 1) * rate;
         int index = (int)u;
+        DCHECK(index >= 0 && index < new_vector.size());
 
         [[maybe_unused]] ResultType result;
         if constexpr (lt_is_datetime<LT>) {
@@ -306,7 +320,11 @@ class PercentileDiscAggregateFunction final : public PercentileContDiscAggregate
         const double& rate = this->data(state).rate;
 
         ResultColumnType* column = down_cast<ResultColumnType*>(to);
-        DCHECK(!new_vector.empty());
+
+        if (new_vector.empty()) {
+            return;
+        }
+
         if (new_vector.size() == 1 || rate == 1) {
             column->append(new_vector.back());
             return;
@@ -314,6 +332,7 @@ class PercentileDiscAggregateFunction final : public PercentileContDiscAggregate
 
         // choose the uppper one
         int index = ceil((new_vector.size() - 1) * rate);
+        DCHECK(index >= 0 && index < new_vector.size());
 
         [[maybe_unused]] ResultType result;
         if constexpr (lt_is_datetime<LT>) {
