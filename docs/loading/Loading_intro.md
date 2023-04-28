@@ -172,7 +172,7 @@ You can configure the following parameters in the configuration file **fe.conf**
 
 - `desired_max_waiting_jobs`
   
-  This parameter specifies the maximum number of load jobs that can be held waiting in queue. The default value is **1024**. When the number of load jobs in the **PENDING** state on an FE reaches the maximum number that you specify, the FE rejects new load requests. This parameter is valid only for asynchronous load jobs.
+  This parameter specifies the maximum number of load jobs that can be held waiting in queue. The default value is **1024** (100 in v2.4 and earlier and 1024 in v2.5 and later). When the number of load jobs in the **PENDING** state on an FE reaches the maximum number that you specify, the FE rejects new load requests. This parameter is valid only for asynchronous load jobs.
 
 - `max_running_txn_num_per_db`
   
