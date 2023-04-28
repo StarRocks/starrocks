@@ -19,5 +19,6 @@ public enum CloudType {
     DEFAULT,
     AWS,
     AZURE,
-    GCP
+    GCP,
+    HDFS
 }
