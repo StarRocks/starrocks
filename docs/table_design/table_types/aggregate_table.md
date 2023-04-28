@@ -1,8 +1,9 @@
 # Aggregate table
 
-When you create a table that uses the Aggregate table, you can define sort key columns and metric columns and can specify an aggregate function for the metric columns. If the records to be loaded have the same sort key, the metric columns are aggregated. The Aggregate table helps reduce the amount of data that needs to be processed for queries, thereby accelerating queries.
+**Aggregate Table** can be used to pre-aggregate data at storage engine and accelerate subsequent aggregation queries. When creating table, you need to specify the key columns and metric columns with aggregation function. After that, the storage engine will aggregate data based on the keys during data ingestion and compaction.
 
-## Scenarios
+
+## Use Case
 
 The Aggregate table is well suited to data statistics and analytics scenarios. A few examples are as follows:
 
@@ -44,29 +45,38 @@ StarRocks aggregates the four raw records into the following two records at data
 | 2020.05.01 | CHN     | 3    |
 | 2020.05.01 | USA     | 7    |
 
-## Create a table
+## Syntax
 
-Suppose that you want to analyze the numbers of visits by users from different cities to different web pages. In this example, create a table named `example_db.aggregate_tbl`, define `site_id`, `date`, and `city_code` as sort key columns, define `pv` as a metric column, and specify the SUM function for the `pv` column.
-
-The statement for creating the table is as follows:
 
 ```SQL
 CREATE TABLE IF NOT EXISTS example_db.aggregate_tbl (
     site_id LARGEINT NOT NULL COMMENT "id of site",
     date DATE NOT NULL COMMENT "time of event",
     city_code VARCHAR(20) COMMENT "city_code of user",
-    pv BIGINT SUM DEFAULT "0" COMMENT "total page views"
+    
+    pv BIGINT SUM DEFAULT "0" COMMENT "total page views",
+    last_visit_dt DATETIME REPLACE
 )
 AGGREGATE KEY(site_id, date, city_code)
-DISTRIBUTED BY HASH(site_id) BUCKETS 8
-PROPERTIES (
-"replication_num" = "1"
-);
+DISTRIBUTED BY HASH(site_id);
 ```
+
+In this example:
+1. `pv BIGINT SUM`: indicate that `pv` column is used with aggregation function `SUM`, all values will be summarized
+2. `last_visit_dt DATETIME REPLACE`: indicate that `last_visit_dt` column is used with `REPLACE` function, only the last value will be kept
+
+
+Supported aggregation functions are:
+- `SUM, MIN, MAX`: can be used with numeric types
+- `REPLACE`: keep the last data
+- `REPLACE_IF_NOT_NULL`: keep the last not-null data
+- `HLL_UNION`: work with `HLL` type to accumulate data into a HLL sketch
+- `BITMAP_UNION`: work with `BITMAP` type to accumulate data into a BITMAP
+
 
 ## Usage notes
 
-- Take note of the following points about the sort key of a table:
+- Sort key of aggregate table:
   - You can use the `AGGREGATE KEY` keyword to explicitly define the columns that are used in the sort key.
 
     - If the `AGGREGATE KEY` keyword does not include all the dimension columns, the table cannot be created.
@@ -74,13 +84,9 @@ PROPERTIES (
 
   - The sort key must be created on columns on which unique constraints are enforced. It must be composed of all the dimension columns whose names cannot be changed.
 
-- You can specify an aggregate function following the name of a column to define the column as a metric column. In most cases, metric columns hold data that needs to be aggregated and analyzed.
+- When queries are running, sort key columns are filtered before the aggregation of multiple data versions, whereas metric columns are filtered after the aggregation of multiple data versions. Therefore, we recommend that you identify the columns that are frequently used as filter conditions and define these columns as the sort key. This way, data filtering can start before the aggregation of multiple data versions to improve query performance.
 
-- For information about the aggregate functions that are supported by the Aggregate table, see [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
-
-- When queries are run, sort key columns are filtered before the aggregation of multiple data versions, whereas metric columns are filtered after the aggregation of multiple data versions. Therefore, we recommend that you identify the columns that are frequently used as filter conditions and define these columns as the sort key. This way, data filtering can start before the aggregation of multiple data versions to improve query performance.
-
-- When you create a table, you cannot create BITMAP indexes or Bloom Filter indexes on the metric columns of the table.
+- Cannot create BITMAP indexes or Bloom Filter indexes on the metric columns of the table
 
 ## What to do next
 
