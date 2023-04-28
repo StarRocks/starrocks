@@ -4275,7 +4275,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitDropFunctionStatement(StarRocksParser.DropFunctionStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        String functionName = qualifiedName.toString().toLowerCase();
+        String functionName = qualifiedName.toString();
         boolean isGlobal = context.GLOBAL() != null;
         FunctionName fnName = FunctionName.createFnName(functionName);
         if (isGlobal) {
@@ -4297,7 +4297,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
-        String functionName = qualifiedName.toString().toLowerCase();
+        String functionName = qualifiedName.toString();
 
         TypeDef returnTypeDef = new TypeDef(getType(context.returnType), createPos(context.returnType));
         TypeDef intermediateType = null;
@@ -5106,10 +5106,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitSimpleFunctionCall(StarRocksParser.SimpleFunctionCallContext context) {
 
-        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+        String fullFunctionName = getQualifiedName(context.qualifiedName()).toString();
         NodePosition pos = createPos(context);
 
-        FunctionName fnName = FunctionName.createFnName(functionName);
+        FunctionName fnName = FunctionName.createFnName(fullFunctionName);
+        String functionName = fnName.getFunction();
         if (functionName.equals(FunctionSet.TIME_SLICE) || functionName.equals(FunctionSet.DATE_SLICE)) {
             if (context.expression().size() == 2) {
                 Expr e1 = (Expr) visit(context.expression(0));
