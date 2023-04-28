@@ -58,29 +58,30 @@ Status BinlogManager::init(BinlogLsn min_valid_lsn, std::vector<int64_t>& sorted
 
     // 2. recover binlog from the largest version to the smallest version
     std::vector<int64_t> useless_file_ids;
-    std::vector<BinlogFileMetaPBPtr> recovered_file_metas(binlog_file_ids.size());
-    auto version_it = sorted_valid_versions.rbegin();
+    std::vector<BinlogFileMetaPBPtr> recovered_file_metas;
+    recovered_file_metas.reserve(binlog_file_ids.size());
     std::list<int64_t>::reverse_iterator file_id_it = binlog_file_ids.rbegin();
-    int64_t num_versions_recovered = 0;
-    while (version_it != sorted_valid_versions.rend()) {
-        int64_t version = *version_it;
+    int64_t next_version_index = sorted_valid_versions.size() - 1;
+    while (next_version_index >= 0) {
+        int64_t version = sorted_valid_versions[next_version_index];
         BinlogLsn min_lsn = version == min_valid_lsn.version() ? min_valid_lsn : BinlogLsn(version, 0);
         Status recover_status = _recover_version(version, min_lsn, binlog_file_ids, file_id_it, recovered_file_metas,
                                                  &useless_file_ids);
         if (!recover_status.ok()) {
+            LOG(ERROR) << "Failed to recover version: " << version << " for tablet: " << _tablet_id
+                       << ", status: " << recover_status.to_string();
             break;
         }
-        version_it++;
-        num_versions_recovered++;
+        next_version_index--;
     }
 
-    if (version_it != sorted_valid_versions.rend()) {
+    if (next_version_index >= 0) {
         std::string err_msg = fmt::format(
                 "Failed to init binlog because can't find binlog for all of versions, "
                 "tablet: {}, min_valid_lsn: {}, num expected versions: {}, num recovered version: {}, last failed "
                 "version: {}",
-                _tablet_id, min_valid_lsn.to_string(), sorted_valid_versions.size(), num_versions_recovered,
-                *version_it);
+                _tablet_id, min_valid_lsn.to_string(), sorted_valid_versions.size(),
+                sorted_valid_versions.size() - next_version_index, sorted_valid_versions[next_version_index]);
         LOG(ERROR) << err_msg << ". Details of valid versions for tablet: "
                    << fmt::format("{}", fmt::join(sorted_valid_versions, ", "));
         _init_failure.store(true);
