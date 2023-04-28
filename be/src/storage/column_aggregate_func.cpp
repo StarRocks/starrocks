@@ -15,6 +15,8 @@
 #include "storage/column_aggregate_func.h"
 
 #include "column/array_column.h"
+#include "column/map_column.h"
+#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
@@ -159,7 +161,7 @@ public:
     }
 };
 
-struct ArrayState {
+struct ColumnRefState {
     ColumnPtr column;
     int row = 0;
 
@@ -170,7 +172,7 @@ struct ArrayState {
 };
 
 template <>
-class ReplaceAggregator<ArrayColumn, ArrayState> final : public ValueColumnAggregator<ArrayColumn, ArrayState> {
+class ReplaceAggregator<ArrayColumn, ColumnRefState> final : public ValueColumnAggregator<ArrayColumn, ColumnRefState> {
 public:
     void reset() override { this->data().reset(); }
 
@@ -188,6 +190,48 @@ public:
         } else {
             col->append_default();
         }
+    }
+
+    bool need_deep_copy() const override { return true; }
+};
+
+template <>
+class ReplaceAggregator<MapColumn, ColumnRefState> final : public ValueColumnAggregator<MapColumn, ColumnRefState> {
+public:
+    void reset() override { this->data().reset(); }
+
+    void aggregate_impl(int row, const ColumnPtr& src) override {
+        this->data().column = src;
+        this->data().row = row;
+    }
+
+    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override { aggregate_impl(end - 1, src); }
+
+    void append_data(Column* agg) override {
+        auto* col = down_cast<MapColumn*>(agg);
+        DCHECK_NOTNULL(this->data().column);
+        col->append(*this->data().column, this->data().row, 1);
+    }
+
+    bool need_deep_copy() const override { return true; }
+};
+
+template <>
+class ReplaceAggregator<StructColumn, ColumnRefState> final : public ValueColumnAggregator<StructColumn, ColumnRefState> {
+public:
+    void reset() override { this->data().reset(); }
+
+    void aggregate_impl(int row, const ColumnPtr& src) override {
+        this->data().column = src;
+        this->data().row = row;
+    }
+
+    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override { aggregate_impl(end - 1, src); }
+
+    void append_data(Column* agg) override {
+        auto* col = down_cast<StructColumn*>(agg);
+        DCHECK_NOTNULL(this->data().column);
+        col->append(*this->data().column, this->data().row, 1);
     }
 
     bool need_deep_copy() const override { return true; }
@@ -366,7 +410,9 @@ ValueColumnAggregatorPtr create_value_aggregator(LogicalType type, StorageAggreg
             CASE_REPLACE(TYPE_VARCHAR, BinaryColumn, SliceState)
             CASE_REPLACE(TYPE_VARBINARY, BinaryColumn, SliceState)
             CASE_REPLACE(TYPE_BOOLEAN, BooleanColumn, uint8_t)
-            CASE_REPLACE(TYPE_ARRAY, ArrayColumn, ArrayState)
+            CASE_REPLACE(TYPE_ARRAY, ArrayColumn, ColumnRefState)
+            CASE_REPLACE(TYPE_MAP, MapColumn, ColumnRefState)
+            CASE_REPLACE(TYPE_STRUCT, StructColumn, ColumnRefState)
             CASE_REPLACE(TYPE_HLL, HyperLogLogColumn, HyperLogLog)
             CASE_REPLACE(TYPE_OBJECT, BitmapColumn, BitmapValue)
             CASE_REPLACE(TYPE_PERCENTILE, PercentileColumn, PercentileValue)

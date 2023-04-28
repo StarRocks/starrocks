@@ -304,7 +304,7 @@ public class ColumnDef implements ParseNode {
             typeDef.setType(AggregateType.extendedPrecision(typeDef.getType()));
         }
 
-        typeDef.analyze(isOlap);
+        typeDef.analyze();
 
         Type type = typeDef.getType();
 
