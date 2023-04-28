@@ -2,11 +2,9 @@
 
 ## Description
 
-Creates a materialized view. Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted successfully. You can view the building status of Sync Refresh synchronous materialized views in a database via [SHOW ALTER MATERIALIZED VIEW](../data-manipulation/SHOW%20ALTER%20MATERIALIZED%20VIEW.md) command. For usage information about materialized views, see [materialized view](../../../using_starrocks/Materialized_view.md).
+Creates a materialized view. 
 
-> **CAUTION**
->
-> Only users with the `CREATE_PRIV` privilege in the database where the base table resides can create a materialized view.
+Creating a materialized view is asynchronous operation. Running this command successfully indicates that the task of creating the materialized view is submitted, but has not been refreshed. You can view the refresh status via [SHOW MATERIALIZED VIEWS](../data-manipulation/SHOW%20MATERIALIZED%20VIEW.md) command. For usage information about materialized views, see [materialized view](../../../using_starrocks/Materialized_view.md).
 
 StarRocks supports asynchronous materialized views from v2.4. The major differences between asynchronous materialized views and synchronous materialized views in previous versions are as follows:
 
@@ -16,6 +14,10 @@ StarRocks supports asynchronous materialized views from v2.4. The major differen
 | **Asynchronous materialized view** | Yes | Yes | Yes  | Yes  |
 
 In StarRocks v2.5, asynchronous async refresh materialized views support query rewrite, nested materialized views, and creating materialized views based on Hive catalog, Hudi catalog, and Iceberg catalog.
+
+> **CAUTION**
+>
+> Only users with the `CREATE_PRIV` privilege in the database where the base table resides can create a materialized view.
 
 ## Syntax
 

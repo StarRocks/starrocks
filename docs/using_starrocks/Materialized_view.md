@@ -1,74 +1,82 @@
 # Asynchronous materialized views
 
-This topic describes how to understand, create, use, and manage an asynchronous materialized view. Asynchronous materialized views are supported from StarRocks v2.4 onwards.
+This topic explains how to understand, create, use, and manage an asynchronous materialized view. Asynchronous materialized view is available in StarRocks v2.4 and later.
 
-Compared with synchronous materialized views, asynchronous materialized views support multi-table join and more aggregate functions. The refresh of asynchronous materialized views can be triggered manually or by scheduled tasks. You can also refresh some of the partitions instead of the whole materialized view, greatly reducing the cost of refresh. In addition, asynchronous materialized views support a variety of query rewrite scenarios, allowing automatic, transparent query acceleration.
+> Compared to synchronous materialized views, asynchronous materialized views support multi-table joins and more aggregate functions. Asynchronous materialized views can be refreshed manually or by scheduled tasks, and you can choose to refresh only certain partitions instead of the entire materialized view, significantly reducing the cost of refresh. Additionally, asynchronous materialized views support various query rewrite scenarios, enabling automatic and transparent query acceleration.
+> 
 
-For the scenario and usage of the synchronized materialized views (Rollup), see [Synchronous materialized view (Rollup)](../using_starrocks/Materialized_view-single_table.md).
+> For information on the scenario and usage of synchronous materialized views (Rollup), refer to the Synchronous Materialized View (Rollup) topic.
+> 
 
 ## Overview
 
-Applications in databases often perform complex queries on large tables. Such queries involve multi-table joins and aggregations on tables that contain billions of rows. Processing these queries can be expensive, in terms of system resources and the time it takes to compute the results.
+Databases often execute complex queries on large tables, which require multi-table joins and aggregations on tables containing billions of rows. Processing these queries can be expensive in terms of system resources and time.
 
-Asynchronous materialized views in StarRocks are designed to tackle these issues. An asynchronous materialized view is a special physical table that holds pre-computed query results from one or more base tables. When you perform complex queries on the base table, StarRocks returns the pre-computed results from the relevant materialized views to process these queries. This way, query performance can be improved because repetitive complex calculations are avoided. This performance difference can be significant when a query is run frequently or is sufficiently complex.
+To address these issues, StarRocks provides asynchronous materialized views. These views are special physical tables that hold pre-computed query results from one or more base tables. When you perform complex queries on the base table, StarRocks returns pre-computed results from the relevant materialized views to process the queries. This avoids repetitive complex calculations and improves query performance, which can be significant for frequently run or sufficiently complex queries.
 
-Additionally, asynchronous materialized views are especially useful for building mathematical models upon your data warehouse. By doing so, you can provide a unified data specification to upper-layer applications, shield the underlying implementation, or protect the raw data security of the base tables.
+Asynchronous materialized views are particularly useful for building mathematical models on your data warehouse. This approach provides a unified data specification to upper-layer applications, shields the underlying implementation, and protects the security of the raw data in the base tables.
 
 ### Understand materialized views in StarRocks
 
-StarRocks v2.3 and earlier versions provided a synchronized materialized view that can be built only on a single table. Synchronized materialized views, or the Rollup, retain higher data freshness and lower refreshing costs. However, compared to asynchronous materialized views supported from v2.4 onwards, synchronized materialized views have many limitations. You have limited choices of aggregation operators when you want to build a synchronized materialized view to accelerate or rewrite your queries.
+StarRocks v2.3 and earlier versions offered synchronized materialized views, which could be built only on a single table. Although synchronized materialized views, or Rollup, provide higher data freshness and lower refreshing costs, they have many limitations compared to asynchronous materialized views supported from v2.4 onwards. For instance, when building a synchronized materialized view to accelerate or rewrite queries, the choice of aggregation operators is limited.
 
-The following table compares the asynchronous materialized views (ASYNC MVs) in StarRocks v2.5, v2.4, and the synchronized materialized view (SYNC MV) in the perspective of features that they support:
+The following table compares asynchronous materialized views (ASYNC MV) in StarRocks v2.5 and v2.4 with the synchronized materialized view (SYNC MV) in terms of features they support:
 
-|                       | **Single-table aggregation** | **Multi-table join** | **Query rewrite** | **Refresh strategy** | **Base table** |
-| --------------------- | ---------------------------- | -------------------- | ----------------- | -------------------- | -------------- |
-| **ASYNC MVs in v2.5** | Yes | Yes | Yes | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from:<ul><li>Default catalog</li><li>External catalogs</li><li>Existing materialized views</li></ul> |
-| **ASYNC MVs in v2.4** | Yes | Yes | No | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from the default catalog |
-| **SYNC MV (Rollup)**  | Limited choices of operators | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
+|  | Single-table aggregation | Multi-table join | Query rewrite | Refresh strategy | Base table |
+| --- | --- | --- | --- | --- | --- |
+| ASYNC MVs in v2.5 | Yes | Yes | Yes | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from:<ul><li>Default catalog</li><li>External catalogs</li><li>Existing materialized views</li></ul> |
+| ASYNC MVs in v2.4 | Yes | Yes | No | <ul><li>Regularly triggered refresh</li><li>Manual refresh</li></ul> | Multiple tables from the default catalog |
+| SYNC MV (Rollup) | Limited choices of operators | No | Yes | Synchronous refresh during data loading | Single table in the default catalog |
 
-### Basic concepts
+### Basic Concepts
 
-- **Base table**
-
-  Base tables are the driving tables of a materialized view.
-
-  For StarRocks' asynchronous materialized views, base tables can be StarRocks native tables in the [default catalog](../data_source/catalog/default_catalog.md), tables in external catalogs (supported from v2.5), or even existing asynchronous materialized views (supported from v2.5). StarRocks supports creating asynchronous materialized views on all [types of StarRocks tables](../table_design/Data_model.md).
-
+- **Base Table**
+    
+    Base tables are the tables that drive a materialized view. For StarRocks' asynchronous materialized views, base tables can be StarRocks native tables in the default catalog, tables in external catalogs (supported from v2.5), or even existing asynchronous materialized views (supported from v2.5). StarRocks supports creating asynchronous materialized views on all types of StarRocks tables.
+    
 - **Refresh**
+    
+    When you create an asynchronous materialized view, its data reflects only the state of the base tables at that time. When the data in the base tables changes, you need to refresh the materialized view to keep the changes synchronized. Currently, StarRocks supports two generic refreshing strategies: ASYNC (refreshing triggered regularly by tasks) and MANUAL (refreshing triggered manually by users).
+    
+- **Query Rewrite**
+    
+    Query rewrite means that when executing a query on base tables with materialized views built on, the system automatically judges whether the pre-computed results in the materialized view can be reused for the query. If they can be reused, the system will load the data directly from the relevant materialized view to avoid the time- and resource-consuming computations or joins. From v2.5, StarRocks supports automatic, transparent query rewrite based on the SPJG-type asynchronous materialized views that are created on the default catalog or an external catalog such as a Hive catalog, Hudi catalog, or Iceberg catalog.
+    
+    Base tables are the tables that drive a materialized view.
+    
+    For StarRocks' asynchronous materialized views, base tables can be StarRocks native tables in the default catalog, tables in external catalogs (supported from v2.5), or even existing asynchronous materialized views (supported from v2.5). StarRocks supports creating asynchronous materialized views on all types of StarRocks tables.
+    
 
-  When you create an asynchronous materialized view, its data reflects only the state of the base tables at that time. When the data in the base tables change, you need to refresh the materialized view to keep the changes synchronized.
+## Use Case
 
-  Currently, StarRocks supports two generic refreshing strategies: ASYNC (refreshing triggered regularly by tasks) and MANUAL (refreshing triggered manually by users).
+Materialized View can be used in following cases:
 
-- **Query rewrite**
+- **Accelerating Heavy Aggregation Queries**
 
-  Query rewrite means that when executing a query on base tables with materialized views built on, the system automatically judges whether the pre-computed results in the materialized view can be reused for the query. If they can be reused, the system will load the data directly from the relevant materialized view to avoid the time- and resource-consuming computations or joins.
+If most queries in your data warehouse include the same sub-query with an aggregate function, and these queries consume a significant proportion of computing resources, you can create an asynchronous materialized view based on this sub-query. The materialized view will compute and store all results of the sub-query. After building the materialized view, StarRocks rewrites all queries containing the sub-query, loads intermediate results from the materialized view, and accelerates these queries.
 
-  From v2.5, StarRocks supports automatic, transparent query rewrite based on the SPJG-type asynchronous materialized views that are created on the default catalog or an external catalog such as a Hive catalog, Hudi catalog, or Iceberg catalog.
+- **Accelerate Multi-Table Join Queries**
 
-## Decide when to create a materialized view
+If you need to regularly join multiple tables in your data warehouse to make a new wide table, you can build an asynchronous materialized view for these tables and set the ASYNC refreshing strategy to trigger refreshing tasks at fixed time intervals. After building the materialized view, query results are returned directly from the materialized view, avoiding the latency caused by JOIN operations.
 
-You can create an asynchronous materialized view if you have the following demands in your data warehouse environment:
+- **Data Warehouse Layering**
 
-- **Accelerating queries with repetitive aggregate functions**
+If your data warehouse contains a mass of raw data, and queries require a complex set of ETL operations, you can build multiple layers of asynchronous materialized views to stratify the data in your data warehouse and decompose the query into a series of simple sub-queries. This can significantly reduce repetitive computation and, more importantly, help your DBA identify problems with ease and efficiency. Data warehouse layering also helps decouple the raw data and statistical data, protecting the security of sensitive raw data.
 
-  Suppose that most queries in your data warehouse include the same sub-query with an aggregate function, and these queries have consumed a huge proportion of your computing resources. Based on this sub-query, you can create an asynchronous materialized view, which will compute and store all results of the sub-query. After the materialized view is built, StarRocks rewrites all queries that contain the sub-query, loads the intermediate results stored in the materialized view, and thus accelerates these queries.
+- **DataLake Acceleration**
 
-- **Regular JOIN of multiple tables**
+Querying a DataLake can be slow due to network latency and object storage throughput. Building a materialized view on top of the DataLake to clean and filter the raw data can speed up subsequent queries. StarRocks can automatically refresh the materialized view when external data changes, so you don't have to worry about data consistency. Additionally, the SQL optimizer can rewrite queries to use available materialized views, so you don't have to modify your queries.
 
-  Suppose that you need to regularly join multiple tables in your data warehouse to make a new wide table. You can build an asynchronous materialized view for these tables, and set the ASYNC refreshing strategy that triggers refreshing tasks at a fixed time interval. After the materialized view is built, query results are returned directly from the materialized view, and thus the latency caused by JOIN operations is avoided.
+## Create materialized view
 
-- **Data warehouse layering**
+Asynchronous materialized view can be created on top of: 
 
-  Suppose that your data warehouse contains a mass of raw data, and queries in it require a complex set of ETL operations. You can build multiple layers of asynchronous materialized views to stratify the data in your data warehouse, and thus decompose the query into a series of simple sub-queries. It can significantly reduce repetitive computation, and, more importantly, help your DBA identify the problem with ease and efficiency. Beyond that, data warehouse layering helps decouple the raw data and statistical data, protecting the security of sensitive raw data.
+- OLAP Table: regular StarRocks table with native storage
+- DataLake: Hive/Hudi/Iceberg/DeltaLake
+- Jdbc Table:
+- Materialized View: this pattern is called MV on MV
 
-## Create an asynchronous materialized view
-
-StarRocks supports creating asynchronous materialized views on one or more base tables from the default catalog and external catalogs. Base tables support all StarRocks table types. You can also build an asynchronous materialized view on existing materialized views.
-
-### Before you begin
-
-#### Prepare base tables
+### Before start
 
 The following examples involve two base tables:
 
@@ -147,42 +155,39 @@ GROUP BY order_id;
 > - The query statement used to create a materialized view does not support random functions, including rand(), random(), uuid(), and sleep().
 
 - **About refresh mechanisms of asynchronous materialized views**
-
-  Currently, StarRocks supports two ON DEMAND refresh strategies: manual refresh and regular refresh at a fixed time interval.
-
-  In StarRocks v2.5, asynchronous materialized views further support a variety of asynchronous refreshing mechanisms:
-
-  - If an MV has many large partitions, each refresh can consume a large amount of resources. In v2.5, StarRocks supports splitting refresh tasks. You can specify the maximum number of partitions to be refreshed, and StarRocks performs refresh in batches, with a batch size smaller or equal to the specified maximum number of partitions. This feature ensures large asynchronous materialized views are stably refreshed, enhancing the stability and robustness of data modeling.
-  - You can specify the time to live (TTL) for partitions of an asynchronous materialized view, reducing the storage size taken by the materialized view.
-  - You can specify the refresh range to refresh only the latest few partitions, reducing the refresh overhead.
-
-  For more information, see the **PROPERTIES** section in [CREATE MATERIALIZED VIEW - Parameters](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md#parameters). You can also modify the mechanisms of an existing asynchronous materialized view using [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md).
-
+    
+    Currently, StarRocks supports two ON DEMAND refresh strategies: manual refresh and regular refresh at a fixed time interval.
+    
+    In StarRocks v2.5, asynchronous materialized views support a variety of refreshing mechanisms:
+    
+    - If an MV has many large partitions, each refresh can consume a significant amount of resources. To address this, StarRocks v2.5 supports splitting refresh tasks. You can specify the maximum number of partitions to be refreshed, and StarRocks performs refresh in batches, with a batch size equal to or smaller than the specified maximum number of partitions. This feature ensures that large asynchronous materialized views are stably refreshed, enhancing the stability and robustness of data modeling.
+    - You can specify the time to live (TTL) for partitions of an asynchronous materialized view, reducing the storage size taken by the materialized view.
+    - You can specify the refresh range to refresh only the latest few partitions, reducing the refresh overhead.
+    
+    For more information, see the **PROPERTIES** section in CREATE MATERIALIZED VIEW - Parameters. You can also modify the mechanisms of an existing asynchronous materialized view using ALTER MATERIALIZED VIEW.
+    
 - **About nested materialized views**
-
-  StarRocks v2.5 supports creating nested asynchronous materialized views. You can build asynchronous materialized views based on existing asynchronous materialized views. The refreshing strategy for each materialized view does not affect the materialized views on the upper or lower layers. Currently, StarRocks does not limit the number of nesting levels. In a production environment, we recommend that the number of nesting layers does not exceed THREE.
-
+    
+    StarRocks v2.5 now supports creating nested asynchronous materialized views. You can build asynchronous materialized views based on existing asynchronous materialized views. The refreshing strategy for each materialized view does not affect the materialized views on the upper or lower layers. Currently, StarRocks does not limit the number of nesting levels. However, in a production environment, we recommend that the number of nesting layers does not exceed three.
+    
 - **About external catalog materialized views**
+    
+    StarRocks v2.5 now supports creating asynchronous materialized views based on Hive, Hudi, and Iceberg catalogs. To create an external catalog materialized view, follow the same steps as creating a general asynchronous materialized view, but with the following usage restrictions:
+    
+    - Strict consistency is not guaranteed between the materialized view and the base tables in the external catalog.
+    - Currently, building asynchronous materialized views based on external resources is not supported.
+    - Currently, StarRocks cannot perceive if the data of the base tables in the external catalog has changed, so all partitions are refreshed by default every time the refreshing task is triggered. If you want to refresh only some of the partitions, you can manually refresh the materialized view using the [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md) statement and specify the partition you want to refresh.
 
-  StarRocks v2.5 supports creating asynchronous materialized views based on Hive catalog, Hudi catalog and Iceberg catalog. An external catalog materialized view is created in the same way as a general asynchronous materialized view is created, with the following usage restrictions:
+## Query Materialized View
 
-  - Strict consistency is not guaranteed between the materialized view and the base tables in the external catalog.
-  - Currently, building asynchronous materialized views based on external resources is not supported.
-  - Currently, StarRocks cannot perceive if the data of the base tables in the external catalog has changed, so all partitions are refreshed by default every time the refreshing task is triggered. If you want to refresh only some of the partitions, you can manually refresh the materialized view using the [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md) statement and specify the partition you want to refresh.
+There are two methods to query the materialized view:
 
-## Manually refresh an asynchronous materialized view
+- Query it directly: treat the materialized view as a regular table and query it directly.
+- Transparently rewrite: the optimizer will attempt to rewrite your query to use an available materialized view by using pattern match algorithms. In this way, you don't need to change your query.
 
-You can refresh an asynchronous materialized view that is created with the ASYNC or the MANUAL refreshing strategy via [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md). StarRocks v2.5 supports refreshing specific partitions of an asynchronous materialized view by specifying partition names.
+### Query directly
 
-```SQL
-REFRESH MATERIALIZED VIEW order_mv;
-```
-
-You can cancel a refresh task using [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md).
-
-## Query the asynchronous materialized view
-
-The asynchronous materialized view you created is essentially a physical table that contains the complete set of pre-computed results in accordance with the query statement. Therefore, you can directly query the materialized view after the materialized view is refreshed for the first time.
+The asynchronous materialized view you have created is essentially a physical table that contains a complete set of pre-computed results in accordance with the query statement. Therefore, you can directly query the materialized view after it has been refreshed for the first time.
 
 ```Plain
 MySQL > SELECT * FROM order_mv;
@@ -200,25 +205,25 @@ MySQL > SELECT * FROM order_mv;
 >
 > You can directly query an asynchronous materialized view, but the results may be inconsistent with what you get from the query on its base tables.
 
-## Rewrite queries with the asynchronous materialized view
+### Transparently Rewrite
 
-StarRocks v2.5 supports automatic and transparent query rewrite based on the SPJG-type asynchronous materialized views. The SPJG-type materialized views refer to materialized views whose plan only includes Scan, Filter, Project, and Aggregate types of operators. The SPJG-type materialized views query rewrite includes single table query rewrite, Join query rewrite, aggregation query rewrite, Union query rewrite and query rewrite based on nested materialized views.
+StarRocks v2.5 now offers automatic and transparent query rewriting based on SPJG-type asynchronous materialized views. These are materialized views whose plans only include Scan, Filter, Project, and Aggregate operators. The query rewriting based on SPJG-type materialized views includes single table query rewriting, join query rewriting, aggregation query rewriting, union query rewriting, and query rewriting based on nested materialized views.
 
-Currently, StarRocks supports rewriting queries on asynchronous materialized views that are created on the default catalog or an external catalog such as a Hive catalog, Hudi catalog, or Iceberg catalog. When querying data in the default catalog, StarRocks ensures strong consistency of results between the rewritten query and the original query by excluding materialized views whose data is inconsistent with the base table. When the data in a materialized view expires, the materialized view will not be used as a candidate materialized view. When querying data in external catalogs, StarRocks does not ensure strong consistency of the results because StarRocks cannot perceive the data changes in external catalogs.
+Currently, StarRocks supports query rewriting on asynchronous materialized views created on either the default catalog or an external catalog (e.g., Hive, Hudi, or Iceberg). When querying data in the default catalog, StarRocks ensures strong consistency of the results between the rewritten query and the original query by excluding materialized views whose data is inconsistent with the base table. If the data in a materialized view expires, it will not be used as a candidate materialized view. However, when querying data in external catalogs, StarRocks does not guarantee strong consistency of the results because it cannot detect data changes in external catalogs.
 
 ### Enable query rewrite
 
-- **Enable query rewrite based on the default catalog materialized views**
-
+**Enable query rewrite based on the default catalog materialized views**
+    
   StarRocks enables asynchronous materialized view query rewrite by default. You can enable or disable this feature with the session variable enable_materialized_view_rewrite.
-
-  ```SQL
+  
+  ```
   SET GLOBAL enable_materialized_view_rewrite = { true | false };
   ```
-
-- **[Experimental] Enable query rewrite based on the external catalog materialized views**
-
-  Because StarRocks does not ensure a strong consistency of the results when you query data in external catalogs using asynchronous materialized views, the query rewrite based on the external catalog materialized views is disabled by default. You can enable this feature for an external catalog materialized view by adding the property `"force_external_table_query_rewrite" = "true"` when creating the materialized view.
+    
+**[Experimental] Enable query rewrite based on the external catalog materialized views**
+    
+Because StarRocks does not ensure a strong consistency of the results when you query data in external catalogs using asynchronous materialized views, the query rewrite based on the external catalog materialized views is disabled by default. You can enable this feature for an external catalog materialized view by adding the property `"force_external_table_query_rewrite" = "true"` when creating the materialized view.
 
   Example:
 
@@ -237,7 +242,7 @@ Currently, StarRocks supports rewriting queries on asynchronous materialized vie
 
 ### Rewrite queries in View Delta Join scenarios
 
-StarRocks now supports rewriting queries based on asynchronous materialized views with Delta Join, which means that the queried tables are a subset of the materialized view's base tables. For example, queries of the form `table_a INNER JOIN table_b` can be rewritten by materialized views of the form `table_a INNER JOIN table_b INNER JOIN/LEFT OUTER JOIN table_c`, where `table_b INNER JOIN/LEFT OUTER JOIN table_c` is the Delta Join. This feature allows transparent acceleration for such queries, thereby preserving the flexibility of the query and avoiding the huge cost of building wide tables.
+StarRocks now supports rewriting queries based on asynchronous materialized views with Delta Join, which allows queried tables to be a subset of the materialized view's base tables. For example, queries of the form `table_a INNER JOIN table_b` can be rewritten by materialized views of the form `table_a INNER JOIN table_b INNER JOIN/LEFT OUTER JOIN table_c`, where `table_b INNER JOIN/LEFT OUTER JOIN table_c` is the Delta Join. This feature provides transparent acceleration for such queries, preserving the query's flexibility and avoiding the high cost of building wide tables.
 
 View Delta Join queries can be rewritten only when the following requirements are met:
 
@@ -337,9 +342,30 @@ mysql> EXPLAIN SELECT
 |      numNodes=0                    |
 +------------------------------------+
 20 rows in set (0.01 sec)
+
 ```
 
-## Manage an asynchronous materialized view
+## Manage Materialized View
+
+These are DDL commands to manage the Materialized View:
+
+- [CREATE MATERIAIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md)
+- [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md)
+- [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER%20MATERIALIZED%20VIEW.md)
+- [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md)
+- [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md)
+- [SHOW MATERIALIZED VIEW](../sql-reference//sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md)
+- [SHOW CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20MATERIALIZED%20VIEW.md)
+
+### Manually refresh an asynchronous materialized view
+
+You can refresh an asynchronous materialized view that is created with the ASYNC or the MANUAL refreshing strategy via [REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/REFRESH%20MATERIALIZED%20VIEW.md). StarRocks v2.5 supports refreshing specific partitions of an asynchronous materialized view by specifying partition names.
+
+```
+REFRESH MATERIALIZED VIEW order_mv;
+```
+
+You can cancel a refresh task using [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md).
 
 ### Alter an asynchronous materialized view
 
@@ -439,7 +465,3 @@ The following example checks the execution status of the materialized view that 
 ### Drop an asynchronous materialized view
 
 You can drop an asynchronous materialized view via [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md).
-
-```Plain
-DROP MATERIALIZED VIEW order_mv;
-```
