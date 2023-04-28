@@ -492,7 +492,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             if (newStringToDicts.isEmpty()) {
                 context.hasEncoded = false;
             }
-            return new Projection(newProjectMap, projectOperator.getCommonSubOperatorMap());
+            return new Projection(newProjectMap);
         }
 
         private PhysicalTopNOperator rewriteTopNOperator(PhysicalTopNOperator operator, DecodeContext context) {
@@ -938,9 +938,10 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
     }
 
     private static OptExpression generateDecodeOExpr(DecodeContext context, List<OptExpression> childExpr) {
-        Map<Integer, Integer> dictToStrings = Maps.newHashMap();
+        Map<ColumnRefOperator, ColumnRefOperator> dictToStrings = Maps.newHashMap();
         for (Map.Entry<Integer, Integer> entry : context.stringColumnIdToDictColumnIds.entrySet()) {
-            dictToStrings.put(entry.getValue(), entry.getKey());
+            dictToStrings.put(context.columnRefFactory.getColumnRef(entry.getValue()),
+                    context.columnRefFactory.getColumnRef(entry.getKey()));
         }
         PhysicalDecodeOperator decodeOperator = new PhysicalDecodeOperator(ImmutableMap.copyOf(dictToStrings),
                 Maps.newHashMap(context.stringFunctions));
@@ -948,7 +949,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         result.setStatistics(childExpr.get(0).getStatistics());
 
         LogicalProperty decodeProperty = new LogicalProperty(childExpr.get(0).getLogicalProperty());
-        result.setLogicalProperty(DecodeVisitor.rewriteLogicProperty(decodeProperty, dictToStrings));
+        result.setLogicalProperty(DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictToStrings()));
         context.clear();
         return result;
     }

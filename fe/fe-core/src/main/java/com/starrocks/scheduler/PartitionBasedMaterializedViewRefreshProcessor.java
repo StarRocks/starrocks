@@ -467,6 +467,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
         PartitionDiff partitionDiff = new PartitionDiff();
         Map<String, Range<PartitionKey>> basePartitionMap;
+
+        int partitionTTLNumber = materializedView.getTableProperty().getPartitionTTLNumber();
+        mvContext.setPartitionTTLNumber(partitionTTLNumber);
         Map<String, Range<PartitionKey>> mvPartitionMap = materializedView.getRangePartitionMap();
         database.readLock();
         try {
@@ -584,27 +587,31 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                                                                   String start,
                                                                   String end,
                                                                   boolean force) throws AnalysisException {
+        int partitionTTLNumber = mvContext.getPartitionTTLNumber();
         if (force && start == null && end == null) {
-            return Sets.newHashSet(materializedView.getPartitionNames());
+            return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
         }
 
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
             if (force || unPartitionedMVNeedToRefresh()) {
-                return Sets.newHashSet(materializedView.getPartitionNames());
+                return materializedView.getPartitionNames();
             }
         } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             Expr partitionExpr = MaterializedView.getPartitionExpr(materializedView);
             Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
             Table partitionTable = partitionTableAndColumn.first;
+
+            boolean isAutoRefresh = (mvContext.type == Constants.TaskType.PERIODICAL ||
+                    mvContext.type == Constants.TaskType.EVENT_TRIGGERED);
             Set<String> mvRangePartitionNames = SyncPartitionUtils.getPartitionNamesByRangeWithPartitionLimit(
-                    materializedView, start, end, mvContext.type);
+                    materializedView, start, end, partitionTTLNumber, isAutoRefresh);
 
             if (needToRefreshNonPartitionTable(partitionTable)) {
                 if (start == null && end == null) {
                     // if non partition table changed, should refresh all partitions of materialized view
-                    return Sets.newHashSet(materializedView.getPartitionNames());
+                    return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
                 } else {
                     // If the user specifies the start and end ranges, and the non-partitioned table still changes,
                     // it should be refreshed according to the user-specified range, not all partitions.

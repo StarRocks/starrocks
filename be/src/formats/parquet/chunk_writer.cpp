@@ -54,6 +54,7 @@ Status ChunkWriter::write(Chunk* chunk) {
 
     for (size_t i = 0; i < chunk->num_columns(); i++) {
         ASSIGN_OR_RETURN(auto col, _eval_func(chunk, i));
+        auto& col = chunk->get_column_by_index(i);
         auto level_builder = LevelBuilder(_type_descs[i], _schema->field(i));
         level_builder.write(ctx, col, write_leaf_column);
     }

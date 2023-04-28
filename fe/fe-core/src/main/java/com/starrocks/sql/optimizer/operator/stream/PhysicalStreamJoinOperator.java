@@ -14,14 +14,18 @@
 
 package com.starrocks.sql.optimizer.operator.stream;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Objects;
 
 public class PhysicalStreamJoinOperator extends PhysicalStreamOperator {
@@ -51,6 +55,17 @@ public class PhysicalStreamJoinOperator extends PhysicalStreamOperator {
 
     public String getJoinHint() {
         return joinHint;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> entryList = Lists.newArrayList();
+        for (OptExpression input : inputs) {
+            for (ColumnOutputInfo entry : input.getRowOutputInfo().getColumnOutputInfo()) {
+                entryList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
+            }
+        }
+        return new RowOutputInfo(entryList);
     }
 
     @Override

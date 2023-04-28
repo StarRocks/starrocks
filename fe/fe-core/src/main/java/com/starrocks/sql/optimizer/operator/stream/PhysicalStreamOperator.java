@@ -21,7 +21,7 @@ import com.starrocks.sql.optimizer.rule.mv.KeyInference;
 import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
 import com.starrocks.sql.optimizer.rule.mv.ModifyInference;
 
-public class PhysicalStreamOperator extends PhysicalOperator {
+public abstract class PhysicalStreamOperator extends PhysicalOperator {
 
     private final MVOperatorProperty property = new MVOperatorProperty();
 

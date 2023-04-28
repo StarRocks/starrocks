@@ -82,7 +82,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_basic) {
 
     // Take drivers from queue.
     for (auto* out_driver : out_drivers) {
-        auto maybe_driver = queue.take();
+        auto maybe_driver = queue.take(true);
         ASSERT_TRUE(maybe_driver.ok());
         ASSERT_EQ(out_driver, maybe_driver.value());
     }
@@ -124,7 +124,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_cancel) {
 
     for (size_t i = 0; i < out_drivers.size(); i++) {
         ops_before_get[i]();
-        auto maybe_driver = queue.take();
+        auto maybe_driver = queue.take(true);
         ASSERT_TRUE(maybe_driver.ok());
         ASSERT_EQ(out_drivers[i], maybe_driver.value());
     }
@@ -139,7 +139,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_take_block) {
     _set_driver_level(driver1.get(), 1);
 
     auto consumer_thread = std::make_shared<std::thread>([&queue, &driver1] {
-        auto maybe_driver = queue.take();
+        auto maybe_driver = queue.take(true);
         ASSERT_TRUE(maybe_driver.ok());
         ASSERT_EQ(driver1.get(), maybe_driver.value());
     });
@@ -155,7 +155,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_take_close) {
     QuerySharedDriverQueue queue;
 
     auto consumer_thread = std::make_shared<std::thread>([&queue] {
-        auto maybe_driver = queue.take();
+        auto maybe_driver = queue.take(true);
         ASSERT_TRUE(maybe_driver.status().is_cancelled());
     });
 
@@ -263,7 +263,7 @@ TEST_F(WorkGroupDriverQueueTest, test_basic) {
 
     // Take drivers from queue.
     for (auto* out_driver : out_drivers) {
-        auto maybe_driver = queue.take();
+        auto maybe_driver = queue.take(true);
         ASSERT_TRUE(maybe_driver.ok());
         ASSERT_EQ(out_driver, maybe_driver.value());
     }
@@ -279,7 +279,7 @@ TEST_F(WorkGroupDriverQueueTest, test_take_block) {
     driver1->set_workgroup(_wg1);
 
     auto consumer_thread = std::make_shared<std::thread>([&queue, &driver1] {
-        auto maybe_driver = queue.take();
+        auto maybe_driver = queue.take(true);
         ASSERT_TRUE(maybe_driver.ok());
         ASSERT_EQ(driver1.get(), maybe_driver.value());
     });
@@ -295,7 +295,7 @@ TEST_F(WorkGroupDriverQueueTest, test_take_close) {
     WorkGroupDriverQueue queue;
 
     auto consumer_thread = std::make_shared<std::thread>([&queue] {
-        auto maybe_driver = queue.take();
+        auto maybe_driver = queue.take(true);
         ASSERT_TRUE(maybe_driver.status().is_cancelled());
     });
 

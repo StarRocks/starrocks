@@ -705,6 +705,8 @@ Status JsonReader::_read_and_parse_json() {
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         ASSIGN_OR_RETURN(_parser_buf, stream_file->pipe()->read());
 
+        _state->update_num_bytes_scan_from_source(_parser_buf->remaining());
+
         if (_parser_buf->capacity < _parser_buf->remaining() + simdjson::SIMDJSON_PADDING) {
             // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
             // Hence, a re-allocation is needed if the space is not enough.

@@ -16,23 +16,28 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class PhysicalDecodeOperator extends PhysicalOperator {
-    private final ImmutableMap<Integer, Integer> dictToStrings;
+    private final ImmutableMap<ColumnRefOperator, ColumnRefOperator> dictToStrings;
     private final Map<ColumnRefOperator, ScalarOperator> stringFunctions;
 
-    public PhysicalDecodeOperator(ImmutableMap<Integer, Integer> dictToStrings,
+    public PhysicalDecodeOperator(ImmutableMap<ColumnRefOperator, ColumnRefOperator> dictToStrings,
                                   Map<ColumnRefOperator, ScalarOperator> stringFunctions) {
         super(OperatorType.PHYSICAL_DECODE);
         this.dictToStrings = dictToStrings;
@@ -44,7 +49,8 @@ public class PhysicalDecodeOperator extends PhysicalOperator {
     // Some functions end up not being used, or some functions generated in intermediate,
     // and we need to remove them
     private void removeUnusedFunction() {
-        Set<Integer> dictIds = this.dictToStrings.keySet();
+        Set<Integer> dictIds = this.dictToStrings.keySet().stream()
+                .map(ColumnRefOperator::getId).collect(Collectors.toSet());
         Map<Integer, ScalarOperator> dictToFunctions = Maps.newHashMap();
         // build dictionary-id to string-function mapping
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : stringFunctions.entrySet()) {
@@ -103,11 +109,29 @@ public class PhysicalDecodeOperator extends PhysicalOperator {
     }
 
     public ImmutableMap<Integer, Integer> getDictToStrings() {
-        return dictToStrings;
+        Map<Integer, Integer> res = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : dictToStrings.entrySet()) {
+            res.put(entry.getKey().getId(), entry.getValue().getId());
+        }
+        return ImmutableMap.copyOf(res);
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getStringFunctions() {
         return stringFunctions;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        RowOutputInfo childRow = inputs.get(0).getRowOutputInfo();
+        List<ColumnOutputInfo> cols = Lists.newArrayList();
+        for (ColumnOutputInfo col : childRow.getColumnOutputInfo()) {
+            if (dictToStrings.containsKey(col.getColumnRef())) {
+                cols.add(new ColumnOutputInfo(dictToStrings.get(col.getColumnRef()), col.getColumnRef()));
+            } else {
+                cols.add(new ColumnOutputInfo(col.getColumnRef(), col.getColumnRef()));
+            }
+        }
+        return new RowOutputInfo(cols, dictToStrings.values());
     }
 
     @Override
@@ -127,6 +151,11 @@ public class PhysicalDecodeOperator extends PhysicalOperator {
 
     @Override
     public ColumnRefSet getUsedColumns() {
-        return new ColumnRefSet();
+        ColumnRefSet columnRefSet = new ColumnRefSet();
+        columnRefSet.union(dictToStrings.keySet());
+        for (ScalarOperator scalarOperator : stringFunctions.values()) {
+            columnRefSet.union(scalarOperator.getUsedColumns());
+        }
+        return columnRefSet;
     }
 }
