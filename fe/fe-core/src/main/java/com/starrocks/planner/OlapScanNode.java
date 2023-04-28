@@ -625,6 +625,13 @@ public class OlapScanNode extends ScanNode {
                     output.append(prefix).append("- ").append(col.toString()).append("\n");
                 }
             }
+
+            if (!bucketColumns.isEmpty() && FeConstants.showLocalShuffleColumnsInExplain) {
+                output.append(prefix).append("LocalShuffleColumns:\n");
+                for (ColumnRefOperator col : bucketColumns) {
+                    output.append(prefix).append("- ").append(col.toString()).append("\n");
+                }
+            }
         }
 
         return output.toString();
