@@ -181,9 +181,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             // check used percent after clone
             double srcUsedPercent = (double) (srcTotalUsedCapacity - replicaSize) / srcTotalCapacity;
             double destUsedPercent = (double) (destTotalUsedCapacity + replicaSize) / destTotalCapacity;
-            if ((destUsedPercent > (Config.storage_flood_stage_usage_percent / 100.0)) ||
-                    ((destTotalCapacity - destTotalUsedCapacity - replicaSize) <
-                            Config.storage_flood_stage_left_capacity_bytes)) {
+            if (DiskInfo.exceedLimit(destTotalCapacity - destTotalUsedCapacity - replicaSize,
+                    destTotalCapacity, false)) {
                 throw new SchedException(SchedException.Status.UNRECOVERABLE, "dest be disk used exceed limit");
             }
             if (srcUsedPercent < destUsedPercent) {
@@ -219,8 +218,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     }
 
                     double usedPercent = (double) totalUsedCapacity / totalCapacity;
-                    if ((usedPercent > (Config.storage_flood_stage_usage_percent / 100.0)) ||
-                            ((totalCapacity - totalUsedCapacity) < Config.storage_flood_stage_left_capacity_bytes)) {
+                    if (DiskInfo.exceedLimit(totalCapacity - totalUsedCapacity,
+                            totalCapacity, false)) {
                         throw new SchedException(SchedException.Status.UNRECOVERABLE, "be disk used exceed limit");
                     }
 
@@ -248,8 +247,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     }
 
                     double usedPercent = (double) totalUsedCapacity / totalCapacity;
-                    if ((usedPercent > (Config.storage_flood_stage_usage_percent / 100.0)) ||
-                            ((totalCapacity - totalUsedCapacity) < Config.storage_flood_stage_left_capacity_bytes)) {
+                    if (DiskInfo.exceedLimit(totalCapacity - totalUsedCapacity,
+                            totalCapacity, false)) {
                         throw new SchedException(SchedException.Status.UNRECOVERABLE, "be disk used exceed limit");
                     }
 
@@ -1186,7 +1185,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         // NOTICE: state has been changed, the tablet must be selected
                         // set dest beId and pathHash
                         if (!isLocalBalance) {
-                            //round robin to select dest be path
+                            // round-robin to select dest be path
                             Pair<List<Long>, Integer> destPaths = beDisks.get(destTablets.first);
                             Long pathHash = destPaths.first.get(destPaths.second);
                             destPaths.second = (destPaths.second + 1) % destPaths.first.size();
@@ -1749,8 +1748,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             double destUsedPercent = (double) (destCap.second + size) / destCap.first;
 
             // first check dest be|path capacity limit
-            if ((destUsedPercent > (Config.storage_flood_stage_usage_percent / 100.0)) ||
-                    ((destCap.first - destCap.second - size) < Config.storage_flood_stage_left_capacity_bytes)) {
+            if (DiskInfo.exceedLimit(destCap.first - destCap.second - size,
+                    destCap.first, false)) {
                 return false;
             }
 

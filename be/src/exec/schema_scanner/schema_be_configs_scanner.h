@@ -16,6 +16,7 @@
 
 #include <cstdint>
 
+#include "common/configbase.h"
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
 
@@ -33,7 +34,7 @@ private:
     Status fill_chunk(ChunkPtr* chunk);
 
     int64_t _be_id{0};
-    std::vector<std::pair<std::string, std::string>> _infos;
+    std::vector<config::ConfigInfo> _infos;
     size_t _cur_idx{0};
     static SchemaScanner::ColumnDesc _s_columns[];
 };

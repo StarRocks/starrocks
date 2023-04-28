@@ -14,11 +14,14 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -82,6 +85,18 @@ public class PhysicalWindowOperator extends PhysicalOperator {
 
     public boolean isUseHashBasedPartition() {
         return useHashBasedPartition;
+    }
+
+    @Override
+    public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
+        List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : analyticCall.entrySet()) {
+            columnOutputInfoList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
+        }
+        for (ColumnOutputInfo entry : inputs.get(0).getRowOutputInfo().getColumnOutputInfo()) {
+            columnOutputInfoList.add(new ColumnOutputInfo(entry.getColumnRef(), entry.getColumnRef()));
+        }
+        return new RowOutputInfo(columnOutputInfoList);
     }
 
     @Override

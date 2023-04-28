@@ -773,6 +773,10 @@ public abstract class AstVisitor<R, C> {
         return visitNode(clause, context);
     }
 
+    public R visitCleanTabletSchedQClause(CleanTabletSchedQClause clause, C context) {
+        return visitNode(clause, context);
+    }
+
     public R visitModifyFrontendHostClause(ModifyFrontendAddressClause clause, C context) {
         return visitNode(clause, context);
     }
