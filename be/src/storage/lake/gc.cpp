@@ -26,6 +26,7 @@
 #include "fs/fs.h"
 #include "fs/rapidjson_stream_adapter.h"
 #include "gutil/stl_util.h"
+#include "json2pb/pb_to_json.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -134,6 +135,39 @@ static Status write_orphan_list_file(const std::set<std::string>& orphans, Writa
         return os.status();
     }
     return file->close();
+}
+
+static Status dump_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_location) {
+    ASSIGN_OR_RETURN(auto dump_file, FileSystem::Default()->new_writable_file(
+                             fmt::format("tablet_metadata_dump.{}", time(NULL))));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
+    auto metadata_root_location = join_path(root_location, kMetadataDirectoryName);
+    auto iter_st = fs->iterate_dir(metadata_root_location, [&](std::string_view name) {
+        if (is_tablet_metadata(name)) {
+            auto path = join_path(metadata_root_location, name);
+            auto metadata_or = tablet_mgr->get_tablet_metadata(path, false);
+            if (!metadata_or.ok() && !metadata_or.status().is_not_found()) {
+                dump_file->append(fmt::format("Fail to read tablet metadata {}\n", path));
+            } else if (metadata_or.ok()) {
+                auto metadata = std::move(metadata_or).value();
+                json2pb::Pb2JsonOptions options;
+                std::string json;
+                std::string error;
+                if (!json2pb::ProtoMessageToJson(*metadata, &json, options, &error)) {
+                    dump_file->append(fmt::format("Fail to convert {} to json: {}", path, error));
+                } else {
+                    dump_file->append(json);
+                    dump_file->append("\n");
+                }
+            }
+        }
+        return true;
+    });
+
+    if (!iter_st.ok()) {
+        dump_file->append(fmt::format("Failt o list {}: {}", metadata_root_location, iter_st.to_string()));
+    }
+    return iter_st;
 }
 
 static Status delete_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_location,
@@ -284,12 +318,16 @@ static Status drop_disk_cache(std::string_view root_location) {
 }
 
 Status metadata_gc(std::string_view root_location, TabletManager* tablet_mgr, int64_t min_active_txn_id) {
-    const auto owned_tablets = tablet_mgr->owned_tablets();
-    Status ret;
-    ret.update(delete_tablet_metadata(tablet_mgr, root_location, owned_tablets));
-    ret.update(delete_txn_log(root_location, owned_tablets, min_active_txn_id));
-    ret.update(drop_disk_cache(root_location));
-    return ret;
+    if (config::experimental_lake_gc_dump_tablet_metadata) {
+        return dump_tablet_metadata(tablet_mgr, root_location);
+    } else {
+        const auto owned_tablets = tablet_mgr->owned_tablets();
+        Status ret;
+        ret.update(delete_tablet_metadata(tablet_mgr, root_location, owned_tablets));
+        ret.update(delete_txn_log(root_location, owned_tablets, min_active_txn_id));
+        ret.update(drop_disk_cache(root_location));
+        return ret;
+    }
 }
 
 // To developers: |tablet_metadatas| must be a sorted container to use STLSetDifference
