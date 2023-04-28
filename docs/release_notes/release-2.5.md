@@ -1,5 +1,41 @@
 # StarRocks version 2.5
 
+Release date: April 28, 2023
+
+## 2.5.5
+
+### New features
+
+Added a metric to monitor the tablet status of Primary Key tables:
+
+- Added the FE metric `err_state_metric`.
+- Added the `ErrorStateTabletNum` column to the output of `SHOW PROC '/statistic/'` to display the number of **err_state** tablets.
+- Added the `ErrorStateTablets` column to the output of `SHOW PROC '/statistic/<db_id>/'` to display the IDs of **err_state** tablets.
+
+For more information, see [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW%20PROC.md).
+
+### Improvements
+
+- Optimized the disk balancing speed when multiple BEs are added. [# 19418](https://github.com/StarRocks/starrocks/pull/19418)
+- Optimized the inference of `storage_medium`. When BEs use both SSD and HDD as storage devices, if the property `storage_cooldown_time` is specified, StarRocks sets `storage_medium` to `SSD`. Otherwise, StarRocks sets `storage_medium` to `HDD`. [#18649](https://github.com/StarRocks/starrocks/pull/18649)
+- Optimized the performance of Unique Key tables by forbidding the collection of statistics from value columns. [#19563](https://github.com/StarRocks/starrocks/pull/19563)
+
+### Bug Fixes
+
+- For Colocation tables, the replica status can be manually specified as `bad` by using statements like `ADMIN SET REPLICA STATUS PROPERTIES ("tablet_id" = "10003", "backend_id" = "10001", "status" = "bad");`. If the number of BEs is less than or equal to the number of replicas, the corrupted replica cannot be repaired. [# 17876](https://github.com/StarRocks/starrocks/issues/17876)
+- After a BE is started, its process exists but the BE port cannot be enabled. [# 19347](https://github.com/StarRocks/starrocks/pull/19347)
+- Wrong results are returned for aggregate queries whose subquery is nested with a window function. [# 19725](https://github.com/StarRocks/starrocks/issues/19725)
+- `auto_refresh_partitions_limit` does not take effect when the materialized view (MV) is refreshed for the first time. As a result, all the partitions are refreshed. [# 19759](https://github.com/StarRocks/starrocks/issues/19759)
+- An error occurs when querying a CSV Hive external table whose array data is nested with complex data such as MAP and STRUCT. [# 20233](https://github.com/StarRocks/starrocks/pull/20233)
+- Queries that use Spark connector time out. [# 20264](https://github.com/StarRocks/starrocks/pull/20264)
+- If one replica of a two-replica table is corrupted, the table cannot recover. [# 20681](https://github.com/StarRocks/starrocks/pull/20681)
+- Query failure caused by MV query rewrite failure. [# 19549](https://github.com/StarRocks/starrocks/issues/19549)
+- The metric interface expires due to database lock. [# 20790](https://github.com/StarRocks/starrocks/pull/20790)
+- Wrong results are returned for Broadcast Join. [# 20952](https://github.com/StarRocks/starrocks/issues/20952)
+- NPE is returned when an unsupported data type is used in CREATE TABLE. [# 20999](https://github.com/StarRocks/starrocks/issues/20999)
+- The issue caused by using window_funnel() with the Query Cache feature. [# 21474](https://github.com/StarRocks/starrocks/issues/21474)
+- Optimization plan selection takes an unexpectedly long time after the CTE is rewritten. [# 16515](https://github.com/StarRocks/starrocks/pull/16515)
+
 ## 2.5.4
 
 Release date: April 4, 2023
