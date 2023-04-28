@@ -895,8 +895,7 @@ CONF_String(block_cache_engine, "starcache");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
-CONF_mInt32(max_l0_wal_version_num, "200");
-CONF_mInt64(l0_max_mem_usage, "67108864"); // 64MB
+CONF_mInt64(l0_max_mem_usage, "67108864");  // 64MB
 CONF_mInt64(max_tmp_l1_num, "10");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
