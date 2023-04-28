@@ -49,7 +49,9 @@ public class JDBCConnector implements Connector {
         validate(JDBCResource.PASSWORD);
         validate(JDBCResource.DRIVER_URL);
 
-        computeDriverChecksum();
+        if (this.properties.get(JDBCResource.CHECK_SUM) == null) {
+            computeDriverChecksum();
+        }
     }
 
     private void validate(String propertyKey) {
