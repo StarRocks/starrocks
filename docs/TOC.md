@@ -90,6 +90,7 @@
     + [Deploy a shared-data StarRocks cluster](./administration/deploy_shared_data.md)
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
     + Deploy StarRocks on Kubernetes
+      + [Deploy StarRocks on Kuber with Minikube](./administration/deploy_on_kubernetes_with_minikube.md)
       + [Deploy StarRocks with Operator](./administration/sr_operator.md)
       + [Deploy StarRocks with Helm](./administration/helm.md)
     + [Deploy CN](./administration/deploy_cn.md)
