@@ -37,6 +37,7 @@
 #include "storage/olap_common.h"
 #include "testutil/sync_point.h"
 #include "util/raw_container.h"
+#include "util/uid_util.h"
 
 namespace starrocks::lake {
 
@@ -139,7 +140,7 @@ static Status write_orphan_list_file(const std::set<std::string>& orphans, Writa
 
 static Status dump_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_location) {
     ASSIGN_OR_RETURN(auto dump_file, FileSystem::Default()->new_writable_file(
-                             fmt::format("tablet_metadata_dump.{}", time(NULL))));
+                             fmt::format("tablet_metadata_dump_{}_{}", generate_uuid_string(), time(NULL))));
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
     auto metadata_root_location = join_path(root_location, kMetadataDirectoryName);
     auto iter_st = fs->iterate_dir(metadata_root_location, [&](std::string_view name) {
