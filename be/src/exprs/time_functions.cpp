@@ -610,6 +610,28 @@ DEFINE_UNARY_FN_WITH_IMPL(week_of_year_with_default_modeImpl, t) {
 }
 DEFINE_TIME_UNARY_FN(week_of_year_with_default_mode, TYPE_DATETIME, TYPE_INT);
 
+DEFINE_UNARY_FN_WITH_IMPL(week_of_year_isoImpl, t) {
+    
+    auto date_value = (DateValue)t;
+    int year = 0, month = 0, day = 0;
+    date_value.to_date(&year, &month, &day);
+
+    uint week_behaviour = TimeFunctions::week_mode(1);
+    uint week = TimeFunctions::compute_week(year, month, day, week_behaviour);
+
+    if (week == 0) {
+        // Calculate the last day of the previous year.
+        int last_year = year - 1;
+        int last_month = 12;
+        int last_day = 31;
+        week = TimeFunctions::compute_week(last_year, last_month, last_day, week_behaviour);
+    }
+
+    return week;
+}
+
+DEFINE_TIME_UNARY_FN(week_of_year_iso, TYPE_DATETIME, TYPE_INT);
+
 DEFINE_BINARY_FUNCTION_WITH_IMPL(week_of_year_with_modeImpl, t, m) {
     auto date_value = (DateValue)t;
     int year = 0, month = 0, day = 0;
