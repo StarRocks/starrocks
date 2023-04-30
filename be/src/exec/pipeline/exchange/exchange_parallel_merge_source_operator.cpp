@@ -74,9 +74,7 @@ Status ExchangeParallelMergeSourceOperatorFactory::prepare(RuntimeState* state) 
 
 OperatorPtr ExchangeParallelMergeSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     ++_stream_recvr_cnt;
-    return std::make_shared<ExchangeParallelMergeSourceOperator>(this, _id, _plan_node_id, driver_sequence, _num_sender,
-                                                                 _row_desc, _sort_exec_exprs, _is_asc_order,
-                                                                 _nulls_first);
+    return std::make_shared<ExchangeParallelMergeSourceOperator>(this, _id, _plan_node_id, driver_sequence);
 }
 
 void ExchangeParallelMergeSourceOperatorFactory::close(RuntimeState* state) {
