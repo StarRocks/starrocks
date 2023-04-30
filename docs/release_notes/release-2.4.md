@@ -1,5 +1,39 @@
 # StarRocks version 2.4
 
+## 2.4.5
+
+Release date: April 21, 2023
+
+### Improvements
+
+- Forbade the List Partition syntax because it may cause errors in upgrading metadata. [#15401](https://github.com/StarRocks/starrocks/pull/15401)
+- Supports BITMAP, HLL, and PERCENTILE types for materialized views. [#15731](https://github.com/StarRocks/starrocks/pull/15731)
+- Optimized the inference of `storage_medium`. When BEs use both SSD and HDD as storage devices, if the property `storage_cooldown_time` is specified, StarRocks sets `storage_medium` to `SSD`. Otherwise, StarRocks sets `storage_medium` to `HDD`. [#18649](https://github.com/StarRocks/starrocks/pull/18649)
+- Optimized the accuracy of thread dump. [#16748](https://github.com/StarRocks/starrocks/pull/16748)
+- Optimized load efficiency by triggering metadata compaction before loading. [#19347](https://github.com/StarRocks/starrocks/pull/19347)
+- Optimized the Stream Load planner timeout. [#18992](https://github.com/StarRocks/starrocks/pull/18992/files)
+- Optimized the Unique key table performance by forbidding the collection of statistics from value columns. [#19563](https://github.com/StarRocks/starrocks/pull/19563)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- NPE is returned when an unsupported data type is used in CREATE TABLE. [# 20999](https://github.com/StarRocks/starrocks/issues/20999)
+- Wrong results are returned to queries using Broadcast Join with the short-circuit. [#20952](https://github.com/StarRocks/starrocks/issues/20952)
+- The disk occupation problem caused by the wrong data truncate logic. [#20590](https://github.com/StarRocks/starrocks/pull/20590)
+- The AuditLoader plugin can neither be installed nor deleted. [#20468](https://github.com/StarRocks/starrocks/issues/20468)
+- If an exception is thrown when a tablet is being scheduled, other tablets in the same batch will never be scheduled. [#20681](https://github.com/StarRocks/starrocks/pull/20681)
+- Unknown Error is returned when an unsupported SQL function is used in the creation of a synchronous materialized view. [#20348](https://github.com/StarRocks/starrocks/issues/20348)
+- Multiple COUNT DISTINCT calculations are incorrectly rewritten. [#19714](https://github.com/StarRocks/starrocks/pull/19714)
+- Wrong results are returned to queries on the tablet that is in compaction. [#20084](https://github.com/StarRocks/starrocks/issues/20084)
+- Wrong results are returned to queries with aggregation. [#19725](https://github.com/StarRocks/starrocks/issues/19725)
+- No error message is returned when loading NULL parquet data into NOT NULL columns. [#19885](https://github.com/StarRocks/starrocks/pull/19885)
+- The query concurrency metric decreases slowly when the concurrency limit of a resource group is continuously reached. [#19363](https://github.com/StarRocks/starrocks/pull/19363)
+- FE fails to start when replaying the `InsertOverwriteJob` state change log. [#19061](https://github.com/StarRocks/starrocks/issues/19061)
+- The Primary Key table deadlock. [#18488](https://github.com/StarRocks/starrocks/pull/18488)
+- For Colocation tables, the replica status can be manually specified as `bad` by using statements like `ADMIN SET REPLICA STATUS PROPERTIES ("tablet_id" = "10003", "backend_id" = "10001", "status" = "bad");`. If the number of BEs is less than or equal to the number of replicas, the corrupted replica cannot be repaired. [#17876](https://github.com/StarRocks/starrocks/issues/17876)
+- Issues caused by ARRAY-related functions. [#18556](https://github.com/StarRocks/starrocks/pull/18556)
+
 ## 2.4.4
 
 Release date: February 22, 2023
@@ -55,7 +89,7 @@ The following bugs are fixed:
 - Memory leak caused by a materialized view QeProcessorImpl issue. [#15699](https://github.com/StarRocks/starrocks/pull/15699)
 - The results of queries with `limit`  are inconsistent. [#13574](https://github.com/StarRocks/starrocks/pull/13574)
 - Memory leak caused by INSERT. [#14718](https://github.com/StarRocks/starrocks/pull/14718)
-- Primary Key tables executes Tablet Migration。[#13720](https://github.com/StarRocks/starrocks/pull/13720)
+- Primary Key tables executes Tablet Migration.[#13720](https://github.com/StarRocks/starrocks/pull/13720)
 - Broker Kerberos tickets timeout during Broker Load. [#16149](https://github.com/StarRocks/starrocks/pull/16149)
 - The `nullable` information is inferred incorrectly in the view of a table. [#15744](https://github.com/StarRocks/starrocks/pull/15744)
 
@@ -141,7 +175,7 @@ Release date: October 20, 2022
 
 ### New Features
 
-- Supports creating asynchronous materialized views based on multiple base tables to accelerate queries with JOIN operations. Asynchronous materialized views support all [Data Models](../table_design/Data_model.md). For more information, see [Materialized View](../using_starrocks/Materialized_view.md).
+- Supports creating asynchronous materialized views based on multiple base tables to accelerate queries with JOIN operations. Asynchronous materialized views support all [table types](../table_design/table_types/table_types.md). For more information, see [Materialized View](../using_starrocks/Materialized_view.md).
 
 - Supports overwriting data via INSERT OVERWRITE. For more information, see [Load data using INSERT](../loading/InsertInto.md).
 
@@ -159,7 +193,7 @@ Release date: October 20, 2022
 
 - Supports FDQN access: now you can use domain name or the combination of hostname and port as the unique identification of a BE or an FE node. This prevents access failures caused by changing IP addresses. For more information, see [Enable FQDN Access](../administration/enable_fqdn.md).
 
-- flink-connector-starrocks supports Primary Key model partial update. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
+- flink-connector-starrocks supports Primary Key table partial update. For more information, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
 
 - Provides the following new functions:
 
@@ -168,7 +202,7 @@ Release date: October 20, 2022
 
 ### Improvements
 
-- The Primary Key model supports flushing VARCHAR-type primary key indexes to disks. From version 2.4.0, the Primary Key model supports the same data types for primary key indexes regardless of whether persistent primary key index is turned on or not.
+- The Primary Key table supports flushing VARCHAR-type primary key indexes to disks. From version 2.4.0, the Primary Key table supports the same data types for primary key indexes regardless of whether persistent primary key index is turned on or not.
 
 - Optimized the query performance on external tables.
 
@@ -187,7 +221,7 @@ Release date: October 20, 2022
 
 - Adjusted the mechanisms of default PageCache size calculation and memory consistency check to avoid OOM issues during multi-instance deployments.
 
-- Improved the performance of large-size batch load on PRIMARY KEY model up to two times by removing final_merge operations.
+- Improved the performance of large-size batch load on Primary Key tables up to two times by removing final_merge operations.
 
 - Supports a Stream Load transaction interface to implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Apache Flink® and Apache Kafka®, improving the performance of highly concurrent stream loads.
 

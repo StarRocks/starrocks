@@ -266,6 +266,8 @@ public:
 
     int64_t num_rows_load_unselected() const noexcept { return _num_rows_load_unselected.load(); }
 
+    int64_t num_bytes_scan_from_source() const noexcept { return _num_bytes_scan_from_source.load(); }
+
     void update_num_bytes_load_from_source(int64_t bytes_load) { _num_bytes_load_from_source.fetch_add(bytes_load); }
 
     void update_num_rows_load_from_source(int64_t num_rows) { _num_rows_load_total_from_source.fetch_add(num_rows); }
@@ -278,6 +280,8 @@ public:
 
     void update_num_rows_load_unselected(int64_t num_rows) { _num_rows_load_unselected.fetch_add(num_rows); }
 
+    void update_num_bytes_scan_from_source(int64_t scan_bytes) { _num_bytes_scan_from_source.fetch_add(scan_bytes); }
+
     void update_report_load_status(TReportExecStatusParams* load_params) {
         load_params->__set_loaded_rows(num_rows_load_sink());
         load_params->__set_sink_load_bytes(num_bytes_load_sink());
@@ -285,6 +289,7 @@ public:
         load_params->__set_source_load_bytes(num_bytes_load_from_source());
         load_params->__set_filtered_rows(num_rows_load_filtered());
         load_params->__set_unselected_rows(num_rows_load_unselected());
+        load_params->__set_source_scan_bytes(num_bytes_scan_from_source());
     }
 
     void set_per_fragment_instance_idx(int idx) { _per_fragment_instance_idx = idx; }
@@ -311,6 +316,7 @@ public:
     int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
 
     int64_t spill_operator_max_bytes() const { return _query_options.spill_operator_max_bytes; }
+    int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
@@ -467,8 +473,9 @@ private:
     std::atomic<int64_t> _num_rows_load_sink{0};  // total rows sink to storage
     std::atomic<int64_t> _num_bytes_load_sink{0}; // total bytes sink to storage
 
-    std::atomic<int64_t> _num_rows_load_filtered{0};   // unqualified rows
-    std::atomic<int64_t> _num_rows_load_unselected{0}; // rows filtered by predicates
+    std::atomic<int64_t> _num_rows_load_filtered{0};     // unqualified rows
+    std::atomic<int64_t> _num_rows_load_unselected{0};   // rows filtered by predicates
+    std::atomic<int64_t> _num_bytes_scan_from_source{0}; // total bytes scan from source node
 
     std::atomic<int64_t> _num_print_error_rows{0};
     std::atomic<int64_t> _num_log_rejected_rows{0}; // rejected rows
@@ -529,6 +536,15 @@ private:
             break;                                                                                                  \
         case MemTracker::SCHEMA_CHANGE_TASK:                                                                        \
             str << "You can change the limit by modify BE config [memory_limitation_per_thread_for_schema_change]"; \
+            break;                                                                                                  \
+        case MemTracker::RESOURCE_GROUP:                                                                            \
+            /* TODO: make default_wg configuable. */                                                                \
+            if (tracker->label() == "default_wg") {                                                                 \
+                str << "Mem usage has exceed the limit of query pool";                                              \
+            } else {                                                                                                \
+                str << "Mem usage has exceed the limit of the resource group [" << tracker->label() << "]. "        \
+                    << "You can change the limit by modify [mem_limit] of this group";                              \
+            }                                                                                                       \
             break;                                                                                                  \
         default:                                                                                                    \
             break;                                                                                                  \

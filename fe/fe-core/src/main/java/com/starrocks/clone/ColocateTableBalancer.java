@@ -52,6 +52,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletScheduler.AddResult;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -61,7 +62,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -209,7 +212,6 @@ public class ColocateTableBalancer extends FrontendDaemon {
      */
     private final Map<GroupId, ColocateRelocationInfo> group2ColocateRelocationInfo = Maps.newConcurrentMap();
 
-
     /*
      * Each round, we do 2 steps:
      * 1. Relocate and balance
@@ -243,12 +245,8 @@ public class ColocateTableBalancer extends FrontendDaemon {
     @Override
     protected void runAfterCatalogReady() {
         if (!Config.tablet_sched_disable_colocate_balance) {
-            boolean isAnyGroupChanged = relocateAndBalancePerGroup();
-            if (!isAnyGroupChanged) {
-                // Only do overall balance after all groups are balanced from per group view.
-                // This may add some balance overhead, but it can make the balance logic more clear.
-                relocateAndBalanceAllGroups();
-            }
+            relocateAndBalancePerGroup();
+            relocateAndBalanceAllGroups();
         }
         matchGroup();
     }
@@ -500,7 +498,6 @@ public class ColocateTableBalancer extends FrontendDaemon {
         destInfo.replicaNumToGroupsMap.computeIfAbsent(numOfReplicas, k -> new HashSet<>()).add(groupId);
     }
 
-
     /**
      * Balance replica distribution from overall view.
      * First we collect the replica distribution info of all colocate groups for each backend, and put them into
@@ -520,14 +517,6 @@ public class ColocateTableBalancer extends FrontendDaemon {
         }
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        Map<GroupId, Long> group2InScheduleTabletNum =
-                globalStateMgr.getTabletScheduler().getTabletsNumInScheduleForEachCG();
-        if (!group2InScheduleTabletNum.isEmpty()) {
-            // For simplicity, won't make new relocation decision if there is still
-            // colocate relocation tasks in schedule.
-            return;
-        }
-
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         ColocateTableIndex colocateIndex = globalStateMgr.getColocateTableIndex();
         Set<GroupId> allGroups = colocateIndex.getAllGroupIds();
@@ -543,8 +532,8 @@ public class ColocateTableBalancer extends FrontendDaemon {
         Map<GroupId, List<GroupId>> groupToCoGroupsInOtherDb =
                 initGroupToCoGroupsInOtherDbMap(colocateIndex, allGroups);
         Map<GroupId, List<GroupId>> filteredMap = groupToCoGroupsInOtherDb.entrySet().stream()
-                        .filter(e -> !e.getValue().isEmpty())
-                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                .filter(e -> !e.getValue().isEmpty())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
         if (!filteredMap.isEmpty()) {
             LOG.info("groups that have colocate groups in other databases: {}", filteredMap);
         }
@@ -597,7 +586,7 @@ public class ColocateTableBalancer extends FrontendDaemon {
                 // `totalNumOfReplicasAssigned` of dest backend closer to `avgNumOfReplicasPerBackend`
                 srcNumOfReplicasList.sort((replicaNum1, replicaNum2) -> Math.toIntExact(
                         Math.abs(replicaNum1 + destCurrentTotalReplicaNum - avgNumOfReplicasPerBackend) -
-                        Math.abs(replicaNum2 + destCurrentTotalReplicaNum - avgNumOfReplicasPerBackend)));
+                                Math.abs(replicaNum2 + destCurrentTotalReplicaNum - avgNumOfReplicasPerBackend)));
                 for (int numOfReplicas : srcNumOfReplicasList) {
                     List<GroupId> candidateGroupList =
                             new ArrayList<>(srcInfo.replicaNumToGroupsMap.get(numOfReplicas));
@@ -625,11 +614,18 @@ public class ColocateTableBalancer extends FrontendDaemon {
                                 // from backend `srcInfo.backendId` to backend `destInfo.backendId`
                                 backendSetForBucket.remove(srcInfo.backendId);
                                 backendSetForBucket.add(destInfo.backendId);
+                                // Here we check whether this move will break the per group balanced state,
+                                // if it will, we won't make this move
+                                if (!checkKeepingPerGroupBalanced(backendsPerBucketSeq)) {
+                                    // restore backend set
+                                    backendsPerBucketSeq.set(bucketIdx, oldBackendSetForBucket);
+                                    continue;
+                                }
                                 result.putIfAbsent(groupId, backendsPerBucketSeq);
                                 // also need to update the distribution info statistics for following balance round
                                 updateDistInfoAfterBalanceMove(srcInfo, destInfo, numOfReplicas, groupId, bucketIdx);
                                 LOG.info("overall colocate balance for group {}, replace backend {} for " +
-                                        "bucket index {} with backend {}, original backend list: {}",
+                                                "bucket index {} with backend {}, original backend list: {}",
                                         groupId, srcInfo.backendId, bucketIdx, destInfo.backendId,
                                         oldBackendSetForBucket);
                                 // balance one bucket each round, need to sort `distInfoPerBackendList` and make new
@@ -649,7 +645,6 @@ public class ColocateTableBalancer extends FrontendDaemon {
                 break;
             }
         } // while(true)
-
 
         // update backends per bucket sequence for each group according to the result
         for (Map.Entry<GroupId, List<Set<Long>>> entry : result.entrySet()) {
@@ -676,6 +671,17 @@ public class ColocateTableBalancer extends FrontendDaemon {
             LOG.info("{} group(s) changed in overall colocate balance round, updated state: {}",
                     result.size(), sortDistInfoPerBackendList(distInfoPerBackendList));
         }
+    }
+
+    private boolean checkKeepingPerGroupBalanced(List<Set<Long>> backendsPerBucketSeq) {
+        // backend id -> replica num, and sorted by replica num, descending.
+        Map<Long, Long> backendToReplicaNum = backendsPerBucketSeq.stream().flatMap(Collection::stream)
+                .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+        List<Map.Entry<Long, Long>> entries =
+                backendToReplicaNum.entrySet().stream().sorted(Comparator.comparingLong(Map.Entry::getValue))
+                        .collect(Collectors.toList());
+        int lastIdx = entries.size() - 1;
+        return entries.get(lastIdx).getValue() - entries.get(0).getValue() <= 1;
     }
 
     public static boolean needToForceRepair(TabletStatus st, LocalTablet tablet, Set<Long> backendsSet) {
@@ -805,7 +811,8 @@ public class ColocateTableBalancer extends FrontendDaemon {
 
                                             // For bad replica, we ignore the size limit of scheduler queue
                                             AddResult res = tabletScheduler.addTablet(tabletCtx,
-                                                    needToForceRepair(st, tablet, bucketsSeq) /* forcefully add or not */);
+                                                    needToForceRepair(st, tablet,
+                                                            bucketsSeq) /* forcefully add or not */);
                                             if (res == AddResult.LIMIT_EXCEED) {
                                                 // tablet in scheduler exceed limit, skip this group and check next one.
                                                 LOG.info("number of scheduling tablets in tablet scheduler"
@@ -902,7 +909,8 @@ public class ColocateTableBalancer extends FrontendDaemon {
      */
     private boolean doRelocateAndBalance(GroupId groupId, Set<Long> unavailableBeIds, List<Long> availableBeIds,
                                          ColocateTableIndex colocateIndex, SystemInfoService infoService,
-                                         ClusterLoadStatistic statistic, List<List<Long>> balancedBackendsPerBucketSeq) {
+                                         ClusterLoadStatistic statistic,
+                                         List<List<Long>> balancedBackendsPerBucketSeq) {
         ColocateGroupSchema groupSchema = colocateIndex.getGroupSchema(groupId);
         int replicationNum = groupSchema.getReplicationNum();
         List<List<Long>> backendsPerBucketSeq = Lists.newArrayList(colocateIndex.getBackendsPerBucketSeq(groupId));
@@ -1072,29 +1080,32 @@ public class ColocateTableBalancer extends FrontendDaemon {
             }
         }
 
-        return backendToReplicaNum
-                .entrySet()
-                .stream()
-                .sorted((entry1, entry2) -> {
-                    if (!entry1.getValue().equals(entry2.getValue())) {
-                        return (int) (entry2.getValue() - entry1.getValue());
-                    }
-                    BackendLoadStatistic beStat1 = statistic.getBackendLoadStatistic(entry1.getKey());
-                    BackendLoadStatistic beStat2 = statistic.getBackendLoadStatistic(entry2.getKey());
-                    if (beStat1 == null || beStat2 == null) {
-                        return 0;
-                    }
-                    double loadScore1 = beStat1.getMixLoadScore();
-                    double loadScore2 = beStat2.getMixLoadScore();
-                    if (Math.abs(loadScore1 - loadScore2) < 1e-6) {
-                        return 0;
-                    } else if (loadScore2 > loadScore1) {
-                        return 1;
-                    } else {
-                        return -1;
-                    }
-                })
-                .collect(Collectors.toList());
+        List<Map.Entry<Long, Long>> entries = new ArrayList<>(backendToReplicaNum.entrySet());
+        if (!FeConstants.runningUnitTest) {
+            // to randomize the relative order of entries with the same number of replicas
+            Collections.shuffle(entries);
+        }
+        entries.sort((entry1, entry2) -> {
+            if (!entry1.getValue().equals(entry2.getValue())) {
+                return (int) (entry2.getValue() - entry1.getValue());
+            }
+            BackendLoadStatistic beStat1 = statistic.getBackendLoadStatistic(entry1.getKey());
+            BackendLoadStatistic beStat2 = statistic.getBackendLoadStatistic(entry2.getKey());
+            if (beStat1 == null || beStat2 == null) {
+                return 0;
+            }
+            double loadScore1 = beStat1.getMixLoadScore();
+            double loadScore2 = beStat2.getMixLoadScore();
+            if (Math.abs(loadScore1 - loadScore2) < 1e-6) {
+                return 0;
+            } else if (loadScore2 > loadScore1) {
+                return 1;
+            } else {
+                return -1;
+            }
+        });
+
+        return entries;
     }
 
     /*

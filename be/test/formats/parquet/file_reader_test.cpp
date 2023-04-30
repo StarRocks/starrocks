@@ -27,6 +27,7 @@
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
+#include "formats/parquet/parquet_test_util/util.h"
 #include "fs/fs.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptor_helper.h"
@@ -37,7 +38,6 @@ namespace starrocks::parquet {
 static HdfsScanStats g_hdfs_scan_stats;
 using starrocks::HdfsScannerContext;
 
-// TODO: min/max conjunct
 class FileReaderTest : public testing::Test {
 public:
     void SetUp() override { _runtime_state = _pool.add(new RuntimeState(TQueryGlobals())); }
@@ -209,50 +209,6 @@ protected:
     RuntimeState* _runtime_state = nullptr;
     ObjectPool _pool;
 };
-
-struct SlotDesc {
-    std::string name;
-    TypeDescriptor type;
-};
-
-TupleDescriptor* create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDesc* slot_descs) {
-    TDescriptorTableBuilder table_desc_builder;
-
-    TTupleDescriptorBuilder tuple_desc_builder;
-    int size = 0;
-    for (int i = 0;; i++) {
-        if (slot_descs[i].name == "") {
-            break;
-        }
-        TSlotDescriptorBuilder b2;
-        b2.column_name(slot_descs[i].name).type(slot_descs[i].type).id(i).nullable(true);
-        tuple_desc_builder.add_slot(b2.build());
-        size += 1;
-    }
-    tuple_desc_builder.build(&table_desc_builder);
-
-    std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    std::vector<bool> nullable_tuples = std::vector<bool>{true};
-    DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
-
-    RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
-    return row_desc->tuple_descriptors()[0];
-}
-
-void make_column_info_vector(const TupleDescriptor* tuple_desc, std::vector<HdfsScannerContext::ColumnInfo>* columns) {
-    columns->clear();
-    for (int i = 0; i < tuple_desc->slots().size(); i++) {
-        SlotDescriptor* slot = tuple_desc->slots()[i];
-        HdfsScannerContext::ColumnInfo c;
-        c.col_name = slot->col_name();
-        c.col_idx = i;
-        c.slot_id = slot->id();
-        c.col_type = slot->type();
-        c.slot_desc = slot;
-        columns->emplace_back(c);
-    }
-}
 
 std::unique_ptr<RandomAccessFile> FileReaderTest::_create_file(const std::string& file_path) {
     return *FileSystem::Default()->new_random_access_file(file_path);

@@ -52,6 +52,7 @@
 #include "storage/rowset/segment_writer.h" // k_segment_magic_length
 #include "storage/tablet_schema.h"
 #include "storage/type_utils.h"
+#include "storage/utils.h"
 #include "util/crc32c.h"
 #include "util/slice.h"
 
@@ -215,6 +216,19 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
     return Status::OK();
 }
 
+bool Segment::_use_segment_zone_map_filter(const SegmentReadOptions& read_options) {
+    if (!read_options.is_primary_keys || read_options.dcg_loader == nullptr) {
+        return true;
+    }
+    SCOPED_RAW_TIMER(&read_options.stats->get_delta_column_group_ns);
+    DeltaColumnGroupList dcgs;
+    TabletSegmentId tsid;
+    tsid.tablet_id = read_options.tablet_id;
+    tsid.segment_id = read_options.rowset_id + _segment_id;
+    auto st = read_options.dcg_loader->load(tsid, read_options.version, &dcgs);
+    return st.ok() && dcgs.size() == 0;
+}
+
 StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const SegmentReadOptions& read_options) {
     DCHECK(read_options.stats != nullptr);
     // trying to prune the current segment by segment-level zone map
@@ -224,8 +238,14 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
             continue;
         }
         if (!_column_readers[column_id]->segment_zone_map_filter(pair.second)) {
-            read_options.stats->segment_stats_filtered += _column_readers[column_id]->num_rows();
-            return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _fname));
+            // skip segment zonemap filter when this segment has column files link to it.
+            const TabletColumn& tablet_column = _tablet_schema->column(column_id);
+            if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
+                read_options.stats->segment_stats_filtered += _column_readers[column_id]->num_rows();
+                return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _fname));
+            } else {
+                break;
+            }
         }
     }
     return new_segment_iterator(shared_from_this(), schema, read_options);
@@ -375,8 +395,8 @@ Status Segment::new_bitmap_index_iterator(uint32_t cid, BitmapIndexIterator** it
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg) {
-    return Segment::open(_fs, dcg.column_file(), 0, TabletSchema::create_with_uid(*_tablet_schema, dcg.column_ids()),
-                         nullptr);
+    return Segment::open(_fs, dcg.column_file(parent_name(_fname)), 0,
+                         TabletSchema::create_with_uid(*_tablet_schema, dcg.column_ids()), nullptr);
 }
 
 } // namespace starrocks

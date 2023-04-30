@@ -162,6 +162,10 @@ public class MaterializedViewRewriter {
         return true;
     }
 
+    private boolean isSupportViewDeltaJoin(Table table) {
+        return table.isNativeTableOrMaterializedView() || table.isHiveTable();
+    }
+
     public OptExpression rewrite() {
         final OptExpression queryExpression = mvRewriteContext.getQueryExpression();
         final OptExpression mvExpression = materializationContext.getMvExpression();
@@ -184,7 +188,8 @@ public class MaterializedViewRewriter {
         if (materializationContext.getMvPartialPartitionPredicate() != null) {
             List<ScalarOperator> partitionPredicates =
                     getPartitionRelatedPredicates(mvPredicate, mvRewriteContext.getMaterializationContext().getMv());
-            if (partitionPredicates.stream().noneMatch(p -> p instanceof IsNullPredicateOperator)) {
+            if (partitionPredicates.stream().noneMatch(p -> (p instanceof IsNullPredicateOperator)
+                    && !((IsNullPredicateOperator) p).isNotNull())) {
                 // there is no partition column is null predicate
                 // add latest partition predicate to mv predicate
                 ScalarOperator rewritten =
@@ -199,11 +204,11 @@ public class MaterializedViewRewriter {
             List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
             // do not support external table now
             if (queryTableScanDescs.stream().anyMatch(
-                    tableScanDesc -> !tableScanDesc.getTable().isNativeTableOrMaterializedView())) {
+                    tableScanDesc -> !isSupportViewDeltaJoin(tableScanDesc.getTable()))) {
                 return null;
             }
             if (mvTableScanDescs.stream().anyMatch(
-                    tableScanDesc -> !tableScanDesc.getTable().isNativeTableOrMaterializedView())) {
+                    tableScanDesc -> !isSupportViewDeltaJoin(tableScanDesc.getTable()))) {
                 return null;
             }
 
@@ -342,6 +347,11 @@ public class MaterializedViewRewriter {
 
             OptExpression rewrittenExpression = tryRewriteForRelationMapping(rewriteContext, compensationJoinColumns);
             if (rewrittenExpression != null) {
+                // copy limit into rewritten plan
+                // limit will affect the statistics of rewritten plan
+                if (rewriteContext.getQueryExpression().getOp().hasLimit()) {
+                    rewrittenExpression.getOp().setLimit(rewriteContext.getQueryExpression().getOp().getLimit());
+                }
                 return rewrittenExpression;
             }
         }
@@ -382,9 +392,7 @@ public class MaterializedViewRewriter {
 
         // add edges to directed graph by FK-UK
         for (TableScanDesc mvTableScanDesc : mvGraph.nodes()) {
-            // now only support OlapTable
-            Preconditions.checkState(mvTableScanDesc.getTable() instanceof OlapTable);
-            OlapTable mvChildTable = (OlapTable) mvTableScanDesc.getTable();
+            Table mvChildTable = mvTableScanDesc.getTable();
             List<ForeignKeyConstraint> foreignKeyConstraints = mvChildTable.getForeignKeyConstraints();
             if (foreignKeyConstraints == null) {
                 continue;
@@ -448,17 +456,15 @@ public class MaterializedViewRewriter {
             List<Pair<String, String>> columnPairs, List<String> childKeys, List<String> parentKeys,
             EquivalenceClasses viewEquivalenceClasses,
             Multimap<ColumnRefOperator, ColumnRefOperator> constraintCompensationJoinColumns) {
-        // now only OlapTable is supported
-        Preconditions.checkState(parentTableScanDesc.getTable() instanceof OlapTable);
-        OlapTable parentOlapTable = (OlapTable) parentTableScanDesc.getTable();
-        OlapTable childTable = (OlapTable) tableScanDesc.getTable();
+        Table parentTable = parentTableScanDesc.getTable();
+        Table childTable = tableScanDesc.getTable();
         JoinOperator parentJoinType = parentTableScanDesc.getParentJoinType();
         if (parentJoinType.isInnerJoin()) {
             // to check:
             // 1. childKeys should be foreign key
             // 2. childKeys should be not null
             // 3. parentKeys should be unique
-            if (!isUniqueKeys(parentOlapTable, parentKeys)) {
+            if (!isUniqueKeys(parentTable, parentKeys)) {
                 return false;
             }
             // foreign keys are not null
@@ -468,7 +474,7 @@ public class MaterializedViewRewriter {
         } else if (parentJoinType.isLeftOuterJoin()) {
             // make sure that all join keys are in foreign keys
             // the join keys of parent table should be unique
-            if (!isUniqueKeys(parentOlapTable, parentKeys)) {
+            if (!isUniqueKeys(parentTable, parentKeys)) {
                 return false;
             }
         } else {
@@ -537,12 +543,12 @@ public class MaterializedViewRewriter {
                     mvRelationId = mvRefFactory.getRelationId(columnRef.getId());
                 }
 
-                OlapTable olapTable = (OlapTable) entry.getKey().getTable();
-                Column column = olapTable.getColumn(columnRef.getName());
+                Table table = entry.getKey().getTable();
+                Column column = table.getColumn(columnRef.getName());
                 ColumnRefOperator newColumn =
                         queryRefFactory.create(columnRef.getName(), columnRef.getType(), columnRef.isNullable());
                 queryRefFactory.updateColumnToRelationIds(newColumn.getId(), relationId);
-                queryRefFactory.updateColumnRefToColumns(newColumn, column, olapTable);
+                queryRefFactory.updateColumnRefToColumns(newColumn, column, table);
             }
             Set<Integer> relationIds =
                     compensationRelations.computeIfAbsent(entry.getKey().getTable(), table -> Sets.newHashSet());
@@ -551,15 +557,17 @@ public class MaterializedViewRewriter {
         }
     }
 
-    private boolean isUniqueKeys(OlapTable table, List<String> lowerCasekeys) {
-        KeysType tableKeyType = table.getKeysType();
+    private boolean isUniqueKeys(Table table, List<String> lowerCasekeys) {
+        KeysType tableKeyType = KeysType.DUP_KEYS;
         Set<String> keySet = Sets.newHashSet(lowerCasekeys);
-        if (tableKeyType == KeysType.PRIMARY_KEYS || tableKeyType == KeysType.UNIQUE_KEYS) {
-            if (!table.isKeySet(keySet)) {
-                return false;
+        if (table.isNativeTableOrMaterializedView()) {
+            OlapTable olapTable = (OlapTable) table;
+            tableKeyType = olapTable.getKeysType();
+            if (tableKeyType == KeysType.PRIMARY_KEYS || tableKeyType == KeysType.UNIQUE_KEYS) {
+                return olapTable.isKeySet(keySet);
             }
-            return true;
-        } else if (tableKeyType == KeysType.DUP_KEYS) {
+        }
+        if (tableKeyType == KeysType.DUP_KEYS) {
             List<UniqueConstraint> uniqueConstraints = table.getUniqueConstraints();
             if (uniqueConstraints == null || uniqueConstraints.isEmpty()) {
                 return false;
@@ -1272,10 +1280,27 @@ public class MaterializedViewRewriter {
             ScalarOperator swapped = columnRewriter.rewriteByQueryEc(rewritten);
             swappedQueryColumnMap.put(entry.getKey(), swapped);
         }
+
+        Map<ColumnRefOperator, ColumnRefOperator> outputMapping = rewriteContext.getOutputMapping();
+        // Generate different column-refs for multi use of the same mv to avoid bugs later.
+        if (materializationContext.getMVUsedCount() > 0) {
+            OptExpressionDuplicator duplicator = new OptExpressionDuplicator(materializationContext);
+            mvOptExpr = duplicator.duplicate(mvOptExpr);
+            Map<ColumnRefOperator, ScalarOperator> replacedOutputMapping = duplicator.getColumnMapping();
+            Map<ColumnRefOperator, ColumnRefOperator> newOutputMapping = Maps.newHashMap();
+            for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : outputMapping.entrySet()) {
+                ColumnRefOperator newDuplicatorColRef = (ColumnRefOperator) replacedOutputMapping.get(entry.getValue());
+                if (newDuplicatorColRef != null) {
+                    newOutputMapping.put(entry.getKey(), newDuplicatorColRef);
+                }
+            }
+            outputMapping = newOutputMapping;
+        }
+
         Map<ColumnRefOperator, ScalarOperator> newQueryProjection = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : swappedQueryColumnMap.entrySet()) {
             ScalarOperator rewritten = replaceExprWithTarget(entry.getValue(),
-                    queryExprToMvExprRewriter, rewriteContext.getOutputMapping());
+                    queryExprToMvExprRewriter, outputMapping);
             if (rewritten == null) {
                 return null;
             }

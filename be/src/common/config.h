@@ -121,11 +121,11 @@ CONF_Int32(delete_worker_count_high_priority, "1");
 // The count of thread to alter table.
 CONF_Int32(alter_tablet_worker_count, "3");
 // The count of parallel clone task per storage path
-CONF_Int32(parallel_clone_task_per_path, "2");
-// The count of thread to clone.
+CONF_mInt32(parallel_clone_task_per_path, "8");
+// The count of thread to clone. Deprecated
 CONF_Int32(clone_worker_count, "3");
 // The count of thread to clone.
-CONF_Int32(storage_medium_migrate_count, "1");
+CONF_Int32(storage_medium_migrate_count, "3");
 // The count of thread to check consistency.
 CONF_Int32(check_consistency_worker_count, "1");
 // The count of thread to upload.
@@ -816,12 +816,16 @@ CONF_Int32(starlet_fs_stream_buffer_size_bytes, "131072");
 #endif
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
-CONF_Int64(lake_gc_metadata_max_versions, "10");
-CONF_Int64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
-CONF_Int64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
+CONF_mBool(lake_print_delete_log, "true");
+CONF_mInt64(lake_gc_metadata_max_versions, "10");
+CONF_mInt64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
+CONF_mInt64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
 // This value should be much larger than the maximum timeout of loading/compaction/schema change jobs.
-CONF_Int64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
-CONF_Bool(lake_compaction_check_txn_log_first, "false");
+// The actual effective value is max(lake_gc_segment_expire_seconds, 86400)
+CONF_mInt64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
+CONF_mBool(lake_compaction_check_txn_log_first, "false");
+CONF_mInt64(experimental_lake_segment_gc_max_retries, "3");
+CONF_mBool(experimental_lake_enable_fast_gc, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -936,6 +940,7 @@ CONF_Int64(binlog_file_max_size, "536870912");
 CONF_Int32(binlog_page_max_size, "1048576");
 
 CONF_mInt64(txn_info_history_size, "20000");
+CONF_mInt64(file_write_history_size, "10000");
 
 CONF_mInt32(update_cache_evict_internal_sec, "11");
 CONF_mBool(enable_auto_evict_update_cache, "true");
@@ -943,5 +948,7 @@ CONF_mBool(enable_auto_evict_update_cache, "true");
 CONF_Bool(enable_preload_column_mode_update_cache, "true");
 
 CONF_mInt64(load_tablet_timeout_seconds, "30");
+
+CONF_mBool(enable_pk_value_column_zonemap, "true");
 
 } // namespace starrocks::config

@@ -1,3 +1,5 @@
+<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=f5ae0b2c-3578-4a40-9056-178e9837cfe0" />
+
 # Deploy StarRocks with Docker
 
 This QuickStart tutorial guides you through the procedures to deploy StarRocks on your local machine with Docker. Before getting started, you can read [StarRocks Architecture](../introduction/Architecture.md) for more conceptual details.
@@ -28,16 +30,8 @@ Before deploying StarRocks in Docker, make sure the following requirements are s
 Download a StarRocks Docker image from [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/allin1-ubuntu/tags). You can choose a specific version based on the tag of the image.
 
 ```Bash
-sudo docker pull starrocks/allin1-ubuntu
-```
-
-## Step 2: Deploy StarRocks in Docker container
-
-After the Docker image is downloaded, you can deploy StarRocks by running the following command:
-
-```Bash
 sudo docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 \
-    -itd starrocks/allin1-ubuntu
+    -itd starrocks.docker.scarf.sh/starrocks/allin1-ubuntu
 ```
 
 > **TROUBLESHOOTING**
@@ -57,7 +51,7 @@ CONTAINER ID   IMAGE                                          COMMAND           
 8962368f9208   starrocks/allin1-ubuntu:branch-3.0-0afb97bbf   "/bin/sh -c ./start_…"   4 minutes ago   Up 4 minutes           0.0.0.0:8037->8030/tcp, :::8037->8030/tcp, 0.0.0.0:8047->8040/tcp, :::8047->8040/tcp, 0.0.0.0:9037->9030/tcp, :::9037->9030/tcp   xxxxx
 ```
 
-## Step 3: Connect to StarRocks
+## Step 2: Connect to StarRocks
 
 After StarRocks is deployed properly, you can connect to it via a MySQL client.
 

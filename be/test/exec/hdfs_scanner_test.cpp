@@ -639,6 +639,92 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
 
 /**
  *
+File be/test/exec/test_data/orc_scanner/two-strips-dict-and-nodict.orc has 2 stripes
+Stripe Statistics:
+  Stripe 1:
+    Column 0: count: 100 hasNull: false
+    Column 1: count: 100 hasNull: false bytesOnDisk: 19 min: 0 max: 9 sum: 450
+    Column 2: count: 100 hasNull: false bytesOnDisk: 17 min: a max: a sum: 100
+  Stripe 2:
+    Column 0: count: 100 hasNull: false
+    Column 1: count: 100 hasNull: false bytesOnDisk: 20 min: 0 max: 9 sum: 451
+    Column 2: count: 100 hasNull: false bytesOnDisk: 1234 min: a max: ztrddxrhvzodrpeomoie sum: 1981
+
+File Statistics:
+  Column 0: count: 200 hasNull: false
+  Column 1: count: 200 hasNull: false bytesOnDisk: 39 min: 0 max: 9 sum: 901
+  Column 2: count: 200 hasNull: false bytesOnDisk: 1251 min: a max: ztrddxrhvzodrpeomoie sum: 2081
+
+Stripes:
+ Stripe1: offset: 3 data: 36 rows: 100 tail: 52 index: 63
+   Stream: column 0 section ROW_INDEX start: 3 length 11
+   Stream: column 1 section ROW_INDEX start: 14 length 25
+   Stream: column 2 section ROW_INDEX start: 39 length 27
+   Stream: column 1 section DATA start: 66 length 19
+   Stream: column 2 section DATA start: 85 length 7
+   Stream: column 2 section LENGTH start: 92 length 6
+   Stream: column 2 section DICTIONARY_DATA start: 98 length 4
+   Encoding column 0: DIRECT
+   Encoding column 1: DIRECT_V2
+   Encoding column 2: DICTIONARY_V2[1]
+ Stripe2: offset: 154 data: 1254 rows: 100 tail: 50 index: 83
+   Stream: column 0 section ROW_INDEX start: 154 length 11
+   Stream: column 1 section ROW_INDEX start: 165 length 25
+   Stream: column 2 section ROW_INDEX start: 190 length 47
+   Stream: column 1 section DATA start: 237 length 20
+   Stream: column 2 section DATA start: 257 length 1224
+   Stream: column 2 section LENGTH start: 1481 length 10
+   Encoding column 0: DIRECT
+   Encoding column 1: DIRECT_V2
+   Encoding column 2: DIRECT_V2
+*/
+
+TEST_F(HdfsScannerTest, TestOrcGetNextWithDiffEncodeDictFilter) {
+    SlotDesc two_diff_encode_orc_desc[] = {{"x", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                                           {"y", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                                           {""}};
+    const std::string two_diff_encode_orc_file = "./be/test/exec/test_data/orc_scanner/two-strips-dict-and-nodict.orc";
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(two_diff_encode_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(two_diff_encode_orc_desc);
+    auto* param = _create_param(two_diff_encode_orc_file, range, tuple_desc);
+
+    // key = "a", y = 'a' rows is 101
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "a");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::EQ, tuple_desc->slots()[1], TPrimitiveType::VARCHAR, lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::cout << "equal expr = " << ctx->root()->debug_string() << std::endl;
+        param->conjunct_ctxs_by_slot[1].push_back(ctx);
+    }
+
+    for (auto& it : param->conjunct_ctxs_by_slot) {
+        Expr::prepare(it.second, _runtime_state);
+        Expr::open(it.second, _runtime_state);
+    }
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    // so stripe will not be filtered out by search argument
+    // and we can test dict-filtering strategy.
+    scanner->disable_use_orc_sargs();
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 101);
+    // since we use dict filter eval cache, we can do filter on orc cvb
+    // so actually read rows is 200.
+    EXPECT_EQ(scanner->raw_rows_read(), 200);
+    scanner->close(_runtime_state);
+}
+
+// ====================================================================================================
+
+/**
+ *
 datetime are all in UTC timezone.
 
 File Version: 0.12 with ORC_CPP_ORIGINAL
@@ -2321,6 +2407,39 @@ TEST_F(HdfsScannerTest, TestParquetTimestampToDatetime) {
     EXPECT_EQ(scanner->raw_rows_read(), 4);
     EXPECT_EQ(_debug_row_output,
               "[3023-01-01 00:00:00]\n[2023-01-01 00:00:00]\n[1000-01-01 00:00:00]\n[1900-01-01 00:00:00]\n");
+    scanner->close(_runtime_state);
+}
+
+TEST_F(HdfsScannerTest, TestParquetIcebergCaseSensitive) {
+    SlotDesc parquet_descs[] = {{"Id", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)}, {""}};
+
+    const std::string parquet_file =
+            "./be/test/formats/parquet/test_data/iceberg_schema_evolution/add_struct_subfield.parquet";
+
+    _create_runtime_state("Asia/Shanghai");
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    TIcebergSchema schema = TIcebergSchema{};
+
+    TIcebergSchemaField field_id{};
+    field_id.__set_field_id(1);
+    field_id.__set_name("Id");
+
+    std::vector<TIcebergSchemaField> fields{field_id};
+    schema.__set_fields(fields);
+    param->iceberg_schema = &schema;
+
+    _debug_rows_per_call = 10;
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 1);
+    EXPECT_EQ(scanner->raw_rows_read(), 1);
+    EXPECT_EQ(_debug_row_output, "[1]\n");
     scanner->close(_runtime_state);
 }
 

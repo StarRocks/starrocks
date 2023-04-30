@@ -90,6 +90,7 @@ import io.trino.sql.tree.Cast;
 import io.trino.sql.tree.CoalesceExpression;
 import io.trino.sql.tree.ComparisonExpression;
 import io.trino.sql.tree.Cube;
+import io.trino.sql.tree.CurrentTime;
 import io.trino.sql.tree.DataType;
 import io.trino.sql.tree.DateTimeDataType;
 import io.trino.sql.tree.DereferenceExpression;
@@ -109,6 +110,7 @@ import io.trino.sql.tree.GroupingElement;
 import io.trino.sql.tree.GroupingOperation;
 import io.trino.sql.tree.GroupingSets;
 import io.trino.sql.tree.Identifier;
+import io.trino.sql.tree.IfExpression;
 import io.trino.sql.tree.InListExpression;
 import io.trino.sql.tree.InPredicate;
 import io.trino.sql.tree.Intersect;
@@ -142,6 +144,7 @@ import io.trino.sql.tree.SubqueryExpression;
 import io.trino.sql.tree.SubscriptExpression;
 import io.trino.sql.tree.Table;
 import io.trino.sql.tree.TableSubquery;
+import io.trino.sql.tree.TimestampLiteral;
 import io.trino.sql.tree.Trim;
 import io.trino.sql.tree.Union;
 import io.trino.sql.tree.WhenClause;
@@ -164,6 +167,7 @@ import static com.starrocks.analysis.AnalyticWindow.BoundaryType.FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.PRECEDING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
+import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.util.stream.Collectors.toList;
 
 public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
@@ -774,6 +778,15 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitTimestampLiteral(TimestampLiteral node, ParseTreeContext context) {
+        try {
+            return new DateLiteral(node.getValue(), Type.DATETIME);
+        } catch (AnalysisException e) {
+            throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
+        }
+    }
+
+    @Override
     protected ParseNode visitCoalesceExpression(CoalesceExpression node, ParseTreeContext context) {
         List<Expr> children = visit(node, context, Expr.class);
         FunctionName fnName = FunctionName.createFnName("coalesce");
@@ -902,6 +915,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     }
 
     @Override
+    protected ParseNode visitCurrentTime(CurrentTime node, ParseTreeContext context) {
+        return new FunctionCallExpr(node.getFunction().getName(), new ArrayList<>());
+    }
+
+    @Override
     protected ParseNode visitSearchedCaseExpression(SearchedCaseExpression node, ParseTreeContext context) {
         return new CaseExpr(null, visit(node.getWhenClauses(), context, CaseWhenClause.class),
                 (Expr) processOptional(node.getDefaultValue(), context));
@@ -918,6 +936,20 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitNullIfExpression(NullIfExpression node, ParseTreeContext context) {
         List<Expr> arguments = visit(ImmutableList.of(node.getFirst(), node.getSecond()), context, Expr.class);
         return new FunctionCallExpr("nullif", arguments);
+    }
+
+    @Override
+    protected ParseNode visitIfExpression(IfExpression node, ParseTreeContext context) {
+        List<Node> children = Lists.newArrayList();
+        children.add(node.getCondition());
+        children.add(node.getTrueValue());
+        if (node.getFalseValue().isPresent()) {
+            children.add(node.getFalseValue().get());
+        } else {
+            children.add(new io.trino.sql.tree.NullLiteral());
+        }
+        List<Expr> arguments = visit(children, context, Expr.class);
+        return new FunctionCallExpr("if", arguments);
     }
 
     @Override

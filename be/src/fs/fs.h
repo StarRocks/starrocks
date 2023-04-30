@@ -104,6 +104,13 @@ struct DirEntry {
     std::optional<bool> is_dir;
 };
 
+struct FileWriteStat {
+    int64_t open_time{0};
+    int64_t close_time{0};
+    int64_t size{0};
+    std::string path;
+};
+
 class FileSystem {
 public:
     enum Type { POSIX, S3, HDFS, BROKER, MEMORY, STARLET };
@@ -130,6 +137,10 @@ public:
     // system.  Sophisticated users may wish to provide their own FileSystem
     // implementation instead of relying on this default environment.
     static FileSystem* Default();
+
+    static void get_file_write_history(std::vector<FileWriteStat>* stats);
+    static void on_file_write_open(WritableFile* file);
+    static void on_file_write_close(WritableFile* file);
 
     virtual Type type() const = 0;
 

@@ -315,6 +315,8 @@ public class PlanFragmentBuilder {
         }
         Collections.reverse(fragments);
 
+        fragments.forEach(PlanFragmentBuilder::maybeClearOlapScanNodePartitions);
+
         // compute local_rf_waiting_set for each PlanNode.
         // when enable_pipeline_engine=true and enable_global_runtime_filter=false, we should clear
         // runtime filters from PlanNode.
@@ -340,6 +342,50 @@ public class PlanFragmentBuilder {
         }
 
         return execPlan;
+    }
+
+    private static void maybeClearOlapScanNodePartitions(PlanFragment fragment) {
+        List<OlapScanNode> olapScanNodes = fragment.collectOlapScanNodes();
+        long numNodesWithBucketColumns = olapScanNodes.stream().filter(node -> !node.getBucketColumns().isEmpty()).count();
+        // Either all OlapScanNode use bucketColumns for local shuffle, or none of them do.
+        // Therefore, clear bucketColumns if only some of them contain bucketColumns.
+        boolean needClear = numNodesWithBucketColumns > 0 && numNodesWithBucketColumns < olapScanNodes.size();
+        if (needClear) {
+            clearOlapScanNodePartitions(fragment.getPlanRoot());
+        }
+    }
+
+    /**
+     * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE).
+     * <p>
+     * When partitionExprs of OlapScanNode are passed to BE, the post operators will use them as
+     * local shuffle partition exprs.
+     * Otherwise, the operators will use the original partition exprs (group by keys or join on keys).
+     * <p>
+     * The bucket keys can satisfy the required hash property of blocking aggregation except two scenarios:
+     * - OlapScanNode only has one tablet after pruned.
+     * - It is executed on the single BE.
+     * As for these two scenarios, which will generate ScanNode(k1)->LocalShuffle(c1)->BlockingAgg(c1),
+     * partitionExprs of OlapScanNode must be cleared to make BE use group by keys not bucket keys as
+     * local shuffle partition exprs.
+     *
+     * @param root The root node of the fragment which need to check whether to clear bucket keys of OlapScanNode.
+     */
+    private static void clearOlapScanNodePartitions(PlanNode root) {
+        if (root instanceof OlapScanNode) {
+            OlapScanNode scanNode = (OlapScanNode) root;
+            scanNode.setBucketExprs(Lists.newArrayList());
+            scanNode.setBucketColumns(Lists.newArrayList());
+            return;
+        }
+
+        if (root instanceof ExchangeNode) {
+            return;
+        }
+
+        for (PlanNode child : root.getChildren()) {
+            clearOlapScanNodePartitions(child);
+        }
     }
 
     private static class PhysicalPlanTranslator extends OptExpressionVisitor<PlanFragment, ExecPlan> {
@@ -1180,6 +1226,11 @@ public class PlanFragmentBuilder {
                 }
             }
 
+            if (scanNode.getTableName().equalsIgnoreCase("load_tracking_logs") && scanNode.getLabel() == null
+                    && scanNode.getJobId() == null) {
+                throw UnsupportedException.unsupportedException("load_tracking_logs must specify label or job_id");
+            }
+
             if (scanNode.isBeSchemaTable()) {
                 scanNode.computeBeScanRanges();
             }
@@ -1482,39 +1533,6 @@ public class PlanFragmentBuilder {
             sourceFragment.clearDestination();
             sourceFragment.clearOutputPartition();
             return sourceFragment;
-        }
-
-        /**
-         * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE).
-         * <p>
-         * When partitionExprs of OlapScanNode are passed to BE, the post operators will use them as
-         * local shuffle partition exprs.
-         * Otherwise, the operators will use the original partition exprs (group by keys or join on keys).
-         * <p>
-         * The bucket keys can satisfy the required hash property of blocking aggregation except two scenarios:
-         * - OlapScanNode only has one tablet after pruned.
-         * - It is executed on the single BE.
-         * As for these two scenarios, which will generate ScanNode(k1)->LocalShuffle(c1)->BlockingAgg(c1),
-         * partitionExprs of OlapScanNode must be cleared to make BE use group by keys not bucket keys as
-         * local shuffle partition exprs.
-         *
-         * @param root The root node of the fragment which need to check whether to clear bucket keys of OlapScanNode.
-         */
-        private void clearOlapScanNodePartitions(PlanNode root) {
-            if (root instanceof OlapScanNode) {
-                OlapScanNode scanNode = (OlapScanNode) root;
-                scanNode.setBucketExprs(Lists.newArrayList());
-                scanNode.setBucketColumns(Lists.newArrayList());
-                return;
-            }
-
-            if (root instanceof ExchangeNode) {
-                return;
-            }
-
-            for (PlanNode child : root.getChildren()) {
-                clearOlapScanNodePartitions(child);
-            }
         }
 
         private static class AggregateExprInfo {

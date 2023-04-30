@@ -10,7 +10,7 @@ Both are variable-length data types. When you store data of the same length, VAR
 
 Yes.
 
-## Why do TXT files imported from Oracle still appear garbled after I set the character set to UTF-8？
+## Why do TXT files imported from Oracle still appear garbled after I set the character set to UTF-8?
 
 To solve this problem, perform the following steps:
 
@@ -18,7 +18,7 @@ To solve this problem, perform the following steps:
 
     ```Plain%20Text
     file --mime-encoding origin.txt
-    origin.txt：iso-8859-1
+    origin.txt: iso-8859-1
     ```
 
 2. Run the `iconv` command to convert the character set of this file into UTF-8.
@@ -57,9 +57,9 @@ ALTER DATABASE example_db SET DATA QUOTA 10T;
 
 ## Does StarRocks support updating particular fields in a table by executing the UPSERT statement?
 
-StarRocks 2.2 and later support updating specific fields in a table by using the primary key model. StarRocks 1.9 and later support updating all fields in a table by using the primary key model. For more information, see [Primary key model](../table_design/Data_model.md#primary-key-model) in StarRocks 2.2.
+StarRocks 2.2 and later support updating specific fields in a table by using the Primary Key table. StarRocks 1.9 and later support updating all fields in a table by using the Primary Key table. For more information, see [Primary Key table](../table_design/table_types/primary_key_table.md) in StarRocks 2.2.
 
-## How to swap the data between two tables or two partitions？
+## How to swap the data between two tables or two partitions?
 
 Execute the SWAP WITH statement to swap the data between two tables or two partitions. The SWAP WITH statement is more secure than the INSERT OVERWRITE statement. Before you swap the data, check the data first and then see whether the data after the swapping is consistent with the data before the swapping.
 
@@ -210,7 +210,7 @@ The speed to read disks for the first query relates to the performance of disks.
 
 StarRocks supports single node deployment, so you need to configure at least one BE. BEs need to be run with AVX2, so we recommend that you deploy BEs on machines with 8-core and 16GB or higher configurations.
 
-## How to set data permissions when I use Apache Superset to visualize the data in StarRocks？
+## How to set data permissions when I use Apache Superset to visualize the data in StarRocks?
 
 You can create a new user account and then set the data permission by granting permissions on the table query to the user.
 

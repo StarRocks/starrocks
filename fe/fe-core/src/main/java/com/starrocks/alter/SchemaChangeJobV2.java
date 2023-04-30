@@ -95,7 +95,6 @@ import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TQueryGlobals;
 import com.starrocks.thrift.TQueryOptions;
-import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTaskType;
@@ -166,8 +165,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
     // The schema change job will wait all transactions before this txn id finished, then send the schema change tasks.
     @SerializedName(value = "watershedTxnId")
     protected long watershedTxnId = -1;
-    @SerializedName(value = "storageFormat")
-    private TStorageFormat storageFormat = TStorageFormat.DEFAULT;
     @SerializedName(value = "startTime")
     private long startTime;
     @SerializedName(value = "sortKeyIdxes")
@@ -223,10 +220,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
     public void setStartTime(long startTime) {
         this.startTime = startTime;
-    }
-
-    public void setStorageFormat(TStorageFormat storageFormat) {
-        this.storageFormat = storageFormat;
     }
 
     public void setSortKeyIdxes(List<Integer> sortKeyIdxes) {
@@ -368,10 +361,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             createReplicaTask.setBaseTablet(
                                     partitionIndexTabletMap.get(partitionId, shadowIdxId).get(shadowTabletId),
                                     originSchemaHash);
-                            if (this.storageFormat != null) {
-                                createReplicaTask.setStorageFormat(this.storageFormat);
-                            }
-
                             batchTask.addTask(createReplicaTask);
                         } // end for rollupReplicas
                     } // end for rollupTablets
@@ -911,11 +900,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             tbl.setIndexes(indexes);
         }
 
-        // set storage format of table, only set if format is v2
-        if (storageFormat == TStorageFormat.V2) {
-            tbl.setStorageFormat(storageFormat);
-        }
-
         tbl.setState(OlapTableState.NORMAL);
         tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
     }
@@ -1242,7 +1226,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_84) {
-            storageFormat = TStorageFormat.valueOf(Text.readString(in));
+            Text.readString(in); //placeholder
         }
     }
 
@@ -1293,7 +1277,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_84) {
-            storageFormat = TStorageFormat.valueOf(Text.readString(in));
+            Text.readString(in); //placeholder
         }
     }
 

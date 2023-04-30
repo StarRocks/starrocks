@@ -42,6 +42,7 @@ public class PartitionExprAnalyzer {
             }
 
             functionCallExpr.setFn(builtinFunction);
+            functionCallExpr.setType(targetColType);
         }
     }
 }

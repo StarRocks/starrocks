@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
+import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterWarehouseStmt;
@@ -63,11 +64,13 @@ import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
+import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateWarehouseStmt;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFileStmt;
@@ -78,6 +81,7 @@ import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
+import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.DropWarehouseStmt;
@@ -99,6 +103,7 @@ import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
+import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
@@ -119,6 +124,7 @@ import com.starrocks.sql.ast.ShowRestoreStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSnapshotStmt;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.ShowStorageVolumesStmt;
 import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -256,17 +262,20 @@ public class Analyzer {
 
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
-            CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
-            if (createTableAsSelectStmt != null) {
+            if (statement.getCreateTableAsSelectStmt() != null) {
+                CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
                 QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
                 Analyzer.analyze(queryStatement, context);
-                OriginStatement origStmt = statement.getOrigStmt();
-                String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
-                statement.setSqlText(sqlText);
-                TaskAnalyzer.analyzeSubmitTaskStmt(statement, context);
+            } else if (statement.getInsertStmt() != null) {
+                InsertStmt insertStmt = statement.getInsertStmt();
+                InsertAnalyzer.analyze(insertStmt, context);
             } else {
-                InsertAnalyzer.analyze(statement.getInsertStmt(), context);
+                throw new SemanticException("Submit task statement is not supported");
             }
+            OriginStatement origStmt = statement.getOrigStmt();
+            String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
+            statement.setSqlText(sqlText);
+            TaskAnalyzer.analyzeSubmitTaskStmt(statement, context);
             return null;
         }
 
@@ -827,6 +836,43 @@ public class Analyzer {
 
         public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
             FileAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ---------------------------------------- Storage Volume Statement -------------------------------------------
+        @Override
+        public Void visitCreateStorageVolumeStatement(CreateStorageVolumeStmt statement, ConnectContext context) {
+            StorageVolumeAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterStorageVolumeStatement(AlterStorageVolumeStmt statement, ConnectContext context) {
+            StorageVolumeAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropStorageVolumeStatement(DropStorageVolumeStmt statement, ConnectContext context) {
+            StorageVolumeAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowStorageVolumesStatement(ShowStorageVolumesStmt statement, ConnectContext context) {
+            StorageVolumeAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDescStorageVolumeStatement(DescStorageVolumeStmt statement, ConnectContext context) {
+            StorageVolumeAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt statement, ConnectContext context) {
+            StorageVolumeAnalyzer.analyze(statement, context);
             return null;
         }
     }

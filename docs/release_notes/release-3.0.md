@@ -6,7 +6,7 @@ Release date: April 13, 2023
 
 ### Improvements
 
-- Updated Docker image and the related [Docker deployment document](../quick_start/deploy_in_docker.md) for version 3.0. ([#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021))
+- Updated Docker image and the related [Docker deployment document](../quick_start/deploy_with_docker.md) for version 3.0. ([#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021))
 - Supports creating asynchronous INSERT tasks. For more information, see [INSERT](../loading/InsertInto.md#load-data-asynchronously-using-insert) and [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md). ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
 - Supports adding MV partitions in batches, which improves the efficiency of partition addition during materialized view building. ([#21167](https://github.com/StarRocks/starrocks/pull/21167))
 
@@ -32,7 +32,7 @@ Release date: March 31, 2023
 
 - The [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md) attribute is supported to provide globally unique IDs, which simplifies data management.
 - [Automatic partitioning and partitioning expressions](../table_design/automatic_partitioning.md) are supported, which makes partition creation easier to use and more flexible.
-- Primary Key tables support more complete [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md) and [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md) syntax, including the use of CTEs and references to multiple tables.
+- Primary Key tables support more complete [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md) and [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md#primary-key-tables) syntax, including the use of CTEs and references to multiple tables.
 - Added Load Profile for Broker Load and INSERT INTO jobs. You can view the details of a load job by querying the load profile. The usage is the same as [Analyze query profile](../administration/query_profile.md).
 
 **Data Lake Analytics**
@@ -64,7 +64,7 @@ Release date: March 31, 2023
 **Storage engine and data ingestion**
 
 - Supports more CSV parameters for data ingestion, including SKIP_HEADER, TRIM_SPACE, ENCLOSE, and ESCAPE. See [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), and [ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
-- The primary key and sort key are decoupled in [Primary Key tables](../table_design/Data_model.md#primary-key-model). The sort key can be separately specified in `ORDER BY`.
+- The primary key and sort key are decoupled in [Primary Key tables](../table_design/table_types/primary_key_table.md). The sort key can be separately specified in `ORDER BY`.
 - Optimized the memory usage of data ingestion into Primary Key tables in scenarios such as large-volume ingestion, partial updates, and persistent primary indexes.
 
 **Materialized View**

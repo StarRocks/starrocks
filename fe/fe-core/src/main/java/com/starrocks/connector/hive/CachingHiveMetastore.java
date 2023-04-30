@@ -206,6 +206,12 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
     public List<String> getPartitionKeys(String dbName, String tableName) {
         HiveTableName hiveTableName = HiveTableName.of(dbName, tableName);
+        if (metastore instanceof CachingHiveMetastore) {
+            Table table = getTable(dbName, tableName);
+            if (table.isHiveTable() && !((HiveTable) table).isUseMetadataCache()) {
+                invalidatePartitionKeys(hiveTableName);
+            }
+        }
         // update last access time
         lastAccessTimeMap.put(hiveTableName, System.currentTimeMillis());
         return get(partitionKeysCache, hiveTableName);
@@ -497,6 +503,15 @@ public class CachingHiveMetastore implements IHiveMetastore {
         partitionKeysCache.invalidate(hiveTableName);
         partitionCache.invalidate(partitionName);
         partitionStatsCache.invalidate(partitionName);
+    }
+
+    public synchronized void invalidatePartitionKeys(HiveTableName hiveTableName) {
+        if (metastore instanceof CachingHiveMetastore) {
+            metastore.invalidatePartitionKeys(hiveTableName);
+            partitionKeysCache.invalidate(hiveTableName);
+        } else {
+            partitionKeysCache.invalidate(hiveTableName);
+        }
     }
 
     public boolean isTablePresent(HiveTableName tableName) {

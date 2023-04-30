@@ -46,8 +46,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 1\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE table_int (id_int INT, id_bigint BIGINT) " +
@@ -71,8 +70,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 10\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         starRocksAssert.withTable("CREATE TABLE lineorder_flat (\n" +
@@ -120,8 +118,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "DISTRIBUTED BY HASH(LO_ORDERKEY) BUCKETS 48\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\",\n" +
-                "\"storage_format\" = \"DEFAULT\"\n" +
+                "\"in_memory\" = \"false\"\n" +
                 ");");
 
         FeConstants.USE_MOCK_DICT_MANAGER = true;
@@ -786,6 +783,15 @@ public class LowCardinalityTest extends PlanTestBase {
                 "args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true]"));
         Assert.assertTrue(plan.contains("  |  common expressions:\n" +
                 "  |  13 <-> DictExpr(12: S_COMMENT,[upper(<place-holder>)])"));
+
+        // support(support(unsupport(Column), unsupport(Column)))
+        sql = "select REVERSE(SUBSTR(LEFT(REVERSE(S_ADDRESS),INSTR(REVERSE(S_ADDRESS),'/')-1),5)) FROM supplier";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 9> : reverse(substr(left(11: expr, CAST(CAST(instr(11: expr, '/') AS BIGINT)" +
+                " - 1 AS INT)), 5))\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 11> : DictExpr(10: S_ADDRESS,[reverse(<place-holder>)])");
     }
 
     @Test
@@ -1580,7 +1586,6 @@ public class LowCardinalityTest extends PlanTestBase {
                         "AND (<place-holder> < 'b'), TRUE, FALSE)])");
     }
 
-
     @Test
     public void testComplexScalarOperator_1() throws Exception {
         String sql = "select case when s_address = 'test' then 'a' " +
@@ -1594,7 +1599,6 @@ public class LowCardinalityTest extends PlanTestBase {
                 "WHEN coalesce(DictExpr(10: S_ADDRESS,[<place-holder>]), 'c') = 'c' THEN 'c' " +
                 "ELSE 'a' END\n" +
                 "  |");
-
 
         sql = "select case when s_address = 'test' then 'a' " +
                 "when s_phone = 'b' then 'b' " +
@@ -1664,8 +1668,9 @@ public class LowCardinalityTest extends PlanTestBase {
 
     @Test
     public void testTopNWithProjection() throws Exception {
-        String sql = "select t2.s_address, cast(t1.a as date), concat(t1.b, '') from (select max(s_address) a, min(s_phone) b " +
-                "from supplier group by s_address) t1 join (select s_address from supplier) t2 order by t1.a";
+        String sql =
+                "select t2.s_address, cast(t1.a as date), concat(t1.b, '') from (select max(s_address) a, min(s_phone) b " +
+                        "from supplier group by s_address) t1 join (select s_address from supplier) t2 order by t1.a";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "10:Decode\n" +
                 "  |  <dict id 23> : <string id 13>\n" +

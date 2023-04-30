@@ -223,6 +223,7 @@ public class ConfigBase {
 
     public static void setConfigField(Field f, String confVal) throws Exception {
         confVal = confVal.trim();
+        boolean isEmpty = confVal.isEmpty();
 
         String[] sa = confVal.split(",");
         for (int i = 0; i < sa.length; i++) {
@@ -252,42 +253,42 @@ public class ConfigBase {
                 f.set(null, confVal);
                 break;
             case "short[]":
-                short[] sha = new short[sa.length];
+                short[] sha = isEmpty ? new short[0] : new short[sa.length];
                 for (int i = 0; i < sha.length; i++) {
                     sha[i] = Short.parseShort(sa[i]);
                 }
                 f.set(null, sha);
                 break;
             case "int[]":
-                int[] ia = new int[sa.length];
+                int[] ia = isEmpty ? new int[0] : new int[sa.length];
                 for (int i = 0; i < ia.length; i++) {
                     ia[i] = Integer.parseInt(sa[i]);
                 }
                 f.set(null, ia);
                 break;
             case "long[]":
-                long[] la = new long[sa.length];
+                long[] la = isEmpty ? new long[0] : new long[sa.length];
                 for (int i = 0; i < la.length; i++) {
                     la[i] = Long.parseLong(sa[i]);
                 }
                 f.set(null, la);
                 break;
             case "double[]":
-                double[] da = new double[sa.length];
+                double[] da = isEmpty ? new double[0] : new double[sa.length];
                 for (int i = 0; i < da.length; i++) {
                     da[i] = Double.parseDouble(sa[i]);
                 }
                 f.set(null, da);
                 break;
             case "boolean[]":
-                boolean[] ba = new boolean[sa.length];
+                boolean[] ba = isEmpty ? new boolean[0] : new boolean[sa.length];
                 for (int i = 0; i < ba.length; i++) {
                     ba[i] = Boolean.parseBoolean(sa[i]);
                 }
                 f.set(null, ba);
                 break;
             case "String[]":
-                f.set(null, sa);
+                f.set(null, isEmpty ? new String[0] : sa);
                 break;
             default:
                 throw new InvalidConfException("unknown type: " + f.getType().getSimpleName());

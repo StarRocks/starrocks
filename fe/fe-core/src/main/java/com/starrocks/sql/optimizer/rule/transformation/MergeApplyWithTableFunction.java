@@ -72,7 +72,7 @@ public class MergeApplyWithTableFunction extends TransformationRule {
 
         LogicalTableFunctionOperator newTableFunctionOperator = (new LogicalTableFunctionOperator.Builder())
                 .withOperator(tableFunctionOperator)
-                .setOuterColRefs(input.inputAt(0).getRowOutputInfo().getColumnRefOps()).build();
+                .setOuterColRefs(input.inputAt(0).getRowOutputInfo().getOutputColRefs()).build();
 
         return Lists.newArrayList(OptExpression.create(newTableFunctionOperator, childOptExpression));
     }

@@ -1,12 +1,13 @@
 # Performance Optimization
 
-## Table Creation
+## Table Type Selection
 
-### Data Model Selection
+StarRocks supports four table types: Duplicate Key table, Aggragate table, Unique Key table, and Primary Key table. All of them are sorted by KEY.
 
-StarRocks supports three kinds of data model: AGGREGATE KEY, UNIQUE KEY, and DUPLICATE KEY. All three are sorted by KEY.
-
-* AGGREGATE KEY: When the AGGREGATE KEY is the same, the old and new records are aggregated. The currently supported aggregate functions are SUM, MIN, MAX, REPLACE. Aggregate  model can aggregate data in advance, which is suitable for reporting and multi-dimensional analyses.
+- `AGGREGATE KEY`: When records with the same AGGREGATE KEY is loaded into StarRocks, the old and new records are aggregated. Currently, aggregate tables supports the following aggregate functions: SUM, MIN, MAX, and REPLACE. Aggregate tables support aggregating data in advance, facilitating business statements and multi-dimensional analyses.
+- `DUPLICATE KEY`: You only need to specify the sort key for a DUPLICATE KEY table. Records with the same DUPLICATE KEY exist at the same time. It is suitable for analyses that do not involve aggregating data in advance.
+- `UNIQUE KEY`: When records with the same UNIQUE KEY is loaded into StarRocks, the new record overwrites the old one. A UNIQUE KEY tables is similar to an aggregate table with REPLACE function. Both are suitable for analyses involving constant updates.
+- `PRIMARY KEY`: Primary Key tables guarantee the uniqueness of records, and allow you to perform realtime updating.
 
 ~~~sql
 CREATE TABLE site_visit
@@ -18,25 +19,8 @@ CREATE TABLE site_visit
 )
 AGGREGATE KEY(siteid, city, username)
 DISTRIBUTED BY HASH(siteid) BUCKETS 10;
-~~~
 
-UNIQUE KEY: When the UNIQUE KEY is the same, the new record overwrites the old one.. Currently, `UNIQUE KEY` functions similarly as `REPLACE` of `AGGREGATE KEY`.Both are suitable for analyses involving constant updates.
 
-~~~sql
-CREATE TABLE sales_order
-(
-    orderid     BIGINT,
-    status      TINYINT,
-    username    VARCHAR(32),
-    amount      BIGINT DEFAULT '0'
-)
-UNIQUE KEY(orderid)
-DISTRIBUTED BY HASH(orderid) BUCKETS 10;
-~~~
-
-DUPLICATE KEY: Only need to specify the sort key. Records with the same DUPLICATE KEY exist at the same time. It is suitable for analyses that don’t involve aggregating data in advance.
-
-~~~sql
 CREATE TABLE session_data
 (
     visitorid   SMALLINT,
@@ -50,32 +34,29 @@ CREATE TABLE session_data
 )
 DUPLICATE KEY(visitorid, sessionid)
 DISTRIBUTED BY HASH(sessionid, visitorid) BUCKETS 10;
-~~~
 
-### In-memory tables
-
-StarRocks supports caching data in memory to speed up queries. In-memory tables are suitable for dimension tables with a small number of rows.
-
-~~~sql
-CREATE TABLE memory_table
+CREATE TABLE sales_order
 (
-    visitorid   SMALLINT,
-    sessionid   BIGINT,
-    visittime   DATETIME,
-    city        CHAR(20),
-    province    CHAR(20),
-    ip          varchar(32),
-    brower      CHAR(20),
-    url         VARCHAR(1024)
+    orderid     BIGINT,
+    status      TINYINT,
+    username    VARCHAR(32),
+    amount      BIGINT DEFAULT '0'
 )
-DUPLICATE KEY(visitorid, sessionid)
-DISTRIBUTED BY HASH(sessionid, visitorid) BUCKETS 10
-PROPERTIES (
-           "in_memory"="true"
-);
+UNIQUE KEY(orderid)
+DISTRIBUTED BY HASH(orderid) BUCKETS 10;
+
+CREATE TABLE sales_order
+(
+    orderid     BIGINT,
+    status      TINYINT,
+    username    VARCHAR(32),
+    amount      BIGINT DEFAULT '0'
+)
+PRIMARY KEY(orderid)
+DISTRIBUTED BY HASH(orderid) BUCKETS 10;
 ~~~
 
-### Colocate Table
+## Colocate Table
 
 To speed up queries, tables with the same distribution can use a common bucketing column. In that case, data can be joined locally without being transferred across the cluster during the `join` operation.
 
@@ -100,16 +81,16 @@ PROPERTIES(
 
 For more information about colocate join and replica management, refer to [Colocate join](../using_starrocks/Colocate_join.md)
 
-### Flat table and star schema
+## Flat table and star schema
 
 To adapt to the front-end business,  flat tables don’t  differentiate between dimension information and index information. Such flat tables often do not perform as well as expected because:
 
-* The schema has many fields When there are a large number of key columns in the aggregation model,  it may lead to an increase in the number of columns that need to be sorted during the import.
+* The schema has many fields When there are a large number of key columns in the Aggregate table,  it may lead to an increase in the number of columns that need to be sorted during the import.
 * Updates on dimension information will be reflected to the table. The frequency of updates directly affects query efficiency.
 
 It is recommended to use star schema to distinguish dimension tables and index tables. This schema can place dimension tables with frequent updates in MySQL, and dimension tables with fewer updates in StarRocks. Creating replicas of dimension tables in StarRocks can improve join performance.
 
-### Partition and bucket
+## Partition and bucket
 
 StarRocks supports two levels of partitioning storage, the first level is RANGE partition, the second level is HASH bucket.
 
@@ -124,7 +105,7 @@ StarRocks supports two levels of partitioning storage, the first level is RANGE 
 * It is recommended to use a column with a large degree of differentiation for bucketing to avoid data skewing
 * To facilitate data recovery, it is recommended to keep  the size of each bucket around 10GB. Please consider the number of buckets when creating a table or adding a partition .
 
-### Sparse index and bloomfilter
+## Sparse index and bloomfilter
 
 StarRocks stores data in an ordered manner and builds a sparse index with  block (1024 rows) granularity.
 
@@ -141,11 +122,11 @@ StarRocks stores data in an ordered manner and builds a sparse index with  block
 * The siteid, city, and username rows occupy 4, 2, and 32 bytes respectively, so the content of the prefix index is the first 30 bytes of siteid + city + username.
 * In addition to sparse indexes, StarRocks also provides bloomfilter indexes, which are effective for filtering columns with large differentiations. If you don't want to place a varchar field in the sparse index, you can create a bloomfilter index.
 
-### Inverted Index
+## Inverted Index
 
-StarRocks adopts Bitmap Indexing technology to support inverted indexes that can be applied to all columns of the duplicate data model and the key column of the aggregate and unique data models. Bitmap Index is suitable for columns with a small value range, such as gender, city, and province. As the range expands, the bitmap index expands in parallel.
+StarRocks adopts Bitmap Indexing technology to support inverted indexes that can be applied to all columns of the Duplicate Key table and the key column of the Aggregate table and Unique Key table. Bitmap Index is suitable for columns with a small value range, such as gender, city, and province. As the range expands, the bitmap index expands in parallel.
 
-### Materialized view (rollup)
+## Materialized view (rollup)
 
 A rollup is essentially a materialized index of the original table (base table). When creating a rollup, only some columns of the base table can be selected as the schema, and the order of the fields in the schema can be different from that of the base table. Below are some use cases of using a rollup:
 
@@ -164,13 +145,6 @@ A rollup is essentially a materialized index of the original table (base table).
 * If there are cases where you can analyze visits by browser and province, you can create a separate rollup.
 
 `ALTER TABLE session_data ADD ROLLUP rollup_brower(brower,province,ip,url) DUPLICATE KEY(brower,province);`
-
-## Import
-
-StarRocks currently supports two types of imports – broker load and stream load. StarRocks guarantees atomicity for single batch imports, even if multiple tables are imported at once.
-
-* stream load: Import by http in micro batch. Latency of importingf 1 MB data is maintained at the second level. Suitable for high frequency import.
-* broker load: Import by pull. Suitable for batch data import on a daily basis.
 
 ## Schema change
 

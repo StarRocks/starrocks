@@ -383,6 +383,10 @@ Status ScrollParser::_append_value_from_json_val(Column* column, const TypeDescr
         RETURN_IF_ERROR(_append_array_val(col, type_desc, column, pure_doc_value));
         break;
     }
+    case TYPE_JSON: {
+        RETURN_IF_ERROR(_append_json_val(col, type_desc, column, pure_doc_value));
+        break;
+    }
     default: {
         DCHECK(false) << "unknown type:" << type;
         return Status::InvalidArgument(fmt::format("unknown type {}", type));
@@ -567,6 +571,19 @@ Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDe
 
     size_t new_size = elements->size();
     offsets->append(new_size);
+    return Status::OK();
+}
+
+Status ScrollParser::_append_json_val(const rapidjson::Value& col, const TypeDescriptor& type_desc, Column* column,
+                                      bool pure_doc_value) {
+    std::string s = json_value_to_string(col);
+    Slice slice{s};
+    if (!col.IsObject()) {
+        return Status::InternalError("col: " + slice.to_string() + " is not an object");
+    }
+    ASSIGN_OR_RETURN(JsonValue json, JsonValue::parse_json_or_string(slice));
+    JsonValue* tmp = &json;
+    _append_data<TYPE_JSON>(column, tmp);
     return Status::OK();
 }
 

@@ -120,6 +120,10 @@ public class FeNameFormat {
         checkCommonName("warehouse", warehouseName);
     }
 
+    public static void checkStorageVolumeName(String svName) {
+        checkCommonName("storage volume", svName);
+    }
+
     public static void checkCommonName(String type, String name) {
         if (Strings.isNullOrEmpty(name) || !name.matches(COMMON_NAME_REGEX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_NAME_FORMAT, type, name);

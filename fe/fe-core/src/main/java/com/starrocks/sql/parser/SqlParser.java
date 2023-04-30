@@ -63,7 +63,12 @@ public class SqlParser {
             }
         } catch (ParsingException e) {
             // we only support trino partial syntax, use StarRocks parser to parse now
-            LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
+            if (sql.toLowerCase().contains("select")) {
+                LOG.warn("Trino parse sql [{}] error, cause by {}", sql, e);
+            }
+            return parseWithStarRocksDialect(sql, sessionVariable);
+        } catch (UnsupportedOperationException e) {
+            // For unsupported statement, use StarRocks parser to parse
             return parseWithStarRocksDialect(sql, sessionVariable);
         }
         if (statements.isEmpty() || statements.stream().anyMatch(Objects::isNull)) {
@@ -167,8 +172,8 @@ public class SqlParser {
         parser.removeErrorListeners();
         parser.addErrorListener(new ErrorHandler());
         parser.removeParseListeners();
-        parser.addParseListener(
-                new PostProcessListener(sessionVariable.getParseTokensLimit(), Config.expr_children_limit));
+        parser.addParseListener(new PostProcessListener(sessionVariable.getParseTokensLimit(),
+                Math.max(Config.expr_children_limit, sessionVariable.getExprChildrenLimit())));
         return parser;
     }
 

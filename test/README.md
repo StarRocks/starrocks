@@ -103,7 +103,7 @@ The execution timeout(s) for a single case, default is 10 min. Once the case's r
 With this parameter, the framework will just list the names of the cases that need to be executed, but will not actually execute them.
 
 **`-a|--attr` [Optional]**  
-tag filters, format：tag1,tag2...
+tag filters, format: tag1,tag2...
 
 **`--file_filter=` [Optional]**  
 The format of the values is a regular expression, and only test cases in files with filenames that match it will be executed.   

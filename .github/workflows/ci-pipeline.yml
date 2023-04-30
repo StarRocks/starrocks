@@ -78,6 +78,7 @@ jobs:
     name: BE FILTER
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
+      output2: ${{ steps.be-changes-info.outputs.thirdparty }}
     steps:
       - uses: dorny/paths-filter@v2
         id: changes
@@ -88,11 +89,17 @@ jobs:
             - 'gensrc/**'
             - 'run-be-ut.sh'
             - 'build.sh'
+            - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+            thirdparty:
+            - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
 
       - name: BE CHECK INFO
         id: be-changes-info
         run: |
           echo "be=${{ steps.changes.outputs.be }}" >> $GITHUB_OUTPUT
+          echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
 
   clang-format:
     runs-on: self-hosted
@@ -109,7 +116,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-      
+
       - name: BRANCH INFO
         id: branch
         run: |
@@ -126,19 +133,69 @@ jobs:
           git checkout $BRANCH_NAME;
           git checkout -b merge_pr;
           git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
-          
+
       - name: Run Clang-Format
         run: |
           export PATH=/var/lib/llvm/bin:$PATH
           bash build-support/check-format.sh
 
+  thirdparty-update:
+    runs-on: self-hosted
+    needs: [ be-checker, clang-format ]
+    name: Thirdparty Update
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
+    outputs:
+      ip: ${{ steps.update-image.outputs.ip }}
+      instance_id: ${{ steps.update-image.outputs.instance_id }}
+      image_cache_id: ${{ steps.update-image.outputs.image_cache_id }}
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+
+      - name: Checkout Code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Update Image
+        id: update-image
+        run: |
+          set -ex
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+            rm -rf ./elastic-service
+            cp -rf /var/lib/elastic-service ./elastic-service
+            cd elastic-service && git pull
+            ./bin/elastic-cluster.sh --template thirdparty
+            ip=$(grep hosts conf/starrocks_deploy.conf | head -n 1 | awk '{print $NF}')
+            instance_id=$(grep instances conf/starrocks_deploy.conf | head -n 1 | awk '{print $NF}')
+            echo "ip=${ip}" >> $GITHUB_OUTPUT
+            echo "instance_id=${instance_id}" >> $GITHUB_OUTPUT
+            sleep 30
+            sudo ssh-keygen -f "/root/.ssh/known_hosts" -R "${ip}" || true
+            sshpass -p ${{ secrets.PASSWORD }} scp -o StrictHostKeyChecking=no -r bin/elastic-build-thirdparty.sh root@$ip:/home/disk1/
+            sshpass -p ${{ secrets.PASSWORD }} ssh -o StrictHostKeyChecking=no root@$ip "cd /home/disk1; ./elastic-build-thirdparty.sh $BRANCH $PR_NUMBER"
+            image_cache_id=$(python3 lib/eci_imagecache.py create $BRANCH-$PR_NUMBER)
+            echo "image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Clean ENV
+        if: always()
+        run: |
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+              cd elastic-service
+              python3 lib/ecs_lib.py delete_instances conf/starrocks_deploy.conf
+          fi
+
   be-ut:
     runs-on: self-hosted
-    needs: [ clang-format ]
+    needs: [ be-checker, thirdparty-update ]
     timeout-minutes: 90
     name: BE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
     steps:
       - name: BRANCH INFO
         id: branch
@@ -155,6 +212,10 @@ jobs:
           rm -rf ./elastic-service
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+              export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+              export image_tag=$BRANCH-$PR_NUMBER
+          fi
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be
 
       - name: clean ECI
@@ -284,7 +345,7 @@ jobs:
           rm -rf ./elastic-service
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
-          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}}
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release
 
       - name: Clean ECI
         if: always()
@@ -353,10 +414,11 @@ jobs:
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
   build:
     runs-on: self-hosted
-    needs: [be-checker, fe-checker, be-ut, fe-ut]
+    needs: [be-checker, fe-checker, be-ut, fe-ut, thirdparty-update]
     name: BUILD
     env:
       PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
     outputs:
       build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
     if: always() && (needs.be-ut.result == 'success' && needs.fe-ut.result == 'success') || (needs.be-checker.outputs.output1 != 'true' && needs.fe-ut.result == 'success') || (needs.fe-checker.outputs.output1 != 'true' && needs.be-ut.result == 'success')
@@ -378,6 +440,10 @@ jobs:
           rm -rf ./elastic-service
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+              export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
+              export image_tag=$BRANCH-$PR_NUMBER
+          fi
           ./bin/elastic-build.sh --pr ${PR_NUMBER}
 
       - name: build result
@@ -407,6 +473,7 @@ jobs:
     outputs:
       fe: ${{steps.deploy_sr.outputs.fe}}
       be: ${{steps.deploy_sr.outputs.be}}
+      deploy_conf_file: ${{steps.apply_resource.outputs.deploy_conf_file}}
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
@@ -425,7 +492,8 @@ jobs:
           cp -rf /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
           ./bin/elastic-cluster.sh --template admit-default
-          cp conf/starrocks_deploy.conf /var/lib/elastic-service/conf/starrocks_deploy.conf
+          cp conf/starrocks_deploy.conf /var/local/env/${PR_NUMBER}-starrocks_deploy.conf
+          echo "deploy_conf_file=/var/local/env/${PR_NUMBER}-starrocks_deploy.conf" >> $GITHUB_OUTPUT
 
       - name: Deploy SR
         id: deploy_sr
@@ -549,3 +617,29 @@ jobs:
           detailed_summary: true
           token: ${{ secrets.GITHUB_TOKEN }}
           report_paths: 'test/*.xml'
+
+  Teardown:
+    runs-on: self-hosted
+    name: Teardown
+    needs: [ deploy, SQL-Tester, admit ]
+    if: always() && needs.deploy.outputs.deploy_conf_file != ''
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      BRANCH: ${{ github.base_ref }}
+      CONF_FILE: ${{ needs.deploy.outputs.deploy_conf_file }}
+    steps:
+      - name: Backup SR Info
+        run: |
+          rm -rf ./elastic-service
+          cp -rf /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          ./bin/backup_log_cores.sh --branch $BRANCH --pr $PR_NUMBER --build Release --conf $CONF_FILE
+
+      - name: Clean ECS
+        run: |
+          cd elastic-service
+          python3 lib/ecs_lib.py delete_instances $CONF_FILE
+
+      - name: Clean TMP
+        run: |
+          rm -f $CONF_FILE

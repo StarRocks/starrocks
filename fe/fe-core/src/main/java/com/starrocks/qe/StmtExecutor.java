@@ -925,11 +925,12 @@ public class StmtExecutor {
                     // Sync load cache, auto-populate column statistic cache after Analyze table manually
                     false);
         } else {
+            StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
+                    StatsConstants.AnalyzeType.FULL;
             statisticExecutor.collectStatistics(statsConnectCtx,
                     StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, null,
                             analyzeStmt.getColumnNames(),
-                            analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
-                                    StatsConstants.AnalyzeType.FULL,
+                            analyzeType,
                             StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
                     analyzeStatus,
                     // Sync load cache, auto-populate column statistic cache after Analyze table manually
@@ -1448,7 +1449,16 @@ public class StmtExecutor {
                     ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_EXCEPTION);
                 } else {
                     coord.cancel();
-                    ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT);
+                    if (coord.isThriftServerHighLoad()) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT,
+                                "Please check the thrift-server-pool metrics, " +
+                                        "if the pool size reaches thrift_server_max_worker_threads(default is 4096), " +
+                                        "you can set the config to a higher value in fe.conf, " +
+                                        "or set parallel_fragment_exec_instance_num to a lower value in session variable");
+                    } else {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_QUERY_TIMEOUT,
+                                "Increase the query_timeout session variable and retry");
+                    }
                 }
             }
 
