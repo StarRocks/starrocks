@@ -78,9 +78,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> LakeMetaScanNode::decomp
     bool shared_morsel_queue = morsel_queue_factory->is_shared();
 
     size_t buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
-    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
-            buffer_capacity, buffer_capacity, mem_limit, runtime_state()->chunk_size());
+            buffer_capacity, buffer_capacity, _mem_limit, runtime_state()->chunk_size());
 
     auto scan_ctx_factory = std::make_shared<pipeline::MetaScanContextFactory>(this, dop, shared_morsel_queue,
                                                                                std::move(buffer_limiter));
