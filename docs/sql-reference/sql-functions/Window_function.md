@@ -20,7 +20,9 @@ Currently supported functions include:
 
 * MIN(), MAX(), COUNT(), SUM(), AVG()
 * FIRST_VALUE(), LAST_VALUE(), LEAD(), LAG()
-* ROW_NUMBER(), RANK(), DENSE_RANK(), QUALIFY()
+* ROW_NUMBER(), RANK(), DENSE_RANK()
+* CUME_DIST()
+* QUALIFY()
 
 ### PARTITION BY clause
 
@@ -196,6 +198,44 @@ from int_t where property in ('odd','even');
 +----+----------+------------------+
 ~~~
 
+### CUME_DIST()
+
+The CUME_DIST() function calculates the cumulative distribution of a value within a partition, indicating its relative position as a percentage of values less than or equal to the value in the current row. With a range of 0 to 1, it's useful for percentile calculations and data distribution analysis.
+
+Syntax:
+
+~~~SQL
+CUME_DIST() OVER (partition_by_clause order_by_clause)
+~~~
+
+The following example shows the cumulative distribution of column y within each group of column x.
+
+~~~SQL
+SELECT x, y,
+    CUME_DIST()
+        OVER (
+            PARTITION BY x
+            ORDER BY y
+        ) AS `cume_dist`
+FROM int_t;
+~~~
+
+~~~Plain Text
++---+---+-----------------------+
+| x | y | cume_dist             |
++---+---+-----------------------+
+| 1 | 1 | 0.3333333333333333    |
+| 1 | 2 | 1.0000000000000000    |
+| 1 | 2 | 1.0000000000000000    |
+| 2 | 1 | 0.3333333333333333    |
+| 2 | 2 | 0.6666666666666667    |
+| 2 | 3 | 1.0000000000000000    |
+| 3 | 1 | 0.6666666666666667    |
+| 3 | 1 | 0.6666666666666667    |
+| 3 | 2 | 1.0000000000000000    |
++---+---+-----------------------+
+~~~
+
 ### DENSE_RANK()
 
 The DENSE_RANK() function is used to represent rankings. Unlike RANK(), DENSE_RANK()**does not have vacant** numbers. For example, if there are two tied 1s, the third number of DENSE_RANK() is still 2, whereas the third number of RANK() is 3.
@@ -234,7 +274,7 @@ from int_t;
 +---+---+------+
 ~~~
 
-### NTILE
+### NTILE()
 
 NTILE() function divides the sorted rows in a partition by the specified number of `num_buckets` as equally as possible, stores the divided rows in the respective buckets, starting from 1 `[1, 2, ..., num_buckets]`, and returns the bucket number that each row is in.
 
