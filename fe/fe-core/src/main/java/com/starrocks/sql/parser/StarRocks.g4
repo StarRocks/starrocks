@@ -2116,6 +2116,7 @@ windowFunction
     : name = ROW_NUMBER '(' ')'
     | name = RANK '(' ')'
     | name = DENSE_RANK '(' ')'
+    | name = CUME_DIST '(' ')'
     | name = NTILE  '(' expression? ')'
     | name = LEAD  '(' (expression ignoreNulls? (',' expression)*)? ')' ignoreNulls?
     | name = LAG '(' (expression ignoreNulls? (',' expression)*)? ')' ignoreNulls?
