@@ -205,7 +205,7 @@ private:
     int64_t _num_rows_returned = 0;
     int64_t _limit; // -1: no limit
     bool _has_lead_lag_function = false;
-    
+
     // For cumulative distribution ranking function.
     bool _has_cume_function = false;
     std::vector<int64_t> _cume_function_index;
