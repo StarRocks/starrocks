@@ -316,6 +316,7 @@ public class ConnectProcessor {
         ctx.getAuditEventBuilder().reset();
         ctx.getAuditEventBuilder()
                 .setTimestamp(System.currentTimeMillis())
+                .setClusterName(Config.cluster_name)
                 .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
                 .setUser(ctx.getQualifiedUser())
                 .setAuthorizedUser(

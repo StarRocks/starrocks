@@ -46,6 +46,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
@@ -710,6 +711,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         ctx.getAuditEventBuilder().reset();
         ctx.getAuditEventBuilder()
                 .setTimestamp(System.currentTimeMillis())
+                .setClusterName(Config.cluster_name)
                 .setClientIp(mvContext.getRemoteIp())
                 .setUser(ctx.getQualifiedUser())
                 .setDb(ctx.getDatabase());
