@@ -1223,6 +1223,10 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "predicates: 11: cume_dist() = 1");
 
+        sql = "select tc from tall qualify percent_rank() OVER(PARTITION by ta order by tg) = 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: percent_rank() = 1");
+
         // for '<'
         sql = "select tc from tall qualify row_number() OVER(PARTITION by ta order by tg) < 1;";
         plan = getFragmentPlan(sql);
@@ -1240,6 +1244,10 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "predicates: 11: cume_dist() < 1");
 
+        sql = "select tc from tall qualify percent_rank() OVER(PARTITION by ta order by tg) < 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: percent_rank() < 1");
+
         // for '>'
         sql = "select tc from tall qualify row_number() OVER(PARTITION by ta order by tg) > 1;";
         plan = getFragmentPlan(sql);
@@ -1256,6 +1264,10 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select tc from tall qualify cume_dist() OVER(PARTITION by ta order by tg) > 1;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "predicates: 11: cume_dist() > 1");
+
+        sql = "select tc from tall qualify percent_rank() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: percent_rank() > 1");
 
         // for alias
         sql = "select ta as col1 from tall qualify dense_rank() OVER(PARTITION by ta order by tg) > 1;";
