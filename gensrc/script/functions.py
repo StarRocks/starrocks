@@ -186,6 +186,13 @@ vectorized_functions = [
 
     [10322, "square", "DOUBLE", ["DOUBLE"], "MathFunctions::square"],
 
+    [10324, "width_bucket", "BIGINT", ["TINYINT", "TINYINT", "TINYINT", "BIGINT"], "MathFunctions::width_bucket<TYPE_TINYINT>"],
+    [103241, "width_bucket", "BIGINT", ["SMALLINT", "SMALLINT", "SMALLINT", "BIGINT"], "MathFunctions::width_bucket<TYPE_SMALLINT>"],
+    [103242, "width_bucket", "BIGINT", ["INT", "INT", "INT", "BIGINT"], "MathFunctions::width_bucket<TYPE_INT>"],
+    [103243, "width_bucket", "BIGINT", ["BIGINT", "BIGINT", "BIGINT", "BIGINT"], "MathFunctions::width_bucket<TYPE_BIGINT>"],
+    [103244, "width_bucket", "BIGINT", ["FLOAT", "FLOAT", "FLOAT", "BIGINT"], "MathFunctions::width_bucket<TYPE_FLOAT>"],
+    [103245, "width_bucket", "BIGINT", ["DOUBLE", "DOUBLE", "DOUBLE", "BIGINT"], "MathFunctions::width_bucket<TYPE_DOUBLE>"],
+
     # 20xxx: bit functions
     [20010, 'bitand', 'TINYINT', ['TINYINT', 'TINYINT'], "BitFunctions::bitAnd<TYPE_TINYINT>"],
     [20011, 'bitand', 'SMALLINT', ['SMALLINT', 'SMALLINT'], "BitFunctions::bitAnd<TYPE_SMALLINT>"],

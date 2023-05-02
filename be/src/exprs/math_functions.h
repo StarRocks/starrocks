@@ -495,6 +495,45 @@ public:
         return result.build(ColumnHelper::is_all_const(columns));
     }
 
+    /**
+    * @tparam : TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT, TYPE_BIGINT, TYPE_FLOAT, TYPE_DOUBLE
+    * @param: [TypeColumn, TypeColumn, TypeColumn, BigIntColumn]
+    * @return: BigIntColumn
+    */
+    template <LogicalType Type>
+    static StatusOr<ColumnPtr> width_bucket(FunctionContext* context, const Columns& columns) {
+        auto size = columns[0]->size();
+        ColumnBuilder<TYPE_BIGINT> result(size);
+        ColumnViewer<Type> input_col(columns[0]);
+        ColumnViewer<Type> min_col(columns[1]);
+        ColumnViewer<Type> max_col(columns[2]);
+        ColumnViewer<TYPE_BIGINT> bucket_col(columns[3]);
+
+        for (int row = 0; row < size; row++) {
+            if (input_col.is_null(row) || min_col.is_null(row) || max_col.is_null(row) || bucket_col.is_null(row) ||
+                bucket_col.value(row) <= 0) {
+                result.append_null();
+                continue;
+            }
+            auto min_value = min_col.value(row);
+            auto max_value = max_col.value(row);
+            auto input_value = input_col.value(row);
+            auto bucket_num = bucket_col.value(row);
+            if (input_value < min_value) {
+                result.append(0);
+            } else if (input_value >= max_value) {
+                result.append(bucket_num + 1);
+            } else {
+                auto range_size = max_value - min_value;
+                auto dist_from_min = input_value - min_value;
+                int64_t ret = dist_from_min / (range_size / bucket_num);
+                result.append(ret + 1);
+            }
+        }
+
+        return result.build(ColumnHelper::is_all_const(columns));
+    }
+
     template <DecimalRoundRule rule>
     static StatusOr<ColumnPtr> decimal_round(FunctionContext* context, const Columns& columns);
 
