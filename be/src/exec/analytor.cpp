@@ -140,9 +140,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             _need_partition_materializing = true;
         }
 
-        if (fn.name.function_name == "cume_dist") {
+        if (fn.name.function_name == "cume_dist" || fn.name.function_name == "percent_rank") {
             if (!state->enable_pipeline_engine()) {
-                return Status::NotSupported("The CUME_DIST window function is only supported by the pipeline engine.");
+                return Status::NotSupported(strings::Substitute(
+                        "The $0 window function is only supported by the pipeline engine.", fn.name.function_name));
             }
             _has_cume_function = true;
             _cume_function_index.emplace_back(i);
@@ -158,9 +159,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         bool is_input_nullable = false;
         if (fn.name.function_name == "count" || fn.name.function_name == "row_number" ||
             fn.name.function_name == "rank" || fn.name.function_name == "dense_rank" ||
-            fn.name.function_name == "ntile" || fn.name.function_name == "cume_dist") {
+            fn.name.function_name == "cume_dist" || fn.name.function_name == "percent_rank" ||
+            fn.name.function_name == "ntile") {
             auto return_type = TYPE_BIGINT;
-            if (fn.name.function_name == "cume_dist") {
+            if (fn.name.function_name == "cume_dist" || fn.name.function_name == "percent_rank") {
                 return_type = TYPE_DOUBLE;
             }
             is_input_nullable = !fn.arg_types.empty() && (desc.nodes[0].has_nullable_child || has_outer_join_child);

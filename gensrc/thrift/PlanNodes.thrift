@@ -638,7 +638,8 @@ enum TAggregationOp {
   BITMAP_UNION,
   ANY_VALUE,
   NTILE,
-  CUME_DIST
+  CUME_DIST,
+  PERCENT_RANK
 }
 
 //struct TAggregateFunctionCall {
