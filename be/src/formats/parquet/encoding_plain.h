@@ -199,8 +199,8 @@ public:
         }
         // unlikely happened
         if (UNLIKELY(num_decoded < values_to_skip || _offset > _data.size)) {
-            return Status::InternalError(strings::Substitute(
-                    "going to skip out-of-bounds data, offset=$0,size=$1", _offset, _data.size));
+            return Status::InternalError(
+                    strings::Substitute("going to skip out-of-bounds data, offset=$0,size=$1", _offset, _data.size));
         }
         return Status::OK();
     }
@@ -384,8 +384,9 @@ public:
 
     Status skip(size_t values_to_skip) override {
         if (_offset + _type_length * values_to_skip > _data.size) {
-            return Status::InternalError(strings::Substitute(
-                    "going to skip out-of-bounds data, offset=$0,skip=$1,size=$2", _offset, _type_length * values_to_skip, _data.size));
+            return Status::InternalError(
+                    strings::Substitute("going to skip out-of-bounds data, offset=$0,skip=$1,size=$2", _offset,
+                                        _type_length * values_to_skip, _data.size));
         }
         _offset += _type_length * values_to_skip;
         return Status::OK();
