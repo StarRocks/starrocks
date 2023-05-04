@@ -1,6 +1,3 @@
-<<<<<<< HEAD:be/src/exec/vectorized/aggregate/agg_hash_variant.cpp
-#include "exec/vectorized/aggregate/agg_hash_variant.h"
-=======
 // Copyright 2021-present StarRocks, Inc. All rights reserved.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-#include "exec/aggregate/agg_hash_variant.h"
->>>>>>> 20bc392c6 ([Refactor] Replace marco with std::variant for PartitionHashMapVariant (#17742)):be/src/exec/aggregate/agg_hash_variant.cpp
+#include "exec/vectorized/aggregate/agg_hash_variant.h"
 
 #include <type_traits>
 #include <variant>
+
+#include "exec/vectorized/aggregate/agg_hash_variant.h"
 
 namespace starrocks::vectorized {
 
@@ -301,8 +299,4 @@ size_t AggHashSetVariant::allocated_memory_usage(const MemPool* pool) const {
     });
 }
 
-<<<<<<< HEAD:be/src/exec/vectorized/aggregate/agg_hash_variant.cpp
 } // namespace starrocks::vectorized
-=======
-} // namespace starrocks
->>>>>>> 20bc392c6 ([Refactor] Replace marco with std::variant for PartitionHashMapVariant (#17742)):be/src/exec/aggregate/agg_hash_variant.cpp

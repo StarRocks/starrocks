@@ -184,5 +184,7 @@ struct PartitionHashMapVariant {
     size_t size() const;
 
     size_t memory_usage() const;
+
+    bool is_nullable() const;
 };
 } // namespace starrocks::vectorized

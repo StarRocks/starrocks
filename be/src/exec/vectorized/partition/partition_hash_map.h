@@ -322,13 +322,8 @@ protected:
     }
 };
 
-<<<<<<< HEAD:be/src/exec/vectorized/partition/partition_hash_map.h
 template <PrimitiveType primitive_type, typename HashMap>
-struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase {
-=======
-template <LogicalType primitive_type, typename HashMap>
 struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase<false, false> {
->>>>>>> 20bc392c6 ([Refactor] Replace marco with std::variant for PartitionHashMapVariant (#17742)):be/src/exec/partition/partition_hash_map.h
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using FieldType = RunTimeCppType<primitive_type>;
@@ -351,13 +346,8 @@ struct PartitionHashMapWithOneNumberKey : public PartitionHashMapBase<false, fal
     }
 };
 
-<<<<<<< HEAD:be/src/exec/vectorized/partition/partition_hash_map.h
 template <PrimitiveType primitive_type, typename HashMap>
-struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase {
-=======
-template <LogicalType primitive_type, typename HashMap>
 struct PartitionHashMapWithOneNullableNumberKey : public PartitionHashMapBase<true, false> {
->>>>>>> 20bc392c6 ([Refactor] Replace marco with std::variant for PartitionHashMapVariant (#17742)):be/src/exec/partition/partition_hash_map.h
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using FieldType = RunTimeCppType<primitive_type>;

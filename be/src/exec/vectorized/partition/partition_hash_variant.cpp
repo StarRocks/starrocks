@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "exec/partition/partition_hash_variant.h"
+#include "exec/vectorized/partition/partition_hash_variant.h"
 
-#include "exec/partition/partition_hash_map.h"
+#include "exec/vectorized/partition/partition_hash_map.h"
 
-namespace starrocks {
+namespace starrocks::vectorized {
 
 namespace detail {
 template <PartitionHashMapVariant::Type>
@@ -143,4 +143,8 @@ size_t PartitionHashMapVariant::size() const {
 size_t PartitionHashMapVariant::memory_usage() const {
     return visit([](const auto& hash_map_with_key) { return hash_map_with_key->hash_map.dump_bound(); });
 }
-} // namespace starrocks
+
+bool PartitionHashMapVariant::is_nullable() const {
+    return visit([](const auto& hash_map_with_key) { return std::decay_t<decltype(*hash_map_with_key)>::is_nullable; });
+}
+} // namespace starrocks::vectorized
