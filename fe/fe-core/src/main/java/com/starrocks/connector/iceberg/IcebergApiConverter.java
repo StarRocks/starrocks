@@ -60,6 +60,7 @@ import static org.apache.iceberg.hive.IcebergHiveCatalog.LOCATION_PROPERTY;
 public class IcebergApiConverter {
     private static final Logger LOG = LogManager.getLogger(IcebergApiConverter.class);
     public static final String PARTITION_NULL_VALUE = "null";
+    private static final int FAKE_FIELD_ID = -1;
 
     public static IcebergTable toIcebergTable(Table nativeTbl, String catalogName, String remoteDbName,
                                               String remoteTableName, String nativeCatalogType,
@@ -141,14 +142,15 @@ public class IcebergApiConverter {
         }
 
         // handle complex type
+        // it's ok to use FAKE_FIELD_ID here because TypeUtil.assignFreshIds will assign ground-truth ids later.
         if (type.isArrayType()) {
             ArrayType arrayType = (ArrayType) type;
-            return Types.ListType.ofOptional(-1, toIcebergColumnType(arrayType.getItemType()));
+            return Types.ListType.ofOptional(FAKE_FIELD_ID, toIcebergColumnType(arrayType.getItemType()));
         }
 
         if (type.isMapType()) {
             MapType mapType = (MapType) type;
-            return Types.MapType.ofOptional(-1, -1, toIcebergColumnType(mapType.getKeyType()),
+            return Types.MapType.ofOptional(FAKE_FIELD_ID, FAKE_FIELD_ID, toIcebergColumnType(mapType.getKeyType()),
                     toIcebergColumnType(mapType.getValueType()));
         }
 
@@ -158,7 +160,7 @@ public class IcebergApiConverter {
             for (StructField structField : structType.getFields()) {
                 org.apache.iceberg.types.Type subtype = toIcebergColumnType(structField.getType());
                 Types.NestedField field = Types.NestedField.of(
-                        -1, true, structField.getName(), subtype, structField.getComment());
+                        FAKE_FIELD_ID, true, structField.getName(), subtype, structField.getComment());
                 fields.add(field);
             }
             return Types.StructType.of(fields);
