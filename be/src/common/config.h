@@ -294,6 +294,7 @@ CONF_Int32(update_compaction_per_tablet_min_interval_seconds, "120"); // 2min
 CONF_mInt64(max_update_compaction_num_singleton_deltas, "1000");
 
 CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
+CONF_Int32(manual_compaction_threads, "4");
 
 // if compaction of a tablet failed, this tablet should not be chosen to
 // compaction until this interval passes.

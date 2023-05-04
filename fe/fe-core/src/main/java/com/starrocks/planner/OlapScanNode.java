@@ -55,6 +55,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
@@ -617,6 +618,13 @@ public class OlapScanNode extends ScanNode {
                     output.append(prefix).append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
                 }
             }
+
+            if (!bucketColumns.isEmpty() && FeConstants.showLocalShuffleColumnsInExplain) {
+                output.append(prefix).append("LocalShuffleColumns:\n");
+                for (ColumnRefOperator col : bucketColumns) {
+                    output.append(prefix).append("- ").append(col.toString()).append("\n");
+                }
+            }
         }
 
         return output.toString();
@@ -633,19 +641,21 @@ public class OlapScanNode extends ScanNode {
         List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
         if (selectedIndexId != -1) {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
-            if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
-                for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
-                    Column col = indexMeta.getSchema().get(sortKeyIdx);
-                    keyColumnNames.add(col.getName());
-                    keyColumnTypes.add(col.getPrimitiveType().toThrift());
-                }
-            } else {
-                for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
-                    if (!col.isKey()) {
-                        break;
+            if (indexMeta != null) {
+                if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
+                    for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+                        Column col = indexMeta.getSchema().get(sortKeyIdx);
+                        keyColumnNames.add(col.getName());
+                        keyColumnTypes.add(col.getPrimitiveType().toThrift());
                     }
-                    keyColumnNames.add(col.getName());
-                    keyColumnTypes.add(col.getPrimitiveType().toThrift());
+                } else {
+                    for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
+                        if (!col.isKey()) {
+                            break;
+                        }
+                        keyColumnNames.add(col.getName());
+                        keyColumnTypes.add(col.getPrimitiveType().toThrift());
+                    }
                 }
             }
         }

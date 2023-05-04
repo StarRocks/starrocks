@@ -292,6 +292,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
 
+    public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
+
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
@@ -780,8 +782,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_SORT_AGGREGATE)
     private boolean enableSortAggregate = false;
 
+    // 1: sort based, 2: hash based
+    @VarAttr(name = WINDOW_PARTITION_MODE, flag = VariableMgr.INVISIBLE)
+    private int windowPartitionMode = 1;
+
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;
+    }
+
+    public int getWindowPartitionMode() {
+        return windowPartitionMode;
     }
 
     public void setEnableSortAggregate(boolean enableSortAggregate) {
@@ -871,6 +881,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
+
+    private int exprChildrenLimit = -1;
+
+    public int getExprChildrenLimit() {
+        return exprChildrenLimit;
+    }
+
+    public void setExprChildrenLimit(int exprChildrenLimit) {
+        this.exprChildrenLimit = exprChildrenLimit;
+    }
 
     public void setFullSortMaxBufferedRows(long v) {
         fullSortMaxBufferedRows = v;
