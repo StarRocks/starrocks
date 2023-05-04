@@ -696,3 +696,13 @@ select week_iso("2023-01-03");
 -- result:
 1
 -- !result
+select week_iso("");
+-- result:
+NULL
+-- !result
+select week_iso(NULL);
+-- result:
+NULL
+-- !result
+
+
