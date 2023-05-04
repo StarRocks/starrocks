@@ -48,13 +48,13 @@ After all the [prerequisites](#prerequisites) are met, you can download the Star
 
     ```Plain
     cd HelloStarRocks
-    wget https://download.starrocks.io/en-US/download/request-download/54/StarRocks-2.4.0.tar.gz
+    wget https://download.starrocks.io/en-US/download/request-download/54/StarRocks-2.5.5.tar.gz
     ```
 
 3. Extract the files in the software package to install StarRocks on your machine.
 
   ```Plain
-  tar -xzvf StarRocks-2.3.0.tar.gz --strip-components 1
+  tar -xzvf StarRocks-2.5.5.tar.gz --strip-components 1
   ```
 
   The software package includes the working directories of FE (**fe**), BE (**be**), [Broker](../administration/deploy_broker.md) (**apache_hdfs_broker**), User Defined Function (**udf**), and **LICENSE** and **NOTICE** files.
