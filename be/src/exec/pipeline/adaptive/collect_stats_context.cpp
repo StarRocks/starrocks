@@ -152,6 +152,8 @@ bool PassthroughState::is_downstream_finished(int32_t driver_seq) const {
 
     const auto& buffer_chunk_queue = _ctx->_buffer_chunk_queue(driver_seq);
     const auto& passthrough_chunk_queue = _in_chunk_queue_per_driver_seq[driver_seq].queue;
+    // _is_finishing_per_driver_seq is set to true using memory_order_release after all the chunks are enqueued.
+    // Therefore, enqueueing chunk hapens before setting _is_finishing_per_driver_seq to true.
     return buffer_chunk_queue.empty() && passthrough_chunk_queue.size_approx() <= 0;
 }
 bool PassthroughState::is_upstream_finished(int32_t driver_seq) const {
