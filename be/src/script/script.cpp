@@ -226,6 +226,30 @@ public:
         }
     }
 
+    static size_t submit_manual_compaction_task_for_table(int64_t table_id, int64_t rowset_size_threshold) {
+        auto infos = get_tablet_infos(table_id, -1);
+        for (auto& info : infos) {
+            submit_manual_compaction_task_for_tablet(info.tablet_id, rowset_size_threshold);
+        }
+        return infos.size();
+    }
+
+    static size_t submit_manual_compaction_task_for_partition(int64_t partition_id, int64_t rowset_size_threshold) {
+        auto infos = get_tablet_infos(-1, partition_id);
+        for (auto& info : infos) {
+            submit_manual_compaction_task_for_tablet(info.tablet_id, rowset_size_threshold);
+        }
+        return infos.size();
+    }
+
+    static void submit_manual_compaction_task_for_tablet(int64_t tablet_id, int64_t rowset_size_threshold) {
+        StorageEngine::instance()->submit_manual_compaction_task(tablet_id, rowset_size_threshold);
+    }
+
+    static std::string get_manual_compaction_status() {
+        return StorageEngine::instance()->get_manual_compaction_status();
+    }
+
     static void bind(ForeignModule& m) {
         {
             auto& cls = m.klass<TabletBasicInfo>("TabletBasicInfo");
@@ -371,6 +395,10 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, drop_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_data_dirs);
             REG_STATIC_METHOD(StorageEngineRef, do_compaction);
+            REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_table);
+            REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_partition);
+            REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_tablet);
+            REG_STATIC_METHOD(StorageEngineRef, get_manual_compaction_status);
         }
     }
 };

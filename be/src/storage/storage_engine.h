@@ -218,6 +218,9 @@ public:
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>>
     get_executed_repair_compaction_tasks();
 
+    void submit_manual_compaction_task(int64_t tablet_id, int64_t rowset_size_threshold);
+    std::string get_manual_compaction_status();
+
     void do_manual_compact(bool force_compact);
 
     void increase_update_compaction_thread(const int num_threads_per_disk);
@@ -275,6 +278,10 @@ private:
     void* _update_compaction_thread_callback(void* arg, DataDir* data_dir);
     // repair compaction function
     void* _repair_compaction_thread_callback(void* arg);
+    // manual compaction function
+    void* _manual_compaction_thread_callback(void* arg);
+
+    bool _check_and_run_manual_compaction_task();
 
     // garbage sweep thread process function. clear snapshot and trash folder
     void* _garbage_sweeper_thread_callback(void* arg);
@@ -358,6 +365,7 @@ private:
     std::mutex _repair_compaction_tasks_lock;
     std::vector<std::pair<int64_t, std::vector<uint32_t>>> _repair_compaction_tasks;
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>> _executed_repair_compaction_tasks;
+    std::vector<std::thread> _manual_compaction_threads;
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
     std::thread _adjust_cache_thread;
