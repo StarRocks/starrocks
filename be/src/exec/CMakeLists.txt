@@ -56,6 +56,7 @@ set(EXEC_FILES
     vectorized/aggregate/aggregate_streaming_node.cpp
     vectorized/aggregate/distinct_streaming_node.cpp
     vectorized/partition/chunks_partitioner.cpp
+    vectorized/partition/partition_hash_variant.cpp
     vectorized/analytic_node.cpp
     vectorized/analytor.cpp
     vectorized/csv_scanner.cpp
