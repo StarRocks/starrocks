@@ -18,7 +18,7 @@
 #include <fmt/format.h>
 #include <gutil/strings/util.h>
 
-#include <boost/algorithm/string.hpp>
+#include <algorithm>
 
 namespace starrocks {
 
@@ -28,8 +28,8 @@ bool S3URI::parse(const char* uri_str) {
         return false;
     }
 
-    _scheme = boost::algorithm::to_lower_copy(uri.scheme());
-
+    _scheme = uri.scheme();
+    std::transform(_scheme.begin(), _scheme.end(), _scheme.begin(), ::tolower);
     const std::string& host = uri.host();
     std::string_view path;
 
