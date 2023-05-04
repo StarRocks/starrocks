@@ -208,6 +208,10 @@ Syntax:
 CUME_DIST() OVER (partition_by_clause order_by_clause)
 ~~~
 
+**This function should be used with ORDER BY to sort partition rows into the desired order. Without ORDER BY, all rows are peers and have value N/N = 1, where N is the partition size.**
+
+CUME_DIST() contains NULL values and treats them as the lowest values.
+
 The following example shows the cumulative distribution of column y within each group of column x.
 
 ~~~SQL
