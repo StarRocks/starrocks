@@ -159,7 +159,7 @@ public class StateChangeExecutor extends Daemon {
                     break;
             } // end switch formerFeType
 
-            LOG.info("finished to transfer FE type to {}", feType);
+            LOG.info("finished to transfer FE type from {} to {}", feType, newType);
         }
     } // end runOneCycle
 }
