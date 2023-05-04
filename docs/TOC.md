@@ -470,6 +470,7 @@
       + [unix_timestamp](./sql-reference/sql-functions/date-time-functions/unix_timestamp.md)
       + [utc_timestamp](./sql-reference/sql-functions/date-time-functions/utc_timestamp.md)
       + [week](./sql-reference/sql-functions/date-time-functions/week.md)
+      + [week_iso](./sql-reference/sql-functions/date-time-functions/week_iso.md)
       + [weekofyear](./sql-reference/sql-functions/date-time-functions/weekofyear.md)
       + [weeks_add](./sql-reference/sql-functions/date-time-functions/weeks_add.md)
       + [weeks_diff](./sql-reference/sql-functions/date-time-functions/weeks_diff.md)
