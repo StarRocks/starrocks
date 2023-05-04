@@ -32,70 +32,69 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
 
-namespace starrocks {
-namespace parquet {
+namespace starrocks::parquet {
 
-struct SlotDesc {
-    std::string name;
-    TypeDescriptor type;
+class Utils {
+public:
+    struct SlotDesc {
+        std::string name;
+        TypeDescriptor type;
+    };
+
+    static TupleDescriptor *
+    create_tuple_descriptor(RuntimeState *state, ObjectPool *pool, const SlotDesc *slot_descs) {
+        TDescriptorTableBuilder table_desc_builder;
+        TTupleDescriptorBuilder tuple_desc_builder;
+        for (int i = 0;; i++) {
+            if (slot_descs[i].name == "") {
+                break;
+            }
+            TSlotDescriptorBuilder b2;
+            b2.column_name(slot_descs[i].name).type(slot_descs[i].type).id(i).nullable(true);
+            tuple_desc_builder.add_slot(b2.build());
+        }
+        tuple_desc_builder.build(&table_desc_builder);
+
+        std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
+        std::vector<bool> nullable_tuples = std::vector<bool>{true};
+        DescriptorTbl *tbl = nullptr;
+        DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+
+        RowDescriptor *row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        return row_desc->tuple_descriptors()[0];
+    }
+
+    static void make_column_info_vector(const TupleDescriptor *tuple_desc,
+                                        std::vector<HdfsScannerContext::ColumnInfo> *columns) {
+        columns->clear();
+        for (int i = 0; i < tuple_desc->slots().size(); i++) {
+            SlotDescriptor *slot = tuple_desc->slots()[i];
+            HdfsScannerContext::ColumnInfo c;
+            c.col_name = slot->col_name();
+            c.col_idx = i;
+            c.slot_id = slot->id();
+            c.col_type = slot->type();
+            c.slot_desc = slot;
+            columns->emplace_back(c);
+        }
+    }
+
+    static void assert_equal_chunk(const Chunk *expected, const Chunk *actual) {
+        if (expected->debug_columns() != actual->debug_columns()) {
+            std::cout << expected->debug_columns() << std::endl;
+            std::cout << actual->debug_columns() << std::endl;
+        }
+        ASSERT_EQ(expected->debug_columns(), actual->debug_columns());
+        for (size_t i = 0; i < expected->num_columns(); i++) {
+            const auto &expected_col = expected->get_column_by_index(i);
+            const auto &actual_col = expected->get_column_by_index(i);
+            if (expected_col->debug_string() != actual_col->debug_string()) {
+                std::cout << expected_col->debug_string() << std::endl;
+                std::cout << actual_col->debug_string() << std::endl;
+            }
+            ASSERT_EQ(expected_col->debug_string(), actual_col->debug_string());
+        }
+    }
 };
 
-inline TupleDescriptor* create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDesc* slot_descs) {
-    TDescriptorTableBuilder table_desc_builder;
-
-    TTupleDescriptorBuilder tuple_desc_builder;
-    int size = 0;
-    for (int i = 0;; i++) {
-        if (slot_descs[i].name == "") {
-            break;
-        }
-        TSlotDescriptorBuilder b2;
-        b2.column_name(slot_descs[i].name).type(slot_descs[i].type).id(i).nullable(true);
-        tuple_desc_builder.add_slot(b2.build());
-        size += 1;
-    }
-    tuple_desc_builder.build(&table_desc_builder);
-
-    std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    std::vector<bool> nullable_tuples = std::vector<bool>{true};
-    DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
-
-    RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
-    return row_desc->tuple_descriptors()[0];
-}
-
-inline void make_column_info_vector(const TupleDescriptor* tuple_desc,
-                                    std::vector<HdfsScannerContext::ColumnInfo>* columns) {
-    columns->clear();
-    for (int i = 0; i < tuple_desc->slots().size(); i++) {
-        SlotDescriptor* slot = tuple_desc->slots()[i];
-        HdfsScannerContext::ColumnInfo c;
-        c.col_name = slot->col_name();
-        c.col_idx = i;
-        c.slot_id = slot->id();
-        c.col_type = slot->type();
-        c.slot_desc = slot;
-        columns->emplace_back(c);
-    }
-}
-
-inline void assert_equal_chunk(const Chunk* expected, const Chunk* actual) {
-    if (expected->debug_columns() != actual->debug_columns()) {
-        std::cout << expected->debug_columns() << std::endl;
-        std::cout << actual->debug_columns() << std::endl;
-    }
-    ASSERT_EQ(expected->debug_columns(), actual->debug_columns());
-    for (size_t i = 0; i < expected->num_columns(); i++) {
-        auto expected_col = expected->get_column_by_index(i);
-        auto actual_col = expected->get_column_by_index(i);
-        if (expected_col->debug_string() != actual_col->debug_string()) {
-            std::cout << expected_col->debug_string() << std::endl;
-            std::cout << actual_col->debug_string() << std::endl;
-        }
-        ASSERT_EQ(expected_col->debug_string(), actual_col->debug_string());
-    }
-}
-
-} // namespace parquet
 } // namespace starrocks
