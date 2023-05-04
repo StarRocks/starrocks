@@ -54,6 +54,8 @@ Broker Load 支持从如下外部存储系统导入数据：
 
 - 腾讯云 COS
 
+- 华为云 OBS
+
 - 其他兼容 S3 协议的对象存储（如 MinIO）
 
 - Microsoft Azure Storage
