@@ -104,8 +104,8 @@ static Status set_config_remote(const StarRocksNodesInfo& nodes_info, int64_t be
 }
 
 static Status write_be_configs_table(const StarRocksNodesInfo& nodes_info, int64_t self_be_id, Columns& columns) {
-    if (columns.size() != 3) {
-        return Status::InternalError("write be_configs table should have 3 columns");
+    if (columns.size() < 3) {
+        return Status::InternalError("write be_configs table should have at least 3 columns");
     }
     auto update_config = UpdateConfigAction::instance();
     if (update_config == nullptr) {

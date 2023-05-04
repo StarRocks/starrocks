@@ -155,8 +155,9 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
     case TSchemaTableType::STARROCKS_ROLE_EDGES:
         return std::make_unique<StarrocksRoleEdgesScanner>();
     case TSchemaTableType::STARROCKS_GRANT_TO_ROLES:
+        return std::make_unique<StarrocksGrantsToScanner>(TGrantsToType::ROLE);
     case TSchemaTableType::STARROCKS_GRANT_TO_USERS:
-        return std::make_unique<StarrocksGrantsToScanner>();
+        return std::make_unique<StarrocksGrantsToScanner>(TGrantsToType::USER);
     default:
         return std::make_unique<SchemaDummyScanner>();
     }

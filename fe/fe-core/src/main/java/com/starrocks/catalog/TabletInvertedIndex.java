@@ -536,7 +536,9 @@ public class TabletInvertedIndex {
         }
         writeLock();
         try {
-            Preconditions.checkState(tabletMetaMap.containsKey(tabletId));
+            if (!tabletMetaMap.containsKey(tabletId)) {
+                return;
+            }
             if (replicaMetaTable.containsRow(tabletId)) {
                 Replica replica = replicaMetaTable.remove(tabletId, backendId);
                 replicaToTabletMap.remove(replica.getId());

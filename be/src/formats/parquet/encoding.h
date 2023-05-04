@@ -30,7 +30,6 @@ class Column;
 
 namespace starrocks::parquet {
 
-// NOTE: This class is only used for unit test
 class Encoder {
 public:
     Encoder() = default;
@@ -65,15 +64,17 @@ public:
     }
 
     // used to set fixed length
-    virtual void set_type_legth(int32_t type_length) {}
+    virtual void set_type_length(int32_t type_length) {}
 
-    // Set a new page to decoded.
+    // Set a new page to decode.
     virtual Status set_data(const Slice& data) = 0;
 
     // For history reason, decoder don't known how many elements encoded in one page.
     // Caller must assure that no out-of-bounds access.
     // It will return ERROR if caller wants to read out-of-bound data.
     virtual Status next_batch(size_t count, ColumnContentType content_type, Column* dst) = 0;
+
+    virtual Status skip(size_t values_to_skip) = 0;
 
     // Currently, this function is only used to read dictionary values.
     virtual Status next_batch(size_t count, uint8_t* dst) {

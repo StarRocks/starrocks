@@ -21,7 +21,7 @@ namespace starrocks {
 
 class StarrocksGrantsToScanner : public SchemaScanner {
 public:
-    StarrocksGrantsToScanner();
+    StarrocksGrantsToScanner(TGrantsToType::type type);
     ~StarrocksGrantsToScanner() override;
     Status start(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
@@ -29,6 +29,7 @@ public:
 private:
     Status fill_chunk(ChunkPtr* chunk);
 
+    TGrantsToType::type _type;
     int _grants_to_index{0};
     TGetGrantsToRolesOrUserResponse _grants_to_result;
     static SchemaScanner::ColumnDesc _s_grants_to_columns[];

@@ -15,6 +15,7 @@
 package com.starrocks.credential.gcp;
 
 import com.google.common.base.Preconditions;
+import com.staros.proto.FileStoreInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.thrift.TCloudConfiguration;
@@ -51,6 +52,12 @@ public class GCPCloudConfiguration implements CloudConfiguration {
     @Override
     public CloudType getCloudType() {
         return CloudType.GCP;
+    }
+
+    @Override
+    public FileStoreInfo toFileStoreInfo() {
+        // TODO: Support gcp credential
+        return gcpCloudCredential.toFileStoreInfo();
     }
 
     @Override

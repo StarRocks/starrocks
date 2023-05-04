@@ -655,7 +655,8 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         // 1. check if replicas' backends are mismatch
         Set<Long> replicaBackendIds = getBackendIds();
         for (Long backendId : backendsSet) {
-            if (!replicaBackendIds.contains(backendId)) {
+            if (!replicaBackendIds.contains(backendId)
+                    && containsAnyHighPrioBackend(replicaBackendIds, Config.tablet_sched_colocate_balance_high_prio_backends)) {
                 return TabletStatus.COLOCATE_MISMATCH;
             }
         }
@@ -687,6 +688,20 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         }
 
         return TabletStatus.HEALTHY;
+    }
+
+    private boolean containsAnyHighPrioBackend(Set<Long> backendIds, long[] highPriorityBackendIds) {
+        if (highPriorityBackendIds == null || highPriorityBackendIds.length == 0) {
+            return true;
+        }
+
+        for (long beId : highPriorityBackendIds) {
+            if (backendIds.contains(beId)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

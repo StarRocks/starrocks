@@ -1248,8 +1248,13 @@ struct TGetRoleEdgesResponse {
     1: optional list<TGetRoleEdgesItem> role_edges
 }
 
+enum TGrantsToType {
+    ROLE,
+    USER,
+}
+
 struct TGetGrantsToRolesOrUserRequest {
-    1: optional string type;
+    1: optional TGrantsToType type;
 }
 
 struct TGetGrantsToRolesOrUserItem {

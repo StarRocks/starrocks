@@ -1961,6 +1961,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TGetGrantsToRolesOrUserResponse getGrantsTo(TGetGrantsToRolesOrUserRequest request) {
-        return GrantsTo.getGrantsToRoles(request);
+        return GrantsTo.getGrantsTo(request);
     }
 }

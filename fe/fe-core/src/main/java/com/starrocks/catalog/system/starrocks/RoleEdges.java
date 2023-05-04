@@ -18,7 +18,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.privilege.AuthorizationManager;
-import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
@@ -50,46 +49,51 @@ public class RoleEdges {
     }
 
     public static TGetRoleEdgesResponse getRoleEdges(TGetRoleEdgesRequest request) {
-
         AuthorizationManager authorizationManager = GlobalStateMgr.getCurrentState().getAuthorizationManager();
         TGetRoleEdgesResponse tGetRoleEdgesResponse = new TGetRoleEdgesResponse();
 
-        try {
-            List<String> allRoles = authorizationManager.getAllRoles();
-            for (String roleName : allRoles) {
-                Long roleId = authorizationManager.getRoleIdByNameAllowNull(roleName);
-                RolePrivilegeCollection rolePrivilegeCollection =
-                        authorizationManager.getRolePrivilegeCollectionUnlocked(roleId, true);
-                Set<Long> parentRoleIds = rolePrivilegeCollection.getParentRoleIds();
-                for (Long parentRoleId : parentRoleIds) {
-                    RolePrivilegeCollection parentRoleCollection =
-                            authorizationManager.getRolePrivilegeCollectionUnlocked(parentRoleId, true);
-                    TGetRoleEdgesItem tGetRoleEdgesItem = new TGetRoleEdgesItem();
-                    tGetRoleEdgesItem.setFrom_role(parentRoleCollection.getName());
-                    tGetRoleEdgesItem.setTo_role(roleName);
-                    tGetRoleEdgesResponse.addToRole_edges(tGetRoleEdgesItem);
-                }
+        List<String> allRoles = authorizationManager.getAllRoles();
+        for (String roleName : allRoles) {
+            RolePrivilegeCollection rolePrivilegeCollection =
+                    authorizationManager.getRolePrivilegeCollection(roleName);
+            if (rolePrivilegeCollection == null) {
+                continue;
             }
-
-            Set<UserIdentity> allUsers = authorizationManager.getAllUserIdentities();
-            for (UserIdentity userIdentity : allUsers) {
-                UserPrivilegeCollection userPrivilegeCollection =
-                        authorizationManager.getUserPrivilegeCollectionUnlocked(userIdentity);
-                Set<Long> parentRoleIds = userPrivilegeCollection.getAllRoles();
-                for (Long parentRoleId : parentRoleIds) {
-                    RolePrivilegeCollection parentRoleCollection =
-                            authorizationManager.getRolePrivilegeCollectionUnlocked(parentRoleId, true);
-                    TGetRoleEdgesItem tGetRoleEdgesItem = new TGetRoleEdgesItem();
-                    tGetRoleEdgesItem.setFrom_role(parentRoleCollection.getName());
-                    tGetRoleEdgesItem.setTo_user(userIdentity.toString());
-                    tGetRoleEdgesResponse.addToRole_edges(tGetRoleEdgesItem);
+            Set<Long> parentRoleIds = rolePrivilegeCollection.getParentRoleIds();
+            for (Long parentRoleId : parentRoleIds) {
+                RolePrivilegeCollection parentRoleCollection =
+                        authorizationManager.getRolePrivilegeCollection(parentRoleId);
+                if (parentRoleCollection == null) {
+                    continue;
                 }
+                TGetRoleEdgesItem tGetRoleEdgesItem = new TGetRoleEdgesItem();
+                tGetRoleEdgesItem.setFrom_role(parentRoleCollection.getName());
+                tGetRoleEdgesItem.setTo_role(roleName);
+                tGetRoleEdgesResponse.addToRole_edges(tGetRoleEdgesItem);
             }
-
-            return tGetRoleEdgesResponse;
-        } catch (PrivilegeException e) {
-            LOG.warn(e.getMessage());
-            return tGetRoleEdgesResponse;
         }
+
+        Set<UserIdentity> allUsers = authorizationManager.getAllUserIdentities();
+        for (UserIdentity userIdentity : allUsers) {
+            UserPrivilegeCollection userPrivilegeCollection =
+                    authorizationManager.getUserPrivilegeCollection(userIdentity);
+            if (userPrivilegeCollection == null) {
+                continue;
+            }
+            Set<Long> parentRoleIds = userPrivilegeCollection.getAllRoles();
+            for (Long parentRoleId : parentRoleIds) {
+                RolePrivilegeCollection parentRoleCollection =
+                        authorizationManager.getRolePrivilegeCollection(parentRoleId);
+                if (parentRoleCollection == null) {
+                    continue;
+                }
+                TGetRoleEdgesItem tGetRoleEdgesItem = new TGetRoleEdgesItem();
+                tGetRoleEdgesItem.setFrom_role(parentRoleCollection.getName());
+                tGetRoleEdgesItem.setTo_user(userIdentity.toString());
+                tGetRoleEdgesResponse.addToRole_edges(tGetRoleEdgesItem);
+            }
+        }
+
+        return tGetRoleEdgesResponse;
     }
 }

@@ -1,3 +1,5 @@
+<img referrerpolicy="no-referrer-when-downgrade" src="https://static.scarf.sh/a.png?x-pxid=f5ae0b2c-3578-4a40-9056-178e9837cfe0" />
+
 # Deploy StarRocks with Docker
 
 This QuickStart tutorial guides you through the procedures to deploy StarRocks on your local machine with Docker. Before getting started, you can read [StarRocks Architecture](../introduction/Architecture.md) for more conceptual details.
@@ -29,7 +31,7 @@ Download a StarRocks Docker image from [StarRocks Docker Hub](https://hub.docker
 
 ```Bash
 sudo docker run -p 9030:9030 -p 8030:8030 -p 8040:8040 \
-    -itd starrocks.docker.scarf.sh/starrocks/allin1-ubuntu
+    -itd registry.starrocks.io/starrocks/allin1-ubuntu
 ```
 
 > **TROUBLESHOOTING**

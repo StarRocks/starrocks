@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.nio.NConnectContext;
 import com.starrocks.mysql.privilege.PrivPredicate;
@@ -213,16 +214,23 @@ public class ConnectScheduler {
                 context.setThreadLocalInfo();
                 context.setConnectScheduler(ConnectScheduler.this);
                 // authenticate check failed.
-                if (!MysqlProto.negotiate(context)) {
-                    return;
-                }
+                MysqlProto.NegotiateResult result = null;
+                try {
+                    result = MysqlProto.negotiate(context);
+                    if (!result.isSuccess()) {
+                        return;
+                    }
 
-                if (registerConnection(context)) {
-                    MysqlProto.sendResponsePacket(context);
-                } else {
-                    context.getState().setError("Reach limit of connections");
-                    MysqlProto.sendResponsePacket(context);
-                    return;
+                    if (registerConnection(context)) {
+                        MysqlProto.sendResponsePacket(context);
+                    } else {
+                        context.getState().setError("Reach limit of connections");
+                        MysqlProto.sendResponsePacket(context);
+                        return;
+                    }
+                } finally {
+                    LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context,
+                            result == null ? null : result.getAuthPacket());
                 }
 
                 context.setStartTime();

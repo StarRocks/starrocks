@@ -202,7 +202,7 @@ public class Cluster implements Writable {
         String errMsg = String.format("%d vs %d, fatal error, Write cluster meta failed!", dbCount, dbIds.size());
 
         // ensure we have removed InfoSchemaDb id
-        Preconditions.checkState(dbCount == dbIds.size() + 1, errMsg);
+        Preconditions.checkState(dbCount == dbIds.size(), errMsg);
 
         out.writeInt(dbCount);
         for (long id : dbIds) {

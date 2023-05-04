@@ -34,8 +34,7 @@
 #include "runtime/descriptor_helper.h"
 #include "testutil/assert.h"
 
-namespace starrocks {
-namespace parquet {
+namespace starrocks::parquet {
 
 static HdfsScanStats g_hdfs_scan_stats;
 using starrocks::HdfsScannerContext;
@@ -49,15 +48,15 @@ protected:
     HdfsScannerContext* _create_scan_context(const std::vector<TypeDescriptor>& type_descs) {
         auto ctx = _pool.add(new HdfsScannerContext());
 
-        std::vector<SlotDesc> slot_descs;
+        std::vector<Utils::SlotDesc> slot_descs;
         for (auto& type_desc : type_descs) {
             auto type_name = type_desc.debug_string();
             slot_descs.push_back({type_name, type_desc});
         }
         slot_descs.push_back({""});
 
-        ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
-        make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs.data());
+        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
         ASSIGN_OR_ABORT(auto file_size, _fs.get_file_size(_file_path));
         ctx->scan_ranges.emplace_back(_create_scan_range(_file_path, file_size));
         ctx->timezone = "Asia/Shanghai";
@@ -181,7 +180,7 @@ TEST_F(FileWriterTest, TestWriteIntegralTypes) {
     // read chunk and assert equality
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 TEST_F(FileWriterTest, TestWriteDecimal) {
@@ -221,7 +220,7 @@ TEST_F(FileWriterTest, TestWriteDecimal) {
     // read chunk and assert equality
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 TEST_F(FileWriterTest, TestWriteBoolean) {
@@ -249,7 +248,7 @@ TEST_F(FileWriterTest, TestWriteBoolean) {
     // read chunk and assert equality
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 TEST_F(FileWriterTest, TestWriteFloat) {
@@ -278,7 +277,7 @@ TEST_F(FileWriterTest, TestWriteFloat) {
     // read chunk and assert equality
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 TEST_F(FileWriterTest, TestWriteDouble) {
@@ -307,7 +306,7 @@ TEST_F(FileWriterTest, TestWriteDouble) {
     // read chunk and assert equality
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 TEST_F(FileWriterTest, TestWriteDate) {
@@ -345,7 +344,7 @@ TEST_F(FileWriterTest, TestWriteDate) {
     // read chunk and assert equality
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 TEST_F(FileWriterTest, TestWriteDatetime) {
@@ -383,7 +382,7 @@ TEST_F(FileWriterTest, TestWriteDatetime) {
     // read chunk and assert equality
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 TEST_F(FileWriterTest, TestWriteVarchar) {
@@ -415,7 +414,7 @@ TEST_F(FileWriterTest, TestWriteVarchar) {
     // read chunk and assert equality
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 TEST_F(FileWriterTest, TestWriteArray) {
@@ -459,7 +458,7 @@ TEST_F(FileWriterTest, TestWriteArray) {
     // read chunk and assert equality
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 TEST_F(FileWriterTest, TestWriteStruct) {
@@ -516,7 +515,7 @@ TEST_F(FileWriterTest, TestWriteStruct) {
     // read chunk and assert equality
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 TEST_F(FileWriterTest, TestWriteMap) {
@@ -570,7 +569,7 @@ TEST_F(FileWriterTest, TestWriteMap) {
     // read chunk and assert equality
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 TEST_F(FileWriterTest, TestWriteNestedArray) {
@@ -627,8 +626,7 @@ TEST_F(FileWriterTest, TestWriteNestedArray) {
     // read chunk and assert equality
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-} // namespace parquet
 } // namespace starrocks

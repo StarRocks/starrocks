@@ -84,4 +84,13 @@ public class CloudConfigurationConstants {
     public static final String GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID = "gcp.gcs.service_account_private_key_id";
     public static final String GCP_GCS_SERVICE_ACCOUNT_IMPERSONATION_SERVICE_ACCOUNT =
             "gcp.gcs.impersonation_service_account";
+
+    // Credential for HDFS
+    // TODO: Refactor the name of parameters
+    public static final String HDFS_AUTHENTICATION = "hadoop.security.authentication";
+    public static final String HDFS_USER_NAME = "username";
+    public static final String HDFS_PASSWORD = "password";
+    public static final String HDFS_KERBEROS_PRINCIPAL = "kerberos_principal";
+    public static final String HDFS_KERBEROS_KEYTAB = "kerberos_keytab";
+    public static final String HDFS_KERBEROS_KEYTAB_CONTENT = "kerberos_keytab_content";
 }

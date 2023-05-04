@@ -22,13 +22,18 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc StarrocksGrantsToScanner::_s_grants_to_columns[] = {
         //   name,       type,          size
-        {"FROM_ROLE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TO_ROLE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TO_USER", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"GRANTEE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"OBJECT_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"OBJECT_DATABASE", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"OBJECT_NAME", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"OBJECT_TYPE", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"PRIVILEGE_TYPE", TYPE_VARCHAR, sizeof(StringValue), true},
+        {"IS_GRANTABLE", TYPE_VARCHAR, sizeof(StringValue), true},
 };
 
-StarrocksGrantsToScanner::StarrocksGrantsToScanner()
-        : SchemaScanner(_s_grants_to_columns, sizeof(_s_grants_to_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
+StarrocksGrantsToScanner::StarrocksGrantsToScanner(TGrantsToType::type type)
+        : SchemaScanner(_s_grants_to_columns, sizeof(_s_grants_to_columns) / sizeof(SchemaScanner::ColumnDesc)),
+          _type(type) {}
 
 StarrocksGrantsToScanner::~StarrocksGrantsToScanner() = default;
 
@@ -37,9 +42,9 @@ Status StarrocksGrantsToScanner::start(RuntimeState* state) {
         return Status::InternalError("used before initialized.");
     }
     TGetGrantsToRolesOrUserRequest grants_to_params;
+    grants_to_params.__set_type(_type);
     if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(
-                SchemaHelper::get_grants_to(*(_param->ip), _param->port, grants_to_params, &_grants_to_result));
+        RETURN_IF_ERROR(SchemaHelper::get_grants_to(*(_param->ip), _param->port, grants_to_params, &_grants_to_result));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
@@ -133,16 +138,12 @@ Status StarrocksGrantsToScanner::fill_chunk(ChunkPtr* chunk) {
             break;
         }
         case 7: {
-            // IS_GRANTABLE
+            // IS_GRANTABLEA
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(7);
-                if (grants_to_item.__isset.is_grantable) {
-                    const std::string* str = &grants_to_item.privilege_type;
-                    Slice value(str->c_str(), str->length());
-                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
-                } else {
-                    fill_data_column_with_null(column.get());
-                }
+                const std::string str = grants_to_item.is_grantable ? "YES" : "NO";
+                Slice value(str.c_str(), str.length());
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
         }
@@ -169,4 +170,4 @@ Status StarrocksGrantsToScanner::get_next(ChunkPtr* chunk, bool* eos) {
     return fill_chunk(chunk);
 }
 
-}
+} // namespace starrocks
