@@ -1158,6 +1158,20 @@ public class ShowExecutorTest {
     }
 
     @Test
+    public void testShowCreateExternalCatalogNotExists() {
+        new MockUp<CatalogMgr>() {
+            @Mock
+            public Catalog getCatalogByName(String name) {
+                return null;
+            }
+        };
+
+        ShowCreateExternalCatalogStmt stmt = new ShowCreateExternalCatalogStmt("catalog_not_exist");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        Assert.assertThrows(AnalysisException.class, executor::execute);
+    }
+
+    @Test
     public void testShowGrants() throws Exception {
         ShowGrantsStmt stmt = new ShowGrantsStmt("root");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
