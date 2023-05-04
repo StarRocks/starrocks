@@ -95,7 +95,7 @@ After the data import, in the row `page_id = 1, visit_date = '2020-06-23 01:30:3
 Import using local files:
 
 ```shell
-cat <<<'DONE' | \
+cat <<'DONE' | \
     curl --location-trusted -u root: -H "label:label_1600960288796" \
         -H "column_separator:," \
         -H "columns:page_id,visit_date,visit_users, visit_users=to_bitmap(visit_users)" -T - \

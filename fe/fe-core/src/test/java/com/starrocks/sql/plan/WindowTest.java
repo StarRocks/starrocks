@@ -742,4 +742,45 @@ public class WindowTest extends PlanTestBase {
         expectedEx.expectMessage("HAVING clause cannot contain window function");
         String plan = getFragmentPlan(sql);
     }
+
+    @Test
+    public void testHashBasedWindowTest() throws Exception {
+        {
+            String sql = "select sum(v1) over ([hash] partition by v1,v2 )," +
+                    "sum(v1/v3) over ([hash] partition by v1,v2 ) " +
+                    "from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:ANALYTIC\n" +
+                    "  |  functions: [, sum(1: v1), ], [, sum(CAST(1: v1 AS DOUBLE) / CAST(3: v3 AS DOUBLE)), ]\n" +
+                    "  |  partition by: 1: v1, 2: v2\n" +
+                    "  |  useHashBasedPartition");
+        }
+        {
+            String sql = "select sum(v1) over ( partition by v1,v2 )," +
+                    "sum(v1/v3) over ([hash] partition by v1,v2 ) " +
+                    "from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:ANALYTIC\n" +
+                    "  |  functions: [, sum(1: v1), ]\n" +
+                    "  |  partition by: 1: v1, 2: v2");
+            assertContains(plan, "  1:ANALYTIC\n" +
+                    "  |  functions: [, sum(CAST(1: v1 AS DOUBLE) / CAST(3: v3 AS DOUBLE)), ]\n" +
+                    "  |  partition by: 1: v1, 2: v2\n" +
+                    "  |  useHashBasedPartition");
+        }
+        {
+            String sql = "select sum(v1) over ([hash] partition by v1 )," +
+                    "sum(v1/v3) over ([hash] partition by v1,v2 ) " +
+                    "from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:ANALYTIC\n" +
+                    "  |  functions: [, sum(1: v1), ]\n" +
+                    "  |  partition by: 1: v1\n" +
+                    "  |  useHashBasedPartition");
+            assertContains(plan, "  1:ANALYTIC\n" +
+                    "  |  functions: [, sum(CAST(1: v1 AS DOUBLE) / CAST(3: v3 AS DOUBLE)), ]\n" +
+                    "  |  partition by: 1: v1, 2: v2\n" +
+                    "  |  useHashBasedPartition");
+        }
+    }
 }
