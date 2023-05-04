@@ -452,7 +452,18 @@ GRANT public_sales TO ROLE lineb_query;
    GRANT REFRESH ON ALL MATERIALIZED VIEWS IN ALL DATABASES TO ROLE write_only;
    ```
 
-3. 全局、数据库级、表级以及分区级备份恢复权限
+3. 指定外部数据目录（EXTERNAL CATALOG）下的读权限
+
+   ```SQL
+   -- 创建自定义角色。
+   CREATE ROLE read_catalog_only;
+   -- 切换到对应数据目录。
+   SET CATALOG hive_catalog;
+   -- 赋予角色所有表的查询权限。
+   GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
+   ```
+
+4. 全局、数据库级、表级以及分区级备份恢复权限
 
    - 全局备份恢复权限
 
