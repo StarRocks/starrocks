@@ -276,12 +276,8 @@ private:
     void _update_window_batch_lead_lag(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
                                        int64_t frame_end);
 
-<<<<<<< HEAD:be/src/exec/vectorized/analytor.h
     int64_t _find_first_not_equal(vectorized::Column* column, int64_t target, int64_t start, int64_t end);
-=======
-    int64_t _find_first_not_equal(Column* column, int64_t target, int64_t start, int64_t end);
     int64_t _find_first_not_equal_for_hash_based_partition(int64_t target, int64_t start, int64_t end);
->>>>>>> 51e097394 ([BugFix] Fix problem of finding partition end when enable hash based partition (#20654)):be/src/exec/analytor.h
     void _find_candidate_partition_ends();
     void _find_candidate_peer_group_ends();
 };
