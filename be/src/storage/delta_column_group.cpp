@@ -92,4 +92,39 @@ Status DeltaColumnGroupListSerializer::deserialize_delta_column_group_list(const
     return Status::OK();
 }
 
+void DeltaColumnGroupListHelper::garbage_collection(DeltaColumnGroupList& dcg_list, TabletSegmentId tsid,
+                                                    int64_t min_readable_version,
+                                                    std::vector<std::pair<TabletSegmentId, int64_t>>& garbage_dcgs) {
+    auto dcg_itr = dcg_list.begin();
+    // The delta column group that need to be gc, should satisfy two point:
+    // 1. It's version is not larger than min_readable_version
+    // 2. It's all column are covered by other delta column groups which are also not larger than min_readable_version
+    std::unordered_set<uint32_t> column_set;
+    while (dcg_itr != dcg_list.end()) {
+        if ((*dcg_itr)->version() > min_readable_version) {
+            // skip the delta column group that isn't expired.
+            dcg_itr++;
+        } else {
+            bool need_free = true;
+            auto cids = (*dcg_itr)->column_ids();
+            for (uint32_t cid : cids) {
+                // We can't free the dcg that it's columns not in column_set yet.
+                if (column_set.count(cid) == 0) {
+                    need_free = false;
+                    break;
+                }
+            }
+            if (need_free) {
+                garbage_dcgs.push_back(std::make_pair(tsid, (*dcg_itr)->version()));
+                dcg_itr = dcg_list.erase(dcg_itr);
+            } else {
+                for (uint32_t cid : cids) {
+                    column_set.insert(cid);
+                }
+                dcg_itr++;
+            }
+        }
+    }
+}
+
 } // namespace starrocks

@@ -1927,11 +1927,21 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         } else {
             delvec_deleted = res.value();
         }
+        // Remove useless delta column group
+        auto update_manager = StorageEngine::instance()->update_manager();
+        size_t dcg_deleted = 0;
+        res = update_manager->clear_delta_column_group_before_version(meta_store, tablet_id, min_readable_version);
+        if (!res.ok()) {
+            LOG(WARNING) << "Fail to clear_delta_column_group_before_version tablet:" << tablet_id
+                         << " min_readable_version:" << min_readable_version << " msg:" << res.status();
+        } else {
+            dcg_deleted = res.value();
+        }
         LOG(INFO) << strings::Substitute(
                 "remove_expired_versions $0 time:$1 min_readable_version:$2 deletes: #version:$3 #rowset:$4 "
-                "#delvec:$5",
+                "#delvec:$5 #dcgs:$6",
                 _debug_version_info(true), expire_time, min_readable_version, num_version_removed, num_rowset_removed,
-                delvec_deleted);
+                delvec_deleted, dcg_deleted);
     }
     _remove_unused_rowsets();
 }
