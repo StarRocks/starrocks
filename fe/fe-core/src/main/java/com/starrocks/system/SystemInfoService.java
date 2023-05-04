@@ -65,7 +65,6 @@ import com.starrocks.common.util.NetUtils;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -1013,11 +1012,15 @@ public class SystemInfoService {
             }
         }
 
-        // add it to warehouse
+        // add it to DEFAULT_WAREHOUSE
         if (Config.only_use_compute_node) {
-            String currentWh = ConnectContext.get().getCurrentWarehouse();
-            Warehouse currentWarehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(currentWh);
-            currentWarehouse.getAnyAvailableCluster().addNode(newComputeNode.getId());
+            final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                    getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            if (warehouse != null) {
+                warehouse.getAnyAvailableCluster().addNode(newComputeNode.getId());
+            } else {
+                // TODO: cn will be updated in loadWarehouse
+            }
         }
     }
 
