@@ -881,9 +881,9 @@ struct ArrowConverter<AT, LT, is_nullable, is_strict, StructGurad<LT>> {
                 return illegal_converting_error(child_array->type()->name(), child_type.debug_string());
             }
 
-            RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(conv_func, num_elements, child_array.get(), &child_type,
-                                                                    child_col, array_start_idx, chunk_start_idx,
-                                                                    chunk_filter, ctx));
+            RETURN_IF_ERROR(ParquetScanner::convert_array_to_column(conv_func, num_elements, child_array.get(),
+                                                                    &child_type, child_col, array_start_idx,
+                                                                    chunk_start_idx, chunk_filter, ctx));
         }
 
         return Status::OK();
