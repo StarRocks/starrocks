@@ -183,6 +183,11 @@ Status StorageEngine::start_bg_threads() {
     _repair_compaction_thread = std::thread([this] { _repair_compaction_thread_callback(nullptr); });
     Thread::set_thread_name(_repair_compaction_thread, "repair_compact");
 
+    for (uint32_t i = 0; i < config::manual_compaction_threads; i++) {
+        _manual_compaction_threads.emplace_back([this] { _manual_compaction_thread_callback(nullptr); });
+        Thread::set_thread_name(_update_compaction_threads.back(), "manual_compact");
+    }
+
     // tablet checkpoint thread
     for (auto data_dir : data_dirs) {
         _tablet_checkpoint_threads.emplace_back([this, data_dir] { _tablet_checkpoint_callback((void*)data_dir); });

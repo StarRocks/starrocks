@@ -1901,6 +1901,43 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     return st;
 }
 
+Status TabletUpdates::get_rowsets_for_compaction(int64_t rowset_size_threshold, std::vector<uint32_t>& rowset_ids,
+                                                 size_t& total_bytes) {
+    std::vector<uint32_t> all_rowsets;
+    {
+        std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            string msg = strings::Substitute("tablet deleted when get_rowsets_for_compaction tablet:$0",
+                                             _tablet.tablet_id());
+            LOG(WARNING) << msg;
+            _compaction_running = false;
+            return Status::InternalError(msg);
+        }
+        all_rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
+    }
+    total_bytes = 0;
+    {
+        std::lock_guard lg(_rowset_stats_lock);
+        for (auto rowsetid : all_rowsets) {
+            auto itr = _rowset_stats.find(rowsetid);
+            if (itr == _rowset_stats.end()) {
+                // should not happen
+                string msg = strings::Substitute("rowset not found in rowset stats tablet=$0 rowset=$1",
+                                                 _tablet.tablet_id(), rowsetid);
+                DCHECK(false) << msg;
+                LOG(WARNING) << msg;
+                continue;
+            }
+            auto& stat = *itr->second;
+            if (stat.byte_size < rowset_size_threshold) {
+                rowset_ids.push_back(rowsetid);
+                total_bytes += stat.byte_size;
+            }
+        }
+    }
+    return Status::OK();
+}
+
 Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>& input_rowset_ids) {
     if (_error) {
         return Status::InternalError(Substitute("compaction failed, tablet updates is in error state: tablet:$0 $1",
@@ -1929,6 +1966,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
     size_t total_bytes = 0;
     size_t total_rows_after_compaction = 0;
     size_t total_bytes_after_compaction = 0;
+    size_t total_segments = 0;
     {
         std::lock_guard lg(_rowset_stats_lock);
         for (auto rowsetid : input_rowset_ids) {
@@ -1953,10 +1991,16 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
                 total_rows_after_compaction += stat.num_rows - stat.num_dels;
                 total_bytes_after_compaction += stat.byte_size * (stat.num_rows - stat.num_dels) / stat.num_rows;
             }
+            total_segments += stat.num_segments;
         }
     }
     if (info->inputs.empty()) {
         LOG(INFO) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
+        _compaction_running = false;
+        return Status::OK();
+    }
+    if (total_segments == 1) {
+        LOG(INFO) << "only 1 segment, skip update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;
         return Status::OK();
     }

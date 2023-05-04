@@ -56,6 +56,7 @@ set(EXEC_FILES
     vectorized/aggregate/aggregate_streaming_node.cpp
     vectorized/aggregate/distinct_streaming_node.cpp
     vectorized/partition/chunks_partitioner.cpp
+    vectorized/partition/partition_hash_variant.cpp
     vectorized/analytic_node.cpp
     vectorized/analytor.cpp
     vectorized/csv_scanner.cpp
@@ -216,6 +217,9 @@ set(EXEC_FILES
     pipeline/set/intersect_build_sink_operator.cpp
     pipeline/set/intersect_probe_sink_operator.cpp
     pipeline/set/intersect_output_source_operator.cpp
+    pipeline/hash_partition_context.cpp
+    pipeline/hash_partition_sink_operator.cpp
+    pipeline/hash_partition_source_operator.cpp
     pipeline/chunk_accumulate_operator.cpp
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp

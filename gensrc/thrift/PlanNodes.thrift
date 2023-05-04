@@ -788,6 +788,7 @@ struct TAnalyticNode {
   11: optional string sql_aggregate_functions
 
   20: optional bool has_outer_join_child
+  21: optional bool use_hash_based_partition
 }
 
 struct TMergeNode {
