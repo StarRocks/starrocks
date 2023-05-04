@@ -20,4 +20,29 @@ select week_iso(NULL);
 NULL
 -- !result
 
+<<<<<<< HEAD
+=======
+-- name: test_week_iso
+select week_iso("2023-01-01");
+-- result:
+52
+-- !result
+select week_iso("2023-01-02");
+-- result:
+1
+-- !result
+select week_iso("2023-01-03");
+-- result:
+1
+-- !result
+select week_iso("");
+-- result:
+NULL
+-- !result
+select week_iso(NULL);
+-- result:
+NULL
+-- !result
+
+>>>>>>> 054b2d604 ([Enhancement] support iso week function (#20511) (#22773))
 
