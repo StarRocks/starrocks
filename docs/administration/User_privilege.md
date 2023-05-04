@@ -422,22 +422,22 @@ We recommend you customize roles to manage privileges and users. The following e
    ```SQL
    --Create a role.
    CREATE ROLE read_only;
-   --Grant USAGE privileges on all catalogs to the role.
+   --Grant the USAGE privilege on all catalogs to the role.
    GRANT USAGE ON ALL CATALOGS TO ROLE read_only;
-   --Grant SELECT privileges on all tables to the role.
+   --Grant the SELECT privilege on all tables to the role.
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_only;
-   --Grant SELECT privileges on all views to the role.
+   --Grant the SELECT privilege on all views to the role.
    GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_only;
-   --Grant SELECT privileges on all materialized views and the privilege to accelerate queries with them to the role.
+   --Grant the SELECT privilege on all materialized views and the privilege to accelerate queries with them to the role.
    GRANT SELECT ON ALL MATERIALIZED VIEWS IN ALL DATABASES TO ROLE read_only;
    ```
 
    And you can further grant the privilege to use UDFs in queries:
 
    ```SQL
-   --Grant USAGE privileges on all database-level UDF to the role.
+   --Grant the USAGE privilege on all database-level UDF to the role.
    GRANT USAGE ON ALL FUNCTIONS IN ALL DATABASES TO ROLE read_only;
-   --Grant USAGE privileges on global UDF to the role.
+   --Grant the USAGE privilege on global UDF to the role.
    GRANT USAGE ON ALL GLOBAL FUNCTIONS TO ROLE read_only;
    ```
 
@@ -446,7 +446,7 @@ We recommend you customize roles to manage privileges and users. The following e
    ```SQL
    --Create a role.
    CREATE ROLE write_only;
-   --Grant USAGE privilege on all catalogs to the role.
+   --Grant the USAGE privilege on all catalogs to the role.
    GRANT USAGE ON ALL CATALOGS TO ROLE write_only;
    --Grant INSERT and UPDATE privileges on all tables to the role.
    GRANT INSERT, UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE write_only;
@@ -461,7 +461,7 @@ We recommend you customize roles to manage privileges and users. The following e
    CREATE ROLE read_catalog_only;
    --Switch to the corresponding catalog.
    SET CATALOG hive_catalog;
-   --Grant SELECT privileges on all tables in all databases.
+   --Grant the SELECT privilege on all tables in all databases.
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
    ```
 
