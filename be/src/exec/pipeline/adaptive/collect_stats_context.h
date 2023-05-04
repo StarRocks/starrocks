@@ -179,7 +179,7 @@ private:
         ChunkQueueWrapper() : queue(), token(queue) {}
 
         ChunkQueue queue;
-        //_producer_token is used to ensure that the order of dequeueing is the same as enqueueing
+        // token is used to ensure that the order of dequeueing is the same as enqueueing.
         ChunkQueue::producer_token_t token;
     };
     std::vector<ChunkQueueWrapper> _in_chunk_queue_per_driver_seq;

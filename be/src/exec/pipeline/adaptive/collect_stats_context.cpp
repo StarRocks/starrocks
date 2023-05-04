@@ -92,7 +92,8 @@ bool PassthroughState::need_input(int32_t driver_seq) const {
 }
 
 Status PassthroughState::push_chunk(int32_t driver_seq, ChunkPtr chunk) {
-    _in_chunk_queue_per_driver_seq[driver_seq].queue.enqueue(std::move(chunk));
+    auto& [chunk_queue, token] = _in_chunk_queue_per_driver_seq[driver_seq];
+    chunk_queue.enqueue(token, std::move(chunk));
     return Status::OK();
 }
 
