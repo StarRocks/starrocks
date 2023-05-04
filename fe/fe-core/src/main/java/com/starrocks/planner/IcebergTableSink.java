@@ -39,7 +39,7 @@ public class IcebergTableSink extends DataSink {
     private final long targetTableId;
     private final String fileFormat;
     private final String location;
-    private String compressionType;
+    private final String compressionType;
     private final boolean isStatisticsPartitionSink;
     private final String tableIdentifier;
 
@@ -56,9 +56,13 @@ public class IcebergTableSink extends DataSink {
             case "parquet":
                 compressionType = nativeTable.properties().getOrDefault(PARQUET_COMPRESSION, PARQUET_COMPRESSION_DEFAULT)
                         .toLowerCase(Locale.ROOT);
+                break;
             case "orc":
                 compressionType = nativeTable.properties().getOrDefault(ORC_COMPRESSION, ORC_COMPRESSION_DEFAULT)
                         .toLowerCase(Locale.ROOT);
+                break;
+            default:
+                compressionType = "default";
         }
     }
 

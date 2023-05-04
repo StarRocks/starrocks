@@ -178,7 +178,7 @@ public:
     ~AsyncFileWriter() override = default;
 
     Status close(RuntimeState* state,
-                 std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> cb = nullptr);
+                 const std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)>& cb = nullptr);
 
     bool writable() {
         auto lock = std::unique_lock(_m);

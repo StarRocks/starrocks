@@ -433,7 +433,7 @@ void AsyncFileWriter::_flush_row_group() {
 }
 
 Status AsyncFileWriter::close(RuntimeState* state,
-                              std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> cb) {
+                              const std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)>& cb) {
     bool ret = _executor_pool->try_offer([&, state, cb]() {
         SCOPED_TIMER(_io_timer);
         {

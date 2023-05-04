@@ -36,7 +36,6 @@
 namespace starrocks {
 
 struct TableInfo;
-struct PartitionInfo;
 
 struct TableInfo {
     TCompressionType::type _compress_type = TCompressionType::SNAPPY;
@@ -59,11 +58,8 @@ public:
     bool writable() const { return _writer == nullptr || _writer->writable(); }
     bool closed();
 
-    static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
-
 private:
     std::string _new_file_location();
-    std::string _get_file_location() { return _outfile_location; }
 
     Status _new_file_writer();
     Status close_current_writer(RuntimeState* state);
@@ -74,7 +70,7 @@ private:
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
     std::string _partition_location;
-    int32_t _cnt = 0;
+    int32_t _file_cnt = 0;
     std::string _outfile_location;
     std::vector<std::shared_ptr<starrocks::parquet::AsyncFileWriter>> _pending_commits;
     int64_t _max_file_size = 1 * 1024 * 1024 * 1024; // 1GB

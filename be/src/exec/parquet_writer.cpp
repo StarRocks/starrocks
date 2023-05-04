@@ -50,8 +50,8 @@ Status RollingAsyncParquetWriter::init_rolling_writer(const TableInfo& tableInfo
 }
 
 std::string RollingAsyncParquetWriter::_new_file_location() {
-    _cnt += 1;
-    _outfile_location = _partition_location + fmt::format("{}_{}.parquet", _cnt, generate_uuid_string());
+    _file_cnt += 1;
+    _outfile_location = _partition_location + fmt::format("{}_{}.parquet", _file_cnt, generate_uuid_string());
     return _outfile_location;
 }
 

@@ -81,7 +81,7 @@ Status IcebergTableSinkOperator::set_cancelled(RuntimeState* state) {
 }
 
 StatusOr<ChunkPtr> IcebergTableSinkOperator::pull_chunk(RuntimeState* state) {
-    return Status::InternalError("Shouldn't pull chunk from mysql table sink operator");
+    return Status::InternalError("Shouldn't pull chunk from iceberg table sink operator");
 }
 
 Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
