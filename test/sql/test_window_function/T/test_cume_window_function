@@ -95,14 +95,14 @@ SELECT *, CUME_DIST() OVER (PARTITION BY v3 ORDER BY v4) AS cume_dist_v3_partiti
 SELECT *, CUME_DIST() OVER (PARTITION BY k1 ORDER BY k2) AS cume_dist_k1_partition_k2 FROM cume_test ORDER BY v1;
 SELECT *, CUME_DIST() OVER (PARTITION BY v4 ORDER BY v3) AS cume_dist_v4_partition_v3 FROM cume_test ORDER BY v2 DESC;
 
-SELECT *, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1, ROW_NUMBER() OVER (ORDER BY v1) AS row_number_v1 FROM cume_test;
+SELECT *, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1, ROW_NUMBER() OVER (ORDER BY v1, v3) AS row_number_v1_v3 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v2) AS cume_dist_v2, RANK() OVER (ORDER BY v1) AS rank_v1 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v3) AS cume_dist_v3, DENSE_RANK() OVER (ORDER BY v1) AS dense_rank_v1 FROM cume_test;
-SELECT *, CUME_DIST() OVER (ORDER BY v4) AS cume_dist_v4, NTILE(5) OVER (ORDER BY v1) AS ntile_v1 FROM cume_test;
-SELECT *, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1, LAG(v2) OVER (ORDER BY v1) AS lag_v2 FROM cume_test;
-SELECT *, CUME_DIST() OVER (ORDER BY v2) AS cume_dist_v2, LEAD(v2) OVER (ORDER BY v1) AS lead_v2 FROM cume_test;
-SELECT *, CUME_DIST() OVER (ORDER BY v3) AS cume_dist_v3, FIRST_VALUE(v2) OVER (ORDER BY v1) AS first_value_v2 FROM cume_test;
-SELECT *, CUME_DIST() OVER (ORDER BY v4) AS cume_dist_v4, LAST_VALUE(v2) OVER (ORDER BY v1 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_value_v2 FROM cume_test;
+SELECT *, CUME_DIST() OVER (ORDER BY v4) AS cume_dist_v4, NTILE(5) OVER (ORDER BY v1, v3) AS ntile_v1 FROM cume_test;
+SELECT *, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1, LAG(v2) OVER (ORDER BY v1, v3) AS lag_v2 FROM cume_test;
+SELECT *, CUME_DIST() OVER (ORDER BY v2) AS cume_dist_v2, LEAD(v2) OVER (ORDER BY v1, v3) AS lead_v2 FROM cume_test;
+SELECT *, CUME_DIST() OVER (ORDER BY v3) AS cume_dist_v3, FIRST_VALUE(v2) OVER (ORDER BY v1, v3) AS first_value_v2 FROM cume_test;
+SELECT *, CUME_DIST() OVER (ORDER BY v4) AS cume_dist_v4, LAST_VALUE(v2) OVER (ORDER BY v1, v3 ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS last_value_v2 FROM cume_test;
 
 SELECT *, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1, AVG(v2) OVER (ORDER BY v1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS avg_v2 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v2) AS cume_dist_v2, SUM(v2) OVER (ORDER BY v1 ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS sum_v2 FROM cume_test;
