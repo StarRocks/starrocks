@@ -93,7 +93,10 @@ bool PassthroughState::need_input(int32_t driver_seq) const {
 
 Status PassthroughState::push_chunk(int32_t driver_seq, ChunkPtr chunk) {
     auto& [chunk_queue, token] = _in_chunk_queue_per_driver_seq[driver_seq];
-    chunk_queue.enqueue(token, std::move(chunk));
+    if (UNLIKELY(!chunk_queue.enqueue(token, std::move(chunk)))) {
+        return Status::MemoryLimitExceeded(
+                "allocation failed when enqueueing into the passthrough queue of CollectStatsSink");
+    }
     return Status::OK();
 }
 
@@ -132,7 +135,9 @@ StatusOr<ChunkPtr> PassthroughState::pull_chunk(int32_t driver_seq) {
 
     auto& passthrough_chunk_queue = _in_chunk_queue_per_driver_seq[driver_seq].queue;
     ChunkPtr chunk = nullptr;
-    passthrough_chunk_queue.try_dequeue(chunk);
+    if (UNLIKELY(!passthrough_chunk_queue.try_dequeue(chunk))) {
+        return Status::InternalError("attempt to dequeue from the empty passthrough queue of CollectStatsSource");
+    }
     return chunk;
 }
 
