@@ -669,6 +669,7 @@ public class WindowTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         {
             // Cannot be optimized, the result of cume_dist() is double.
+            // cume_dist() need partition_count and peer_group_count to calculate.
             String sql = "select * from (\n" +
                     "    select *, " +
                     "        cume_dist() over (order by v2) as cd " +
@@ -701,7 +702,7 @@ public class WindowTest extends PlanTestBase {
             assertNotContains(plan, "TOP-N");
         }
         {
-            // Optimized, do not share the same sort group with row_number().
+            // Cannot be optimized and do not share the same sort group with row_number().
             String sql = "select * from (\n" +
                     "    select *, " +
                     "        cume_dist() over (order by v3) as cd," +
@@ -710,10 +711,9 @@ public class WindowTest extends PlanTestBase {
                     ") sub_t0\n" +
                     "where rk <= 4;";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  4:TOP-N\n" +
-                    "  |  order by: <slot 2> 2: v2 ASC\n" +
-                    "  |  offset: 0\n" +
-                    "  |  limit: 4");
+            assertContains(plan, "  1:SORT\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC\n" +
+                    "  |  offset: 0");
         }
         FeConstants.runningUnitTest = false;
     }
@@ -722,6 +722,7 @@ public class WindowTest extends PlanTestBase {
     public void testCumeWindowWithoutPartitionLimit() throws Exception {
         FeConstants.runningUnitTest = true;
         {
+            // Cannot be optimized.
             String sql = "select * from (\n" +
                     "    select *, " +
                     "        cume_dist() over (order by v2) as cd " +
@@ -729,17 +730,16 @@ public class WindowTest extends PlanTestBase {
                     ") sub_t0\n" +
                     "order by cd limit 5;";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  4:TOP-N\n" +
-                    "  |  order by: <slot 4> 4: cume_dist() ASC\n" +
-                    "  |  offset: 0\n" +
-                    "  |  limit: 5");
+            assertContains(plan, "  1:SORT\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
         }
         {
-            // Two window function share the same sort group cannot be optimized.
+            // Cannot be optimized and share the same sort group with rank().
             String sql = "select * from (\n" +
                     "    select *, " +
                     "        cume_dist() over (order by v2) as cd, " +
-                    "        sum(v1) over (order by v2) as sm " +
+                    "        rank() over (order by v2) as rk " +
                     "    from t0\n" +
                     ") sub_t0\n" +
                     "order by cd limit 5";
@@ -750,7 +750,7 @@ public class WindowTest extends PlanTestBase {
 
             sql = "select * from (\n" +
                     "    select *, " +
-                    "        sum(v1) over (order by v2) as sm, " +
+                    "        rank() over (order by v2) as rk, " +
                     "        cume_dist() over (order by v2) as cd " +
                     "    from t0\n" +
                     ") sub_t0\n" +
@@ -761,7 +761,7 @@ public class WindowTest extends PlanTestBase {
                     "  |  offset: 0");
         }
         {
-            // Two window function do not share the same sort group.
+            // Cannot be optimized and two window function do not share the same sort group.
             String sql = "select * from (\n" +
                     "    select *, " +
                     "        sum(v1) over (order by v3) as sm, " +
@@ -770,10 +770,9 @@ public class WindowTest extends PlanTestBase {
                     ") sub_t0\n" +
                     "order by cd,sm limit 100,1";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  6:TOP-N\n" +
-                    "  |  order by: <slot 5> 5: cume_dist() ASC, <slot 4> 4: sum(1: v1) ASC\n" +
-                    "  |  offset: 0\n" +
-                    "  |  limit: 101");
+            assertContains(plan, "  4:SORT\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
         }
         FeConstants.runningUnitTest = false;
     }
