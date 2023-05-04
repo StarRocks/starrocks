@@ -196,11 +196,11 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 
 The upgrade process lasts for a while. You can run the command `kubectl -n starrocks get pods` to view the upgrade progress.
 
-#### Scale StarRocks cluster
+### Scale StarRocks cluster
 
 This topic takes scaling out the BE and FE clusters as examples.
 
-##### Scale out BE cluster
+#### Scale out BE cluster
 
 Run the following command to scale out the BE cluster to 9 nodes:
 
@@ -208,7 +208,7 @@ Run the following command to scale out the BE cluster to 9 nodes:
 kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":"9"}}}'
 ```
 
-##### Scale out FE cluster
+#### Scale out FE cluster
 
 Run the following command to scale out the FE cluster to 4 nodes:
 
