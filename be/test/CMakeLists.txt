@@ -148,6 +148,11 @@ set(EXEC_FILES
         ./formats/parquet/group_reader_test.cpp
         ./formats/parquet/file_reader_test.cpp
         ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
+<<<<<<< HEAD
+=======
+        ./formats/parquet/column_converter_test.cpp
+        ./formats/parquet/parquet_footer_test.cpp
+>>>>>>> 955b9876b ([Enhancement] Improve parquet UT coverage (#22790))
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_client_test.cpp

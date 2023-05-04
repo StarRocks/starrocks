@@ -199,7 +199,7 @@ Status ColumnChunkReader::_parse_data_page() {
         _decoders[static_cast<int>(encoding)] = std::move(decoder);
     }
 
-    _cur_decoder->set_type_legth(_type_length);
+    _cur_decoder->set_type_length(_type_length);
     _cur_decoder->set_data(_data);
 
     _page_parse_state = PAGE_DATA_PARSED;
@@ -233,7 +233,7 @@ Status ColumnChunkReader::_parse_dict_page() {
     RETURN_IF_ERROR(EncodingInfo::get(metadata().type, dict_encoding, &code_info));
     RETURN_IF_ERROR(code_info->create_decoder(&dict_decoder));
     dict_decoder->set_data(_data);
-    dict_decoder->set_type_legth(_type_length);
+    dict_decoder->set_type_length(_type_length);
 
     // initialize decoder
     std::unique_ptr<Decoder> decoder;

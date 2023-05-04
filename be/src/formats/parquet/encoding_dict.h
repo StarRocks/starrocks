@@ -108,6 +108,13 @@ public:
         return Status::OK();
     }
 
+    Status skip(size_t values_to_skip) override {
+        //TODO(Smith) still heavy work load
+        _indexes.reserve(values_to_skip);
+        _index_batch_decoder.GetBatch(&_indexes[0], values_to_skip);
+        return Status::OK();
+    }
+
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
         _indexes.reserve(count);
         _index_batch_decoder.GetBatch(&_indexes[0], count);
@@ -208,6 +215,13 @@ public:
         } else {
             return Status::Corruption("input encoded data size is 0");
         }
+        return Status::OK();
+    }
+
+    Status skip(size_t values_to_skip) override {
+        //TODO(Smith) still heavy work load
+        _indexes.reserve(values_to_skip);
+        _index_batch_decoder.GetBatch(&_indexes[0], values_to_skip);
         return Status::OK();
     }
 

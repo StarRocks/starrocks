@@ -427,7 +427,13 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         break;
     }
     case tparquet::Type::type::BYTE_ARRAY: {
+<<<<<<< HEAD
         if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR) {
+=======
+        // TODO don't support converter byte_array to decimal
+        if (col_type != LogicalType::TYPE_VARCHAR && col_type != LogicalType::TYPE_CHAR &&
+            col_type != LogicalType::TYPE_VARBINARY) {
+>>>>>>> 955b9876b ([Enhancement] Improve parquet UT coverage (#22790))
             need_convert = true;
         }
         break;
