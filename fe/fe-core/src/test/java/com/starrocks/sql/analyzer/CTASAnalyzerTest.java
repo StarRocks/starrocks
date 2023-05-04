@@ -485,7 +485,7 @@ public class CTASAnalyzerTest {
     @Test
     public void testCTASDefaultLimit() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        String sql = "create table ctas_limit (c1, c2, c3) as select t1.c1, t1.c2, t1.c3 from test_notnull t1;";
+        String sql = "create table ctas_limit as select * from test_notnull t1;";
         try {
             ctx.getSessionVariable().setSqlSelectLimit(10);
             CreateTableAsSelectStmt ctasStmt =
