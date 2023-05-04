@@ -323,11 +323,11 @@ int64_t BinlogDataSource::cpu_time_spent() const {
 }
 
 int64_t BinlogDataSource::num_rows_read_in_epoch() const {
-    return _rows_read_number;
+    return _rows_read_in_epoch;
 }
 
 int64_t BinlogDataSource::cpu_time_spent_in_epoch() const {
-    return _cpu_time_ns;
+    return _cpu_time_spent_in_epoch;
 }
 
 } // namespace starrocks::connector

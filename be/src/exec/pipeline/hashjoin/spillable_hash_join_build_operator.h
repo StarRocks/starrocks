@@ -64,7 +64,6 @@ private:
     ChunkSharedSlice _hash_table_build_chunk_slice;
     std::function<StatusOr<ChunkPtr>()> _hash_table_slice_iterator;
     bool _is_first_time_spill = true;
-    size_t _push_numbers = 0;
 };
 
 class SpillableHashJoinBuildOperatorFactory final : public HashJoinBuildOperatorFactory {
