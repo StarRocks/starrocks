@@ -2,7 +2,7 @@
 
 ## Table Type Selection
 
-StarRocks supports four table types: Duplicate Key table, Aggragate table, Unique Key table, and Primary Key table. All of them are sorted by KEY.
+StarRocks supports four table types: Duplicate Key table, Aggregate table, Unique Key table, and Primary Key table. All of them are sorted by KEY.
 
 - `AGGREGATE KEY`: When records with the same AGGREGATE KEY is loaded into StarRocks, the old and new records are aggregated. Currently, aggregate tables supports the following aggregate functions: SUM, MIN, MAX, and REPLACE. Aggregate tables support aggregating data in advance, facilitating business statements and multi-dimensional analyses.
 - `DUPLICATE KEY`: You only need to specify the sort key for a DUPLICATE KEY table. Records with the same DUPLICATE KEY exist at the same time. It is suitable for analyses that do not involve aggregating data in advance.
@@ -133,29 +133,29 @@ A rollup is essentially a materialized index of the original table (base table).
 
 - Data aggregation in the base table is not high, because the base table has fields with high differentiation. In this case, you may consider selecting some columns to create rollups. Use the above `site_visit` table as an example:
 
-~~~sql
-site_visit(siteid, city, username, pv)
-~~~
+  ~~~sql
+  site_visit(siteid, city, username, pv)
+  ~~~
 
-`siteid` may lead to poor data aggregation. If you need to frequently calculate PVs by city, you can create a rollup with only `city` and `pv`.
+  `siteid` may lead to poor data aggregation. If you need to frequently calculate PVs by city, you can create a rollup with only `city` and `pv`.
 
-~~~sql
-ALTER TABLE site_visit ADD ROLLUP rollup_city(city, pv);
-~~~
+  ~~~sql
+  ALTER TABLE site_visit ADD ROLLUP rollup_city(city, pv);
+  ~~~
 
 - The prefix index in the base table cannot be hit, because the way the base table is built cannot cover all the query patterns. In this case, you may consider creating a rollup to adjust the column order. Use the above `session_data` table as an example:
 
-~~~sql
-session_data(visitorid, sessionid, visittime, city, province, ip, brower, url)
-~~~
+  ~~~sql
+  session_data(visitorid, sessionid, visittime, city, province, ip, brower, url)
+  ~~~
 
-If there are cases where you need to analyze visits by `browser` and `province` in addition to `visitorid`, you can create a separate rollup:
+  If there are cases where you need to analyze visits by `browser` and `province` in addition to `visitorid`, you can create a separate rollup:
 
-~~~sql
-ALTER TABLE session_data
-ADD ROLLUP rollup_brower(brower,province,ip,url)
-DUPLICATE KEY(brower,province);
-~~~
+  ~~~sql
+  ALTER TABLE session_data
+  ADD ROLLUP rollup_brower(brower,province,ip,url)
+  DUPLICATE KEY(brower,province);
+  ~~~
 
 ## Schema change
 
@@ -163,14 +163,14 @@ There are three ways to change schemas in StarRocks: sorted schema change, direc
 
 - Sorted schema change: Change the sorting of a column and reorder the data. For example, deleting a column in a sorted schema leads to data reorder.
 
-`ALTER TABLE site_visit DROP COLUMN city;`
+  `ALTER TABLE site_visit DROP COLUMN city;`
 
 - Direct schema change: Transform the data instead of reordering it, for example, changing the column type or adding a column to a sparse index.
 
-`ALTER TABLE site_visit MODIFY COLUMN username varchar(64);`
+  `ALTER TABLE site_visit MODIFY COLUMN username varchar(64);`
 
 - Linked schema change: Complete changes without transforming data, for example, adding columns.
 
-`ALTER TABLE site_visit ADD COLUMN click bigint SUM default '0';`
+  `ALTER TABLE site_visit ADD COLUMN click bigint SUM default '0';`
 
-It is recommended to choose an appropriate schema when you create tables to accelerate schema changes.
+  It is recommended to choose an appropriate schema when you create tables to accelerate schema changes.
