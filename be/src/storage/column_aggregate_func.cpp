@@ -217,7 +217,7 @@ public:
 };
 
 template <>
-class ReplaceAggregator<StructColumn, ColumnRefState> final 
+class ReplaceAggregator<StructColumn, ColumnRefState> final
         : public ValueColumnAggregator<StructColumn, ColumnRefState> {
 public:
     void reset() override { this->data().reset(); }
