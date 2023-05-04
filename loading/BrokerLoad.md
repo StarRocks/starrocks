@@ -35,13 +35,15 @@ Broker Load 支持从如下外部存储系统导入数据：
 
 - HDFS
 
-- Amazon S3
+- AWS S3
 
 - Google GCS
 
 - 阿里云 OSS
 
 - 腾讯云 COS
+
+- 华为云 OBS
 
 ## 前提条件
 
@@ -113,7 +115,7 @@ Broker Load 支持从如下外部存储系统导入数据：
    200,'北京'
    ```
 
-3. 把创建好的数据文件 `file1.csv` 和 `file2.csv` 分别上传到 HDFS 集群的 `/user/starrocks/` 路径下、Amazon S3 存储空间 `bucket_s3` 里的 `input` 文件夹下、 Google GCS 存储空间 `bucket_gcs` 里的 `input` 文件夹下、阿里云 OSS 存储空间 `bucket_oss` 里的 `input` 文件夹下、以及腾讯云 COS 存储空间 `bucket_cos` 里的 `input` 文件夹下。
+3. 把创建好的数据文件 `file1.csv` 和 `file2.csv` 分别上传到 HDFS 集群的 `/user/starrocks/` 路径下、AWS S3 存储空间 `bucket_s3` 里的 `input` 文件夹下、 Google GCS 存储空间 `bucket_gcs` 里的 `input` 文件夹下、阿里云 OSS 存储空间 `bucket_oss` 里的 `input` 文件夹下、以及腾讯云 COS 存储空间 `bucket_cos` 里的 `input` 文件夹下。
 
 #### 从 HDFS 导入
 
@@ -143,9 +145,9 @@ PROPERTIES
 );
 ```
 
-#### 从 Amazon S3 导入
+#### 从 AWS S3 导入
 
-可以通过如下语句，把 Amazon S3 存储空间 `bucket_s3` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
+可以通过如下语句，把 AWS S3 存储空间 `bucket_s3` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
 
 ```SQL
 LOAD LABEL test_db.label2
@@ -171,7 +173,7 @@ WITH BROKER "mybroker"
 > **说明**
 >
 > - 由于 Broker Load 只支持通过 S3A 协议访问 AWS S3，因此当从 AWS S3 导入数据时，`DATA INFILE` 中传入的目标文件的 S3 URI，前缀必须将 `s3://` 修改为 `s3a://`。
-> - 如果您的 Amazon EC2 实例上绑定的 IAM 角色可以访问您的 Amazon S3 存储空间，那么您不需要提供 `fs.s3a.access.key` 和 `fs.s3a.secret.key` 配置，留空即可。
+> - 如果您的 AWS EC2 实例上绑定的 IAM 角色可以访问您的 AWS S3 存储空间，那么您不需要提供 `fs.s3a.access.key` 和 `fs.s3a.secret.key` 配置，留空即可。
 
 #### 从 Google GCS 导入
 
@@ -202,7 +204,7 @@ WITH BROKER "mybroker"
 >
 > 由于 Broker Load 只支持通过 S3A 协议访问 Google GCS，因此当从 Google GCS 导入数据时，`DATA INFILE` 中传入的目标文件的 GCS URI，前缀必须修改为 `s3a://`。
 
-#### 从 阿里云 OSS 导入
+#### 从阿里云 OSS 导入
 
 可以通过如下语句，把阿里云 OSS 存储空间 `bucket_oss` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
 
@@ -252,7 +254,7 @@ WITH BROKER "mybroker"
 );
 ```
 
-#### 从 华为云 OBS 导入
+#### 从华为云 OBS 导入
 
 可以通过如下语句，把华为云 OBS 存储空间 `bucket_obs` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
 
