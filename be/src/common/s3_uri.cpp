@@ -17,6 +17,7 @@
 #include <brpc/uri.h>
 #include <fmt/format.h>
 #include <gutil/strings/util.h>
+#include <boost/algorithm/string.hpp>
 
 namespace starrocks {
 
@@ -26,7 +27,7 @@ bool S3URI::parse(const char* uri_str) {
         return false;
     }
 
-    _scheme = uri.scheme();
+    _scheme = boost::algorithm::to_lower_copy(uri.scheme());
 
     const std::string& host = uri.host();
     std::string_view path;
@@ -37,8 +38,15 @@ bool S3URI::parse(const char* uri_str) {
         path = uri.path();
     }
 
-    if (host.find('.') == std::string::npos) {
+    if (_scheme == "s3" || _scheme == "s3a" || _scheme == "s3n") {
+        // s3 style format: https://docs.aws.amazon.com/solutions/latest/media2cloud-on-aws/file-paths-in-amazon-s3.html
         // URL like S3://bucket-name/key-name
+        _bucket = host;
+        _key = path;
+    } else if (host.find('.') == std::string::npos) {
+        // TODO We need to check each cloud vendor's path style, like ks3, tos, ..., etc
+        // OSS's path format: https://help.aliyun.com/document_detail/154985.html and https://help.aliyun.com/document_detail/415351.html
+        // URL like oss://bucket-name/key-name
         _bucket = host;
         _key = path;
     } else if (HasPrefixString(host, "s3.") && HasSuffixString(host, ".amazonaws.com")) {
