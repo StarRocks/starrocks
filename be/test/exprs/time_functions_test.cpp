@@ -260,6 +260,32 @@ TEST_F(TimeFunctionsTest, weekOfYearTest) {
     }
 }
 
+TEST_F(TimeFunctionsTest, weekOfYearIsoTest) {
+    auto tc = TimestampColumn::create();
+    tc->append(TimestampValue::create(2023, 1, 5, 0, 5, 0));
+    tc->append(TimestampValue::create(2023, 1, 9, 0, 9, 0));
+    tc->append(TimestampValue::create(2023, 1, 2, 0, 2, 0));
+    tc->append(TimestampValue::create(2023, 1, 6, 0, 6, 0));
+    tc->append(TimestampValue::create(2023, 1, 3, 0, 3, 0));
+    tc->append(TimestampValue::create(2023, 1, 7, 0, 7, 0));
+    tc->append(TimestampValue::create(2023, 1, 10, 0, 10, 0));
+    tc->append(TimestampValue::create(2023, 1, 1, 0, 1, 0));
+    tc->append(TimestampValue::create(2023, 1, 4, 0, 4, 0));
+    tc->append(TimestampValue::create(2023, 1, 8, 0, 8, 0));
+
+    int weeks[] = {1, 2, 1, 1, 1, 1, 2, 52, 1, 1};
+
+    Columns columns;
+    columns.emplace_back(tc);
+
+    ColumnPtr result = TimeFunctions::week_of_year_iso(_utils->get_fn_ctx(), columns).value();
+
+    auto year_weeks = ColumnHelper::cast_to<TYPE_INT>(result);
+    for (size_t i = 0; i < sizeof(weeks) / sizeof(weeks[0]); ++i) {
+        ASSERT_EQ(weeks[i], year_weeks->get_data()[i]);
+    }
+}
+
 TEST_F(TimeFunctionsTest, weekWithDefaultModeTest) {
     auto tc = TimestampColumn::create();
     tc->append(TimestampValue::create(2007, 1, 1, 0, 0, 0));

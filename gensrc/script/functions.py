@@ -227,6 +227,7 @@ vectorized_functions = [
     [20073, 'bit_shift_right_logical', 'BIGINT', ['BIGINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_BIGINT>"],
     [20074, 'bit_shift_right_logical', 'LARGEINT', ['LARGEINT', 'BIGINT'], "BitFunctions::bitShiftRightLogical<TYPE_LARGEINT>"],
 
+
     # 30xxx: string functions
     [30010, 'substr', 'VARCHAR', ['VARCHAR', 'INT'], 'StringFunctions::substring', 'StringFunctions::sub_str_prepare', 'StringFunctions::sub_str_close'],
     [30011, 'substr', 'VARCHAR', ['VARCHAR', 'INT', 'INT'], 'StringFunctions::substring', 'StringFunctions::sub_str_prepare', 'StringFunctions::sub_str_close'],
@@ -346,6 +347,7 @@ vectorized_functions = [
     [50063, 'weekofyear', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year'],
     [50064, 'week', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year_with_default_mode'],
     [50067, 'week', 'INT', ['DATETIME', 'INT'], 'TimeFunctions::week_of_year_with_mode'],
+    [50068, 'week_iso', 'INT', ['DATETIME'], 'TimeFunctions::week_of_year_iso'],
 
     [50069, 'hour', 'TINYINT', ['DATETIME'], 'TimeFunctions::hourV2'],
     [50070, 'hour', 'INT', ['DATETIME'], 'TimeFunctions::hour'],

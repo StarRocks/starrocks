@@ -610,6 +610,16 @@ DEFINE_UNARY_FN_WITH_IMPL(week_of_year_with_default_modeImpl, t) {
 }
 DEFINE_TIME_UNARY_FN(week_of_year_with_default_mode, TYPE_DATETIME, TYPE_INT);
 
+DEFINE_UNARY_FN_WITH_IMPL(week_of_year_isoImpl, t) {
+    auto date_value = (DateValue)t;
+    int year = 0, month = 0, day = 0;
+    date_value.to_date(&year, &month, &day);
+
+    return TimeFunctions::compute_week(year, month, day, TimeFunctions::week_mode(3));
+}
+
+DEFINE_TIME_UNARY_FN(week_of_year_iso, TYPE_DATETIME, TYPE_INT);
+
 DEFINE_BINARY_FUNCTION_WITH_IMPL(week_of_year_with_modeImpl, t, m) {
     auto date_value = (DateValue)t;
     int year = 0, month = 0, day = 0;
