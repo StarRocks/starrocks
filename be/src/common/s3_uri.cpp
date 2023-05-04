@@ -17,6 +17,7 @@
 #include <brpc/uri.h>
 #include <fmt/format.h>
 #include <gutil/strings/util.h>
+
 #include <boost/algorithm/string.hpp>
 
 namespace starrocks {
