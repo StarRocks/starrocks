@@ -173,7 +173,7 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
 - `desired_max_waiting_jobs`
 
-  等待队列可以容纳的导入作业的最大个数，默认值为 100。如果 FE 中处于 **PENDING** 状态的导入作业数目达到最大个数限制时，FE 会拒绝新的导入请求。该参数配置仅对异步执行的导入有效。
+  等待队列可以容纳的导入作业的最大个数，默认值为 1024 (2.4 及之前版本默认值为 100；2.5 及以后版本默认值变为 1024)。如果 FE 中处于 **PENDING** 状态的导入作业数目达到最大个数限制时，FE 会拒绝新的导入请求。该参数配置仅对异步执行的导入有效。
 
 - `max_running_txn_num_per_db`
 
