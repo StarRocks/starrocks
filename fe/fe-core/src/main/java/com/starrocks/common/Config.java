@@ -91,7 +91,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static String sys_log_roll_mode = "SIZE-MB-1024";
     /**
-     * Log to file by default. set to `true` if want to log to console
+     * Log to file by default. set to `true` if you want to log to console
      */
     @ConfField
     public static boolean sys_log_to_console = false;
@@ -469,7 +469,7 @@ public class Config extends ConfigBase {
     public static long bdbje_reserved_disk_size = 512L * 1024 * 1024;
 
     /**
-     * the max txn number which bdbje can rollback when trying to rejoin the group
+     * the max txn number which bdbje can roll back when trying to rejoin the group
      */
     @ConfField
     public static int txn_rollback_limit = 100;
@@ -1066,29 +1066,31 @@ public class Config extends ConfigBase {
     public static String locale = "zh_CN.UTF-8";
 
     /**
-     * 'storage_high_watermark_usage_percent' limit the max capacity usage percent of a Backend storage path.
-     * 'storage_min_left_capacity_bytes' limit the minimum left capacity of a Backend storage path.
+     * 'storage_usage_soft_limit_percent' limit the max capacity usage percent of a Backend storage path.
+     * 'storage_usage_soft_limit_left_bytes' limit the minimum left capacity of a Backend storage path.
      * If both limitations are reached, this storage path can not be chosen as tablet balance destination.
      * But for tablet recovery, we may exceed these limit for keeping data integrity as much as possible.
      */
-    @ConfField(mutable = true)
-    public static int storage_high_watermark_usage_percent = 85;
-    @ConfField(mutable = true)
-    public static long storage_min_left_capacity_bytes = 2L * 1024 * 1024 * 1024; // 2G
+    @ConfField(mutable = true, aliases = {"storage_high_watermark_usage_percent"})
+    public static int storage_usage_soft_limit_percent = 90;
+    @ConfField(mutable = true, aliases = {"storage_min_left_capacity_bytes"})
+    public static long storage_usage_soft_limit_reserve_bytes = 200L * 1024 * 1024 * 1024; // 200GB
 
     /**
-     * If capacity of disk reach the 'storage_flood_stage_usage_percent' and 'storage_flood_stage_left_capacity_bytes',
+     * If capacity of disk reach the 'storage_usage_hard_limit_percent' and 'storage_usage_hard_limit_reserve_bytes',
      * the following operation will be rejected:
      * 1. load job
      * 2. restore job
      */
-    @ConfField(mutable = true)
-    public static int storage_flood_stage_usage_percent = 95;
-    @ConfField(mutable = true)
-    public static long storage_flood_stage_left_capacity_bytes = 1024L * 1024 * 1024; // 1G
+    @ConfField(mutable = true, aliases = {"storage_flood_stage_usage_percent"})
+    public static int storage_usage_hard_limit_percent = 95;
+    @ConfField(mutable = true, aliases = {"storage_flood_stage_left_capacity_bytes"})
+    public static long storage_usage_hard_limit_reserve_bytes = 100L * 1024L * 1024 * 1024; // 100GB
 
-    // update interval of tablet stat
-    // All frontends will get tablet stat from all backends at each interval
+    /**
+     * update interval of tablet stat
+     * All frontends will get tablet stat from all backends at each interval
+     */
     @ConfField
     public static int tablet_stat_update_interval_second = 300;  // 5 min
 
@@ -1157,6 +1159,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean tablet_sched_disable_colocate_overall_balance = false;
+
+    @ConfField(mutable = true)
+    public static long[] tablet_sched_colocate_balance_high_prio_backends = {};
+
+    @ConfField(mutable = true)
+    public static boolean tablet_sched_always_force_decommission_replica = false;
 
     /**
      * If BE is down beyond this time, tablets on that BE of colocate table will be migrated to other available BEs
@@ -1490,6 +1498,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3d
+
+    /**
+     * Check expire partition statistics data when StarRocks start up
+     */
+    @ConfField(mutable = true)
+    public static boolean statistic_check_expire_partition = true;
 
     /**
      * The collect thread work interval

@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BackendClause;
 import com.starrocks.sql.ast.CancelAlterSystemStmt;
+import com.starrocks.sql.ast.CleanTabletSchedQClause;
 import com.starrocks.sql.ast.ComputeNodeClause;
 import com.starrocks.sql.ast.CreateImageClause;
 import com.starrocks.sql.ast.DdlStmt;
@@ -103,6 +104,11 @@ public class AlterSystemStmtAnalyzer {
 
         @Override
         public Void visitCreateImageClause(CreateImageClause createImageClause, ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public Void visitCleanTabletSchedQClause(CleanTabletSchedQClause clause, ConnectContext context) {
             return null;
         }
 

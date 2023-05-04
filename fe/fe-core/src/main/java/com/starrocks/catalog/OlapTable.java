@@ -35,6 +35,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -70,6 +71,7 @@ import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.Util;
@@ -80,6 +82,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -105,6 +108,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -971,6 +975,7 @@ public class OlapTable extends Table {
                 // drop partition info
                 listPartitionInfo.dropPartition(partition.getId());
             }
+            GlobalStateMgr.getCurrentAnalyzeMgr().dropPartition(partition.getId());
         }
     }
 
@@ -1105,22 +1110,52 @@ public class OlapTable extends Table {
             return rangePartitionMap;
         }
 
-        List<Range<PartitionKey>> sortedRange = rangePartitionMap.values().stream()
-                .sorted(RangeUtils.RANGE_COMPARATOR).collect(Collectors.toList());
-        int partitionNum = sortedRange.size();
-
+        int partitionNum = rangePartitionMap.size();
         if (lastPartitionNum > partitionNum) {
             return rangePartitionMap;
         }
 
-        LiteralExpr startExpr = sortedRange.get(partitionNum - lastPartitionNum).lowerEndpoint().
+        List<Column> partitionColumns = ((RangePartitionInfo) partitionInfo).getPartitionColumns();
+        Column partitionColumn = partitionColumns.get(0);
+        Type partitionType = partitionColumn.getType();
+
+        List<Range<PartitionKey>> sortedRange = rangePartitionMap.values().stream()
+                .sorted(RangeUtils.RANGE_COMPARATOR).collect(Collectors.toList());
+        int startIndex;
+        if (partitionType.isNumericType()) {
+            startIndex = partitionNum - lastPartitionNum;
+        } else if (partitionType.isDateType()) {
+            LocalDateTime currentDateTime = LocalDateTime.now();
+            PartitionValue currentPartitionValue = new PartitionValue(currentDateTime.format(DateUtils.DATE_FORMATTER_UNIX));
+            PartitionKey currentPartitionKey = PartitionKey.createPartitionKey(
+                    ImmutableList.of(currentPartitionValue), partitionColumns);
+            // For date types, ttl number should not consider future time
+            int futurePartitionNum = 0;
+            for (int i = sortedRange.size(); i > 0; i--) {
+                PartitionKey lowerEndpoint = sortedRange.get(i - 1).lowerEndpoint();
+                if (lowerEndpoint.compareTo(currentPartitionKey) > 0) {
+                    futurePartitionNum++;
+                } else {
+                    break;
+                }
+            }
+
+            if (partitionNum - lastPartitionNum - futurePartitionNum <= 0) {
+                return rangePartitionMap;
+            } else {
+                startIndex = partitionNum - lastPartitionNum - futurePartitionNum;
+            }
+        } else {
+            throw new AnalysisException("Unsupported partition type: " + partitionType);
+        }
+
+        LiteralExpr startExpr = sortedRange.get(startIndex).lowerEndpoint().
                 getKeys().get(0);
         LiteralExpr endExpr = sortedRange.get(partitionNum - 1).upperEndpoint().getKeys().get(0);
         String start = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
         String end = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 0);
 
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
-        Column partitionColumn = ((RangePartitionInfo) partitionInfo).getPartitionColumns().get(0);
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
         for (Map.Entry<String, Range<PartitionKey>> entry : rangePartitionMap.entrySet()) {
             Range<PartitionKey> rangeToCheck = entry.getValue();
@@ -1130,7 +1165,6 @@ public class OlapTable extends Table {
                 result.put(entry.getKey(), entry.getValue());
             }
         }
-
         return result;
     }
 

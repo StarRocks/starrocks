@@ -1126,18 +1126,18 @@ public class SystemInfoService {
     /*
      * Check if the specified disks' capacity has reached the limit.
      * bePathsMap is (BE id -> list of path hash)
-     * If floodStage is true, it will check with the floodStage threshold.
+     * If usingHardLimit is true, it will check with the usingHardLimit threshold.
      *
      * return Status.OK if not reach the limit
      */
-    public Status checkExceedDiskCapacityLimit(Multimap<Long, Long> bePathsMap, boolean floodStage) {
+    public Status checkExceedDiskCapacityLimit(Multimap<Long, Long> bePathsMap, boolean usingHardLimit) {
         LOG.debug("pathBeMap: {}", bePathsMap);
         if (RunMode.getCurrentRunMode() != RunMode.SHARED_DATA) {
             ImmutableMap<Long, DiskInfo> pathHashToDiskInfo = pathHashToDishInfoRef;
             for (Long beId : bePathsMap.keySet()) {
                 for (Long pathHash : bePathsMap.get(beId)) {
                     DiskInfo diskInfo = pathHashToDiskInfo.get(pathHash);
-                    if (diskInfo != null && diskInfo.exceedLimit(floodStage)) {
+                    if (diskInfo != null && diskInfo.exceedLimit(usingHardLimit)) {
                         return new Status(TStatusCode.CANCELLED,
                                 "disk " + pathHash + " on backend " + beId + " exceed limit usage");
                     }

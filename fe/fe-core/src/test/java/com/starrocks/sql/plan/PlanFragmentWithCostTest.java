@@ -905,6 +905,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=" + tabletIdsStrList.get(1) + "\n" +
                     "     actualRows=0, avgRowSize=4.0\n" +
+                    "     LocalShuffleColumns:\n" +
+                    "     - 5: v4\n" +
                     "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)");
@@ -915,6 +917,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                     "     tabletList=" + tabletIdsStrList.get(0) + "\n" +
                     "     actualRows=0, avgRowSize=4.0\n" +
+                    "     LocalShuffleColumns:\n" +
+                    "     - 1: v1\n" +
                     "     cardinality: 360000\n" +
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (1: v1 + 1)");
@@ -1040,6 +1044,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                 "     tabletList=" + tabletIdsStrList.get(0) + "\n" +
                 "     actualRows=0, avgRowSize=1.0\n" +
+                "     LocalShuffleColumns:\n" +
+                "     - 1: v4\n" +
                 "     cardinality: 400000");
 
         assertContains(plan, "  5:EXCHANGE\n" +

@@ -338,14 +338,14 @@ void test_nullable_binary(const TestCaseArray<ArrowCppType>& test_cases, bool st
 }
 
 void test_nullable_binary_with_strict_mode(const TestCaseArray<std::string>& test_cases, bool strict_mode) {
-    test_nullable_binary<ArrowTypeId::BINARY, TYPE_VARCHAR, arrow::BinaryType, std::string>(test_cases, strict_mode);
-    test_nullable_binary<ArrowTypeId::BINARY, TYPE_CHAR, arrow::BinaryType, std::string>(test_cases, strict_mode);
+    test_nullable_binary<ArrowTypeId::BINARY, TYPE_VARBINARY, arrow::BinaryType, std::string>(test_cases, strict_mode);
+    test_nullable_binary<ArrowTypeId::BINARY, TYPE_VARBINARY, arrow::BinaryType, std::string>(test_cases, strict_mode);
     test_nullable_binary<ArrowTypeId::STRING, TYPE_VARCHAR, arrow::StringType, std::string>(test_cases, strict_mode);
     test_nullable_binary<ArrowTypeId::STRING, TYPE_CHAR, arrow::StringType, std::string>(test_cases, strict_mode);
-    test_nullable_binary<ArrowTypeId::LARGE_BINARY, TYPE_VARCHAR, arrow::LargeBinaryType, std::string>(test_cases,
-                                                                                                       strict_mode);
-    test_nullable_binary<ArrowTypeId::LARGE_BINARY, TYPE_CHAR, arrow::LargeBinaryType, std::string>(test_cases,
-                                                                                                    strict_mode);
+    test_nullable_binary<ArrowTypeId::LARGE_BINARY, TYPE_VARBINARY, arrow::LargeBinaryType, std::string>(test_cases,
+                                                                                                         strict_mode);
+    test_nullable_binary<ArrowTypeId::LARGE_BINARY, TYPE_VARBINARY, arrow::LargeBinaryType, std::string>(test_cases,
+                                                                                                         strict_mode);
     test_nullable_binary<ArrowTypeId::LARGE_STRING, TYPE_VARCHAR, arrow::LargeStringType, std::string>(test_cases,
                                                                                                        strict_mode);
     test_nullable_binary<ArrowTypeId::LARGE_STRING, TYPE_CHAR, arrow::LargeStringType, std::string>(test_cases,
@@ -353,12 +353,14 @@ void test_nullable_binary_with_strict_mode(const TestCaseArray<std::string>& tes
 }
 
 void test_binary_with_strict_mode(const TestCaseArray<std::string>& test_cases, bool strict_mode) {
-    test_binary<ArrowTypeId::BINARY, TYPE_VARCHAR, arrow::BinaryType, std::string>(test_cases, strict_mode);
-    test_binary<ArrowTypeId::BINARY, TYPE_CHAR, arrow::BinaryType, std::string>(test_cases, strict_mode);
+    test_binary<ArrowTypeId::BINARY, TYPE_VARBINARY, arrow::BinaryType, std::string>(test_cases, strict_mode);
+    test_binary<ArrowTypeId::BINARY, TYPE_VARBINARY, arrow::BinaryType, std::string>(test_cases, strict_mode);
     test_binary<ArrowTypeId::STRING, TYPE_VARCHAR, arrow::StringType, std::string>(test_cases, strict_mode);
     test_binary<ArrowTypeId::STRING, TYPE_CHAR, arrow::StringType, std::string>(test_cases, strict_mode);
-    test_binary<ArrowTypeId::LARGE_BINARY, TYPE_VARCHAR, arrow::LargeBinaryType, std::string>(test_cases, strict_mode);
-    test_binary<ArrowTypeId::LARGE_BINARY, TYPE_CHAR, arrow::LargeBinaryType, std::string>(test_cases, strict_mode);
+    test_binary<ArrowTypeId::LARGE_BINARY, TYPE_VARBINARY, arrow::LargeBinaryType, std::string>(test_cases,
+                                                                                                strict_mode);
+    test_binary<ArrowTypeId::LARGE_BINARY, TYPE_VARBINARY, arrow::LargeBinaryType, std::string>(test_cases,
+                                                                                                strict_mode);
     test_binary<ArrowTypeId::LARGE_STRING, TYPE_VARCHAR, arrow::LargeStringType, std::string>(test_cases, strict_mode);
     test_binary<ArrowTypeId::LARGE_STRING, TYPE_CHAR, arrow::LargeStringType, std::string>(test_cases, strict_mode);
 }
@@ -408,7 +410,7 @@ PARALLEL_TEST(ArrowConverterTest, test_nullable_binary_nonstrict) {
 }
 
 template <LogicalType LT>
-void convert_binary_fail(size_t limit, bool strict_mode) {
+void convert_string_fail(size_t limit, bool strict_mode) {
     auto test_cases_pass = TestCaseArray<std::string>{
             {7, std::string(limit, 'x'), false},
             {8, std::string(limit + 1, 'x'), true},
@@ -416,31 +418,49 @@ void convert_binary_fail(size_t limit, bool strict_mode) {
             {10, std::string(limit + 2, 'x'), true},
     };
     test_nullable_binary<ArrowTypeId::STRING, LT, arrow::StringType, std::string>(test_cases_pass, strict_mode);
-    test_nullable_binary<ArrowTypeId::BINARY, LT, arrow::BinaryType, std::string>(test_cases_pass, strict_mode);
     test_nullable_binary<ArrowTypeId::LARGE_STRING, LT, arrow::LargeStringType, std::string>(test_cases_pass,
                                                                                              strict_mode);
+    test_binary<ArrowTypeId::STRING, LT, arrow::StringType, std::string>(test_cases_pass, strict_mode);
+    test_binary<ArrowTypeId::LARGE_STRING, LT, arrow::LargeStringType, std::string>(test_cases_pass, strict_mode);
+}
+
+template <LogicalType LT>
+void convert_binary_fail(size_t limit, bool strict_mode) {
+    auto test_cases_pass = TestCaseArray<std::string>{
+            {7, std::string(limit, 'a'), false},
+            {8, std::string(limit + 1, 'a'), true},
+            {9, std::string(limit, 'a'), false},
+            {10, std::string(limit + 2, 'a'), true},
+    };
+    test_nullable_binary<ArrowTypeId::BINARY, LT, arrow::BinaryType, std::string>(test_cases_pass, strict_mode);
     test_nullable_binary<ArrowTypeId::LARGE_BINARY, LT, arrow::LargeBinaryType, std::string>(test_cases_pass,
                                                                                              strict_mode);
-    test_binary<ArrowTypeId::STRING, LT, arrow::StringType, std::string>(test_cases_pass, strict_mode);
     test_binary<ArrowTypeId::BINARY, LT, arrow::BinaryType, std::string>(test_cases_pass, strict_mode);
-    test_binary<ArrowTypeId::LARGE_STRING, LT, arrow::LargeStringType, std::string>(test_cases_pass, strict_mode);
     test_binary<ArrowTypeId::LARGE_BINARY, LT, arrow::LargeBinaryType, std::string>(test_cases_pass, strict_mode);
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_char_fail_strict) {
-    convert_binary_fail<TYPE_CHAR>(TypeDescriptor::MAX_CHAR_LENGTH, true);
+    convert_string_fail<TYPE_CHAR>(TypeDescriptor::MAX_CHAR_LENGTH, true);
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_varchar_fail_strict) {
-    convert_binary_fail<TYPE_VARCHAR>(TypeDescriptor::MAX_VARCHAR_LENGTH, true);
+    convert_string_fail<TYPE_VARCHAR>(TypeDescriptor::MAX_VARCHAR_LENGTH, true);
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_char_fail_nonstrict) {
-    convert_binary_fail<TYPE_CHAR>(TypeDescriptor::MAX_CHAR_LENGTH, false);
+    convert_string_fail<TYPE_CHAR>(TypeDescriptor::MAX_CHAR_LENGTH, false);
 }
 
 PARALLEL_TEST(ArrowConverterTest, test_varchar_fail_nonstrict) {
-    convert_binary_fail<TYPE_VARCHAR>(TypeDescriptor::MAX_VARCHAR_LENGTH, false);
+    convert_string_fail<TYPE_VARCHAR>(TypeDescriptor::MAX_VARCHAR_LENGTH, false);
+}
+
+PARALLEL_TEST(ArrowConverterTest, test_binary_fail_strict) {
+    convert_binary_fail<TYPE_VARBINARY>(TypeDescriptor::MAX_VARCHAR_LENGTH, true);
+}
+
+PARALLEL_TEST(ArrowConverterTest, test_binary_fail_nonstrict) {
+    convert_binary_fail<TYPE_VARBINARY>(TypeDescriptor::MAX_VARCHAR_LENGTH, false);
 }
 
 template <int bytes_width, bool is_nullable = false>
@@ -472,14 +492,14 @@ static inline std::shared_ptr<arrow::Array> create_constant_fixed_size_binary_ar
     return std::static_pointer_cast<arrow::Array>(array);
 }
 
-template <int bytes_width, LogicalType LT>
+template <int bytes_width, ArrowTypeId AT, LogicalType LT>
 void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_elements, const std::string& value,
                                                   size_t& counter, bool fail) {
     ASSERT_EQ(column->size(), counter);
     using CppType = RunTimeCppType<LT>;
     using ColumnType = RunTimeColumnType<LT>;
     auto array = create_constant_fixed_size_binary_array<bytes_width, false>(num_elements, value, counter);
-    auto conv_func = get_arrow_converter(ArrowTypeId::FIXED_SIZE_BINARY, LT, false, false);
+    auto conv_func = get_arrow_converter(AT, LT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
     Filter filter;
     filter.resize(array->length(), 1);
@@ -502,14 +522,14 @@ void add_fixed_size_binary_array_to_binary_column(Column* column, size_t num_ele
     }
 }
 
-template <int bytes_width, LogicalType LT>
+template <int bytes_width, ArrowTypeId AT, LogicalType LT>
 void add_fixed_size_binary_array_to_nullable_binary_column(Column* column, size_t num_elements,
                                                            const std::string& value, size_t& counter, bool fail) {
     ASSERT_EQ(column->size(), counter);
     using CppType = RunTimeCppType<LT>;
     using ColumnType = RunTimeColumnType<LT>;
     auto array = create_constant_fixed_size_binary_array<bytes_width, true>(num_elements, value, counter);
-    auto conv_func = get_arrow_converter(ArrowTypeId::FIXED_SIZE_BINARY, LT, true, false);
+    auto conv_func = get_arrow_converter(AT, LT, true, false);
     ASSERT_TRUE(conv_func != nullptr);
 
     auto* nullable_column = down_cast<NullableColumn*>(column);
@@ -542,7 +562,7 @@ void add_fixed_size_binary_array_to_nullable_binary_column(Column* column, size_
     }
 }
 
-template <int bytes_width, LogicalType LT>
+template <int bytes_width, ArrowTypeId AT, LogicalType LT>
 void PARALLEL_TESTixed_size_binary(const TestCaseArray<std::string>& test_cases) {
     using ColumnType = RunTimeColumnType<LT>;
     auto col = ColumnType::create();
@@ -552,11 +572,12 @@ void PARALLEL_TESTixed_size_binary(const TestCaseArray<std::string>& test_cases)
         auto num_elements = std::get<0>(tc);
         auto value = std::get<1>(tc);
         auto fail = std::get<2>(tc);
-        add_fixed_size_binary_array_to_binary_column<bytes_width, LT>(col.get(), num_elements, value, counter, fail);
+        add_fixed_size_binary_array_to_binary_column<bytes_width, AT, LT>(col.get(), num_elements, value, counter,
+                                                                          fail);
     }
 }
 
-template <int bytes_width, LogicalType LT>
+template <int bytes_width, ArrowTypeId AT, LogicalType LT>
 void test_nullable_fixed_size_binary(const TestCaseArray<std::string>& test_cases) {
     using ColumnType = RunTimeColumnType<LT>;
     auto binary_column = ColumnType::create();
@@ -568,9 +589,41 @@ void test_nullable_fixed_size_binary(const TestCaseArray<std::string>& test_case
         auto num_elements = std::get<0>(tc);
         auto value = std::get<1>(tc);
         auto fail = std::get<2>(tc);
-        add_fixed_size_binary_array_to_nullable_binary_column<bytes_width, LT>(col.get(), num_elements, value, counter,
-                                                                               fail);
+        add_fixed_size_binary_array_to_nullable_binary_column<bytes_width, AT, LT>(col.get(), num_elements, value,
+                                                                                   counter, fail);
     }
+}
+
+PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_string_pass) {
+    auto test_cases = TestCaseArray<std::string>{
+            {3, std::string(""), false},
+            {3, std::string("a"), false},
+            {3, std::string(255, 'x'), false},
+    };
+    PARALLEL_TESTixed_size_binary<10, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_CHAR>(test_cases);
+    PARALLEL_TESTixed_size_binary<255, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_CHAR>(test_cases);
+    test_nullable_fixed_size_binary<10, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_CHAR>(test_cases);
+    test_nullable_fixed_size_binary<255, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_CHAR>(test_cases);
+    PARALLEL_TESTixed_size_binary<10, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(test_cases);
+    PARALLEL_TESTixed_size_binary<255, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(test_cases);
+    PARALLEL_TESTixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(
+            test_cases);
+    test_nullable_fixed_size_binary<10, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(test_cases);
+    test_nullable_fixed_size_binary<255, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(test_cases);
+    test_nullable_fixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(
+            test_cases);
+}
+
+PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_string_fail) {
+    auto test_cases = TestCaseArray<std::string>{
+            {2, std::string(255, 'x'), true},
+    };
+    PARALLEL_TESTixed_size_binary<256, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_CHAR>(test_cases);
+    test_nullable_fixed_size_binary<256, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_CHAR>(test_cases);
+    PARALLEL_TESTixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH + 1, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARCHAR>(
+            test_cases);
+    test_nullable_fixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH + 1, ArrowTypeId::FIXED_SIZE_BINARY,
+                                    TYPE_VARCHAR>(test_cases);
 }
 
 PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_binary_pass) {
@@ -579,26 +632,28 @@ PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_binary_pass) {
             {3, std::string("a"), false},
             {3, std::string(255, 'x'), false},
     };
-    PARALLEL_TESTixed_size_binary<10, TYPE_CHAR>(test_cases);
-    PARALLEL_TESTixed_size_binary<255, TYPE_CHAR>(test_cases);
-    test_nullable_fixed_size_binary<10, TYPE_CHAR>(test_cases);
-    test_nullable_fixed_size_binary<255, TYPE_CHAR>(test_cases);
-    PARALLEL_TESTixed_size_binary<10, TYPE_VARCHAR>(test_cases);
-    PARALLEL_TESTixed_size_binary<255, TYPE_VARCHAR>(test_cases);
-    PARALLEL_TESTixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH, TYPE_VARCHAR>(test_cases);
-    test_nullable_fixed_size_binary<10, TYPE_VARCHAR>(test_cases);
-    test_nullable_fixed_size_binary<255, TYPE_VARCHAR>(test_cases);
-    test_nullable_fixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH, TYPE_VARCHAR>(test_cases);
+    PARALLEL_TESTixed_size_binary<10, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
+    PARALLEL_TESTixed_size_binary<255, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
+    test_nullable_fixed_size_binary<10, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
+    test_nullable_fixed_size_binary<255, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
+    PARALLEL_TESTixed_size_binary<10, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
+    PARALLEL_TESTixed_size_binary<255, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
+    PARALLEL_TESTixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(
+            test_cases);
+    test_nullable_fixed_size_binary<10, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
+    test_nullable_fixed_size_binary<255, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(test_cases);
+    test_nullable_fixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH, ArrowTypeId::FIXED_SIZE_BINARY, TYPE_VARBINARY>(
+            test_cases);
 }
 
 PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_binary_fail) {
     auto test_cases = TestCaseArray<std::string>{
             {2, std::string(255, 'x'), true},
     };
-    PARALLEL_TESTixed_size_binary<256, TYPE_CHAR>(test_cases);
-    test_nullable_fixed_size_binary<256, TYPE_CHAR>(test_cases);
-    PARALLEL_TESTixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH + 1, TYPE_VARCHAR>(test_cases);
-    test_nullable_fixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH + 1, TYPE_VARCHAR>(test_cases);
+    PARALLEL_TESTixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH + 1, ArrowTypeId::FIXED_SIZE_BINARY,
+                                  TYPE_VARBINARY>(test_cases);
+    test_nullable_fixed_size_binary<TypeDescriptor::MAX_VARCHAR_LENGTH + 1, ArrowTypeId::FIXED_SIZE_BINARY,
+                                    TYPE_VARBINARY>(test_cases);
 }
 
 template <typename ArrowType, bool is_nullable, typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType>
