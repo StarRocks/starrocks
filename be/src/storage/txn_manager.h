@@ -21,6 +21,14 @@
 
 #pragma once
 
+#include "common/compiler_util.h"
+
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bthread/condition_variable.h>
+#include <bthread/mutex.h>
+DIAGNOSTIC_POP
+
 #include <pthread.h>
 #include <rapidjson/document.h>
 
@@ -48,6 +56,7 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/tablet.h"
+#include "util/countdown_latch.h"
 #include "util/lru_cache.h"
 #include "util/time.h"
 
@@ -139,6 +148,7 @@ public:
 
 private:
     using TxnKey = std::pair<int64_t, int64_t>; // partition_id, transaction_id;
+    using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
     // implement TxnKey hash function to support TxnKey as a key for unordered_map
     struct TxnKeyHash {

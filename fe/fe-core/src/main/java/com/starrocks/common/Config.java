@@ -1325,6 +1325,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_statistic_collect = true;
+    
+    @ConfField(mutable = true)
+    public static int expr_children_limit = 10000;
 
     /**
      * The start time of day when auto-updates are enabled
@@ -1349,6 +1352,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_analyze_status_keep_second = 3 * 24 * 3600L; // 3d
+
+    /**
+     * Check expire partition statistics data when StarRocks start up
+     */
+    @ConfField(mutable = true)
+    public static boolean statistic_check_expire_partition = true;
 
     /**
      * The collect thread work interval
@@ -1394,16 +1403,22 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static double statistic_auto_collect_ratio = 0.8;
 
+    @ConfField(mutable = true)
+    public static long statistic_full_collect_buffer = 1024L * 1024 * 20; // 20MB
+
     // If the health in statistic_full_collect_interval is lower than this value,
     // choose collect sample statistics first
     @ConfField(mutable = true)
-    public static double statistic_auto_sample_ratio = 0.3;
+    public static double statistic_auto_collect_sample_threshold = 0.3;
 
     @ConfField(mutable = true)
-    public static long statistic_auto_sample_data_size = 100L * 1024 * 1024 * 1024; // 100G
+    public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
 
     @ConfField(mutable = true)
-    public static long statistic_auto_collect_interval = 3600L * 12; // unit: second, default 12h
+    public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
+
+    @ConfField(mutable = true)
+    public static long statistic_auto_collect_large_table_interval = 3600L * 12; // unit: second, default 12h
 
     /**
      * Full statistics collection max data size

@@ -95,8 +95,14 @@ public class StatisticsCollectJobFactory {
 
     private static void createJob(List<StatisticsCollectJob> allTableJobMap, AnalyzeJob job,
                                   Database db, Table table, List<String> columns) {
-        if (table == null || !table.isOlapOrLakeTable() || ! (table instanceof OlapTable)) {
+        if (table == null || !table.isOlapOrLakeTable() || !(table instanceof OlapTable)) {
             return;
+        }
+
+        if (table instanceof OlapTable) {
+            if (((OlapTable) table).getState() != OlapTable.OlapTableState.NORMAL) {
+                return;
+            }
         }
 
         if (StatisticUtils.isEmptyTable(table)) {
@@ -115,6 +121,7 @@ public class StatisticsCollectJobFactory {
         }
 
         BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
+        double healthy = 0;
         if (basicStatsMeta != null) {
             LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
             LocalDateTime statisticsUpdateTime = basicStatsMeta.getUpdateTime();
@@ -125,14 +132,27 @@ public class StatisticsCollectJobFactory {
                 return;
             }
 
+            long sumDataSize = 0;
+            for (Partition partition : ((OlapTable) table).getPartitions()) {
+                LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
+                if (statisticsUpdateTime.isBefore(partitionUpdateTime)) {
+                    sumDataSize += partition.getDataSize();
+                }
+            }
+
+            long defaultInterval = sumDataSize > Config.statistic_auto_collect_small_table_size ?
+                    Config.statistic_auto_collect_large_table_interval :
+                    Config.statistic_auto_collect_small_table_interval;
+
             long timeInterval = job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL) != null ?
                     Long.parseLong(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL)) :
-                    Config.statistic_auto_collect_interval;
+                    defaultInterval;
 
-            if (statisticsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
+            if (statisticsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now()) &&
+                    sumDataSize > Config.statistic_auto_collect_small_table_size) {
                 LOG.debug("statistics job doesn't work on the interval table: {}, " +
-                                "last collect time: {}, interval: {}",
-                        table.getName(), tableUpdateTime, timeInterval);
+                                "last collect time: {}, interval: {}, table size: {}MB",
+                        table.getName(), tableUpdateTime, timeInterval, ByteSizeUnit.BYTES.toMB(sumDataSize));
                 return;
             }
 
@@ -141,33 +161,27 @@ public class StatisticsCollectJobFactory {
                             Double.parseDouble(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO)) :
                             Config.statistic_auto_collect_ratio;
 
-            double healthy = basicStatsMeta.getHealthy();
+            healthy = basicStatsMeta.getHealthy();
             if (healthy > statisticAutoCollectRatio) {
                 LOG.debug("statistics job doesn't work on health table: {}, healthy: {}, collect healthy limit: <{}",
                         table.getName(), healthy, statisticAutoCollectRatio);
                 return;
-            } else if (healthy < Config.statistic_auto_sample_ratio) {
-                long sumDataSize = 0;
-                for (Partition partition : ((OlapTable) table).getPartitions()) {
-                    LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
-                    if (statisticsUpdateTime.isBefore(partitionUpdateTime)) {
-                        sumDataSize += partition.getDataSize();
-                    }
-                }
-
-                if (sumDataSize > Config.statistic_auto_sample_data_size) {
+            } else if (healthy < Config.statistic_auto_collect_sample_threshold) {
+                if (sumDataSize > Config.statistic_auto_collect_small_table_size) {
                     LOG.debug("statistics job choose sample on real-time update table: {}" +
                                     ", last collect time: {}, current healthy: {}, full collect healthy limit: {}<, " +
                                     ", update data size: {}MB, full collect healthy data size limit: <{}MB",
                             table.getName(), statisticsUpdateTime, healthy,
-                            Config.statistic_auto_sample_ratio, ByteSizeUnit.BYTES.toMB(sumDataSize),
-                            ByteSizeUnit.BYTES.toMB(Config.statistic_auto_sample_data_size));
+                            Config.statistic_auto_collect_sample_threshold, ByteSizeUnit.BYTES.toMB(sumDataSize),
+                            ByteSizeUnit.BYTES.toMB(Config.statistic_auto_collect_small_table_size));
                     createSampleStatsJob(allTableJobMap, job, db, table, columns);
                     return;
                 }
             }
         }
 
+        LOG.debug("statistics job work on un-health table: {}, healthy: {}, Type: {}", table.getName(), healthy,
+                job.getAnalyzeType());
         if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.SAMPLE)) {
             createSampleStatsJob(allTableJobMap, job, db, table, columns);
         } else if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
@@ -177,7 +191,8 @@ public class StatisticsCollectJobFactory {
                 createFullStatsJob(allTableJobMap, job, basicStatsMeta.getUpdateTime(), db, table, columns);
             }
         } else {
-            throw new StarRocksPlannerException("Unknown analyze type " + job.getAnalyzeType(), ErrorType.INTERNAL_ERROR);
+            throw new StarRocksPlannerException("Unknown analyze type " + job.getAnalyzeType(),
+                    ErrorType.INTERNAL_ERROR);
         }
     }
 
