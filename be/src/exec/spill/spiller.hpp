@@ -176,7 +176,7 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
     // if all is well and input stream enable prefetch and not eof
     if (!_stream->eof()) {
         _running_restore_tasks++;
-        auto restore_task = [this, guard]() {
+        auto restore_task = [this, state, guard]() {
             RETURN_IF(!guard.scoped_begin(), Status::OK());
             auto defer = DeferOp([&]() { _running_restore_tasks--; });
             {
