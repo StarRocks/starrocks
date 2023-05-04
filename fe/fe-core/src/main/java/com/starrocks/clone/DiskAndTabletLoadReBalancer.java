@@ -301,10 +301,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             throws SchedException {
         TabletScheduler.PathSlot srcBePathSlot = backendsWorkingSlots.get(beId);
         if (srcBePathSlot == null) {
-            throw new SchedException(SchedException.Status.UNRECOVERABLE, "working slots not exist for src be");
+            throw new SchedException(SchedException.Status.UNRECOVERABLE, "working slots not exist for be: " + beId);
         }
         if (srcBePathSlot.takeBalanceSlot(pathHash) == -1) {
-            throw new SchedException(SchedException.Status.SCHEDULE_FAILED, "path busy, wait for next round");
+            throw new SchedException(SchedException.Status.SCHEDULE_RETRY, "path busy, wait for next round");
         }
     }
 

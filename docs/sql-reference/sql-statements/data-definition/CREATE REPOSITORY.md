@@ -33,24 +33,24 @@ PROPERTIES ("key"="value", ...)
 
 StarRocks Supports creating repository in HDFS, S3, OSS, and COS.
 
-- HDFS：
-  - "username"：Username used to log in HDFS.
-  - "password"：Password used to log in HDFS.
+- HDFS:
+  - "username": Username used to log in HDFS.
+  - "password": Password used to log in HDFS.
 
-- S3：
-  - "fs.s3a.access.key"：Access Key used to log in S3.
-  - "fs.s3a.secret.key"：Secret Key used to log in S3.
-  - "fs.s3a.endpoint"：Endpoint of the S3 storage.
+- S3:
+  - "fs.s3a.access.key": Access Key used to log in S3.
+  - "fs.s3a.secret.key": Secret Key used to log in S3.
+  - "fs.s3a.endpoint": Endpoint of the S3 storage.
 
-- For OSS：
-  - "fs.oss.accessKeyId"：Access Key ID used to log in OSS.
-  - "fs.oss.accessKeySecret"：Access Key Secret used to log in OSS.
-  - "fs.oss.endpoint"：Endpoint of the OSS storage.
+- For OSS:
+  - "fs.oss.accessKeyId": Access Key ID used to log in OSS.
+  - "fs.oss.accessKeySecret": Access Key Secret used to log in OSS.
+  - "fs.oss.endpoint": Endpoint of the OSS storage.
 
-- For COS：
-  - "fs.cosn.userinfo.secretId"：Secret ID used to log in COS.
-  - "fs.cosn.userinfo.secretKey"：Secret Key used to log in COS.
-  - "fs.cosn.bucket.endpoint_suffix"：COS endpoint suffix.
+- For COS:
+  - "fs.cosn.userinfo.secretId": Secret ID used to log in COS.
+  - "fs.cosn.userinfo.secretKey": Secret Key used to log in COS.
+  - "fs.cosn.bucket.endpoint_suffix": COS endpoint suffix.
 
 ## Examples
 

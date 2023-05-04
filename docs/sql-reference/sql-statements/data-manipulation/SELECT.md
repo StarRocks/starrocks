@@ -51,7 +51,7 @@ There is actually no special syntax to identify self-join. The conditions on bot
 
 We need to assign them different aliases.
 
-Example：
+Example:
 
 ```sql
 SELECT lhs.id, rhs.parent, lhs.c1, rhs.c2 FROM tree_data lhs, tree_data rhs WHERE lhs.id = rhs.parent;
@@ -222,7 +222,7 @@ The HAVING clause does not filter row data in a table, but filters the results o
 
 Generally speaking, HAVING is used with aggregate functions (such as COUNT(), SUM(), AVG(), MIN(), MAX()) and GROUP BY clauses.
 
-Example：
+Example:
 
 ```sql
 select tiny_column, sum(short_column) 
@@ -272,7 +272,7 @@ The size of the query result set needs to be limited because of the large amount
 
 Instructions for use: The value of the LIMIT clause must be a numeric literal constant.
 
-Example：
+Example:
 
 ```plain text
 mysql> select tiny_column from small_table limit 1;
@@ -307,7 +307,7 @@ The result set defaults to start at line 0, so offset 0 and no offset return the
 
 Generally speaking, OFFSET clauses need to be used with ORDER BY and LIMIT clauses to be valid.
 
-Example：
+Example:
 
 ```plain text
 mysql> select varchar_column from big_table order by varchar_column limit 3;
@@ -383,7 +383,7 @@ As a result, queries using UNION ALL operations are faster and consume less memo
 
 You need to place the UNION operation in the subquery, then select from the subquery, and finally place the subquery and order by outside the subquery.
 
-Example：
+Example:
 
 ```plain text
 mysql> (select tiny_column from small_table) union all (select tiny_column from small_table);
@@ -480,7 +480,7 @@ Subqueries are divided into irrelevant subqueries and related subqueries by rele
 
 Uncorrelated subqueries support [NOT] IN and EXISTS.
 
-Example：
+Example:
 
 ```sql
 SELECT x FROM t1 WHERE x [NOT] IN (SELECT y FROM t2);
@@ -494,7 +494,7 @@ SELECT x FROM t1 WHERE EXISTS (SELECT y FROM t2 WHERE y = 1);
 
 Related subqueries support [NOT] IN and [NOT] EXISTS.
 
-Example：
+Example:
 
 ```sql
 SELECT * FROM t1 WHERE x [NOT] IN (SELECT a FROM t2 WHERE t1.y = t2.b);
@@ -521,7 +521,7 @@ Example:
 3. Related scalar quantum queries. For example, output the highest salary information for each department.
 
     ```sql
-    SELECT name FROM table a WHERE salary = （SELECT MAX(salary) FROM table b WHERE b.Department= a.Department）;
+    SELECT name FROM table a WHERE salary = (SELECT MAX(salary) FROM table b WHERE b.Department= a.Department);
     ```
 
 4. Scalar quantum queries are used as parameters of ordinary functions.
@@ -542,7 +542,7 @@ Convenient and easy to maintain, reducing duplication within queries.
 
  It is easier to read and understand SQL code by abstracting the most complex parts of a query into separate blocks.
 
-Example：
+Example:
 
 ```sql
 -- Define one subquery at the outer level, and another at the inner level as part of the
@@ -560,7 +560,7 @@ SQL operators are a series of functions used for comparison and are widely used 
 
 Arithmetic operators usually appear in expressions that contain left, right, and most often left operands
 
-**+and-**：can be used as a unit or as a 2-ary operator. When used as a unit operator, such as +1, -2.5 or -col_ name, which means the value is multiplied by +1 or -1.
+**+and-**: can be used as a unit or as a 2-ary operator. When used as a unit operator, such as +1, -2.5 or -col_ name, which means the value is multiplied by +1 or -1.
 
 So the cell operator + returns an unchanged value, and the cell operator - changes the symbol bits of that value.
 
@@ -570,7 +570,7 @@ Because--is interpreted as a comment in the following statement (when a user can
 
 When + or - is a binary operator, such as 2+2, 3+1.5, or col1+col2, it means that the left value is added or subtracted from the right value. Both left and right values must be numeric types.
 
-**and/**：represent multiplication and division, respectively. The operands on both sides must be data types. When two numbers are multiplied.
+**and/**: represent multiplication and division, respectively. The operands on both sides must be data types. When two numbers are multiplied.
 
 Smaller operands may be promoted if needed (e.g., SMALLINT to INT or BIGINT), and the result of the expression will be promoted to the next larger type.
 
@@ -578,9 +578,9 @@ For example, TINYINT multiplied by INT will produce a BIGINT type of result. Whe
 
 If the user wants to convert the result of the expression to another type, it needs to be converted using the CAST function.
 
-**%**：Modulation operator. Returns the remainder of the left operand divided by the right operand. Both left and right operands must be integers.
+**%**: Modulation operator. Returns the remainder of the left operand divided by the right operand. Both left and right operands must be integers.
 
-**&，|and ^**：The bitwise operator returns the result of bitwise AND, bitwise OR, bitwise XOR operations on two operands. Both operands require an integer type.
+**&, |and ^**: The bitwise operator returns the result of bitwise AND, bitwise OR, bitwise XOR operations on two operands. Both operands require an integer type.
 
 If the types of the two operands of a bitwise operator are inconsistent, the operands of a smaller type are promoted to the operands of a larger type, and the corresponding bitwise operations are performed.
 
@@ -606,7 +606,7 @@ Data type: Usually an expression evaluates to a numeric type, which also support
 
  If you need to make sure the expression works correctly, you can use functions such as upper (), lower (), substr (), trim ().
 
-Example：
+Example:
 
 ```sql
 select c1 from t1 where month between 1 and 6;
@@ -634,7 +634,7 @@ select * from small_table where tiny_column in (1,2);
 
 This operator is used to compare to a string. ''matches a single character,'%' matches multiple characters. The parameter must match the complete string. Typically, placing'%'at the end of a string is more practical.
 
-Example：
+Example:
 
 ```plain text
 mysql> select varchar_column from small_table where varchar_column like 'm%';
@@ -670,7 +670,7 @@ OR: 2-ary operator that returns TRUE if one of the parameters on the left and ri
 
 NOT: Unit operator, the result of inverting an expression. If the parameter is TRUE, the operator returns FALSE; If the parameter is FALSE, the operator returns TRUE.
 
-Example：
+Example:
 
 ```plain text
 mysql> select true and true;
@@ -730,7 +730,7 @@ If you want to match the middle part, the front part of the regular expression c
 
 The'|'operator is an optional operator. Regular expressions on either side of'|' only need to satisfy one side condition. The'|'operator and regular expressions on both sides usually need to be enclosed in ().
 
-Example：
+Example:
 
 ```plain text
 mysql> select varchar_column from small_table where varchar_column regexp '(mi|MI).*';
@@ -766,7 +766,7 @@ Simply add an AS alias clause after the table, column, and expression names in t
 
 AS keywords are optional and users can specify aliases directly after the original name. If an alias or other identifier has the same name as an internal keyword, you need to add a ``symbol to the name. Aliases are case sensitive.
 
-Example：
+Example:
 
 ```sql
 select tiny_column as name, int_column as sex from big_table;

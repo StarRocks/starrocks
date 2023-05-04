@@ -59,7 +59,7 @@ Choose a collection method (manual or periodic) and run the relevant commands. F
     );
     ```
 
-    Example：
+    Example:
 
     ```SQL
     -- Periodically collect full statistics from all tables under the tpch database with default collection interval and default check interval.
@@ -109,7 +109,7 @@ Choose a collection method (manual or periodic) and run the relevant commands. F
     );
     ```
 
-    Example：
+    Example:
 
     ```SQL
     -- Periodically collect sampled statistics at intervals of 43,200 seconds (12 hours), with a default check interval.

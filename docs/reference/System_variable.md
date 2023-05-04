@@ -18,7 +18,7 @@ SHOW VARIABLES LIKE '%time_zone%';
 
 ### Settings
 
-Variables can generally be set to take effect **globally** or **only on the current session**. When set to global, a new value will be used in subsequent new sessions without affecting the current session. When set to “current session only”, the variable will only take effect on the current session.
+Variables can generally be set to take effect **globally** or **only on the current session**. When set to global, a new value will be used in subsequent new sessions without affecting the current session. When set to "current session only", the variable will only take effect on the current session.
 
 A variable set by `SET var_name=xxx;` only takes effect for the current session. For example:
 
@@ -124,8 +124,8 @@ SELECT /*+ SET_VAR
 
 * streaming_preaggregation_mode
 
-  Used to specify the preaggregation mode for the first phase of GROUP BY. If the preaggregation effect in the first phase is not satisfactory, you can use the streaming mode, which performs simple data serialization before streaming data to the destination。Valid values:
-  * `auto`：The system first tries local preaggregation. If the effect is not satisfactory, it switches to the streaming mode. This is the default value.
+  Used to specify the preaggregation mode for the first phase of GROUP BY. If the preaggregation effect in the first phase is not satisfactory, you can use the streaming mode, which performs simple data serialization before streaming data to the destination. Valid values:
+  * `auto`: The system first tries local preaggregation. If the effect is not satisfactory, it switches to the streaming mode. This is the default value.
   * `force_preaggregation`: The system directly performs local preaggregation.
   * `force_streaming`: The system directly performs streaming.
 

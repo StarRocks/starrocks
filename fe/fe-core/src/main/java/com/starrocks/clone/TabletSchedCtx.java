@@ -580,7 +580,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             }
         }
 
-        throw new SchedException(Status.SCHEDULE_FAILED, "unable to find source slot");
+        throw new SchedException(Status.SCHEDULE_RETRY, "path busy, wait for next round");
     }
 
     /*
@@ -592,7 +592,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             throws SchedException {
         chooseSrcReplica(backendsWorkingSlots);
         if (srcReplica.getBackendId() == destBackendId) {
-            throw new SchedException(Status.SCHEDULE_FAILED, "the chosen source replica is in dest backend");
+            throw new SchedException(Status.UNRECOVERABLE, "the chosen source replica is in dest backend");
         }
     }
 
@@ -642,18 +642,19 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
 
         if (chosenReplica == null) {
-            throw new SchedException(Status.SCHEDULE_FAILED, "unable to choose dest replica");
+            throw new SchedException(Status.UNRECOVERABLE, "unable to choose dest replica");
         }
 
         // check if the dest replica has available slot
         PathSlot slot = backendsWorkingSlots.get(chosenReplica.getBackendId());
         if (slot == null) {
-            throw new SchedException(Status.SCHEDULE_FAILED, "backend of dest replica is missing");
+            throw new SchedException(Status.UNRECOVERABLE, "working slots not exist for be: "
+                    + chosenReplica.getBackendId());
         }
 
         long destPathHash = slot.takeSlot(chosenReplica.getPathHash());
         if (destPathHash == -1) {
-            throw new SchedException(Status.SCHEDULE_FAILED, "unable to take slot of dest path");
+            throw new SchedException(Status.SCHEDULE_RETRY, "path busy, wait for next round");
         }
 
         setDest(chosenReplica.getBackendId(), chosenReplica.getPathHash());
@@ -768,13 +769,13 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
     public CloneTask createCloneReplicaAndTask() throws SchedException {
         Backend srcBe = infoService.getBackend(srcReplica.getBackendId());
         if (srcBe == null) {
-            throw new SchedException(Status.SCHEDULE_FAILED,
+            throw new SchedException(Status.UNRECOVERABLE,
                     "src backend " + srcReplica.getBackendId() + " does not exist");
         }
 
         Backend destBe = infoService.getBackend(destBackendId);
         if (destBe == null) {
-            throw new SchedException(Status.SCHEDULE_FAILED,
+            throw new SchedException(Status.UNRECOVERABLE,
                     "dest backend " + destBackendId + " does not exist");
         }
 
@@ -817,16 +818,16 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             // double check
             Replica replica = tablet.getReplicaByBackendId(destBackendId);
             if (replica == null) {
-                throw new SchedException(Status.SCHEDULE_FAILED, "dest replica does not exist on BE " + destBackendId);
+                throw new SchedException(Status.UNRECOVERABLE, "dest replica does not exist on BE " + destBackendId);
             }
 
             if (replica.getPathHash() != destPathHash) {
-                throw new SchedException(Status.SCHEDULE_FAILED, "dest replica's path hash is changed. "
+                throw new SchedException(Status.UNRECOVERABLE, "dest replica's path hash is changed. "
                         + "current: " + replica.getPathHash() + ", scheduled: " + destPathHash);
             }
         } else if (type == Type.BALANCE && cloneTask.isLocal()) {
             if (tabletStatus != TabletStatus.HEALTHY) {
-                throw new SchedException(Status.SCHEDULE_FAILED, "tablet " + tabletId + " is not healthy");
+                throw new SchedException(Status.SCHEDULE_RETRY, "tablet " + tabletId + " is not healthy");
             }
         }
 
@@ -894,12 +895,12 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
         // check if clone task success
         if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
-            throw new SchedException(Status.RUNNING_FAILED, request.getTask_status().getError_msgs().get(0));
+            throw new SchedException(Status.UNRECOVERABLE, request.getTask_status().getError_msgs().get(0));
         }
 
         // check tablet info is set
         if (!request.isSetFinish_tablet_infos() || request.getFinish_tablet_infos().isEmpty()) {
-            throw new SchedException(Status.RUNNING_FAILED, "tablet info is not set in task report request");
+            throw new SchedException(Status.UNRECOVERABLE, "tablet info is not set in task report request");
         }
 
         // check task report
@@ -912,7 +913,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     cloneTask.getDbId(), cloneTask.getTableId(), cloneTask.getPartitionId(),
                     cloneTask.getIndexId(), cloneTask.getTabletId(), cloneTask.getBackendId(),
                     dbId, tblId, partitionId, indexId, tablet.getId(), destBackendId);
-            throw new SchedException(Status.RUNNING_FAILED, msg);
+            throw new SchedException(Status.UNRECOVERABLE, msg);
         }
 
         // 1. check the tablet status first
@@ -1017,7 +1018,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             String msg = String.format("the clone replica's version is stale. %d, task visible version: %d",
                     reportedTablet.getVersion(),
                     visibleVersion);
-            throw new SchedException(Status.RUNNING_FAILED, msg);
+            throw new SchedException(Status.UNRECOVERABLE, msg);
         }
 
         // check if replica exist

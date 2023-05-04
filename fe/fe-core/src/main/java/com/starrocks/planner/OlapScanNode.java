@@ -54,6 +54,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -598,6 +599,14 @@ public class OlapScanNode extends ScanNode {
                         "actualRows=%s", actualRows))
                 .append(", ").append(String.format(
                         "avgRowSize=%s", avgRowSize)).append("\n");
+
+        if (!bucketColumns.isEmpty() && FeConstants.showLocalShuffleColumnsInExplain) {
+            output.append(prefix).append("LocalShuffleColumns:\n");
+            for (ColumnRefOperator col : bucketColumns) {
+                output.append(prefix).append("- ").append(col.toString()).append("\n");
+            }
+        }
+
         return output.toString();
     }
 

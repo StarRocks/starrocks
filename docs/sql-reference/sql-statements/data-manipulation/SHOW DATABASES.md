@@ -1,10 +1,10 @@
 # SHOW DATABASES
 
-## description
+## Description
 
 This statement is used to display the currently visible db
 
-Syntax：
+Syntax:
 
 ```sql
 SHOW DATABASES
