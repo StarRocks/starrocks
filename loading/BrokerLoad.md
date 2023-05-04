@@ -54,6 +54,8 @@ Broker Load 支持从如下外部存储系统导入数据：
 
 - 腾讯云 COS
 
+- 华为云 OBS
+
 - 其他兼容 S3 协议的对象存储（如 MinIO）
 
 - Microsoft Azure Storage
@@ -205,7 +207,7 @@ WITH BROKER
 >
 > 由于 Broker Load 只支持通过 gs 协议访问 Google GCS，因此当从 Google GCS 导入数据时，必须确保文件路径传入的目标文件的 GCS URI 使用 `gs://` 为前缀。
 
-#### 从 阿里云 OSS 导入
+#### 从阿里云 OSS 导入
 
 可以通过如下语句，把阿里云 OSS 存储空间 `bucket_oss` 里 `input` 文件夹内的 CSV 文件 `file1.csv` 和 `file2.csv` 分别导入到 StarRocks 表 `table1` 和 `table2` 中：
 
