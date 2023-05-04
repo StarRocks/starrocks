@@ -12,23 +12,23 @@ This topic introduces how to use the StarRocks Operator to automate the deployme
 
 You can use the cloud-managed Kubernetes service, such as an [Amazon Elastic Kubernetes Service (EKS)](https://aws.amazon.com/cn/eks/?nc2=h_ql_prod_ct_eks) or [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine?hl=zh-cn) cluster, or a self-managed Kubernetes cluster.
 
-**Create an Amazon EKS cluster**
+- Create an Amazon EKS cluster
 
-1. Check that [the following command-line tools are installed in your environment](https://docs.aws.amazon.com/eks/latest/userguide/getting-started.html):
-   1. Install and configure AWS command-line tool AWS CLI.
-   2. Install EKS cluster command-line tool eksctl.
-   3. Install Kubernetes cluster command-line tool kubectl.
-2. Use one of the following methods to create an EKS cluster:
-   1. [Use eksctl to quickly create an EKS cluster](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-eksctl.html).
-   2. [Manually create an EKS cluster with the AWS console and AWS CLI](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-console.html).
+  1. Check that [the following command-line tools are installed in your environment](https://docs.aws.amazon.com/eks/latest/userguide/getting-started.html):
+     1. Install and configure AWS command-line tool AWS CLI.
+     2. Install EKS cluster command-line tool eksctl.
+     3. Install Kubernetes cluster command-line tool kubectl.
+  2. Use one of the following methods to create an EKS cluster:
+     1. [Use eksctl to quickly create an EKS cluster](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-eksctl.html).
+     2. [Manually create an EKS cluster with the AWS console and AWS CLI](https://docs.aws.amazon.com/eks/latest/userguide/getting-started-console.html).
 
-**Create a GKE cluster**
+- Create a GKE cluster
 
-Before you start to create a GKE cluster, make sure that you complete all the [prerequisites](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#before-you-begin). Then follow the instructions provided in [Create a GKE cluster](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#create_cluster) to create a GKE cluster.
+  Before you start to create a GKE cluster, make sure that you complete all the [prerequisites](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#before-you-begin). Then follow the instructions provided in [Create a GKE cluster](https://cloud.google.com/kubernetes-engine/docs/deploy-app-cluster#create_cluster) to create a GKE cluster.
 
-**Create a self-managed Kubernetes cluster**
+- Create a self-managed Kubernetes cluster
 
-Follow the instructions provided in [Bootstrapping clusters with kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/) to create a self-managed Kubernetes cluster. You can use [Minikube](https://kubernetes.io/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) and [Docker Desktop](https://docs.docker.com/desktop/) to create a single-node private Kubernetes cluster with minimum steps.
+  Follow the instructions provided in [Bootstrapping clusters with kubeadm](https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/) to create a self-managed Kubernetes cluster. You can use [Minikube](https://kubernetes.io/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) and [Docker Desktop](https://docs.docker.com/desktop/) to create a single-node private Kubernetes cluster with minimum steps.
 
 ### Deploy StarRocks Operator
 
@@ -196,11 +196,11 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 
 The upgrade process lasts for a while. You can run the command `kubectl -n starrocks get pods` to view the upgrade progress.
 
-#### Scale out and in StarRocks cluster
+#### Scale StarRocks cluster
 
 This topic takes scaling out the BE and FE clusters as examples.
 
-**Scale out BE cluster**
+##### Scale out BE cluster
 
 Run the following command to scale out the BE cluster to 9 nodes:
 
@@ -208,7 +208,7 @@ Run the following command to scale out the BE cluster to 9 nodes:
 kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":"9"}}}'
 ```
 
-**Scale out FE cluster**
+##### Scale out FE cluster
 
 Run the following command to scale out the FE cluster to 4 nodes:
 
