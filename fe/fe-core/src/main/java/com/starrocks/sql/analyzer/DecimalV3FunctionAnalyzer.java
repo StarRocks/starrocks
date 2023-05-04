@@ -219,7 +219,6 @@ public class DecimalV3FunctionAnalyzer {
         return newFn;
     }
 
-
     // This function is used to convert the sum(distinct) function to the multi_distinct_sum function in
     // optimizing phase and PlanFragment building phase.
     // Decimal types of multi_distinct_sum must be rectified because the function signature registered in
@@ -285,6 +284,41 @@ public class DecimalV3FunctionAnalyzer {
         // check array child type
         return Arrays.stream(argumentTypes).filter(Type::isArrayType).map(t -> (ArrayType) t)
                 .anyMatch(t -> t.getItemType().isDecimalV3());
+    }
+
+    // Multi parameters decimalV2 function will match decimalV3 function, and doesn't set decimalV3 precision&scale.
+    // like that, user input may: array_slice(decimalV2, tinyint), sr always match array_slice(decimalV3, bigint),
+    // because array_slice(decimalV2, tinyint) can't match array_slice(decimalV2, bigint) in IS_IDENTICAL mode, but
+    // only match array_slice(decimalV3, bigint) in IS_NONSTRICT_SUPERTYPE_OF mode (decimalV3 function is higher
+    // than decimalV2 function).
+    public static boolean argumentTypeContainDecimalV2(String fnName, Type[] argumentTypes) {
+        if (!FunctionSet.ARRAY_SLICE.equals(fnName)) {
+            return false;
+        }
+
+        if (Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV2)) {
+            return true;
+        }
+
+        // check array child type
+        return Arrays.stream(argumentTypes).filter(Type::isArrayType).map(t -> (ArrayType) t)
+                .anyMatch(t -> t.getItemType().isDecimalV2());
+    }
+
+    public static Function getDecimalV2Function(FunctionCallExpr node, Type[] argumentTypes) {
+        String fnName = node.getFnName().getFunction();
+        argumentTypes = normalizeDecimalArgTypes(argumentTypes, fnName);
+
+        if (FunctionSet.ARRAY_SLICE.equals(fnName)) {
+            Type[] clone = Arrays.copyOf(argumentTypes, argumentTypes.length);
+            for (int i = 1; i < clone.length; i++) {
+                clone[i] = Type.BIGINT;
+            }
+
+            argumentTypes = clone;
+        }
+
+        return Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
     }
 
     public static Function getDecimalV3Function(ConnectContext session, FunctionCallExpr node, Type[] argumentTypes) {
