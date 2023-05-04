@@ -424,7 +424,8 @@ TEST_F(BinlogFileTest, test_random_begin_commit_abort) {
     ASSERT_EQ(versions[0].version, file_meta->start_version());
     ASSERT_EQ(0, file_meta->start_seq_id());
     ASSERT_EQ(versions.back().version, file_meta->end_version());
-    ASSERT_EQ(versions.back().num_entries * versions.back().num_rows_per_entry - 1, file_meta->end_seq_id());
+    ASSERT_EQ(std::max(versions.back().num_entries * versions.back().num_rows_per_entry - 1, (int64_t)0),
+              file_meta->end_seq_id());
     verify_dup_key_multiple_versions(versions, _binlog_file_dir, {file_meta});
 }
 
