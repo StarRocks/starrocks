@@ -175,7 +175,7 @@ In addition to MySQL client, you can use the FE console for visualized, interact
 
    You can view the queries that are currently processed and their resource consumption on the **System Info** page.
 
-2. Click the **QueryID** of the query. 
+2. Click the **QueryID** of the query.
 
    ![FE console 2](../assets/console_2.png)
 
