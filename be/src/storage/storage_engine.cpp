@@ -664,6 +664,118 @@ size_t StorageEngine::_compaction_check_one_round() {
     return tablets_num_checked;
 }
 
+struct ManualCompactionTask {
+    int64_t tablet_id{0};
+    int64_t rowset_size_threshold{0};
+    vector<uint32_t> input_rowset_ids;
+    size_t total_bytes{0};
+    int64_t start_time{0};
+    int64_t end_time{0};
+    std::string status;
+};
+
+static std::mutex manual_compaction_mutex;
+static size_t total_manual_compaction_tasks_submitted = 0;
+static size_t total_manual_compaction_tasks_finished = 0;
+static size_t total_manual_compaction_bytes = 0;
+static std::deque<ManualCompactionTask> manual_compaction_tasks;
+static const int64_t MAX_MANUAL_COMPACTION_HISTORY = 1000;
+static std::deque<ManualCompactionTask> manual_compaction_history;
+
+void StorageEngine::submit_manual_compaction_task(int64_t tablet_id, int64_t rowset_size_threshold) {
+    std::lock_guard lg(manual_compaction_mutex);
+    auto& task = manual_compaction_tasks.emplace_back();
+    task.tablet_id = tablet_id;
+    task.rowset_size_threshold = rowset_size_threshold;
+    total_manual_compaction_tasks_submitted++;
+    LOG(INFO) << "submit manual compaction task tablet:" << tablet_id
+              << " rowset_size_threshold:" << rowset_size_threshold;
+}
+
+std::string StorageEngine::get_manual_compaction_status() {
+    std::ostringstream os;
+    std::lock_guard lg(manual_compaction_mutex);
+    os << "current task:" << manual_compaction_tasks.size() << "\ntablet_ids: ";
+    for (auto& task : manual_compaction_tasks) {
+        os << task.tablet_id << ",";
+    }
+    os << "\n";
+    for (auto& t : manual_compaction_history) {
+        os << "  tablet:" << t.tablet_id << " #rowset:" << t.input_rowset_ids.size() << " bytes:" << t.total_bytes
+           << " start:" << t.start_time << " duration:" << t.end_time - t.start_time << " " << t.status << std::endl;
+    }
+    os << "history: " << manual_compaction_history.size() << " submitted:" << total_manual_compaction_tasks_submitted
+       << " finished:" << total_manual_compaction_tasks_finished << " bytes:" << total_manual_compaction_bytes
+       << std::endl;
+    return os.str();
+}
+
+static void do_manual_compaction(TabletManager* tablet_manager, ManualCompactionTask& t) {
+    auto tablet = tablet_manager->get_tablet(t.tablet_id);
+    if (!tablet) {
+        LOG(WARNING) << "repair compaction failed, tablet not found: " << t.tablet_id;
+        return;
+    }
+    if (tablet->updates() == nullptr) {
+        LOG(ERROR) << "manual compaction failed, tablet not primary key tablet found: " << t.tablet_id;
+        return;
+    }
+    auto* mem_tracker = ExecEnv::GetInstance()->compaction_mem_tracker();
+    auto st = tablet->updates()->get_rowsets_for_compaction(t.rowset_size_threshold, t.input_rowset_ids, t.total_bytes);
+    if (!st.ok()) {
+        t.status = st.to_string();
+        LOG(WARNING) << "get_rowsets_for_compaction failed: " << st.get_error_msg();
+        return;
+    }
+    st = tablet->updates()->compaction(mem_tracker, t.input_rowset_ids);
+    t.status = st.to_string();
+    if (!st.ok()) {
+        LOG(WARNING) << "manual compaction failed: " << st.get_error_msg() << " tablet:" << t.tablet_id;
+        return;
+    }
+}
+
+bool StorageEngine::_check_and_run_manual_compaction_task() {
+    ManualCompactionTask t;
+    {
+        std::lock_guard lg(manual_compaction_mutex);
+        if (manual_compaction_tasks.empty()) {
+            return false;
+        }
+        t = manual_compaction_tasks.front();
+        manual_compaction_tasks.pop_front();
+    }
+    t.start_time = UnixSeconds();
+    do_manual_compaction(_tablet_manager.get(), t);
+    t.end_time = UnixSeconds();
+    {
+        std::lock_guard lg(manual_compaction_mutex);
+        total_manual_compaction_tasks_finished++;
+        total_manual_compaction_bytes += t.total_bytes;
+        manual_compaction_history.push_back(t);
+        while (manual_compaction_history.size() > MAX_MANUAL_COMPACTION_HISTORY) {
+            manual_compaction_history.pop_front();
+        }
+    }
+    return true;
+}
+
+void* StorageEngine::_manual_compaction_thread_callback(void* arg) {
+#ifdef GOOGLE_PROFILER
+    ProfilerRegisterThread();
+#endif
+    Status status = Status::OK();
+    while (!_bg_worker_stopped.load(std::memory_order_consume)) {
+        _check_and_run_manual_compaction_task();
+        int64_t left_seconds = 5;
+        while (!_bg_worker_stopped.load(std::memory_order_consume) && left_seconds > 0) {
+            sleep(1);
+            --left_seconds;
+        }
+    }
+    return nullptr;
+}
+
 Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
                                                      std::pair<int32_t, int32_t> tablet_shards_range) {
     scoped_refptr<Trace> trace(new Trace);
