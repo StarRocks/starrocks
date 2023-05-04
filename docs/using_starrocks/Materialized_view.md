@@ -395,46 +395,46 @@ SHOW CREATE MATERIALIZED VIEW order_mv;
 
 ### Check the asynchronous materialized view execution status
 
-You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the `tasks` and `task_runs` metadata tables in StarRocks' [Information Schema](../administration/information_schema.md). 
+You can check the execution (building or refreshing) status of an asynchronous materialized view by querying the `tasks` and `task_runs` metadata tables in StarRocks' [Information Schema](../administration/information_schema.md).
 
 The following example checks the execution status of the materialized view that was created most recently:
 
 1. Check the `TASK_NAME` of the most recent task in the table `tasks`.
 
-  ```Plain
-  mysql> select * from information_schema.tasks  order by CREATE_TIME desc limit 1\G;
-  *************************** 1. row ***************************
-    TASK_NAME: mv-59299
-  CREATE_TIME: 2022-12-12 17:33:51
-     SCHEDULE: MANUAL
-     DATABASE: ssb_1
-   DEFINITION: insert overwrite hive_mv_lineorder_flat_1 SELECT `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_linenumber`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_custkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_partkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderpriority`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_ordtotalprice`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_revenue`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`p_mfgr`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`s_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_city`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate`
-  FROM `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`
-  WHERE `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate` = '1997-01-01'
-  EXPIRE_TIME: NULL
-  1 row in set (0.02 sec)
-  ```
+    ```Plain
+    mysql> select * from information_schema.tasks  order by CREATE_TIME desc limit 1\G;
+    *************************** 1. row ***************************
+      TASK_NAME: mv-59299
+    CREATE_TIME: 2022-12-12 17:33:51
+      SCHEDULE: MANUAL
+      DATABASE: ssb_1
+    DEFINITION: insert overwrite hive_mv_lineorder_flat_1 SELECT `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_linenumber`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_custkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_partkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderpriority`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_ordtotalprice`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_revenue`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`p_mfgr`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`s_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_city`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate`
+    FROM `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`
+    WHERE `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate` = '1997-01-01'
+    EXPIRE_TIME: NULL
+    1 row in set (0.02 sec)
+    ```
 
 2. Check the execution status in the table `task_runs` using the `TASK_NAME` you have found.
 
-  ```Plain
-  mysql> select * from information_schema.task_runs where task_name='mv-59299' order by CREATE_TIME \G;
-  *************************** 1. row ***************************
-       QUERY_ID: d9cef11f-7a00-11ed-bd90-00163e14767f
-      TASK_NAME: mv-59299
-    CREATE_TIME: 2022-12-12 17:39:19
-    FINISH_TIME: 2022-12-12 17:39:22
-          STATE: SUCCESS
-       DATABASE: ssb_1
-     DEFINITION: insert overwrite hive_mv_lineorder_flat_1 SELECT `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_linenumber`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_custkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_partkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderpriority`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_ordtotalprice`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_revenue`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`p_mfgr`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`s_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_city`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate`
-  FROM `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`
-  WHERE `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate` = '1997-01-01'
-    EXPIRE_TIME: 2022-12-15 17:39:19
-     ERROR_CODE: 0
-  ERROR_MESSAGE: NULL
-       PROGRESS: 100%
-  2 rows in set (0.02 sec)
-  ```
+    ```Plain
+    mysql> select * from information_schema.task_runs where task_name='mv-59299' order by CREATE_TIME \G;
+    *************************** 1. row ***************************
+        QUERY_ID: d9cef11f-7a00-11ed-bd90-00163e14767f
+        TASK_NAME: mv-59299
+      CREATE_TIME: 2022-12-12 17:39:19
+      FINISH_TIME: 2022-12-12 17:39:22
+            STATE: SUCCESS
+        DATABASE: ssb_1
+      DEFINITION: insert overwrite hive_mv_lineorder_flat_1 SELECT `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_linenumber`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_custkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_partkey`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderpriority`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_ordtotalprice`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_revenue`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`p_mfgr`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`s_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_city`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`c_nation`, `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate`
+    FROM `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`
+    WHERE `hive_ci`.`dla_scan`.`lineorder_flat_1000_1000_orc`.`lo_orderdate` = '1997-01-01'
+      EXPIRE_TIME: 2022-12-15 17:39:19
+      ERROR_CODE: 0
+    ERROR_MESSAGE: NULL
+        PROGRESS: 100%
+    2 rows in set (0.02 sec)
+    ```
 
 ### Drop an asynchronous materialized view
 
