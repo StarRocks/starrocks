@@ -1,4 +1,4 @@
--- name: test_next_day
+-- name: test_cume_window_function
 DROP TABLE IF EXISTS `cume_test`;
 CREATE TABLE IF NOT EXISTS `cume_test` (
   k1 INT,
@@ -43,12 +43,49 @@ VALUES (1, 10, 15, 2.5, '2023-01-01', 'apple'),
        (6, 6, 55, 13.5, '2023-01-25', 'acerola'),
        (6, 5, 60, 13.5, '2023-01-26', 'bilberry'),
        (7, 4, 60, 13.5, '2023-01-27', 'cloudberry'),
-       (7, 3, 60, 14.5, '2023-01-28', 'dewberry');
+       (7, 3, 60, 14.5, '2023-01-28', 'dewberry'),
+       (8, 2, null, 2.5, '2023-01-29', null),
+       (8, 8, 15, 3.5, '2023-01-30', null),
+       (8, 7, null, 3.5, '2023-01-31', 'date'),
+       (8, 6, null, null, '2023-02-01', 'fig'),
+       (9, 5, 20, 4.5, '2023-02-02', 'grape'),
+       (9, 4, 20, 5.5, '2023-02-07', null),
+       (10, 3, 20, null, null, 'kiwi'),
+       (10, 2, 20, 5.5, '2023-02-09', 'lemon'),
+       (10, 2, 25, 5.5, '2023-02-10', null),
+       (11, 10, null, 5.5, null, null),
+       (11, 9, 30, 5.5, '2023-02-12', 'orange'),
+       (12, 8, 35, 6.5, '2023-02-13', null),
+       (13, 7, 35, 6.5, '2023-02-14', 'pineapple'),
+       (13, 6, null, 7.5, '2023-02-15', 'quince'),
+       (13, 5, 35, 7.5, '2023-02-16', null),
+       (13, 4, 35, 8.5, null, null),
+       (13, 3, 40, 8.5, '2023-02-18', 'tangerine'),
+       (14, 2, 40, null, '2023-02-19', 'ugli fruit'),
+       (14, 1, 40, null, '2023-02-20', 'vanilla'),
+       (14, 10, 45, 9.5, '2023-02-21', 'watermelon'),
+       (15, 9, 45, 10.5, null, 'xigua'),
+       (16, 8, 50, 11.5, null, null),
+       (16, 7, 50, 12.5, '2023-02-24', null),
+       (16, 6, 55, 13.5, '2023-02-25', 'acerola'),
+       (16, 5, 60, 13.5, '2023-02-26', 'bilberry'),
+       (17, 4, null, 13.5, null, 'cloudberry'),
+       (17, 3, 60, 14.5, '2023-02-28', 'dewberry');
+
+SELECT *, CUME_DIST() OVER () AS cume_dist_without_order_by FROM cume_test;
+SELECT *, CUME_DIST() OVER () AS cume_dist_without_order_by FROM cume_test ORDER BY v1 DESC;
+SELECT *, CUME_DIST() OVER () AS cume_dist_without_order_by FROM cume_test ORDER BY v2;
+SELECT *, CUME_DIST() OVER () AS cume_dist_without_order_by, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1 FROM cume_test;
 
 SELECT *, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v2 DESC) AS cume_dist_v2 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v3) AS cume_dist_v3 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY v4) AS cume_dist_v4 FROM cume_test;
+
+SELECT *, CUME_DIST() OVER (ORDER BY v1) AS cume_dist_v1 FROM cume_test WHERE v1 IS NOT NULL;
+SELECT *, CUME_DIST() OVER (ORDER BY v2 DESC) AS cume_dist_v2 FROM cume_test WHERE v2 IS NOT NULL;
+SELECT *, CUME_DIST() OVER (ORDER BY v3) AS cume_dist_v3 FROM cume_test WHERE v3 IS NOT NULL;
+SELECT *, CUME_DIST() OVER (ORDER BY v4) AS cume_dist_v4 FROM cume_test WHERE v4 IS NOT NULL;
 
 SELECT *, CUME_DIST() OVER (ORDER BY k1, k2) AS cume_dist_k1_k2 FROM cume_test;
 SELECT *, CUME_DIST() OVER (ORDER BY k1 ASC, k2 DESC) AS cume_dist_k1_asc_k2_desc FROM cume_test;
