@@ -456,7 +456,7 @@ GRANT public_sales TO ROLE lineb_query;
 
    - 全局备份恢复权限
 
-     全局备份恢复权限可以对任意库、表、分区进行备份恢复。需要 SYSTEM 级的 REPOSITORY 权限，在 Default Catalog 下创建数据库的权限，在任意数据库下创建表的权限，以及对任意表进行导入的权限。
+     全局备份恢复权限可以对任意库、表、分区进行备份恢复。需要 SYSTEM 级的 REPOSITORY 权限，在 Default Catalog 下创建数据库的权限，在任意数据库下创建表的权限，以及对任意表进行导入、导出的权限。
 
      ```SQL
      -- 创建自定义角色。
@@ -466,28 +466,33 @@ GRANT public_sales TO ROLE lineb_query;
      -- 赋予角色创建数据库的权限。
      GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover;
      -- 赋予角色创建任意表的权限。
-     -- 注意如果您此时在 External Catalog 下，需要通过 `SET CATALOG default_catalog` 切换至 Default Catalog 下。
      GRANT CREATE TABLE ON ALL DATABASE TO ROLE recover;
-     -- 赋予角色导入数据至任意表的权限。
-     GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE recover;
+     -- 赋予角色向任意表导入、导出数据的权限。
+     GRANT INSERT, EXPORT ON ALL TABLES IN ALL DATABASES TO ROLE recover;
      ```
 
    - 数据库级备份恢复权限
 
-     数据库级备份恢复权限需要 SYSTEM 级的 REPOSITORY 权限，以及在 Default Catalog 下创建数据库的权限。
+     数据库级备份恢复权限可以对整个数据库进行备份恢复，需要 SYSTEM 级的 REPOSITORY 权限，在 Default Catalog 下创建数据库的权限，在任意数据库下创建表的权限，以及待备份数据库下所有表的导出权限。
 
      ```SQL
      -- 创建自定义角色。
      CREATE ROLE recover_db;
      -- 赋予角色 SYSTEM 级的 REPOSITORY 权限。
      GRANT REPOSITORY ON SYSTEM TO ROLE recover_db;
-     -- 赋予角色在 Default Catalog 下创建数据库的权限。
+     -- 赋予角色创建数据库的权限。
      GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover_db;
+     -- 赋予角色创建任意表的权限。
+     GRANT CREATE TABLE ON ALL DATABASE TO ROLE recover_db;
+     -- 赋予角色向任意表导入数据的权限。
+     GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE recover_db;
+     -- 赋予角色向待备份数据库下所有表的导出权限。
+     GRANT EXPORT ON ALL TABLES IN DATABASE <database_name> TO ROLE recover_db;
      ```
 
    - 表级备份恢复权限
 
-     表级备份恢复权限需要 SYSTEM 级的 REPOSITORY 权限，以及在对应数据库下创建表的权限。
+     表级备份恢复权限需要 SYSTEM 级的 REPOSITORY 权限，在待备份数据库下创建表及导入数据的权限，以及待备份表的导出权限。
 
      ```SQL
      -- 创建自定义角色。
@@ -496,11 +501,15 @@ GRANT public_sales TO ROLE lineb_query;
      GRANT REPOSITORY ON SYSTEM TO ROLE recover_tbl;
      -- 赋予角色在对应数据库下创建表的权限。
      GRANT CREATE TABLE ON DATABASE <db_name> TO ROLE recover_tbl;
+     -- 赋予角色向任意表导入数据的权限。
+     GRANT INSERT ON ALL TABLES IN DATABASE <db_name> TO ROLE recover_db;
+     -- 赋予角色导出待备份表数据的权限。
+     GRANT EXPORT ON TABLE <talbe_name> TO ROLE recover_tbl;     
      ```
 
    - 分区级备份恢复权限
 
-     分区级备份恢复权限需要 SYSTEM 级的 REPOSITORY 权限，以及对对应表进行导入的权限。
+     分区级备份恢复权限需要 SYSTEM 级的 REPOSITORY 权限，以及对待备份表的导入、导出权限。
 
      ```SQL
      -- 创建自定义角色。
@@ -508,5 +517,5 @@ GRANT public_sales TO ROLE lineb_query;
      -- 赋予角色 SYSTEM 级的 REPOSITORY 权限。
      GRANT REPOSITORY ON SYSTEM TO ROLE recover_par;
      -- 赋予角色对对应表进行导入的权限。
-     GRANT INSERT ON TABLE <tbl_name> TO ROLE recover_par;
+     GRANT INSERT, EXPORT ON TABLE <tbl_name> TO ROLE recover_par;
      ```
