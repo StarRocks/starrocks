@@ -750,7 +750,7 @@ public class WindowTest extends PlanTestBase {
                     "sum(v1/v3) over ([hash] partition by v1,v2 ) " +
                     "from t0";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  2:ANALYTIC\n" +
+            assertContains(plan, "  1:ANALYTIC\n" +
                     "  |  functions: [, sum(1: v1), ], [, sum(CAST(1: v1 AS DOUBLE) / CAST(3: v3 AS DOUBLE)), ]\n" +
                     "  |  partition by: 1: v1, 2: v2\n" +
                     "  |  useHashBasedPartition");
@@ -763,7 +763,7 @@ public class WindowTest extends PlanTestBase {
             assertContains(plan, "  4:ANALYTIC\n" +
                     "  |  functions: [, sum(1: v1), ]\n" +
                     "  |  partition by: 1: v1, 2: v2");
-            assertContains(plan, "  2:ANALYTIC\n" +
+            assertContains(plan, "  1:ANALYTIC\n" +
                     "  |  functions: [, sum(CAST(1: v1 AS DOUBLE) / CAST(3: v3 AS DOUBLE)), ]\n" +
                     "  |  partition by: 1: v1, 2: v2\n" +
                     "  |  useHashBasedPartition");
@@ -773,11 +773,11 @@ public class WindowTest extends PlanTestBase {
                     "sum(v1/v3) over ([hash] partition by v1,v2 ) " +
                     "from t0";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  4:ANALYTIC\n" +
+            assertContains(plan, "  3:ANALYTIC\n" +
                     "  |  functions: [, sum(1: v1), ]\n" +
                     "  |  partition by: 1: v1\n" +
                     "  |  useHashBasedPartition");
-            assertContains(plan, "  2:ANALYTIC\n" +
+            assertContains(plan, "  1:ANALYTIC\n" +
                     "  |  functions: [, sum(CAST(1: v1 AS DOUBLE) / CAST(3: v3 AS DOUBLE)), ]\n" +
                     "  |  partition by: 1: v1, 2: v2\n" +
                     "  |  useHashBasedPartition");
