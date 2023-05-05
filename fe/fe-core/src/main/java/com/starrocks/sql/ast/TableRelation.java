@@ -85,8 +85,9 @@ public class TableRelation extends Relation {
         this.partitionNames = partitionNames;
     }
 
-    public boolean getHasHintsPartitionNames() {
-        return partitionNames != null;
+    // Check whether the table has some table hints, some rules should not be applied.
+    public boolean hasTableHints() {
+        return partitionNames != null || isSyncMVQuery() ||  (tabletIds != null && !tabletIds.isEmpty());
     }
 
     public List<Long> getTabletIds() {
