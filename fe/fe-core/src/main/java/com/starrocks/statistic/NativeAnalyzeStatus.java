@@ -16,52 +16,72 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.common.MetaUtils;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class ExternalAnalyzeStatus implements AnalyzeStatus {
-
+public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
+    @SerializedName("id")
     private long id;
-    private String catalogName;
-    private String dbName;
-    private String tableName;
-    private String tableUUID;
 
+    @SerializedName("dbId")
+    private long dbId;
+
+    @SerializedName("tableId")
+    private long tableId;
+
+    @SerializedName("columns")
     private List<String> columns;
 
+    @SerializedName("type")
     protected StatsConstants.AnalyzeType type;
 
+    @SerializedName("scheduleType")
     private StatsConstants.ScheduleType scheduleType;
 
+    @SerializedName("properties")
     private Map<String, String> properties;
 
+    @SerializedName("status")
     protected StatsConstants.ScheduleStatus status;
 
+    @SerializedName("startTime")
     private LocalDateTime startTime;
 
+    @SerializedName("endTime")
     private LocalDateTime endTime;
 
+    @SerializedName("reason")
     protected String reason;
 
+    @SerializedName("progress")
     private long progress;
 
-    public ExternalAnalyzeStatus(long id, String catalogName, String dbName, String tableName,
-                                 String tableUUID,
-                                 List<String> columns,
-                                 StatsConstants.AnalyzeType type,
-                                 StatsConstants.ScheduleType scheduleType,
-                                 Map<String, String> properties,
-                                 LocalDateTime startTime) {
+    public NativeAnalyzeStatus(long id, long dbId, long tableId, List<String> columns,
+                               StatsConstants.AnalyzeType type,
+                               StatsConstants.ScheduleType scheduleType,
+                               Map<String, String> properties,
+                               LocalDateTime startTime) {
         this.id = id;
-        this.catalogName = catalogName;
-        this.dbName = dbName;
-        this.tableName = tableName;
-        this.tableUUID = tableUUID;
+        this.dbId = dbId;
+        this.tableId = tableId;
         this.columns = columns;
         this.type = type;
         this.scheduleType = scheduleType;
@@ -74,23 +94,39 @@ public class ExternalAnalyzeStatus implements AnalyzeStatus {
         return id;
     }
 
-    public String getTableUUID() {
-        return tableUUID;
+    public long getDbId() {
+        return dbId;
+    }
+
+    public long getTableId() {
+        return tableId;
     }
 
     @Override
     public String getCatalogName() {
-        return catalogName;
+        return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     }
 
     @Override
     public String getDbName() throws MetaNotFoundException {
-        return dbName;
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            throw new MetaNotFoundException("No found database: " + dbId);
+        }
+        return db.getOriginName();
     }
 
     @Override
     public String getTableName() throws MetaNotFoundException {
-        return tableName;
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            throw new MetaNotFoundException("No found database: " + dbId);
+        }
+        Table table = db.getTable(tableId);
+        if (table == null) {
+            throw new MetaNotFoundException("No found table: " + tableId);
+        }
+        return table.getName();
     }
 
     @Override
@@ -160,6 +196,26 @@ public class ExternalAnalyzeStatus implements AnalyzeStatus {
 
     @Override
     public ShowResultSet toShowResult() {
+        String dbName;
+        if (dbId == StatsConstants.DEFAULT_ALL_ID) {
+            dbName = "*";
+        } else {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            dbName = db.getOriginName();
+        }
+        String tableName;
+        if (tableId == StatsConstants.DEFAULT_ALL_ID) {
+            tableName = "*";
+        } else {
+            try {
+                tableName = MetaUtils.getTable(dbId, tableId).getName();
+            } catch (SemanticException e) {
+                tableName = "<tableId : " + tableId + ">";
+                status = StatsConstants.ScheduleStatus.FAILED;
+                reason = e.getMessage();
+            }
+        }
+
         String op = "unknown";
         if (type.equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             op = "histogram";
@@ -180,7 +236,18 @@ public class ExternalAnalyzeStatus implements AnalyzeStatus {
         }
 
         List<List<String>> rows = new ArrayList<>();
-        rows.add(Lists.newArrayList(catalogName + "." + dbName + "." + tableName, op, msgType, msgText));
+        rows.add(Lists.newArrayList(dbName + "." + tableName, op, msgType, msgText));
         return new ShowResultSet(META_DATA, rows);
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        String s = GsonUtils.GSON.toJson(this);
+        Text.writeString(out, s);
+    }
+
+    public static NativeAnalyzeStatus read(DataInput in) throws IOException {
+        String s = Text.readString(in);
+        return GsonUtils.GSON.fromJson(s, NativeAnalyzeStatus.class);
     }
 }

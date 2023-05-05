@@ -66,7 +66,7 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         List<String> columns = analyzeStatus.getColumns();
 
         row.set(0, String.valueOf(analyzeStatus.getId()));
-        row.set(1, analyzeStatus.getDbName());
+        row.set(1, analyzeStatus.getCatalogName() + "." + analyzeStatus.getDbName());
         row.set(2, analyzeStatus.getTableName());
 
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.

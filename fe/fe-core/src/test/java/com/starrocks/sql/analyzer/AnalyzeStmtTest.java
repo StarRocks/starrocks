@@ -44,6 +44,7 @@ import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticSQLBuilder;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
@@ -155,7 +156,7 @@ public class AnalyzeStmtTest {
         sql = "show analyze status";
         ShowAnalyzeStatusStmt showAnalyzeStatusStatement = (ShowAnalyzeStatusStmt) analyzeSuccess(sql);
 
-        AnalyzeStatus analyzeStatus = new AnalyzeStatus(-1, testDb.getId(), table.getId(), Lists.newArrayList(),
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(-1, testDb.getId(), table.getId(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(
                         2020, 1, 1, 1, 1));
@@ -311,7 +312,7 @@ public class AnalyzeStmtTest {
     public void testAnalyzeStatus() throws MetaNotFoundException {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = testDb.getTable("t0");
-        AnalyzeStatus analyzeStatus = new AnalyzeStatus(-1, testDb.getId(), table.getId(), Lists.newArrayList(),
+        AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(-1, testDb.getId(), table.getId(), Lists.newArrayList(),
                 StatsConstants.AnalyzeType.FULL,
                 StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.of(
                         2020, 1, 1, 1, 1));

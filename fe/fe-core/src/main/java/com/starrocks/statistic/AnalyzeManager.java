@@ -158,7 +158,8 @@ public class AnalyzeManager implements Writable {
     public void dropAnalyzeStatus(Long tableId) {
         List<AnalyzeStatus> expireList = Lists.newArrayList();
         for (AnalyzeStatus analyzeStatus : analyzeStatusMap.values()) {
-            if (analyzeStatus.getTableId() == tableId) {
+            if (analyzeStatus instanceof NativeAnalyzeStatus &&
+                    ((NativeAnalyzeStatus) analyzeStatus).getTableId() == tableId) {
                 expireList.add(analyzeStatus);
             }
         }

@@ -142,6 +142,7 @@ import com.starrocks.statistic.AnalyzeManager;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.HistogramStatisticsCollectJob;
+import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatisticsCollectJobFactory;
@@ -876,7 +877,7 @@ public class StmtExecutor {
         if (analyzeStmt.isExternal()) {
             String catalogName = analyzeStmt.getTableName().getCatalog();
             analyzeStatus = new ExternalAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                     db.getId(), table.getId(), catalogName, db.getOriginName(), table.getName(),
+                    catalogName, db.getOriginName(), table.getName(),
                     table.getUUID(),
                     analyzeStmt.getColumnNames(),
                     analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
@@ -884,7 +885,7 @@ public class StmtExecutor {
             GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
         } else {
             //Only for send sync command to client
-            analyzeStatus = new AnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+            analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
                     db.getId(), table.getId(), analyzeStmt.getColumnNames(),
                     analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
