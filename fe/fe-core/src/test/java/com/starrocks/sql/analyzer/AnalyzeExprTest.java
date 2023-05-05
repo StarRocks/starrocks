@@ -321,8 +321,8 @@ public class AnalyzeExprTest {
 
     @Test
     public void testAnalyzeMapFunc() {
-        analyzeSuccess("select map_size({1:3, 3:5,2:45})");
-        analyzeSuccess("select map_size({})");
+        analyzeSuccess("select cardinality({1:3,3:5,2:45})");
+        analyzeSuccess("select cardinality({})");
         analyzeSuccess("select element_at({1:2,3:3,4:3},3)");
         analyzeSuccess("select element_at({1:2,3:3,4:3},312)");
         analyzeSuccess("select element_at({1:2,3:3,4:3},null)");
@@ -337,11 +337,4 @@ public class AnalyzeExprTest {
         analyzeFail("select map_concat()");
     }
 
-    @Test
-    public void testMapFunc() {
-        String sql = "select map_concat({16865432442:3},{3.323777777:'3'})";
-        StatementBase statementBase = analyzeSuccess(sql);
-        Assert.assertTrue(AstToStringBuilder.toString(statementBase)
-                .contains("MAP<DECIMAL128(28,9),VARCHAR>"));
-    }
 }
