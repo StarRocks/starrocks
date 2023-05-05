@@ -77,4 +77,7 @@ public interface IcebergCatalog {
         return "";
     }
 
+    default void deleteUncommittedDataFiles(List<String> fileLocations) {
+    }
+
 }

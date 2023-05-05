@@ -34,6 +34,7 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.TableScan;
+import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.hive.HiveTableOperations;
@@ -42,6 +43,8 @@ import org.apache.thrift.TException;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -403,5 +406,64 @@ public class IcebergMetadataTest extends TableTestBase {
         Assert.assertEquals(fileSize, dataFile.fileSizeInBytes());
         Assert.assertEquals(4, dataFile.splitOffsets().get(0).longValue());
         Assert.assertEquals(111L, dataFile.valueCounts().get(1).longValue());
+    }
+
+    @Test
+    public void testFinishSinkWithCommitFailed(@Mocked IcebergMetadata.Append append) throws IOException {
+        IcebergHiveCatalog icebergHiveCatalog = new IcebergHiveCatalog();
+        icebergHiveCatalog.initialize("iceberg_catalog", new HashMap<>());
+
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, icebergHiveCatalog);
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "iceberg_db",
+                "iceberg_table", Lists.newArrayList(), table, Maps.newHashMap());
+
+        new Expectations(append) {
+            {
+                append.commit();
+                result = new Exception("commit failed");
+                minTimes = 0;
+
+                append.addFile((DataFile) any);
+                result = null;
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(metadata) {
+            {
+                metadata.getTable(anyString, anyString);
+                result = icebergTable;
+                minTimes = 0;
+
+                metadata.getBatchWrite((Transaction) any, anyBoolean);
+                result = append;
+                minTimes = 0;
+            }
+        };
+
+
+        File fakeFile = temp.newFile();
+        fakeFile.createNewFile();
+        Assert.assertTrue(fakeFile.exists());
+        String path = fakeFile.getPath();
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        TIcebergDataFile tIcebergDataFile = new TIcebergDataFile();
+        String format = "parquet";
+        long recordCount = 10;
+        long fileSize = 2000;
+        String partitionPath = table.location() + "/data/data_bucket=0/";
+        List<Long> splitOffsets = Lists.newArrayList(4L);
+        tIcebergDataFile.setPath(path);
+        tIcebergDataFile.setFormat(format);
+        tIcebergDataFile.setRecord_count(recordCount);
+        tIcebergDataFile.setSplit_offsets(splitOffsets);
+        tIcebergDataFile.setPartition_path(partitionPath);
+        tIcebergDataFile.setFile_size_in_bytes(fileSize);
+
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setIceberg_data_file(tIcebergDataFile);
+
+        metadata.finishSink("iceberg_db", "iceberg_table", Lists.newArrayList(tSinkCommitInfo));
+        Assert.assertFalse(fakeFile.exists());
     }
 }
