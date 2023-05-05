@@ -49,6 +49,9 @@ static void send_rpc_runtime_filter(doris::PBackendService_Stub* stub, RuntimeFi
     rpc_closure->ref();
     rpc_closure->cntl.Reset();
     rpc_closure->cntl.set_timeout_ms(timeout_ms);
+    // as the attachment is empty, the http rpc also can do like the following interface.
+    // create a http rpc stub: http_stub
+    // http_stub->transmit_runtime_filter(&rpc_closure->cntl, &request, &rpc_closure->result, rpc_closure);
     stub->transmit_runtime_filter(&rpc_closure->cntl, &request, &rpc_closure->result, rpc_closure);
     rpc_closure->seq++;
 }

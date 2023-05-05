@@ -15,7 +15,7 @@ Everyone who contributes can become a StarRocks contributor. The members will pr
 ### How to become a Contributor?
 -   1 merged PR in the following repos: StarRocks, docs or flink-connector-starrocks
 
-### As a Contributor, we expect you to：
+### As a Contributor, we expect you to:
 -   Actively participate in StarRocks' project development
 -   Participate in community events (meetups, hackathons, etc.)
 -   Learn and help others learn StarRocks-related technologies

@@ -52,6 +52,10 @@ public:
     void transmit_chunk(::google::protobuf::RpcController* controller, const ::starrocks::PTransmitChunkParams* request,
                         ::starrocks::PTransmitChunkResult* response, ::google::protobuf::Closure* done) override;
 
+    void transmit_chunk_via_http(::google::protobuf::RpcController* controller,
+                                 const ::starrocks::PHttpRequest* request, ::starrocks::PTransmitChunkResult* response,
+                                 ::google::protobuf::Closure* done) override;
+
     void transmit_runtime_filter(::google::protobuf::RpcController* controller,
                                  const ::starrocks::PTransmitRuntimeFilterParams* request,
                                  ::starrocks::PTransmitRuntimeFilterResult* response,
@@ -101,6 +105,9 @@ public:
 
     void get_pulsar_info(google::protobuf::RpcController* controller, const PPulsarProxyRequest* request,
                          PPulsarProxyResult* response, google::protobuf::Closure* done) override;
+
+    void execute_command(google::protobuf::RpcController* controller, const ExecuteCommandRequestPB* request,
+                         ExecuteCommandResultPB* response, google::protobuf::Closure* done) override;
 
 private:
     void _get_info_impl(const PProxyRequest* request, PProxyResult* response,

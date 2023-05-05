@@ -36,6 +36,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import org.spark_project.guava.collect.Sets;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -269,7 +270,7 @@ public class PartitionUtil {
     // based on partitioned external table.
     public static Set<String> getMVPartitionName(Table table, Column partitionColumn, List<String> partitionNames)
             throws AnalysisException {
-        return getMVPartitionNameWithRange(table, partitionColumn, partitionNames).keySet();
+        return Sets.newHashSet(getMVPartitionNameWithRange(table, partitionColumn, partitionNames).keySet());
     }
 
     // Map partition values to partition ranges, eg

@@ -267,10 +267,11 @@ private:
         TRY_CATCH_ALLOC_SCOPE_END()             \
     } while (0)
 
+// TRY_CATCH_ALL will not set catched=true, only used for catch unexpected crash,
+// cannot be used to control memory usage.
 #define TRY_CATCH_ALL(result, stmt)                                                      \
     do {                                                                                 \
         try {                                                                            \
-            SCOPED_SET_CATCHED(true);                                                    \
             { result = stmt; }                                                           \
         } catch (std::runtime_error const& e) {                                          \
             result = Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));   \

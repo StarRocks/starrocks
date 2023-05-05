@@ -76,6 +76,7 @@ struct TRoutineLoadTask {
     13: optional InternalService.TExecPlanFragmentParams params
     14: optional PlanNodes.TFileFormatType format
     15: optional TPulsarLoadInfo pulsar_load_info
+    16: optional double max_filter_ratio
 }
 
 struct TKafkaMetaProxyRequest {

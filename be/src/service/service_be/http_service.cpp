@@ -26,6 +26,7 @@
 #include "http/action/checksum_action.h"
 #include "http/action/compact_rocksdb_meta_action.h"
 #include "http/action/compaction_action.h"
+#include "http/action/greplog_action.h"
 #include "http/action/health_action.h"
 #include "http/action/meta_action.h"
 #include "http/action/metrics_action.h"
@@ -223,6 +224,10 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::GET, "/api/pipeline_blocking_drivers/{action}",
                                       pipeline_driver_poller_action);
     _http_handlers.emplace_back(pipeline_driver_poller_action);
+
+    auto* greplog_action = new GrepLogAction();
+    _ev_http_server->register_handler(HttpMethod::GET, "/greplog", greplog_action);
+    _http_handlers.emplace_back(greplog_action);
 
     RETURN_IF_ERROR(_ev_http_server->start());
     return Status::OK();

@@ -28,6 +28,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -68,6 +69,29 @@ public class CreateTableTest {
     private static void alterTableWithNewParser(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+    }
+
+    @Test(expected = SemanticException.class)
+    public void testCreateUnsupportedType() throws Exception {
+        createTable(
+                "CREATE TABLE test.ods_warehoused (\n" +
+                        " warehouse_id                                bigint(20)                 COMMENT        ''\n" +
+                        ",company_id                                        bigint(20)                 COMMENT        ''\n" +
+                        ",company_name                                string                        COMMENT        ''\n" +
+                        ",is_sort_express_by_cost        tinyint(1)                COMMENT        ''\n" +
+                        ",is_order_intercepted                tinyint(1)                COMMENT        ''\n" +
+                        ",intercept_time_type                tinyint(3)                 COMMENT        ''\n" +
+                        ",intercept_time                                time                        COMMENT        ''\n" +
+                        ",intercept_begin_time                time                        COMMENT        ''\n" +
+                        ",intercept_end_time                        time                        COMMENT        ''\n" +
+                        ")\n" +
+                        "PRIMARY KEY(warehouse_id)\n" +
+                        "COMMENT \"\"\n" +
+                        "DISTRIBUTED BY HASH(warehouse_id)\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");"
+        );
     }
 
     @Test

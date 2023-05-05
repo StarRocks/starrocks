@@ -120,4 +120,39 @@ const THdfsProperties* FSOptions::hdfs_properties() const {
     return nullptr;
 }
 
+static std::deque<FileWriteStat> file_write_history;
+static std::unordered_map<uint64_t, FileWriteStat> file_writes;
+static std::mutex file_writes_mutex;
+
+void FileSystem::get_file_write_history(std::vector<FileWriteStat>* stats) {
+    std::lock_guard<std::mutex> l(file_writes_mutex);
+    stats->assign(file_write_history.begin(), file_write_history.end());
+    for (auto& it : file_writes) {
+        stats->push_back(it.second);
+    }
+}
+
+void FileSystem::on_file_write_open(WritableFile* file) {
+    std::lock_guard<std::mutex> l(file_writes_mutex);
+    FileWriteStat stat;
+    stat.path = file->filename();
+    stat.open_time = time(nullptr);
+    file_writes[reinterpret_cast<uint64_t>(file)] = stat;
+}
+
+void FileSystem::on_file_write_close(WritableFile* file) {
+    std::lock_guard<std::mutex> l(file_writes_mutex);
+    auto it = file_writes.find(reinterpret_cast<uint64_t>(file));
+    if (it == file_writes.end()) {
+        return;
+    }
+    it->second.close_time = time(nullptr);
+    it->second.size = file->size();
+    file_write_history.push_back(it->second);
+    file_writes.erase(it);
+    while (file_write_history.size() > config::file_write_history_size) {
+        file_write_history.pop_front();
+    }
+}
+
 } // namespace starrocks

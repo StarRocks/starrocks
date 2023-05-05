@@ -20,8 +20,9 @@
         <presto.hive.version>3.0.0-8</presto.hive.version>
         <hudi.version>0.12.2</hudi.version>
         <fasterxml.version>2.13.4</fasterxml.version>
-        <fasterxml.jackson.databind.version>2.13.4.1</fasterxml.jackson.databind.version>
+        <fasterxml.jackson.databind.version>2.13.4.2</fasterxml.jackson.databind.version>
         <esotericsoftware.kryo.shaded.version>4.0.2</esotericsoftware.kryo.shaded.version>
+        <luben.zstd.jni.version>1.5.4-2</luben.zstd.jni.version>
     </properties>
 
     <dependencies>
@@ -109,6 +110,12 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>${fasterxml.jackson.databind.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+            <version>${luben.zstd.jni.version}</version>
         </dependency>
 
         <dependency>

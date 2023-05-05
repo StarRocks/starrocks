@@ -537,4 +537,15 @@ public class SetTest extends PlanTestBase {
             Assert.assertEquals("Scalar subquery should output one column", e.getMessage());
         }
     }
+
+    @Test
+    public void testMinus() throws Exception {
+        String sql = "select * from t0 minus select * from t1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:EXCEPT\n" +
+                "  |  \n" +
+                "  |----4:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:EXCHANGE");
+    }
 }

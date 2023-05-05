@@ -774,6 +774,22 @@ public class Coordinator {
         }
     }
 
+    private void handleErrorBackendExecState(BackendExecState errorBackendExecState, TStatusCode errorCode, String errMessage)
+            throws UserException, RpcException {
+        if (errorBackendExecState != null) {
+            cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+            switch (Objects.requireNonNull(errorCode)) {
+                case TIMEOUT:
+                    throw new UserException("query timeout. backend id: " + errorBackendExecState.backend.getId());
+                case THRIFT_RPC_ERROR:
+                    SimpleScheduler.addToBlacklist(errorBackendExecState.backend.getId());
+                    throw new RpcException(errorBackendExecState.backend.getHost(), "rpc failed");
+                default:
+                    throw new UserException(errMessage + " backend:" + errorBackendExecState.address.hostname);
+            }
+        }
+    }
+
     private void deliverExecFragmentRequests(boolean enablePipelineEngine) throws Exception {
         long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
         lock();
@@ -896,6 +912,10 @@ public class Coordinator {
                         }
                         futures.add(Pair.create(execState, execState.execRemoteFragmentAsync()));
                     }
+
+                    BackendExecState errorBackendExecState = null;
+                    TStatusCode errorCode = null;
+                    String errMessage = null;
                     for (Pair<BackendExecState, Future<PExecPlanFragmentResult>> pair : futures) {
                         TStatusCode code;
                         String errMsg = null;
@@ -925,18 +945,22 @@ public class Coordinator {
                             LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
                                     errMsg, code, fragment.getFragmentId(),
                                     pair.first.address.hostname, pair.first.address.port);
-                            cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
-                            switch (Objects.requireNonNull(code)) {
-                                case TIMEOUT:
-                                    throw new UserException("query timeout. backend id: " + pair.first.backend.getId());
-                                case THRIFT_RPC_ERROR:
-                                    SimpleScheduler.addToBlacklist(pair.first.backend.getId());
-                                    throw new RpcException(pair.first.backend.getHost(), "rpc failed");
-                                default:
-                                    throw new UserException(errMsg + " backend:" + pair.first.address.hostname);
+                            if (errorBackendExecState == null) {
+                                errorBackendExecState = pair.first;
+                                errorCode = code;
+                                errMessage = errMsg;
+                            }
+                            if (Objects.requireNonNull(code) == TStatusCode.TIMEOUT) {
+                                break;
                             }
                         }
                     }
+
+                    // Handle error results and cancel fragment instances, excluding TIMEOUT errors,
+                    // until all the delivered fragment instances are completed.
+                    // Otherwise, the cancellation RPC may arrive at BE before the delivery fragment instance RPC,
+                    // causing the instances to become stale and only able to be released after a timeout.
+                    handleErrorBackendExecState(errorBackendExecState, errorCode, errMessage);
                 }
                 profileFragmentId += 1;
             }
@@ -1203,6 +1227,9 @@ public class Coordinator {
                                 firstExecState.execRemoteBatchFragmentsAsync(inflightRequest.second)));
                     }
 
+                    BackendExecState errorBackendExecState = null;
+                    TStatusCode errorCode = null;
+                    String errMessage = null;
                     for (Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>> pair : futures) {
                         TStatusCode code;
                         String errMsg = null;
@@ -1232,18 +1259,23 @@ public class Coordinator {
                             LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
                                     errMsg, code, pair.first.fragmentId,
                                     pair.first.address.hostname, pair.first.address.port);
-                            cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
-                            switch (Objects.requireNonNull(code)) {
-                                case TIMEOUT:
-                                    throw new UserException("query timeout. backend id: " + pair.first.backend.getId());
-                                case THRIFT_RPC_ERROR:
-                                    SimpleScheduler.addToBlacklist(pair.first.backend.getId());
-                                    throw new RpcException(pair.first.backend.getHost(), "rpc failed");
-                                default:
-                                    throw new UserException(errMsg + " backend:" + pair.first.address.hostname);
+                            profileDoneSignal.markedCountDown(pair.first.fragmentInstanceId(), -1L);
+                            if (errorBackendExecState == null) {
+                                errorBackendExecState = pair.first;
+                                errorCode = code;
+                                errMessage = errMsg;
+                            }
+                            if (Objects.requireNonNull(code) == TStatusCode.TIMEOUT) {
+                                break;
                             }
                         }
                     }
+
+                    // Handle error results and cancel fragment instances, excluding TIMEOUT errors,
+                    // until all the delivered fragment instances are completed.
+                    // Otherwise, the cancellation RPC may arrive at BE before the delivery fragment instance RPC,
+                    // causing the instances to become stale and only able to be released after a timeout.
+                    handleErrorBackendExecState(errorBackendExecState, errorCode, errMessage);
                 }
             }
 
@@ -2379,11 +2411,6 @@ public class Coordinator {
             } else if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                     scanNode instanceof FileTableScanNode) {
-                if (connectContext != null) {
-                    queryOptions.setUse_scan_block_cache(connectContext.getSessionVariable().getUseScanBlockCache());
-                    queryOptions.setEnable_populate_block_cache(
-                            connectContext.getSessionVariable().getEnablePopulateBlockCache());
-                }
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                 getSelectorComputeNodes(hasComputeNode),

@@ -18,7 +18,7 @@ SHOW VARIABLES LIKE '%time_zone%';
 
 ### Set variables
 
-Variables can generally be set to take effect **globally** or **only on the current session**. When set to global, a new value will be used in subsequent new sessions without affecting the current session. When set to “current session only”, the variable will only take effect on the current session.
+Variables can generally be set to take effect **globally** or **only on the current session**. When set to global, a new value will be used in subsequent new sessions without affecting the current session. When set to "current session only", the variable will only take effect on the current session.
 
 A variable set by `SET var_name=xxx;` only takes effect for the current session. For example:
 
@@ -55,6 +55,7 @@ Variables that can be set both globally or partially effective include:
 * use_compute_nodes
 * vectorized_engine_enable
 * wait_timeout
+* sql_dialect
 
 Variables that can only be set globally effective include:
 
@@ -126,8 +127,8 @@ SELECT /*+ SET_VAR
 
 * streaming_preaggregation_mode
 
-  Used to specify the preaggregation mode for the first phase of GROUP BY. If the preaggregation effect in the first phase is not satisfactory, you can use the streaming mode, which performs simple data serialization before streaming data to the destination。Valid values:
-  * `auto`：The system first tries local preaggregation. If the effect is not satisfactory, it switches to the streaming mode. This is the default value.
+  Used to specify the preaggregation mode for the first phase of GROUP BY. If the preaggregation effect in the first phase is not satisfactory, you can use the streaming mode, which performs simple data serialization before streaming data to the destination. Valid values:
+  * `auto`: The system first tries local preaggregation. If the effect is not satisfactory, it switches to the streaming mode. This is the default value.
   * `force_preaggregation`: The system directly performs local preaggregation.
   * `force_streaming`: The system directly performs streaming.
 
@@ -141,7 +142,7 @@ SELECT /*+ SET_VAR
 
 * enable_insert_strict
 
-  Used to enable the strict mode when importing data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Load data using INSERT](../loading/InsertInto.md)".
+  Used to enable the strict mode when importing data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md)".
 
 * enable_spilling
 
@@ -243,10 +244,6 @@ SELECT /*+ SET_VAR
 
   Specifies whether to enable the Query Cache feature. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. When this feature is enabled, it works only for queries that meet the conditions specified in the application scenarios of [Query Cache](../using_starrocks/query_cache.md#application-scenarios).
 
-* query_cache_force_populate (2.5 and later)
-
-  Specifies whether to ignore the computation results saved in the query cache. Valid values: true and false. `true` specifies to enable this feature, and `false` specifies to disable this feature. If this feature is enabled, StarRocks ignores the cached computation results when it performs computations required by queries. In this case, StarRocks once again reads data from the source, computes the data, and updates the computation results saved in the query cache. In this sense, the `query_cache_force_populate=true` setting resembles cache misses.
-
 * query_cache_entry_max_bytes (2.5 and later)
 
   The threshold for triggering the Passthrough mode. Valid values: 0 to 9223372036854775807. When the number of bytes or rows from the computation results of a specific tablet accessed by a query exceeds the threshold specified by the `query_cache_entry_max_bytes` or `query_cache_entry_max_rows` parameter, the query is switched to Passthrough mode.
@@ -329,7 +326,7 @@ SELECT /*+ SET_VAR
 
   In a distributed query execution plan, the upper-level node usually has one or more exchange nodes to receive data from the execution instances of the lower-level node on different BEs. Usually the number of exchange nodes is equal to the number of execution instances of the lower-level node.
 
-  In some aggregation query scenarios where the amount of data decreases drastically after aggregation, you can try to modify this variable to a smaller value to reduce the resource overhead. An example would be running aggregation queries using theDUPLICATE model.
+  In some aggregation query scenarios where the amount of data decreases drastically after aggregation, you can try to modify this variable to a smaller value to reduce the resource overhead. An example would be running aggregation queries using the Duplicate Key table.
 
 * parallel_fragment_exec_instance_num
 
@@ -475,3 +472,7 @@ SELECT /*+ SET_VAR
   The maximum number of rows allowed for the Hash table based on which Bloom filter Local RF is generated. Local RF will not be generated if this value is exceeded. This variable prevents the generation of an excessively long Local RF.
 
   The value is an integer. Default value: 1024000.
+
+* sql_dialect
+
+  The SQL dialect that is used. For example, you can run the `set sql_dialect = 'trino';` command to set the SQL dialect to Trino, so you can use Trino-specific SQL syntax and functions in your queries.

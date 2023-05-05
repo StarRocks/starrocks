@@ -116,7 +116,7 @@ void MapColumn::append_selective(const Column& src, const uint32_t* indexes, uin
     }
 }
 
-void MapColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
+void MapColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) {
     for (uint32_t i = 0; i < size; i++) {
         append(src, index, 1);
     }
@@ -461,6 +461,11 @@ Datum MapColumn::get(size_t idx) const {
 size_t MapColumn::get_map_size(size_t idx) const {
     DCHECK_LT(idx + 1, _offsets->size());
     return _offsets->get_data()[idx + 1] - _offsets->get_data()[idx];
+}
+
+std::pair<size_t, size_t> MapColumn::get_map_offset_size(size_t idx) const {
+    DCHECK_LT(idx + 1, _offsets->size());
+    return {_offsets->get_data()[idx], _offsets->get_data()[idx + 1] - _offsets->get_data()[idx]};
 }
 
 bool MapColumn::set_null(size_t idx) {

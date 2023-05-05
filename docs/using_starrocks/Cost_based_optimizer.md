@@ -94,7 +94,7 @@ You can rely on automatic jobs for a majority of statistics collection, but if y
 
 ### Manual collection
 
-You can use ANALYZE TABLE to create a manual collection task. By default, manual collection is a synchronous operation. You can also set it to an asynchronous operation. In asynchronous mode, the result for running ANALYZE TABLE is returned immediately after you run this command. However, the collection task will be running in the background and you do not have to wait for the result. Asynchronous collection is suitable for tables with large data volume, whereas synchronous collection is suitable for tables with small data volume. **Manual collection tasks are run only once after creation. You do not need to delete manual collection tasks.** You can check the status of the task by running SHOW ANALYZE STATUS.
+You can use ANALYZE TABLE to create a manual collection task. By default, manual collection is a synchronous operation. You can also set it to an asynchronous operation. In asynchronous mode, after you run ANALYZE TABLE, the system immediately returns whether this statement is successful. However, the collection task will be running in the background and you do not have to wait for the result. You can check the status of the task by running SHOW ANALYZE STATUS. Asynchronous collection is suitable for tables with large data volume, whereas synchronous collection is suitable for tables with small data volume. **Manual collection tasks are run only once after creation. You do not need to delete manual collection tasks.**
 
 #### Manually collect basic statistics
 
@@ -111,11 +111,11 @@ Parameter description:
   - SAMPLE: indicates sampled collection.
   - If no collection type is specified, full collection is used by default.
 
-- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected.
+- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
 
-- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
+- [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you do not specify this parameter.
 
-- `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in the `fe.conf` file are used.
+- `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in the `fe.conf` file are used. The properties that are actually used can be viewed via the `Properties` column in the output of SHOW ANALYZE STATUS.
 
 | **PROPERTIES**                | **Type** | **Default value** | **Description**                                              |
 | ----------------------------- | -------- | ----------------- | ------------------------------------------------------------ |
@@ -159,7 +159,7 @@ PROPERTIES (property [,property]);
 
 Parameter description:
 
-- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected. This parameter is required for histograms.
+- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected. This parameter is required for histograms.
 
 - [WITH SYNC | ASYNC MODE]: whether to run the manual collection task in synchronous or asynchronous mode. Synchronous collection is used by default if you not specify this parameter.
 
@@ -221,7 +221,7 @@ Parameter description:
   - SAMPLE: indicates sampled collection.
   - If no collection type is specified, full collection is used by default.
 
-- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (;). If this parameter is not specified, the entire table is collected.
+- `col_name`: columns from which to collect statistics. Separate multiple columns with commas (`,`). If this parameter is not specified, the entire table is collected.
 
 - `PROPERTIES`: custom parameters. If `PROPERTIES` is not specified, the default settings in `fe.conf` are used.
 
@@ -230,6 +230,7 @@ Parameter description:
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If the statistics health is below this threshold, automatic collection is triggered. |
 | statistics_max_full_collect_data_size | INT      | 100               | The size of the largest partition for automatic collection to collect data. Unit: GB.If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_sample_collect_rows         | INT      | 200000            | The minimum number of rows to collect.If the parameter value exceeds the actual number of rows in your table, full collection is performed. |
+| statistic_exclude_pattern             | String   | null              | The name of the database or table that needs to be excluded in the job. You can specify the database and table that do not collect statistics in the job. Note that this is a regular expression pattern, and the match content is `database.table`. |
 
 Examples
 
@@ -247,6 +248,11 @@ CREATE ANALYZE FULL DATABASE db_name;
 
 -- Automatically collect full stats of specified columns in a table.
 CREATE ANALYZE TABLE tbl_name(c1, c2, c3); 
+
+-- Automatically collect stats of all databases, excluding specified database 'db_name'.
+CREATE ANALYZE ALL PROPERTIES (
+   "statistic_exclude_pattern" = "db_name\."
+);
 ```
 
 Automatic sampled collection
@@ -255,11 +261,17 @@ Automatic sampled collection
 -- Automatically collect stats of all tables in a database with default settings.
 CREATE ANALYZE SAMPLE DATABASE db_name;
 
+-- Automatically collect stats of all tables in a database, excluding specified table 'db_name.tbl_name'.
+CREATE ANALYZE SAMPLE DATABASE db_name PROPERTIES (
+   "statistic_exclude_pattern" = "db_name\.tbl_name"
+);
+
 -- Automatically collect stats of specified columns in a table, with statistics health and the number of rows to collect specified.
-CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES(
+CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES (
    "statistic_auto_collect_ratio" = "0.5",
    "statistic_sample_collect_rows" = "1000000"
 );
+
 ```
 
 #### View custom collection tasks

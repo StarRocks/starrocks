@@ -77,6 +77,11 @@ public class Config extends ConfigBase {
     @Deprecated
     @ConfField
     public static String sys_log_roll_mode = "SIZE-MB-1024";
+    /**
+     * Log to file by default. set to `true` if want to log to console
+     */
+    @ConfField
+    public static boolean sys_log_to_console = false;
 
     /**
      * audit_log_dir:
@@ -161,7 +166,8 @@ public class Config extends ConfigBase {
      * Used to limit the maximum number of partitions that can be created when creating a dynamic partition table,
      * to avoid creating too many partitions at one time.
      */
-    @ConfField(mutable = true) public static int max_dynamic_partition_num = 500;
+    @ConfField(mutable = true)
+    public static int max_dynamic_partition_num = 500;
 
     /**
      * plugin_dir:
@@ -208,13 +214,19 @@ public class Config extends ConfigBase {
      * for task set expire time
      */
     @ConfField(mutable = true)
-    public static int task_ttl_second = 3 * 24 * 3600;         // 3 day
+    public static int task_ttl_second = 24 * 3600;         // 1 day
 
     /**
      * for task run set expire time
      */
     @ConfField(mutable = true)
-    public static int task_runs_ttl_second = 3 * 24 * 3600;     // 3 day
+    public static int task_runs_ttl_second = 24 * 3600;     // 1 day
+
+    /**
+     * max history task num kept
+     */
+    @ConfField(mutable = true)
+    public static int task_runs_max_history_number = 10000;
 
     /**
      * The max keep time of some kind of jobs.
@@ -782,7 +794,7 @@ public class Config extends ConfigBase {
      * In some situation, such as switch the master, the current number is maybe more than desired_max_waiting_jobs
      */
     @ConfField(mutable = true)
-    public static int desired_max_waiting_jobs = 100;
+    public static int desired_max_waiting_jobs = 1024;
 
     /**
      * maximun concurrent running txn num including prepare, commit txns under a single db
@@ -797,7 +809,7 @@ public class Config extends ConfigBase {
      * It should be less than 'max_running_txn_num_per_db'
      */
     @ConfField
-    public static int async_load_task_pool_size = 10;
+    public static int async_load_task_pool_size = 2;
 
     /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
@@ -872,10 +884,10 @@ public class Config extends ConfigBase {
     public static int task_runs_queue_length = 500;
     /**
      * Limitation of the running TaskRun.
-     * Default is 20.
+     * Default is 4.
      */
     @ConfField(mutable = true)
-    public static int task_runs_concurrency = 20;
+    public static int task_runs_concurrency = 4;
     /**
      * Default timeout of export jobs.
      */
@@ -1047,7 +1059,7 @@ public class Config extends ConfigBase {
      * TODO(cmy): remove this config and dynamically adjust it by clone task statistic
      */
     @ConfField(mutable = true, aliases = {"schedule_slot_num_per_path"})
-    public static int tablet_sched_slot_num_per_path = 4;
+    public static int tablet_sched_slot_num_per_path = 8;
 
     // if the number of scheduled tablets in TabletScheduler exceed max_scheduling_tablets
     // skip checking.
@@ -1069,6 +1081,18 @@ public class Config extends ConfigBase {
 
     /**
      * If BE is down beyond this time, tablets on that BE of colcoate table will be migrated to other available BEs
+     * When setting to true, disable the overall balance behavior for colocate groups which treats all the groups
+     * in all databases as a whole and balances the replica distribution between all of them.
+     * See `ColocateBalancer.relocateAndBalanceAllGroups` for more details.
+     * Notice: set `tablet_sched_disable_colocate_balance` to true will disable all the colocate balance behavior,
+     * including this behavior and the per-group balance behavior. This configuration is only to disable the overall
+     * balance behavior.
+     */
+    @ConfField(mutable = true)
+    public static boolean tablet_sched_disable_colocate_overall_balance = false;
+
+    /**
+     * If BE is down beyond this time, tablets on that BE of colocate table will be migrated to other available BEs
      */
     @ConfField(mutable = true)
     public static long tablet_sched_colocate_be_down_tolerate_time_s = 12L * 3600L;
@@ -1088,11 +1112,6 @@ public class Config extends ConfigBase {
     public static long tablet_sched_storage_cooldown_second = -1L; // won't cool down by default
 
     /**
-     * FOR BeLoadBalancer:
-     * the threshold of cluster balance score, if a backend's load score is 10% lower than average score,
-     * this backend will be marked as LOW load, if load score is 10% higher than average score, HIGH load
-     * will be marked.
-     * <p>
      * FOR DiskAndTabletLoadBalancer:
      * upper limit of the difference in disk usage of all backends, exceeding this threshold will cause
      * disk balance
@@ -1414,6 +1433,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_update_interval_sec = 24L * 60L * 60L;
 
+    @ConfField(mutable = true)
+    public static long statistic_collect_too_many_version_sleep = 600000; // 10min
     /**
      * Enable full statistics collection
      */
@@ -1425,6 +1446,23 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static double statistic_auto_collect_ratio = 0.8;
+
+    @ConfField(mutable = true)
+    public static long statistic_full_collect_buffer = 1024L * 1024 * 20; // 20MB
+
+    // If the health in statistic_full_collect_interval is lower than this value,
+    // choose collect sample statistics first
+    @ConfField(mutable = true)
+    public static double statistic_auto_collect_sample_threshold = 0.3;
+
+    @ConfField(mutable = true)
+    public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
+
+    @ConfField(mutable = true)
+    public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
+
+    @ConfField(mutable = true)
+    public static long statistic_auto_collect_large_table_interval = 3600L * 12; // unit: second, default 12h
 
     /**
      * Full statistics collection max data size
@@ -1536,7 +1574,7 @@ public class Config extends ConfigBase {
      * The maximum number of partitions to fetch from the metastore in one RPC.
      */
     @ConfField
-    public static int max_hive_partitions_per_rpc = 1000;
+    public static int max_hive_partitions_per_rpc = 5000;
 
     /**
      * The interval of lazy refreshing remote file's metadata cache
@@ -1594,16 +1632,34 @@ public class Config extends ConfigBase {
     public static long hive_max_split_size = 64L * 1024L * 1024L;
 
     /**
-     * Enable background refresh all hive external tables all partitions metadata on internal catalog.
+     * Enable background refresh all external tables all partitions metadata on internal catalog.
      */
     @ConfField
-    public static boolean enable_background_refresh_hive_metadata = false;
+    public static boolean enable_background_refresh_connector_metadata = false;
 
     /**
-     * Background refresh hive external table metadata interval in milliseconds.
+     * Enable background refresh all external tables all partitions metadata based on resource in internal catalog.
+     */
+    @ConfField
+    public static boolean enable_background_refresh_resource_table_metadata = false;
+
+    /**
+     * Number of threads to refresh remote file's metadata concurrency.
+     */
+    @ConfField
+    public static int background_refresh_file_metadata_concurrency = 4;
+
+    /**
+     * Background refresh external table metadata interval in milliseconds.
      */
     @ConfField(mutable = true)
     public static int background_refresh_metadata_interval_millis = 600000;
+
+    /**
+     * The duration of background refresh external table metadata since the table last access.
+     */
+    @ConfField(mutable = true)
+    public static long background_refresh_metadata_time_secs_since_last_access_secs = 3600L * 24L;
 
     /**
      * Enable refresh hive partition statistics.
@@ -1910,4 +1966,10 @@ public class Config extends ConfigBase {
      **/
     @ConfField(mutable = true)
     public static boolean enable_auto_tablet_distribution = false;
+
+    @ConfField(mutable = true)
+    public static long max_per_node_grep_log_limit = 500000;
+
+    @ConfField
+    public static boolean enable_execute_script_on_frontend = true;
 }

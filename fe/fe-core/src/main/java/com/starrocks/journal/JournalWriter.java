@@ -48,6 +48,9 @@ public class JournalWriter {
      */
     private boolean forceRollJournal;
 
+    /** Last timestamp in millisecond to log the commit triggered by delay. */
+    private long lastLogTimeForDelayTriggeredCommit = -1;
+
     public JournalWriter(Journal journal, BlockingQueue<JournalTask> journalQueue) {
         this.journal = journal;
         this.journalQueue = journalQueue;
@@ -164,11 +167,16 @@ public class JournalWriter {
 
     private boolean shouldCommitNow() {
         // 1. check if is an emergency journal
-        if (currentJournal.getBetterCommitBeforeTime() > 0) {
-            long delayMillis = (System.nanoTime() - currentJournal.getBetterCommitBeforeTime()) / 1000000;
-            if (delayMillis >= 0) {
-                LOG.warn("journal expect commit before {} is delayed {} mills, will commit now",
-                        currentJournal.getBetterCommitBeforeTime(), delayMillis);
+        if (currentJournal.getBetterCommitBeforeTimeInNano() > 0) {
+            long delayNanos = System.nanoTime() - currentJournal.getBetterCommitBeforeTimeInNano();
+            if (delayNanos >= 0) {
+                long logTime = System.currentTimeMillis();
+                // avoid logging too many messages if triggered frequently
+                if (lastLogTimeForDelayTriggeredCommit + 500 < logTime) {
+                    lastLogTimeForDelayTriggeredCommit = logTime;
+                    LOG.warn("journal expect commit before {} is delayed {} nanos, will commit now",
+                            currentJournal.getBetterCommitBeforeTimeInNano(), delayNanos);
+                }
                 return true;
             }
         }

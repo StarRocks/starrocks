@@ -209,7 +209,7 @@ public class LoadManager implements Writable {
 
 
     public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
-                                long createTimestamp, long estimateScanRows, TLoadJobType type)
+                                long createTimestamp, long estimateScanRows, TLoadJobType type, long timeout)
             throws UserException {
 
         // get db id
@@ -221,7 +221,7 @@ public class LoadManager implements Writable {
         LoadJob loadJob;
         switch (jobType) {
             case INSERT:
-                loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type);
+                loadJob = new InsertLoadJob(label, db.getId(), tableId, createTimestamp, estimateScanRows, type, timeout);
                 break;
             default:
                 throw new LoadException("Unknown job type [" + jobType.name() + "]");

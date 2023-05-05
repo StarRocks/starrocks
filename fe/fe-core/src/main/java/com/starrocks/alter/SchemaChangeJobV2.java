@@ -538,9 +538,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             LOG.info("schema change tasks not finished. job: {}", jobId);
             List<AgentTask> tasks = schemaChangeBatchTask.getUnfinishedTasks(2000);
             for (AgentTask task : tasks) {
-                if (task.getFailedTimes() >= 3) {
-                    throw new AlterCancelException(
-                            "schema change task failed after try three times: " + task.getErrorMsg());
+                if (task.isFailed() || task.getFailedTimes() >= 3) {
+                    throw new AlterCancelException("schema change task failed: " + task.getErrorMsg());
                 }
             }
             return;
@@ -579,7 +578,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                         // Mark schema changed tablet not to move to trash.
                         long baseTabletId = partitionIndexTabletMap.get(
                                                     partitionId, shadowIdxId).get(shadowTablet.getId());
-                        GlobalStateMgr.getCurrentInvertedIndex().markTabletForceDelete(baseTabletId);
+                        GlobalStateMgr.getCurrentInvertedIndex().
+                                    markTabletForceDelete(baseTabletId, shadowTablet.getBackendIds());
                         List<Replica> replicas = ((LocalTablet) shadowTablet).getImmutableReplicas();
                         int healthyReplicaNum = 0;
                         for (Replica replica : replicas) {

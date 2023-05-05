@@ -28,6 +28,8 @@
 #include <mutex>
 #include <string>
 
+#include "agent/agent_common.h"
+#include "agent/agent_server.h"
 #include "common/configbase.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -42,15 +44,16 @@
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
+#include "storage/update_manager.h"
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
 
 const static std::string HEADER_JSON = "application/json";
 
-void UpdateConfigAction::handle(HttpRequest* req) {
-    LOG(INFO) << req->debug_string();
+std::atomic<UpdateConfigAction*> UpdateConfigAction::_instance(nullptr);
 
+Status UpdateConfigAction::update_config(const std::string& name, const std::string& value) {
     std::call_once(_once_flag, [&]() {
         _config_callback.emplace("scanner_thread_pool_thread_num", [&]() {
             LOG(INFO) << "set scanner_thread_pool_thread_num:" << config::scanner_thread_pool_thread_num;
@@ -86,7 +89,33 @@ void UpdateConfigAction::handle(HttpRequest* req) {
             StorageEngine::instance()->increase_update_compaction_thread(
                     config::update_compaction_num_threads_per_disk);
         });
+        _config_callback.emplace("update_memory_limit_percent", [&]() {
+            StorageEngine::instance()->update_manager()->update_primary_index_memory_limit(
+                    config::update_memory_limit_percent);
+        });
+        _config_callback.emplace("transaction_publish_version_worker_count", [&]() {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::PUBLISH_VERSION);
+            thread_pool->update_max_threads(
+                    std::max(MIN_TRANSACTION_PUBLISH_WORKER_COUNT, config::transaction_publish_version_worker_count));
+        });
+        _config_callback.emplace("parallel_clone_task_per_path", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
+                                                                 config::parallel_clone_task_per_path);
+        });
     });
+
+    Status s = config::set_config(name, value);
+    if (s.ok()) {
+        LOG(INFO) << "set_config " << name << "=" << value << " success";
+        if (_config_callback.count(name)) {
+            _config_callback[name]();
+        }
+    }
+    return s;
+}
+
+void UpdateConfigAction::handle(HttpRequest* req) {
+    LOG(INFO) << req->debug_string();
 
     Status s;
     std::string msg;
@@ -97,13 +126,8 @@ void UpdateConfigAction::handle(HttpRequest* req) {
         DCHECK(req->params()->size() == 1);
         const std::string& config = req->params()->begin()->first;
         const std::string& new_value = req->params()->begin()->second;
-        s = config::set_config(config, new_value);
-        if (s.ok()) {
-            LOG(INFO) << "set_config " << config << "=" << new_value << " success";
-            if (_config_callback.count(config)) {
-                _config_callback[config]();
-            }
-        } else {
+        s = update_config(config, new_value);
+        if (!s.ok()) {
             LOG(WARNING) << "set_config " << config << "=" << new_value << " failed";
             msg = strings::Substitute("set $0=$1 failed, reason: $2", config, new_value, s.to_string());
         }

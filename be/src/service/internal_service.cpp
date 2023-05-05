@@ -31,6 +31,7 @@
 #include "gen_cpp/BackendService.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/command_executor.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
@@ -93,7 +94,6 @@ template <typename T>
 void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController* cntl_base,
                                                  const PTransmitChunkParams* request, PTransmitChunkResult* response,
                                                  google::protobuf::Closure* done) {
-    auto begin_ts = MonotonicNanos();
     VLOG_ROW << "transmit data: " << (uint64_t)(request) << " fragment_instance_id=" << print_id(request->finst_id())
              << " node=" << request->node_id() << " begin";
     // NOTE: we should give a default value to response to avoid concurrent risk
@@ -114,7 +114,7 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
     }
     Status st;
     st.to_protobuf(response->mutable_status());
-    TRY_CATCH_ALL(st, _exec_env->stream_mgr()->transmit_chunk(*request, &done));
+    st = _exec_env->stream_mgr()->transmit_chunk(*request, &done);
     if (!st.ok()) {
         LOG(WARNING) << "transmit_data failed, message=" << st.get_error_msg()
                      << ", fragment_instance_id=" << print_id(request->finst_id()) << ", node=" << request->node_id();
@@ -124,8 +124,42 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
         st.to_protobuf(response->mutable_status());
         done->Run();
     }
-    VLOG_ROW << "transmit data: " << (uint64_t)(request) << " fragment_instance_id=" << print_id(request->finst_id())
-             << " node=" << request->node_id() << " cost time = " << MonotonicNanos() - begin_ts;
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcController* cntl_base,
+                                                          const PHttpRequest* request, PTransmitChunkResult* response,
+                                                          google::protobuf::Closure* done) {
+    auto params = std::make_shared<PTransmitChunkParams>();
+    auto get_params = [&]() -> Status {
+        auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+        butil::IOBuf& iobuf = cntl->request_attachment();
+        // deserialize PTransmitChunkParams
+        size_t params_size = 0;
+        iobuf.cutn(&params_size, sizeof(params_size));
+        butil::IOBuf params_from;
+        iobuf.cutn(&params_from, params_size);
+        butil::IOBufAsZeroCopyInputStream wrapper(params_from);
+        params->ParseFromZeroCopyStream(&wrapper);
+        // the left size is from chunks' data
+        size_t attachment_size = 0;
+        iobuf.cutn(&attachment_size, sizeof(attachment_size));
+        if (attachment_size != iobuf.size()) {
+            Status st = Status::InternalError(
+                    fmt::format("{} != {} during deserialization via http", attachment_size, iobuf.size()));
+            return st;
+        }
+        return Status::OK();
+    };
+    // may throw std::bad_alloc exception.
+    Status st = get_params();
+    if (!st.ok()) {
+        st.to_protobuf(response->mutable_status());
+        done->Run();
+        LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.get_error_msg();
+        return;
+    }
+    this->transmit_chunk(cntl_base, params.get(), response, done);
 }
 
 template <typename T>
@@ -441,25 +475,25 @@ void PInternalServiceImplBase<T>::_get_info_impl(
         Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
         return;
     }
-
+    Status st = Status::OK();
+    std::string group_id;
+    MonotonicStopWatch watch;
+    watch.start();
     if (request->has_kafka_meta_request()) {
         std::vector<int32_t> partition_ids;
-        Status st = _exec_env->routine_load_task_executor()->get_kafka_partition_meta(request->kafka_meta_request(),
-                                                                                      &partition_ids, timeout_ms);
+        st = _exec_env->routine_load_task_executor()->get_kafka_partition_meta(request->kafka_meta_request(),
+                                                                               &partition_ids, timeout_ms, &group_id);
         if (st.ok()) {
             PKafkaMetaProxyResult* kafka_result = response->mutable_kafka_meta_result();
             for (int32_t id : partition_ids) {
                 kafka_result->add_partition_ids(id);
             }
         }
-        st.to_protobuf(response->mutable_status());
-        return;
-    }
-    if (request->has_kafka_offset_request()) {
+    } else if (request->has_kafka_offset_request()) {
         std::vector<int64_t> beginning_offsets;
         std::vector<int64_t> latest_offsets;
-        Status st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                request->kafka_offset_request(), &beginning_offsets, &latest_offsets, timeout_ms);
+        st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
+                request->kafka_offset_request(), &beginning_offsets, &latest_offsets, timeout_ms, &group_id);
         if (st.ok()) {
             auto result = response->mutable_kafka_offset_result();
             for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -468,24 +502,19 @@ void PInternalServiceImplBase<T>::_get_info_impl(
                 result->add_latest_offsets(latest_offsets[i]);
             }
         }
-        st.to_protobuf(response->mutable_status());
-        return;
-    }
-    if (request->has_kafka_offset_batch_request()) {
-        MonotonicStopWatch watch;
-        watch.start();
+    } else if (request->has_kafka_offset_batch_request()) {
         for (const auto& offset_req : request->kafka_offset_batch_request().requests()) {
             std::vector<int64_t> beginning_offsets;
             std::vector<int64_t> latest_offsets;
 
             auto left_ms = timeout_ms - watch.elapsed_time() / 1000 / 1000;
             if (left_ms <= 0) {
-                Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
-                return;
+                st = Status::TimedOut("get kafka offset batch timeout");
+                break;
             }
 
-            Status st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                    offset_req, &beginning_offsets, &latest_offsets, left_ms);
+            st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
+                    offset_req, &beginning_offsets, &latest_offsets, left_ms, &group_id);
             auto offset_result = response->mutable_kafka_offset_batch_result()->add_results();
             if (st.ok()) {
                 for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -495,12 +524,15 @@ void PInternalServiceImplBase<T>::_get_info_impl(
                 }
             } else {
                 response->clear_kafka_offset_batch_result();
-                st.to_protobuf(response->mutable_status());
-                return;
+                break;
             }
         }
     }
-    Status::OK().to_protobuf(response->mutable_status());
+    st.to_protobuf(response->mutable_status());
+    if (!st.ok()) {
+        LOG(WARNING) << "group id " << group_id << " get kafka info timeout. used time(ms) "
+                     << watch.elapsed_time() / 1000 / 1000 << ". error: " << st.to_string();
+    }
 }
 
 template <typename T>
@@ -589,6 +621,18 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(
         }
     }
     Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::execute_command(google::protobuf::RpcController* controller,
+                                                  const ExecuteCommandRequestPB* request,
+                                                  ExecuteCommandResultPB* response, google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    Status st = starrocks::execute_command(request->command(), request->params(), response->mutable_result());
+    if (!st.ok()) {
+        LOG(WARNING) << "execute_command failed, errmsg=" << st.to_string();
+    }
+    st.to_protobuf(response->mutable_status());
 }
 
 template class PInternalServiceImplBase<PInternalService>;

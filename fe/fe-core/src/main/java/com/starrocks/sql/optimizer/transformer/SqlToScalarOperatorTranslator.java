@@ -26,6 +26,7 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
@@ -173,6 +174,8 @@ public final class SqlToScalarOperatorTranslator {
 
         public final boolean hasSubquery;
         public final boolean useSemiAnti;
+
+        // only for recording outer exprs to an un-correlate subquery in a predicate
         public final List<Expr> outerExprs;
 
         public Context() {
@@ -191,15 +194,38 @@ public final class SqlToScalarOperatorTranslator {
             if (!hasSubquery) {
                 return this;
             }
-            List<Expr> outerExprs = Collections.emptyList();
-            if (node.getChildren().stream().anyMatch(Subquery.class::isInstance)) {
-                outerExprs = node.getChildren().stream().filter(c -> !(c instanceof Subquery))
-                        .collect(Collectors.toList());
-            }
+            List<Expr> res = findOuterExprs(node);
             if (!this.useSemiAnti && outerExprs.isEmpty()) {
                 return this;
             }
-            return new Context(true, false, outerExprs);
+            return new Context(true, false, res);
+        }
+
+        private List<Expr> findOuterExprs(Expr node) {
+            List<Expr> res = Lists.newArrayList();
+            if (node instanceof Predicate && node.getChildren().stream().anyMatch(Subquery.class::isInstance)) {
+                for (Expr child : node.getChildren()) {
+                    if (collectSubqueryNum(child) == 0) {
+                        res.add(child);
+                    }
+                }
+            }
+            return res;
+        }
+        private int collectSubqueryNum(Expr node) {
+            int num = 0;
+            for (Expr child : node.getChildren()) {
+                if (num > 0) {
+                    return num;
+                }
+
+                if (child instanceof Subquery) {
+                    num++;
+                } else {
+                    num += collectSubqueryNum(child);
+                }
+            }
+            return num;
         }
     }
 
@@ -325,10 +351,6 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitLambdaFunctionExpr(LambdaFunctionExpr node,
                                                       Context context) {
-            // To avoid the ids of lambda arguments are different after each visit()
-            if (node.getTransformed() != null) {
-                return node.getTransformed();
-            }
             Preconditions.checkArgument(node.getChildren().size() >= 2);
             List<ColumnRefOperator> refs = Lists.newArrayList();
             List<LambdaArgument> args = Lists.newArrayList();
@@ -341,13 +363,16 @@ public final class SqlToScalarOperatorTranslator {
             expressionMapping = new ExpressionMapping(scope, refs, expressionMapping);
             ScalarOperator lambda = visit(node.getChild(0), context.clone(node));
             expressionMapping = old; // recover it
-            node.setTransformed(new LambdaFunctionOperator(refs, lambda, Type.FUNCTION));
-            return node.getTransformed();
+            return new LambdaFunctionOperator(refs, lambda, Type.FUNCTION);
         }
 
         @Override
         public ScalarOperator visitLambdaArguments(LambdaArgument node, Context context) {
-            return columnRefFactory.create(node.getName(), node.getType(), node.isNullable(), true);
+            // To avoid the ids of lambda arguments are different after each visit()
+            if (node.getTransformed() == null) {
+                node.setTransformed(columnRefFactory.create(node.getName(), node.getType(), node.isNullable(), true));
+            }
+            return node.getTransformed();
         }
 
         @Override
@@ -573,12 +598,14 @@ public final class SqlToScalarOperatorTranslator {
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
 
-            return new CallOperator(
+            CallOperator callOperator = new CallOperator(
                     node.getFnName().getFunction(),
                     node.getType(),
                     arguments,
                     node.getFn(),
                     node.getParams().isDistinct());
+            callOperator.setHints(node.getHints());
+            return callOperator;
         }
 
         @Override

@@ -42,6 +42,13 @@ struct SchemaScannerParam {
     int64_t partition_id{-1};
     int64_t tablet_id{-1};
     int64_t txn_id{-1};
+    const std::string* type{nullptr};
+    const std::string* state{nullptr};
+    int64_t log_start_ts{-1};
+    int64_t log_end_ts{-1};
+    const std::string* log_level{nullptr};
+    const std::string* log_pattern{nullptr};
+    int64_t log_limit{-1};
 
     RuntimeProfile::Counter* _rpc_timer = nullptr;
     RuntimeProfile::Counter* _fill_chunk_timer = nullptr;

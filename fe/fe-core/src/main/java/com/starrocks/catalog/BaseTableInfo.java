@@ -97,7 +97,7 @@ public class BaseTableInfo {
     }
 
     public String getTableIdentifier() {
-        return this.tableIdentifier;
+        return this.tableIdentifier == null ? String.valueOf(tableId) : this.tableIdentifier;
     }
 
     public long getDbId() {

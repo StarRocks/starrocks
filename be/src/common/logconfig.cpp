@@ -31,6 +31,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/logging.h"
+#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -50,6 +51,8 @@ static bool iequals(const std::string& a, const std::string& b) {
     }
     return true;
 }
+
+size_t get_build_version(char* buffer, size_t max_size);
 
 // avoid to allocate extra memory
 static int print_unique_id(char* buffer, const TUniqueId& uid) {
@@ -84,17 +87,22 @@ static void dump_trace_info() {
         auto query_id = CurrentThread::current().query_id();
         auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
         char buffer[256] = {};
-        int res = sprintf(buffer, "query_id:");
+
+        // write build version
+        int res = get_build_version(buffer, sizeof(buffer));
+        [[maybe_unused]] auto wt = write(STDERR_FILENO, buffer, res);
+
+        res = sprintf(buffer, "query_id:");
         res = print_unique_id(buffer + res, query_id) + res;
         res = sprintf(buffer + res, ", ") + res;
         res = sprintf(buffer + res, "fragment_instance:") + res;
         res = print_unique_id(buffer + res, fragment_instance_id) + res;
         res = sprintf(buffer + res, "\n") + res;
-        [[maybe_unused]] auto wt = write(STDERR_FILENO, buffer, res);
+        wt = write(STDERR_FILENO, buffer, res);
         // dump memory usage
+        // copy trackers
         auto trackers = ExecEnv::GetInstance()->mem_trackers();
-        // copy tracker to add reference
-        for (auto tracker : trackers) {
+        for (const auto& tracker : trackers) {
             if (tracker) {
                 size_t len = tracker->debug_string(buffer, sizeof(buffer));
                 wt = write(STDERR_FILENO, buffer, len);

@@ -126,16 +126,18 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     // to avoid the unnecessary SerDe and improve query performance
     _params.need_agg_finalize = _need_agg_finalize;
     _params.use_page_cache = !config::disable_storage_page_cache;
+
+    auto parser = _pool.add(new PredicateParser(_tablet->tablet_schema()));
+    std::vector<PredicatePtr> preds;
+    RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(parser, &preds));
+
     // Improve for select * from table limit x, x is small
-    if (_parent->_limit != -1 && _parent->_limit < runtime_state()->chunk_size()) {
+    if (preds.empty() && _parent->_limit != -1 && _parent->_limit < runtime_state()->chunk_size()) {
         _params.chunk_size = _parent->_limit;
     } else {
         _params.chunk_size = runtime_state()->chunk_size();
     }
 
-    auto parser = _pool.add(new PredicateParser(_tablet->tablet_schema()));
-    std::vector<PredicatePtr> preds;
-    RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(parser, &preds));
     for (auto& p : preds) {
         if (parser->can_pushdown(p.get())) {
             _params.predicates.push_back(p.get());

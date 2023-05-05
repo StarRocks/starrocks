@@ -51,12 +51,14 @@ import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunction;
+
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -185,6 +187,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     // Needed for properly capturing expr precedences in the SQL string.
     protected boolean printSqlInParens = false;
 
+    private List<String> hints = Collections.emptyList();
+
     protected Expr() {
         super();
         type = Type.INVALID;
@@ -209,6 +213,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         fn = other.fn;
         printSqlInParens = other.printSqlInParens;
         children = Expr.cloneList(other.children);
+        hints = Lists.newArrayList(hints);
     }
 
     @SuppressWarnings("unchecked")
@@ -1168,7 +1173,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 // otherwise we may recurse infinitely.
                 Method m = root.getChild(0).getClass().getDeclaredMethod(NEGATE_FN);
                 return pushNegationToOperands(root.getChild(0).negate());
-            } catch (NoSuchMethodException|IllegalStateException e) {
+            } catch (NoSuchMethodException | IllegalStateException e) {
                 // The 'negate' function is not implemented. Break the recursion.
                 return root;
             }
@@ -1327,9 +1332,13 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
         this.fn = fn;
     }
 
-    public void setIgnoreNulls(boolean ignoreNulls) { this.ignoreNulls = ignoreNulls; }
+    public void setIgnoreNulls(boolean ignoreNulls) {
+        this.ignoreNulls = ignoreNulls;
+    }
 
-    public boolean getIgnoreNulls() { return ignoreNulls; }
+    public boolean getIgnoreNulls() {
+        return ignoreNulls;
+    }
 
     // only the first/last one can be lambda functions.
     public boolean hasLambdaFunction(Expr expression) {
@@ -1392,4 +1401,13 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             return expr;
         }
     }
+
+    public void setHints(List<String> hints) {
+        this.hints = hints;
+    }
+
+    public List<String> getHints() {
+        return hints;
+    }
+
 }

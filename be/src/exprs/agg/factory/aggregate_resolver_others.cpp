@@ -10,6 +10,17 @@
 
 namespace starrocks::vectorized {
 
+struct PercentileDiscDispatcher {
+    template <PrimitiveType pt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (pt_is_datetime<pt> || pt_is_date<pt> || pt_is_arithmetic<pt> || pt_is_string<pt> ||
+                      pt_is_decimal_of_any_version<pt>) {
+            resolver->add_aggregate_mapping_variadic<pt, pt, PercentileState<pt>>(
+                    "percentile_disc", false, AggregateFactory::MakePercentileDiscAggregateFunction<pt>());
+        }
+    }
+};
+
 void AggregateFuncResolver::register_others() {
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_DOUBLE>("percentile_approx", false,
                                                             AggregateFactory::MakePercentileApproxAggregateFunction());
@@ -18,12 +29,16 @@ void AggregateFuncResolver::register_others() {
     add_aggregate_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE, PercentileValue>(
             "percentile_union", false, AggregateFactory::MakePercentileUnionAggregateFunction());
 
-    add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_DOUBLE, PercentileContState<TYPE_DOUBLE>>(
+    add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_DOUBLE, PercentileState<TYPE_DOUBLE>>(
             "percentile_cont", false, AggregateFactory::MakePercentileContAggregateFunction<TYPE_DOUBLE>());
-    add_aggregate_mapping_variadic<TYPE_DATETIME, TYPE_DATETIME, PercentileContState<TYPE_DATETIME>>(
+    add_aggregate_mapping_variadic<TYPE_DATETIME, TYPE_DATETIME, PercentileState<TYPE_DATETIME>>(
             "percentile_cont", false, AggregateFactory::MakePercentileContAggregateFunction<TYPE_DATETIME>());
-    add_aggregate_mapping_variadic<TYPE_DATE, TYPE_DATE, PercentileContState<TYPE_DATE>>(
+    add_aggregate_mapping_variadic<TYPE_DATE, TYPE_DATE, PercentileState<TYPE_DATE>>(
             "percentile_cont", false, AggregateFactory::MakePercentileContAggregateFunction<TYPE_DATE>());
+
+    for (auto type : sortable_types()) {
+        type_dispatch_all(type, PercentileDiscDispatcher(), this);
+    }
 
     add_aggregate_mapping_variadic<TYPE_CHAR, TYPE_VARCHAR, GroupConcatAggregateState>(
             "group_concat", false, AggregateFactory::MakeGroupConcatAggregateFunction<TYPE_CHAR>());

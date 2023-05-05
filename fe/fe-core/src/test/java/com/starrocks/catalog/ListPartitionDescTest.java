@@ -109,7 +109,7 @@ public class ListPartitionDescTest {
         Map<String, Long> partitionNameToId = new HashMap<>();
         partitionNameToId.put("p1", 10001L);
         partitionNameToId.put("p2", 10002L);
-        return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
+        return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false, false);
     }
 
     public ListPartitionInfo findMultiListPartitionInfo() throws AnalysisException, DdlException {
@@ -120,7 +120,7 @@ public class ListPartitionDescTest {
         Map<String, Long> partitionNameToId = new HashMap<>();
         partitionNameToId.put("p1", 10001L);
         partitionNameToId.put("p2", 10002L);
-        return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false);
+        return (ListPartitionInfo) listPartitionDesc.toPartitionInfo(this.findColumnList(), partitionNameToId, false, false);
     }
 
     @Test(expected = AnalysisException.class)

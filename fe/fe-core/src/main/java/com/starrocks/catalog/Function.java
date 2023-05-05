@@ -238,6 +238,10 @@ public class Function implements Writable {
         argTypes = newTypes;
     }
 
+    public void setRetType(Type retType) {
+        this.retType = retType;
+    }
+
     public Type getVarArgsType() {
         if (!hasVarArgs) {
             return Type.INVALID;

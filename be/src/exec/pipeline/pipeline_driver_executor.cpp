@@ -73,6 +73,7 @@ void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* r
 }
 
 void GlobalDriverExecutor::_worker_thread() {
+    auto current_thread = Thread::current_thread();
     const int worker_id = _next_id++;
     while (true) {
         if (_num_threads_setter.should_shrink()) {
@@ -83,7 +84,13 @@ void GlobalDriverExecutor::_worker_thread() {
         CurrentThread::current().set_fragment_instance_id({});
         CurrentThread::current().set_pipeline_driver_id(0);
 
+        if (current_thread != nullptr) {
+            current_thread->set_idle(true);
+        }
         auto maybe_driver = this->_driver_queue->take();
+        if (current_thread != nullptr) {
+            current_thread->set_idle(false);
+        }
         if (maybe_driver.status().is_cancelled()) {
             return;
         }
@@ -127,6 +134,9 @@ void GlobalDriverExecutor::_worker_thread() {
 #else
             maybe_state = driver->process(runtime_state, worker_id);
 #endif
+            if (current_thread != nullptr) {
+                current_thread->inc_finished_tasks();
+            }
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
 
@@ -207,6 +217,12 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     _update_profile_by_level(query_ctx, fragment_ctx, done);
     auto params = ExecStateReporter::create_report_exec_status_params(query_ctx, fragment_ctx, status, done);
     auto fe_addr = fragment_ctx->fe_addr();
+    if (fe_addr.hostname.empty()) {
+        // query executed by external connectors, like spark and flink connector,
+        // does not need to report exec state to FE, so return if fe addr is empty.
+        return;
+    }
+
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
     auto fragment_id = fragment_ctx->fragment_instance_id();
 
