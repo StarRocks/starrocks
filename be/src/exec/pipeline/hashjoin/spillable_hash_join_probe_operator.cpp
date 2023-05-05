@@ -21,6 +21,8 @@
 #include <optional>
 
 #include "common/config.h"
+#include "exec/hash_joiner.h"
+#include "exec/join_hash_map.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/executor.h"
@@ -28,6 +30,7 @@
 #include "exec/spill/spill_components.h"
 #include "exec/spill/spiller.h"
 #include "exec/spill/spiller.hpp"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
@@ -36,6 +39,7 @@
 namespace starrocks::pipeline {
 Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(HashJoinProbeOperator::prepare(state));
+    _need_post_probe = has_post_probe(_join_prober->hash_table_param().join_type);
     _probe_spiller->set_metrics(spill::SpillProcessMetrics(_unique_metrics.get()));
     metrics.hash_partitions = ADD_COUNTER(_unique_metrics.get(), "SpillPartitions", TUnit::UNIT);
     RETURN_IF_ERROR(_probe_spiller->prepare(state));
@@ -61,6 +65,12 @@ bool SpillableHashJoinProbeOperator::has_output() const {
         return true;
     }
 
+    if (_processing_partitions.empty()) {
+        as_mutable()->_acquire_next_partitions();
+        _update_status(as_mutable()->_load_all_partition_build_side(runtime_state()));
+        return false;
+    }
+
     // if any hash_join_prober has data.
     for (auto prober : _probers) {
         if (!prober->probe_chunk_empty()) {
@@ -71,11 +81,6 @@ bool SpillableHashJoinProbeOperator::has_output() const {
     //
     if (_probe_spiller->is_full()) {
         return false;
-    }
-
-    //
-    if (_staging_chunk != nullptr) {
-        return true;
     }
 
     if (_is_finishing) {
@@ -113,8 +118,9 @@ bool SpillableHashJoinProbeOperator::need_input() const {
         return false;
     }
 
-    // process staging chunk firstly if having staging chunk
-    if (_staging_chunk != nullptr) {
+    if (_processing_partitions.empty()) {
+        as_mutable()->_acquire_next_partitions();
+        _update_status(as_mutable()->_load_all_partition_build_side(runtime_state()));
         return false;
     }
 
@@ -178,23 +184,6 @@ Status SpillableHashJoinProbeOperator::push_chunk(RuntimeState* state, const Chu
         return HashJoinProbeOperator::push_chunk(state, chunk);
     }
 
-    // we still have processing partitions just return
-    if (_processing_partitions.empty()) {
-        _acquire_next_partitions();
-    }
-
-    // load all processing partition data
-    // build hash table for each partition
-    if (!_all_loaded_partition_data_ready()) {
-        _load_all_partition_build_side(state);
-    }
-
-    // not all data ready staging the input chunk
-    if (!_all_loaded_partition_data_ready()) {
-        _staging_chunk = chunk;
-        return Status::OK();
-    }
-
     RETURN_IF_ERROR(_push_probe_chunk(state, chunk));
 
     return Status::OK();
@@ -216,12 +205,14 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
     auto partition_processer = [&chunk, this, state, &hash_values](spill::SpilledPartition* probe_partition,
                                                                    const std::vector<uint32_t>& selection, int32_t from,
                                                                    int32_t size) {
-        // now spill only support inner join and left semi join
         // nothing to do for empty partition
-        auto build_partition_iter = _pid_to_build_partition.find(probe_partition->partition_id);
-        if (build_partition_iter != _pid_to_build_partition.end()) {
-            if (build_partition_iter->second->empty()) {
-                return;
+        if (could_short_circuit(_join_prober->hash_table_param().join_type)) {
+            // For left semi join and inner join we can just skip the empty partition
+            auto build_partition_iter = _pid_to_build_partition.find(probe_partition->partition_id);
+            if (build_partition_iter != _pid_to_build_partition.end()) {
+                if (build_partition_iter->second->empty()) {
+                    return;
+                }
             }
         }
 
@@ -235,6 +226,8 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
             auto mem_table = probe_partition->spill_writer->mem_table();
             mem_table->append_selective(*chunk, selection.data(), from, size);
         } else {
+            // maybe has some small chunk problem
+            // TODO: add chunk accumulator here
             auto partitioned_chunk = chunk->clone_empty();
             partitioned_chunk->append_selective(*chunk, selection.data(), from, size);
             _probers[iter->second]->push_probe_chunk(state, std::move(partitioned_chunk));
@@ -294,7 +287,7 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
     return Status::OK();
 }
 
-void SpillableHashJoinProbeOperator::_update_status(Status&& status) {
+void SpillableHashJoinProbeOperator::_update_status(Status&& status) const {
     if (!status.ok()) {
         std::lock_guard guard(_mutex);
         _operator_status = std::move(status);
@@ -306,27 +299,7 @@ Status SpillableHashJoinProbeOperator::_status() const {
     return _operator_status;
 }
 
-StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* state) {
-    RETURN_IF_ERROR(_status());
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
-        return HashJoinProbeOperator::pull_chunk(state);
-    }
-
-    auto all_probe_partition_is_empty = [this]() {
-        for (auto& _prober : _probers) {
-            if (!_prober->probe_chunk_empty()) {
-                return false;
-            }
-        }
-        return true;
-    };
-
-    if (all_probe_partition_is_empty() && _staging_chunk != nullptr) {
-        // all probe partition is empty. push staging chunk firstly
-        RETURN_IF_ERROR(_push_probe_chunk(state, _staging_chunk));
-        _staging_chunk = nullptr;
-    }
-
+void SpillableHashJoinProbeOperator::_check_partitions() {
     if (_is_finishing) {
 #ifndef NDEBUG
         auto partitioned_writer = down_cast<spill::PartitionedSpillerWriter*>(_probe_spiller->writer().get());
@@ -346,48 +319,66 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
         }
 #endif
     }
+}
 
-    if (_processing_partitions.empty()) {
-        _acquire_next_partitions();
-    }
-
-    if (!_all_loaded_partition_data_ready()) {
-        RETURN_IF_ERROR(_load_all_partition_build_side(state));
-    }
-
-    if (!_all_loaded_partition_data_ready()) {
-        // wait loading partition
-        return nullptr;
-    }
-
-    if (_current_reader.empty() && _is_finishing && all_probe_partition_is_empty()) {
-        // load data from spiller
-        _current_reader = _probe_spiller->get_partition_spill_readers(_processing_partitions);
-        _eofs.assign(_current_reader.size(), false);
-    }
-
-    if (!_current_reader.empty() && all_probe_partition_is_empty()) {
-        for (size_t i = 0; i < _probers.size(); ++i) {
-            RETURN_IF_ERROR(_current_reader[i]->trigger_restore(
+Status SpillableHashJoinProbeOperator::_restore_probe_partition(RuntimeState* state) {
+    for (size_t i = 0; i < _probers.size(); ++i) {
+        // probe partition has been processed
+        if (_probe_read_eofs[i]) continue;
+        RETURN_IF_ERROR(_current_reader[i]->trigger_restore(
+                state, *_executor,
+                spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this(),
+                                               std::weak_ptr(_current_reader[i]))));
+        if (_current_reader[i]->has_output_data()) {
+            auto chunk_st = _current_reader[i]->restore(
                     state, *_executor,
                     spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this(),
-                                                   std::weak_ptr(_current_reader[i]))));
-            if (_current_reader[i]->has_output_data()) {
-                auto chunk_st = _current_reader[i]->restore(
-                        state, *_executor,
-                        spill::ResourceMemTrackerGuard(tls_mem_tracker, state->query_ctx()->weak_from_this(),
-                                                       std::weak_ptr(_current_reader[i])));
-                if (chunk_st.ok() && chunk_st.value() && !chunk_st.value()->is_empty()) {
-                    _probers[i]->push_probe_chunk(state, std::move(chunk_st.value()));
-                } else if (chunk_st.status().is_end_of_file()) {
-                    _eofs[i] = true;
-                } else if (!chunk_st.ok()) {
-                    return chunk_st;
-                }
+                                                   std::weak_ptr(_current_reader[i])));
+            if (chunk_st.ok() && chunk_st.value() && !chunk_st.value()->is_empty()) {
+                _probers[i]->push_probe_chunk(state, std::move(chunk_st.value()));
+            } else if (chunk_st.status().is_end_of_file()) {
+                _probe_read_eofs[i] = true;
+            } else if (!chunk_st.ok()) {
+                return chunk_st.status();
             }
         }
     }
+    return Status::OK();
+}
 
+StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* state) {
+    RETURN_IF_ERROR(_status());
+    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+        return HashJoinProbeOperator::pull_chunk(state);
+    }
+
+    _check_partitions();
+
+    auto all_probe_partition_is_empty = [this]() {
+        for (auto& _prober : _probers) {
+            if (!_prober->probe_chunk_empty()) {
+                return false;
+            }
+        }
+        return true;
+    };
+
+    bool probe_has_no_output = all_probe_partition_is_empty() && !_has_probe_remain;
+
+    if (_current_reader.empty() && _is_finishing && probe_has_no_output) {
+        // init spill reader
+        _current_reader = _probe_spiller->get_partition_spill_readers(_processing_partitions);
+        _probe_read_eofs.assign(_current_reader.size(), false);
+        _probe_post_eofs.assign(_current_reader.size(), false);
+        _has_probe_remain = true;
+    }
+
+    // restore chunk from spilled partition then push it to hash join prober
+    if (!_current_reader.empty() && probe_has_no_output) {
+        RETURN_IF_ERROR(_restore_probe_partition(state));
+    }
+
+    // probe chunk
     for (size_t i = 0; i < _probers.size(); ++i) {
         if (!_probers[i]->probe_chunk_empty()) {
             ASSIGN_OR_RETURN(auto res, _probers[i]->probe_chunk(state, &_builders[i]->hash_table()));
@@ -395,15 +386,36 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
         }
     }
 
-    size_t eofs = std::accumulate(_eofs.begin(), _eofs.end(), 0);
+    size_t eofs = std::accumulate(_probe_read_eofs.begin(), _probe_read_eofs.end(), 0);
+    if (_need_post_probe && _has_probe_remain) {
+        if (_is_finishing) {
+            for (size_t i = 0; i < _probers.size(); ++i) {
+                if (!_probe_post_eofs[i] && _probe_read_eofs[i]) {
+                    bool has_remain = false;
+                    ASSIGN_OR_RETURN(auto res,
+                                     _probers[i]->probe_remain(state, &_builders[i]->hash_table(), &has_remain));
+                    _probe_post_eofs[i] = !has_remain;
+                    if (res && !res->is_empty()) {
+                        return res;
+                    }
+                }
+            }
+            _has_probe_remain = false;
+        }
+    } else {
+        _has_probe_remain = false;
+    }
+
     // processing partitions
-    if (all_probe_partition_is_empty() && _is_finishing && eofs == _processing_partitions.size()) {
+    if (_is_finishing && eofs == _processing_partitions.size() && !_has_probe_remain) {
+        DCHECK(all_probe_partition_is_empty());
         // current partition is finished
         for (auto* partition : _processing_partitions) {
             _processed_partitions.emplace(partition->partition_id);
         }
         _processing_partitions.clear();
         _current_reader.clear();
+        _has_probe_remain = false;
     }
 
     return nullptr;
@@ -457,6 +469,8 @@ void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
         _probers[i] = _join_prober->new_prober(&_component_pool);
         _builders[i] = _join_builder->new_builder(&_component_pool);
         _builders[i]->create(_join_builder->hash_table_param());
+        _probe_read_eofs.assign(process_partition_nums, true);
+        _probe_post_eofs.assign(process_partition_nums, false);
     }
 }
 
