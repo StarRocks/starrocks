@@ -65,7 +65,7 @@ Committers are Contributors who have earned the ability to modify ("commit") sou
 
 Maintainers are a subset of Committers with additional responsibilities for driving a project’s release and serving on the TSC. 
 
-### How to become a PMC?
+### How to become a Maintainer?
 
 - In-depth understanding of StarRocks principles and a clear understanding of StarRocks' future plans
 - Have the ability to deal with project issues promptly
