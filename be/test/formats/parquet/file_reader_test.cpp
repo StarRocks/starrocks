@@ -2253,19 +2253,19 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutRequiredComplexType) {
 
 TEST_F(FileReaderTest, TestLateMaterializationAboutOptionalComplexType) {
     // Schema:
-    //  message schema {
-    //    required int64 a (INTEGER(64,true));
-    //    required group b {
-    //      required int64 b1 (INTEGER(64,true));
-    //      required int64 b2 (INTEGER(64,true));
+    // message schema {
+    //  optional int64 a (INTEGER(64,true));
+    //  optional group b {
+    //    optional int64 b1 (INTEGER(64,true));
+    //    optional int64 b2 (INTEGER(64,true));
     //  }
-    //    required group c (MAP) {
-    //      repeated group key_value {
-    //        required int64 key (INTEGER(64,true));
-    //        required int64 value (INTEGER(64,true));
-    //      }
+    //  optional group c (MAP) {
+    //    repeated group key_value {
+    //      required int64 key (INTEGER(64,true));
+    //      optional int64 value (INTEGER(64,true));
     //    }
     //  }
+    // }
     const std::string filepath = "./be/test/formats/parquet/test_data/map_struct_subfield_optional.parquet";
     auto file = _create_file(filepath);
     auto file_reader =
