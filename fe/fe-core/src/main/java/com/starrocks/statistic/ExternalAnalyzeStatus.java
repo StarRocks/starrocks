@@ -16,8 +16,6 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ShowResultSet;
 
@@ -29,10 +27,13 @@ import java.util.Map;
 public class ExternalAnalyzeStatus extends AnalyzeStatus {
 
     private String catalogName;
-    private Database db;
-    private Table table;
+    private String dbName;
+    private String tableName;
+    private String tableUUID;
 
-    public ExternalAnalyzeStatus(long id, String catalogName, long dbId, long tableId, Database db, Table table,
+    public ExternalAnalyzeStatus(long id, long dbId, long tableId,
+                                 String catalogName, String dbName, String tableName,
+                                 String tableUUID,
                                  List<String> columns,
                                  StatsConstants.AnalyzeType type,
                                  StatsConstants.ScheduleType scheduleType,
@@ -40,12 +41,13 @@ public class ExternalAnalyzeStatus extends AnalyzeStatus {
                                  LocalDateTime startTime) {
         super(id, dbId, tableId, columns, type, scheduleType, properties, startTime);
         this.catalogName = catalogName;
-        this.db = db;
-        this.table = table;
+        this.dbName = dbName;
+        this.tableName = tableName;
+        this.tableUUID = tableUUID;
     }
 
     public String getTableUUID() {
-        return table.getUUID();
+        return tableUUID;
     }
 
     @Override
@@ -55,19 +57,16 @@ public class ExternalAnalyzeStatus extends AnalyzeStatus {
 
     @Override
     public String getDbName() throws MetaNotFoundException {
-        return db.getOriginName();
+        return dbName;
     }
 
     @Override
     public String getTableName() throws MetaNotFoundException {
-        return table.getName();
+        return tableName;
     }
 
     @Override
     public ShowResultSet toShowResult() {
-        String dbName = db.getOriginName();
-        String tableName = table.getName();
-
         String op = "unknown";
         if (type.equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             op = "histogram";

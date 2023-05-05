@@ -876,7 +876,8 @@ public class StmtExecutor {
         if (analyzeStmt.isExternal()) {
             String catalogName = analyzeStmt.getTableName().getCatalog();
             analyzeStatus = new ExternalAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                    catalogName, db.getId(), table.getId(), db, table,
+                     db.getId(), table.getId(), catalogName, db.getOriginName(), table.getName(),
+                    table.getUUID(),
                     analyzeStmt.getColumnNames(),
                     analyzeType, StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties(), LocalDateTime.now());
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
