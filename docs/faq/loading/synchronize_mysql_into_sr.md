@@ -22,7 +22,7 @@ state.checkpoints.dir: file:///tmp/flink-checkpoints-directory
 
 Parameter description:
 
-> **NOTE** 
+> **NOTE**
 >
 > For more detailed parameter descriptions in Flink documentation,  see [Checkpointing](https://nightlies.apache.org/flink/flink-docs-master/docs/dev/datastream/fault-tolerance/checkpointing/).
 
@@ -36,21 +36,21 @@ You can manually trigger a [savepoint](https://nightlies.apache.org/flink/flink-
 
 1. Stop a Flink job with a savepoint. The following command automatically triggers a savepoint for the Flink job `jobId` and stops the Flink job. Additionally, you can specify a target file system directory to store the savepoint.
 
-```undefined
-bin/flink stop --type [native/canonical] --savepointPath [:targetDirectory] :jobId
-```
+    ```Bash
+    bin/flink stop --type [native/canonical] --savepointPath [:targetDirectory] :jobId
+    ```
 
-Parameter description:
+    Parameter description:
 
-- `jobId`: You can view the Flink job ID from the Flink WebUI or by running `flink list -running` on the command line.
-- `targetDirectory`: You can specify state.savepoints.dir as the default directory for storing savepoints in the Flink configuration file **flink-conf.yml**. When a savepoint is triggered, the savepoint is stored in this default directory and you do not need to specify a directory .
+    - `jobId`: You can view the Flink job ID from the Flink WebUI or by running `flink list -running` on the command line.
+    - `targetDirectory`: You can specify `state.savepoints.dir` as the default directory for storing savepoints in the Flink configuration file **flink-conf.yml**. When a savepoint is triggered, the savepoint is stored in this default directory and you do not need to specify a directory .
 
-```Bash
-state.savepoints.dir: [file://或hdfs://]/home/user/savepoints_dir
-```
+    ```Bash
+    state.savepoints.dir: [file:// or hdfs://]/home/user/savepoints_dir
+    ```
 
-1. If you need to restore a Flink job to its state before it was stopped, specify the savepoint when resubmitting the Flink job.
+2. If you need to restore a Flink job to its state before it was stopped, specify the savepoint when resubmitting the Flink job.
 
-```undefined
-./flink run -c com.starrocks.connector.flink.tools.ExecuteSQL -s savepoints_dir/savepoints-xxxxxxxx flink-connector-starrocks-xxxx.jar -f flink-create.all.sql 
-```
+    ```Bash
+    ./flink run -c com.starrocks.connector.flink.tools.ExecuteSQL -s savepoints_dir/savepoints-xxxxxxxx flink-connector-starrocks-xxxx.jar -f flink-create.all.sql 
+    ```
