@@ -179,4 +179,29 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
                 "group by ts").nonMatch("test_partition_expr_mv1");
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
     }
+
+    @Test
+    public void testNullableTestCase1() throws Exception {
+        String mv = "create materialized view join_null_mv_2\n" +
+                "distributed by hash(empid)\n" +
+                "as\n" +
+                "select empid, depts.deptno, depts.name from emps_null join depts using (deptno);";
+        starRocksAssert.withMaterializedView(mv);
+        sql("select empid, emps_null.deptno \n" +
+                "from emps_null join depts using (deptno) \n" +
+                "where empid < 10")
+                .match("join_null_mv_2");
+    }
+
+    @Test
+    public void testNullableTestCase2() throws Exception {
+        String mv = "create materialized view join_null_mv\n" +
+                "distributed by hash(empid)\n" +
+                "as\n" +
+                "select empid, depts_null.deptno, depts_null.name from emps_null join depts_null using (deptno)\n";
+        starRocksAssert.withMaterializedView(mv);
+        sql("select empid, depts_null.deptno, depts_null.name from emps_null " +
+                "join depts_null using (deptno) where depts_null.deptno < 10;")
+                .match("join_null_mv");
+    }
 }

@@ -205,7 +205,7 @@ public class Optimizer {
             memo = new Memo();
         }
 
-        context = new OptimizerContext(memo, columnRefFactory, connectContext);
+        context = new OptimizerContext(memo, columnRefFactory, connectContext, optimizerConfig);
         OptimizerTraceInfo traceInfo;
         if (connectContext.getExecutor() == null) {
             traceInfo = new OptimizerTraceInfo(connectContext.getQueryId(), null);

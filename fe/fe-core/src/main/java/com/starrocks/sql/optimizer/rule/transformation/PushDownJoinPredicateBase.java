@@ -63,7 +63,8 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
         return root;
     }
 
-    public static OptExpression pushDownOnPredicate(OptExpression input, ScalarOperator conjunct) {
+    public static OptExpression pushDownOnPredicate(OptExpression input, ScalarOperator conjunct,
+                                                    boolean needDeriveIsNotNullPredicate) {
         LogicalJoinOperator join = (LogicalJoinOperator) input.getOp();
 
         List<ScalarOperator> conjunctList = Utils.extractConjuncts(conjunct);
@@ -136,7 +137,7 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
                 .setOriginalOnPredicate(join.getOnPredicate())
                 .build();
         root = OptExpression.create(newJoinOperator, input.getInputs());
-        if (!join.hasDeriveIsNotNullPredicate()) {
+        if (needDeriveIsNotNullPredicate && !join.hasDeriveIsNotNullPredicate()) {
             deriveIsNotNullPredicate(eqConjuncts, root, leftPushDown, rightPushDown);
         }
         return pushDownPredicate(root, leftPushDown, rightPushDown);

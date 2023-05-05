@@ -212,13 +212,14 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
         LogicalFilterOperator filter = (LogicalFilterOperator) input.getOp();
         OptExpression joinOpt = input.getInputs().get(0);
         LogicalJoinOperator join = (LogicalJoinOperator) joinOpt.getOp();
+        boolean isMVRewritePlan = context.getOptimizerConfig().isMVRewritePlan();
 
         if (join.getJoinType().isCrossJoin() || join.getJoinType().isInnerJoin()) {
             // The effect will be better, first do the range derive, and then do the equivalence derive
             ScalarOperator predicate =
                     rangePredicateDerive(Utils.compoundAnd(join.getOnPredicate(), filter.getPredicate()));
             predicate = equivalenceDerive(predicate, true);
-            return Lists.newArrayList(pushDownOnPredicate(input.getInputs().get(0), predicate));
+            return Lists.newArrayList(pushDownOnPredicate(input.getInputs().get(0), predicate, !isMVRewritePlan));
         } else {
             if (join.getJoinType().isOuterJoin()) {
                 convertOuterToInner(input, context);
@@ -229,7 +230,7 @@ public class PushDownPredicateJoinRule extends PushDownJoinPredicateBase {
                 ScalarOperator predicate =
                         rangePredicateDerive(Utils.compoundAnd(join.getOnPredicate(), filter.getPredicate()));
                 predicate = equivalenceDerive(predicate, true);
-                return Lists.newArrayList(pushDownOnPredicate(input.getInputs().get(0), predicate));
+                return Lists.newArrayList(pushDownOnPredicate(input.getInputs().get(0), predicate, !isMVRewritePlan));
             } else {
                 ScalarOperator predicate = rangePredicateDerive(filter.getPredicate());
                 List<ScalarOperator> leftPushDown = Lists.newArrayList();

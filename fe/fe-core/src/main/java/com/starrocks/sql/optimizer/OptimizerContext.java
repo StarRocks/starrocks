@@ -56,6 +56,7 @@ public class OptimizerContext {
         this.candidateMvs = Lists.newArrayList();
     }
 
+    @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
         this(memo, columnRefFactory, connectContext, OptimizerConfig.defaultConfig());
     }
