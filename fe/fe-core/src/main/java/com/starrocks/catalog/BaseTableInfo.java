@@ -149,6 +149,10 @@ public class BaseTableInfo {
         }
     }
 
+    public String getReadableString() {
+        return catalogName + "." + getDbName() + "." + getTableName();
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

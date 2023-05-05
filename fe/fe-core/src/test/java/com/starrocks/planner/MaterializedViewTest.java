@@ -1450,7 +1450,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "(select * from hive0.partitioned_db.t1 where c1 = 1) a\n"
                 + "join hive0.partitioned_db2.t2 using (c2)";
         String query = "select c2 from hive0.partitioned_db.t1 where c1 = 1";
-        testRewriteOK(mv, query)
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
                 .contains("0:OlapScanNode\n" +
                         "     TABLE: mv0\n" +
                         "     PREAGGREGATION: ON\n");
@@ -1462,7 +1464,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db2.t2 l on t1.c2= l.c2 " +
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2";
         String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2";
-        testRewriteOK(mv, query)
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
                 .contains("0:OlapScanNode\n" +
                         "     TABLE: mv0\n" +
                         "     PREAGGREGATION: ON\n");
@@ -1475,7 +1480,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
                 "join hive0.partitioned_db.t3 on t1.c2 = t3.c2";
         String query = "select t1.c1, t3.c1 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2";
-        testRewriteOK(mv, query)
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
                 .contains("0:OlapScanNode\n" +
                         "     TABLE: mv0\n" +
                         "     PREAGGREGATION: ON\n");
@@ -1489,7 +1497,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db.t3 on a.c2 = t3.c2";
         String query = "select a.c2 from (select * from hive0.partitioned_db.t1 where c1 = 1) a join hive0.partitioned_db.t3 " +
                 "on a.c2 = hive0.partitioned_db.t3.c2";
-        testRewriteOK(mv, query)
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2);\" ";
+        testRewriteOK(mv, query, constraint)
                 .contains("0:OlapScanNode\n" +
                         "     TABLE: mv0\n" +
                         "     PREAGGREGATION: ON\n");
@@ -1503,7 +1513,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "join hive0.partitioned_db.t3 on a.c2 = t3.c2";
         String query = "select a.c3 from (select * from hive0.partitioned_db.t1 where c1 = 1) a join hive0.partitioned_db.t3 " +
                 "on a.c2 = hive0.partitioned_db.t3.c2";
-        testRewriteFail(mv, query);
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2);\" ";
+        testRewriteFail(mv, query, constraint);
     }
 
     @Test
@@ -1514,7 +1526,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "where t1.c1 = 1";
         String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2 " +
                 "where t1.c1 = 1";
-        testRewriteOK(mv, query)
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint)
                 .contains("0:OlapScanNode\n" +
                         "     TABLE: mv0\n" +
                         "     PREAGGREGATION: ON\n");
@@ -1528,7 +1543,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "where t1.c1 = 1";
         String query = "select t1.c1, t2.c2 from hive0.partitioned_db.t1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c1 " +
                 "where t1.c1 = 1";
-        testRewriteFail(mv, query);
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteFail(mv, query, constraint);
     }
 
     @Test
@@ -1540,19 +1558,25 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "where t1.c1 = 1";
         String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                 "where t1.c1 = 1";
-        testRewriteOK(mv, query);
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint);
     }
 
     @Test
     public void testHiveViewDeltaJoinUKFK9() {
         String mv = "select t1.c1, l.c2 as c2_1, r.c2 as c2_2, t3.c3 from hive0.partitioned_db.t1 " +
                 "join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
-                "left join hive0.partitioned_db2.t2 l on t1.c2= l.c2 " +
+                "left join hive0.partitioned_db2.t2 l on t1.c2 = l.c2 " +
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
                 "where t1.c1 = 1";
         String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                 "where t1.c1 = 1";
-        testRewriteOK(mv, query);
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint);
     }
 
     @Test
@@ -1560,11 +1584,14 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         String mv = "select t1.c1, l.c2 as c2_1, r.c2 as c2_2, t3.c3 from hive0.partitioned_db.t1 " +
                 "join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                 "join hive0.partitioned_db2.t2 r on t1.c3 = r.c2 " +
-                "left join hive0.partitioned_db2.t2 l on t1.c2= l.c2 " +
+                "left join hive0.partitioned_db2.t2 l on t1.c2 = l.c2 " +
                 "where t1.c1 = 1";
         String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                 "where t1.c1 = 1";
-        testRewriteOK(mv, query);
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c2) references hive0.partitioned_db2.t2(c2); " +
+                "hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2)\" ";
+        testRewriteOK(mv, query, constraint);
     }
 
     @Test
@@ -1575,7 +1602,9 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "where t1.c1 = 1";
         String query = "select t1.c1, t3.c3 from hive0.partitioned_db.t1 left join hive0.partitioned_db.t3 on t1.c2 = t3.c2 " +
                 "where t1.c1 = 1";
-        testRewriteOK(mv, query);
+        String constraint = "\"unique_constraints\" = \"hive0.partitioned_db2.t2.c2\"," +
+                "\"foreign_key_constraints\" = \"hive0.partitioned_db.t1(c3) references hive0.partitioned_db2.t2(c2);\" ";
+        testRewriteOK(mv, query, constraint);
     }
 
     // mv: t1, t2, t2
@@ -1759,6 +1788,93 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 + "left outer join dependents using (empid)\n"
                 + "where emps.empid = 1";
         testRewriteOK(mv, query);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFKInMV1() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
+                + "join dependents using (empid)";
+        String query = "select empid, deptno from emps\n"
+                + "where emps.empid = 1";
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps(empid) references dependents(empid)\" ";
+        testRewriteOK(mv, query, constraint).
+                contains("0:OlapScanNode\n" +
+                "     TABLE: mv0");
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFKInMV2() {
+        String mv = "select emps_no_constraint.empid, emps_no_constraint.deptno, dependents.name from emps_no_constraint\n"
+                + "join dependents using (empid)";
+        String query = "select empid, deptno from emps_no_constraint\n"
+                + "where empid = 1";
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+        testRewriteOK(mv, query, constraint).
+                contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0");
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFKInMV3() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+        testRewriteOK(mv, query, constraint).
+                contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0");
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFKInMV4() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "left join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+        testRewriteOK(mv, query, constraint).
+                contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0");
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFKInMV5() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "left join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join depts a on (emps.deptno=a.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        String constraint = "\"unique_constraints\" = \"dependents.empid\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid)\" ";
+        testRewriteFail(mv, query, constraint);
+    }
+
+    @Test
+    public void testViewDeltaJoinUKFKInMV6() {
+        String mv = "select emps.empid, emps.deptno, dependents.name from emps_no_constraint emps\n"
+                + "left join dependents using (empid)"
+                + "inner join depts b on (emps.deptno=b.deptno)\n"
+                + "left outer join depts a on (emps.deptno=a.deptno)\n"
+                + "where emps.empid = 1";
+        String query = "select empid, emps.deptno from emps_no_constraint emps join depts b on (emps.deptno=b.deptno) \n"
+                + "where empid = 1";
+        String constraint = "\"unique_constraints\" = \"dependents.empid; depts.deptno\"," +
+                "\"foreign_key_constraints\" = \"emps_no_constraint(empid) references dependents(empid);" +
+                "emps_no_constraint(deptno) references depts(deptno)\" ";
+        testRewriteOK(mv, query, constraint).
+                contains("0:OlapScanNode\n" +
+                        "     TABLE: mv0");
     }
 
     @Test

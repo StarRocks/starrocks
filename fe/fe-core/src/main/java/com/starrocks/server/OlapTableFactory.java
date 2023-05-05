@@ -613,7 +613,7 @@ public class OlapTableFactory implements AbstractTableFactory {
 
     private void processConstraint(
             Database db, OlapTable olapTable, Map<String, String> properties) throws AnalysisException {
-        List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, olapTable);
+        List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, olapTable);
         if (uniqueConstraints != null) {
             olapTable.setUniqueConstraints(uniqueConstraints);
         }

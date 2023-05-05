@@ -41,6 +41,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.binlog.BinlogConfig;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -54,6 +55,8 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -70,6 +73,7 @@ import java.util.Map;
  * If there is different type properties is added.Write a method such as buildDynamicProperty to build it.
  */
 public class TableProperty implements Writable, GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(TableProperty.class);
     public static final String DYNAMIC_PARTITION_PROPERTY_PREFIX = "dynamic_partition";
     public static final int INVALID = -1;
 
@@ -361,8 +365,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildConstraint() {
-        uniqueConstraints = UniqueConstraint.parse(
+        try {
+            uniqueConstraints = UniqueConstraint.parse(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
+        } catch (AnalysisException e) {
+            LOG.warn("Failed to parse unique constraint: {} , ignore this unique constraint", e.getMessage());
+        }
 
         foreignKeyConstraints = ForeignKeyConstraint.parse(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
