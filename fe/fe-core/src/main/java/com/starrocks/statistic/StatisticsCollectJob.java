@@ -90,6 +90,8 @@ public abstract class StatisticsCollectJob {
             LOG.debug("statistics collect sql : {}", sql);
             StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            SessionVariable sessionVariable = context.getSessionVariable();
+            sessionVariable.setEnableMaterializedViewRewrite(false);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();
