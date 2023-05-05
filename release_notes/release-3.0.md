@@ -1,26 +1,8 @@
 # StarRocks version 3.0
 
-## 3.0.0-rc02
+## 3.0.0
 
-发布日期： 2023 年 4 月 13 日
-
-### 功能优化
-
-- 更新 3.0 版本的 Docker 镜像和相关[部署文档](../quick_start/deploy_with_docker.md)。 ([#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021))
-- 提供异步 ETL 命令接口，支持创建异步 INSERT 任务。更多信息，参考[INSERT](../loading/InsertInto.md) 和 [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md)。 ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
-- 物化视图支持批量创建分区，提升物化视图构建时的分区创建效率。([#21167](https://github.com/StarRocks/starrocks/pull/21167))
-
-### 问题修复
-
-修复了以下问题：
-
-- 使用 VARCHAR 作为物化视图分区列时导致 FE 无法正常启动。([#19366](https://github.com/StarRocks/starrocks/issues/19366))
-- 窗口函数 [lead](../sql-reference/sql-functions/Window_function.md#使用-lead-窗口函数) 和 [lag](../sql-reference/sql-functions/Window_function.md#使用-lag-窗口函数) 对 IGNORE NULLS 的处理不正确。 ([#21001](https://github.com/StarRocks/starrocks/pull/21001))
-- 插入临时分区和自动创建分区发生冲突。（[#21222](https://github.com/StarRocks/starrocks/issues/21222)）
-
-## 3.0.0-rc01
-
-发布日期： 2023 年 3 月 31 日
+发布日期： 2023 年 4 月 28 日
 
 ### 新增特性
 
@@ -30,7 +12,7 @@
 
 **存储和导入**
 
-- 支持自增列 [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md)，提供表内全局唯一 ID，可以简化数据管理。
+- 支持自增列属性 [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md)，提供表内全局唯一 ID，简化数据管理。
 - 支持[导入时自动创建分区和使用分区表达式定义分区规则](../table_design/automatic_partitioning.md)，提高了分区创建的易用性和灵活性。
 - Primary Key 模型表支持更丰富的 [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md) 和 [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md) 语法，包括使用 CTE 和对多表的引用。
 - Broker Load 和 INSERT INTO 增加 Load Profile，支持通过 profile 查看并分析导入作业详情。使用方法与 [查看分析Query Profile](../administration/query_profile.md) 相同。
@@ -48,25 +30,35 @@
 
 **查询**
 
-<!--- [Preview] 支持大查询的算子落盘，可以在内存不足时利用磁盘空间来保证查询稳定执行成功。-->
-- [Query Cache](../using_starrocks/query_cache.md) 支持更多使用场景，包括各种 Broadcast Join、Bucket Shuffle Join 等 Join 场景。
+<!-- - [Preview] 支持大查询的算子落盘，可以在内存不足时利用磁盘空间来保证查询稳定执行成功。
+- [Query Cache](../using_starrocks/query_cache.md) 支持更多使用场景，包括各种 Broadcast Join、Bucket Shuffle Join 场景。-->
 - 支持 [Global UDF](../sql-reference/sql-functions/JAVA_UDF.md)。
 - 动态自适应并行度，可以根据查询并发度自适应调节 `pipeline_dop`。
 
-**函数**
+**SQL 语句和函数**
 
+- 新增如下权限相关 SQL 语句：[SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md)、[SET ROLE](../sql-reference/sql-statements/account-management/SET%20ROLE.md)、[SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md)、[SHOW USERS](../sql-reference/sql-statements/account-management/SHOW%20USERS.md)。
 - 新增半结构化数据分析相关函数：[map_from_arrays](../sql-reference/sql-functions/map-functions/map_from_arrays.md)、[map_apply](../sql-reference/sql-functions/map-functions/map_apply.md)、[map_filter](../sql-reference/sql-functions/map-functions/map_filter.md)、[transform_keys](../sql-reference/sql-functions/map-functions/transform_keys.md)、[transform_values](../sql-reference/sql-functions/map-functions/transform_values.md)。
 - [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md) 支持 ORDER BY。
-- 新增字符串函数 [replace](../sql-reference/sql-functions/string-functions/replace.md)。
+- 窗口函数 [lead](../sql-reference/sql-functions/Window_function.md#使用-lead-窗口函数)、[lag](../sql-reference/sql-functions/Window_function.md#使用-lag-窗口函数) 支持 IGNORE NULLS。
+- 新增 [BINARY/VARBINARY 数据类型](../sql-reference/sql-statements/data-types/BINARY.md)，新增 [to_binary()](../sql-reference/sql-functions/binary-functions/to_binary.md) ，[from_binary()](../sql-reference/sql-functions/binary-functions/from_binary.md) 函数。
+- 新增字符串函数 [replace](../sql-reference/sql-functions/string-functions/replace.md)、[hex_decode_binary()](../sql-reference/sql-functions/string-functions/hex_decode_binary.md)、[hex_decode_string()](../sql-reference/sql-functions/string-functions/hex_decode_string.md)。
+- 新增加密函数 [base64_decode_binary()](../sql-reference/sql-functions/crytographic-functions/base64_decode_binary.md)、[base64_decode_string()](../sql-reference/sql-functions/crytographic-functions/base64_decode_string.md)。
+- 新增数学函数 [sinh()](../sql-reference/sql-functions/math-functions/sinh.md)、[cosh()](../sql-reference/sql-functions/math-functions/cosh.md)、[tanh()](../sql-reference/sql-functions/math-functions/tanh.md)。
 - 新增工具函数 [current_role](../sql-reference/sql-functions/utility-functions/current_role.md)。
 
 ### 功能优化
+
+**部署**
+
+- 更新 3.0 版本的 Docker 镜像和相关[部署文档](../quick_start/deploy_with_docker.md)。 ([#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021))
 
 **存储与导入**
 
 - 数据导入提供了更丰富的 CSV 格式参数，包括 `skip_header`、`trim_space`、`enclose` 和 `escape`。参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)、[BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md) 和 [ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md)。
 - [Primary Key 模型表](../table_design/table_types/primary_key_table.md)解耦了主键和排序键，支持通过 `ORDER BY` 单独指定排序键。
 - 优化 Primary Key 模型表在大数据导入、部分列更新、以及开启持久化索引等场景的内存占用。 [#12068](https://github.com/StarRocks/starrocks/pull/12068) [#14187](https://github.com/StarRocks/starrocks/pull/14187) [#15729](https://github.com/StarRocks/starrocks/pull/15729)
+- 提供异步 ETL 命令接口，支持创建异步 INSERT 任务。更多信息，参考[INSERT](../loading/InsertInto.md) 和 [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md)。 ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
 
 **物化视图**
 
@@ -76,6 +68,7 @@
   - 优化带分区时 UNION 的 SQL rewrite。
 - 完善物化视图的构建能力：支持 CTE、SELECT * 、UNION。
 - 优化 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md) 命令的返回信息。
+- 提升物化视图构建时的分区创建效率。([#21167](https://github.com/StarRocks/starrocks/pull/21167))
 
 **查询**
 
@@ -89,11 +82,9 @@
 - 优化元数据统计信息收集。
 - Hive Catalog、Iceberg Catalog、Hudi Catalog 和 Delta Catalog 支持通过 [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md) 查看外表 Schema 信息，支持通过 [SHOW CREATE CATALOG](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20CATALOG.md) 查看 Catalog 的创建信息。
 
-**函数**
-
-窗口函数 [lead](../sql-reference/sql-functions/Window_function.md#使用-lead-窗口函数)、[lag](../sql-reference/sql-functions/Window_function.md#使用-lag-窗口函数) 支持 IGNORE NULLS。
-
 ### 问题修复
+
+修复了以下问题：
 
 - StarRocks 源文件的许可 header 中部分 url 无法访问。#[2224](https://github.com/StarRocks/starrocks/issues/2224)
 - SELECT 查询出现 unknown error。 #[19731](https://github.com/StarRocks/starrocks/issues/19731)
@@ -102,11 +93,15 @@
 - 支持 show full fields from 'table'。# [17233](https://github.com/StarRocks/starrocks/issues/17233)
 - 分区修剪导致 MV 改写失败。 #[14641](https://github.com/StarRocks/starrocks/issues/14641)
 - 当 MV 创建语句包含 count(distinct) 且 count(distinct) 作用在分布列上时，MV 改写失败。 #[16558](https://github.com/StarRocks/starrocks/issues/16558)
+- 使用 VARCHAR 作为物化视图分区列时导致 FE 无法正常启动。([#19366](https://github.com/StarRocks/starrocks/issues/19366))
+- 窗口函数 [lead](../sql-reference/sql-functions/Window_function.md#使用-lead-窗口函数) 和 [lag](../sql-reference/sql-functions/Window_function.md#使用-lag-窗口函数) 对 IGNORE NULLS 的处理不正确。 ([#21001](https://github.com/StarRocks/starrocks/pull/21001))
+- 插入临时分区和自动创建分区发生冲突。（[#21222](https://github.com/StarRocks/starrocks/issues/21222)）
 
 ### 行为变更
 
 - RBAC 升级以后会兼容之前的用户和权限，但是 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) 等相关语法有大幅改动。
 - SHOW MATERIALIZED VIEW 更名为 [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md)。
+- 新增如下[保留关键字](../sql-reference/sql-statements/keywords.md)：AUTO_INCREMENT、CURRENT_ROLE、DEFERRED、ENCLOSE、ESCAPE、IMMEDIATE、PRIVILEGES、SKIP_HEADER、TRIM_SPACE、VARBINARY。
 
 ### 升级注意事项
 
