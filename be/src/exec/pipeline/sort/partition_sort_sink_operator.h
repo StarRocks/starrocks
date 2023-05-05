@@ -17,9 +17,7 @@ class ExecNode;
 namespace vectorized {
 class ChunksSorter;
 }
-
 namespace pipeline {
-using namespace vectorized;
 
 /*
  * Partiton Sort Operator is almost like Sort Operator,
@@ -80,10 +78,11 @@ public:
     PartitionSortSinkOperatorFactory(
             int32_t id, int32_t plan_node_id, std::shared_ptr<SortContextFactory> sort_context_factory,
             SortExecExprs& sort_exec_exprs, std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
-            const std::string& sort_keys, int64_t offset, int64_t limit, const TTopNType::type topn_type,
-            const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
-            const RowDescriptor& parent_node_row_desc, const RowDescriptor& parent_node_child_row_desc,
-            const std::vector<ExprContext*>& analytic_partition_exprs)
+            std::string sort_keys, int64_t offset, int64_t limit, int64_t max_buffered_rows, int64_t max_buffered_bytes,
+            const TTopNType::type topn_type, const std::vector<OrderByType>& order_by_types,
+            TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
+            const RowDescriptor& parent_node_child_row_desc, std::vector<ExprContext*> analytic_partition_exprs,
+            const std::vector<SlotId>& early_materialized_slots)
             : OperatorFactory(id, "local_sort_sink", plan_node_id),
               _sort_context_factory(sort_context_factory),
               _sort_exec_exprs(sort_exec_exprs),
@@ -92,12 +91,15 @@ public:
               _sort_keys(sort_keys),
               _offset(offset),
               _limit(limit),
+              _max_buffered_rows(max_buffered_rows),
+              _max_buffered_bytes(max_buffered_bytes),
               _topn_type(topn_type),
               _order_by_types(order_by_types),
               _materialized_tuple_desc(materialized_tuple_desc),
               _parent_node_row_desc(parent_node_row_desc),
               _parent_node_child_row_desc(parent_node_child_row_desc),
-              _analytic_partition_exprs(analytic_partition_exprs) {}
+              _analytic_partition_exprs(std::move(analytic_partition_exprs)),
+              _early_materialized_slots(early_materialized_slots) {}
 
     ~PartitionSortSinkOperatorFactory() override = default;
 
@@ -115,6 +117,8 @@ private:
     const std::string _sort_keys;
     int64_t _offset;
     int64_t _limit;
+    int64_t _max_buffered_rows;
+    int64_t _max_buffered_bytes;
     const TTopNType::type _topn_type;
     const std::vector<OrderByType>& _order_by_types;
 
@@ -125,6 +129,7 @@ private:
     const RowDescriptor& _parent_node_row_desc;
     const RowDescriptor& _parent_node_child_row_desc;
     std::vector<ExprContext*> _analytic_partition_exprs;
+    std::vector<SlotId> _early_materialized_slots;
 };
 
 } // namespace pipeline

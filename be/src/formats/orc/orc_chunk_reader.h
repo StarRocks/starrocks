@@ -115,16 +115,18 @@ public:
     SlotDescriptor* get_current_slot() const { return _current_slot; }
     void set_current_file_name(const std::string& name) { _current_file_name = name; }
     void report_error_message(const std::string& error_msg);
-    int get_column_id_by_name(const std::string& name) const;
+    int get_column_id_by_slot_name(const std::string& name) const;
 
     void set_lazy_load_context(LazyLoadContext* ctx) { _lazy_load_ctx = ctx; }
     bool has_lazy_load_context() { return _lazy_load_ctx != nullptr; }
     StatusOr<ChunkPtr> get_chunk();
     StatusOr<ChunkPtr> get_active_chunk();
-    void lazy_read_next(size_t numValues);
-    void lazy_seek_to(uint64_t rowInStripe);
+    Status lazy_read_next(size_t numValues);
+    Status lazy_seek_to(uint64_t rowInStripe);
     void lazy_filter_on_cvb(Filter* filter);
     StatusOr<ChunkPtr> get_lazy_chunk();
+
+    bool is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type);
 
 private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots, const std::vector<int>* indices);
@@ -185,7 +187,8 @@ private:
     size_t _num_rows_filtered;
     const std::vector<std::string>* _hive_column_names = nullptr;
     bool _case_sensitive = false;
-    std::unordered_map<std::string, int> _name_to_column_id;
+    // Key is slot name formatted with case sensitive
+    std::unordered_map<std::string, int> _formatted_slot_name_to_column_id;
     RuntimeState* _state = nullptr;
     SlotDescriptor* _current_slot = nullptr;
     std::string _current_file_name;

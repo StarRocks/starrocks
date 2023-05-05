@@ -27,6 +27,8 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -38,6 +40,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
@@ -53,6 +56,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.DescribeStmt;
@@ -60,8 +64,10 @@ import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAuthorStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.sql.ast.ShowCharsetStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
@@ -93,7 +99,9 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
@@ -180,6 +188,9 @@ public class ShowExecutorTest {
             }
         };
 
+        BaseTableInfo baseTableInfo = new BaseTableInfo(
+                "default_catalog", "testDb", "testTbl");
+
         // mock materialized view
         MaterializedView mv = new MaterializedView();
         new Expectations(mv) {
@@ -214,7 +225,7 @@ public class ShowExecutorTest {
                         Collections.singletonList(
                                 new SlotRef(
                                         new TableName("test", "testMv"), column1.getName())),
-                        Collections.singletonList(column1));
+                        Collections.singletonList(column1), PartitionType.RANGE);
 
                 mv.getDefaultDistributionInfo();
                 minTimes = 0;
@@ -307,6 +318,11 @@ public class ShowExecutorTest {
                 GlobalStateMgr.getCurrentState().getMetadataMgr().getDb("default_catalog", "emptyDb");
                 minTimes = 0;
                 result = null;
+
+                GlobalStateMgr.getCurrentState().getMetadataMgr().getTable("default_catalog", "testDb",
+                        "testTbl");
+                minTimes = 0;
+                result = table;
             }
         };
 
@@ -567,7 +583,72 @@ public class ShowExecutorTest {
 
         Assert.assertFalse(resultSet.next());
     }
-    
+
+    @Ignore
+    @Test
+    public void testShowColumn() throws AnalysisException, DdlException {
+        ctx.setGlobalStateMgr(globalStateMgr);
+        ctx.setQualifiedUser("testUser");
+
+        ShowColumnStmt stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show columns from testTbl in testDb",
+                ctx.getSessionVariable()).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("col1", resultSet.getString(0));
+        Assert.assertEquals("NO", resultSet.getString(2));
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("col2", resultSet.getString(0));
+        Assert.assertFalse(resultSet.next());
+
+        // verbose
+        stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb",
+                ctx.getSessionVariable()).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+
+        executor = new ShowExecutor(ctx, stmt);
+        resultSet = executor.execute();
+
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("col1", resultSet.getString(0));
+        Assert.assertEquals("NO", resultSet.getString(3));
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("col2", resultSet.getString(0));
+        Assert.assertEquals("NO", resultSet.getString(3));
+        Assert.assertFalse(resultSet.next());
+
+        // show full fields
+        stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full fields from testTbl in testDb",
+                ctx.getSessionVariable()).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+
+        executor = new ShowExecutor(ctx, stmt);
+        resultSet = executor.execute();
+
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("col1", resultSet.getString(0));
+        Assert.assertEquals("NO", resultSet.getString(3));
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("col2", resultSet.getString(0));
+        Assert.assertEquals("NO", resultSet.getString(3));
+        Assert.assertFalse(resultSet.next());
+
+        // pattern
+        stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb like \"%1\"",
+                ctx.getSessionVariable().getSqlMode()).get(0);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
+        executor = new ShowExecutor(ctx, stmt);
+        resultSet = executor.execute();
+
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("col1", resultSet.getString(0));
+        Assert.assertEquals("NO", resultSet.getString(3));
+        Assert.assertFalse(resultSet.next());
+    }
+
     @Test
     public void testShowColumnFromUnknownTable() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
@@ -684,6 +765,18 @@ public class ShowExecutorTest {
         ShowResultSet resultSet = executor.execute();
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("root", resultSet.getString(0));
+    }
+
+    @Test
+    public void testShowCharset() throws DdlException, AnalysisException {
+        // Dbeaver 23 Use
+        ShowCharsetStmt stmt = new ShowCharsetStmt();
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertTrue(resultSet.next());
+        List<List<String>> resultRows = resultSet.getResultRows();
+        Assert.assertTrue(resultRows.size() >= 1);
+        Assert.assertEquals(resultRows.get(0).get(0), "utf8");
     }
 
     @Test
@@ -898,5 +991,33 @@ public class ShowExecutorTest {
         Assert.assertEquals("hive_test", resultSet.getString(0));
         Assert.assertEquals("BASE TABLE", resultSet.getString(1));
         Assert.assertFalse(resultSet.next());
+    }
+
+    @Test
+    public void testShowCreateExternalCatalogWithMask() throws AnalysisException, DdlException {
+        new MockUp<CatalogMgr>() {
+            @Mock
+            public Catalog getCatalogByName(String name) {
+                Map<String, String> properties = new HashMap<>();
+                properties.put("hive.metastore.uris", "thrift://hadoop:9083");
+                properties.put("type", "hive");
+                properties.put("aws.s3.access_key", "iam_user_access_key");
+                properties.put("aws.s3.secret_key", "iam_user_secret_key");
+                Catalog catalog = new Catalog(1, "test_hive", properties, "hive_test");
+                return catalog;
+            }
+        };
+        ShowCreateExternalCatalogStmt stmt = new ShowCreateExternalCatalogStmt("test_hive");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+
+        Assert.assertEquals("test_hive", resultSet.getResultRows().get(0).get(0));
+        Assert.assertEquals("CREATE EXTERNAL CATALOG `test_hive`\n" +
+                "comment \"hive_test\"\n" +
+                "PROPERTIES (\"aws.s3.access_key\"  =  \"ia******ey\",\n" +
+                "\"aws.s3.secret_key\"  =  \"ia******ey\",\n" +
+                "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\",\n" +
+                "\"type\"  =  \"hive\"\n" +
+                ")", resultSet.getResultRows().get(0).get(1));
     }
 }

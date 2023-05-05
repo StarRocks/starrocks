@@ -53,7 +53,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
         String path = ObjectStorageUtils.formatObjectStoragePath(pathKey.getPath());
         List<RemoteFileDesc> fileDescs = Lists.newArrayList();
         try {
-            URI uri = new URI(path.replace(" ", "%20"));
+            URI uri = new Path(path).toUri();
             FileSystem fileSystem;
 
             if (!FeConstants.runningUnitTest) {

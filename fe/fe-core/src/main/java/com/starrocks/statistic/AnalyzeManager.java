@@ -49,7 +49,7 @@ public class AnalyzeManager implements Writable {
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
     private final Map<Long, BasicStatsMeta> basicStatsMetaMap;
     private final Map<Pair<Long, String>, HistogramStatsMeta> histogramStatsMetaMap;
-    //ConnectContext of all currently running analyze tasks
+    // ConnectContext of all currently running analyze tasks
     private final Map<Long, ConnectContext> connectionMap = Maps.newConcurrentMap();
     private static final ExecutorService ANALYZE_TASK_THREAD_POOL = ThreadPoolManager.newDaemonFixedThreadPool(
             Config.statistic_collect_concurrency, 100,
@@ -297,6 +297,15 @@ public class AnalyzeManager implements Writable {
         }
     }
 
+    public void killConnection(long analyzeID) {
+        ConnectContext context = connectionMap.get(analyzeID);
+        if (context != null) {
+            context.kill(false);
+        } else {
+            throw new SemanticException("There is no running task with analyzeId " + analyzeID);
+        }
+    }
+
     public ExecutorService getAnalyzeTaskThreadPool() {
         return ANALYZE_TASK_THREAD_POOL;
     }
@@ -309,13 +318,15 @@ public class AnalyzeManager implements Writable {
         TxnCommitAttachment attachment = transactionState.getTxnCommitAttachment();
         if (attachment instanceof RLTaskTxnCommitAttachment) {
             BasicStatsMeta basicStatsMeta =
-                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(transactionState.getTableIdList().get(0));
+                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
+                            .get(transactionState.getTableIdList().get(0));
             if (basicStatsMeta != null) {
                 basicStatsMeta.increaseUpdateRows(((RLTaskTxnCommitAttachment) attachment).getLoadedRows());
             }
         } else if (attachment instanceof ManualLoadTxnCommitAttachment) {
             BasicStatsMeta basicStatsMeta =
-                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(transactionState.getTableIdList().get(0));
+                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
+                            .get(transactionState.getTableIdList().get(0));
             if (basicStatsMeta != null) {
                 basicStatsMeta.increaseUpdateRows(((ManualLoadTxnCommitAttachment) attachment).getLoadedRows());
             }
@@ -332,7 +343,8 @@ public class AnalyzeManager implements Writable {
             );
         } else if (attachment instanceof InsertTxnCommitAttachment) {
             BasicStatsMeta basicStatsMeta =
-                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(transactionState.getTableIdList().get(0));
+                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
+                            .get(transactionState.getTableIdList().get(0));
             if (basicStatsMeta != null) {
                 long loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
                 if (loadRows == 0) {

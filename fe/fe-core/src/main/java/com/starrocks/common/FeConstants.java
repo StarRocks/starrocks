@@ -69,4 +69,8 @@ public class FeConstants {
     public static final int DEFAULT_TABLET_NUMBER = 128;
 
     public static final int AGG_FUNC_VERSION = 3;
+
+    // Every 3GB, corresponds a new tablet. Assume compression ratio equals to 3,
+    // the raw data of one tablet equals to 10GB approximately
+    public static final long AUTO_DISTRIBUTION_UNIT = 3221225472L;
 }

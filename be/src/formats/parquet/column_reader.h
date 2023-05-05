@@ -50,6 +50,8 @@ public:
 
     virtual void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) = 0;
 
+    virtual void set_need_parse_levels(bool need_parse_levels) = 0;
+
     virtual Status get_dict_values(vectorized::Column* column) {
         return Status::NotSupported("get_dict_values is not supported");
     }
@@ -62,8 +64,11 @@ public:
         return Status::NotSupported("get_dict_codes is not supported");
     }
 
-public:
     std::unique_ptr<ColumnConverter> converter;
+
+private:
+    static Status do_create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
+                            std::unique_ptr<ColumnReader>* reader);
 };
 
 } // namespace starrocks::parquet

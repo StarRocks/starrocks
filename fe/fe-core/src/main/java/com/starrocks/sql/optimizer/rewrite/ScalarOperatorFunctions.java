@@ -325,6 +325,28 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(startTime);
     }
 
+    @ConstantFunction(name = "now", argTypes = {INT}, returnType = DATETIME)
+    public static ConstantOperator now(ConstantOperator fsp) throws AnalysisException {
+        int fspVal = fsp.getInt();
+        if (fspVal == 0) {
+            return now();
+        }
+        // Although there is a check here, it will not take effect and will be forwarded to BE.
+        if (fspVal < 0) {
+            throw new AnalysisException("precision must be greater than 0.");
+        }
+        if (fspVal > 6) {
+            throw new AnalysisException("Too-big precision " + fspVal + "specified for 'now'. Maximum is 6.");
+        }
+        // Here only the syntax is implemented for the metabase to use.
+        // If you want to achieve a precise type, you need to change the BE code
+        // and consider the transitivity of the FE expression.
+        ConnectContext connectContext = ConnectContext.get();
+        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
+                .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+        return ConstantOperator.createDatetime(startTime);
+    }
+
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "curdate", argTypes = {}, returnType = DATE),
             @ConstantFunction(name = "current_date", argTypes = {}, returnType = DATE)

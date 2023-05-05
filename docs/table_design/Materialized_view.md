@@ -42,7 +42,7 @@ The creation of a materialized view is currently an asynchronous operation. The 
 * **Restrictions**
 
   * The `partition column` in the base table must be one of  the `group by` columns of the created materialized view
-  * Currently, only single-table materialized views are supported. No multi-table joins.
+  * Currently, only synchronous materialized views are supported. No multi-table joins.
   * Aggregation is not supported for key columns, but only for value columns.The type of aggregation operator cannot be changed.
   * The materialized view must contain at least one key column.
   * Expression calculation is not supported.

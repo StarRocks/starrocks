@@ -3,6 +3,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
 
@@ -63,7 +64,7 @@ public class JoinRelation extends Relation {
     }
 
     public void setJoinHint(String joinHint) {
-        this.joinHint = joinHint;
+        this.joinHint = StringUtils.upperCase(joinHint);
     }
 
     public String getJoinHint() {

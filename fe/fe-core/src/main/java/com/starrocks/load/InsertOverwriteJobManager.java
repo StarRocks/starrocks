@@ -139,6 +139,10 @@ public class InsertOverwriteJobManager implements Writable, GsonPostProcessable 
 
     public void replayInsertOverwriteStateChange(InsertOverwriteStateChangeInfo info) {
         InsertOverwriteJob job = getInsertOverwriteJob(info.getJobId());
+        if (job == null) {
+            LOG.info("cannot find job: {}, ignore", info);
+            return;
+        }
         InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(job);
         runner.replayStateChange(info);
         if (job.isFinished()) {

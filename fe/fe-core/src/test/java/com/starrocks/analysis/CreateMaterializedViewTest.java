@@ -4,6 +4,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -71,7 +72,6 @@ public class CreateMaterializedViewTest {
     @BeforeClass
     public static void beforeClass() throws Exception {
         ConnectorPlanTestBase.beforeClass();
-        FeConstants.runningUnitTest = true;
         FeConstants.default_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
@@ -336,7 +336,7 @@ public class CreateMaterializedViewTest {
             partitionFunctionCallExpr.collect(SlotRef.class, slotRefs);
             SlotRef partitionSlotRef = slotRefs.get(0);
             Assert.assertEquals("k1", partitionSlotRef.getColumnName());
-            List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+            List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
             Assert.assertEquals(1, baseTableInfos.size());
             Expr partitionRefTableExpr = materializedView.getPartitionRefTableExprs().get(0);
             List<SlotRef> tableSlotRefs = Lists.newArrayList();
@@ -563,7 +563,7 @@ public class CreateMaterializedViewTest {
             Assert.assertTrue(partitionExpr instanceof SlotRef);
             SlotRef partitionSlotRef = (SlotRef) partitionExpr;
             Assert.assertEquals("s1", partitionSlotRef.getColumnName());
-            List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+            List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
             Assert.assertEquals(2, baseTableInfos.size());
             Expr partitionRefTableExpr = materializedView.getPartitionRefTableExprs().get(0);
             List<SlotRef> slotRefs = Lists.newArrayList();
@@ -628,7 +628,7 @@ public class CreateMaterializedViewTest {
             Partition partition = materializedView.getPartitions().iterator().next();
             Assert.assertNotNull(partition);
             Assert.assertEquals("mv1", partition.getName());
-            List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+            List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
             Assert.assertEquals(1, baseTableInfos.size());
             Table baseTable = testDb.getTable(baseTableInfos.iterator().next().getTableId());
             Assert.assertTrue(1 <= baseTable.getRelatedMaterializedViews().size());
@@ -965,7 +965,7 @@ public class CreateMaterializedViewTest {
         try {
             CreateMaterializedViewStatement statementBase =
                     (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-            List<MaterializedView.BaseTableInfo> baseTableInfos = statementBase.getBaseTableInfos();
+            List<BaseTableInfo> baseTableInfos = statementBase.getBaseTableInfos();
             Assert.assertEquals(1, baseTableInfos.size());
         } catch (Exception e) {
             Assert.fail(e.getMessage());
@@ -1525,13 +1525,13 @@ public class CreateMaterializedViewTest {
     @Test
     public void testAsSelectItemNoAlias() {
         String sql = "create materialized view mv1 " +
-                "partition by ss " +
+                "partition by k1 " +
                 "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ")" +
-                "as select date_trunc('month',tbl1.k1), k2 from tbl1;";
+                "as select date_trunc('month',tbl1.k1), k1, k2 from tbl1;";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
@@ -2067,7 +2067,7 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testPartitionByNotFirstColumn() throws Exception {
-        starRocksAssert.withNewMaterializedView("create materialized view mv_with_partition_by_not_first_column" +
+        starRocksAssert.withMaterializedView("create materialized view mv_with_partition_by_not_first_column" +
                 " partition by k1" +
                 " distributed by hash(k3) buckets 10" +
                 " as select k3, k1, sum(v1) as total from tbl5 group by k3, k1");
@@ -2089,7 +2089,7 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testHiveMVWithoutPartition() throws Exception {
-        starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW supplier_hive_mv " +
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW supplier_hive_mv " +
                 "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL AS select     s_suppkey,     s_nationkey," +
                 "sum(s_acctbal) as total_s_acctbal,      count(s_phone) as s_phone_count from hive0.tpch.supplier as supp " +
                 "group by s_suppkey, s_nationkey order by s_suppkey;");
@@ -2105,7 +2105,7 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testHiveMVJoinWithoutPartition() throws Exception {
-        starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW supplier_nation_hive_mv DISTRIBUTED BY " +
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW supplier_nation_hive_mv DISTRIBUTED BY " +
                 "HASH(`s_suppkey`) BUCKETS 10 REFRESH MANUAL AS select     s_suppkey,     n_name,      sum(s_acctbal) " +
                 "as total_s_acctbal,      count(s_phone) as s_phone_count from " +
                 "hive0.tpch.supplier as supp join hive0.tpch.nation group by s_suppkey, n_name order by s_suppkey;");
@@ -2121,7 +2121,7 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testHiveMVWithPartition() throws Exception {
-        starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW lineitem_supplier_hive_mv \n" +
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lineitem_supplier_hive_mv \n" +
                 "partition by l_shipdate\n" +
                 "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
                 "REFRESH MANUAL\n" +
@@ -2144,7 +2144,7 @@ public class CreateMaterializedViewTest {
 
     @Test
     public void testHiveMVAsyncRefresh() throws Exception {
-        starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW supplier_hive_mv " +
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW supplier_hive_mv " +
                 "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH ASYNC  START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "AS select     s_suppkey,     s_nationkey, sum(s_acctbal) as total_s_acctbal,      " +
                 "count(s_phone) as s_phone_count from hive0.tpch.supplier as supp " +
@@ -2168,7 +2168,7 @@ public class CreateMaterializedViewTest {
         expectedException.expect(DdlException.class);
         expectedException.expectMessage("Materialized view which type is ASYNC need to specify refresh interval " +
                 "for external table");
-        starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW supplier_hive_mv " +
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW supplier_hive_mv " +
                 "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH ASYNC AS select     s_suppkey,     s_nationkey," +
                 "sum(s_acctbal) as total_s_acctbal,      count(s_phone) as s_phone_count from hive0.tpch.supplier as supp " +
                 "group by s_suppkey, s_nationkey order by s_suppkey;");
@@ -2206,7 +2206,7 @@ public class CreateMaterializedViewTest {
         String sql = "create materialized view async_mv_1 distributed by hash(c_1_9) as" +
                 " select c_1_9, c_1_4 from t1";
         try {
-            starRocksAssert.withNewMaterializedView(sql);
+            starRocksAssert.withMaterializedView(sql);
             MaterializedView mv = (MaterializedView) testDb.getTable("async_mv_1");
             Assert.assertTrue(mv.getFullSchema().get(0).isKey());
             Assert.assertFalse(mv.getFullSchema().get(1).isKey());
@@ -2217,7 +2217,7 @@ public class CreateMaterializedViewTest {
         String sql2 = "create materialized view async_mv_1 distributed by hash(c_1_4) as" +
                 " select c_1_4 from t1";
         try {
-            starRocksAssert.withNewMaterializedView(sql2);
+            starRocksAssert.withMaterializedView(sql2);
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Data type of first column cannot be DOUBLE"));
         }
@@ -2234,6 +2234,133 @@ public class CreateMaterializedViewTest {
             LOG.error("Test CollectAllTableAndView failed", e);
             Assert.fail();
         }
+    }
+
+    @Test
+    public void testCreateMVWithDifferentDB() {
+        try{
+            ConnectContext newConnectContext = UtFrameUtils.createDefaultCtx();
+            StarRocksAssert newStarRocksAssert = new StarRocksAssert(newConnectContext);
+            newStarRocksAssert.withDatabase("test_mv_different_db")
+                    .useDatabase("test_mv_different_db");
+            String sql = "create materialized view test.test_mv_use_different_tbl " +
+                    "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
+            CreateMaterializedViewStmt stmt =
+                    (CreateMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
+            Assert.assertEquals(stmt.getDBName(), "test");
+            Assert.assertEquals(stmt.getMVName(), "test_mv_use_different_tbl");
+            currentState.createMaterializedView(stmt);
+            waitingRollupJobV2Finish();
+
+            Table table = testDb.getTable("tbl5");
+            Assert.assertTrue(table != null);
+            OlapTable olapTable = (OlapTable)  table;
+            Assert.assertTrue(olapTable.getIndexIdToMeta().size() >= 2);
+            Assert.assertTrue(olapTable.getIndexIdToMeta().entrySet().stream()
+                    .anyMatch(x -> x.getValue().getKeysType().isAggregationFamily()));
+            newStarRocksAssert.dropDatabase("test_mv_different_db");
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testCreateAsyncMVWithDifferentDB() {
+        try {
+            ConnectContext newConnectContext = UtFrameUtils.createDefaultCtx();
+            StarRocksAssert newStarRocksAssert = new StarRocksAssert(newConnectContext);
+            newStarRocksAssert.withDatabase("test_mv_different_db")
+                    .useDatabase("test_mv_different_db");
+            String sql = "create materialized view test.test_mv_use_different_tbl " +
+                    "distributed by hash(k1) " +
+                    "as select k1, sum(v1), min(v2) from test.tbl5 group by k1;";
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, newStarRocksAssert.getCtx());
+            Assert.assertEquals(stmt.getTableName().getDb(), "test");
+            Assert.assertEquals(stmt.getTableName().getTbl(), "test_mv_use_different_tbl");
+
+            currentState.createMaterializedView(stmt);
+            newStarRocksAssert.dropDatabase("test_mv_different_db");
+            Table mv1 = testDb.getTable("test_mv_use_different_tbl");
+            Assert.assertTrue(mv1 instanceof MaterializedView);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+
+    }
+
+    private Table getTable(String dbName, String mvName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Table table = db.getTable(mvName);
+        Assert.assertNotNull(table);
+        return table;
+    }
+
+    private MaterializedView getMv(String dbName, String mvName) {
+        Table table = getTable(dbName, mvName);
+        Assert.assertTrue(table instanceof MaterializedView);
+        MaterializedView mv = (MaterializedView) table;
+        return mv;
+    }
+
+    @Test
+    public void testMvNullable() throws Exception {
+        starRocksAssert.withTable("create table emps (\n" +
+                "    empid int not null,\n" +
+                "    deptno int not null,\n" +
+                "    name varchar(25) not null,\n" +
+                "    salary double\n" +
+                ")\n" +
+                "distributed by hash(`empid`) buckets 10\n" +
+                "properties (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");")
+                .withTable("create table depts (\n" +
+                        "    deptno int not null,\n" +
+                        "    name varchar(25) not null\n" +
+                        ")\n" +
+                        "distributed by hash(`deptno`) buckets 10\n" +
+                        "properties (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");");
+        {
+            starRocksAssert.withMaterializedView("create materialized view mv_nullable" +
+                    " distributed by hash(`empid`) as" +
+                    " select empid, d.deptno, d.name" +
+                    " from emps e left outer join depts d on e.deptno = d.deptno");
+            MaterializedView mv = getMv("test", "mv_nullable");
+            Assert.assertFalse(mv.getColumn("empid").isAllowNull());
+            Assert.assertTrue(mv.getColumn("deptno").isAllowNull());
+            Assert.assertTrue(mv.getColumn("name").isAllowNull());
+            starRocksAssert.dropMaterializedView("mv_nullable");
+        }
+
+        {
+            starRocksAssert.withMaterializedView("create materialized view mv_nullable" +
+                    " distributed by hash(`empid`) as" +
+                    " select empid, d.deptno, d.name" +
+                    " from emps e right outer join depts d on e.deptno = d.deptno");
+            MaterializedView mv = getMv("test", "mv_nullable");
+            Assert.assertTrue(mv.getColumn("empid").isAllowNull());
+            Assert.assertFalse(mv.getColumn("deptno").isAllowNull());
+            Assert.assertFalse(mv.getColumn("name").isAllowNull());
+            starRocksAssert.dropMaterializedView("mv_nullable");
+        }
+
+        {
+            starRocksAssert.withMaterializedView("create materialized view mv_nullable" +
+                    " distributed by hash(`empid`) as" +
+                    " select empid, d.deptno, d.name" +
+                    " from emps e full outer join depts d on e.deptno = d.deptno");
+            MaterializedView mv = getMv("test", "mv_nullable");
+            Assert.assertTrue(mv.getColumn("empid").isAllowNull());
+            Assert.assertTrue(mv.getColumn("deptno").isAllowNull());
+            Assert.assertTrue(mv.getColumn("name").isAllowNull());
+            starRocksAssert.dropMaterializedView("mv_nullable");
+        }
+
+        starRocksAssert.dropTable("emps");
+        starRocksAssert.dropTable("depts");
     }
 }
 

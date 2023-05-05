@@ -183,8 +183,8 @@ class CACHELINE_ALIGNED ColumnPool {
     };
 
 public:
-    void set_mem_tracker(MemTracker* mem_tracker) { _mem_tracker = mem_tracker; }
-    MemTracker* mem_tracker() { return _mem_tracker; }
+    void set_mem_tracker(std::shared_ptr<MemTracker> mem_tracker) { _mem_tracker = std::move(mem_tracker); }
+    MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
     static std::enable_if_t<std::is_default_constructible_v<T>, ColumnPool*> singleton() {
         static ColumnPool p;
@@ -357,7 +357,7 @@ private:
 
     ~ColumnPool() = default;
 
-    MemTracker* _mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
 
     static __thread LocalPool* _local_pool; // NOLINT
     static std::atomic<long> _nlocal;       // NOLINT

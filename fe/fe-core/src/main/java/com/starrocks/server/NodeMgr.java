@@ -671,9 +671,13 @@ public class NodeMgr {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            Frontend fe = getFeByHost(host);
-            if (null != fe) {
-                throw new DdlException("frontend use host [" + host + "] already exists ");
+            try {
+                if (checkFeExistByIpOrFqdn(host)) {
+                    throw new DdlException("FE with the same host: " + host + " already exists");
+                }
+            } catch (UnknownHostException e) {
+                LOG.warn("failed to get right ip by fqdn {}", host, e);
+                throw new DdlException("unknown fqdn host: " + host);
             }
 
             String nodeName = GlobalStateMgr.genFeNodeName(host, editLogPort, false /* new name style */);
@@ -682,7 +686,7 @@ public class NodeMgr {
                 throw new DdlException("frontend name already exists " + nodeName + ". Try again");
             }
 
-            fe = new Frontend(role, nodeName, host, editLogPort);
+            Frontend fe = new Frontend(role, nodeName, host, editLogPort);
             frontends.put(nodeName, fe);
             if (role == FrontendNodeType.FOLLOWER) {
                 helperNodes.add(Pair.create(host, editLogPort));
@@ -861,6 +865,35 @@ public class NodeMgr {
         return null;
     }
 
+    protected boolean checkFeExistByIpOrFqdn(String ipOrFqdn) throws UnknownHostException {
+        Pair<String, String> targetIpAndFqdn = NetUtils.getIpAndFqdnByHost(ipOrFqdn);
+
+        for (Frontend fe : frontends.values()) {
+            Pair<String, String> curIpAndFqdn;
+            try {
+                curIpAndFqdn = NetUtils.getIpAndFqdnByHost(fe.getHost());
+            } catch (UnknownHostException e) {
+                LOG.warn("failed to get right ip by fqdn {}", fe.getHost(), e);
+                if (targetIpAndFqdn.second.equals(fe.getHost())
+                        && !Strings.isNullOrEmpty(targetIpAndFqdn.second)) {
+                    return true;
+                }
+                continue;
+            }
+            // target, cur has same ip
+            if (targetIpAndFqdn.first.equals(curIpAndFqdn.first)) {
+                return true;
+            }
+            // target, cur has same fqdn and both of them are not equal ""
+            if (targetIpAndFqdn.second.equals(curIpAndFqdn.second)
+                    && !Strings.isNullOrEmpty(targetIpAndFqdn.second)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public Frontend getFeByHost(String ipOrFqdn) {
         // This host could be Ip, or fqdn
         Pair<String, String> targetPair;
@@ -933,25 +966,33 @@ public class NodeMgr {
         return this.nodeName;
     }
 
-    public int getLeaderRpcPort() {
-        if (!stateMgr.isReady()) {
-            return 0;
+    public Pair<String, Integer> getLeaderIpAndRpcPort() {
+        if (stateMgr.isReady()) {
+            return new Pair<>(this.leaderIp, this.leaderRpcPort);
+        } else {
+            String leaderNodeName = stateMgr.getHaProtocol().getLeaderNodeName();
+            Frontend frontend = frontends.get(leaderNodeName);
+            return new Pair<>(frontend.getHost(), frontend.getRpcPort());
         }
-        return this.leaderRpcPort;
     }
 
-    public int getLeaderHttpPort() {
-        if (!stateMgr.isReady()) {
-            return 0;
+    public Pair<String, Integer> getLeaderIpAndHttpPort() {
+        if (stateMgr.isReady()) {
+            return new Pair<>(this.leaderIp, this.leaderHttpPort);
+        } else {
+            String leaderNodeName = stateMgr.getHaProtocol().getLeaderNodeName();
+            Frontend frontend = frontends.get(leaderNodeName);
+            return new Pair<>(frontend.getHost(), Config.http_port);
         }
-        return this.leaderHttpPort;
     }
 
     public String getLeaderIp() {
-        if (!stateMgr.isReady()) {
-            return "";
+        if (stateMgr.isReady()) {
+            return this.leaderIp;
+        } else {
+            String leaderNodeName = stateMgr.getHaProtocol().getLeaderNodeName();
+            return frontends.get(leaderNodeName).getHost();
         }
-        return this.leaderIp;
     }
 
     public void setLeader(LeaderInfo info) {

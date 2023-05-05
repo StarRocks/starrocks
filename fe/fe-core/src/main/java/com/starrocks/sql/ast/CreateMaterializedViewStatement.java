@@ -5,9 +5,9 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
-import com.starrocks.catalog.MaterializedView;
 
 import java.util.List;
 import java.util.Map;
@@ -37,11 +37,11 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private KeysType keysType = KeysType.DUP_KEYS;
     protected String inlineViewDef;
 
-
     private String simpleViewDef;
+    private List<BaseTableInfo> baseTableInfos;
+
     // for create column in mv
     private List<Column> mvColumnItems = Lists.newArrayList();
-    private List<MaterializedView.BaseTableInfo> baseTableInfos;
     private Column partitionColumn;
     // record expression which related with partition by clause
     private Expr partitionRefTableExpr;
@@ -156,11 +156,11 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.mvColumnItems = mvColumnItems;
     }
 
-    public List<MaterializedView.BaseTableInfo> getBaseTableInfos() {
+    public List<BaseTableInfo> getBaseTableInfos() {
         return baseTableInfos;
     }
 
-    public void setBaseTableInfos(List<MaterializedView.BaseTableInfo> baseTableInfos) {
+    public void setBaseTableInfos(List<BaseTableInfo> baseTableInfos) {
         this.baseTableInfos = baseTableInfos;
     }
 

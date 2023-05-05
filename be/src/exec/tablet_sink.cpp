@@ -29,6 +29,7 @@
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
+#include "common/statusor.h"
 #include "config.h"
 #include "exprs/expr.h"
 #include "gutil/strings/fastmem.h"
@@ -205,7 +206,21 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     // This ref is for RPC's reference
     open_closure->ref();
     open_closure->cntl.set_timeout_ms(config::tablet_writer_open_rpc_timeout_sec * 1000);
-    _stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
+    if (request.ByteSizeLong() > _parent->_rpc_http_min_size) {
+        TNetworkAddress brpc_addr;
+        brpc_addr.hostname = _node_info->host;
+        brpc_addr.port = _node_info->brpc_port;
+        open_closure->cntl.http_request().set_content_type("application/proto");
+        auto res = BrpcStubCache::create_http_stub(brpc_addr);
+        if (!res.ok()) {
+            LOG(ERROR) << res.status().get_error_msg();
+            return;
+        }
+        res.value()->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
+        VLOG(2) << "NodeChannel::_open() issue a http rpc, request size = " << request.ByteSizeLong();
+    } else {
+        _stub->tablet_writer_open(&open_closure->cntl, &request, &open_closure->result, open_closure);
+    }
     request.release_id();
     request.release_schema();
 
@@ -509,16 +524,47 @@ Status NodeChannel::_send_request(bool eos) {
     _add_batch_closures[_current_request_index]->ref();
     _add_batch_closures[_current_request_index]->reset();
     _add_batch_closures[_current_request_index]->cntl.set_timeout_ms(_rpc_timeout_ms);
+
     if (_enable_colocate_mv_index) {
         request.set_is_repeated_chunk(true);
-        _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
-                                        &_add_batch_closures[_current_request_index]->result,
-                                        _add_batch_closures[_current_request_index]);
+        if (UNLIKELY(request.ByteSizeLong() > _parent->_rpc_http_min_size)) {
+            TNetworkAddress brpc_addr;
+            brpc_addr.hostname = _node_info->host;
+            brpc_addr.port = _node_info->brpc_port;
+            _add_batch_closures[_current_request_index]->cntl.http_request().set_content_type("application/proto");
+            auto res = BrpcStubCache::create_http_stub(brpc_addr);
+            if (!res.ok()) {
+                return res.status();
+            }
+            res.value()->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
+                                                  &_add_batch_closures[_current_request_index]->result,
+                                                  _add_batch_closures[_current_request_index]);
+            VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
+        } else {
+            _stub->tablet_writer_add_chunks(&_add_batch_closures[_current_request_index]->cntl, &request,
+                                            &_add_batch_closures[_current_request_index]->result,
+                                            _add_batch_closures[_current_request_index]);
+        }
     } else {
         DCHECK(request.requests_size() == 1);
-        _stub->tablet_writer_add_chunk(&_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
-                                       &_add_batch_closures[_current_request_index]->result,
-                                       _add_batch_closures[_current_request_index]);
+        if (UNLIKELY(request.ByteSizeLong() > _parent->_rpc_http_min_size)) {
+            TNetworkAddress brpc_addr;
+            brpc_addr.hostname = _node_info->host;
+            brpc_addr.port = _node_info->brpc_port;
+            _add_batch_closures[_current_request_index]->cntl.http_request().set_content_type("application/proto");
+            auto res = BrpcStubCache::create_http_stub(brpc_addr);
+            if (!res.ok()) {
+                return res.status();
+            }
+            res.value()->tablet_writer_add_chunk(
+                    &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
+                    &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
+            VLOG(2) << "NodeChannel::_send_request() issue a http rpc, request size = " << request.ByteSizeLong();
+        } else {
+            _stub->tablet_writer_add_chunk(
+                    &_add_batch_closures[_current_request_index]->cntl, request.mutable_requests(0),
+                    &_add_batch_closures[_current_request_index]->result, _add_batch_closures[_current_request_index]);
+        }
     }
     _next_packet_seq++;
 
@@ -568,6 +614,8 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         _add_batch_counter.add_batch_num++;
     }
 
+    std::unordered_set<std::string> invalid_dict_cache_column_set;
+    std::unordered_set<std::string> valid_dict_cache_column_set;
     for (auto& tablet : closure->result.tablet_vec()) {
         TTabletCommitInfo commit_info;
         commit_info.tabletId = tablet.tablet_id();
@@ -576,19 +624,29 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         } else {
             commit_info.backendId = _node_id;
         }
-        std::vector<std::string> invalid_dict_cache_columns;
-        for (auto& col_name : tablet.invalid_dict_cache_columns()) {
-            invalid_dict_cache_columns.emplace_back(col_name);
-        }
-        commit_info.__set_invalid_dict_cache_columns(invalid_dict_cache_columns);
 
-        std::vector<std::string> valid_dict_cache_columns;
-        for (auto& col_name : tablet.valid_dict_cache_columns()) {
-            valid_dict_cache_columns.emplace_back(col_name);
+        for (auto& col_name : tablet.invalid_dict_cache_columns()) {
+            invalid_dict_cache_column_set.insert(col_name);
         }
-        commit_info.__set_valid_dict_cache_columns(valid_dict_cache_columns);
+
+        for (auto& col_name : tablet.valid_dict_cache_columns()) {
+            valid_dict_cache_column_set.insert(col_name);
+        }
 
         _tablet_commit_infos.emplace_back(std::move(commit_info));
+    }
+
+    // Only send valid and invalid dict cache columns info once
+    if (!_tablet_commit_infos.empty()) {
+        std::vector<std::string> invalid_dict_cache_columns;
+        invalid_dict_cache_columns.assign(invalid_dict_cache_column_set.begin(), invalid_dict_cache_column_set.end());
+        _tablet_commit_infos[0].__set_invalid_dict_cache_columns(invalid_dict_cache_columns);
+
+        std::vector<std::string> valid_dict_cache_columns;
+        std::set_difference(valid_dict_cache_column_set.begin(), valid_dict_cache_column_set.end(),
+                            invalid_dict_cache_column_set.begin(), invalid_dict_cache_column_set.end(),
+                            std::back_inserter(valid_dict_cache_columns));
+        _tablet_commit_infos[0].__set_valid_dict_cache_columns(valid_dict_cache_columns);
     }
 
     return Status::OK();
@@ -910,7 +968,7 @@ Status OlapTableSink::prepare(RuntimeState* state) {
     }
 
     _load_mem_limit = state->get_load_mem_limit();
-
+    _rpc_http_min_size = state->get_rpc_http_min_size();
     // open all channels
     return _init_node_channels(state);
 }
@@ -1339,11 +1397,6 @@ bool OlapTableSink::is_close_done() {
     }
 
     return _close_done;
-}
-
-void OlapTableSink::cancel() {
-    Status st = Status::Cancelled("cancel");
-    for_each_index_channel([&st](NodeChannel* ch) { ch->cancel(st); });
 }
 
 Status OlapTableSink::close(RuntimeState* state, Status close_status) {

@@ -289,10 +289,10 @@ public class QueryAnalyzer {
                 Field field;
                 if (table.getBaseSchema().contains(column)) {
                     field = new Field(column.getName(), column.getType(), tableName,
-                            new SlotRef(tableName, column.getName(), column.getName()), true);
+                            new SlotRef(tableName, column.getName(), column.getName()), true, column.isAllowNull());
                 } else {
                     field = new Field(column.getName(), column.getType(), tableName,
-                            new SlotRef(tableName, column.getName(), column.getName()), false);
+                            new SlotRef(tableName, column.getName(), column.getName()), false, column.isAllowNull());
                 }
                 columns.put(field, column);
                 fields.add(field);
@@ -409,12 +409,35 @@ public class QueryAnalyzer {
                 scope = new Scope(RelationId.of(join), leftScope.getRelationFields());
             } else if (join.getJoinOp().isRightSemiAntiJoin()) {
                 scope = new Scope(RelationId.of(join), rightScope.getRelationFields());
+            } else if (join.getJoinOp().isLeftOuterJoin()) {
+                List<Field> rightFields = getFieldsWithNullable(rightScope);
+                scope = new Scope(RelationId.of(join),
+                        leftScope.getRelationFields().joinWith(new RelationFields(rightFields)));
+            } else if (join.getJoinOp().isRightOuterJoin()) {
+                List<Field> leftFields = getFieldsWithNullable(leftScope);
+                scope = new Scope(RelationId.of(join),
+                        new RelationFields(leftFields).joinWith(rightScope.getRelationFields()));
+            } else if (join.getJoinOp().isFullOuterJoin()) {
+                List<Field> rightFields = getFieldsWithNullable(rightScope);
+                List<Field> leftFields = getFieldsWithNullable(leftScope);
+                scope = new Scope(RelationId.of(join),
+                        new RelationFields(leftFields).joinWith(new RelationFields(rightFields)));
             } else {
                 scope = new Scope(RelationId.of(join),
                         leftScope.getRelationFields().joinWith(rightScope.getRelationFields()));
             }
             join.setScope(scope);
             return scope;
+        }
+
+        private List<Field> getFieldsWithNullable(Scope scope) {
+            List<Field> newFields = new ArrayList<>();
+            for (Field field : scope.getRelationFields().getAllFields()) {
+                Field newField = new Field(field);
+                newField.setNullable(true);
+                newFields.add(newField);
+            }
+            return newFields;
         }
 
         private Expr analyzeJoinUsing(List<String> usingColNames, Scope left, Scope right) {
@@ -439,24 +462,24 @@ public class QueryAnalyzer {
         }
 
         private void analyzeJoinHints(JoinRelation join) {
-            if (join.getJoinHint().equalsIgnoreCase("BROADCAST")) {
+            if (JoinOperator.HINT_BROADCAST.equals(join.getJoinHint())) {
                 if (join.getJoinOp() == JoinOperator.RIGHT_OUTER_JOIN
                         || join.getJoinOp() == JoinOperator.FULL_OUTER_JOIN
                         || join.getJoinOp() == JoinOperator.RIGHT_SEMI_JOIN
                         || join.getJoinOp() == JoinOperator.RIGHT_ANTI_JOIN) {
                     throw new SemanticException(join.getJoinOp().toString() + " does not support BROADCAST.");
                 }
-            } else if (join.getJoinHint().equalsIgnoreCase("SHUFFLE")) {
+            } else if (JoinOperator.HINT_SHUFFLE.equals(join.getJoinHint())) {
                 if (join.getJoinOp() == JoinOperator.CROSS_JOIN ||
                         (join.getJoinOp() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
                     throw new SemanticException("CROSS JOIN does not support SHUFFLE.");
                 }
-            } else if ("BUCKET".equalsIgnoreCase(join.getJoinHint()) ||
-                    "COLOCATE".equalsIgnoreCase(join.getJoinHint())) {
+            } else if (JoinOperator.HINT_BUCKET.equals(join.getJoinHint()) ||
+                    JoinOperator.HINT_COLOCATE.equals(join.getJoinHint())) {
                 if (join.getJoinOp() == JoinOperator.CROSS_JOIN) {
                     throw new SemanticException("CROSS JOIN does not support " + join.getJoinHint() + ".");
                 }
-            } else {
+            } else if (!JoinOperator.HINT_UNREORDER.equals(join.getJoinHint())) {
                 throw new SemanticException("JOIN hint not recognized: " + join.getJoinHint());
             }
         }

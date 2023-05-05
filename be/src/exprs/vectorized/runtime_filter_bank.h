@@ -220,6 +220,7 @@ private:
     std::map<int32_t, RuntimeFilterProbeDescriptor*> _descriptors;
     int _wait_timeout_ms = 0;
     long _scan_wait_timeout_ms = 0L;
+    double _early_return_selectivity = 0.05;
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeBloomFilterEvalContext _eval_context;
     int _plan_node_id = -1;

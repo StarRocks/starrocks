@@ -2,7 +2,7 @@
 
 ## Description
 
-Shows all or one specific materialized view.
+Shows all or one specific asynchronous materialized view.
 
 ## Syntax
 
@@ -27,13 +27,29 @@ Parameters in brackets [] is optional.
 
 ## Returns
 
-| **Return**    | **Description**                                              |
-| ------------- | ------------------------------------------------------------ |
-| id            | The ID of the materialized view.                             |
-| name          | The name of the materialized view.                           |
-| database_name | The name of the database to which the materialized view resides. |
-| text          | The statement used to create the materialized view.          |
-| rows          | The rows of data in the materialized view.                   |
+| **Return**                 | **Description**                                              |
+| -------------------------- | ------------------------------------------------------------ |
+| id                         | The ID of the materialized view.                             |
+| database_name              | The name of the database in which the materialized view resides. |
+| name                       | The name of the materialized view.                           |
+| refresh_type               | The refresh type of the materialized view, including ROLLUP, MANNUL, ASYNC, and INCREMENTAL. |
+| is_active                  | Whether the materialized view state is active. Valid Value: `true` and `false`. |
+| partition_type             | The partition type of the materialized view, including RANGE and UNPARTITIONED.                |
+| task_id                    | ID of the materialized view refresh task.                  |
+| task_name                  | Name of the materialized view refresh task.                |
+| last_refresh_start_time    | The start time of the last refresh of the materialized view. |
+| last_refresh_finished_time | The end time of the last refresh of the materialized view.   |
+| last_refresh_duration      | The time taken by the last refresh. Unit: seconds.           |
+| last_refresh_state         | The status of the last refresh, including PENDING, RUNNING, FAILED, and SUCCESS. |
+| last_refresh_force_refresh | Whether the last refresh is a FORCE refresh.                 |
+| last_refresh_start_partition | The start partition of the last refresh in the materialized view. |
+| last_refresh_end_partition | The end partition of the last refresh in the materialized view. |
+| last_refresh_base_refresh_partitions | The base table partitions that were refreshed in the last refresh. |
+| last_refresh_mv_refresh_partitions | The materialized view partitions that were refreshed in the last refresh. |
+| last_refresh_error_code    | The error code for the last failed refresh of the materialized view (if the materialized view state is not active). |
+| last_refresh_error_message | The reason why the last refresh failed (if the materialized view state is not active). |
+| rows                       | The number of data rows in the materialized view.            |
+| text                       | The statement used to create the materialized view.          |
 
 ## Examples
 

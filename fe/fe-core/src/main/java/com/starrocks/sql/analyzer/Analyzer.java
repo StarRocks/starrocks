@@ -79,6 +79,7 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
+import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
@@ -458,6 +459,12 @@ public class Analyzer {
         }
 
         @Override
+        public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
+            CatalogAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
         public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
             DropStmtAnalyzer.analyze(statement, context);
             return null;
@@ -555,7 +562,6 @@ public class Analyzer {
             PauseRoutineLoadAnalyzer.analyze(statement, session);
             return null;
         }
-
 
         // ------------------------------------------- Cluster Management Statement ----------------------------------------
 

@@ -43,8 +43,6 @@ public:
 
     bool is_constant() const override { return true; }
 
-    bool low_cardinality() const override { return false; }
-
     const uint8_t* raw_data() const override { return _data->raw_data(); }
 
     uint8_t* mutable_raw_data() override { return reinterpret_cast<uint8_t*>(_data->mutable_raw_data()); }
@@ -87,7 +85,7 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
 
     virtual ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
 

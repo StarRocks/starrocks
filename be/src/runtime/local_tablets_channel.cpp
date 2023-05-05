@@ -378,12 +378,14 @@ void LocalTabletsChannel::_commit_tablets(const PTabletWriterAddChunkRequest& re
 }
 
 int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
-    int n = _num_remaining_senders.fetch_sub(1);
-    DCHECK_GE(n, 1);
     std::lock_guard l(_partitions_ids_lock);
     for (int i = 0; i < partitions_size; i++) {
         _partition_ids.insert(partitions[i]);
     }
+    // when replicated storage is true, the partitions of each sender will be different
+    // So we need to make sure that all partitions are added to _partition_ids when committing
+    int n = _num_remaining_senders.fetch_sub(1);
+    DCHECK_GE(n, 1);
     return n - 1;
 }
 
@@ -471,16 +473,19 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     for (size_t i = 0; i < tablet_ids.size(); ++i) {
         _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
     }
-    std::stringstream ss;
-    ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id()) << " open delta writer: ";
-    for (auto& [tablet_id, delta_writer] : _delta_writers) {
-        ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
+    if (_is_replicated_storage) {
+        std::stringstream ss;
+        ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id()) << " open "
+           << _delta_writers.size() << " delta writer: ";
+        for (auto& [tablet_id, delta_writer] : _delta_writers) {
+            ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
+        }
+        ss << " " << failed_tablet_ids.size() << " failed_tablets: ";
+        for (auto& tablet_id : failed_tablet_ids) {
+            ss << tablet_id << ",";
+        }
+        LOG(INFO) << ss.str();
     }
-    ss << " failed_tablets: ";
-    for (auto& tablet_id : failed_tablet_ids) {
-        ss << tablet_id << ",";
-    }
-    LOG(INFO) << ss.str();
     return Status::OK();
 }
 

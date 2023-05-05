@@ -6,19 +6,18 @@ This topic describes the resource group feature of StarRocks.
 
 With this feature, you could simultaneously run several workloads in a single cluster, including short query, ad-hoc query, ETL jobs, to save extra cost of deploying multiple clusters. From technical perspective, the execution engine would schedule concurrent workloads according to users' specification and isolate the interference among them.
 
-
 Roadmap of Resource Group feature:
-- Since v2.2, StarRocks supports limiting resource consumption for queries and implementing isolation and efficient use of resources among tenants in the same cluster. 
-- In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, to guarantee the system stability. 
-- StarRocks v2.5 supports resource group of data ingestio,
 
+- Since v2.2, StarRocks supports limiting resource consumption for queries and implementing isolation and efficient use of resources among tenants in the same cluster.
+- In StarRocks v2.3, you can further restrict the resource consumption for big queries, and prevent the cluster resources from getting exhausted by oversized query requests, to guarantee the system stability.
+- StarRocks v2.5 supports limiting computation resource consumption for data loading (INSERT).
 
-|  | Internal Table | External Table | Big Query Restriction| Short Query | Data Ingestion  | Schema Change |
-|---|---|---|---|---|---|---|
-| 2.2 | √ | × | × | × | × | × |
-| 2.3 | √ | √ | √ | √ | × | × |
-| 2.4 | √ | √ | √ | √ | × | × |
-| 2.5 | √ | √ | √ | √ | √ | × |
+|  | Internal Table | External Table | Big Query Restriction| Short Query | Data Ingestion  | Schema Change | INSERT |
+|---|---|---|---|---|---|---|---|
+| 2.2 | √ | × | × | × | × | × | × |
+| 2.3 | √ | √ | √ | √ | × | × | × |
+| 2.4 | √ | √ | √ | √ | × | × | × |
+| 2.5 | √ | √ | √ | √ | √ | × | √ |
 
 ## Terms
 
@@ -73,10 +72,9 @@ On the basis of the above resource consumption restrictions, you can further res
 >
 > When a query running in a resource group exceeds the above big query limit, the query will be terminated with an error. You can also view error messages in the `ErrorCode` column of the FE node **fe.audit.log**.
 
-You can set the resource group `type` to `short_query`, `insert`, or `normal`.
+You can set the resource group `type` to `short_query`, or `normal`.
 
 - The default value is `normal`. You do not need specify `normal` in the parameter `type`.
-- When loading tasks hit a `insert` resource group, the BE node reserves the specified CPU resources for the loading tasks.
 - When queries hit a `short_query` resource group, the BE node reserves the CPU resource specified in `short_query.cpu_core_limit`. The CPU resource reserved for queries that hit `normal` resource group is limited to `BE core - short_query.cpu_core_limit`.
 - When no query hits the `short_query` resource group, no limit is imposed to the resource of `normal` resource group.
 
@@ -93,7 +91,7 @@ Classifiers support the following conditions:
 
 - `user`: the name of the user.
 - `role`: the role of the user.
-- `query_type`: the type of the query. `SELECT` and `INSERT` are supported.
+- `query_type`: the type of the query. `SELECT` and `INSERT` (from v2.5) are supported. When INSERT tasks hit a resource group with `query_type` as `insert`, the BE node reserves the specified CPU resources for the tasks.
 - `source_ip`: the CIDR block from which the query is initiated.
 - `db`: the database which the query accesses. It can be specified by strings separated by commas `,`.
 
@@ -105,7 +103,7 @@ A classifier matches a query only when one or all conditions of the classifier m
 >
 > If a query does not hit any classifiers, the default resource group `default_wg` is used. The resource limits of `default_wg` are as follows:
 >
-> - `cpu_core_limit`: 1 (<= v2.3.7) or the number of CPU cores in BE（> v2.3.7)
+> - `cpu_core_limit`: 1 (<= v2.3.7) or the number of CPU cores in BE (> v2.3.7)
 > - `mem_limit`: 100%
 > - `concurrency_limit`: 0
 > - `big_query_cpu_second_limit`: 0
@@ -139,9 +137,9 @@ If multiple matching classifiers have the same number of conditions, the classif
 classifier A (user='Alice', source_ip = '192.168.1.0/16')
 classifier B (user='Alice', source_ip = '192.168.1.0/24')
 
--- Classifier C has fewer query types specified in it than Classifier D. Therefore, Classifier has a higher degree of matching than Classifier D.
+-- Classifier C has fewer query types specified in it than Classifier D. Therefore, Classifier C has a higher degree of matching than Classifier D.
 classifier C (user='Alice', query_type in ('select'))
-classifier D (user='Alice', query_type in ('insert','select', 'ctas')）
+classifier D (user='Alice', query_type in ('insert','select'))
 ```
 
 ## Isolate computing resources
@@ -173,7 +171,7 @@ TO (
     role='string', 
     query_type in ('select'), 
     source_ip='cidr'
-) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (,).
+) --Create a classifier. If you create more than one classifier, separate the classifiers with commas (`,`).
 WITH (
     "cpu_core_limit" = "INT",
     "mem_limit" = "m%",
@@ -226,7 +224,7 @@ SHOW RESOURCE GROUPS;
 Execute the following statement to query a specified resource group and its classifiers:
 
 ```SQL
-SHOW RESOURCE GROUP group_name；
+SHOW RESOURCE GROUP group_name;
 ```
 
 Example:

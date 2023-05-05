@@ -30,6 +30,8 @@ OPTS=$(getopt \
     -l 'daemon' \
     -l 'cn' \
     -l 'be' \
+    -l 'logconsole' \
+    -l numa: \
 -- "$@")
 
 eval set -- "$OPTS"
@@ -37,14 +39,18 @@ eval set -- "$OPTS"
 RUN_DAEMON=0
 RUN_CN=0
 RUN_BE=0
+RUN_NUMA="-1"
+RUN_LOG_CONSOLE=0
 
 while true; do
     case "$1" in
         --daemon) RUN_DAEMON=1 ; shift ;;
         --cn) RUN_CN=1; RUN_BE=0; shift ;;
         --be) RUN_BE=1; RUN_CN=0; shift ;;
+        --logconsole) RUN_LOG_CONSOLE=1 ; shift ;;
+        --numa) RUN_NUMA=$2; shift 2 ;;
         --) shift ;  break ;;
-        *) ehco "Internal error" ; exit 1 ;;
+        *) echo "Internal error" ; exit 1 ;;
     esac
 done
 
@@ -108,6 +114,15 @@ if [[ "$JAVA_VERSION" -gt 8 ]]; then
     fi
 fi
 
+# check NUMA setting
+NUMA_CMD=""
+if [[ "${RUN_NUMA}" -ne "-1" ]]; then
+    set -e
+    NUMA_CMD="numactl --cpubind ${RUN_NUMA} --membind ${RUN_NUMA}"
+    ${NUMA_CMD} echo "Running on NUMA ${RUN_NUMA}"
+    set +e
+fi
+
 export LIBHDFS_OPTS=$final_java_opt
 # Prevent JVM from handling any internally or externally generated signals.
 # Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.
@@ -158,23 +173,24 @@ if [[ $(ulimit -n) -lt 60000 ]]; then
     ulimit -n 65535
 fi
 
-if [ ${RUN_BE} -eq 1 ]; then
-    echo "start time: "$(date) >> $LOG_DIR/be.out
-    if [ ${RUN_DAEMON} -eq 1 ]; then
-        nohup ${STARROCKS_HOME}/lib/starrocks_be "$@" >> $LOG_DIR/be.out 2>&1 </dev/null &
-    else
-        ${STARROCKS_HOME}/lib/starrocks_be "$@" >> $LOG_DIR/be.out 2>&1 </dev/null
-    fi
-fi
-
+START_BE_CMD="${NUMA_CMD} ${STARROCKS_HOME}/lib/starrocks_be"
+LOG_FILE=$LOG_DIR/be.out
 if [ ${RUN_CN} -eq 1 ]; then
-    echo "start time: "$(date) >> $LOG_DIR/cn.out
-    if [ ${RUN_DAEMON} -eq 1 ]; then
-        nohup ${STARROCKS_HOME}/lib/starrocks_be --cn "$@" >> $LOG_DIR/cn.out 2>&1 </dev/null &
-    else
-        exec ${STARROCKS_HOME}/lib/starrocks_be --cn "$@" >> $LOG_DIR/cn.out 2>&1 </dev/null
-    fi
+    START_BE_CMD="${START_BE_CMD} --cn"
+    LOG_FILE=${LOG_DIR}/cn.out
 fi
 
+if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
+    # force glog output to console (stderr)
+    export GLOG_logtostderr=1
+else
+    # redirect stdout/stderr to ${LOG_FILE}
+    exec &>> ${LOG_FILE}
+fi
 
-
+echo "start time: "$(date)
+if [ ${RUN_DAEMON} -eq 1 ]; then
+    nohup ${START_BE_CMD} "$@" </dev/null &
+else
+    exec ${START_BE_CMD} "$@" </dev/null
+fi

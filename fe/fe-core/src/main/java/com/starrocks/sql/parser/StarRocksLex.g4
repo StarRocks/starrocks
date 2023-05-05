@@ -1,7 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 lexer grammar StarRocksLex;
-@parser::members {public static long sqlMode;}
+@members {
+private long sqlMode = com.starrocks.qe.SqlModeHelper.MODE_DEFAULT;
+public void setSqlMode(long newSqlMode) {
+    sqlMode = newSqlMode;
+}
+}
 tokens {
     CONCAT
 }
@@ -241,6 +246,7 @@ PLUGIN: 'PLUGIN';
 PLUGINS: 'PLUGINS';
 PRECEDING: 'PRECEDING';
 PRIMARY: 'PRIMARY';
+PRIVILEGES: 'PRIVILEGES';
 PROC: 'PROC';
 PROCEDURE: 'PROCEDURE';
 PROCESSLIST: 'PROCESSLIST';
@@ -359,6 +365,10 @@ WITH: 'WITH';
 WORK: 'WORK';
 WRITE: 'WRITE';
 YEAR: 'YEAR';
+CURRENT_CATALOG: 'CURRENT_CATALOG';
+LOCK: 'LOCK';
+UNLOCK: 'UNLOCK';
+LOW_PRIORITY: 'LOW_PRIORITY';
 
 EQ  : '=';
 NEQ : '<>' | '!=';
@@ -374,7 +384,7 @@ ASTERISK_SYMBOL: '*';
 SLASH_SYMBOL: '/';
 PERCENT_SYMBOL: '%';
 
-LOGICAL_OR: '||' {setType((StarRocksParser.sqlMode & com.starrocks.qe.SqlModeHelper.MODE_PIPES_AS_CONCAT) == 0 ? LOGICAL_OR : StarRocksParser.CONCAT);};
+LOGICAL_OR: '||' {setType((sqlMode & com.starrocks.qe.SqlModeHelper.MODE_PIPES_AS_CONCAT) == 0 ? LOGICAL_OR : StarRocksParser.CONCAT);};
 LOGICAL_AND: '&&';
 LOGICAL_NOT: '!';
 

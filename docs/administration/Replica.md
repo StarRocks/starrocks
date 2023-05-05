@@ -8,7 +8,7 @@
 * TabletChecker (TC): A resident background thread that periodically scans all Tablets and decides whether to send tablets to TabletScheduler based on their status.
 * TabletScheduler (TS): A resident background thread that processes tablets sent by TabletChecker, and also performs cluster replica balancing.
 * TabletSchedCtx (TSC): A wrapper for a tablet. When a tablet is selected by TC, it is encapsulated as a TSC and sent to TS.
-* Storage Medium：StarRocks supports different storage media for partition granularity, including SSD and HDD. The scheduling of replicas varies for different storage media.
+* Storage Medium: StarRocks supports different storage media for partition granularity, including SSD and HDD. The scheduling of replicas varies for different storage media.
 
 ## Status
 

@@ -2,7 +2,7 @@
 
 ## Description
 
-Alters the name or refresh strategy of a materialized view.
+Alters the name or refresh strategy of an asynchronous materialized view.
 
 ## Syntax
 

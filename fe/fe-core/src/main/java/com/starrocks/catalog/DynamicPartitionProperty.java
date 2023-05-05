@@ -165,7 +165,9 @@ public class DynamicPartitionProperty {
         sb.append(START + ":" + start + ",");
         sb.append(END + ":" + end + ",");
         sb.append(PREFIX + ":" + prefix + ",");
-        sb.append(BUCKETS + ":" + buckets + ",");
+        if (buckets > 0) {
+            sb.append(BUCKETS + ":" + buckets + ",");
+        }
         if (replicationNum != NOT_SET_REPLICATION_NUM) {
             sb.append(REPLICATION_NUM + ":" + replicationNum + ",");
         }
@@ -186,8 +188,11 @@ public class DynamicPartitionProperty {
                 + ",\n\"" + TIME_ZONE + "\" = \"" + tz.getID() + "\""
                 + ",\n\"" + START + "\" = \"" + start + "\""
                 + ",\n\"" + END + "\" = \"" + end + "\""
-                + ",\n\"" + PREFIX + "\" = \"" + prefix + "\""
-                + ",\n\"" + BUCKETS + "\" = \"" + buckets + "\"";
+                + ",\n\"" + PREFIX + "\" = \"" + prefix + "\"";
+        if (buckets > 0) {
+            res += ",\n\"" + BUCKETS + "\" = \"" + buckets + "\"";
+        }
+        res += ",\n\"" + HISTORY_PARTITION_NUM + "\" = \"" + historyPartitionNum + "\"";
         if (replicationNum != NOT_SET_REPLICATION_NUM) {
             res += ",\n\"" + REPLICATION_NUM + "\" = \"" + replicationNum + "\"";
         }

@@ -237,11 +237,11 @@ To synchronize data from MySQL in real time, the system needs to read data from 
     flink-create.all.sql  starrocks-create.1.sql
     ```
 
-3. Run the following command to connect to StarRocks and execute the `starrocks-create.all.sql` file to create a database and table in StarRocks. We recommend that you use the default table creation statement in the SQL file to create a table of the [Primary Key model](../table_design/Data_model.md#primary-key-model).
+3. Run the following command to connect to StarRocks and execute the `starrocks-create.all.sql` file to create a database and table in StarRocks. We recommend that you use the default table creation statement in the SQL file to create a table of the [Primary Key table](../table_design/table_types/primary_key_table.md).
 
     > **Note**
     >
-    > You can also modify the table creation statement based on your business needs and create a table that does not use the Primary Key model. However, the DELETE operation in the source MySQL database cannot be synchronized to the non-primary key table. Exercise caution when you create such a table.
+    > You can also modify the table creation statement based on your business needs and create a table that does not use the Primary Key table. However, the DELETE operation in the source MySQL database cannot be synchronized to the non-primary key table. Exercise caution when you create such a table.
 
     ```Bash
     mysql -h <fe_host> -P <fe_query_port> -u user2 -pxxxxxx < starrocks-create.all.sql

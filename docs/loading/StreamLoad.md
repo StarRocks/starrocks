@@ -35,7 +35,7 @@ You can use the `streaming_load_max_mb` parameter to specify the maximum size of
 > For CSV data, take note of the following points:
 >
 > - You can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
-> - Null values are denoted by using `\\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\\N` in the second column to denote a null value. This means the record must be compiled as `a,\\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
+> - Null values are denoted by using `\N`. For example, a data file consists of three columns, and a record from that data file holds data in the first and third columns but no data in the second column. In this situation, you need to use `\N` in the second column to denote a null value. This means the record must be compiled as `a,\N,b` instead of `a,,b`. `a,,b` denotes that the second column of the record holds an empty string.
 
 ## Limits
 
@@ -67,7 +67,7 @@ Note that in StarRocks some literals are used as reserved keywords by the SQL la
 
 ##### Data examples
 
-1. In your StarRocks database `test_db`, create a table named `table1` that uses the Primary Key model. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+1. In your StarRocks database `test_db`, create a table named `table1` that uses the Primary Key table. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table1`
@@ -125,7 +125,7 @@ MySQL [test_db]> SELECT * FROM table1;
 
 ##### Data examples
 
-1. In your StarRocks database `test_db`, create a table named `table2` that uses the Primary Key model. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
+1. In your StarRocks database `test_db`, create a table named `table2` that uses the Primary Key table. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
 
    ```SQL
    MySQL [test_db]> CREATE TABLE `table2`

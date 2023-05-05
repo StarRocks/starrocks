@@ -190,6 +190,7 @@ public:
     size_t total_row_size() const { return rowset_meta()->total_row_size(); }
     Version version() const { return rowset_meta()->version(); }
     RowsetId rowset_id() const { return rowset_meta()->rowset_id(); }
+    std::string rowset_id_str() const { return rowset_meta()->rowset_id().to_string(); }
     int64_t creation_time() const { return rowset_meta()->creation_time(); }
     PUniqueId load_id() const { return rowset_meta()->load_id(); }
     int64_t txn_id() const { return rowset_meta()->txn_id(); }
@@ -252,6 +253,8 @@ public:
     void set_need_delete_file() { _need_delete_file = true; }
 
     bool contains_version(Version version) const { return rowset_meta()->version().contains(version); }
+
+    DeletePredicatePB* mutable_delete_predicate() { return _rowset_meta->mutable_delete_predicate(); }
 
     static bool comparator(const RowsetSharedPtr& left, const RowsetSharedPtr& right) {
         return left->end_version() < right->end_version();

@@ -60,7 +60,6 @@ public class ColumnType {
 
     static {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("byte", TypeValue.BYTE);
-        PRIMITIVE_TYPE_VALUE_MAPPING.put("bool", TypeValue.BOOLEAN);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("boolean", TypeValue.BOOLEAN);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("short", TypeValue.SHORT);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("int", TypeValue.INT);
@@ -71,8 +70,8 @@ public class ColumnType {
         PRIMITIVE_TYPE_VALUE_MAPPING.put("binary", TypeValue.BINARY);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("date", TypeValue.DATE);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp", TypeValue.DATETIME);
-        PRIMITIVE_TYPE_VALUE_MAPPING.put("TimestampMicros", TypeValue.DATETIME_MICROS);
-        PRIMITIVE_TYPE_VALUE_MAPPING.put("TimestampMillis", TypeValue.DATETIME_MILLIS);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-micros", TypeValue.DATETIME_MICROS);
+        PRIMITIVE_TYPE_VALUE_MAPPING.put("timestamp-millis", TypeValue.DATETIME_MILLIS);
         PRIMITIVE_TYPE_VALUE_MAPPING.put("decimal", TypeValue.DECIMAL);
 
         PRIMITIVE_TYPE_VALUE_SIZE.put(TypeValue.BYTE, 1);

@@ -1095,7 +1095,7 @@ TEST_F(OrcChunkReaderTest, TestReadArrayDecimal) {
     type_array.children.emplace_back(TypeDescriptor::create_decimalv3_type(TYPE_DECIMAL64, 9, 9));
 
     SlotDesc slot_descs[] = {
-            {"id",  TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {"arr", type_array},
             {""},
     };
@@ -1715,9 +1715,8 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
                 "[2, [{c11:3,c12:['danny2','Smith3']},{c11:5,c12:['poal','alan']}], "
                 "[{2:{c21:12,c22:'hi2'}},{6:{c21:24,c22:'p5'}}]]",
                 result->debug_row(1));
-        EXPECT_EQ(
-                "[3, [{c11:4,c12:['danny3']},{c11:6,c12:['poal']}], [{3:{c21:13,c22:'hi3'}},{7:{c21:25,c22:'p6'}}]]",
-                result->debug_row(2));
+        EXPECT_EQ("[3, [{c11:4,c12:['danny3']},{c11:6,c12:['poal']}], [{3:{c21:13,c22:'hi3'}},{7:{c21:25,c22:'p6'}}]]",
+                  result->debug_row(2));
         EXPECT_EQ(
                 "[4, [{c11:5,c12:['danny4','Smith5']},{c11:7,c12:['poal','alan']}], "
                 "[{4:{c21:14,c22:'hi4'}},{8:{c21:26,c22:'p7'}}]]",
@@ -1795,9 +1794,10 @@ TEST_F(OrcChunkReaderTest, TestReadStructArrayMap) {
                 "[2, [{c11:3,c12:['danny2','Smith3']},{c11:5,c12:['poal','alan']}], "
                 "[{2:{c22:'hi2'}},{6:{c22:'p5'}}]]",
                 result->debug_row(1));
-        EXPECT_EQ("[3, [{c11:4,c12:['danny3']},{c11:6,c12:['poal']}], "
+        EXPECT_EQ(
+                "[3, [{c11:4,c12:['danny3']},{c11:6,c12:['poal']}], "
                 "[{3:{c22:'hi3'}},{7:{c22:'p6'}}]]",
-                  result->debug_row(2));
+                result->debug_row(2));
         EXPECT_EQ(
                 "[4, [{c11:5,c12:['danny4','Smith5']},{c11:7,c12:['poal','alan']}], "
                 "[{4:{c22:'hi4'}},{8:{c22:'p7'}}]]",

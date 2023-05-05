@@ -289,7 +289,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testCaseWhen() throws Exception {
         String sql = "SELECT v1 FROM t0 WHERE CASE WHEN (v1 IS NOT NULL) THEN NULL END";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("PREDICATES: if(1: v1 IS NOT NULL, NULL, NULL)"));
+        Assert.assertTrue(plan.contains("0:EMPTYSET"));
     }
 
     @Test
@@ -587,20 +587,76 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testReuseNestedHighOrderLambdaFunctions() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE action1(uid int(11), event_type varchar(65533), time datetime)" +
+                " duplicate key(uid, event_type) distributed by hash(uid) buckets 1 " +
+                "properties('replication_num'='1');");
+        starRocksAssert.withTable("create table test_array23(c0 INT, c1 array<varchar(65533)>, c2 array<int>) " +
+                " duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
+        String sql = "WITH `CASE_006` AS\n" +
+                "  (SELECT array_map((arg_001) -> (arg_001), `c1`) AS `argument_003`,\n" +
+                "          array_map((arg_002) -> (CAST(1 AS BIGINT)), `c1`) AS `argument_004`\n" +
+                "   FROM test_array23)\n" +
+                "\n" +
+                "select argument_004, ARRAY_FILTER((x, y) -> y IS NOT NULL, " +
+                "`argument_003`, `argument_004`) AS `source_target_005` from CASE_006;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 14> : array_map(<slot 5> -> 1, 8: c1)");
+
+        sql = "WITH `CASE_006` AS\n" +
+                "  (SELECT array_map((arg_001) -> (arg_001), `c1`) AS `argument_003`,\n" +
+                "          array_map((arg_002) -> (arg_002 + 1), `c1`) AS `argument_004`\n" +
+                "   FROM test_array23)\n" +
+                "\n" +
+                "select argument_004, ARRAY_FILTER((x, y) -> y IS NOT NULL, " +
+                "`argument_003`, `argument_004`) AS `source_target_005` from CASE_006;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 14> : array_map(<slot 5> -> CAST(<slot 5> AS DOUBLE) + 1.0, 8: c1)");
+
+        sql = "SELECT uid, times, actions, step0_time, step1_time, array_filter((x, y)->(y = '支付' AND (x BETWEEN " +
+                "step1_time AND date_add(step1_time, INTERVAL 90 MINUTE)) AND (step1_time <> '2020-01-01 00:00:00')" +
+                " ), times, actions)[1] AS step2_time FROM (SELECT uid, times, actions, step0_time, array_filter( " +
+                "(x, y)-> (y = '下单' AND (x BETWEEN step0_time AND date_add(step0_time, INTERVAL 90 MINUTE)) AND " +
+                "(step0_time <> '2020-01-01 00:00:00' ) ), times, actions)[1] AS step1_time FROM (SELECT uid, times" +
+                ", actions, array_filter((x, y) -> (y= '浏览' AND x BETWEEN '2020-01-02 00:00:00' AND " +
+                "'2020-01-02 23:59:59'), times, actions)[1] AS step0_time FROM (SELECT uid, " +
+                "array_sort(array_agg(time)) AS times, array_sortby(array_agg(event_type), array_agg(time)) " +
+                "AS actions FROM action1 GROUP BY uid) AS t ) AS t1) AS t2;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  |  common expressions:\n" +
+                "  |  <slot 17> : array_sort(4: array_agg)\n" +
+                "  |  <slot 18> : array_sortby(5: array_agg, 4: array_agg)\n" +
+                "  |  <slot 19> : array_map((<slot 8>, <slot 9>) -> (<slot 9> = '浏览') AND ((<slot 8> >= " +
+                "'2020-01-02 00:00:00') AND (<slot 8> <= '2020-01-02 23:59:59'))," +
+                " 17: array_sort, 18: array_sortby)\n" +
+                "  |  <slot 20> : array_filter(17: array_sort, 19: array_map)\n" +
+                "  |  <slot 21> : 20: array_filter[1]\n" +
+                "  |  <slot 22> : minutes_add(21: expr, 90)\n" +
+                "  |  <slot 23> : 21: expr != '2020-01-01 00:00:00'\n" +
+                "  |  <slot 24> : array_map((<slot 11>, <slot 12>) -> ((<slot 12> = '下单') AND ((<slot 11> >= 21:" +
+                " expr) AND (<slot 11> <= 22: minutes_add))) AND (23: expr), 17: array_sort, 18: array_sortby)\n" +
+                "  |  <slot 25> : array_filter(17: array_sort, 24: array_map)\n" +
+                "  |  <slot 26> : 25: array_filter[1]");
+    }
+
+    @Test
     public void testLambdaWithAggAndWindowFunctions() throws Exception {
-        starRocksAssert.withTable("create table if not exists test_array " +
+        starRocksAssert.withTable("create table if not exists test_array12 " +
                 "(c0 INT,c1 int, c2 array<int>) " +
                 " duplicate key(c0) distributed by hash(c0) buckets 1 " +
                 "properties('replication_num'='1');");
         // aggregations
-        String sql = "select array_agg(array_length(array_map(x->x*2, c2))) from test_array";
+        String sql = "select array_agg(array_length(array_map(x->x*2, c2))) from test_array12";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("  2:AGGREGATE (update finalize)\n" +
                 "  |  output: array_agg(5: array_length)"));
         Assert.assertTrue(plan.contains("  1:Project\n" +
                 "  |  <slot 5> : array_length(array_map(<slot 4> -> CAST(<slot 4> AS BIGINT) * 2, 3: c2))"));
 
-        sql = "select array_map(x->x > count(c1), c2) from test_array group by c2";
+        sql = "select array_map(x->x > count(c1), c2) from test_array12 group by c2";
         plan = getFragmentPlan(sql);
 
         Assert.assertTrue(plan.contains("  2:Project\n" +
@@ -610,12 +666,12 @@ public class ExpressionTest extends PlanTestBase {
                 "  |  group by: 3: c2"));
 
         // window functions
-        sql = "select count(c1) over (partition by array_sum(array_map(x->x+1, [1]))) from test_array";
+        sql = "select count(c1) over (partition by array_sum(array_map(x->x+1, [1]))) from test_array12";
         plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  4:ANALYTIC\n" +
+        Assert.assertTrue(plan.contains("  3:ANALYTIC\n" +
                 "  |  functions: [, count(6: c1), ]\n" +
                 "  |  partition by: 8: array_sum"));
-        Assert.assertTrue(plan.contains("  3:SORT\n" +
+        Assert.assertTrue(plan.contains("  2:SORT\n" +
                 "  |  order by: <slot 8> 8: array_sum ASC\n" +
                 "  |  offset:"));
         Assert.assertTrue(plan.contains("  1:Project\n" +
@@ -1170,6 +1226,11 @@ public class ExpressionTest extends PlanTestBase {
         assertContains(plan, "predicates: 11: rank() > 1");
 
         sql = "select tc from tall qualify dense_rank() OVER(PARTITION by ta order by tg) > 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "predicates: 11: dense_rank() > 1");
+
+        // for alias
+        sql = "select ta as col1 from tall qualify dense_rank() OVER(PARTITION by ta order by tg) > 1;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "predicates: 11: dense_rank() > 1");
     }

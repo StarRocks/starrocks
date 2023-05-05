@@ -1,0 +1,22 @@
+
+commands_restrictions:
+  backport:
+    conditions:
+      - sender-permission>=read
+
+pull_request_rules:
+  - name: assign PRs with the pr author
+    conditions:
+      - -merged
+    actions:
+      assign:
+        add_users: 
+          - "{{author}}"
+  - name: close pr when conflict
+    conditions:
+      - label=conflicts
+      - author=mergify
+    actions:
+      close:
+        message:
+          "Backport conflict, please reslove the conflict and resubmit the pr"

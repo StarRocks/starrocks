@@ -7,6 +7,7 @@
 
 #include "common/status.h"
 #include "common/tracer.h"
+#include "exec/vectorized/schema_scanner/schema_be_tablets_scanner.h"
 #include "gen_cpp/MasterService_types.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/stl_util.h"
@@ -218,33 +219,59 @@ Status TabletUpdates::_load_from_pb(const TabletUpdatesPB& tablet_updates_pb) {
 
     // Load delete vectors and update RowsetStats.
     // TODO: save num_dels in rowset meta.
+
+    std::unordered_map<uint32_t, ssize_t> del_vector_cardinality_by_rssid;
+    for (auto& [rsid, rowset] : _rowsets) {
+        if (unapplied_rowsets.find(rsid) == unapplied_rowsets.end()) {
+            for (uint32_t i = 0; i < rowset->num_segments(); i++) {
+                del_vector_cardinality_by_rssid[rsid + i] = -1;
+            }
+        }
+    }
+
+    RETURN_IF_ERROR(TabletMetaManager::del_vector_iterate(
+            _tablet.data_dir()->get_meta(), _tablet.tablet_id(), 0, UINT32_MAX,
+            [&](uint32_t segment_id, int64_t version, std::string_view value) -> bool {
+                auto iter = del_vector_cardinality_by_rssid.find(segment_id);
+                if (iter == del_vector_cardinality_by_rssid.end()) {
+                    return true;
+                }
+                if (iter->second == -1) {
+                    DelVectorPtr delvec = std::make_shared<DelVector>();
+                    if (!delvec->load(version, value.data(), value.size()).ok()) {
+                        return false;
+                    }
+                    iter->second = delvec->cardinality();
+                }
+                return true;
+            }));
+
     for (auto& [rsid, rowset] : _rowsets) {
         auto stats = std::make_unique<RowsetStats>();
         stats->num_segments = rowset->num_segments();
         stats->num_rows = rowset->num_rows();
         stats->byte_size = rowset->data_disk_size();
         stats->num_dels = 0;
+        // the unapplied rowsets have no delete vector yet, so we only need to check the applied rowsets
         if (unapplied_rowsets.find(rsid) == unapplied_rowsets.end()) {
-            // rowset applied, must have delvec
             for (int i = 0; i < rowset->num_segments(); i++) {
-                DelVector delvec;
-                int64_t dummy;
-                auto st = TabletMetaManager::get_del_vector(_tablet.data_dir()->get_meta(), _tablet.tablet_id(),
-                                                            rsid + i, INT64_MAX, &delvec, &dummy);
-                if (!st.ok()) {
-                    std::string msg = Substitute("_load_from_pb get_del_vector failed: $0", st.to_string());
-                    _set_error(msg);
+                auto itr = del_vector_cardinality_by_rssid.find(rsid + i);
+                if (itr != del_vector_cardinality_by_rssid.end() && itr->second != -1) {
+                    stats->num_dels += itr->second;
+                } else {
+                    std::string msg = strings::Substitute("delvec not found for rowset $0 segment $1", rsid, i);
                     LOG(ERROR) << msg;
-                    return Status::OK();
+                    return Status::InternalError(msg);
                 }
-                stats->num_dels += delvec.cardinality();
             }
-            DCHECK_LE(stats->num_dels, stats->num_rows) << " tabletid:" << _tablet.tablet_id() << " rowset:" << rsid;
         }
+        DCHECK_LE(stats->num_dels, stats->num_rows) << " tabletid:" << _tablet.tablet_id() << " rowset:" << rsid;
         _calc_compaction_score(stats.get());
         std::lock_guard lg(_rowset_stats_lock);
         _rowset_stats.emplace(rsid, std::move(stats));
     }
+    del_vector_cardinality_by_rssid.clear();
+
     l2.unlock(); // _rowsets_lock
     _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
     VLOG(1) << "load tablet " << _debug_string(false, true);
@@ -1365,6 +1392,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
 }
 
 void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info) {
+    DeferOp defer([&]() { _compaction_running = false; });
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace_tablet("apply_compaction", _tablet.tablet_id()));
     // NOTE: after commit, apply must success or fatal crash
     auto info = version_info.compaction.get();
@@ -1692,7 +1720,16 @@ int64_t TabletUpdates::get_compaction_score() {
         }
         if (_apply_version_idx + 2 < _edit_version_infos.size() || _pending_commits.size() >= 2) {
             // has too many pending tasks, skip compaction
-            return -1;
+            size_t version_count = _edit_version_infos.back()->rowsets.size() + _pending_commits.size();
+            if (version_count > config::tablet_max_versions) {
+                LOG(INFO) << strings::Substitute(
+                        "Try to do compaction because of too many versions. tablet_id:$0 "
+                        "version_count:$1 limit:$2 applied_version_idx:$3 edit_version_infos:$4 pending:$5",
+                        _tablet.tablet_id(), version_count, config::tablet_max_versions, _apply_version_idx,
+                        _edit_version_infos.size(), _pending_commits.size());
+            } else {
+                return -1;
+            }
         }
         for (size_t i = _apply_version_idx + 1; i < _edit_version_infos.size(); i++) {
             if (_edit_version_infos[i]->compaction) {
@@ -1761,7 +1798,6 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
         return Status::InternalError("illegal state: another compaction is running");
     }
-    DeferOp defer([&]() { _compaction_running = false; });
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     vector<uint32_t> rowsets;
     {
@@ -1839,6 +1875,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     }
     if (info->inputs.empty()) {
         LOG(INFO) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
+        _compaction_running = false;
         return Status::OK();
     }
     std::sort(info->inputs.begin(), info->inputs.end());
@@ -1856,6 +1893,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
 
     Status st = _do_compaction(&info);
     if (!st.ok()) {
+        _compaction_running = false;
         _last_compaction_failure_millis = UnixMillis();
     } else {
         _last_compaction_success_millis = UnixMillis();
@@ -1872,7 +1910,6 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
     if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
         return Status::InternalError("illegal state: another compaction is running");
     }
-    DeferOp defer([&]() { _compaction_running = false; });
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
     std::unordered_set<uint32_t> all_rowsets;
     {
@@ -1880,6 +1917,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
         if (_edit_version_infos.empty()) {
             string msg = Substitute("tablet deleted when compaction tablet:$0", _tablet.tablet_id());
             LOG(WARNING) << msg;
+            _compaction_running = false;
             return Status::InternalError(msg);
         }
         // 1. start compaction at current apply version
@@ -1919,6 +1957,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
     }
     if (info->inputs.empty()) {
         LOG(INFO) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
+        _compaction_running = false;
         return Status::OK();
     }
     // do not reset _last_compaction_time_ms so we can continue doing compaction
@@ -1934,6 +1973,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
 
     Status st = _do_compaction(&info);
     if (!st.ok()) {
+        _compaction_running = false;
         _last_compaction_failure_millis = UnixMillis();
     } else {
         _last_compaction_success_millis = UnixMillis();
@@ -2125,6 +2165,7 @@ void TabletUpdates::get_tablet_info_extra(TTabletInfo* info) {
     info->__set_version_count(rowsets.size());
     info->__set_row_count(total_row);
     info->__set_data_size(total_size);
+    info->__set_is_error_state(_error);
 }
 
 int64_t TabletUpdates::get_average_row_size() {
@@ -2300,7 +2341,8 @@ Status TabletUpdates::get_applied_rowsets(int64_t version, std::vector<RowsetSha
                            _tablet.tablet_id(), _error_msg));
     }
     std::unique_lock<std::mutex> ul(_lock);
-    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 60000, ul));
+    // wait for version timeout 55s, should smaller than exec_plan_fragment rpc timeout(60s)
+    RETURN_IF_ERROR(_wait_for_version(EditVersion(version, 0), 55000, ul));
     if (_edit_version_infos.empty()) {
         string msg = Substitute("tablet deleted when get_applied_rowsets tablet:$0", _tablet.tablet_id());
         LOG(WARNING) << msg;
@@ -2354,6 +2396,15 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
                      << " tablet:" << _tablet.tablet_id() << " base_tablet:" << base_tablet->tablet_id();
         return Status::InternalError("link_from: max_version < request version");
     }
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "link_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        std::unique_lock wrlock(_tablet.get_header_lock());
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
+        return Status::OK();
+    }
     vector<RowsetSharedPtr> rowsets;
     EditVersion version;
     Status st = base_tablet->updates()->get_applied_rowsets(request_version, &rowsets, &version);
@@ -2364,6 +2415,8 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
     }
 
     // disable compaction temporarily when tablet just loaded
+    int64_t prev_last_compaction_time_ms = _last_compaction_time_ms;
+    DeferOp op([&] { _last_compaction_time_ms = prev_last_compaction_time_ms; });
     _last_compaction_time_ms = UnixMillis();
 
     // 1. construct new rowsets
@@ -2448,6 +2501,14 @@ Status TabletUpdates::link_from(Tablet* base_tablet, int64_t request_version) {
     }
 
     std::unique_lock wrlock(_tablet.get_header_lock());
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "link_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
+        return Status::OK();
+    }
     st = kv_store->write_batch(&wb);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to delete old meta and write new meta" << tablet_id << ": " << st;
@@ -2489,6 +2550,15 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
                      << " base_tablet:" << base_tablet->tablet_id();
         return Status::InternalError("convert_from: max_version < request_version");
     }
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "convert_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        std::unique_lock wrlock(_tablet.get_header_lock());
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
+        return Status::OK();
+    }
     std::vector<RowsetSharedPtr> src_rowsets;
     EditVersion version;
     Status status = base_tablet->updates()->get_applied_rowsets(request_version, &src_rowsets, &version);
@@ -2499,6 +2569,8 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     }
 
     // disable compaction temporarily when tablet just loaded
+    int64_t prev_last_compaction_time_ms = _last_compaction_time_ms;
+    DeferOp op([&] { _last_compaction_time_ms = prev_last_compaction_time_ms; });
     _last_compaction_time_ms = UnixMillis();
 
     auto kv_store = _tablet.data_dir()->get_meta();
@@ -2610,6 +2682,14 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     }
 
     std::unique_lock wrlock(_tablet.get_header_lock());
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "convert_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
+        return Status::OK();
+    }
     status = kv_store->write_batch(&wb);
     if (!status.ok()) {
         LOG(WARNING) << "Fail to delete old meta and write new meta" << tablet_id << ": " << status;
@@ -2696,6 +2776,15 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
                      << " base_tablet:" << base_tablet->tablet_id();
         return Status::InternalError("reorder_from: max_version < request_version");
     }
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "reorder_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        std::unique_lock wrlock(_tablet.get_header_lock());
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
+        return Status::OK();
+    }
     std::vector<RowsetSharedPtr> src_rowsets;
     EditVersion version;
     Status status = base_tablet->updates()->get_applied_rowsets(request_version, &src_rowsets, &version);
@@ -2706,6 +2795,8 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     }
 
     // disable compaction temporarily when tablet just loaded
+    int64_t prev_last_compaction_time_ms = _last_compaction_time_ms;
+    DeferOp op([&] { _last_compaction_time_ms = prev_last_compaction_time_ms; });
     _last_compaction_time_ms = UnixMillis();
 
     auto kv_store = _tablet.data_dir()->get_meta();
@@ -2826,6 +2917,7 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
         total_bytes += rowset_meta_pb.total_disk_size();
         total_rows += rowset_meta_pb.num_rows();
         total_files += rowset_meta_pb.num_segments() + rowset_meta_pb.num_delete_files();
+        chunk_arr.clear();
     }
 
     TabletMetaPB meta_pb;
@@ -2868,6 +2960,14 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
     }
 
     std::unique_lock wrlock(_tablet.get_header_lock());
+    if (this->max_version() >= request_version) {
+        LOG(WARNING) << "reorder_from skipped: max_version:" << this->max_version()
+                     << " >= alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+        _tablet.save_meta();
+        return Status::OK();
+    }
     status = kv_store->write_batch(&wb);
     if (!status.ok()) {
         LOG(WARNING) << "Fail to delete old meta and write new meta" << tablet_id << ": " << status;
@@ -2956,6 +3056,44 @@ Status TabletUpdates::check_and_remove_rowset() {
     return Status::OK();
 }
 
+void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
+    vector<uint32_t> rowsets;
+    {
+        std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            LOG(WARNING) << "tablet delete when get_tablet_info_extra tablet:" << _tablet.tablet_id();
+            return;
+        }
+        info.num_version = _edit_version_infos.size();
+        info.min_version = _edit_version_infos[0]->version.major();
+        auto& v = _edit_version_infos[_edit_version_infos.size() - 1];
+        info.max_version = v->version.major();
+        info.num_rowset = v->rowsets.size();
+        rowsets = v->rowsets;
+    }
+    int64_t total_row = 0;
+    int64_t total_size = 0;
+    {
+        std::lock_guard lg(_rowset_stats_lock);
+        for (uint32_t rowsetid : rowsets) {
+            auto itr = _rowset_stats.find(rowsetid);
+            if (itr != _rowset_stats.end()) {
+                // TODO(cbl): also report num deletes
+                total_row += itr->second->num_rows;
+                total_size += itr->second->byte_size;
+            }
+        }
+    }
+    info.num_row = total_row;
+    info.data_size = total_size;
+    auto& index_cache = StorageEngine::instance()->update_manager()->index_cache();
+    auto index_entry = index_cache.get(_tablet.tablet_id());
+    if (index_entry != nullptr) {
+        info.index_mem = index_entry->size();
+        index_cache.release(index_entry);
+    }
+}
+
 void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
     updates_pb->Clear();
     for (const auto& version : _edit_version_infos) {
@@ -3008,6 +3146,8 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
                                                 _tablet.tablet_id(), _error_msg));
     }
     // disable compaction temporarily when doing load_snapshot
+    int64_t prev_last_compaction_time_ms = _last_compaction_time_ms;
+    DeferOp op([&] { _last_compaction_time_ms = prev_last_compaction_time_ms; });
     _last_compaction_time_ms = UnixMillis();
 
     // A utility function used to ensure that segment files have been placed under the
@@ -3178,6 +3318,16 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         l2.unlock();                     // _rowsets_lock
         _try_commit_pendings_unlocked(); // may acquire |_rowset_stats_lock| and |_rowsets_lock|
 
+        _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
+        _apply_version_changed.notify_all();
+        // The function `unload` of index_entry in the following code acquire `_lock` in PrimaryIndex.
+        // If there are other thread to do rowset commit, it will load PrimaryIndex first which hold `_lock` in
+        // PrimaryIndex and it will acquire `_lock` in TabletUpdates which is `l1` to get applied rowset which will
+        // cause dead lock.
+        // Actually, unload PrimayIndex doesn't need to hold `_lock` of TabletUpdates, so we can release l1 in advance
+        // to avoid dead lock.
+        l1.unlock();
+
         // unload primary index
         auto manager = StorageEngine::instance()->update_manager();
         auto& index_cache = manager->index_cache();
@@ -3185,9 +3335,6 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         index_entry->update_expire_time(MonotonicMillis() + manager->get_cache_expire_ms());
         index_entry->value().unload();
         index_cache.release(index_entry);
-        _update_total_stats(_edit_version_infos[_apply_version_idx]->rowsets, nullptr, nullptr);
-
-        _apply_version_changed.notify_all();
 
         LOG(INFO) << "load full snapshot done " << _debug_string(false);
 
@@ -3508,6 +3655,30 @@ void TabletUpdates::to_rowset_meta_pb(const std::vector<RowsetMetaSharedPtr>& ro
         RowsetMetaPB& meta_pb = rowset_metas_pb.emplace_back();
         rowset_meta->to_rowset_pb(&meta_pb);
     }
+}
+
+std::vector<std::string> TabletUpdates::get_version_list() const {
+    std::lock_guard wl(_lock);
+    std::vector<std::string> version_list;
+    for (auto& edit_version_info : _edit_version_infos) {
+        version_list.emplace_back(edit_version_info->version.to_string());
+    }
+    return version_list;
+}
+
+std::shared_ptr<EditVersionInfo> TabletUpdates::get_edit_version(const string& version) const {
+    std::lock_guard wl(_lock);
+    for (auto& edit_version_info : _edit_version_infos) {
+        if (edit_version_info->version.to_string() == version) {
+            return std::make_shared<EditVersionInfo>(*edit_version_info);
+        }
+    }
+    return nullptr;
+}
+
+std::shared_ptr<std::unordered_map<uint32_t, RowsetSharedPtr>> TabletUpdates::get_rowset_map() const {
+    std::lock_guard lg(_rowsets_lock);
+    return std::make_shared<std::unordered_map<uint32_t, RowsetSharedPtr>>(_rowsets);
 }
 
 } // namespace starrocks

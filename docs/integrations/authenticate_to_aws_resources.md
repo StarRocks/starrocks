@@ -32,7 +32,7 @@ If you choose AWS S3 as storage, StarRocks accesses your S3 bucket based on the 
 
 > **NOTICE**
 >
-> Remember to specify the name of your S3 bucket in the `Resource` element.
+> Remember to replace `<bucket_name>` with the name of your S3 bucket.
 
 ```JSON
 {
@@ -100,7 +100,7 @@ First, create and attach a new IAM policy as shown below to your assumed role `s
 
 > **NOTICE**
 >
-> Remember to specify the ARN of the IAM role associated with the EC2 instance on which your StarRocks cluster runs in the `AWS` field under the `Principal` element.
+> Remember to replace `<cluster_EC2_iam_role_ARN>` with the ARN of the IAM role associated with the EC2 instance on which your StarRocks cluster runs.
 
 ```JSON
 {
@@ -121,7 +121,7 @@ Then, create and attach a new IAM policy as shown below to the IAM role associat
 
 > **NOTICE**
 >
-> Remember to specify the ARN of your assumed role `s3_role_test` in the `Resource` element. You need to specify the ARN of your assumed role `glue_role_test` only when you choose AWS Glue as metastore and have created another assumed role named `glue_role_test` for AWS Glue.
+> Remember to replace `<ARN of s3_role_test>` with the ARN of your assumed role `s3_role_test`. You need to replace `<ARN of glue_role_test>` with the ARN of your assumed role `glue_role_test` only when you choose AWS Glue as metastore and have created another assumed role named `glue_role_test` for AWS Glue.
 
 ```JSON
 {
@@ -147,21 +147,25 @@ You need to create an IAM user and attach the policy provided in the "[Access AW
 
 The following figure provides a high-level explanation of the differences in mechanism between instance profile-based credential, assumed role-based credential, and IAM user-based credential in StarRocks.
 
-![Comparison between credential methods](../assets/credential_method_comparison.png)
+![Comparison between credential methods](../assets/authenticate_s3_credential_methods.png)
 
 ## Build connections with AWS resources
 
 ### Authentication parameters for accessing AWS S3
 
-- If you use the instance profile-based credential method to access AWS S3, set `aws.s3.use_instance_profile` to `true` when you create external catalogs or file external tables or when you ingest, back up, or restore data from AWS S3.
-- If you use the assumed role-based credential method to access AWS S3, set `aws.s3.use_instance_profile` to `true` and configure `aws.s3.iam_role_arn` as the assumed role's ARN that you use to access AWS S3 when you create external catalogs or file external tables or when you ingest, back up, or restore data from AWS S3.
-- If you use the IAM user-based credential method to access AWS S3, set `aws.s3.use_instance_profile` to `false` and configure `aws.s3.access_key` and `aws.s3.secret_key` as the access key and secret key of your AWS IAM user when you create external catalogs or file external tables or when you ingest, back up, or restore data from AWS S3.
+In various scenarios in which StarRocks needs to integrate with AWS S3, for example, when you create external catalogs or file external tables or when you ingest, back up, or restore data from AWS S3, configure the authentication parameters for accessing AWS S3 as follows:
+
+- If you use the instance profile-based credential method to access AWS S3, set `aws.s3.use_instance_profile` to `true`.
+- If you use the assumed role-based credential method to access AWS S3, set `aws.s3.use_instance_profile` to `true` and configure `aws.s3.iam_role_arn` as the assumed role's ARN that you use to access AWS S3.
+- If you use the IAM user-based credential method to access AWS S3, set `aws.s3.use_instance_profile` to `false` and configure `aws.s3.access_key` and `aws.s3.secret_key` as the access key and secret key of your AWS IAM user.
 
 ### Authentication parameters for accessing AWS Glue
 
-- If you use the instance profile-based credential method to access AWS Glue, set `aws.glue.use_instance_profile` to `true` when you create external catalogs.
-- If you use the assumed role-based credential method to access AWS Glue, set `aws.glue.use_instance_profile` to `true` and configure `aws.glue.iam_role_arn` as the assumed role's ARN that you use to access AWS S3 when you create external catalogs.
-- If you use the IAM user-based credential method to access AWS Glue, set `aws.glue.use_instance_profile` to `false` and configure `aws.glue.access_key` and `aws.glue.secret_key` as the access key and secret key of your AWS IAM user when you create external catalogs.
+In various scenarios in which StarRocks needs to integrate with AWS Glue, for example, when you create external catalogs, configure the authentication parameters for accessing AWS Glue as follows:
+
+- If you use the instance profile-based credential method to access AWS Glue, set `aws.glue.use_instance_profile` to `true`.
+- If you use the assumed role-based credential method to access AWS Glue, set `aws.glue.use_instance_profile` to `true` and configure `aws.glue.iam_role_arn` as the assumed role's ARN that you use to access AWS Glue.
+- If you use the IAM user-based credential method to access AWS Glue, set `aws.glue.use_instance_profile` to `false` and configure `aws.glue.access_key` and `aws.glue.secret_key` as the access key and secret key of your AWS IAM user.
 
 ## Integration examples
 
@@ -174,10 +178,10 @@ Creating an external catalog in your StarRocks cluster means building integratio
 
 StarRocks supports the following types of catalogs:
 
-- [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md)
 - [Hive catalog](../data_source/catalog/hive_catalog.md)
-- [Hudi catalog](../data_source/catalog/hudi_catalog.md)
 - [Iceberg catalog](../data_source/catalog/iceberg_catalog.md)
+- [Hudi catalog](../data_source/catalog/hudi_catalog.md)
+- [Delta Lake catalog](../data_source/catalog/deltalake_catalog.md)
 
 The following examples create a Hive catalog named `hive_catalog_hms` or `hive_catalog_glue`, depending on the type of metastore you use, to query data from your Hive cluster. For detailed syntax and parameters, see [Hive catalog](../data_source/catalog/hive_catalog.md).
 
@@ -221,7 +225,7 @@ The following examples create a Hive catalog named `hive_catalog_hms` or `hive_c
   (
       "type" = "hive",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "<arn:aws:iam::081976408565:role/test_s3_role>",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2",
       "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
   );
@@ -235,11 +239,11 @@ The following examples create a Hive catalog named `hive_catalog_hms` or `hive_c
   (
       "type" = "hive",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.iam_role_arn" = "<arn:aws:iam::081976408565:role/test_s3_role>",
+      "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2",
       "hive.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
-      "aws.glue.iam_role_arn" = "<arn:aws:iam::081976408565:role/test_glue_role>",
+      "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
       "aws.glue.region" = "us-west-2"
   );
   ```
@@ -322,7 +326,7 @@ PROPERTIES
     "path" = "s3://starrocks-test/",
     "format" = "ORC",
     "aws.s3.use_instance_profile"="true",
-    "aws.s3.iam_role_arn"="<arn:aws:iam::081976408565:role/test_s3_role>",
+    "aws.s3.iam_role_arn"="arn:aws:iam::081976408565:role/test_s3_role",
     "aws.s3.region"="us-west-2"
 );
 ```

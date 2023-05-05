@@ -10,18 +10,25 @@
 + Quick Start
   + Deploy
     + [Deploy StarRocks in Linux](./quick_start/Deploy.md)
-    + [Deploy StarRocks in Docker](./quick_start/deploy_in_docker.md)
+    + [Deploy StarRocks with Docker](./quick_start/deploy_with_docker.md)
   + [Create a table](./quick_start/Create_table.md)
-  + [Import and query](./quick_start/Import_and_query.md)
+  + [Load and query data](./quick_start/Import_and_query.md)
 + Table Design
   + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
-  + [Data models](./table_design/Data_model.md)
+  + Table types
+    + [Overview of table types](./table_design/table_types/table_types.md)
+    + [Duplicate Key table](./table_design/table_types/duplicate_key_table.md)
+    + [Aggragete table](./table_design/table_types/aggregate_table.md)
+    + [Unique Key table](./table_design/table_types/unique_key_table.md)
+    + [Primary Key table](./table_design/table_types/primary_key_table.md)
   + Data distribution
     + [Data distribution](./table_design/Data_distribution.md)
     + [Dynamic partitioning](./table_design/dynamic_partitioning.md)
   + [Data compression](./table_design/data_compression.md)
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
+  + Concepts
+    + [Strict mode](./loading/load_concept/strict_mode.md)
   + [Overview of data loading](./loading/Loading_intro.md)
   + [Load data from a local file system or a streaming data source using HTTP PUT](./loading/StreamLoad.md)
   + [Load data from HDFS or cloud storage](./loading/BrokerLoad.md)
@@ -41,33 +48,39 @@
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)
     + [Default catalog](./data_source/catalog/default_catalog.md)
-    + [Delta Lake catalog](./data_source/catalog/deltalake_catalog.md)
     + [Hive catalog](./data_source/catalog/hive_catalog.md)
     + [Iceberg catalog](./data_source/catalog/iceberg_catalog.md)
     + [Hudi catalog](./data_source/catalog/hudi_catalog.md)
+    + [Delta Lake catalog](./data_source/catalog/deltalake_catalog.md)
     + [Query external data](./data_source/catalog/query_external_data.md)
   + [External tables](./data_source/External_table.md)
   + [File external table](./data_source/file_external_table.md)
   + [Local Cache](./data_source/Block_cache.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
-  + [Multi-table asynchronous refresh materialized view](./using_starrocks/Materialized_view.md)
-  + [Single-table Materialized View](./using_starrocks/Materialized_view-single_table.md)
+  + [Synchronous materialized view](./using_starrocks/Materialized_view-single_table.md)
+  + [Asynchronous materialized view](./using_starrocks/Materialized_view.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Query Cache](./using_starrocks/query_cache.md)
   + Index
     + [Bitmap indexing](./using_starrocks/Bitmap_index.md)
-    + [Bloomfilter indexing](./using_starrocks/Bloomfilter_index.md)
+    + [Bloom filter indexing](./using_starrocks/Bloomfilter_index.md)
   + Computing the Number of Distinct Values
     + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
     + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
+  + [Sorted streaming aggregate](./using_starrocks/sorted_aggregate.md)
++ Integration
+  + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
+  + BI tools
+    + [Apache Superset](./integrations/superset_support.md)
+  + [Other tools and systems](./integrations/other_integrations/intro.md)
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
-    + [Deploy StarRocks in Docker](./administration/deploy_with_docker.md)
-    + [Compile StarRocks](./administration/Build_in_docker.md)
-    + [Deploy and manage CN on Kubernetes with StarRocks Operator](./administration/k8s_operator_cn.md)
+    + Deploy StarRocks on Kubernetes
+      + [Deploy StarRocks with Operator](./administration/sr_operator.md)
+      + [Deploy StarRocks with Helm](./administration/helm.md)
     + [Deploy CN](./administration/deploy_cn.md)
     + [Deploy FE cluster with high availability](./administration/Deployment.md)
   + Management
@@ -75,6 +88,7 @@
     + [Backup and restore](./administration/Backup_and_restore.md)
     + [Configuration](./administration/Configuration.md)
     + [Monitor and alert](./administration/Monitor_and_Alert.md)
+    + [Manage audit logs within StarRocks via Audit Loader](./administration/audit_loader.md)
     + [Manage a cluster](./administration/Cluster_administration.md)
     + [Enable FQDN access](./administration/enable_fqdn.md)
     + [Configure a time zone](./administration/timezone.md)
@@ -98,7 +112,6 @@
     + [Profiling](./administration/Profiling.md)
 + Reference
   + SQL Reference
-    + [Keywords](./sql-reference/sql-statements/keywords.md)
     + User Account Management
       + [ALTER USER](./sql-reference/sql-statements/account-management/ALTER%20USER.md)
       + [CREATE ROLE](./sql-reference/sql-statements/account-management/CREATE%20ROLE.md)
@@ -114,6 +127,7 @@
       + [SHOW GRANTS](./sql-reference/sql-statements/account-management/SHOW%20GRANTS.md)
       + [SHOW ROLES](./sql-reference/sql-statements/account-management/SHOW%20ROLES.md)
     + Cluster Management
+      + [ADD SQLBLACKLIST](./sql-reference/sql-statements/Administration/ADD%20SQLBLACKLIST.md)
       + [ADMIN CANCEL REPAIR TABLE](./sql-reference/sql-statements/Administration/ADMIN%20CANCEL%20REPAIR.md)
       + [ADMIN CHECK TABLET](./sql-reference/sql-statements/Administration/ADMIN%20CHECK%20TABLET.md)
       + [ADMIN REPAIR TABLE](./sql-reference/sql-statements/Administration/ADMIN%20REPAIR.md)
@@ -127,9 +141,13 @@
       + [CANCEL DECOMMISSION](./sql-reference/sql-statements/Administration/CANCEL%20DECOMMISSION.md)
       + [CREATE FILE](./sql-reference/sql-statements/Administration/CREATE%20FILE.md)
       + [CREATE RESOURCE GROUP](./sql-reference/sql-statements/Administration/CREATE%20RESOURCE%20GROUP.md)
+      + [DELETE SQLBLACKLIST](./sql-reference/sql-statements/Administration/DELETE%20SQLBLACKLIST.md)
       + [DROP FILE](./sql-reference/sql-statements/Administration/DROP%20FILE.md)
       + [DROP RESOURCE GROUP](./sql-reference/sql-statements/Administration/DROP%20RESOURCE%20GROUP.md)
+      + [EXPLAIN](./sql-reference/sql-statements/Administration/EXPLAIN.md)
       + [INSTALL PLUGIN](./sql-reference/sql-statements/Administration/INSTALL%20PLUGIN.md)
+      + [KILL](./sql-reference/sql-statements/Administration/KILL.md)
+      + [SET](./sql-reference/sql-statements/Administration/SET.md)
       + [SHOW BACKENDS](./sql-reference/sql-statements/Administration/SHOW%20BACKENDS.md)
       + [SHOW BROKER](./sql-reference/sql-statements/Administration/SHOW%20BROKER.md)
       + [SHOW COMPUTE NODES](./sql-reference/sql-statements/Administration/SHOW%20COMPUTE%20NODES.md)
@@ -141,7 +159,9 @@
       + [SHOW PROC](./sql-reference/sql-statements/Administration/SHOW%20PROC.md)
       + [SHOW PROCESSLIST](./sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md)
       + [SHOW RESOURCE GROUP](./sql-reference/sql-statements/Administration/SHOW%20RESOURCE%20GROUP.md)
+      + [SHOW SQLBLACKLIST](./sql-reference/sql-statements/Administration/SHOW%20SQLBLACKLIST.md)
       + [SHOW TABLE STATUS](./sql-reference/sql-statements/Administration/SHOW%20TABLE%20STATUS.md)
+      + [SHOW VARIABLES](./sql-reference/sql-statements/Administration/SHOW%20VARIABLES.md)
       + [UNINSTALL PLUGIN](./sql-reference/sql-statements/Administration/UNINSTALL%20PLUGIN.md)
     + DDL
       + [ALTER DATABASE](./sql-reference/sql-statements/data-definition/ALTER%20DATABASE.md)
@@ -236,11 +256,11 @@
       + [DESC](./sql-reference/sql-statements/Utility/DESCRIBE.md)
     + Data Types
       + Numeric
+        + [TINYINT](./sql-reference/sql-statements/data-types/TINYINT.md)
+        + [SMALLINT](./sql-reference/sql-statements/data-types/SMALLINT.md)
+        + [INT](./sql-reference/sql-statements/data-types/INT.md)
         + [BIGINT](./sql-reference/sql-statements/data-types/BIGINT.md)
         + [LARGEINT](./sql-reference/sql-statements/data-types/LARGEINT.md)
-        + [SMALLINT](./sql-reference/sql-statements/data-types/SMALLINT.md)
-        + [TINYINT](./sql-reference/sql-statements/data-types/TINYINT.md)
-        + [INT](./sql-reference/sql-statements/data-types/INT.md)
         + [DECIMAL](./sql-reference/sql-statements/data-types/DECIMAL.md)
         + [DOUBLE](./sql-reference/sql-statements/data-types/DOUBLE.md)
         + [FLOAT](./sql-reference/sql-statements/data-types/FLOAT.md)
@@ -257,6 +277,7 @@
         + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
         + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
         + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
+    + [Keywords](./sql-reference/sql-statements/keywords.md)
   + Function Reference
     + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
     + [Window functions](./sql-reference/sql-functions/Window_function.md)
@@ -271,6 +292,7 @@
       + [grouping_id](./sql-reference/sql-functions/aggregate-functions/grouping_id.md)
       + [hll_empty](./sql-reference/sql-functions/aggregate-functions/hll_empty.md)
       + [hll_hash](./sql-reference/sql-functions/aggregate-functions/hll_hash.md)
+      + [hll_raw_agg](./sql-reference/sql-functions/aggregate-functions/hll_raw_agg.md)
       + [hll_union](./sql-reference/sql-functions/aggregate-functions/hll_union.md)
       + [hll_union_agg](./sql-reference/sql-functions/aggregate-functions/hll_union_agg.md)
       + [max](./sql-reference/sql-functions/aggregate-functions/max.md)
@@ -280,6 +302,7 @@
       + [multi_distinct_count](./sql-reference/sql-functions/aggregate-functions/multi_distinct_count.md)
       + [percentile_approx](./sql-reference/sql-functions/aggregate-functions/percentile_approx.md)
       + [percentile_cont](./sql-reference/sql-functions/aggregate-functions/percentile_cont.md)
+      + [percentile_disc](./sql-reference/sql-functions/aggregate-functions/percentile_disc.md)
       + [retention](./sql-reference/sql-functions/aggregate-functions/retention.md)
       + [stddev](./sql-reference/sql-functions/aggregate-functions/stddev.md)
       + [stddev_samp](./sql-reference/sql-functions/aggregate-functions/stddev_samp.md)
@@ -455,7 +478,6 @@
         + [json_query](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
         + [json_string](./sql-reference/sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
     + Map Functions
-      + [map_from_arrays](./sql-reference/sql-functions/map-functions/map_from_arrays.md)
       + [map_keys](./sql-reference/sql-functions/map-functions/map_keys.md)
       + [map_size](./sql-reference/sql-functions/map-functions/map_size.md)
       + [map_values](./sql-reference/sql-functions/map-functions/map_values.md)
@@ -590,12 +612,11 @@
   + [Contribute to StarRocks](./developers/How_to_Contribute.md)
   + Development Environment
     + [IDEA](./developers/development-environment/IDEA.md)
-    + [Build_StarRocks_on_Ubuntu](./developers/build-starrocks/build_starrocks_on_ubuntu.md)
+    + [Build StarRocks on Ubuntu](./developers/build-starrocks/build_starrocks_on_ubuntu.md)
+    + [Build StarRocks in Docker](./developers/build-starrocks/Build_in_docker.md)
+    + [Build Handbook](./developers/build-starrocks/handbook.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
-+ Integration
-  + [Integrate with StarRocks](./integrations/intro.md)
-  + [Authenticate to AWS resources](./integrations/authenticate_to_aws_resources.md)
 + Release Notes
   + [v2.5](./release_notes/release-2.5.md)
   + [v2.4](./release_notes/release-2.4.md)

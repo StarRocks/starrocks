@@ -22,6 +22,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
@@ -77,7 +78,7 @@ public:
         int64_t peak_consumption = 0;
     };
 
-    enum Type { NO_SET, PROCESS, QUERY_POOL, QUERY, LOAD, CONSISTENCY, COMPACTION, SCHEMA_CHANGE_TASK };
+    enum Type { NO_SET, PROCESS, QUERY_POOL, QUERY, LOAD, CONSISTENCY, COMPACTION, SCHEMA_CHANGE_TASK, RESOURCE_GROUP };
 
     /// 'byte_limit' < 0 means no limit
     /// 'label' is the label used in the usage string (LogUsage())
@@ -266,6 +267,12 @@ public:
             << "limit trackers size: " << _limit_trackers.size() << "; "
             << "parent is null: " << ((_parent == nullptr) ? "true" : "false") << "; ";
         return msg.str();
+    }
+
+    // no any memory allocate
+    size_t debug_string(char* dst, size_t max_length) {
+        return snprintf(dst, max_length, "tracker:%s consumption: %ld\n", _label.c_str(),
+                        _consumption->current_value());
     }
 
     Type type() const { return _type; }

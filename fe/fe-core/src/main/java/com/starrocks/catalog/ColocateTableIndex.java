@@ -50,7 +50,7 @@ import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -290,7 +290,7 @@ public class ColocateTableIndex implements Writable {
         readLock();
         try {
             if (table2Group.containsKey(table1) && table2Group.containsKey(table2)) {
-                return table2Group.get(table1).equals(table2Group.get(table2));
+                return Objects.equals(table2Group.get(table1).grpId, table2Group.get(table2).grpId);
             }
             return false;
         } finally {
@@ -360,20 +360,21 @@ public class ColocateTableIndex implements Writable {
     public int getNumOfTabletsPerBucket(GroupId groupId) {
         List<Long> allTableIds = getAllTableIds(groupId);
         Database db = GlobalStateMgr.getCurrentState().getDb(groupId.dbId);
-        if (!allTableIds.isEmpty() && db != null) {
-            db.readLock();
+        int numOfTablets = 0;
+        if (db != null && !allTableIds.isEmpty()) {
             try {
-                OlapTable tbl = (OlapTable) db.getTable(allTableIds.get(0));
-                if (tbl != null) {
-                    return allTableIds.size() * tbl.getNumberOfPartitions();
-                } else {
-                    return -1;
+                db.readLock();
+                for (long tableId : allTableIds) {
+                    OlapTable tbl = (OlapTable) db.getTable(tableId);
+                    if (tbl != null) {
+                        numOfTablets += tbl.getNumberOfPartitions();
+                    }
                 }
             } finally {
                 db.readUnlock();
             }
         }
-        return -1;
+        return numOfTablets;
     }
 
     public List<List<Long>> getBackendsPerBucketSeq(GroupId groupId) {
@@ -771,14 +772,80 @@ public class ColocateTableIndex implements Writable {
         return checksum;
     }
 
+    private List<GroupId> getOtherGroupsWithSameOrigNameUnlocked(String origName, long dbId) {
+        List<GroupId> groupIds = new ArrayList<>();
+        for (Map.Entry<String, GroupId> entry : groupName2Id.entrySet()) {
+            if (entry.getKey().split("_")[1].equals(origName) &&
+                    entry.getValue().dbId != dbId) {
+                groupIds.add(entry.getValue());
+            }
+        }
+
+        return groupIds;
+    }
+
+    public GroupId checkColocateSchemaWithGroupInOtherDb(String toCreateGroupName, long dbId,
+                                                      OlapTable toCreateTable) throws DdlException {
+        try {
+            readLock();
+            List<GroupId> sameOrigNameGroups = getOtherGroupsWithSameOrigNameUnlocked(toCreateGroupName, dbId);
+            if (sameOrigNameGroups.isEmpty()) {
+                return null;
+            }
+            // Here we need to check schema consistency with all the groups in other databases, because
+            // if this is the situation where user upgrades from older version, there may exist two colocate
+            // groups with the same original name, but have different schema, in this case, we cannot decide
+            // which group the new colocate group should colocate with, thus we should throw an error explicitly
+            // and let the user handle it.
+            for (GroupId gid : sameOrigNameGroups) {
+                getGroupSchema(gid).checkColocateSchema(toCreateTable);
+            }
+            // For tables that reside in different databases and colocate with each other, there still exists
+            // multi colocate groups, but these colocate groups will have the same original name and their
+            // `GroupId.grpId` parts are limited to be the same, and most importantly, their bucket
+            // sequences will keep in consistent when balancing or doing some kind of modification. For this limitation
+            // reason, here we also need to check the `GroupId.grpId` part is the same in case that this is an upgrade.
+            // If not the same, throw an error.
+            for (int i = 1; i < sameOrigNameGroups.size(); i++) {
+                if (!Objects.equals(sameOrigNameGroups.get(0).grpId, sameOrigNameGroups.get(i).grpId)) {
+                    throw new DdlException("going to create a new group that has the same name '" +
+                            toCreateGroupName + "' with " + sameOrigNameGroups +
+                            ", but these existed groups don't have the same `GroupId.grpId`");
+                }
+            }
+            return sameOrigNameGroups.get(0);
+        } finally {
+            readUnlock();
+        }
+    }
+
+    public List<GroupId> getColocateWithGroupsInOtherDb(GroupId groupId) {
+        List<GroupId> results = new ArrayList<>();
+        Long grpId = groupId.grpId;
+        try {
+            readLock();
+            for (GroupId otherGroupId : group2Schema.keySet()) {
+                if (!Objects.equals(otherGroupId.dbId, groupId.dbId) &&
+                        Objects.equals(otherGroupId.grpId, grpId)) {
+                    results.add(otherGroupId);
+                }
+            }
+        } finally {
+            readUnlock();
+        }
+
+        return results;
+    }
+
     // the invoker should keep db write lock
     public void modifyTableColocate(Database db, OlapTable table, String colocateGroup, boolean isReplay,
                                     GroupId assignedGroupId)
             throws DdlException {
 
         String oldGroup = table.getColocateGroup();
-        GroupId groupId = null;
+        GroupId groupId;
         if (!Strings.isNullOrEmpty(colocateGroup)) {
+            GroupId colocateGrpIdInOtherDb = null;
             String fullGroupName = db.getId() + "_" + colocateGroup;
             ColocateGroupSchema groupSchema = getGroupSchema(fullGroupName);
             if (groupSchema == null) {
@@ -804,6 +871,13 @@ public class ColocateTableIndex implements Writable {
                         }
                     }
                 }
+                // we also need to check the schema consistency with colocate group in other database
+                colocateGrpIdInOtherDb = checkColocateSchemaWithGroupInOtherDb(
+                        colocateGroup, db.getId(), table);
+                // `assignedGroupId == null` means that this is not a replay, but a user issued group creation
+                if (assignedGroupId == null && colocateGrpIdInOtherDb != null) {
+                    assignedGroupId = new GroupId(db.getId(), colocateGrpIdInOtherDb.grpId);
+                }
             } else {
                 // set to an already exist colocate group, check if this table can be added to this group.
                 groupSchema.checkColocateSchema(table);
@@ -811,12 +885,17 @@ public class ColocateTableIndex implements Writable {
 
             List<List<Long>> backendsPerBucketSeq = null;
             if (groupSchema == null) {
-                // assign to a newly created group, set backends sequence.
-                // we arbitrarily choose a tablet backends sequence from this table,
-                // let the colocation balancer do the work.
-                backendsPerBucketSeq = table.getArbitraryTabletBucketsSeq();
+                if (colocateGrpIdInOtherDb == null) {
+                    // assign to a newly created group, set backends sequence.
+                    // we arbitrarily choose a tablet backends sequence from this table,
+                    // let the colocation balancer do the work.
+                    backendsPerBucketSeq = table.getArbitraryTabletBucketsSeq();
+                } else {
+                    // colocate with group in other database, reuse the bucket seq.
+                    backendsPerBucketSeq = getBackendsPerBucketSeq(colocateGrpIdInOtherDb);
+                }
             }
-            // change group after getting backends sequence(if has), in case 'getArbitraryTabletBucketsSeq' failed
+            // change group after getting backends sequence(if it has), in case 'getArbitraryTabletBucketsSeq' failed
             groupId = changeGroup(db.getId(), table, oldGroup, colocateGroup, assignedGroupId);
             if (groupSchema == null) {
                 Preconditions.checkNotNull(backendsPerBucketSeq);
@@ -835,7 +914,7 @@ public class ColocateTableIndex implements Writable {
             }
 
             // there is not any colocate mv related to the table
-            // just remove the table from colocat group
+            // just remove the table from colocate group
             if (table.getColocateMaterializedViewNames().isEmpty()) {
                 // when replayModifyTableColocate, we need the groupId info
                 String fullGroupName = db.getId() + "_" + oldGroup;
@@ -844,14 +923,13 @@ public class ColocateTableIndex implements Writable {
                 table.setColocateGroup(null);
                 table.setInColocateMvGroup(false);
             } else {
-                // change the table's group from oldGroup to a new colocat group
+                // change the table's group from oldGroup to a new colocate group
                 // which is named by dbName + ":" + mvName
                 String groupName = db.getFullName() + ":" + table.getColocateMaterializedViewNames().stream().findAny().get();
                 groupId = changeGroup(db.getId(), table, oldGroup, groupName, assignedGroupId);
                 table.setColocateGroup(groupName);
                 table.setInColocateMvGroup(true);
             }
-
         }
 
         if (!isReplay) {

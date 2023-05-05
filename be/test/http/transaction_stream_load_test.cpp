@@ -22,7 +22,14 @@ class mg_connection;
 
 namespace starrocks {
 
-extern std::string k_response_str;
+extern void (*s_injected_send_reply)(HttpRequest*, HttpStatus, const std::string&);
+
+namespace {
+static std::string k_response_str;
+static void inject_send_reply(HttpRequest* request, HttpStatus status, const std::string& content) {
+    k_response_str = content;
+}
+} // namespace
 
 extern TLoadTxnBeginResult k_stream_load_begin_result;
 extern TLoadTxnCommitResult k_stream_load_commit_result;
@@ -34,6 +41,8 @@ class TransactionStreamLoadActionTest : public testing::Test {
 public:
     TransactionStreamLoadActionTest() = default;
     ~TransactionStreamLoadActionTest() override = default;
+    static void SetUpTestSuite() { s_injected_send_reply = inject_send_reply; }
+    static void TearDownTestSuite() { s_injected_send_reply = nullptr; }
     void SetUp() override {
         k_stream_load_begin_result = TLoadTxnBeginResult();
         k_stream_load_commit_result = TLoadTxnCommitResult();

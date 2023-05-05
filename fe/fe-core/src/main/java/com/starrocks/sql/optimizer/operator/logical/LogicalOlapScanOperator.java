@@ -25,8 +25,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private final long selectedIndexId;
     private final List<Long> selectedPartitionId;
     private final PartitionNames partitionNames;
+    private final boolean hasHintsPartitionNames;
     private final List<Long> selectedTabletId;
     private final List<Long> hintsTabletIds;
+    private final List<ScalarOperator> prunedPartitionPredicates;
 
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
@@ -58,6 +60,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             long selectedIndexId,
             List<Long> selectedPartitionId,
             PartitionNames partitionNames,
+            boolean hasHintsPartitionNames,
             List<Long> selectedTabletId,
             List<Long> hintsTabletIds) {
         super(OperatorType.LOGICAL_OLAP_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
@@ -68,8 +71,26 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.selectedIndexId = selectedIndexId;
         this.selectedPartitionId = selectedPartitionId;
         this.partitionNames = partitionNames;
+        this.hasHintsPartitionNames = hasHintsPartitionNames;
         this.selectedTabletId = selectedTabletId;
         this.hintsTabletIds = hintsTabletIds;
+        this.prunedPartitionPredicates = Lists.newArrayList();
+    }
+
+    public LogicalOlapScanOperator(
+            Table table,
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+            HashDistributionSpec hashDistributionSpec,
+            long limit,
+            ScalarOperator predicate,
+            long selectedIndexId,
+            List<Long> selectedPartitionId,
+            PartitionNames partitionNames,
+            List<Long> selectedTabletId,
+            List<Long> hintsTabletIds) {
+        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, hashDistributionSpec, limit, predicate,
+                selectedIndexId, selectedPartitionId, partitionNames, false, selectedTabletId, hintsTabletIds);
     }
 
     private LogicalOlapScanOperator(Builder builder) {
@@ -82,8 +103,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.selectedIndexId = builder.selectedIndexId;
         this.selectedPartitionId = builder.selectedPartitionId;
         this.partitionNames = builder.partitionNames;
+        this.hasHintsPartitionNames = builder.hasHintsPartitionNames;
         this.selectedTabletId = builder.selectedTabletId;
         this.hintsTabletIds = builder.hintsTabletIds;
+        this.prunedPartitionPredicates = builder.prunedPartitionPredicates;
     }
 
     public HashDistributionSpec getDistributionSpec() {
@@ -108,6 +131,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     public List<Long> getHintsTabletIds() {
         return hintsTabletIds;
+    }
+
+    public boolean hasTabletOrPartitionHints() {
+        return (hintsTabletIds != null && !hintsTabletIds.isEmpty()) || hasHintsPartitionNames;
+    }
+
+    public List<ScalarOperator> getPrunedPartitionPredicates() {
+        return prunedPartitionPredicates;
     }
 
 
@@ -147,8 +178,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         private long selectedIndexId;
         private List<Long> selectedPartitionId;
         private PartitionNames partitionNames;
+
+        private boolean hasHintsPartitionNames;
         private List<Long> selectedTabletId;
         private List<Long> hintsTabletIds;
+        private List<ScalarOperator> prunedPartitionPredicates;
 
         @Override
         public LogicalOlapScanOperator build() {
@@ -163,8 +197,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             this.selectedIndexId = scanOperator.selectedIndexId;
             this.selectedPartitionId = scanOperator.selectedPartitionId;
             this.partitionNames = scanOperator.partitionNames;
+            this.hasHintsPartitionNames = scanOperator.hasHintsPartitionNames;
             this.selectedTabletId = scanOperator.selectedTabletId;
             this.hintsTabletIds = scanOperator.hintsTabletIds;
+            this.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
             return this;
         }
 
@@ -180,6 +216,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         public Builder setSelectedPartitionId(List<Long> selectedPartitionId) {
             this.selectedPartitionId = selectedPartitionId;
+            return this;
+        }
+
+        public Builder setPrunedPartitionPredicates(List<ScalarOperator> prunedPartitionPredicates) {
+            this.prunedPartitionPredicates = prunedPartitionPredicates;
             return this;
         }
     }

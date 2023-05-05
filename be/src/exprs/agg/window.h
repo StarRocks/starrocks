@@ -290,7 +290,7 @@ struct FirstValueState {
     using T = RunTimeCppType<PT>;
     T value;
     bool is_null = false;
-    uint64_t count;
+    bool has_value = false;
 };
 
 // TODO(murphy) refactor with AggDataTypeTraits
@@ -298,6 +298,7 @@ template <PrimitiveType PT>
 struct FirstValueState<PT, StringPTGuard<PT>> {
     Buffer<uint8_t> buffer;
     bool is_null = false;
+    bool has_value = false;
 
     Slice slice() const { return {buffer.data(), buffer.size()}; }
 };
@@ -309,7 +310,7 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).value = {};
         this->data(state).is_null = false;
-        this->data(state).count = 0;
+        this->data(state).has_value = false;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -323,20 +324,22 @@ class FirstValueWindowFunction final : public ValueWindowFunction<PT, FirstValue
         }
 
         // only calculate once
-        if (this->data(state).count != 0 && (!this->data(state).is_null || !ignoreNulls)) {
+        if (this->data(state).has_value && (!this->data(state).is_null || !ignoreNulls)) {
             return;
         }
-
-        this->data(state).count++;
 
         size_t value_index =
                 !ignoreNulls ? frame_start : ColumnHelper::find_nonnull(columns[0], frame_start, frame_end);
         if (value_index == frame_end || columns[0]->is_null(value_index)) {
             this->data(state).is_null = true;
+            if (!ignoreNulls) {
+                this->data(state).has_value = true;
+            }
         } else {
             const Column* data_column = ColumnHelper::get_data_column(columns[0]);
             const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
             this->data(state).is_null = false;
+            this->data(state).has_value = true;
             this->data(state).value = column->get_data()[value_index];
         }
     }
@@ -353,7 +356,8 @@ template <PrimitiveType PT, bool ignoreNulls, typename = guard::Guard>
 struct LastValueState {
     using T = RunTimeCppType<PT>;
     T value;
-    bool is_null = ignoreNulls;
+    bool is_null = false;
+    bool has_value = false;
 };
 
 // TODO(murphy) refactor with AggDataTypeTraits
@@ -361,6 +365,7 @@ template <PrimitiveType PT, bool ignoreNulls>
 struct LastValueState<PT, ignoreNulls, StringPTGuard<PT>> {
     Buffer<uint8_t> buffer;
     bool is_null = false;
+    bool has_value = false;
 
     Slice slice() const { return {buffer.data(), buffer.size()}; }
 };
@@ -371,7 +376,8 @@ class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueSt
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).value = {};
-        this->data(state).is_null = ignoreNulls;
+        this->data(state).is_null = false;
+        this->data(state).has_value = false;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -385,11 +391,17 @@ class LastValueWindowFunction final : public ValueWindowFunction<PT, LastValueSt
         size_t value_index =
                 !ignoreNulls ? frame_end - 1 : ColumnHelper::last_nonnull(columns[0], frame_start, frame_end);
         if (value_index == frame_end || columns[0]->is_null(value_index)) {
-            this->data(state).is_null = true;
+            if (ignoreNulls) {
+                this->data(state).is_null = (!this->data(state).has_value);
+            } else {
+                this->data(state).is_null = true;
+                this->data(state).has_value = true;
+            }
         } else {
             const Column* data_column = ColumnHelper::get_data_column(columns[0]);
             const InputColumnType* column = down_cast<const InputColumnType*>(data_column);
             this->data(state).is_null = false;
+            this->data(state).has_value = true;
             this->data(state).value = column->get_data()[value_index];
         }
     }
@@ -468,6 +480,7 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
         this->data(state).is_null = false;
+        this->data(state).has_value = false;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -480,10 +493,18 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
             return;
         }
 
+        // only calculate once
+        if (this->data(state).has_value && (!this->data(state).is_null || !ignoreNulls)) {
+            return;
+        }
+
         size_t value_index =
                 !ignoreNulls ? frame_start : ColumnHelper::find_nonnull(columns[0], frame_start, frame_end);
         if (value_index == frame_end || columns[0]->is_null(value_index)) {
             this->data(state).is_null = true;
+            if (!ignoreNulls) {
+                this->data(state).has_value = true;
+            }
         } else {
             const Column* data_column = ColumnHelper::get_data_column(columns[0]);
             const auto* column = down_cast<const BinaryColumn*>(data_column);
@@ -491,6 +512,7 @@ class FirstValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
             const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
             this->data(state).buffer.insert(this->data(state).buffer.end(), p, p + slice.size);
             this->data(state).is_null = false;
+            this->data(state).has_value = true;
         }
     }
 
@@ -508,7 +530,8 @@ class LastValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
         : public WindowFunction<LastValueState<PT, ignoreNulls>> {
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         this->data(state).buffer.clear();
-        this->data(state).is_null = ignoreNulls;
+        this->data(state).is_null = false;
+        this->data(state).has_value = false;
     }
 
     void update_batch_single_state_with_frame(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
@@ -524,9 +547,15 @@ class LastValueWindowFunction<PT, ignoreNulls, Slice, StringPTGuard<PT>> final
         const Column* data_column = ColumnHelper::get_data_column(columns[0]);
         const auto* column = down_cast<const BinaryColumn*>(data_column);
         if (value_index == frame_end || columns[0]->is_null(value_index)) {
-            this->data(state).is_null = true;
+            if (ignoreNulls) {
+                this->data(state).is_null = (!this->data(state).has_value);
+            } else {
+                this->data(state).is_null = true;
+                this->data(state).has_value = true;
+            }
         } else {
             this->data(state).is_null = false;
+            this->data(state).has_value = true;
             Slice slice = column->get_slice(value_index);
             const auto* p = reinterpret_cast<const uint8_t*>(slice.data);
             this->data(state).buffer.clear();

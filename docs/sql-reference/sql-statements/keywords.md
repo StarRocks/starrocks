@@ -58,6 +58,8 @@ Following are the reserved keywords supported by StarRocks.
 - CREATE
 - CROSS
 - CUBE
+- CURRENT_DATE
+- CURRENT_TIME
 - CURRENT_TIMESTAMP
 - CURRENT_USER
 
@@ -151,6 +153,8 @@ Following are the reserved keywords supported by StarRocks.
 - LIKE
 - LIMIT
 - LOAD
+- LOCALTIME
+- LOCALTIMESTAMP
 
 ### M
 

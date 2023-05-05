@@ -322,10 +322,15 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
     PredicateParser pred_parser(_tablet->tablet_schema());
 
     std::shared_lock header_lock(_tablet->get_header_lock());
-    for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {
-        if (pred_pb.version() > _delete_predicates_version.second) {
+    // here we can not use DeletePredicatePB from  _tablet->delete_predicates() because
+    // _rowsets maybe stale rowset, and stale rowset's delete predicates may be removed
+    // from _tablet->delete_predicates() after compation
+    for (const RowsetSharedPtr& rowset : _rowsets) {
+        const RowsetMetaSharedPtr& rowset_meta = rowset->rowset_meta();
+        if (!rowset_meta->has_delete_predicate()) {
             continue;
         }
+        const DeletePredicatePB& pred_pb = rowset_meta->delete_predicate();
 
         ConjunctivePredicates conjunctions;
         for (int i = 0; i != pred_pb.sub_predicates_size(); ++i) {
@@ -387,8 +392,16 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
     Schema schema;
     std::vector<Datum> values;
     values.reserve(input.size());
+    const auto& sort_key_idxes = tablet_schema.sort_key_idxes();
+    DCHECK(sort_key_idxes.empty() || sort_key_idxes.size() >= input.size());
+    if (sort_key_idxes.size() > 0) {
+        for (int i = 0; i < input.size(); i++) {
+            schema.append_sort_key_idx(i);
+        }
+    }
     for (size_t i = 0; i < input.size(); i++) {
-        auto f = std::make_shared<Field>(ChunkHelper::convert_field_to_format_v2(i, tablet_schema.column(i)));
+        int idx = sort_key_idxes.empty() ? i : sort_key_idxes[i];
+        auto f = std::make_shared<Field>(ChunkHelper::convert_field_to_format_v2(idx, tablet_schema.column(idx)));
         schema.append(f);
         values.emplace_back(Datum());
         if (input.is_null(i)) {
@@ -398,7 +411,7 @@ Status TabletReader::_to_seek_tuple(const TabletSchema& tablet_schema, const Ola
         // we treat it as VARCHAR, because the execution level CHAR is VARCHAR
         // CHAR type strings are truncated at the storage level after '\0'.
         if (f->type()->type() == OLAP_FIELD_TYPE_CHAR) {
-            RETURN_IF_ERROR(datum_from_string(get_type_info(OLAP_FIELD_TYPE_VARCHAR).get(), &values.back(),
+            RETURN_IF_ERROR(datum_from_string(get_type_info(OLAP_FIELD_TYPE_CHAR).get(), &values.back(),
                                               input.get_value(i), mempool));
         } else {
             RETURN_IF_ERROR(datum_from_string(f->type().get(), &values.back(), input.get_value(i), mempool));

@@ -8,6 +8,7 @@
 #include "column/column.h"
 #include "column/datum.h"
 #include "common/statusor.h"
+#include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
 #include "types/date_value.hpp"
 #include "types/timestamp_value.h"
@@ -30,6 +31,11 @@ template <typename T>
 constexpr bool IsTimestamp = false;
 template <>
 inline constexpr bool IsTimestamp<TimestampValue> = true;
+
+template <typename T>
+constexpr bool IsTemporal() {
+    return std::is_same_v<T, DateValue> || std::is_same_v<T, TimestampValue> || std::is_same_v<T, DateTimeValue>;
+}
 
 template <typename T>
 class FixedLengthColumnBase : public ColumnFactory<Column, FixedLengthColumnBase<T>> {
@@ -96,7 +102,7 @@ public:
 
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
-    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
+    void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) override;
 
     bool append_nulls(size_t count __attribute__((unused))) override { return false; }
 

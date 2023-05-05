@@ -289,10 +289,16 @@ public:
         return ret;
     }
 
+    void try_evict(size_t target_capacity) {
+        std::lock_guard<std::mutex> lg(_lock);
+        _evict(target_capacity);
+        return;
+    }
+
 private:
-    bool _evict() {
+    bool _evict(size_t target_capacity) {
         auto itr = _list.begin();
-        while (_size > _capacity && itr != _list.end()) {
+        while (_size > target_capacity && itr != _list.end()) {
             Entry* entry = (*itr);
             // no need to check iobj != obj, cause obj is in use, so _ref > 1
             if (entry->_ref == 1) {
@@ -310,6 +316,8 @@ private:
         }
         return _size <= _capacity;
     }
+
+    bool _evict() { return _evict(_capacity); }
 
     mutable std::mutex _lock;
     List _list;

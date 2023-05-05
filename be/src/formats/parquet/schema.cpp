@@ -147,7 +147,21 @@ Status SchemaDescriptor::list_to_field(const std::vector<tparquet::SchemaElement
         } else {
             // Have a required group field with chidren, this will generate a group element
             // list<group<child>>
-            RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos + 1, cur_level_info, element, next_pos));
+            // the level2_schema may have converted_type = "MAP", in this scenario we should parse
+            // level2_schema as map, otherwise when we create column reader we will get wrong type.
+            // optional group col_array_map (LIST) {
+            //     repeated group array (MAP) {
+            //         repeated group map (MAP_KEY_VALUE) {
+            //             required binary key (UTF8);
+            //             optional int32 value;
+            //         }
+            //     }
+            // }
+            if (is_map(level2_schema)) {
+                RETURN_IF_ERROR(map_to_field(t_schemas, pos + 1, cur_level_info, element, next_pos));
+            } else {
+                RETURN_IF_ERROR(group_to_struct_field(t_schemas, pos + 1, cur_level_info, element, next_pos));
+            }
         }
     } else if (num_children == 0) {
         // This is backward-compatibility two-level
@@ -184,9 +198,11 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
     if (map_schema.num_children != 1) {
         return Status::InvalidArgument("MAP-annotated group must have a single child.");
     }
-    if (is_repeated(map_schema)) {
-        return Status::InvalidArgument("MAP-annotated group must not be repeated.");
-    }
+    // when map as array's element type, there is a scenario, the array's level_2_schema is converted_type = 'MAP'
+    // we should parse this as map, and in this scenario the level_2_schema is repeated.
+    // if (is_repeated(map_schema)) {
+    //     return Status::InvalidArgument("MAP-annotated group must not be repeated.");
+    // }
     auto& kv_schema = t_schemas[pos + 1];
     if (!is_group(kv_schema) || !is_repeated(kv_schema)) {
         return Status::InvalidArgument("key_value in map group must be a repeated group");

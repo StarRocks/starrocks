@@ -67,9 +67,9 @@ public class StatisticsExecutorTest extends PlanTestBase {
         OlapTable table = (OlapTable) database.getTable("t0_stats");
         List<Long> partitionIdList = table.getAllPartitions().stream().map(Partition::getId).collect(Collectors.toList());
 
-        FullStatisticsCollectJob collectJob = new FullStatisticsCollectJob(database, table, partitionIdList,
+        SampleStatisticsCollectJob collectJob = new SampleStatisticsCollectJob(database, table,
                 Lists.newArrayList("v1", "v2", "v3", "v4", "v5"),
-                StatsConstants.AnalyzeType.FULL,
+                StatsConstants.AnalyzeType.SAMPLE,
                 StatsConstants.ScheduleType.SCHEDULE,
                 Maps.newHashMap());
 

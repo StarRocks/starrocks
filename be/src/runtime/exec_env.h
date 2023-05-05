@@ -118,35 +118,38 @@ public:
     ClientCache<FrontendServiceClient>* frontend_client_cache() { return _frontend_client_cache; }
     ClientCache<TFileBrokerServiceClient>* broker_client_cache() { return _broker_client_cache; }
 
+    static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
+
     // using template to simplify client cache management
     template <typename T>
     ClientCache<T>* get_client_cache() {
         return nullptr;
     }
 
-    MemTracker* process_mem_tracker() { return _mem_tracker; }
-    MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker; }
-    MemTracker* load_mem_tracker() { return _load_mem_tracker; }
-    MemTracker* metadata_mem_tracker() { return _metadata_mem_tracker; }
-    MemTracker* tablet_metadata_mem_tracker() { return _tablet_metadata_mem_tracker; }
-    MemTracker* rowset_metadata_mem_tracker() { return _rowset_metadata_mem_tracker; }
-    MemTracker* segment_metadata_mem_tracker() { return _segment_metadata_mem_tracker; }
-    MemTracker* column_metadata_mem_tracker() { return _column_metadata_mem_tracker; }
-    MemTracker* tablet_schema_mem_tracker() { return _tablet_schema_mem_tracker; }
-    MemTracker* column_zonemap_index_mem_tracker() { return _column_zonemap_index_mem_tracker; }
-    MemTracker* ordinal_index_mem_tracker() { return _ordinal_index_mem_tracker; }
-    MemTracker* bitmap_index_mem_tracker() { return _bitmap_index_mem_tracker; }
-    MemTracker* bloom_filter_index_mem_tracker() { return _bloom_filter_index_mem_tracker; }
-    MemTracker* segment_zonemap_mem_tracker() { return _segment_zonemap_mem_tracker; }
-    MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker; }
-    MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker; }
-    MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker; }
-    MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker; }
-    MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker; }
-    MemTracker* update_mem_tracker() { return _update_mem_tracker; }
-    MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker; }
-    MemTracker* clone_mem_tracker() { return _clone_mem_tracker; }
-    MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker; }
+    MemTracker* process_mem_tracker() { return _process_mem_tracker.get(); }
+    MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker.get(); }
+    MemTracker* load_mem_tracker() { return _load_mem_tracker.get(); }
+    MemTracker* metadata_mem_tracker() { return _metadata_mem_tracker.get(); }
+    MemTracker* tablet_metadata_mem_tracker() { return _tablet_metadata_mem_tracker.get(); }
+    MemTracker* rowset_metadata_mem_tracker() { return _rowset_metadata_mem_tracker.get(); }
+    MemTracker* segment_metadata_mem_tracker() { return _segment_metadata_mem_tracker.get(); }
+    MemTracker* column_metadata_mem_tracker() { return _column_metadata_mem_tracker.get(); }
+    MemTracker* tablet_schema_mem_tracker() { return _tablet_schema_mem_tracker.get(); }
+    MemTracker* column_zonemap_index_mem_tracker() { return _column_zonemap_index_mem_tracker.get(); }
+    MemTracker* ordinal_index_mem_tracker() { return _ordinal_index_mem_tracker.get(); }
+    MemTracker* bitmap_index_mem_tracker() { return _bitmap_index_mem_tracker.get(); }
+    MemTracker* bloom_filter_index_mem_tracker() { return _bloom_filter_index_mem_tracker.get(); }
+    MemTracker* segment_zonemap_mem_tracker() { return _segment_zonemap_mem_tracker.get(); }
+    MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
+    MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
+    MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
+    MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker.get(); }
+    MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
+    MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
+    MemTracker* chunk_allocator_mem_tracker() { return _chunk_allocator_mem_tracker.get(); }
+    MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
+    MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
+    std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
     PriorityThreadPool* thread_pool() { return _thread_pool; }
     workgroup::ScanExecutor* scan_executor_without_workgroup() { return _scan_executor_without_workgroup; }
@@ -212,6 +215,9 @@ public:
 private:
     Status _init(const std::vector<StorePath>& store_paths);
     void _destroy();
+    void _reset_tracker();
+    template <class... Args>
+    std::shared_ptr<MemTracker> regist_tracker(Args&&... args);
 
     Status _init_storage_page_cache();
 
@@ -226,52 +232,55 @@ private:
     ClientCache<BackendServiceClient>* _backend_client_cache = nullptr;
     ClientCache<FrontendServiceClient>* _frontend_client_cache = nullptr;
     ClientCache<TFileBrokerServiceClient>* _broker_client_cache = nullptr;
-    MemTracker* _mem_tracker = nullptr;
+    // root process memory tracker
+    std::shared_ptr<MemTracker> _process_mem_tracker;
 
     // Limit the memory used by the query. At present, it can use 90% of the be memory limit
-    MemTracker* _query_pool_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _query_pool_mem_tracker;
 
     // Limit the memory used by load
-    MemTracker* _load_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _load_mem_tracker;
 
     // metadata l0
-    MemTracker* _metadata_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _metadata_mem_tracker;
 
     // metadata l1
-    MemTracker* _tablet_metadata_mem_tracker = nullptr;
-    MemTracker* _rowset_metadata_mem_tracker = nullptr;
-    MemTracker* _segment_metadata_mem_tracker = nullptr;
-    MemTracker* _column_metadata_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _tablet_metadata_mem_tracker;
+    std::shared_ptr<MemTracker> _rowset_metadata_mem_tracker;
+    std::shared_ptr<MemTracker> _segment_metadata_mem_tracker;
+    std::shared_ptr<MemTracker> _column_metadata_mem_tracker;
 
     // metadata l2
-    MemTracker* _tablet_schema_mem_tracker = nullptr;
-    MemTracker* _segment_zonemap_mem_tracker = nullptr;
-    MemTracker* _short_key_index_mem_tracker = nullptr;
-    MemTracker* _column_zonemap_index_mem_tracker = nullptr;
-    MemTracker* _ordinal_index_mem_tracker = nullptr;
-    MemTracker* _bitmap_index_mem_tracker = nullptr;
-    MemTracker* _bloom_filter_index_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _tablet_schema_mem_tracker;
+    std::shared_ptr<MemTracker> _segment_zonemap_mem_tracker;
+    std::shared_ptr<MemTracker> _short_key_index_mem_tracker;
+    std::shared_ptr<MemTracker> _column_zonemap_index_mem_tracker;
+    std::shared_ptr<MemTracker> _ordinal_index_mem_tracker;
+    std::shared_ptr<MemTracker> _bitmap_index_mem_tracker;
+    std::shared_ptr<MemTracker> _bloom_filter_index_mem_tracker;
 
     // The memory used for compaction
-    MemTracker* _compaction_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _compaction_mem_tracker;
 
     // The memory used for schema change
-    MemTracker* _schema_change_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _schema_change_mem_tracker;
 
     // The memory used for column pool
-    MemTracker* _column_pool_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _column_pool_mem_tracker;
 
     // The memory used for page cache
-    MemTracker* _page_cache_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _page_cache_mem_tracker;
 
     // The memory tracker for update manager
-    MemTracker* _update_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _update_mem_tracker;
 
-    MemTracker* _chunk_allocator_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _chunk_allocator_mem_tracker;
 
-    MemTracker* _clone_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _clone_mem_tracker;
 
-    MemTracker* _consistency_mem_tracker = nullptr;
+    std::shared_ptr<MemTracker> _consistency_mem_tracker;
+
+    std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
 
     PriorityThreadPool* _thread_pool = nullptr;
 
