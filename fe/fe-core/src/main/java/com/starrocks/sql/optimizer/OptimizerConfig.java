@@ -75,7 +75,7 @@ public class OptimizerConfig {
         return this.isMVRewritePlan;
     }
 
-    public void setMVRewritePlan(boolean MVRewritePlan) {
-        this.isMVRewritePlan = MVRewritePlan;
+    public void setMVRewritePlan(boolean isMVRewritePlan) {
+        this.isMVRewritePlan = isMVRewritePlan;
     }
 }
