@@ -59,6 +59,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 ((OlapTable) table).getBaseIndexId(),
                 null,
                 null,
+                false,
                 Lists.newArrayList(),
                 Lists.newArrayList());
     }
@@ -88,22 +89,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.selectedTabletId = selectedTabletId;
         this.hintsTabletIds = hintsTabletIds;
         this.prunedPartitionPredicates = Lists.newArrayList();
-    }
-
-    public LogicalOlapScanOperator(
-            Table table,
-            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
-            HashDistributionSpec hashDistributionSpec,
-            long limit,
-            ScalarOperator predicate,
-            long selectedIndexId,
-            List<Long> selectedPartitionId,
-            PartitionNames partitionNames,
-            List<Long> selectedTabletId,
-            List<Long> hintsTabletIds) {
-        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, hashDistributionSpec, limit, predicate,
-                selectedIndexId, selectedPartitionId, partitionNames, false, selectedTabletId, hintsTabletIds);
     }
 
     private LogicalOlapScanOperator(Builder builder) {
