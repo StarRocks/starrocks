@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "column/type_traits.h"
+#include "exprs/agg/count_if.h"
 #include "exprs/agg/distinct.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
@@ -69,6 +70,22 @@ struct DistinctDispatcher {
     }
 };
 
+VALUE_GUARD(LogicalType, CountIfLTGuard, lt_is_count_if_support, TYPE_BOOLEAN, TYPE_TINYINT, TYPE_SMALLINT, TYPE_INT,
+            TYPE_BIGINT, TYPE_LARGEINT, TYPE_FLOAT, TYPE_DOUBLE, TYPE_DECIMAL, TYPE_DECIMALV2, TYPE_DECIMAL32,
+            TYPE_DECIMAL64, TYPE_DECIMAL128);
+
+struct CountIfDispatcher {
+    template <LogicalType lt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (lt_is_count_if_support<lt>){
+            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, CountIfFunctionState>
+                    ("count_if", false, AggregateFactory::MakeCountIfAggregateFunction<lt>());
+            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, CountIfFunctionState>
+                    ("count_if", true, AggregateFactory::MakeCountIfAggregateFunction<lt>());
+        }
+    }
+};
+
 void AggregateFuncResolver::register_sumcount() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, SumDispatcher(), this);
@@ -79,6 +96,11 @@ void AggregateFuncResolver::register_sumcount() {
     // Some of the following functions will be the same as the above ones.
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, StorageSumDispatcher(), this);
+    }
+
+    // count_if
+    for (auto type : aggregate_types()) {
+        type_dispatch_all(type, CountIfDispatcher(), this);
     }
 
     _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, false, false),
