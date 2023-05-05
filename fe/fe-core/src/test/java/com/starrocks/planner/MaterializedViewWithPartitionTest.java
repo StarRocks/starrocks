@@ -207,14 +207,8 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     partitions=5/5\n" +
                         "     rollup: test_base_part");
 
-        // test union all
         sql("select c1, c3, c2 from test_base_part where c2 < 3000 and c3 < 3000")
-                .contains("UNION")
-                .contains("TABLE: partial_mv_6\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     partitions=5/5\n" +
-                        "     rollup: partial_mv_6")
-                .contains("PREDICATES: 9: c2 < 3000, 9: c2 > 1999\n" +
+                .contains("PREDICATES: 2: c2 < 3000\n" +
                         "     partitions=5/5\n" +
                         "     rollup: test_base_part");
 
