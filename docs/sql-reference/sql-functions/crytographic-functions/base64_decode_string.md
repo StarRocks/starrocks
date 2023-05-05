@@ -5,6 +5,8 @@
 This function is the same as [from_base64](from_base64.md).
 Decodes a Base64-encoded string. and an inverse of [to_base64](to_base64.md).
 
+This function is supported from v3.0.
+
 ## Syntax
 
 ```Haskell

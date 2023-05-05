@@ -4,6 +4,8 @@
 
 Computes the hyperbolic cosine of the argument.
 
+This function is supported from v3.0.
+
 ## Syntax
 
 ```Haskell

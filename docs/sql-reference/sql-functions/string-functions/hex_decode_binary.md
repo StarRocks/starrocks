@@ -2,7 +2,9 @@
 
 ## Description
 
-This function decodes a hex encoded string to a binary
+Decodes a hex encoded string to a binary.
+
+This function is supported from v3.0.
 
 ## Syntax
 
