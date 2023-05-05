@@ -27,7 +27,7 @@ Parameter description:
 > For more detailed parameter descriptions in Flink documentation, see [Checkpointing](https://nightlies.apache.org/flink/flink-docs-master/docs/dev/datastream/fault-tolerance/checkpointing/).
 
 - `execution.checkpointing.interval`: the base time interval of checkpointing. Unit: millisecond. To enable the checkpointing mechanism, you need to set this parameter to a value greater than `0`.
-- `state.backend`: specifies how the state is represented internally, and how and where it is persisted upon checkpointing depends on the chosen state backend. Common values are `filesystem` or `rocksdb`. After the checkpointing mechanism is enabled, the state is persisted upon checkpoints to prevent data loss and ensure data consistency after recovery. For more information on state, see [State Backends](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/state/state_backends/).
+- `state.backend`: specifies the state backend to determine how the state is represented internally, and how and where it is persisted upon checkpointing. Common values are `filesystem` or `rocksdb`. After the checkpointing mechanism is enabled, the state is persisted upon checkpoints to prevent data loss and ensure data consistency after recovery. For more information on state, see [State Backends](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/state/state_backends/).
 - `state.checkpoints.dir`: the directory to which checkpoints are written to.
 
 ## How can I manually stop a Flink job and later restore it to the state before stopping?
