@@ -10,7 +10,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -355,5 +357,20 @@ public class CTASAnalyzerTest {
         Assert.assertTrue(properties2.containsKey("replication_num"));
         Assert.assertEquals(properties2.get("replication_num"), "1");
 
+    }
+
+    @Test
+    public void testCTASDefaultLimit() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_limit as select * from duplicate_table_with_null t1;";
+        try {
+            ctx.getSessionVariable().setSqlSelectLimit(10);
+            CreateTableAsSelectStmt ctasStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            QueryStatement query = ctasStmt.getQueryStatement();
+            Assert.assertFalse(query.getQueryRelation().hasLimit());
+        } finally {
+            ctx.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        }
     }
 }
