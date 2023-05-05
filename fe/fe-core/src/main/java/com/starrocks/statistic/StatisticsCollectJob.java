@@ -109,6 +109,7 @@ public abstract class StatisticsCollectJob {
             // Normally, if the page cache is enabled, the page cache must be full. Page cache is used for query 
             // acceleration, then page cache is better filled with the user's data. 
             sessionVariable.setUsePageCache(false);
+            sessionVariable.setEnableMaterializedViewRewrite(false);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();
