@@ -533,7 +533,8 @@ void ExecEnv::_destroy() {
         _lake_tablet_manager->prune_metacache();
     }
 
-    // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate _query_pool_mem_tracker.
+    // WorkGroupManager should release MemTracker of WorkGroups belongs to itself before deallocate
+    // _query_pool_mem_tracker.
     workgroup::WorkGroupManager::instance()->destroy();
     SAFE_DELETE(_query_context_mgr);
     SAFE_DELETE(_runtime_filter_cache);
