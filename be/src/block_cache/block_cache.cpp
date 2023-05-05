@@ -24,6 +24,7 @@
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/statusor.h"
+#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
@@ -34,7 +35,25 @@ BlockCache* BlockCache::instance() {
 }
 
 Status BlockCache::init(const CacheOptions& options) {
-    // TODO: check block size limit
+    for (auto& dir : options.disk_spaces) {
+        if (dir.size == 0) {
+            continue;
+        }
+        if (fs::path_exist(dir.path)) {
+            ASSIGN_OR_RETURN(const bool is_dir, fs::is_directory(dir.path));
+            if (!is_dir) {
+                LOG(ERROR) << "the block cache disk path already exists but not a directory, path: " << dir.path;
+                return Status::InvalidArgument("invalid block cache disk path");
+            }
+        } else {
+            auto create_res = fs::create_directories(dir.path);
+            if (!create_res.ok()) {
+                LOG(ERROR) << "create block cache disk path failed, path: " << dir.path
+                           << ", reason: " << create_res.get_error_msg();
+                return Status::InvalidArgument("invalid block cache disk path");
+            }
+        }
+    }
     _block_size = options.block_size;
     if (options.engine == "starcache") {
         _kv_cache = std::make_unique<StarCacheWrapper>();
