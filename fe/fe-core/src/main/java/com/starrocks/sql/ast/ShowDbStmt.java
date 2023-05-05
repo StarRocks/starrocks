@@ -20,8 +20,8 @@ import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
 

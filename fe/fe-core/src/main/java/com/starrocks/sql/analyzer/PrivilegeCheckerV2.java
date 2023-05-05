@@ -25,9 +25,9 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Resource;
-import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -523,7 +523,7 @@ public class PrivilegeCheckerV2 {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_PRIVILEGE_ACCESS_TABLE_DENIED,
                                 context.getQualifiedUser(), tableName);
                     }
-                } else if (table instanceof SchemaTable && ((SchemaTable) table).requireOperatePrivilege()) {
+                } else if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
                     checkStmtOperatePrivilege(context);
                 } else if (table.isMaterializedView()) {
                     checkMvAction(context, tableName, PrivilegeType.SELECT);
