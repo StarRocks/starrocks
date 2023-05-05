@@ -509,8 +509,8 @@ public class AnalyzeManager implements Writable {
                 }
             }
 
-            if (null != data.status) {
-                for (AnalyzeStatus status : data.status) {
+            if (null != data.nativeStatus) {
+                for (AnalyzeStatus status : data.nativeStatus) {
                     replayAddAnalyzeStatus(status);
                 }
             }
@@ -534,7 +534,7 @@ public class AnalyzeManager implements Writable {
         // save history
         SerializeData data = new SerializeData();
         data.jobs = getAllAnalyzeJobList();
-        data.status = new ArrayList<>(getAnalyzeStatusMap().values().stream().
+        data.nativeStatus = new ArrayList<>(getAnalyzeStatusMap().values().stream().
                 filter(status -> status instanceof NativeAnalyzeStatus).
                 map(status -> (NativeAnalyzeStatus) status).collect(Collectors.toSet()));
         data.basicStatsMeta = new ArrayList<>(getBasicStatsMetaMap().values());
@@ -564,7 +564,7 @@ public class AnalyzeManager implements Writable {
         public List<AnalyzeJob> jobs;
 
         @SerializedName("analyzeStatus")
-        public List<NativeAnalyzeStatus> status;
+        public List<NativeAnalyzeStatus> nativeStatus;
 
         @SerializedName("basicStatsMeta")
         public List<BasicStatsMeta> basicStatsMeta;

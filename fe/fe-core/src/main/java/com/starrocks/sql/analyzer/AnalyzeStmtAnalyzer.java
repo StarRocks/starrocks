@@ -108,10 +108,6 @@ public class AnalyzeStmtAnalyzer {
             analyzeAnalyzeTypeDesc(session, statement, statement.getAnalyzeTypeDesc());
 
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
-                if (statement.isAsync()) {
-                    throw new SemanticException("External table %s don't support async analyze",
-                            statement.getTableName().toString());
-                }
                 if (statement.isSample()) {
                     throw new SemanticException("External table %s only support FULL analyze",
                             statement.getTableName().toString());
@@ -192,6 +188,10 @@ public class AnalyzeStmtAnalyzer {
         private void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement,
                                             AnalyzeTypeDesc analyzeTypeDesc) {
             if (analyzeTypeDesc instanceof AnalyzeHistogramDesc) {
+                if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
+                    throw new SemanticException("External table %s don't support histogram analyze",
+                            statement.getTableName().toString());
+                }
                 List<String> columns = statement.getColumnNames();
                 OlapTable analyzeTable = (OlapTable) MetaUtils.getTable(session, statement.getTableName());
 
