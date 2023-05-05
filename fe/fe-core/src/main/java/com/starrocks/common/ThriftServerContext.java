@@ -22,12 +22,9 @@
 package com.starrocks.common;
 
 import com.starrocks.thrift.TNetworkAddress;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 import org.apache.thrift.server.ServerContext;
 
 public class ThriftServerContext implements ServerContext {
-    private static final Logger LOG = LogManager.getLogger(ThriftServerEventProcessor.class);
     private TNetworkAddress client;
 
     public ThriftServerContext(TNetworkAddress clientAddress) {
@@ -36,5 +33,23 @@ public class ThriftServerContext implements ServerContext {
 
     public TNetworkAddress getClient() {
         return client;
+    }
+
+    @Override
+    public <T> T unwrap(Class<T> iface) {
+        try {
+            if (isWrapperFor(iface)) {
+                return iface.cast(client);
+            } else {
+                throw new RuntimeException("The context is not a wrapper for " + iface.getName());
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("The context is not a wrapper and does not implement the interface");
+        }
+    }
+
+    @Override
+    public boolean isWrapperFor(Class<?> iface) {
+        return iface.isInstance(client);
     }
 }

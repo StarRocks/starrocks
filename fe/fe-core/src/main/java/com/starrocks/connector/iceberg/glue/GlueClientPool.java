@@ -2,7 +2,6 @@
 
 package com.starrocks.connector.iceberg.glue;
 
-import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
 import com.starrocks.connector.iceberg.hive.HiveClientPool;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -33,8 +32,7 @@ public class GlueClientPool extends ClientPoolImpl<IMetaStoreClient, TException>
     protected IMetaStoreClient newClient() {
         try {
             try {
-                return GET_CLIENT.invoke(hiveConf, (HiveMetaHookLoader) tbl -> null,
-                        AWSCatalogMetastoreClient.class.getName());
+                return null;
             } catch (RuntimeException e) {
                 // any MetaException would be wrapped into RuntimeException during reflection, so let's double-check type here
                 if (e.getCause() instanceof MetaException) {

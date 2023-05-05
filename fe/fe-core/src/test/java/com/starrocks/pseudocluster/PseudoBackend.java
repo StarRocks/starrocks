@@ -813,9 +813,10 @@ public class PseudoBackend {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
             }
-            TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
-            final TExecPlanFragmentParams params = new TExecPlanFragmentParams();
+            TExecPlanFragmentParams params;
             try {
+                TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
+                params = new TExecPlanFragmentParams();
                 deserializer.deserialize(params, request.getSerializedRequest());
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);
@@ -846,9 +847,10 @@ public class PseudoBackend {
             if (shutdown) {
                 throw new RuntimeException("backend " + getId() + " shutdown");
             }
-            TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
-            final TExecBatchPlanFragmentsParams params = new TExecBatchPlanFragmentsParams();
+            TExecBatchPlanFragmentsParams params;
             try {
+                TDeserializer deserializer = new TDeserializer(new TBinaryProtocol.Factory());
+                params = new TExecBatchPlanFragmentsParams();
                 deserializer.deserialize(params, request.getSerializedRequest());
             } catch (TException e) {
                 LOG.warn("error deserialize request", e);

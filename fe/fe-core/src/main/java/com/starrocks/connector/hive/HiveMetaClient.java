@@ -7,10 +7,10 @@ import com.starrocks.common.Config;
 import com.starrocks.connector.ClassUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
-import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
 import com.starrocks.sql.PlannerProfile;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -31,7 +31,6 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.connector.hive.HiveConnector.DUMMY_THRIFT_URI;
-import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class HiveMetaClient {
@@ -74,16 +73,7 @@ public class HiveMetaClient {
         private final IMetaStoreClient hiveClient;
 
         private RecyclableClient(HiveConf conf) throws MetaException {
-            if (DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
-                        DLFProxyMetaStoreClient.class.getName());
-            } else if (GLUE_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
-                        AWSCatalogMetastoreClient.class.getName());
-            } else {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
-                        HiveMetaStoreThriftClient.class.getName());
-            }
+            hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER, HiveMetaStoreClient.class.getName());
         }
 
         // When the number of currently used clients is less than MAX_HMS_CONNECTION_POOL_SIZE,
