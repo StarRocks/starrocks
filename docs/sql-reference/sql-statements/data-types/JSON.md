@@ -172,6 +172,6 @@ You can use JSON functions and operators to construct and process JSON data. For
 
 - JSON columns are supported in Duplicate Key, Primary Key, and Unique Key tables. They are not supported in Aggregate tables.
 
-- JSON columns cannot be used as partition keys, bucketing keys, or dimension columns (DUPLICATE KEY, PRIMARY KEY, UNIQUE KEY). They cannot be used in ORDER BY, GROUP BY, and JOIN clauses.
+- JSON columns cannot be used as partition keys, bucketing keys, or dimension columns of DUPLICATE KEY, PRIMARY KEY, and UNIQUE KEY tables. They cannot be used in ORDER BY, GROUP BY, and JOIN clauses.
 
 - StarRocks allows you to use the following JSON comparison operators to query JSON data: `<`, `<=`, `>`, `>=`, `=`, and `!=`. It does not allow you to use `IN` to query JSON data.
