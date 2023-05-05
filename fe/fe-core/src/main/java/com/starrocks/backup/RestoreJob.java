@@ -39,6 +39,7 @@ import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.Status.ErrCode;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
@@ -489,12 +490,25 @@ public class RestoreJob extends AbstractJob {
                         return;
                     }
                     LOG.debug("get intersect part names: {}, job: {}", intersectPartNames, this);
-                    if (localOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames)
-                            != remoteOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames)) {
+                    if (localOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames, true)
+                            != remoteOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames, true) ||
+                                localOlapTbl.getBaseSchema().size() != remoteOlapTbl.getBaseSchema().size()) {
                         status = new Status(ErrCode.COMMON_ERROR,
                                 "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
                                         + " already exist but with different schema");
                         return;
+                    }
+
+                    for (int i = 0; i < localOlapTbl.getBaseSchema().size(); ++i) {
+                        Column localColumn = localOlapTbl.getBaseSchema().get(i);
+                        Column remoteColumn = remoteOlapTbl.getBaseSchema().get(i);
+
+                        if (!localColumn.equals(remoteColumn)) {
+                            status = new Status(ErrCode.COMMON_ERROR,
+                                    "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
+                                            + " already exist but with different schema");
+                            return;
+                        }
                     }
 
                     // Table with same name and has same schema. Check partition

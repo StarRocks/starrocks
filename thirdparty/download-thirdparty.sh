@@ -299,6 +299,10 @@ if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.7" ]; then
     patch -p1 < $TP_PATCH_DIR/brpc-0.9.7.patch
     touch $PATCHED_MARK
 fi
+if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
+    patch -p1 < $TP_PATCH_DIR/brpc-1.3.0.patch
+    touch $PATCHED_MARK
+fi
 cd -
 echo "Finished patching $BRPC_SOURCE"
 
@@ -431,3 +435,13 @@ echo "Finished patching $VPACK_SOURCE"
 
 cd -
 
+# patch arrows to use our built jemalloc
+if [[ -d $TP_SOURCE_DIR/$ARROW_SOURCE ]] ; then
+    cd $TP_SOURCE_DIR/$ARROW_SOURCE
+    if [ ! -f $PATCHED_MARK ] && [ $ARROW_SOURCE = "arrow-apache-arrow-5.0.0" ] ; then
+        patch -p1 < $TP_PATCH_DIR/arrow-5.0.0-force-use-external-jemalloc.patch
+        touch $PATCHED_MARK
+    fi
+    cd -
+    echo "Finished patching $ARROW_SOURCE"
+fi

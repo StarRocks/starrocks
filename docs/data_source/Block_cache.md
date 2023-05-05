@@ -104,11 +104,11 @@ block_cache_disk_size = 1288490188800
 
 You can check whether a query hits local cache by analyzing the following metrics in the query profile:
 
-- `BlockCacheReadBytes`: indicates the amount of data that StarRocks reads directly from the memory and disks.
-- `BlockCacheWriteBytes`: indicates the amount of data loaded from an external storage system to memory and disks.
-- `BytesRead`: indicates the amount of data that StarRocks read from an external storage system.
+- `BlockCacheReadBytes`: the amount of data that StarRocks reads directly from its memory and disks.
+- `BlockCacheWriteBytes`: the amount of data loaded from an external storage system to StarRocks' memory and disks.
+- `BytesRead`: the total amount of data that is read, including data that StarRocks reads from an external storage system, its memory, and disks.
 
-Example 1: In this example, StarRocks reads a large amount of data (7.65 GB) from the external storage system and few data (518.73 MB) from the memory and disks. This means that few local caches were hit.
+Example 1: In this example, StarRocks reads a large amount of data (7.65 GB) from the external storage system and only a few data (518.73 MB) from the memory and disks. This means that few local caches were hit.
 
 ```Plain
  - Table: lineorder
@@ -136,24 +136,26 @@ Example 1: In this example, StarRocks reads a large amount of data (7.65 GB) fro
    - __MIN_OF_BytesRead: 0.00
 ```
 
-Example 2: In this example, the amount of data StarRocks reads directly from the external storage system is 0, which means StarRocks reads data only from local cache.
+Example 2: In this example, StarRocks reads a large amount of data (46.08 GB) from local cache and no data from the external storage system, which means StarRocks reads data only from local cache.
 
 ```Plain
-- Table: lineorder
- - BlockCacheReadBytes: 7.37 GB
-   - __MAX_OF_BlockCacheReadBytes: 60.73 MB
-   - __MIN_OF_BlockCacheReadBytes: 16.00 KB
- - BlockCacheReadCounter: 8.571K (8571)
-   - __MAX_OF_BlockCacheReadCounter: 68
-   - __MIN_OF_BlockCacheReadCounter: 1
- - BlockCacheReadTimer: 174.362ms
-   - __MAX_OF_BlockCacheReadTimer: 753.745ms
-   - __MIN_OF_BlockCacheReadTimer: 15.840us
- - BlockCacheWriteBytes: 0.00 
- - BlockCacheWriteCounter: 0
- - BlockCacheWriteTimer: 0ns
- - BufferUnplugCount: 103
-   - __MAX_OF_BufferUnplugCount: 5
-   - __MIN_OF_BufferUnplugCount: 0
- - BytesRead: 0.00 
+Table: lineitem
+- BlockCacheReadBytes: 46.08 GB
+ - __MAX_OF_BlockCacheReadBytes: 194.99 MB
+ - __MIN_OF_BlockCacheReadBytes: 81.25 MB
+- BlockCacheReadCounter: 72.237K (72237)
+ - __MAX_OF_BlockCacheReadCounter: 299
+ - __MIN_OF_BlockCacheReadCounter: 118
+- BlockCacheReadTimer: 856.481ms
+ - __MAX_OF_BlockCacheReadTimer: 1s547ms
+ - __MIN_OF_BlockCacheReadTimer: 261.824ms
+- BlockCacheWriteBytes: 0.00 
+- BlockCacheWriteCounter: 0
+- BlockCacheWriteTimer: 0ns
+- BufferUnplugCount: 1.231K (1231)
+ - __MAX_OF_BufferUnplugCount: 81
+ - __MIN_OF_BufferUnplugCount: 35
+- BytesRead: 46.08 GB
+ - __MAX_OF_BytesRead: 194.99 MB
+ - __MIN_OF_BytesRead: 81.25 MB
 ```

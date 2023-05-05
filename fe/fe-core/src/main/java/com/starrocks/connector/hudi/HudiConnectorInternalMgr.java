@@ -36,12 +36,14 @@ public class HudiConnectorInternalMgr {
     private final boolean isRecursive;
     private final int loadRemoteFileMetadataThreadNum;
 
+    private final boolean enableBackgroundRefreshHudiMetadata;
+
     public HudiConnectorInternalMgr(String catalogName, Map<String, String> properties, HdfsEnvironment hdfsEnvironment) {
         this.catalogName = catalogName;
         this.properties = properties;
         this.hdfsEnvironment = hdfsEnvironment;
         this.enableMetastoreCache = Boolean.parseBoolean(properties.getOrDefault("enable_metastore_cache", "true"));
-        this.hmsConf = new CachingHiveMetastoreConf(properties);
+        this.hmsConf = new CachingHiveMetastoreConf(properties, "hudi");
 
         this.enableRemoteFileCache = Boolean.parseBoolean(properties.getOrDefault("enable_remote_file_cache", "true"));
         this.remoteFileConf = new CachingRemoteFileConf(properties);
@@ -49,6 +51,9 @@ public class HudiConnectorInternalMgr {
         this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("enable_recursive_listing", "false"));
         this.loadRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_load_thread_num",
                 String.valueOf(Config.remote_file_metadata_load_concurrency)));
+
+        this.enableBackgroundRefreshHudiMetadata = Boolean.parseBoolean(properties.getOrDefault(
+                "enable_background_refresh_connector_metadata", "true"));
     }
 
     public void shutdown() {
@@ -97,7 +102,7 @@ public class HudiConnectorInternalMgr {
                     new ThreadFactoryBuilder().setNameFormat("hudi-remote-files-refresh-%d").build());
             baseRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                     remoteFileIO,
-                    new ReentrantExecutor(refreshRemoteFileExecutor, remoteFileConf.getPerQueryCacheMaxSize()),
+                    new ReentrantExecutor(refreshRemoteFileExecutor, remoteFileConf.getRefreshMaxThreadNum()),
                     remoteFileConf.getCacheTtlSec(),
                     remoteFileConf.getCacheRefreshIntervalSec(),
                     remoteFileConf.getCacheMaxSize());
@@ -125,5 +130,9 @@ public class HudiConnectorInternalMgr {
 
     public CachingRemoteFileConf getRemoteFileConf() {
         return remoteFileConf;
+    }
+
+    public boolean isEnableBackgroundRefreshHudiMetadata() {
+        return enableBackgroundRefreshHudiMetadata;
     }
 }

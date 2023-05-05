@@ -10,11 +10,13 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
@@ -28,11 +30,13 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -51,10 +55,12 @@ import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
@@ -148,7 +154,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     continue;
                 }
                 checked = true;
-                Set<String> partitionsToRefresh = getPartitionsToRefreshForMaterializedView(context.getProperties());
+                TableProperty mvTableProperty = materializedView.getTableProperty();
+                Set<String> partitionsToRefresh = getPartitionsToRefreshForMaterializedView(context.getProperties(),
+                        mvTableProperty);
                 if (partitionsToRefresh.isEmpty()) {
                     LOG.info("no partitions to refresh for materialized view {}", materializedView.getName());
                     return;
@@ -207,7 +215,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         }
         String nextPartitionStart = null;
         String endPartitionName = null;
-        if (partitionNameIter.hasNext())  {
+        if (partitionNameIter.hasNext()) {
             String startPartitionName = partitionNameIter.next();
             Range<PartitionKey> partitionKeyRange = mappedPartitionsToRefresh.get(startPartitionName);
             LiteralExpr lowerExpr = partitionKeyRange.lowerEndpoint().getKeys().get(0);
@@ -437,12 +445,13 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         Map<String, String> partitionProperties = getPartitionProperties(materializedView);
         DistributionDesc distributionDesc = getDistributionDesc(materializedView);
         Map<String, Range<PartitionKey>> adds = partitionDiff.getAdds();
+
+        addPartitions(database, materializedView, adds, partitionProperties, distributionDesc);
         for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
             String mvPartitionName = addEntry.getKey();
-            addPartition(database, materializedView, mvPartitionName,
-                    addEntry.getValue(), partitionProperties, distributionDesc);
             mvPartitionMap.put(mvPartitionName, addEntry.getValue());
         }
+
         LOG.info("The process of synchronizing materialized view [{}] add partitions range [{}]",
                 materializedView.getName(), adds);
 
@@ -497,31 +506,36 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     @VisibleForTesting
-    public Set<String> getPartitionsToRefreshForMaterializedView(Map<String, String> properties)
+    public Set<String> getPartitionsToRefreshForMaterializedView(Map<String, String> taskProperty,
+                                                                 TableProperty mvTableProperty)
             throws AnalysisException {
-        String start = properties.get(TaskRun.PARTITION_START);
-        String end = properties.get(TaskRun.PARTITION_END);
-        boolean force = Boolean.parseBoolean(properties.get(TaskRun.FORCE));
+        String start = taskProperty.get(TaskRun.PARTITION_START);
+        String end = taskProperty.get(TaskRun.PARTITION_END);
+        boolean force = Boolean.parseBoolean(taskProperty.get(TaskRun.FORCE));
+        int partitionTTLNumber = mvTableProperty.getPartitionTTLNumber();
         if (force && start == null && end == null) {
-            return Sets.newHashSet(materializedView.getPartitionNames());
+            return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
         }
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
             if (force || unPartitionedMVNeedToRefresh()) {
-                return Sets.newHashSet(materializedView.getPartitionNames());
+                return materializedView.getPartitionNames();
             }
         } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             Expr partitionExpr = MaterializedView.getPartitionExpr(materializedView);
             Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
             Table partitionTable = partitionTableAndColumn.first;
-            Set<String> mvRangePartitionNames = SyncPartitionUtils.getPartitionNamesByRange(materializedView, start, end);
+            boolean isAutoRefresh = (mvContext.type == Constants.TaskType.PERIODICAL ||
+                    mvContext.type == Constants.TaskType.EVENT_TRIGGERED);
+            Set<String> mvRangePartitionNames = SyncPartitionUtils.getPartitionNamesByRangeWithPartitionLimit(
+                    materializedView, start, end, partitionTTLNumber, isAutoRefresh);
 
             if (needToRefreshNonPartitionTable(partitionTable)) {
                 if (start == null && end == null) {
                     // if non partition table changed, should refresh all partitions of materialized view
-                    return Sets.newHashSet(materializedView.getPartitionNames());
+                    return materializedView.getValidPartitionMap(partitionTTLNumber).keySet();
                 } else {
                     // If the user specifies the start and end ranges, and the non-partitioned table still changes,
                     // it should be refreshed according to the user-specified range, not all partitions.
@@ -673,6 +687,13 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         if (outputPartitionSlot != null) {
             List<Expr> partitionPredicates =
                     MvUtils.convertRange(outputPartitionSlot, sourceTablePartitionRange);
+            // range contains the min value could be null value
+            Optional<Range<PartitionKey>> nullRange = sourceTablePartitionRange.stream().
+                    filter(range -> range.lowerEndpoint().isMinValue()).findAny();
+            if (nullRange.isPresent()) {
+                Expr isNullPredicate = new IsNullPredicate(outputPartitionSlot, false);
+                partitionPredicates.add(isNullPredicate);
+            }
             tableRelation.setPartitionPredicate(Expr.compoundOr(partitionPredicates));
         }
     }
@@ -729,7 +750,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                         Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
                         Column partitionColumn = partitionTableAndColumn.second;
                         // For Non-partition based base table, it's not necessary to check the partition changed.
-                        if (!snapshotTable.containColumn(partitionColumn.getName())) {
+                        if (!snapshotTable.equals(partitionTableAndColumn.first)
+                                || !snapshotTable.containColumn(partitionColumn.getName())) {
                             continue;
                         }
 
@@ -759,7 +781,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                         Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
                         Column partitionColumn = partitionTableAndColumn.second;
                         // For Non-partition based base table, it's not necessary to check the partition changed.
-                        if (!snapShotIcebergTable.containColumn(partitionColumn.getName())) {
+                        if (!snapshotTable.equals(partitionTableAndColumn.first)
+                                || !snapShotIcebergTable.containColumn(partitionColumn.getName())) {
                             continue;
                         }
 
@@ -888,8 +911,11 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         partitionProperties.put("storage_medium", materializedView.getStorageMedium());
         String storageCooldownTime =
                 materializedView.getTableProperty().getProperties().get("storage_cooldown_time");
-        if (storageCooldownTime != null) {
-            partitionProperties.put("storage_cooldown_time", storageCooldownTime);
+        if (storageCooldownTime != null
+                && !storageCooldownTime.equals(String.valueOf(DataProperty.MAX_COOLDOWN_TIME_MS))) {
+            // cast long str to time str e.g.  '1587473111000' -> '2020-04-21 15:00:00'
+            String storageCooldownTimeStr = TimeUtils.longToTimeString(Long.parseLong(storageCooldownTime));
+            partitionProperties.put("storage_cooldown_time", storageCooldownTimeStr);
         }
         return partitionProperties;
     }
@@ -904,27 +930,41 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         return new HashDistributionDesc(hashDistributionInfo.getBucketNum(), distColumnNames);
     }
 
-    private void addPartition(Database database, MaterializedView materializedView, String partitionName,
-                              Range<PartitionKey> partitionKeyRange, Map<String, String> partitionProperties,
-                              DistributionDesc distributionDesc) {
-        String lowerBound = partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue();
-        String upperBound = partitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue();
-        boolean isMaxValue = partitionKeyRange.upperEndpoint().isMaxValue();
-        PartitionValue upperPartitionValue;
-        if (isMaxValue) {
-            upperPartitionValue = PartitionValue.MAX_VALUE;
-        } else {
-            upperPartitionValue = new PartitionValue(upperBound);
+    private void addPartitions(Database database, MaterializedView materializedView,
+                               Map<String, Range<PartitionKey>> adds, Map<String, String> partitionProperties,
+                               DistributionDesc distributionDesc) {
+        if (adds.isEmpty()) {
+            return;
         }
-        PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
-                Collections.singletonList(new PartitionValue(lowerBound)),
-                Collections.singletonList(upperPartitionValue));
-        SingleRangePartitionDesc singleRangePartitionDesc =
-                new SingleRangePartitionDesc(false, partitionName, partitionKeyDesc, partitionProperties);
+        List<PartitionDesc> partitionDescs = Lists.newArrayList();
+
+        for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
+            String mvPartitionName = addEntry.getKey();
+            Range<PartitionKey> partitionKeyRange = addEntry.getValue();
+
+            String lowerBound = partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue();
+            String upperBound = partitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue();
+            boolean isMaxValue = partitionKeyRange.upperEndpoint().isMaxValue();
+            PartitionValue upperPartitionValue;
+            if (isMaxValue) {
+                upperPartitionValue = PartitionValue.MAX_VALUE;
+            } else {
+                upperPartitionValue = new PartitionValue(upperBound);
+            }
+            PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
+                    Collections.singletonList(new PartitionValue(lowerBound)),
+                    Collections.singletonList(upperPartitionValue));
+            SingleRangePartitionDesc singleRangePartitionDesc =
+                    new SingleRangePartitionDesc(false, mvPartitionName, partitionKeyDesc, partitionProperties);
+            partitionDescs.add(singleRangePartitionDesc);
+        }
+        RangePartitionDesc rangePartitionDesc =
+                new RangePartitionDesc(materializedView.getPartitionColumnNames(), partitionDescs);
+
         try {
             GlobalStateMgr.getCurrentState().addPartitions(
                     database, materializedView.getName(),
-                    new AddPartitionClause(singleRangePartitionDesc, distributionDesc,
+                    new AddPartitionClause(rangePartitionDesc, distributionDesc,
                             partitionProperties, false));
         } catch (Exception e) {
             throw new DmlException("Expression add partition failed: %s, db: %s, table: %s", e, e.getMessage(),

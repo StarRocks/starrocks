@@ -355,6 +355,7 @@ vectorized_functions = [
     [50201, 'current_timestamp', 'DATETIME', [], 'TimeFunctions::now'],
     [50202, 'localtime', 'DATETIME', [], 'TimeFunctions::now'],
     [50203, 'localtimestamp', 'DATETIME', [], 'TimeFunctions::now'],
+    [50204, 'now', 'DATETIME', ['INT'], 'TimeFunctions::now'],
     [50210, 'curtime', 'TIME', [], 'TimeFunctions::curtime'],
     [50211, 'current_time', 'TIME', [], 'TimeFunctions::curtime'],
     [50220, 'curdate', 'DATE', [], 'TimeFunctions::curdate'],
@@ -491,6 +492,9 @@ vectorized_functions = [
     [80020, 'hll_hash', 'HLL', ['VARCHAR'], 'HyperloglogFunction::hll_hash'],
     [80030, 'hll_empty', 'HLL', [], 'HyperloglogFunction::hll_empty'],
 
+    [80040, 'hll_serialize', 'VARCHAR', ['HLL'], 'HyperloglogFunction::hll_serialize'],
+    [80041, 'hll_deserialize', 'HLL', ['VARCHAR'], 'HyperloglogFunction::hll_deserialize'],
+
     # bitmap function
     [90010, 'to_bitmap', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::to_bitmap', False],
     [90020, 'bitmap_hash', 'BITMAP', ['VARCHAR'], 'BitmapFunctions::bitmap_hash', False],
@@ -562,6 +566,8 @@ vectorized_functions = [
     [110018, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
     [110019, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys", 
       "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+    [110100, "to_json", "JSON", ["ANY_MAP"], "JsonFunctions::to_json", False],
+    [110101, "to_json", "JSON", ["ANY_STRUCT"], "JsonFunctions::to_json", False],
 
     # aes and base64 function
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt", False],

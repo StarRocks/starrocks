@@ -257,7 +257,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitCreateResourceStatement(CreateResourceStmt statement, ConnectContext context) {
-            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.CREATE_RESOURCE)) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.CREATE_RESOURCE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE_RESOURCE");
             }
             return null;
@@ -285,7 +285,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitInstallPluginStatement(InstallPluginStmt statement, ConnectContext context) {
-            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.PLUGIN)) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.PLUGIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "PLUGIN");
             }
             return null;
@@ -293,7 +293,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitUninstallPluginStatement(UninstallPluginStmt statement, ConnectContext context) {
-            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.PLUGIN)) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.PLUGIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "PLUGIN");
             }
             return null;
@@ -301,7 +301,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitShowPluginsStatement(ShowPluginsStmt statement, ConnectContext context) {
-            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.PLUGIN)) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.PLUGIN)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "PLUGIN");
             }
             return null;
@@ -312,7 +312,7 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {
             checkAnyActionOnOrUnderDb(context, context.getCurrentCatalog(), statement.getDbName());
-            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.FILE)) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.FILE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
             }
             return null;
@@ -321,7 +321,7 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitDropFileStatement(DropFileStmt statement, ConnectContext context) {
             checkAnyActionOnOrUnderDb(context, context.getCurrentCatalog(), statement.getDbName());
-            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.FILE)) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.FILE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
             }
             return null;
@@ -337,7 +337,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext context) {
-            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.BLACKLIST)) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.BLACKLIST)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "BLACKLIST");
             }
             return null;
@@ -345,7 +345,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDelSqlBlackListStatement(DelSqlBlackListStmt statement, ConnectContext context) {
-            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.BLACKLIST)) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.BLACKLIST)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "BLACKLIST");
             }
             return null;
@@ -353,7 +353,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, ConnectContext context) {
-            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.BLACKLIST)) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.BLACKLIST)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "BLACKLIST");
             }
             return null;
@@ -390,7 +390,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitCreateAlterUserStatement(BaseCreateAlterUserStmt statement, ConnectContext context) {
-            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
             return null;
@@ -457,7 +457,6 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
-        @Override
         public Void visitSetUserPropertyStatement(SetUserPropertyStmt statement, ConnectContext context) {
             String user = statement.getUser();
             if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())

@@ -73,7 +73,7 @@ public class HiveConnectorTest {
                 result = cachingRemoteFileIO;
 
                 internalMgr.getHiveMetastoreConf();
-                result = new CachingHiveMetastoreConf(properties);
+                result = new CachingHiveMetastoreConf(properties, "hive");
 
                 internalMgr.getRemoteFileConf();
                 result = new CachingRemoteFileConf(properties);

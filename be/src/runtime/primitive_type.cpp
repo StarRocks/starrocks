@@ -225,4 +225,12 @@ size_t get_size_of_fixed_length_type(PrimitiveType ptype) {
     return type_dispatch_all(ptype, FixedLengthTypeGetter());
 }
 
+const std::vector<PrimitiveType>& sortable_types() {
+    const static std::vector<PrimitiveType> kTypes{TYPE_BOOLEAN,   TYPE_TINYINT,   TYPE_SMALLINT,  TYPE_INT,
+                                                   TYPE_BIGINT,    TYPE_LARGEINT,  TYPE_FLOAT,     TYPE_DOUBLE,
+                                                   TYPE_VARCHAR,   TYPE_CHAR,      TYPE_DATE,      TYPE_DATETIME,
+                                                   TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128};
+    return kTypes;
+}
+
 } // namespace starrocks

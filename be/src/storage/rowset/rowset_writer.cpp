@@ -197,9 +197,15 @@ Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& da
         // 2. flush segment file
         auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
 
-        size_t remaining_bytes = segment_pb.data_size();
+        butil::IOBuf segment_data;
+        int64_t remaining_bytes = data.cutn(&segment_data, segment_pb.data_size());
+        if (remaining_bytes != segment_pb.data_size()) {
+            return Status::InternalError(fmt::format("segment {} file size {} not equal attachment size {}",
+                                                     segment_pb.DebugString(), remaining_bytes,
+                                                     segment_pb.data_size()));
+        }
         while (remaining_bytes > 0) {
-            auto written_bytes = data.cut_into_writer(writer.get(), remaining_bytes);
+            auto written_bytes = segment_data.cut_into_writer(writer.get(), remaining_bytes);
             if (written_bytes < 0) {
                 return io::io_error(wfile->filename(), errno);
             }
@@ -244,9 +250,15 @@ Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& da
         // 2. flush delete file
         auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
 
-        size_t remaining_bytes = segment_pb.delete_data_size();
+        butil::IOBuf delete_data;
+        int64_t remaining_bytes = data.cutn(&delete_data, segment_pb.delete_data_size());
+        if (remaining_bytes != segment_pb.delete_data_size()) {
+            return Status::InternalError(fmt::format("segment {} delete size {} not equal attachment size {}",
+                                                     segment_pb.DebugString(), remaining_bytes,
+                                                     segment_pb.delete_data_size()));
+        }
         while (remaining_bytes > 0) {
-            auto written_bytes = data.cut_into_writer(writer.get(), remaining_bytes);
+            auto written_bytes = delete_data.cut_into_writer(writer.get(), remaining_bytes);
             if (written_bytes < 0) {
                 return io::io_error(wfile->filename(), errno);
             }

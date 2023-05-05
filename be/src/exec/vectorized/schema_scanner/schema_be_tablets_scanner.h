@@ -35,7 +35,12 @@ struct TabletBasicInfo {
     int64_t create_time{0};
     int32_t state{0};
     int32_t type{0};
+    std::string data_dir;
+    int64_t shard_id{0};
+    int64_t schema_hash{0};
 };
+
+namespace vectorized {
 
 class SchemaBeTabletsScanner : public vectorized::SchemaScanner {
 public:
@@ -53,5 +58,7 @@ private:
     size_t _cur_idx{0};
     static SchemaScanner::ColumnDesc _s_columns[];
 };
+
+} // namespace vectorized
 
 } // namespace starrocks

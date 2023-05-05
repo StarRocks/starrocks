@@ -46,6 +46,10 @@ struct TTabletInfo {
     14: optional bool is_in_memory
     15: optional bool enable_persistent_index
     16: optional Types.TVersion min_readable_version
+
+    // skip num 17 because num 17 is used in later version, so we skip it in 
+    // order to support degrade
+    18: optional bool is_error_state
 }
 
 struct TTabletVersionPair {

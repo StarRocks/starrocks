@@ -64,6 +64,10 @@ public class SlotRef extends Expr {
     // We execute sql: `SELECT col.c2.c1 FROM table`, the usedStructFieldPos value is [1, 0].
     private ImmutableList<Integer> usedStructFieldPos;
 
+    // now it is used in Analyzer phase of creating mv to decide the field nullable of mv
+    // can not use desc because the slotId is unknown in Analyzer phase
+    private boolean nullable = true;
+
     // Only used write
     private SlotRef() {
         super();
@@ -226,6 +230,10 @@ public class SlotRef extends Expr {
         if (desc != null) {
             desc.setType(type);
         }
+    }
+
+    public void setNullable(boolean nullable) {
+        this.nullable = nullable;
     }
 
     public SlotDescriptor getSlotDescriptorWithoutCheck() {
@@ -396,7 +404,7 @@ public class SlotRef extends Expr {
         if (desc != null) {
             return desc.getIsNullable();
         }
-        return true;
+        return nullable;
     }
 
     @Override

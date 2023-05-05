@@ -30,35 +30,37 @@ set(EXEC_FILES
         ./fs/fs_test.cpp
         ./fs/output_stream_wrapper_test.cpp
         ./exec/column_value_range_test.cpp
-        ./exec/vectorized/agg_hash_map_test.cpp
-        ./exec/vectorized/csv_scanner_test.cpp
-        ./exec/vectorized/chunks_sorter_heap_sort_test.cpp
-        ./exec/vectorized/join_hash_map_test.cpp
-        ./exec/vectorized/json_scanner_test.cpp
-        ./exec/vectorized/json_parser_test.cpp
-        ./exec/vectorized/hdfs_scanner_test.cpp
-        ./exec/vectorized/table_function_node_test.cpp
-        ./exec/vectorized/file_scan_node_test.cpp
-        ./exec/schema_columns_scanner_test.cpp
-        ./exec/tablet_info_test.cpp
-        ./exec/vectorized/analytor_test.cpp
-        ./exec/vectorized/arrow_converter_test.cpp
-        ./exec/vectorized/sorting_test.cpp
-        ./exec/vectorized/chunks_sorter_test.cpp
-        ./exec/vectorized/parquet_scanner_test.cpp
-        ./exec/vectorized/repeat_node_test.cpp
-        ./exec/vectorized/analytor_test.cpp
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
         ./exec/es/es_scroll_parser_test.cpp
-        ./exec/vectorized/hdfs_scan_node_test.cpp
-        ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
+        ./exec/pipeline/pipeline_driver_queue_test.cpp
+        ./exec/pipeline/pipeline_file_scan_node_test.cpp
+        ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
-        ./exec/pipeline/pipeline_file_scan_node_test.cpp
-        ./exec/pipeline/pipeline_driver_queue_test.cpp
+        ./exec/query_cache/query_cache_test.cpp
+        ./exec/query_cache/transform_operator.cpp
+        ./exec/schema_columns_scanner_test.cpp
+        ./exec/tablet_info_test.cpp
+        ./exec/vectorized/agg_hash_map_test.cpp
+        ./exec/vectorized/analytor_test.cpp
+        ./exec/vectorized/analytor_test.cpp
+        ./exec/vectorized/arrow_converter_test.cpp
+        ./exec/vectorized/chunks_sorter_heap_sort_test.cpp
+        ./exec/vectorized/chunks_sorter_test.cpp
+        ./exec/vectorized/csv_scanner_test.cpp
+        ./exec/vectorized/file_scan_node_test.cpp
+        ./exec/vectorized/hdfs_scanner_test.cpp
+        ./exec/vectorized/hdfs_scan_node_test.cpp
+        ./exec/vectorized/join_hash_map_test.cpp
+        ./exec/vectorized/json_parser_test.cpp
+        ./exec/vectorized/json_scanner_test.cpp
+        ./exec/vectorized/parquet_scanner_test.cpp
+        ./exec/vectorized/repeat_node_test.cpp
+        ./exec/vectorized/sorting_test.cpp
+        ./exec/vectorized/table_function_node_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/vectorized/arithmetic_expr_test.cpp
@@ -138,8 +140,10 @@ set(EXEC_FILES
         ./formats/parquet/file_reader_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
+        ./http/http_client_test.cpp
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
+        ./http/metrics_action_test.cpp
         ./http/stream_load_test.cpp
         ./http/transaction_stream_load_test.cpp
         ./io/array_input_stream_test.cpp
@@ -153,12 +157,14 @@ set(EXEC_FILES
         ./storage/disjunctive_predicates_test.cpp
         ./storage/utils_test.cpp
         ./storage/del_vector_test.cpp
+        ./storage/delete_handler_test.cpp
         ./storage/file_utils_test.cpp
         ./storage/fs/file_block_manager_test.cpp
         ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
         ./storage/key_coder_test.cpp
         ./storage/kv_store_test.cpp
+        ./storage/options_test.cpp
         ./storage/protobuf_file_test.cpp
         ./storage/page_cache_test.cpp
         ./storage/persistent_index_test.cpp
@@ -251,16 +257,22 @@ set(EXEC_FILES
         ./runtime/mem_pool_test.cpp
         ./runtime/raw_value_test.cpp
         ./runtime/result_queue_mgr_test.cpp
+        ./runtime/routine_load_task_executor_test.cpp
+        ./runtime/small_file_mgr_test.cpp
         ./runtime/snapshot_loader_test.cpp
         ./runtime/stream_load_pipe_test.cpp
         ./runtime/string_value_test.cpp
         ./runtime/type_descriptor_test.cpp
         ./runtime/type_descriptor_test.cpp
+        ./runtime/user_function_cache_test.cpp
         ./runtime/vectorized/sorted_chunks_merger_test.cpp
         ./runtime/memory_scratch_sink_test_issue_8676.cpp
         ./runtime/memory_scratch_sink_test.cpp
+        ./runtime/command_executor_test.cpp
+        ./runtime/exec_env_test.cpp
         ./serde/column_array_serde_test.cpp
         ./serde/protobuf_serde_test.cpp
+        ./types/bitmap_value_test.cpp
         ./simd/simd_test.cpp
         ./simd/simd_selector_test.cpp
         ./simd/simd_mulselector_test.cpp
@@ -282,6 +294,7 @@ set(EXEC_FILES
         ./util/dynamic_cache_test.cpp
         ./util/exception_stack_test.cpp
         ./util/faststring_test.cpp
+        ./util/file_util_test.cpp
         ./util/filesystem_util_test.cpp
         ./util/frame_of_reference_coding_test.cpp
         ./util/json_util_test.cpp
@@ -345,11 +358,6 @@ add_executable(starrocks_test ${EXEC_FILES})
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
-
-add_executable(query_cache_test exec/query_cache/transform_operator.cpp exec/query_cache/query_cache_test.cpp)
-
-TARGET_LINK_LIBRARIES(query_cache_test ${TEST_LINK_LIBS})
-SET_TARGET_PROPERTIES(query_cache_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 # =================================================
 # bytes_test requires tcmalloc which conflicts with sanitizer.
 # Thus we need a standalone binary without sanitizer to test it.
@@ -374,15 +382,6 @@ TARGET_LINK_LIBRARIES(bytes_test
 
 # =================================================
 # test cases must be compiled as a standalone binary
-ADD_BE_TEST(http/metrics_action_test)
-ADD_BE_TEST(http/http_client_test)
-
-ADD_BE_TEST(runtime/routine_load_task_executor_test)
-ADD_BE_TEST(runtime/small_file_mgr_test)
-ADD_BE_TEST(runtime/user_function_cache_test)
-
-ADD_BE_TEST(storage/delete_handler_test)
-ADD_BE_TEST(storage/options_test)
 ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
 
 # you can simply add test case as single binary without adding `main`

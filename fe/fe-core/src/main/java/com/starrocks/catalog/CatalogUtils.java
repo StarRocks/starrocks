@@ -131,4 +131,22 @@ public class CatalogUtils {
             throw new DdlException(e.getMessage());
         }
     }
+
+    public static int calBucketNumAccordingToBackends() {
+        int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
+        // When POC, the backends is not greater than three most of the time.
+        // The bucketNum will be given a small multiplier factor for small backends.
+        int bucketNum = 0;
+        if (backendNum <= 12) {
+            bucketNum = 2 * backendNum;
+        } else if (backendNum <= 24) {
+            bucketNum = (int) (1.5 * backendNum);
+        } else if (backendNum <= 36) {
+            bucketNum = 36;
+        } else {
+            bucketNum = Math.min(backendNum, 48);
+        }
+        return bucketNum;
+
+    }
 }

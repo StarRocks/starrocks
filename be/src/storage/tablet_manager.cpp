@@ -87,11 +87,11 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
         if (old_tablet->schema_hash_path() == new_tablet->schema_hash_path()) {
             LOG(WARNING) << "add the same tablet twice! tablet_id=" << new_tablet->tablet_id()
                          << " schema_hash_path=" << new_tablet->schema_hash_path();
-            return Status::InternalError("tablet already exists");
+            return Status::InternalError(fmt::format("tablet already exists, tablet_id: {}", old_tablet->tablet_id()));
         }
         if (old_tablet->data_dir() == new_tablet->data_dir()) {
             LOG(WARNING) << "add tablet with same data dir twice! tablet_id=" << new_tablet->tablet_id();
-            return Status::InternalError("tablet already exists");
+            return Status::InternalError(fmt::format("tablet already exists, tablet_id: {}", old_tablet->tablet_id()));
         }
         old_tablet->obtain_header_rdlock();
         auto old_rowset = old_tablet->rowset_with_max_version();
@@ -109,7 +109,7 @@ Status TabletManager::_add_tablet_unlocked(const TabletSharedPtr& new_tablet, bo
                       << " old_tablet_path=" << old_tablet->schema_hash_path()
                       << " new_tablet_path=" << new_tablet->schema_hash_path();
         } else {
-            return Status::InternalError("tablet already exists");
+            return Status::AlreadyExist(fmt::format("tablet already exists, tablet_id: {}", old_tablet->tablet_id()));
         }
     }
     if (update_meta) {

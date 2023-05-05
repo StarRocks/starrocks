@@ -250,7 +250,7 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
             rowsets_to_delete.push_back(it.second);
         }
     }
-    modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete);
+    modify_rowsets(std::vector<RowsetSharedPtr>(), rowsets_to_delete, nullptr);
 
     if (need_persist) {
         Status res =
@@ -261,7 +261,8 @@ Status Tablet::add_rowset(const RowsetSharedPtr& rowset, bool need_persist) {
     return Status::OK();
 }
 
-void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const std::vector<RowsetSharedPtr>& to_delete) {
+void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const std::vector<RowsetSharedPtr>& to_delete,
+                            std::vector<RowsetSharedPtr>* to_replace) {
     CHECK(!_updates) << "updatable tablet should not call modify_rowsets";
     // the compaction process allow to compact the single version, eg: version[4-4].
     // this kind of "single version compaction" has same "input version" and "output version".
@@ -274,6 +275,15 @@ void Tablet::modify_rowsets(const std::vector<RowsetSharedPtr>& to_add, const st
         _rs_version_map.erase(rs->version());
 
         // put compaction rowsets in _stale_rs_version_map.
+        // if this version already exist, replace it with new rowset.
+        if (to_replace != nullptr) {
+            auto search = _stale_rs_version_map.find(rs->version());
+            if (search != _stale_rs_version_map.end()) {
+                if (search->second->rowset_id() != rs->rowset_id()) {
+                    to_replace->push_back(search->second);
+                }
+            }
+        }
         _stale_rs_version_map[rs->version()] = rs;
     }
 
@@ -1175,8 +1185,6 @@ std::shared_ptr<CompactionTask> Tablet::create_compaction_task() {
             _compaction_task = _compaction_context->policy->create_compaction(
                     std::static_pointer_cast<Tablet>(shared_from_this()));
         }
-    }
-    if (_compaction_task && _compaction_task.use_count() == 1) {
         return _compaction_task;
     } else {
         return nullptr;
@@ -1251,6 +1259,9 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
     info.create_time = _tablet_meta->creation_time();
     info.state = _state;
     info.type = keys_type();
+    info.data_dir = data_dir()->path();
+    info.shard_id = shard_id();
+    info.schema_hash = schema_hash();
     if (_updates != nullptr) {
         _updates->get_basic_info_extra(info);
     } else {
@@ -1261,6 +1272,18 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
         info.num_row = _tablet_meta->num_rows();
         info.data_size = _tablet_meta->tablet_footprint();
     }
+}
+
+std::string Tablet::schema_debug_string() const {
+    return _tablet_meta->tablet_schema().debug_string();
+}
+
+std::string Tablet::debug_string() const {
+    if (_updates) {
+        return _updates->debug_string();
+    }
+    // TODO: add more debug info
+    return string();
 }
 
 } // namespace starrocks

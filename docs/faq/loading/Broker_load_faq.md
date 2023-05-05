@@ -49,7 +49,7 @@ If an HDFS cluster runs in high availability (HA) mode, configure it as follows:
 
 - `dfs.nameservices`: the name of the HDFS cluster, for example, `"dfs.nameservices" = "my_ha"`.
 
-- `dfs.ha.namenodes.xxx`: the name of the NameNode in the HDFS cluster. If you specify multiple NameNode names, separate them with commas (,). `xxx` is the HDFS cluster name that you have specified in `dfs.nameservices`, for example, `"dfs.ha.namenodes.my_ha" = "my_nn"`.
+- `dfs.ha.namenodes.xxx`: the name of the NameNode in the HDFS cluster. If you specify multiple NameNode names, separate them with commas (`,`). `xxx` is the HDFS cluster name that you have specified in `dfs.nameservices`, for example, `"dfs.ha.namenodes.my_ha" = "my_nn"`.
 
 - `dfs.namenode.rpc-address.xxx.nn`: the RPC address of the NameNode in the HDFS cluster. `nn` is the NameNode name that you have specified in `dfs.ha.namenodes.xxx`, for example, `"dfs.namenode.rpc-address.my_ha.my_nn" = "host:port"`.
 

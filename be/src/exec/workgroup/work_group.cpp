@@ -8,6 +8,7 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "glog/logging.h"
 #include "runtime/exec_env.h"
+#include "util/cpu_info.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
@@ -128,7 +129,7 @@ void WorkGroup::init() {
     _memory_limit_bytes = _memory_limit == ABSENT_MEMORY_LIMIT
                                   ? ExecEnv::GetInstance()->query_pool_mem_tracker()->limit()
                                   : ExecEnv::GetInstance()->query_pool_mem_tracker()->limit() * _memory_limit;
-    _mem_tracker = std::make_shared<starrocks::MemTracker>(_memory_limit_bytes, _name,
+    _mem_tracker = std::make_shared<starrocks::MemTracker>(MemTracker::RESOURCE_GROUP, _memory_limit_bytes, _name,
                                                            ExecEnv::GetInstance()->query_pool_mem_tracker());
     _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>());
     _scan_sched_entity.set_queue(std::make_unique<PriorityScanTaskQueue>(config::pipeline_scan_thread_pool_queue_size));
@@ -520,7 +521,7 @@ std::vector<TWorkGroup> WorkGroupManager::list_all_workgroups() {
 }
 
 size_t WorkGroupManager::normal_workgroup_cpu_hard_limit() const {
-    static int num_hardware_cores = std::thread::hardware_concurrency();
+    static int num_hardware_cores = CpuInfo::num_cores();
     return std::max<int>(1, num_hardware_cores - _rt_cpu_limit);
 }
 

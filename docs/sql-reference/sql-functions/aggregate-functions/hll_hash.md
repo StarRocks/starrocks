@@ -1,8 +1,8 @@
-# HLL_HASH
+# hll_hash
 
 ## Description
 
-Converts a value to an hll type. Typically used in imports to map a value in the source data to an HLL column type in the Starrocks table.
+Converts a value to an hll type. Typically used in imports to map a value in the source data to an HLL column type in the StarRocks table.
 
 ## Syntax
 
@@ -12,11 +12,11 @@ HLL_HASH(column_name)
 
 ## Parameters
 
-`column_name`: The new generated hll column name.
+`column_name`: The name of the generated HLL column.
 
 ## Return value
 
-Returns a value of the hll type.
+Returns a value of the HLL type.
 
 ## Example
 

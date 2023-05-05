@@ -28,12 +28,12 @@
 
 namespace starrocks {
 
-void set_up() {
+static void set_up() {
     system("rm -rf ./test_run && mkdir -p ./test_run");
     system("mkdir -p ./test_run/data && mkdir -p ./test_run/data.ssd");
 }
 
-void tear_down() {
+static void tear_down() {
     system("rm -rf ./test_run");
 }
 
@@ -41,6 +41,9 @@ class OptionsTest : public testing::Test {
 public:
     OptionsTest() = default;
     ~OptionsTest() override = default;
+
+    static void SetUpTestSuite() { set_up(); }
+    static void TearDownTestSuite() { tear_down(); }
 };
 
 TEST_F(OptionsTest, parse_root_path) {
@@ -87,14 +90,3 @@ TEST_F(OptionsTest, parse_root_path) {
 }
 
 } // namespace starrocks
-
-int main(int argc, char** argv) {
-    ::testing::InitGoogleTest(&argc, argv);
-
-    int ret = 0;
-    starrocks::set_up();
-    ret = RUN_ALL_TESTS();
-    starrocks::tear_down();
-
-    return ret;
-}

@@ -15,7 +15,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 public class RangeSimplifier {
@@ -30,50 +29,18 @@ public class RangeSimplifier {
     // left is ColumnRefOperator and right is ConstantOperator
     public ScalarOperator simplify(List<ScalarOperator> targets) {
         try {
-            Map<Integer, Range<ConstantOperator>> srcColumnIdToRange = Maps.newHashMap();
-            for (ScalarOperator rangePredicate : srcPredicates) {
-                Preconditions.checkState(rangePredicate instanceof BinaryPredicateOperator);
-                Preconditions.checkState(rangePredicate.getChild(0) instanceof ColumnRefOperator);
-                Preconditions.checkState(rangePredicate.getChild(1) instanceof ConstantOperator);
-                BinaryPredicateOperator srcBinary = (BinaryPredicateOperator) rangePredicate;
-                Preconditions.checkState(srcBinary.getBinaryType().isRange() || srcBinary.getBinaryType().isEqual());
-                ColumnRefOperator srcColumn = (ColumnRefOperator) srcBinary.getChild(0);
-                ConstantOperator srcConstant = (ConstantOperator) srcBinary.getChild(1);
-                if (!srcColumnIdToRange.containsKey(srcColumn.getId())) {
-                    srcColumnIdToRange.put(srcColumn.getId(), Range.all());
-                }
-                Range<ConstantOperator> columnRange = srcColumnIdToRange.get(srcColumn.getId());
-                Range<ConstantOperator> range = range(srcBinary.getBinaryType(), srcConstant);
-                columnRange = columnRange.intersection(range);
-                if (columnRange.isEmpty()) {
-                    return null;
-                }
-                srcColumnIdToRange.put(srcColumn.getId(), columnRange);
+            Map<Integer, Range<ConstantOperator>> srcColumnIdToRange = extractColumnIdRangeMapping(srcPredicates);
+            if (srcColumnIdToRange == null) {
+                return null;
             }
-            Map<Integer, Range<ConstantOperator>> targetColumnIdToRange = Maps.newHashMap();
-            for (ScalarOperator rangePredicate : targets) {
-                Preconditions.checkState(rangePredicate instanceof BinaryPredicateOperator);
-                Preconditions.checkState(rangePredicate.getChild(0) instanceof ColumnRefOperator);
-                Preconditions.checkState(rangePredicate.getChild(1) instanceof ConstantOperator);
-                BinaryPredicateOperator srcBinary = (BinaryPredicateOperator) rangePredicate;
-                Preconditions.checkState(srcBinary.getBinaryType().isRange() || srcBinary.getBinaryType().isEqual());
-                ColumnRefOperator targetColumn = (ColumnRefOperator) srcBinary.getChild(0);
-                ConstantOperator targetConstant = (ConstantOperator) srcBinary.getChild(1);
-                if (!targetColumnIdToRange.containsKey(targetColumn.getId())) {
-                    targetColumnIdToRange.put(targetColumn.getId(), Range.all());
-                }
-                Range<ConstantOperator> columnRange = targetColumnIdToRange.get(targetColumn.getId());
-                Range<ConstantOperator> range = range(srcBinary.getBinaryType(), targetConstant);
-                columnRange = columnRange.intersection(range);
-                if (columnRange.isEmpty()) {
-                    return null;
-                }
-                targetColumnIdToRange.put(targetColumn.getId(), columnRange);
+            Map<Integer, Range<ConstantOperator>> targetColumnIdToRange = extractColumnIdRangeMapping(targets);
+            if (targetColumnIdToRange == null) {
+                return null;
             }
 
             List<Integer> resultColumnIds = Lists.newArrayList();
-
             for (Map.Entry<Integer, Range<ConstantOperator>> targetEntry : targetColumnIdToRange.entrySet()) {
+                // Source columnId range must contain any target columnId.
                 if (!srcColumnIdToRange.containsKey(targetEntry.getKey())
                         && !targetEntry.getValue().hasUpperBound()
                         && !targetEntry.getValue().hasLowerBound()) {
@@ -99,7 +66,7 @@ public class RangeSimplifier {
             if (resultColumnIds.isEmpty()) {
                 return ConstantOperator.createBoolean(true);
             } else {
-                AtomicReference<ScalarOperator> result = new AtomicReference<>();
+                List<ScalarOperator> rewrittenRangePredicates = Lists.newArrayList();
                 for (int columnId : resultColumnIds) {
                     Range<ConstantOperator> columnRange = srcColumnIdToRange.get(columnId);
                     if (isSingleValueRange(columnRange)) {
@@ -111,21 +78,81 @@ public class RangeSimplifier {
                         BinaryPredicateOperator eqBinary = new BinaryPredicateOperator(
                                 BinaryPredicateOperator.BinaryType.EQ,
                                 binary.getChild(0), columnRange.lowerEndpoint());
-                        result.set(Utils.compoundAnd(result.get(), eqBinary));
+                        rewrittenRangePredicates.add(eqBinary);
                     } else {
                         List<ScalarOperator> columnScalars = srcPredicates.stream().filter(
                                 predicate -> isScalarForColumns(predicate, columnId)
                         ).collect(Collectors.toList());
-                        columnScalars.forEach(
-                                predicate -> result.set(Utils.compoundAnd(result.get(), predicate))
-                        );
+                        columnScalars = filterScalarOperators(columnScalars, columnRange);
+                        rewrittenRangePredicates.addAll(columnScalars);
                     }
                 }
-                return result.get();
+                return Utils.compoundAnd(rewrittenRangePredicates);
             }
         } catch (Exception e) {
             return null;
         }
+    }
+
+    private Map<Integer, Range<ConstantOperator>> extractColumnIdRangeMapping(List<ScalarOperator> predicates) {
+        Map<Integer, Range<ConstantOperator>> columnIdToRange = Maps.newHashMap();
+        for (ScalarOperator rangePredicate : predicates) {
+            Preconditions.checkState(rangePredicate instanceof BinaryPredicateOperator);
+            Preconditions.checkState(rangePredicate.getChild(0) instanceof ColumnRefOperator);
+            Preconditions.checkState(rangePredicate.getChild(1) instanceof ConstantOperator);
+            BinaryPredicateOperator srcBinary = (BinaryPredicateOperator) rangePredicate;
+            Preconditions.checkState(srcBinary.getBinaryType().isRange() || srcBinary.getBinaryType().isEqual());
+            ColumnRefOperator srcColumn = (ColumnRefOperator) srcBinary.getChild(0);
+            ConstantOperator srcConstant = (ConstantOperator) srcBinary.getChild(1);
+            if (!columnIdToRange.containsKey(srcColumn.getId())) {
+                columnIdToRange.put(srcColumn.getId(), Range.all());
+            }
+            Range<ConstantOperator> columnRange = columnIdToRange.get(srcColumn.getId());
+            Range<ConstantOperator> range = range(srcBinary.getBinaryType(), srcConstant);
+            columnRange = columnRange.intersection(range);
+            if (columnRange.isEmpty()) {
+                return null;
+            }
+            columnIdToRange.put(srcColumn.getId(), columnRange);
+        }
+        return columnIdToRange;
+    }
+
+    private List<ScalarOperator> filterScalarOperators(
+            List<ScalarOperator> columnScalars, Range<ConstantOperator> validRange) {
+        List<ScalarOperator> results = Lists.newArrayList();;
+        for (ScalarOperator candidate : columnScalars) {
+            if (isRedundantPredicate(candidate, validRange)) {
+                continue;
+            }
+            results.add(candidate);
+        }
+        return results;
+    }
+
+    private boolean isRedundantPredicate(ScalarOperator scalarOperator, Range<ConstantOperator> validRange) {
+        Preconditions.checkState(scalarOperator instanceof BinaryPredicateOperator);
+        Preconditions.checkState(scalarOperator.getChild(0) instanceof ColumnRefOperator);
+        Preconditions.checkState(scalarOperator.getChild(1) instanceof ConstantOperator);
+        BinaryPredicateOperator binary = scalarOperator.cast();
+        ConstantOperator right = binary.getChild(1).cast();
+        Range predicateRange = range(binary.getBinaryType(), right);
+        // only range border's predicate is non redundant
+        if (predicateRange.hasLowerBound()
+                && validRange.hasLowerBound()
+                && predicateRange.lowerBoundType() == validRange.lowerBoundType()
+                && predicateRange.lowerEndpoint().equals(validRange.lowerEndpoint())) {
+            // predicate is lower border
+            return false;
+        }
+        if (predicateRange.hasUpperBound()
+                && validRange.hasUpperBound()
+                && predicateRange.upperBoundType() == validRange.upperBoundType()
+                && predicateRange.upperEndpoint().equals(validRange.upperEndpoint())) {
+            // predicate is upper border
+            return false;
+        }
+        return true;
     }
 
     private boolean isScalarForColumns(ScalarOperator predicate, int columnId) {

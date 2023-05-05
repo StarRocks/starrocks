@@ -25,7 +25,7 @@ struct SumDispatcher {
 struct DistinctDispatcher {
     template <PrimitiveType pt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt>) {
+        if constexpr (pt_is_aggregate<pt>) {
             using DistinctState = DistinctAggregateState<pt, SumResultPT<pt>>;
             using DistinctState2 = DistinctAggregateStateV2<pt, SumResultPT<pt>>;
             resolver->add_aggregate_mapping<pt, TYPE_BIGINT, DistinctState>(

@@ -23,6 +23,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.TableRenameClause;
@@ -136,7 +137,8 @@ public interface ConnectorMetadata {
     default void alterTable(AlterTableStmt stmt) throws UserException {
     }
 
-    default void createTable(CreateTableStmt stmt) throws DdlException {
+    default boolean createTable(CreateTableStmt stmt) throws DdlException {
+        return true;
     }
 
     default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {
@@ -172,13 +174,16 @@ public interface ConnectorMetadata {
             throws DdlException, MetaNotFoundException, AnalysisException {
     }
 
-    default void refreshMaterializedView(String dbName, String mvName, int priority)
+    default String refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
+                                           int priority, boolean mergeRedundant, boolean isManual)
             throws DdlException, MetaNotFoundException {
+        return null;
     }
 
-    default void refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
-                                         int priority)
+    default String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
+                                           int priority)
             throws DdlException, MetaNotFoundException {
+        return null;
     }
 
     default void cancelRefreshMaterializedView(String dbName, String mvName)

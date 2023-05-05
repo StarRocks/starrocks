@@ -35,7 +35,6 @@
 #include "exec/pipeline/query_context.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
-#include "exec/workgroup/work_group_fwd.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "gutil/strings/substitute.h"
@@ -68,6 +67,7 @@
 #include "storage/update_manager.h"
 #include "util/bfd_parser.h"
 #include "util/brpc_stub_cache.h"
+#include "util/cpu_info.h"
 #include "util/mem_info.h"
 #include "util/parse_util.h"
 #include "util/pretty_printer.h"
@@ -85,6 +85,17 @@ static int64_t calc_max_load_memory(int64_t process_mem_limit) {
     int32_t max_load_memory_percent = config::load_process_max_memory_limit_percent;
     int64_t max_load_memory_bytes = process_mem_limit * max_load_memory_percent / 100;
     return std::min<int64_t>(max_load_memory_bytes, config::load_process_max_memory_limit_bytes);
+}
+
+int64_t ExecEnv::calc_max_query_memory(int64_t process_mem_limit, int64_t percent) {
+    if (process_mem_limit <= 0) {
+        // -1 means no limit
+        return -1;
+    }
+    if (percent < 0 || percent > 100) {
+        percent = 90;
+    }
+    return process_mem_limit * percent / 100;
 }
 
 static int64_t calc_max_compaction_memory(int64_t process_mem_limit) {
@@ -149,14 +160,14 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
 
     int num_prepare_threads = config::pipeline_prepare_thread_pool_thread_num;
     if (num_prepare_threads <= 0) {
-        num_prepare_threads = std::thread::hardware_concurrency();
+        num_prepare_threads = CpuInfo::num_cores();
     }
     _pipeline_prepare_pool =
             new PriorityThreadPool("pip_prepare", num_prepare_threads, config::pipeline_prepare_thread_pool_queue_size);
 
     int num_sink_io_threads = config::pipeline_sink_io_thread_pool_thread_num;
     if (num_sink_io_threads <= 0) {
-        num_sink_io_threads = std::thread::hardware_concurrency();
+        num_sink_io_threads = CpuInfo::num_cores();
     }
     if (config::pipeline_sink_io_thread_pool_queue_size <= 0) {
         return Status::InvalidArgument("pipeline_sink_io_thread_pool_queue_size shoule be greater than 0");
@@ -165,7 +176,7 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             new PriorityThreadPool("pip_sink_io", num_sink_io_threads, config::pipeline_sink_io_thread_pool_queue_size);
 
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
-    _max_executor_threads = std::thread::hardware_concurrency();
+    _max_executor_threads = CpuInfo::num_cores();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
         _max_executor_threads = config::pipeline_exec_thread_pool_thread_num;
     }
@@ -356,8 +367,10 @@ Status ExecEnv::init_mem_tracker() {
     }
 
     _process_mem_tracker = regist_tracker(MemTracker::PROCESS, bytes_limit, "process");
+    int64_t query_pool_mem_limit =
+            calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker =
-            regist_tracker(MemTracker::QUERY_POOL, bytes_limit * 0.9, "query_pool", this->process_mem_tracker());
+            regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool", this->process_mem_tracker());
 
     int64_t load_mem_limit = calc_max_load_memory(_process_mem_tracker->limit());
     _load_mem_tracker = regist_tracker(MemTracker::LOAD, load_mem_limit, "load", process_mem_tracker());

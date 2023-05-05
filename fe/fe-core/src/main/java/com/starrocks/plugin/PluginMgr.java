@@ -139,7 +139,7 @@ public class PluginMgr implements Writable {
             GlobalStateMgr.getCurrentState().getEditLog().logInstallPlugin(info);
             LOG.info("install plugin {}", info.getName());
             return info;
-        } catch (IOException | UserException e) {
+        } catch (Throwable e) {
             pluginLoader.uninstall();
             throw e;
         }

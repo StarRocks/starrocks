@@ -20,8 +20,8 @@ auth_option: {
 }
 ```
 
-1. The command "CREATE USER" is used to create a StarRocks user. In StarRocks, a “user_identity” uniquely identifies a user.  
-2. "user_identity” consists of two parts, “user_name” and “host”. Here, “user_name” is the username and "host" identifies the host address where the client connects. The "host" part can use % for fuzzy matching. If no host is specified, the default is '%', meaning that the user can connect to StarRocks from any host.
+1. The command "CREATE USER" is used to create a StarRocks user. In StarRocks, a "user_identity" uniquely identifies a user.  
+2. "user_identity" consists of two parts, "user_name" and "host". Here, "user_name" is the username and "host" identifies the host address where the client connects. The "host" part can use % for fuzzy matching. If no host is specified, the default is '%', meaning that the user can connect to StarRocks from any host.
 3. "auth_option" specifies user authentication method. It currently supports "mysql_native_password" and "authentication_ldap_simple".
 
 If a role is specified, it will automatically grant all permissions the role owns to this newly created user with the precondition that the role already exists. If a role is not specified, the user defaults to having no permission.  
