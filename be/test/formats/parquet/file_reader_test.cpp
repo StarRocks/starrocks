@@ -2205,7 +2205,6 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutRequiredComplexType) {
     type_c.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
     type_c.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
 
-
     Utils::SlotDesc slot_descs[] = {
             {"a", type_a},
             {"b", type_b},
@@ -2286,7 +2285,6 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutOptionalComplexType) {
     TypeDescriptor type_c = TypeDescriptor::from_logical_type(LogicalType::TYPE_MAP);
     type_c.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
     type_c.children.emplace_back(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT));
-
 
     Utils::SlotDesc slot_descs[] = {
             {"a", type_a},
