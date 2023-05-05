@@ -1,0 +1,104 @@
+-- name: testForEmptySetInput
+CREATE TABLE IF NOT EXISTS `lineorder` (
+    `lo_orderkey` int(11) NOT NULL COMMENT "",
+    `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+SELECT GROUP_CONCAT(lo_shipmode) orgs FROM lineorder WHERE 1 = 2;
+-- result:
+None
+-- !result
+-- name: test_count_if
+CREATE TABLE IF NOT EXISTS `score_table` (
+  `id`		int(11)	NOT NULL,
+  `name`	STRING	NOT NULL,
+  `gender`	CHAR(1),
+  `score`	FLOAT
+)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO `score_table`(id, name, gender, score)
+VALUES 	(1, 'lilyliu', 'F', 100.0),
+		(2, 'alice', 'F', 95.5),
+		(3, 'ella', 'F', 83.0),
+		(4, 'dargonwang', 'M', 98.5),
+		(5, 'bob', 'M', 94.0),
+		(6, 'tom', 'M', null);
+-- result:
+-- !result
+select count_if(id > 0) from score_table;
+-- result:
+6
+-- !result
+select count_if(score > 0) from score_table;
+-- result:
+5
+-- !result
+select count_if(gender = 'F' and score > 90) from score_table;
+-- result:
+2
+-- !result
+select gender, count_if(score > 0) from score_table group by gender;
+-- result:
+F	3
+M	2
+-- !result
+select gender, count_if(score > 95) from score_table group by gender;
+-- result:
+F	2
+M	1
+-- !result
+select id, name, gender, score, count_if(score > 80) over (order by id rows between 1 preceding and  1 following) as interval_cnt from score_table;
+-- result:
+1	lilyliu	F	100.0	2
+2	alice	F	95.5	3
+3	ella	F	83.0	3
+4	dargonwang	M	98.5	3
+5	bob	M	94.0	2
+6	tom	M	None	1
+-- !result
+select count_if(null) from score_table;
+-- result:
+0
+-- !result
+select gender, count_if(null) from score_table group by gender;
+-- result:
+F	0
+M	0
+-- !result
+select id, name, gender, score, count_if(null) over (order by id rows between 1 preceding and  1 following) as interval_cnt from score_table;
+-- result:
+1	lilyliu	F	100.0	None
+2	alice	F	95.5	None
+3	ella	F	83.0	None
+4	dargonwang	M	98.5	None
+5	bob	M	94.0	None
+6	tom	M	None	None
+-- !result
+select count_if("") from score_table;
+-- result:
+[REGEX].*Invalid agg function plan: count_if.*
+-- !result
+select count_if("xxx") from score_table;
+-- result:
+[REGEX].*Invalid agg function plan: count_if.*
+-- !result
+select gender, count_if("xxx") from score_table group by gender;
+-- result:
+[REGEX].*Invalid agg function plan: count_if.*
+-- !result
+select id, name, gender, score, count_if("xxx") over (order by id rows between 1 preceding and  1 following) as interval_cnt from score_table;
+-- result:
+[REGEX].*Invalid .* function plan: count_if.*
+-- !result

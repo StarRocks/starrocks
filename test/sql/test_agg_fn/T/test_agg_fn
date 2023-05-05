@@ -1,0 +1,49 @@
+-- name: testForEmptySetInput
+CREATE TABLE IF NOT EXISTS `lineorder` (
+    `lo_orderkey` int(11) NOT NULL COMMENT "",
+    `lo_shipmode` varchar(11) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`lo_orderkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`lo_orderkey`) BUCKETS 48
+PROPERTIES (
+    "replication_num" = "1"
+);
+SELECT GROUP_CONCAT(lo_shipmode) orgs FROM lineorder WHERE 1 = 2;
+
+-- name: test_count_if
+CREATE TABLE IF NOT EXISTS `score_table` (
+  `id`		int(11)	NOT NULL,
+  `name`	STRING	NOT NULL,
+  `gender`	CHAR(1),
+  `score`	FLOAT
+)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES(
+  "replication_num" = "1"
+);
+
+INSERT INTO `score_table`(id, name, gender, score)
+VALUES 	(1, 'lilyliu', 'F', 100),
+		(2, 'alice', 'F', 95.5),
+		(3, 'ella', 'F', 83),
+		(4, 'dargonwang', 'M', 98.5),
+		(5, 'bob', 'M', 94),
+		(6, 'tom', 'M', null);
+
+select count_if(id > 0) from score_table;
+select count_if(score > 0) from score_table;
+select count_if(gender = 'F' and score > 90) from score_table;
+select gender, count_if(score > 0) from score_table group by gender;
+select gender, count_if(score > 95) from score_table group by gender;
+
+select id, name, gender, score, count_if(score > 80) over (order by id rows between 1 preceding and  1 following) as interval_cnt from score_table;
+
+select count_if(null) from score_table;
+select gender, count_if(null) from score_table group by gender;
+select id, name, gender, score, count_if(null) over (order by id rows between 1 preceding and  1 following) as interval_cnt from score_table;
+
+select count_if("") from score_table;
+select count_if("xxx") from score_table;
+select gender, count_if("xxx") from score_table group by gender;
+select id, name, gender, score, count_if("xxx") over (order by id rows between 1 preceding and  1 following) as interval_cnt from score_table;

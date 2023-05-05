@@ -124,7 +124,7 @@ if(NOT ${MAKE_GENSRC_RESULT} EQUAL 0 AND NOT APPLE)
 endif()
 
 #
-set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc src/exprs/agg/count_if.h)
+set(BUILD_VERSION_CC ${CMAKE_BINARY_DIR}/build_version.cc)
 configure_file(${SRC_DIR}/common/build_version.cc.in ${BUILD_VERSION_CC} @ONLY)
 add_library(build_version OBJECT ${BUILD_VERSION_CC})
 target_include_directories(build_version PRIVATE ${SRC_DIR}/common)
