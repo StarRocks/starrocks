@@ -80,7 +80,7 @@ private:
     FragmentContext* _fragment_ctx = nullptr;
     std::vector<ExprContext*> _output_expr;
     std::vector<ExprContext*> _partition_expr;
-    std::unordered_map<std::string, starrocks::RollingAsyncParquetWriter*> _partition_writers;
+    std::unordered_map<std::string, std::unique_ptr<starrocks::RollingAsyncParquetWriter>> _partition_writers;
     std::atomic<bool> _is_finished = false;
 };
 

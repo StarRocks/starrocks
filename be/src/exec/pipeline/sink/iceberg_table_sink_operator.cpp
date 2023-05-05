@@ -92,9 +92,9 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
     if (_iceberg_table->is_unpartitioned_table()) {
         if (_partition_writers.empty()) {
             tableInfo._partition_location = _location + "/data/";
-            auto writer = new RollingAsyncParquetWriter(tableInfo, _output_expr, _common_metrics.get(),
-                                                        add_iceberg_commit_info);
-            _partition_writers.insert({"", writer});
+            auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
+                                                                      add_iceberg_commit_info);
+            _partition_writers.insert({"", std::move(writer)});
         }
 
         _partition_writers[""]->append_chunk(chunk.get(), state);
@@ -186,16 +186,19 @@ IcebergTableSinkOperatorFactory::IcebergTableSinkOperatorFactory(int32_t id, Fra
 
 Status IcebergTableSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
+
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
 
+    RETURN_IF_ERROR(Expr::prepare(_partition_expr_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_partition_expr_ctxs, state));
+
     const TIcebergSchema* t_iceberg_schema = _iceberg_table->get_iceberg_schema();
     if (_file_format == "parquet") {
         std::vector<parquet::FileColumnId> field_ids = generate_parquet_field_ids(t_iceberg_schema->fields);
-        auto result =
-                parquet::ParquetBuildHelper::make_schema(_iceberg_table->full_column_names(), _output_expr_ctxs,
-                                                         std::vector<parquet::FileColumnId>(_output_expr_ctxs.size()));
+        auto result = parquet::ParquetBuildHelper::make_schema(_iceberg_table->full_column_names(), _output_expr_ctxs,
+                                                               field_ids);
         _parquet_file_schema = result.ValueOrDie();
     }
 

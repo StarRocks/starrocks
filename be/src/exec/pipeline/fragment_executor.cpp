@@ -910,8 +910,6 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
 
         RETURN_IF_ERROR(Expr::create_expr_trees(runtime_state->obj_pool(), partition_expr, &partition_expr_ctxs,
                                                 runtime_state));
-        RETURN_IF_ERROR(Expr::prepare(partition_expr_ctxs, runtime_state));
-        RETURN_IF_ERROR(Expr::open(partition_expr_ctxs, runtime_state));
 
         auto* source_operator =
                 down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->source_operator_factory());
