@@ -320,16 +320,28 @@ public class AnalyzeExprTest {
 
 
     @Test
-    public void testMapFunc() {
+    public void testAnalyzeMapFunc() {
         analyzeSuccess("select cardinality({1:2,3:3,4:3})");
         analyzeSuccess("select cardinality({})");
         analyzeSuccess("select element_at({1:2,3:3,4:3},3)");
         analyzeSuccess("select element_at({1:2,3:3,4:3},312)");
         analyzeSuccess("select element_at({1:2,3:3,4:3},null)");
+        analyzeSuccess("select map_concat(NULL)");
+        analyzeSuccess("select map_concat(NULL,NULL)");
+        analyzeSuccess("select map_concat(NULL,{})");
 
         analyzeFail("select cardinality();");
         analyzeFail("select cardinality({},{})");
         analyzeFail("select cardinality(1)");
         analyzeFail("select element_at({1:2,3:3,4:3})");
+        analyzeFail("select map_concat()");
+    }
+
+    @Test
+    public void testMapFunc() {
+        String sql = "select map_concat({16865432442:3},{3.323777777:'3'});";
+        StatementBase statementBase = analyzeSuccess(sql);
+        Assert.assertTrue(AstToStringBuilder.toString(statementBase)
+                .contains("result: MAP<DECIMAL128(28,9),VARCHAR>"));
     }
 }

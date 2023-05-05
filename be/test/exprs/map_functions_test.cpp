@@ -564,4 +564,122 @@ PARALLEL_TEST(MapFunctionsTest, test_distinct_map_keys) {
     }
 }
 
+PARALLEL_TEST(MapFunctionsTest, test_map_concat) {
+    TypeDescriptor type_map_int_int;
+    type_map_int_int.type = LogicalType::TYPE_MAP;
+    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+    type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
+
+    auto map_column_nullable = ColumnHelper::create_column(type_map_int_int, true);
+    {
+        //   [11->44, 2->55, 4->66]
+        //   [2->77, 3->88]
+        //   [3 -> NULL]
+        //   []
+        //   NULL
+        DatumMap map1;
+        map1[(int32_t)11] = (int32_t)44;
+        map1[(int32_t)2] = (int32_t)55;
+        map1[(int32_t)4] = (int32_t)66;
+        map_column_nullable->append_datum(map1);
+
+        DatumMap map2;
+        map2[(int32_t)2] = (int32_t)77;
+        map2[(int32_t)3] = (int32_t)88;
+        map_column_nullable->append_datum(map2);
+
+        DatumMap map3;
+        map3[(int32_t)3] = Datum();
+        map_column_nullable->append_datum(map3);
+
+        // {} empty
+        map_column_nullable->append_datum(DatumMap());
+        // NULL
+        map_column_nullable->append_datum(Datum{});
+    }
+
+    auto map_column_not_nullable = ColumnHelper::create_column(type_map_int_int, false);
+    {
+        //   [1->44, 2->525, 4->676]
+        //   [2->77, 3->88]
+        //   [3 -> NULL]
+        //   []
+        //   []
+        DatumMap map1;
+        map1[(int32_t)1] = (int32_t)44;
+        map1[(int32_t)2] = (int32_t)55;
+        map1[(int32_t)4] = (int32_t)66;
+        map_column_not_nullable->append_datum(map1);
+
+        DatumMap map2;
+        map2[(int32_t)2] = (int32_t)77;
+        map2[(int32_t)3] = (int32_t)88;
+        map_column_not_nullable->append_datum(map2);
+
+        DatumMap map3;
+        map3[(int32_t)3] = Datum();
+        map_column_not_nullable->append_datum(map3);
+
+        // {} empty
+        map_column_not_nullable->append_datum(DatumMap());
+        map_column_not_nullable->append_datum(DatumMap());
+    }
+
+    auto only_null_column = ColumnHelper::create_const_null_column(5);
+
+    auto const_column =  ConstColumn::create(map_column_nullable->clone_shared(), 5);
+
+    {
+        auto result = MapFunctions::map_concat(nullptr, {map_column_nullable, map_column_not_nullable}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "[{1:44,2:55,4:66,11:44}, {2:77,3:88}, {3:NULL}, {}, {}]");
+    }
+
+    {
+        auto result = MapFunctions::map_concat(nullptr, {map_column_nullable, map_column_nullable}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "[{2:55,4:66,11:44}, {2:77,3:88}, {3:NULL}, {}, NULL]");
+    }
+    {
+        auto result = MapFunctions::map_concat(nullptr, {map_column_not_nullable, map_column_not_nullable}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "[{1:44,2:55,4:66}, {2:77,3:88}, {3:NULL}, {}, {}]");
+    }
+    {
+        auto result = MapFunctions::map_concat(nullptr, {map_column_not_nullable, map_column_not_nullable, map_column_nullable}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "[{2:55,4:66,11:44,1:44}, {2:77,3:88}, {3:NULL}, {}, {}]");
+    }
+    {
+        auto result = MapFunctions::map_concat(nullptr, {map_column_not_nullable}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "[{1:44,2:55,4:66}, {2:77,3:88}, {3:NULL}, {}, {}]");
+    }
+    {
+        auto result = MapFunctions::map_concat(nullptr, {map_column_nullable}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "[{2:55,4:66,11:44}, {2:77,3:88}, {3:NULL}, {}, NULL]");
+    }
+    {
+        auto result = MapFunctions::map_concat(nullptr, {map_column_nullable, only_null_column}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "[{2:55,4:66,11:44}, {2:77,3:88}, {3:NULL}, {}, NULL]");
+    }
+    {
+        auto result = MapFunctions::map_concat(nullptr, {only_null_column}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "CONST: NULL Size : 5");
+    }
+    {
+        auto result = MapFunctions::map_concat(nullptr, {const_column}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "[{2:55,4:66,11:44}, {2:55,4:66,11:44}, {2:55,4:66,11:44}, {2:55,4:66,11:44}, {2:55,4:66,11:44}]");
+    }
+    {
+        auto result = MapFunctions::map_concat(nullptr, {const_column, only_null_column,map_column_not_nullable}).value();
+        EXPECT_TRUE(result->is_nullable());
+        EXPECT_STREQ(result->debug_string().c_str(), "[{1:44,2:55,4:66,11:44}, {2:77,3:88,4:66,11:44}, {3:NULL,2:55,4:66,11:44}, {2:55,4:66,11:44}, {2:55,4:66,11:44}]");
+    }
+}
+
 } // namespace starrocks
