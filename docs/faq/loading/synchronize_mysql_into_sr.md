@@ -4,9 +4,9 @@
 
 A Flink job reports the error `Could not execute SQL statement. Reason:org.apache.flink.table.api.ValidationException: One or more required options are missing.`
 
-It is possible that the required configuration information is missing in multiple sets of rules, such as `[table-rule.1]` and `[table-rule.2]`, in the SMT configuration file **config_prod.conf**.
+A possible reason is that the required configuration information is missing in multiple sets of rules, such as `[table-rule.1]` and `[table-rule.2]`, in the SMT configuration file **config_prod.conf**.
 
-You can check whether each set of rules, such as `[table-rule.1]` and `[table-rule.2]`. is configured with the required database, table, and Flink connector information.
+You can check whether each set of rules, such as `[table-rule.1]` and `[table-rule.2]` is configured with the required database, table, and Flink connector information.
 
 ## How can I make Flink automatically restart failed tasks?
 
@@ -24,17 +24,17 @@ Parameter description:
 
 > **NOTE**
 >
-> For more detailed parameter descriptions in Flink documentation,  see [Checkpointing](https://nightlies.apache.org/flink/flink-docs-master/docs/dev/datastream/fault-tolerance/checkpointing/).
+> For more detailed parameter descriptions in Flink documentation, see [Checkpointing](https://nightlies.apache.org/flink/flink-docs-master/docs/dev/datastream/fault-tolerance/checkpointing/).
 
 - `execution.checkpointing.interval`: the base time interval of checkpointing. Unit: millisecond. To enable the checkpointing mechanism, you need to set this parameter to a value greater than `0`.
-- `state.backend`: How the state is represented internally, and how and where it is persisted upon checkpoints depends on the chosen **State Backend**. Common values are `filesystem` or `rocksdb`. After the checkpointing mechanism is enabled, the state is persisted upon checkpoints to prevent data loss and ensure data consistency after recovery.  For more information on state, see [State Backends](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/state/state_backends/). 
+- `state.backend`: specifies how the state is represented internally, and how and where it is persisted upon checkpointing depends on the chosen state backend. Common values are `filesystem` or `rocksdb`. After the checkpointing mechanism is enabled, the state is persisted upon checkpoints to prevent data loss and ensure data consistency after recovery. For more information on state, see [State Backends](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/state/state_backends/).
 - `state.checkpoints.dir`: the directory to which checkpoints are written to.
 
 ## How can I manually stop a Flink job and later restore it to the state before stopping?
 
 You can manually trigger a [savepoint](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/state/savepoints/) when stopping a Flink job (a savepoint is a consistent image of the execution state of a streaming Flink job, and is created based on the checkpointing mechanism). Later, you can restore the Flink job from the specified savepoint.
 
-1. Stop a Flink job with a savepoint. The following command automatically triggers a savepoint for the Flink job `jobId` and stops the Flink job. Additionally, you can specify a target file system directory to store the savepoint.
+1. Stop the Flink job with a savepoint. The following command automatically triggers a savepoint for the Flink job `jobId` and stops the Flink job. Additionally, you can specify a target file system directory to store the savepoint.
 
     ```Bash
     bin/flink stop --type [native/canonical] --savepointPath [:targetDirectory] :jobId
@@ -49,7 +49,7 @@ You can manually trigger a [savepoint](https://nightlies.apache.org/flink/flink-
     state.savepoints.dir: [file:// or hdfs://]/home/user/savepoints_dir
     ```
 
-2. If you need to restore a Flink job to its state before it was stopped, specify the savepoint when resubmitting the Flink job.
+2. Resubmit the Flink job with the preceding savepoint specified.
 
     ```Bash
     ./flink run -c com.starrocks.connector.flink.tools.ExecuteSQL -s savepoints_dir/savepoints-xxxxxxxx flink-connector-starrocks-xxxx.jar -f flink-create.all.sql 
