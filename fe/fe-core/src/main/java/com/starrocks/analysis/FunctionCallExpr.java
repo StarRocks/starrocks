@@ -278,7 +278,7 @@ public class FunctionCallExpr extends Expr {
                 if (i != 0) {
                     sb.append(',');
                 }
-                sb.append(fn.getArgs()[i].toString());
+                sb.append(fn.getArgs()[i].getPrimitiveType().toString());
             }
             sb.append(";");
             sb.append(" result: ").append(type).append(";");

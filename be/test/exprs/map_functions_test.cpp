@@ -600,7 +600,7 @@ PARALLEL_TEST(MapFunctionsTest, test_map_concat) {
 
     auto map_column_not_nullable = ColumnHelper::create_column(type_map_int_int, false);
     {
-        //   [1->44, 2->525, 4->676]
+        //   [1->44, 2->55, 4->66]
         //   [2->77, 3->88]
         //   [3 -> NULL]
         //   []
