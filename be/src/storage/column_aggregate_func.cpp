@@ -171,8 +171,9 @@ struct ColumnRefState {
     }
 };
 
-template <>
-class ReplaceAggregator<ArrayColumn, ColumnRefState> final : public ValueColumnAggregator<ArrayColumn, ColumnRefState> {
+// Array/Map/Struct
+template <typename ColumnType>
+class ReplaceAggregator<ColumnType, ColumnRefState> final : public ValueColumnAggregator<ColumnType, ColumnRefState> {
 public:
     void reset() override { this->data().reset(); }
 
@@ -184,55 +185,12 @@ public:
     void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override { aggregate_impl(end - 1, src); }
 
     void append_data(Column* agg) override {
-        auto* col = down_cast<ArrayColumn*>(agg);
+        auto* col = down_cast<ColumnType*>(agg);
         if (this->data().column) {
             col->append(*this->data().column, this->data().row, 1);
         } else {
             col->append_default();
         }
-    }
-
-    bool need_deep_copy() const override { return true; }
-};
-
-template <>
-class ReplaceAggregator<MapColumn, ColumnRefState> final : public ValueColumnAggregator<MapColumn, ColumnRefState> {
-public:
-    void reset() override { this->data().reset(); }
-
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        this->data().column = src;
-        this->data().row = row;
-    }
-
-    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override { aggregate_impl(end - 1, src); }
-
-    void append_data(Column* agg) override {
-        auto* col = down_cast<MapColumn*>(agg);
-        DCHECK_NOTNULL(this->data().column);
-        col->append(*this->data().column, this->data().row, 1);
-    }
-
-    bool need_deep_copy() const override { return true; }
-};
-
-template <>
-class ReplaceAggregator<StructColumn, ColumnRefState> final
-        : public ValueColumnAggregator<StructColumn, ColumnRefState> {
-public:
-    void reset() override { this->data().reset(); }
-
-    void aggregate_impl(int row, const ColumnPtr& src) override {
-        this->data().column = src;
-        this->data().row = row;
-    }
-
-    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override { aggregate_impl(end - 1, src); }
-
-    void append_data(Column* agg) override {
-        auto* col = down_cast<StructColumn*>(agg);
-        DCHECK_NOTNULL(this->data().column);
-        col->append(*this->data().column, this->data().row, 1);
     }
 
     bool need_deep_copy() const override { return true; }
