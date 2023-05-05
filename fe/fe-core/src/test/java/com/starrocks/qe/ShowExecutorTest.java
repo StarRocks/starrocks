@@ -65,6 +65,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -1155,6 +1156,20 @@ public class ShowExecutorTest {
                 "PROPERTIES (\"type\"  =  \"hive\",\n" +
                 "\"hive.metastore.uris\"  =  \"thrift://hadoop:9083\"\n" +
                 ")", resultSet.getResultRows().get(0).get(1));
+    }
+
+    @Test
+    public void testShowCreateExternalCatalogNotExists() {
+        new MockUp<CatalogMgr>() {
+            @Mock
+            public Catalog getCatalogByName(String name) {
+                return null;
+            }
+        };
+
+        ShowCreateExternalCatalogStmt stmt = new ShowCreateExternalCatalogStmt("catalog_not_exist");
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Unknown catalog 'catalog_not_exist'", executor::execute);
     }
 
     @Test

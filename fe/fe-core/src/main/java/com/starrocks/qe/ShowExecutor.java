@@ -2491,15 +2491,20 @@ public class ShowExecutor {
         return returnRows;
     }
 
-    private void handleShowCreateExternalCatalog() {
+    private void handleShowCreateExternalCatalog() throws AnalysisException {
         ShowCreateExternalCatalogStmt showStmt = (ShowCreateExternalCatalogStmt) stmt;
         String catalogName = showStmt.getCatalogName();
-        Catalog catalog = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
         List<List<String>> rows = Lists.newArrayList();
         if (InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME.equalsIgnoreCase(catalogName)) {
             resultSet = new ShowResultSet(stmt.getMetaData(), rows);
             return;
         }
+
+        Catalog catalog = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogByName(catalogName);
+        if (catalog == null) {
+            ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+        }
+
         // Create external catalog catalogName (
         StringBuilder createCatalogSql = new StringBuilder();
         createCatalogSql.append("CREATE EXTERNAL CATALOG ")
