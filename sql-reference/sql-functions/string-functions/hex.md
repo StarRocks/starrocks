@@ -12,7 +12,7 @@ HEX(x);
 
 ## 参数说明
 
-`x`: 支持的数据类型为 BIGINT、VARCHAR。
+`x`: 支持的数据类型为 BIGINT、VARCHAR、VARBINARY (v3.0 及以后)。
 
 ## 返回值说明
 
@@ -36,4 +36,12 @@ mysql> select hex('3');
 | 33       |
 +----------+
 1 row in set (0.00 sec)
+
+-- 输入值为 VARBINARY 类型。
+mysql> select hex(x'abab');
++-------------+
+| hex('ABAB') |
++-------------+
+| ABAB        |
++-------------+
 ```
