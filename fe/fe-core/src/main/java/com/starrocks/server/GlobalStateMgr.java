@@ -502,6 +502,8 @@ public class GlobalStateMgr {
 
     private ConfigRefreshDaemon configRefreshDaemon;
 
+    private StorageVolumeMgr storageVolumeMgr;
+
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
     }
@@ -692,6 +694,8 @@ public class GlobalStateMgr {
         this.shardDeleter = new ShardDeleter();
 
         this.binlogManager = new BinlogManager();
+
+        this.storageVolumeMgr = new StorageVolumeMgr();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -917,6 +921,10 @@ public class GlobalStateMgr {
 
     public WarehouseManager getWarehouseMgr() {
         return warehouseMgr;
+    }
+
+    public StorageVolumeMgr getStorageVolumeMgr() {
+        return storageVolumeMgr;
     }
 
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {

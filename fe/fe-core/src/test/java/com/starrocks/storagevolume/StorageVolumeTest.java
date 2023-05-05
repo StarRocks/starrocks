@@ -20,16 +20,36 @@ import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.hdfs.HDFSCloudConfiguration;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.AlterStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.DescStorageVolumeStmt;
+import com.starrocks.sql.ast.DropStorageVolumeStmt;
+import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
+import com.starrocks.sql.ast.ShowStorageVolumesStmt;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ACCESS_KEY;
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
@@ -41,6 +61,14 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_AW
 import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_INSTANCE_PROFILE;
 
 public class StorageVolumeTest {
+    private static ConnectContext connectContext;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        AnalyzeTestUtil.init();
+        connectContext = AnalyzeTestUtil.getConnectContext();
+    }
+
     @Test
     public void testAWSDefaultCredential() throws AnalysisException {
         Map<String, String> storageParams = new HashMap<>();
@@ -228,5 +256,187 @@ public class StorageVolumeTest {
         } catch (AnalysisException e) {
             Assert.assertTrue(e.getMessage().contains("Storage params is not valid"));
         }
+    }
+
+    @Test
+    public void testCreate() throws DdlException, AnalysisException {
+        StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        ExceptionChecker.expectThrowsNoException(
+                () -> {
+                    String sql = "CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_create type = s3 " +
+                            "LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES (\"aws.s3.endpoint\"=\"endpoint\", " +
+                            "\"aws.s3.region\"=\"us-west-2\", \"aws.s3.use_aws_sdk_default_behavior\" = \"true\", " +
+                            "\"enabled\"=\"false\")";
+                    CreateStorageVolumeStmt createStmt = (CreateStorageVolumeStmt) UtFrameUtils.
+                            parseStmtWithNewParser(sql, connectContext);
+                    DDLStmtExecutor.execute(createStmt, connectContext);
+                }
+        );
+        Assert.assertEquals(true, storageVolumeMgr.exists("storage_volume_create"));
+        StorageVolume sv = storageVolumeMgr.getStorageVolume("storage_volume_create");
+        Assert.assertEquals(false, sv.getEnabled());
+        Assert.assertEquals(false, sv.isDefault());
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> {
+                    String sql = "SHOW STORAGE VOLUMES like 'storage_volume_create'";
+                    ShowStorageVolumesStmt showStmt = (ShowStorageVolumesStmt) UtFrameUtils.
+                            parseStmtWithNewParser(sql, connectContext);
+                    ShowExecutor executor = new ShowExecutor(connectContext, showStmt);
+                    ShowResultSet resultSet = executor.execute();
+                    Set<String> allStorageVolumes = resultSet.getResultRows().stream().map(k -> k.get(0))
+                            .collect(Collectors.toSet());
+                    Assert.assertEquals(new HashSet<>(Arrays.asList("storage_volume_create")), allStorageVolumes);
+                }
+        );
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> {
+                    String sql = "DROP STORAGE VOLUME IF EXISTS storage_volume_create";
+                    DropStorageVolumeStmt dropStmt = (DropStorageVolumeStmt) UtFrameUtils.
+                            parseStmtWithNewParser(sql, connectContext);
+                    DDLStmtExecutor.execute(dropStmt, connectContext);
+                }
+        );
+        Assert.assertEquals(false, storageVolumeMgr.exists("storage_volume_create"));
+    }
+
+    @Test
+    public void testAlter() throws DdlException, AnalysisException {
+        StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        ExceptionChecker.expectThrowsNoException(
+                () -> {
+                    String sql = "CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_alter type = s3 " +
+                            "LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES (\"aws.s3.endpoint\"=\"endpoint\", " +
+                            "\"aws.s3.region\"=\"us-west-2\", \"aws.s3.use_aws_sdk_default_behavior\" = \"true\", " +
+                            "\"enabled\"=\"false\")";
+                    CreateStorageVolumeStmt createStmt = (CreateStorageVolumeStmt) UtFrameUtils.
+                            parseStmtWithNewParser(sql, connectContext);
+                    DDLStmtExecutor.execute(createStmt, connectContext);
+                }
+        );
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> {
+                    String sql = "ALTER STORAGE VOLUME storage_volume_alter SET (\"aws.s3.region\"=\"us-west-1\", " +
+                            "\"aws.s3.endpoint\"=\"endpoint1\", \"enabled\"=\"true\" )";
+                    AlterStorageVolumeStmt alterStmt = (AlterStorageVolumeStmt) UtFrameUtils.
+                            parseStmtWithNewParser(sql, connectContext);
+                    DDLStmtExecutor.execute(alterStmt, connectContext);
+                }
+        );
+        StorageVolume sv = storageVolumeMgr.getStorageVolume("storage_volume_alter");
+        Assert.assertEquals(true, sv.getEnabled());
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> {
+                    String sql = "DESC STORAGE VOLUME storage_volume_alter";
+                    DescStorageVolumeStmt descStmt = (DescStorageVolumeStmt) UtFrameUtils.
+                            parseStmtWithNewParser(sql, connectContext);
+                    ShowExecutor executor = new ShowExecutor(connectContext, descStmt);
+                    ShowResultSet resultSet = executor.execute();
+                    Assert.assertEquals(1, resultSet.getResultRows().size());
+                    Assert.assertEquals("storage_volume_alter", resultSet.getResultRows().get(0).get(0));
+                    Assert.assertEquals("S3", resultSet.getResultRows().get(0).get(1));
+                    Assert.assertEquals("false", resultSet.getResultRows().get(0).get(2));
+                    Assert.assertEquals("s3://xxx", resultSet.getResultRows().get(0).get(3));
+                    Assert.assertEquals("true", resultSet.getResultRows().get(0).get(5));
+                    Assert.assertEquals("comment", resultSet.getResultRows().get(0).get(6));
+                }
+        );
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> {
+                    String sql = "DROP STORAGE VOLUME IF EXISTS storage_volume_alter";
+                    DropStorageVolumeStmt dropStmt = (DropStorageVolumeStmt) UtFrameUtils.
+                            parseStmtWithNewParser(sql, connectContext);
+                    DDLStmtExecutor.execute(dropStmt, connectContext);
+                }
+        );
+        Assert.assertEquals(false, storageVolumeMgr.exists("storage_volume_alter"));
+    }
+
+    @Test
+    public void testSetDefault() {
+        StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+        ExceptionChecker.expectThrowsNoException(
+                () -> {
+                    String sql = "CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_1 type = s3 " +
+                            "LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES (\"aws.s3.endpoint\"=\"endpoint\", " +
+                            "\"aws.s3.region\"=\"us-west-2\", \"aws.s3.use_aws_sdk_default_behavior\" = \"true\", " +
+                            "\"enabled\"=\"false\")";
+                    CreateStorageVolumeStmt createStmt = (CreateStorageVolumeStmt) UtFrameUtils.
+                            parseStmtWithNewParser(sql, connectContext);
+                    DDLStmtExecutor.execute(createStmt, connectContext);
+                }
+        );
+        Assert.assertEquals(true, storageVolumeMgr.exists("storage_volume_1"));
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> {
+                    String sql = "CREATE STORAGE VOLUME IF NOT EXISTS storage_volume_2 type = s3 " +
+                            "LOCATIONS = ('s3://xxx') COMMENT 'comment' PROPERTIES (\"aws.s3.endpoint\"=\"endpoint\", " +
+                            "\"aws.s3.region\"=\"us-west-2\", \"aws.s3.use_aws_sdk_default_behavior\" = \"true\", " +
+                            "\"enabled\"=\"false\")";
+                    CreateStorageVolumeStmt createStmt = (CreateStorageVolumeStmt) UtFrameUtils.
+                            parseStmtWithNewParser(sql, connectContext);
+                    DDLStmtExecutor.execute(createStmt, connectContext);
+                }
+        );
+        Assert.assertEquals(true, storageVolumeMgr.exists("storage_volume_2"));
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> {
+                    String sql = "SET storage_volume_1 AS DEFAULT STORAGE VOLUME";
+                    SetDefaultStorageVolumeStmt setStmt = (SetDefaultStorageVolumeStmt) UtFrameUtils.
+                            parseStmtWithNewParser(sql, connectContext);
+                    DDLStmtExecutor.execute(setStmt, connectContext);
+                }
+        );
+        Assert.assertEquals("storage_volume_1", storageVolumeMgr.getDefaultSV());
+
+        ExceptionChecker.expectThrows(
+                IllegalStateException.class,
+                () -> {
+                    String sql = "DROP STORAGE VOLUME IF EXISTS storage_volume_1";
+                    DropStorageVolumeStmt dropStmt = (DropStorageVolumeStmt) UtFrameUtils.
+                            parseStmtWithNewParser(sql, connectContext);
+                    DDLStmtExecutor.execute(dropStmt, connectContext);
+                }
+        );
+        Assert.assertEquals(true, storageVolumeMgr.exists("storage_volume_1"));
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> {
+                    String sql = "SHOW STORAGE VOLUMES";
+                    ShowStorageVolumesStmt showStmt = (ShowStorageVolumesStmt) UtFrameUtils.
+                            parseStmtWithNewParser(sql, connectContext);
+                    ShowExecutor executor = new ShowExecutor(connectContext, showStmt);
+                    ShowResultSet resultSet = executor.execute();
+                    Set<String> allStorageVolumes = resultSet.getResultRows().stream().map(k -> k.get(0))
+                            .collect(Collectors.toSet());
+                    Assert.assertEquals(new HashSet<>(Arrays.asList("storage_volume_1", "storage_volume_2")),
+                            allStorageVolumes);
+                    sql = "SHOW STORAGE VOLUMES like 'storage_volume_1'";
+                    showStmt = (ShowStorageVolumesStmt) UtFrameUtils.
+                            parseStmtWithNewParser(sql, connectContext);
+                    executor = new ShowExecutor(connectContext, showStmt);
+                    resultSet = executor.execute();
+                    allStorageVolumes = resultSet.getResultRows().stream().map(k -> k.get(0))
+                            .collect(Collectors.toSet());
+                    Assert.assertEquals(new HashSet<>(Arrays.asList("storage_volume_1")),
+                            allStorageVolumes);
+                }
+        );
+
+        ExceptionChecker.expectThrowsNoException(
+                () -> {
+                    String sql = "SET storage_volume_2 AS DEFAULT STORAGE VOLUME";
+                    SetDefaultStorageVolumeStmt setStmt = (SetDefaultStorageVolumeStmt) UtFrameUtils.
+                            parseStmtWithNewParser(sql, connectContext);
+                    DDLStmtExecutor.execute(setStmt, connectContext);
+                }
+        );
+        Assert.assertEquals("storage_volume_2", storageVolumeMgr.getDefaultSV());
     }
 }
