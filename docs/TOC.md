@@ -570,6 +570,7 @@
       + [Routine Load](./faq/loading/Routine_load_faq.md)
       + [Broker Load](./faq/loading/Broker_load_faq.md)
       + [Insert Into](./faq/loading/Insert_into_faq.md)
+      + [Synchronize data from MySQL in real time](/faq/loading/synchronize_mysql_into_sr.md)
       + [Flink connector](./faq/loading/Flink_connector_faq.md)
       + [DataX](./faq/loading/DataX_faq.md)
     + [Data Unloading](./faq/Exporting_faq.md)
