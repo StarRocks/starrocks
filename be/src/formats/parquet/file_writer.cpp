@@ -297,14 +297,19 @@ FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
     for (auto expr : output_expr_ctxs) {
         _type_descs.push_back(expr->root()->type());
     }
+    _eval_func = [output_expr_ctxs](Chunk* chunk, size_t col_idx) {
+        return output_expr_ctxs[col_idx]->evaluate(chunk);
+    };
 }
 
+// For UT only
 FileWriterBase::FileWriterBase(std::unique_ptr<WritableFile> writable_file,
                                std::shared_ptr<::parquet::WriterProperties> properties,
                                std::shared_ptr<::parquet::schema::GroupNode> schema,
                                std::vector<TypeDescriptor> type_descs)
         : _properties(std::move(properties)), _schema(std::move(schema)), _type_descs(std::move(type_descs)) {
     _outstream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
+    _eval_func = [](Chunk* chunk, size_t col_idx) { return chunk->get_column_by_index(col_idx); };
 }
 
 Status FileWriterBase::init() {
@@ -319,7 +324,7 @@ void FileWriterBase::_generate_chunk_writer() {
     DCHECK(_writer != nullptr);
     if (_chunk_writer == nullptr) {
         auto rg_writer = _writer->AppendBufferedRowGroup();
-        _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema);
+        _chunk_writer = std::make_unique<ChunkWriter>(rg_writer, _type_descs, _schema, _eval_func);
     }
 }
 
