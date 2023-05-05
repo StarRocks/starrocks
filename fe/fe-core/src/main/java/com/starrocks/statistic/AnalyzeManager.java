@@ -172,7 +172,7 @@ public class AnalyzeManager implements Writable {
     public void dropExternalStats(String tableUUID) {
         List<AnalyzeStatus> expireList = analyzeStatusMap.values().stream().
                 filter(status -> status instanceof ExternalAnalyzeStatus).
-                filter(status -> ((ExternalAnalyzeStatus) status).getTableUUID() == tableUUID).
+                filter(status -> ((ExternalAnalyzeStatus) status).getTableUUID().equals(tableUUID)).
                 collect(Collectors.toList());
 
         expireList.forEach(status -> analyzeStatusMap.remove(status.getId()));
