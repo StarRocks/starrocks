@@ -536,8 +536,7 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
 pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
     // now spill only support INNER_JOIN and LEFT-SEMI JOIN. we could implement LEFT_OUTER_JOIN later
-    if (runtime_state()->enable_spill() &&
-        (_join_type == TJoinOp::INNER_JOIN || _join_type == TJoinOp::LEFT_SEMI_JOIN)) {
+    if (runtime_state()->enable_spill() && is_spillable(_join_type)) {
         return _decompose_to_pipeline<HashJoinerFactory, SpillableHashJoinBuildOperatorFactory,
                                       SpillableHashJoinProbeOperatorFactory>(context);
     } else {
