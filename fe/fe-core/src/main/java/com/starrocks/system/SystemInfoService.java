@@ -1071,7 +1071,7 @@ public class SystemInfoService {
         if (Config.only_use_compute_node) {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
                     getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            if (null != warehouse) {
+            if (warehouse != null) {
                 warehouse.getAnyAvailableCluster().dropNode(cn.getId());
             }
         }
