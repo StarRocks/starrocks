@@ -211,6 +211,7 @@ public class Checkpoint extends FrontendDaemon {
         globalStateMgr = GlobalStateMgr.getCurrentState();
         globalStateMgr.setJournal(journal);
         try {
+            globalStateMgr.setStarOSAgent(GlobalStateMgr.getServingState().getStarOSAgent());
             globalStateMgr.loadImage(imageDir);
             globalStateMgr.replayJournal(checkPointVersion);
             globalStateMgr.clearExpiredJobs();
