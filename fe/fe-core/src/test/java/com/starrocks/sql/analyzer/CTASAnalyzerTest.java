@@ -25,6 +25,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
@@ -484,6 +485,21 @@ public class CTASAnalyzerTest {
             SlotRef col1 = (SlotRef) queryStatement.getQueryRelation().getOutputExpression().get(0);
             Assert.assertFalse(col1.isNullable());
             starRocksAssert.dropTable("emps");
+        }
+    }
+
+    @Test
+    public void testCTASDefaultLimit() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_limit as select * from test_notnull t1;";
+        try {
+            ctx.getSessionVariable().setSqlSelectLimit(10);
+            CreateTableAsSelectStmt ctasStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            QueryStatement query = ctasStmt.getQueryStatement();
+            Assert.assertFalse(query.getQueryRelation().hasLimit());
+        } finally {
+            ctx.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
         }
     }
 }
