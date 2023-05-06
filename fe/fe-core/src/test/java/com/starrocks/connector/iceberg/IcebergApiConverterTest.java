@@ -15,6 +15,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ArrayType;
@@ -22,6 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
@@ -147,14 +149,40 @@ public class IcebergApiConverterTest {
     @Test
     public void testToIcebergApiSchema() {
         List<Column> columns = Lists.newArrayList();
-        Column col = new Column("c1", Type.INT);
-        columns.add(col);
+        columns.add(new Column(new Column("c1", Type.BOOLEAN)));
+        columns.add(new Column(new Column("c2", Type.INT)));
+        columns.add(new Column(new Column("c3", Type.BIGINT)));
+        columns.add(new Column(new Column("c4", Type.FLOAT)));
+        columns.add(new Column(new Column("c5", Type.DOUBLE)));
+        columns.add(new Column(new Column("c6", Type.DATE)));
+        columns.add(new Column(new Column("c7", Type.DATETIME)));
+        columns.add(new Column(new Column("c8", Type.VARCHAR)));
+        columns.add(new Column(new Column("c9", Type.CHAR)));
+        columns.add(new Column(new Column("c10", Type.DECIMAL32)));
+        columns.add(new Column(new Column("c11", Type.DECIMAL64)));
+        columns.add(new Column(new Column("c12", Type.DECIMAL128)));
+        columns.add(new Column(new Column("c13", new ArrayType(Type.INT))));
+        columns.add(new Column(new Column("c14", new MapType(Type.INT, Type.INT))));
+        columns.add(new Column(new Column("c15", new StructType(ImmutableList.of(Type.INT)))));
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
-        List<Types.NestedField> fields = schema.columns();
-        Assert.assertEquals(1, fields.size());
-        Assert.assertEquals(Types.IntegerType.get(), fields.get(0).type());
-        Assert.assertEquals(1, fields.get(0).fieldId());
+        Assert.assertEquals("table {\n" +
+                "  1: c1: required boolean ()\n" +
+                "  2: c2: required int ()\n" +
+                "  3: c3: required long ()\n" +
+                "  4: c4: required float ()\n" +
+                "  5: c5: required double ()\n" +
+                "  6: c6: required date ()\n" +
+                "  7: c7: required timestamp ()\n" +
+                "  8: c8: required string ()\n" +
+                "  9: c9: required string ()\n" +
+                "  10: c10: required decimal(-1, -1) ()\n" +
+                "  11: c11: required decimal(-1, -1) ()\n" +
+                "  12: c12: required decimal(-1, -1) ()\n" +
+                "  13: c13: required list<int> ()\n" +
+                "  14: c14: required map<int, int> ()\n" +
+                "  15: c15: required struct<19: col0: optional int> ()\n" +
+                "}", schema.toString());
 
         PartitionSpec spec = IcebergApiConverter.parsePartitionFields(schema, Lists.newArrayList("c1"));
         Assert.assertTrue(spec.isPartitioned());

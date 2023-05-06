@@ -201,6 +201,10 @@ public class TypeDef implements ParseNode {
 
     private void analyzeMapType(MapType type) throws AnalysisException {
         Type keyType = type.getKeyType();
+        if (!keyType.isValidMapKeyType()) {
+            throw new AnalysisException("Invalid map.key's type: " + keyType.toSql() +
+                    ", which should be base types");
+        }
         analyze(keyType);
         Type valueType = type.getValueType();
         analyze(valueType);

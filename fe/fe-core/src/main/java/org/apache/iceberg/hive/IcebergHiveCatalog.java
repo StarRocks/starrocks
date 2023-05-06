@@ -333,7 +333,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
                 CatalogUtil.dropTableData(ops.io(), lastMetadata);
             }
 
-            deleteTableDirectory(ops.current().location());
+            deletePath(ops.current().location());
             LOG.info("Dropped table: {}", identifier);
             return true;
         } catch (NoSuchTableException | NoSuchObjectException e) {
@@ -347,15 +347,21 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         }
     }
 
-    private void deleteTableDirectory(String tableLocation) {
-        Path path = new Path(tableLocation);
+    @Override
+    public void deleteUncommittedDataFiles(List<String> fileLocations) {
+        fileLocations.forEach(this::deletePath);
+    }
+
+    // TODO(stephen): use CachingFileIO to access file system After adaptation
+    private void deletePath(String location) {
+        Path path = new Path(location);
         URI uri = path.toUri();
         try {
             FileSystem fileSystem = FileSystem.get(uri, new Configuration());
             fileSystem.delete(path, true);
         } catch (IOException e) {
-            LOG.error("Failed to delete directory {}", tableLocation, e);
-            throw new StarRocksConnectorException("Failed to delete directory %s. msg: %s", tableLocation, e.getMessage());
+            LOG.error("Failed to delete location {}", location, e);
+            throw new StarRocksConnectorException("Failed to delete location %s. msg: %s", location, e.getMessage());
         }
     }
 

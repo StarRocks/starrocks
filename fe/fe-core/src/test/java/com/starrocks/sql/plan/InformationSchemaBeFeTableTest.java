@@ -14,7 +14,10 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.SchemaTable;
+import com.starrocks.catalog.system.information.BeConfigsSystemTable;
+import com.starrocks.catalog.system.information.BeMetricsSystemTable;
+import com.starrocks.catalog.system.information.BeTabletsSystemTable;
+import com.starrocks.catalog.system.information.BeTxnsSystemTable;
 import com.starrocks.pseudocluster.PseudoCluster;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -41,17 +44,17 @@ public class InformationSchemaBeFeTableTest {
         Statement stmt = connection.createStatement();
         try {
             Assert.assertTrue(stmt.execute("select * from information_schema.be_tablets"));
-            Assert.assertEquals(SchemaTable.TABLE_MAP.get("be_tablets").getColumns().size(),
+            Assert.assertEquals(BeTabletsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
             System.out.printf("get %d rows\n", stmt.getUpdateCount());
             Assert.assertTrue(stmt.execute("select * from information_schema.be_txns"));
-            Assert.assertEquals(SchemaTable.TABLE_MAP.get("be_txns").getColumns().size(),
+            Assert.assertEquals(BeTxnsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
             Assert.assertTrue(stmt.execute("select * from information_schema.be_configs"));
-            Assert.assertEquals(SchemaTable.TABLE_MAP.get("be_configs").getColumns().size(),
+            Assert.assertEquals(BeConfigsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
             Assert.assertTrue(stmt.execute("select * from information_schema.be_metrics"));
-            Assert.assertEquals(SchemaTable.TABLE_MAP.get("be_metrics").getColumns().size(),
+            Assert.assertEquals(BeMetricsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
         } finally {
             stmt.close();

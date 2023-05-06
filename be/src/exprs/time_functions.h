@@ -147,6 +147,14 @@ public:
     DEFINE_VECTORIZED_FN(week_of_year_with_default_mode);
 
     /**
+     * Get week of the year with iso.
+     * @param context
+     * @param column[0] [TimestampColumn] Columns that hold timestamps.
+     * @return  IntColumn week of the year:
+     */
+    DEFINE_VECTORIZED_FN(week_of_year_iso);
+
+    /**
      * Get week of the year.
      * @param context
      * @param column[0] [TimestampColumn] Columns that hold timestamps.

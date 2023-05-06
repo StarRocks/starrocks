@@ -91,6 +91,7 @@ import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TRuntimeFilterDestination;
 import com.starrocks.thrift.TRuntimeFilterProberParams;
+import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletFailInfo;
@@ -172,6 +173,9 @@ public class Coordinator {
     private List<String> exportFiles;
     private final List<TTabletCommitInfo> commitInfos = Lists.newArrayList();
     private final List<TTabletFailInfo> failInfos = Lists.newArrayList();
+
+    // for external table sink
+    private final List<TSinkCommitInfo> sinkCommitInfos = Lists.newArrayList();
     // Input parameter
     private long jobId = -1; // job which this task belongs to
     private TUniqueId queryId;
@@ -417,6 +421,10 @@ public class Coordinator {
 
     public List<TTabletFailInfo> getFailInfos() {
         return failInfos;
+    }
+
+    public List<TSinkCommitInfo> getSinkCommitInfos() {
+        return sinkCommitInfos;
     }
 
     public boolean isUsingBackend(Long backendID) {
@@ -1484,6 +1492,9 @@ public class Coordinator {
             }
             if (params.isSetRejected_record_path()) {
                 rejectedRecordPaths.add(execState.address.hostname + ":" + params.getRejected_record_path());
+            }
+            if (params.isSetSink_commit_infos()) {
+                sinkCommitInfos.addAll(params.sink_commit_infos);
             }
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }

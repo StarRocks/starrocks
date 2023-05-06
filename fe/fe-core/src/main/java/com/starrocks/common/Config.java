@@ -2255,4 +2255,16 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static short default_replication_num = 3;
+
+    /**
+     * The default scheduler interval for alter jobs.
+     */
+    @ConfField(mutable = true)
+    public static int alter_scheduler_interval_millisecond = 10000;
+
+    /**
+     * The default scheduler interval for routine loads.
+     */
+    @ConfField(mutable = true)
+    public static int routine_load_scheduler_interval_millisecond = 10000;
 }

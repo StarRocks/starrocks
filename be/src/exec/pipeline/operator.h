@@ -177,6 +177,7 @@ public:
     static const int32_t s_pseudo_plan_node_id_for_export_sink;
     static const int32_t s_pseudo_plan_node_id_for_olap_table_sink;
     static const int32_t s_pseudo_plan_node_id_for_result_sink;
+    static const int32_t s_pseudo_plan_node_id_for_iceberg_table_sink;
     static const int32_t s_pseudo_plan_node_id_upper_bound;
 
     RuntimeProfile* runtime_profile() { return _runtime_profile.get(); }
