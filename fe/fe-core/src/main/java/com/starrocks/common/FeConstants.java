@@ -75,8 +75,6 @@ public class FeConstants {
     public static boolean showLocalShuffleColumnsInExplain = true;
     // set to true when replay from query dump
     public static boolean isReplayFromQueryDump = false;
-    // default scheduler interval is 10 seconds
-    public static int default_scheduler_interval_millisecond = 10000;
 
     // Every 3GB, corresponds a new tablet. Assume compression ratio equals to 3,
     // the raw data of one tablet equals to 10GB approximately
