@@ -294,66 +294,6 @@ public class ColumnTypeConverter {
         }
     }
 
-    public static Type fromDeltaLakeType(DataType dataType) {
-        if (dataType == null) {
-            return Type.NULL;
-        }
-        PrimitiveType primitiveType;
-        DeltaDataType deltaDataType = DeltaDataType.instanceFrom(dataType.getClass());
-        switch (deltaDataType) {
-            case BOOLEAN:
-                primitiveType = PrimitiveType.BOOLEAN;
-                break;
-            case BYTE:
-            case TINYINT:
-                primitiveType = PrimitiveType.TINYINT;
-                break;
-            case SMALLINT:
-                primitiveType = PrimitiveType.SMALLINT;
-                break;
-            case INTEGER:
-                primitiveType = PrimitiveType.INT;
-                break;
-            case LONG:
-                primitiveType = PrimitiveType.BIGINT;
-                break;
-            case FLOAT:
-                primitiveType = PrimitiveType.FLOAT;
-                break;
-            case DOUBLE:
-                primitiveType = PrimitiveType.DOUBLE;
-                break;
-            case DATE:
-                primitiveType = PrimitiveType.DATE;
-                break;
-            case TIMESTAMP:
-                primitiveType = PrimitiveType.DATETIME;
-                break;
-            case STRING:
-                return ScalarType.createDefaultString();
-            case DECIMAL:
-                int precision = ((io.delta.standalone.types.DecimalType) dataType).getPrecision();
-                int scale = ((io.delta.standalone.types.DecimalType) dataType).getScale();
-                return ScalarType.createUnifiedDecimalType(precision, scale);
-            case ARRAY:
-                Type type = convertToArrayType((io.delta.standalone.types.ArrayType) dataType);
-                if (type.isArrayType()) {
-                    return type;
-                } else {
-                    return Type.UNKNOWN_TYPE;
-                }
-            case NULL:
-                primitiveType = PrimitiveType.NULL_TYPE;
-                break;
-            case BINARY:
-            case MAP:
-            case STRUCT:
-            default:
-                primitiveType = PrimitiveType.UNKNOWN_TYPE;
-        }
-        return ScalarType.createType(primitiveType);
-    }
-
     private static ArrayType convertToArrayType(io.delta.standalone.types.ArrayType arrayType) {
         return new ArrayType(fromDeltaLakeType(arrayType.getElementType()), true);
     }
