@@ -48,7 +48,8 @@ class RollingAsyncParquetWriter {
 public:
     RollingAsyncParquetWriter(const TableInfo& tableInfo, const std::vector<ExprContext*>& output_expr_ctxs,
                               RuntimeProfile* parent_profile,
-                              std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> _commit_func);
+                              std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> _commit_func,
+                              RuntimeState* state, int32_t driver_id);
 
     ~RollingAsyncParquetWriter() = default;
 
@@ -77,6 +78,8 @@ private:
     std::vector<ExprContext*> _output_expr_ctxs;
     RuntimeProfile* _parent_profile;
     std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> _commit_func;
+    RuntimeState* _state;
+    int32_t _driver_id;
 };
 
 } // namespace starrocks

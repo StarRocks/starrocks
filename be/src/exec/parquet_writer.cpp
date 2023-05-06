@@ -26,8 +26,13 @@ namespace starrocks {
 
 RollingAsyncParquetWriter::RollingAsyncParquetWriter(
         const TableInfo& tableInfo, const std::vector<ExprContext*>& output_expr_ctxs, RuntimeProfile* parent_profile,
-        std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> commit_func)
-        : _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile), _commit_func(std::move(commit_func)) {
+        std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> commit_func, RuntimeState* state,
+        int32_t driver_id)
+        : _output_expr_ctxs(output_expr_ctxs),
+          _parent_profile(parent_profile),
+          _commit_func(std::move(commit_func)),
+          _state(state),
+          _driver_id(driver_id) {
     init_rolling_writer(tableInfo);
 }
 
@@ -49,9 +54,12 @@ Status RollingAsyncParquetWriter::init_rolling_writer(const TableInfo& tableInfo
     return Status::OK();
 }
 
+// prepend fragment instance id to a file name so we can determine which files were written by which fragment instance or be.
+// and we can also know how many files each instance and each driver has written according to file_counts and driver_id mark.
 std::string RollingAsyncParquetWriter::_new_file_location() {
     _file_cnt += 1;
-    _outfile_location = _partition_location + fmt::format("{}_{}.parquet", _file_cnt, generate_uuid_string());
+    _outfile_location = _partition_location + fmt::format("{}_{}_{}.parquet", print_id(_state->fragment_instance_id()),
+                                                          _driver_id, _file_cnt);
     return _outfile_location;
 }
 
