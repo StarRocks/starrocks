@@ -29,6 +29,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.RunMode;
+import com.starrocks.sql.ast.ColumnDef;
+>>>>>>> e3461e405 ([Enhancement] The replication rules of CTAS are consistent with those of table crea… (#22854))
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
@@ -60,19 +65,6 @@ public class CTASAnalyzer {
         Map<String, Table> tableRefToTable = new HashMap<>();
         for (Map.Entry<TableName, Table> t : tables.entrySet()) {
             tableRefToTable.put(t.getKey().getTbl(), t.getValue());
-        }
-
-        // For replication_num, we select the maximum value of all tables replication_num
-        int defaultReplicationNum = 1;
-
-        for (Table table : tableRefToTable.values()) {
-            if (table instanceof OlapTable) {
-                OlapTable olapTable = (OlapTable) table;
-                Short replicationNum = olapTable.getDefaultReplicationNum();
-                if (replicationNum > defaultReplicationNum) {
-                    defaultReplicationNum = replicationNum;
-                }
-            }
         }
 
         List<Field> allFields = queryStatement.getQueryRelation().getRelationFields().getAllFields();
@@ -125,6 +117,9 @@ public class CTASAnalyzer {
                         new Pair<>(slotRef.getColumnName(), allFields.get(i).getName())), table);
             }
         }
+
+        // For replication_num, The behavior is the same as creating a table
+        int defaultReplicationNum = RunMode.defaultReplicationNum();
 
         Map<String, String> stmtProperties = createTableStmt.getProperties();
         if (null == stmtProperties) {
