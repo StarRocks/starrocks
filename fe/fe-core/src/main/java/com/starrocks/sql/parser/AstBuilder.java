@@ -964,7 +964,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 false,
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
                 null,
-                EngineType.defaultEngine().name(),
+                "",
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 partitionDesc,
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
@@ -5895,11 +5895,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new ExpressionPartitionDesc(rangePartitionDesc, functionCallExpr);
         }
         List<Identifier> identifierList = visit(identifierListContext.identifier(), Identifier.class);
-        List<PartitionDesc> partitionDesc = visit(context.rangePartitionDesc(), PartitionDesc.class);
-        return new RangePartitionDesc(
-                identifierList.stream().map(Identifier::getValue).collect(toList()),
-                partitionDesc,
-                createPos(context));
+
+        if (context.LIST() == null && context.RANGE() == null) {
+            List<String> columnList = identifierList.stream().map(Identifier::getValue).collect(toList());
+            return new ListPartitionDesc(columnList, new ArrayList<>());
+        } else {
+            List<PartitionDesc> partitionDesc = visit(context.rangePartitionDesc(), PartitionDesc.class);
+            return new RangePartitionDesc(
+                    identifierList.stream().map(Identifier::getValue).collect(toList()),
+                    partitionDesc,
+                    createPos(context));
+        }
     }
 
     @Override
