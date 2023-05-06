@@ -456,6 +456,9 @@ Status FileReader::_init_group_readers() {
     for (size_t i = 0; i < _file_metadata->t_metadata().row_groups.size(); i++) {
         bool selected = _select_row_group(_file_metadata->t_metadata().row_groups[i]);
 
+        if (i > 0) {
+            row_group_first_row += _file_metadata->t_metadata().row_groups[i - 1].num_rows;
+        }
         if (selected) {
             StatusOr<bool> st = _filter_group(_file_metadata->t_metadata().row_groups[i]);
             if (!st.ok()) return st.status();
@@ -464,9 +467,6 @@ Status FileReader::_init_group_readers() {
                 continue;
             }
 
-            if (i > 0) {
-                row_group_first_row += _file_metadata->t_metadata().row_groups[i].num_rows;
-            }
             auto row_group_reader =
                     std::make_shared<GroupReader>(_group_reader_param, i, _need_skip_rowids, row_group_first_row);
             _row_group_readers.emplace_back(row_group_reader);
