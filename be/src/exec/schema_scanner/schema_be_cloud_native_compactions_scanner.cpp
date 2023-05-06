@@ -66,7 +66,7 @@ Status SchemaBeCloudNativeCompactionsScanner::start(RuntimeState* state) {
 
 Status SchemaBeCloudNativeCompactionsScanner::fill_chunk(ChunkPtr* chunk) {
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
-    const auto end = std::min<size_t>(_infos.size(), _cur_idx + _chunk_size);
+    auto end = _cur_idx + 1;
     for (; _cur_idx < end; _cur_idx++) {
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
