@@ -416,9 +416,9 @@ properties (
 
 * `driver_class`：JDBC 驱动程序的类名称。以下列举常见 JDBC 驱动程序的类名称：
 
-  * MySQL：com.mysql.jdbc.Driver（MySQL 5.x 及以下版本）、com.mysql.cj.jdbc.Driver （MySQL 8.x 及以上版本）
+  * MySQL: com.mysql.jdbc.Driver（MySQL 5.x 及以下版本）、com.mysql.cj.jdbc.Driver （MySQL 8.x 及以上版本）
   * SQL Server：com.microsoft.sqlserver.jdbc.SQLServerDriver
-  * Oracle： oracle.jdbc.driver.OracleDriver
+  * Oracle: oracle.jdbc.driver.OracleDriver
   * PostgreSQL：org.postgresql.Driver
 
 创建资源时，FE 通过 `driver_url` 下载 JDBC 驱动程序 JAR 包，生成 checksum 并保存起来，用于校验 BE 下载的 JDBC 驱动程序 JAR 包的正确性。
@@ -689,15 +689,15 @@ select count(*) from profile_wos_p7;
 
 ### 配置
 
-* fe 配置文件路径为 $FE_HOME/conf，如果需要自定义 hadoop 集群的配置可以在该目录下添加配置文件，例如：hdfs 集群采用了高可用的 nameservice，需要将 hadoop 集群中的 hdfs-site.xml 放到该目录下，如果 hdfs 配置了 viewfs，需要将 core-site.xml 放到该目录下。
-* be 配置文件路径为 $BE_HOME/conf，如果需要自定义 hadoop 集群的配置可以在该目录下添加配置文件，例如：hdfs 集群采用了高可用的 nameservice，需要将 hadoop 集群中的 hdfs-site.xml 放到该目录下，如果 hdfs 配置了 viewfs，需要将 core-site.xml 放到该目录下。
-* be 所在的机器也需要配置 JAVA_HOME，一定要配置成 jdk 环境，不能配置成 jre 环境
-* kerberos 支持
-  1. 在所有的 fe/be 机器上用 `kinit -kt keytab_path principal` 登录，该用户需要有访问 hive 和 hdfs 的权限。kinit 命令登录是有实效性的，需要将其放入 crontab 中定期执行。
-  2. 把 hadoop 集群中的 hive-site.xml/core-site.xml/hdfs-site.xml 放到 $FE_HOME/conf 下，把 core-site.xml/hdfs-site.xml 放到 $BE_HOME/conf 下。
+* FE 配置文件路径为 $FE_HOME/conf。如果需要自定义 Hadoop 集群的配置，可以在该目录下添加配置文件，例如：如果 HDFS 集群采用了高可用的 Nameservice，需要将 Hadoop 集群中的 hdfs-site.xml 放到该目录下；如果 HDFS 配置了 ViewFs，需要将 core-site.xml 放到该目录下。
+* BE 配置文件路径为 $BE_HOME/conf。如果需要自定义 Hadoop 集群的配置，可以在该目录下添加配置文件，例如：如果 HDFS 集群采用了高可用的 Nameservice，需要将 Hadoop 集群中的 hdfs-site.xml 放到该目录下；如果 HDFS 配置了 ViewFs，需要将 core-site.xml 放到该目录下。
+* BE 所在机器的启动脚本 $BE_HOME/bin/start_be.sh 中需要配置 JAVA_HOME，要配置成 JDK 环境，不能配置成 JRE 环境，比如 `export JAVA_HOME = <JDK 的绝对路径>`。
+* Kerberos 支持
+  1. 在所有的 FE/BE 机器上用 `kinit -kt keytab_path principal` 登录，该用户需要有访问 Hive 和 HDFS 的权限。kinit 命令登录是有实效性的，需要将其放入 crontab 中定期执行。
+  2. 把 Hadoop 集群中的 hive-site.xml/core-site.xml/hdfs-site.xml 放到 $FE_HOME/conf 下，把 core-site.xml/hdfs-site.xml 放到 $BE_HOME/conf 下。
   3. 在 $FE_HOME/conf/fe.conf 文件中的 JAVA_OPTS/JAVA_OPTS_FOR_JDK_9 选项加上 -Djava.security.krb5.conf=/etc/krb5.conf，/etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
   4. 在 $BE_HOME/conf/be.conf 文件增加选项 JAVA_OPTS/JAVA_OPTS_FOR_JDK_9="-Djava.security.krb5.conf=/etc/krb5.conf"，其中 /etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
-  5. resource 中的 uri 地址一定要使用域名，并且相应的 hive 和 hdfs 的域名与 ip 的映射都需要配置到 /etc/hosts 中。
+  5. resource 中的 uri 地址一定要使用域名，并且相应的 Hive 和 HDFS 的域名与 IP 的映射都需要配置到 /etc/hosts 中。
 
 #### AWS S3/Tencent Cloud COS 支持
 
@@ -748,49 +748,49 @@ select count(*) from profile_wos_p7;
 
 #### Aliyun OSS 支持
 
-一. 在 $FE_HOME/conf/core-site.xml 中加入如下配置。
+1. 在 $FE_HOME/conf/core-site.xml 中加入如下配置。
 
-~~~xml
-<configuration>
-   <property>
-      <name>fs.oss.impl</name>
-      <value>com.aliyun.jindodata.oss.JindoOssFileSystem</value>
-   </property>
-   <property>
-      <name>fs.AbstractFileSystem.oss.impl</name>
-      <value>com.aliyun.jindodata.oss.OSS</value>
-   </property>
-   <property>
-        <name>fs.oss.accessKeyId</name>
-        <value>xxx</value>
-    </property>
-    <property>
-        <name>fs.oss.accessKeySecret</name>
-        <value>xxx</value>
-    </property>
-    <property>
-        <name>fs.oss.endpoint</name>
-        <!-- 以下以北京地域为例，其他地域请根据实际情况替换。 -->
-        <value>oss-cn-beijing.aliyuncs.com</value>
-    </property>
-</configuration>
-~~~
+   ~~~xml
+   <configuration>
+      <property>
+         <name>fs.oss.impl</name>
+         <value>com.aliyun.jindodata.oss.JindoOssFileSystem</value>
+      </property>
+      <property>
+         <name>fs.AbstractFileSystem.oss.impl</name>
+         <value>com.aliyun.jindodata.oss.OSS</value>
+      </property>
+      <property>
+         <name>fs.oss.accessKeyId</name>
+         <value>xxx</value>
+      </property>
+      <property>
+         <name>fs.oss.accessKeySecret</name>
+         <value>xxx</value>
+      </property>
+      <property>
+         <name>fs.oss.endpoint</name>
+         <!-- 以下以北京地域为例，其他地域请根据实际情况替换。 -->
+         <value>oss-cn-beijing.aliyuncs.com</value>
+      </property>
+   </configuration>
+   ~~~
 
-* `fs.oss.accessKeyId` 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。
-* `fs.oss.accessKeySecret` 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。
-* `fs.oss.endpoint` 指定相关 OSS Bucket 所在地域对应的 Endpoint。
+   * `fs.oss.accessKeyId` 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。
+   * `fs.oss.accessKeySecret` 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。
+   * `fs.oss.endpoint` 指定相关 OSS Bucket 所在地域对应的 Endpoint。
     您可以通过以下方式查询 Endpoint：
 
-  * 根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.htm#concept-zt4-cvy-5db)。
-  * 您可以登录 [阿里云 OSS 管理控制台](https://oss.console.aliyun.com/index?spm=a2c4g.11186623.0.0.11d24772leoEEg#/)，进入 Bucket 概览页，Bucket 域名 examplebucket.oss-cn-hangzhou.aliyuncs.com 的后缀部分 oss-cn-hangzhou.aliyuncs.com，即为该 Bucket 的外网 Endpoint。
+     * 根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.htm#concept-zt4-cvy-5db)。
+     * 您可以登录 [阿里云 OSS 管理控制台](https://oss.console.aliyun.com/index?spm=a2c4g.11186623.0.0.11d24772leoEEg#/)，进入 Bucket 概览页，Bucket 域名 examplebucket.oss-cn-hangzhou.aliyuncs.com 的后缀部分 oss-cn-hangzhou.aliyuncs.com，即为该 Bucket 的外网 Endpoint。
 
-二. 在 $BE_HOME/conf/be.conf 中加入如下配置。
+2. 在 $BE_HOME/conf/be.conf 中加入如下配置。
 
-* `object_storage_access_key_id` 与 FE 端 core-site.xml 配置 `fs.oss.accessKeyId` 相同
-* `object_storage_secret_access_key` 与 FE 端 core-site.xml 配置 `fs.oss.accessKeySecret` 相同
-* `object_storage_endpoint` 与 FE 端 core-site.xml 配置 `fs.oss.endpoint` 相同
+   * `object_storage_access_key_id` 与 FE 端 core-site.xml 配置 `fs.oss.accessKeyId` 相同
+   * `object_storage_secret_access_key` 与 FE 端 core-site.xml 配置 `fs.oss.accessKeySecret` 相同
+   * `object_storage_endpoint` 与 FE 端 core-site.xml 配置 `fs.oss.endpoint` 相同
 
-三. 重启 FE，BE。
+3. 重启 FE，BE。
 
 ### 缓存更新
 
