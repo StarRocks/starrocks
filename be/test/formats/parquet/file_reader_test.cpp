@@ -2173,9 +2173,9 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutRequiredComplexType) {
     EXPECT_EQ(file_reader->_row_group_readers.size(), 3);
 
     auto chunk = std::make_shared<vectorized::Chunk>();
-    chunk->append_column(ColumnHelper::create_column(type_a, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_b, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_c, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_a, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_b, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_c, true), chunk->num_columns());
 
     ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
     const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
@@ -2254,9 +2254,9 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutOptionalComplexType) {
     EXPECT_EQ(file_reader->_row_group_readers.size(), 3);
 
     auto chunk = std::make_shared<vectorized::Chunk>();
-    chunk->append_column(ColumnHelper::create_column(type_a, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_b, true), chunk->num_columns());
-    chunk->append_column(ColumnHelper::create_column(type_c, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_a, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_b, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_c, true), chunk->num_columns());
 
     ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
     const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
