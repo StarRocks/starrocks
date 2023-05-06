@@ -49,12 +49,12 @@ select count_if(gender = 'F' and score > 90) from score_table;
 -- result:
 2
 -- !result
-select gender, count_if(score > 0) from score_table group by gender;
+select gender, count_if(score > 0) from score_table group by gender order by gender;
 -- result:
 F	3
 M	2
 -- !result
-select gender, count_if(score > 95) from score_table group by gender;
+select gender, count_if(score > 95) from score_table group by gender order by gender;
 -- result:
 F	2
 M	1
@@ -72,7 +72,7 @@ select count_if(null) from score_table;
 -- result:
 0
 -- !result
-select gender, count_if(null) from score_table group by gender;
+select gender, count_if(null) from score_table group by gender order by gender;
 -- result:
 F	0
 M	0
@@ -94,7 +94,7 @@ select count_if("xxx") from score_table;
 -- result:
 [REGEX].*Invalid agg function plan: count_if.*
 -- !result
-select gender, count_if("xxx") from score_table group by gender;
+select gender, count_if("xxx") from score_table group by gender order by gender;
 -- result:
 [REGEX].*Invalid agg function plan: count_if.*
 -- !result

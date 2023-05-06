@@ -77,6 +77,10 @@ public class AnalyzeAggregateTest {
                 "No matching function with signature: min_by(bigint(20), bigint(20), bigint(20)).");
         analyzeFail("select min_by(v1,1) from t0", "min_by function args must be column");
         analyzeFail("select min_by(1,v1) from t0", "min_by function args must be column");
+
+        analyzeFail("select count_if(v1, v1) from t0", "No matching function with signature: count_if(bigint(20), bigint(20)).");
+        analyzeSuccess("select count_if(v1 > 0) from t0");
+        analyzeSuccess("select v1, count_if(v2 > 0) from t0 group by v1");
     }
 
     @Test

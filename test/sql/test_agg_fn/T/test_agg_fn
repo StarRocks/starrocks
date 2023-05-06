@@ -34,16 +34,16 @@ VALUES 	(1, 'lilyliu', 'F', 100),
 select count_if(id > 0) from score_table;
 select count_if(score > 0) from score_table;
 select count_if(gender = 'F' and score > 90) from score_table;
-select gender, count_if(score > 0) from score_table group by gender;
-select gender, count_if(score > 95) from score_table group by gender;
+select gender, count_if(score > 0) from score_table group by gender order by gender;
+select gender, count_if(score > 95) from score_table group by gender order by gender;
 
 select id, name, gender, score, count_if(score > 80) over (order by id rows between 1 preceding and  1 following) as interval_cnt from score_table;
 
 select count_if(null) from score_table;
-select gender, count_if(null) from score_table group by gender;
+select gender, count_if(null) from score_table group by gender order by gender;
 select id, name, gender, score, count_if(null) over (order by id rows between 1 preceding and  1 following) as interval_cnt from score_table;
 
 select count_if("") from score_table;
 select count_if("xxx") from score_table;
-select gender, count_if("xxx") from score_table group by gender;
+select gender, count_if("xxx") from score_table group by gender order by gender;
 select id, name, gender, score, count_if("xxx") over (order by id rows between 1 preceding and  1 following) as interval_cnt from score_table;
