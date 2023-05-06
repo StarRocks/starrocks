@@ -364,7 +364,9 @@ public:
                 // all no hit, pass
             } else if (mask == 0xffffffff) {
                 // all hit, copy all
-                strings::memcpy_inlined(data + result_offset, data + start_offset, kBatchNums * data_type_size);
+                if (result_offset != start_offset) {
+                    strings::memcpy_inlined(data + result_offset, data + start_offset, kBatchNums * data_type_size);
+                }
                 result_offset += kBatchNums;
 
             } else {
@@ -425,8 +427,10 @@ public:
             if (vmaxvq_u8(filter) == 0) {
                 // skip
             } else if (vminvq_u8(filter)) {
+              if (result_offset != start_offset){
                 strings::memcpy_inlined(data + result_offset, data + start_offset, kBatchNums * data_type_size);
-                result_offset += kBatchNums;
+              }
+              result_offset += kBatchNums;
             } else {
                 for (int i = 0; i < kBatchNums; ++i) {
                     // the index for vgetq_lane_u8 should be a literal integer
