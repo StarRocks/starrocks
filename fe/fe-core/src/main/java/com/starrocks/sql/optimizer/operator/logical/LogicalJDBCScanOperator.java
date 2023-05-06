@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
@@ -43,14 +42,8 @@ public class LogicalJDBCScanOperator extends LogicalScanOperator {
         Preconditions.checkState(table instanceof JDBCTable);
     }
 
-    private LogicalJDBCScanOperator(LogicalJDBCScanOperator.Builder builder) {
-        super(OperatorType.LOGICAL_JDBC_SCAN,
-                builder.table,
-                builder.colRefToColumnMetaMap,
-                builder.columnMetaToColRefMap,
-                builder.getLimit(),
-                builder.getPredicate(),
-                builder.getProjection());
+    private LogicalJDBCScanOperator() {
+        super(OperatorType.LOGICAL_JDBC_SCAN);
     }
 
     @Override
@@ -61,14 +54,8 @@ public class LogicalJDBCScanOperator extends LogicalScanOperator {
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalJDBCScanOperator, LogicalJDBCScanOperator.Builder> {
         @Override
-        public LogicalJDBCScanOperator build() {
-            return new LogicalJDBCScanOperator(this);
-        }
-
-        @Override
-        public LogicalJDBCScanOperator.Builder withOperator(LogicalJDBCScanOperator operator) {
-            super.withOperator(operator);
-            return this;
+        protected LogicalJDBCScanOperator newInstance() {
+            return new LogicalJDBCScanOperator();
         }
     }
 }

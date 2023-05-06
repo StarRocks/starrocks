@@ -43,14 +43,8 @@ public class LogicalSchemaScanOperator extends LogicalScanOperator {
         Preconditions.checkState(table instanceof SystemTable);
     }
 
-    private LogicalSchemaScanOperator(Builder builder) {
-        super(OperatorType.LOGICAL_SCHEMA_SCAN,
-                builder.table,
-                builder.colRefToColumnMetaMap,
-                builder.columnMetaToColRefMap,
-                builder.getLimit(),
-                builder.getPredicate(),
-                builder.getProjection());
+    private LogicalSchemaScanOperator() {
+        super(OperatorType.LOGICAL_SCHEMA_SCAN);
     }
 
     @Override
@@ -61,14 +55,8 @@ public class LogicalSchemaScanOperator extends LogicalScanOperator {
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalSchemaScanOperator, LogicalSchemaScanOperator.Builder> {
         @Override
-        public LogicalSchemaScanOperator build() {
-            return new LogicalSchemaScanOperator(this);
-        }
-
-        @Override
-        public LogicalSchemaScanOperator.Builder withOperator(LogicalSchemaScanOperator operator) {
-            super.withOperator(operator);
-            return this;
+        protected LogicalSchemaScanOperator newInstance() {
+            return new LogicalSchemaScanOperator();
         }
     }
 }

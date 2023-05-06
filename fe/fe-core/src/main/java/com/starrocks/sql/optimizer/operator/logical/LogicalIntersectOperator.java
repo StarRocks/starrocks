@@ -20,12 +20,8 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
 public class LogicalIntersectOperator extends LogicalSetOperator {
-    private LogicalIntersectOperator(LogicalIntersectOperator.Builder builder) {
-        super(OperatorType.LOGICAL_INTERSECT,
-                builder.outputColumnRefOp,
-                builder.childOutputColumns,
-                builder.getLimit(),
-                builder.getProjection());
+    private LogicalIntersectOperator() {
+        super(OperatorType.LOGICAL_INTERSECT);
     }
 
     @Override
@@ -41,14 +37,8 @@ public class LogicalIntersectOperator extends LogicalSetOperator {
     public static class Builder
             extends LogicalSetOperator.Builder<LogicalIntersectOperator, LogicalIntersectOperator.Builder> {
         @Override
-        public LogicalIntersectOperator build() {
-            return new LogicalIntersectOperator(this);
-        }
-
-        @Override
-        public LogicalIntersectOperator.Builder withOperator(LogicalIntersectOperator operator) {
-            super.withOperator(operator);
-            return this;
+        protected LogicalIntersectOperator newInstance() {
+            return new LogicalIntersectOperator();
         }
     }
 }

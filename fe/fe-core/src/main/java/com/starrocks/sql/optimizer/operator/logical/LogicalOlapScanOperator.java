@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.base.Preconditions;
@@ -34,15 +33,15 @@ import java.util.Map;
 import java.util.Objects;
 
 public final class LogicalOlapScanOperator extends LogicalScanOperator {
-    private final HashDistributionSpec hashDistributionSpec;
-    private final long selectedIndexId;
-    private final List<Long> selectedPartitionId;
-    private final PartitionNames partitionNames;
-    private final boolean hasHintsPartitionNames;
-    private final List<Long> selectedTabletId;
-    private final List<Long> hintsTabletIds;
+    private HashDistributionSpec hashDistributionSpec;
+    private long selectedIndexId;
+    private List<Long> selectedPartitionId;
+    private PartitionNames partitionNames;
+    private boolean hasHintsPartitionNames;
+    private List<Long> selectedTabletId;
+    private List<Long> hintsTabletIds;
 
-    private final List<ScalarOperator> prunedPartitionPredicates;
+    private List<ScalarOperator> prunedPartitionPredicates;
 
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
@@ -107,20 +106,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 selectedIndexId, selectedPartitionId, partitionNames, false, selectedTabletId, hintsTabletIds);
     }
 
-    private LogicalOlapScanOperator(Builder builder) {
-        super(OperatorType.LOGICAL_OLAP_SCAN, builder.table,
-                builder.colRefToColumnMetaMap, builder.columnMetaToColRefMap,
-                builder.getLimit(),
-                builder.getPredicate(),
-                builder.getProjection());
-        this.hashDistributionSpec = builder.hashDistributionSpec;
-        this.selectedIndexId = builder.selectedIndexId;
-        this.selectedPartitionId = builder.selectedPartitionId;
-        this.partitionNames = builder.partitionNames;
-        this.hasHintsPartitionNames = builder.hasHintsPartitionNames;
-        this.selectedTabletId = builder.selectedTabletId;
-        this.hintsTabletIds = builder.hintsTabletIds;
-        this.prunedPartitionPredicates = builder.prunedPartitionPredicates;
+    private LogicalOlapScanOperator() {
+        super(OperatorType.LOGICAL_OLAP_SCAN);
     }
 
     public HashDistributionSpec getDistributionSpec() {
@@ -187,59 +174,48 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalOlapScanOperator, LogicalOlapScanOperator.Builder> {
-        private HashDistributionSpec hashDistributionSpec;
-        private long selectedIndexId;
-        private List<Long> selectedPartitionId;
-        private PartitionNames partitionNames;
-
-        private boolean hasHintsPartitionNames;
-        private List<Long> selectedTabletId;
-        private List<Long> hintsTabletIds;
-
-        private List<ScalarOperator> prunedPartitionPredicates;
-
         @Override
-        public LogicalOlapScanOperator build() {
-            return new LogicalOlapScanOperator(this);
+        protected LogicalOlapScanOperator newInstance() {
+            return new LogicalOlapScanOperator();
         }
 
         @Override
         public Builder withOperator(LogicalOlapScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.hashDistributionSpec = scanOperator.hashDistributionSpec;
-            this.selectedIndexId = scanOperator.selectedIndexId;
-            this.selectedPartitionId = scanOperator.selectedPartitionId;
-            this.partitionNames = scanOperator.partitionNames;
-            this.hasHintsPartitionNames = scanOperator.hasHintsPartitionNames;
-            this.selectedTabletId = scanOperator.selectedTabletId;
-            this.hintsTabletIds = scanOperator.hintsTabletIds;
-            this.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
+            builder.hashDistributionSpec = scanOperator.hashDistributionSpec;
+            builder.selectedIndexId = scanOperator.selectedIndexId;
+            builder.selectedPartitionId = scanOperator.selectedPartitionId;
+            builder.partitionNames = scanOperator.partitionNames;
+            builder.hasHintsPartitionNames = scanOperator.hasHintsPartitionNames;
+            builder.selectedTabletId = scanOperator.selectedTabletId;
+            builder.hintsTabletIds = scanOperator.hintsTabletIds;
+            builder.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
             return this;
         }
 
         public Builder setSelectedIndexId(long selectedIndexId) {
-            this.selectedIndexId = selectedIndexId;
+            builder.selectedIndexId = selectedIndexId;
             return this;
         }
 
         public Builder setSelectedTabletId(List<Long> selectedTabletId) {
-            this.selectedTabletId = selectedTabletId;
+            builder.selectedTabletId = selectedTabletId;
             return this;
         }
 
         public Builder setSelectedPartitionId(List<Long> selectedPartitionId) {
-            this.selectedPartitionId = selectedPartitionId;
+            builder.selectedPartitionId = selectedPartitionId;
             return this;
         }
 
         public Builder setPrunedPartitionPredicates(List<ScalarOperator> prunedPartitionPredicates) {
-            this.prunedPartitionPredicates = prunedPartitionPredicates;
+            builder.prunedPartitionPredicates = prunedPartitionPredicates;
             return this;
         }
 
         public Builder setHashDistributionSpec(HashDistributionSpec hashDistributionSpec) {
-            this.hashDistributionSpec = hashDistributionSpec;
+            builder.hashDistributionSpec = hashDistributionSpec;
             return this;
         }
     }
