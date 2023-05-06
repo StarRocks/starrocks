@@ -49,7 +49,7 @@ public:
     void mark_need_spill() override {
         Operator::mark_need_spill();
         _spill_strategy = spill::SpillStrategy::SPILL_ALL;
-        TRACE_SPILL_LOG << "AggregateBlockingSink, mark spill " << (void*)this;
+        TRACE_SPILL_LOG << "AggregateDistinctBlockingSink, mark spill " << (void*)this;
     }
 
 private:
