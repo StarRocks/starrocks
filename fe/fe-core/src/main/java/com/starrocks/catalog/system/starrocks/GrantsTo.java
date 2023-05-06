@@ -367,7 +367,7 @@ public class GrantsTo {
                                 (FunctionPEntryObject) privilegeEntry.getObject();
                         GlobalFunctionMgr globalFunctionMgr = GlobalStateMgr.getCurrentState().getGlobalFunctionMgr();
 
-                        if (globalFunctionPEntryObject.getFunctionId() ==
+                        if (globalFunctionPEntryObject.getDatabaseId() ==
                                 PrivilegeBuiltinConstants.GLOBAL_FUNCTION_DEFAULT_DATABASE_ID) {
                             for (Function function : globalFunctionMgr.getFunctions()) {
                                 objects.add(Lists.newArrayList(null, null, function.signatureString()));

@@ -38,7 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.system.SystemId;
-import com.starrocks.catalog.system.info.InfoSchemaDb;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.starrocks.StarRocksDb;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;

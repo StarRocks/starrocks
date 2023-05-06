@@ -81,7 +81,6 @@ Status StarrocksRoleEdgesScanner::fill_chunk(ChunkPtr* chunk) {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(3);
                 if (role_edges_item.__isset.to_user) {
                     const std::string* str = &role_edges_item.to_user;
-                    std::cout << str << std::endl;
                     Slice value(str->c_str(), str->length());
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
                 } else {

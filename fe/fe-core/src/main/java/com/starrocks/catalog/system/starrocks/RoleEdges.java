@@ -26,8 +26,6 @@ import com.starrocks.thrift.TGetRoleEdgesItem;
 import com.starrocks.thrift.TGetRoleEdgesRequest;
 import com.starrocks.thrift.TGetRoleEdgesResponse;
 import com.starrocks.thrift.TSchemaTableType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Set;
@@ -36,8 +34,6 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class RoleEdges {
-    private static final Logger LOG = LogManager.getLogger(RoleEdges.class);
-
     public static SystemTable create() {
         return new SystemTable(SystemId.ROLE_EDGES_ID, "role_edges", Table.TableType.SCHEMA,
                 builder()

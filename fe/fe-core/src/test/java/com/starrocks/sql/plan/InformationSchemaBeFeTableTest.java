@@ -14,9 +14,10 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.system.info.BeMetricsSystemTable;
-import com.starrocks.catalog.system.info.BeTabletsSystemTable;
-import com.starrocks.catalog.system.info.BeTxnsSystemTable;
+import com.starrocks.catalog.system.information.BeConfigsSystemTable;
+import com.starrocks.catalog.system.information.BeMetricsSystemTable;
+import com.starrocks.catalog.system.information.BeTabletsSystemTable;
+import com.starrocks.catalog.system.information.BeTxnsSystemTable;
 import com.starrocks.pseudocluster.PseudoCluster;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -50,7 +51,7 @@ public class InformationSchemaBeFeTableTest {
             Assert.assertEquals(BeTxnsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
             Assert.assertTrue(stmt.execute("select * from information_schema.be_configs"));
-            Assert.assertEquals(BeTabletsSystemTable.create().getColumns().size(),
+            Assert.assertEquals(BeConfigsSystemTable.create().getColumns().size(),
                     stmt.getResultSet().getMetaData().getColumnCount());
             Assert.assertTrue(stmt.execute("select * from information_schema.be_metrics"));
             Assert.assertEquals(BeMetricsSystemTable.create().getColumns().size(),

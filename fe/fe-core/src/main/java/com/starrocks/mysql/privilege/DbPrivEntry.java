@@ -35,7 +35,7 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.TablePattern;
-import com.starrocks.catalog.system.info.InfoSchemaDb;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;

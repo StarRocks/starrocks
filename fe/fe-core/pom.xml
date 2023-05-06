@@ -558,7 +558,6 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
-            <version>3.3.3</version>
             <exclusions>
                 <exclusion>
                     <artifactId>zookeeper</artifactId>

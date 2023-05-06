@@ -14,7 +14,13 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -22,11 +28,17 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
+import mockit.Expectations;
+import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.SortOrder;
+import org.apache.iceberg.Table;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.stream.Stream;
+
 
 public class InsertPlanTest extends PlanTestBase {
     @BeforeClass
@@ -757,5 +769,81 @@ public class InsertPlanTest extends PlanTestBase {
             InsertPlanner.enableSingleReplicationShuffle = false;
             FeConstants.runningUnitTest = false;
         }
+    }
+
+    @Test
+    public void testInsertIcebergTableSink() throws Exception {
+        String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
+                "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
+        starRocksAssert.withCatalog(createIcebergCatalogStmt);
+        MetadataMgr metadata = starRocksAssert.getCtx().getGlobalStateMgr().getMetadataMgr();
+
+        Table nativeTable = new BaseTable(null, null);
+
+        Column k1 = new Column("k1", Type.INT);
+        Column k2 = new Column("k2", Type.INT);
+        IcebergTable.Builder builder = IcebergTable.builder();
+        builder.setCatalogName("iceberg_catalog");
+        builder.setRemoteDbName("iceberg_db");
+        builder.setRemoteTableName("iceberg_table");
+        builder.setSrTableName("iceberg_table");
+        builder.setFullSchema(Lists.newArrayList(k1, k2));
+        builder.setNativeTable(nativeTable);
+        IcebergTable icebergTable = builder.build();
+
+        new Expectations(icebergTable) {
+            {
+                icebergTable.getUUID();
+                result = 12345566;
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(nativeTable) {
+            {
+                nativeTable.sortOrder();
+                result = SortOrder.unsorted();
+                minTimes = 0;
+
+                nativeTable.location();
+                result = "hdfs://fake_location";
+                minTimes = 0;
+
+                nativeTable.properties();
+                result = new HashMap<String, String>();
+                minTimes = 0;
+            }
+        };
+
+        new Expectations(metadata) {
+            {
+                metadata.getDb("iceberg_catalog", "iceberg_db");
+                result = new Database(12345566, "iceberg_db");
+                minTimes = 0;
+
+                metadata.getTable("iceberg_catalog", "iceberg_db", "iceberg_table");
+                result = icebergTable;
+                minTimes = 0;
+            }
+        };
+
+        String actualRes = getInsertExecPlan("explain insert into iceberg_catalog.iceberg_db.iceberg_table select 1, 2");
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:4: k1 | 5: k2\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  Iceberg TABLE SINK\n" +
+                "    TABLE: 12345566\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : CAST(1 AS INT)\n" +
+                "  |  <slot 5> : CAST(2 AS INT)\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL\n";
+        Assert.assertEquals(expected, actualRes);
     }
 }

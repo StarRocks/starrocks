@@ -115,11 +115,11 @@ Status RowsetColumnUpdateState::_load_upserts(Rowset* rowset, uint32_t idx) {
     std::shared_ptr<Chunk> chunk_shared_ptr;
     // if we want to preload update cache, create chunk with update columns
     if (_enable_preload_column_mode_update_data) {
-        _update_chunk_cache[idx] = std::move(ChunkHelper::new_chunk(update_schema, DEFAULT_CONTAINER_SIZE));
+        _update_chunk_cache[idx] = ChunkHelper::new_chunk(update_schema, DEFAULT_CONTAINER_SIZE);
         chunk_shared_ptr = ChunkHelper::new_chunk(update_schema, DEFAULT_CONTAINER_SIZE);
         ASSIGN_OR_RETURN(itrs, rowset->get_update_file_iterators(update_schema, &stats));
     } else {
-        _update_chunk_cache[idx] = std::move(ChunkHelper::new_chunk(update_schema, 0));
+        _update_chunk_cache[idx] = ChunkHelper::new_chunk(update_schema, 0);
         chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CONTAINER_SIZE);
         ASSIGN_OR_RETURN(itrs, rowset->get_update_file_iterators(pkey_schema, &stats));
     }

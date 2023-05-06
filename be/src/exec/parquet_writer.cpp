@@ -17,22 +17,25 @@
 
 #include <fmt/format.h>
 
+#include <utility>
+
 #include "runtime/exec_env.h"
-#include "util/priority_thread_pool.hpp"
 #include "util/uid_util.h"
 
 namespace starrocks {
 
-RollingAsyncParquetWriter::RollingAsyncParquetWriter(const TableInfo& tableInfo, const PartitionInfo& partitionInfo,
-                                                     const std::vector<ExprContext*>& output_expr_ctxs,
-                                                     RuntimeProfile* parent_profile)
-        : _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile) {
-    init_rolling_writer(tableInfo, partitionInfo);
+RollingAsyncParquetWriter::RollingAsyncParquetWriter(
+        const TableInfo& tableInfo, const std::vector<ExprContext*>& output_expr_ctxs, RuntimeProfile* parent_profile,
+        std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> commit_func)
+        : _output_expr_ctxs(output_expr_ctxs), _parent_profile(parent_profile), _commit_func(std::move(commit_func)) {
+    init_rolling_writer(tableInfo);
 }
 
-Status RollingAsyncParquetWriter::init_rolling_writer(const TableInfo& tableInfo, const PartitionInfo& partitionInfo) {
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(tableInfo._table_location));
+Status RollingAsyncParquetWriter::init_rolling_writer(const TableInfo& tableInfo) {
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(tableInfo._partition_location))
     _schema = tableInfo._schema;
+    _partition_location = tableInfo._partition_location;
+
     ::parquet::WriterProperties::Builder builder;
     if (tableInfo._enable_dictionary) {
         builder.enable_dictionary();
@@ -42,29 +45,22 @@ Status RollingAsyncParquetWriter::init_rolling_writer(const TableInfo& tableInfo
     builder.version(::parquet::ParquetVersion::PARQUET_2_0);
     starrocks::parquet::ParquetBuildHelper::build_compression_type(builder, tableInfo._compress_type);
     _properties = builder.build();
-    if (partitionInfo._column_names.size() != partitionInfo._column_values.size()) {
-        return Status::InvalidArgument("columns and values are not matched in partitionInfo");
-    }
-    std::stringstream ss;
-    ss << tableInfo._table_location;
-    ss << "/data/";
-    ss << partitionInfo.partition_dir();
-    _partition_dir = ss.str();
+
     return Status::OK();
 }
 
-std::string RollingAsyncParquetWriter::get_new_file_name() {
-    _cnt += 1;
-    _location = _partition_dir + fmt::format("{}_{}.parquet", _cnt, generate_uuid_string());
-    return _location;
+std::string RollingAsyncParquetWriter::_new_file_location() {
+    _file_cnt += 1;
+    _outfile_location = _partition_location + fmt::format("{}_{}.parquet", _file_cnt, generate_uuid_string());
+    return _outfile_location;
 }
 
-Status RollingAsyncParquetWriter::new_file_writer() {
-    std::string file_name = get_new_file_name();
+Status RollingAsyncParquetWriter::_new_file_writer() {
+    std::string new_file_location = _new_file_location();
     WritableFileOptions options{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(auto writable_file, _fs->new_writable_file(options, file_name));
+    ASSIGN_OR_RETURN(auto writable_file, _fs->new_writable_file(options, new_file_location))
     _writer = std::make_shared<starrocks::parquet::AsyncFileWriter>(
-            std::move(writable_file), file_name, _partition_dir, _properties, _schema, _output_expr_ctxs,
+            std::move(writable_file), new_file_location, _partition_location, _properties, _schema, _output_expr_ctxs,
             ExecEnv::GetInstance()->pipeline_sink_io_pool(), _parent_profile);
     auto st = _writer->init();
     return st;
@@ -72,7 +68,7 @@ Status RollingAsyncParquetWriter::new_file_writer() {
 
 Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state) {
     if (_writer == nullptr) {
-        auto status = new_file_writer();
+        auto status = _new_file_writer();
         if (!status.ok()) {
             return status;
         }
@@ -81,7 +77,7 @@ Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state
     if (_writer->file_size() > _max_file_size) {
         auto st = close_current_writer(state);
         if (st.ok()) {
-            new_file_writer();
+            _new_file_writer();
         }
     }
     auto st = _writer->write(chunk);
@@ -89,12 +85,12 @@ Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state
 }
 
 Status RollingAsyncParquetWriter::close_current_writer(RuntimeState* state) {
-    Status st = _writer->close(state, RollingAsyncParquetWriter::add_iceberg_commit_info);
+    Status st = _writer->close(state, _commit_func);
     if (st.ok()) {
         _pending_commits.emplace_back(_writer);
         return Status::OK();
     } else {
-        LOG(WARNING) << "close file error: " << _location;
+        LOG(WARNING) << "close file error: " << _outfile_location;
         return Status::IOError("close file error!");
     }
 }
@@ -124,76 +120,6 @@ bool RollingAsyncParquetWriter::closed() {
     }
 
     return true;
-}
-
-void RollingAsyncParquetWriter::add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer,
-                                                        RuntimeState* state) {
-    TIcebergDataFile dataFile;
-    dataFile.partition_path = writer->file_dir();
-    dataFile.path = writer->file_name();
-    dataFile.format = "parquet";
-    dataFile.record_count = writer->metadata()->num_rows();
-    dataFile.file_size_in_bytes = writer->file_size();
-    std::vector<int64_t> split_offsets;
-    writer->split_offsets(split_offsets);
-    dataFile.split_offsets = split_offsets;
-
-    std::unordered_map<int32_t, int64_t> column_sizes;
-    std::unordered_map<int32_t, int64_t> value_counts;
-    std::unordered_map<int32_t, int64_t> null_value_counts;
-    std::unordered_map<int32_t, std::string> min_values;
-    std::unordered_map<int32_t, std::string> max_values;
-
-    const auto& metadata = writer->metadata();
-
-    for (int i = 0; i < metadata->num_row_groups(); ++i) {
-        auto block = metadata->RowGroup(i);
-        for (int j = 0; j < block->num_columns(); j++) {
-            auto column_meta = block->ColumnChunk(j);
-            int field_id = j + 1;
-            if (null_value_counts.find(field_id) == null_value_counts.end()) {
-                null_value_counts.insert({field_id, column_meta->statistics()->null_count()});
-            } else {
-                null_value_counts[field_id] += column_meta->statistics()->null_count();
-            }
-
-            if (column_sizes.find(field_id) == column_sizes.end()) {
-                column_sizes.insert({field_id, column_meta->total_compressed_size()});
-            } else {
-                column_sizes[field_id] += column_meta->total_compressed_size();
-            }
-
-            if (value_counts.find(field_id) == value_counts.end()) {
-                value_counts.insert({field_id, column_meta->num_values()});
-            } else {
-                value_counts[field_id] += column_meta->num_values();
-            }
-
-            min_values[field_id] = column_meta->statistics()->EncodeMin();
-            max_values[field_id] = column_meta->statistics()->EncodeMax();
-        }
-    }
-
-    TIcebergColumnStats stats;
-    for (auto& i : column_sizes) {
-        stats.column_sizes.insert({i.first, i.second});
-    }
-    for (auto& i : value_counts) {
-        stats.value_counts.insert({i.first, i.second});
-    }
-    for (auto& i : null_value_counts) {
-        stats.null_value_counts.insert({i.first, i.second});
-    }
-    for (auto& i : min_values) {
-        stats.lower_bounds.insert({i.first, i.second});
-    }
-    for (auto& i : max_values) {
-        stats.upper_bounds.insert({i.first, i.second});
-    }
-
-    dataFile.column_stats = stats;
-
-    state->add_iceberg_data_file(dataFile);
 }
 
 } // namespace starrocks

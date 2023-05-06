@@ -150,21 +150,19 @@ Status SchemaHelper::get_tablet_schedules(const std::string& ip, const int32_t p
                                                        });
 }
 
-Status SchemaHelper::get_role_edges(const std::string& ip, const int32_t port,
-                                          const TGetRoleEdgesRequest& request,
-                                          TGetRoleEdgesResponse* response) {
-    return ThriftRpcHelper::rpc<FrontendServiceClient>(ip, port,
-                                                       [&request, &response](FrontendServiceConnection& client) {
-                                                           client->getRoleEdges(*response, request);
-                                                       });
+Status SchemaHelper::get_role_edges(const std::string& ip, const int32_t port, const TGetRoleEdgesRequest& request,
+                                    TGetRoleEdgesResponse* response) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port,
+            [&request, &response](FrontendServiceConnection& client) { client->getRoleEdges(*response, request); });
 }
 
 Status SchemaHelper::get_grants_to(const std::string& ip, const int32_t port,
-                                   const TGetGrantsToRolesOrUserRequest& request, TGetGrantsToRolesOrUserResponse* response){
-    return ThriftRpcHelper::rpc<FrontendServiceClient>(ip, port,
-                                                       [&request, &response](FrontendServiceConnection& client) {
-                                                           client->getGrantsTo(*response, request);
-                                                       });
+                                   const TGetGrantsToRolesOrUserRequest& request,
+                                   TGetGrantsToRolesOrUserResponse* response) {
+    return ThriftRpcHelper::rpc<FrontendServiceClient>(
+            ip, port,
+            [&request, &response](FrontendServiceConnection& client) { client->getGrantsTo(*response, request); });
 }
 
 void fill_data_column_with_null(Column* data_column) {
