@@ -691,7 +691,7 @@ select count(*) from profile_wos_p7;
 
 * FE 配置文件路径为 $FE_HOME/conf。如果需要自定义 Hadoop 集群的配置，可以在该目录下添加配置文件，例如：如果 HDFS 集群采用了高可用的 Nameservice，需要将 Hadoop 集群中的 hdfs-site.xml 放到该目录下；如果 HDFS 配置了 ViewFs，需要将 core-site.xml 放到该目录下。
 * BE 配置文件路径为 $BE_HOME/conf。如果需要自定义 Hadoop 集群的配置，可以在该目录下添加配置文件，例如：如果 HDFS 集群采用了高可用的 Nameservice，需要将 Hadoop 集群中的 hdfs-site.xml 放到该目录下；如果 HDFS 配置了 ViewFs，需要将 core-site.xml 放到该目录下。
-* BE 所在机器的启动脚本 $BE_HOME/bin/start_be.sh 中需要配置 JAVA_HOME，要配置成 JDK 环境，不能配置成 JRE 环境，如 export JAVA_HOME = <Java 的绝对路径>。
+* BE 所在机器的启动脚本 $BE_HOME/bin/start_be.sh 中需要配置 JAVA_HOME，要配置成 JDK 环境，不能配置成 JRE 环境，比如 `export JAVA_HOME = <JDK 的绝对路径>`。
 * Kerberos 支持
   1. 在所有的 FE/BE 机器上用 `kinit -kt keytab_path principal` 登录，该用户需要有访问 Hive 和 HDFS 的权限。kinit 命令登录是有实效性的，需要将其放入 crontab 中定期执行。
   2. 把 Hadoop 集群中的 hive-site.xml/core-site.xml/hdfs-site.xml 放到 $FE_HOME/conf 下，把 core-site.xml/hdfs-site.xml 放到 $BE_HOME/conf 下。
