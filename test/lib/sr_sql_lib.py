@@ -422,7 +422,7 @@ class StarrocksSQLApiLib(object):
             # list result
             if "\n" in res:
                 # many lines, replace null to None for Python
-                res = res.replace("null", "None").split("\n")
+                res = res.replace("null", "None").replace("NULL", "None").split("\n")
             else:
                 # only one line
                 log.info("before: %s" % res)

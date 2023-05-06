@@ -394,7 +394,8 @@ public class PropertyAnalyzer {
         } else {
             if (replicationNum > backendIds.size()) {
                 throw new AnalysisException("Replication num should be less than the number of available BE nodes. "
-                        + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size());
+                        + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size() +
+                        ", You can change this default by setting the replication_num table properties.");
             }
         }
     }
