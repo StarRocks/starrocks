@@ -87,7 +87,7 @@ public:
         // []
         // NULL
         array = ColumnHelper::create_column(type_arr_int, true);
-        array->append_datum(DatumArray{Datum(slot_ref.__set_use_vectorized(true);)}); // [null]
+        array->append_datum(DatumArray{Datum()}); // [null]
         array->append_datum(DatumArray{});        // []
         array->append_datum(Datum{});             // NULL
         auto* array_special = new_fake_const_expr(array, type_arr_int);
