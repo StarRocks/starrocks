@@ -13,6 +13,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -47,19 +48,6 @@ public class CTASAnalyzer {
         Map<String, Table> tableRefToTable = new HashMap<>();
         for (Map.Entry<TableName, Table> t : tables.entrySet()) {
             tableRefToTable.put(t.getKey().getTbl(), t.getValue());
-        }
-
-        // For replication_num, we select the maximum value of all tables replication_num
-        int defaultReplicationNum = 1;
-
-        for (Table table : tableRefToTable.values()) {
-            if (table instanceof OlapTable) {
-                OlapTable olapTable = (OlapTable) table;
-                Short replicationNum = olapTable.getDefaultReplicationNum();
-                if (replicationNum > defaultReplicationNum) {
-                    defaultReplicationNum = replicationNum;
-                }
-            }
         }
 
         List<Field> allFields = queryStatement.getQueryRelation().getRelationFields().getAllFields();
@@ -112,6 +100,9 @@ public class CTASAnalyzer {
                         new Pair<>(slotRef.getColumnName(), allFields.get(i).getName())), table);
             }
         }
+
+        // For replication_num, The behavior is the same as creating a table
+        int defaultReplicationNum = FeConstants.default_replication_num;
 
         Map<String, String> stmtProperties = createTableStmt.getProperties();
         if (null == stmtProperties) {
