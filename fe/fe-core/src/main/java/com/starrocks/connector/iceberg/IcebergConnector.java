@@ -67,15 +67,28 @@ public class IcebergConnector implements Connector {
             props.setProperty(ThreadPools.WORKER_THREAD_POOL_SIZE_PROP, String.valueOf(Config.iceberg_worker_num_threads));
         }
 
+        IcebergCatalog icebergCatalog;
+
         switch (nativeCatalogType) {
             case HIVE_CATALOG:
-                return new IcebergHiveCatalog(catalogName, conf, properties);
+                icebergCatalog = new IcebergHiveCatalog(catalogName, conf, properties);
+                break;
             case GLUE_CATALOG:
-                return new IcebergGlueCatalog(catalogName, conf, properties);
+                icebergCatalog = new IcebergGlueCatalog(catalogName, conf, properties);
+                break;
             case REST_CATALOG:
-                return new IcebergRESTCatalog(catalogName, conf, properties);
+                icebergCatalog = new IcebergRESTCatalog(catalogName, conf, properties);
+                break;
             default:
                 throw new StarRocksConnectorException("Property %s is missing or not supported now.", ICEBERG_CATALOG_TYPE);
+        }
+
+        boolean enableMetaCache = Boolean.parseBoolean(properties.getOrDefault("enable_iceberg_meta_cache",
+                String.valueOf(Config.enable_iceberg_meta_cache)));
+        if (enableMetaCache) {
+            return new CachingIcebergCatalog(icebergCatalog, properties);
+        } else {
+            return icebergCatalog;
         }
     }
 

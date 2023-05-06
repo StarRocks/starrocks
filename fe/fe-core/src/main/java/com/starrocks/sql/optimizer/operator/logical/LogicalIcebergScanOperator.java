@@ -28,6 +28,7 @@ import java.util.Map;
 
 public class LogicalIcebergScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+    private boolean hasUnknownColumnStats = true;
 
     public LogicalIcebergScanOperator(Table table,
                                       Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -51,6 +52,14 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
     @Override
     public ScanOperatorPredicates getScanOperatorPredicates() {
         return this.predicates;
+    }
+
+    public boolean hasUnknownColumnStats() {
+        return hasUnknownColumnStats;
+    }
+
+    public void setHasUnknownColumnStats(boolean hasUnknownColumnStats) {
+        this.hasUnknownColumnStats = hasUnknownColumnStats;
     }
 
     @Override

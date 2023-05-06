@@ -17,6 +17,7 @@ package com.starrocks.statistic;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -26,6 +27,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.connector.Connector;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -179,13 +182,25 @@ public class AnalyzeMgr implements Writable {
         }
     }
 
-    public void dropExternalStats(String tableUUID) {
+    public void dropExternalStats(String tableUUID, String catalogName) {
         List<AnalyzeStatus> expireList = analyzeStatusMap.values().stream().
                 filter(status -> status instanceof ExternalAnalyzeStatus).
                 filter(status -> ((ExternalAnalyzeStatus) status).getTableUUID().equals(tableUUID)).
                 collect(Collectors.toList());
 
+        // invalidate cache
+        try {
+            Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+            List<String> columns = MetaUtils.getTableByUUID(tableUUID).getColumns().stream().map(
+                    Column::getName).collect(Collectors.toList());
+            connector.getMetadata().dropTableStatistics(tableUUID, columns);
+        } catch (Exception e) {
+            throw new StarRocksConnectorException("Drop stats error: " + e.getMessage());
+        }
+
+        // invalidate status
         expireList.forEach(status -> analyzeStatusMap.remove(status.getId()));
+        // delete statistic data
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         statisticExecutor.dropTableStatistics(StatisticUtils.buildConnectContext(), tableUUID);
     }

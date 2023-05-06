@@ -99,6 +99,22 @@ public class StatisticExecutor {
         return executeStatisticDQL(context, sql);
     }
 
+    public List<TStatisticData> queryStatisticSync(ConnectContext context,
+                                                   String tableUUID, List<String> columnNames) {
+        Table table = MetaUtils.getTableByUUID(tableUUID);
+        if (table == null) {
+            return Collections.emptyList();
+        }
+        List<Column> columns = Lists.newArrayList();
+        for (String colName : columnNames) {
+            Column column = table.getColumn(colName);
+            Preconditions.checkState(column != null);
+            columns.add(column);
+        }
+        String sql = StatisticSQLBuilder.buildQueryExternalFullStatisticsSQL(tableUUID, columns);
+        return executeStatisticDQL(context, sql);
+    }
+
     public void dropTableStatistics(ConnectContext statsConnectCtx, Long tableIds,
                                     StatsConstants.AnalyzeType analyzeType) {
         String sql = StatisticSQLBuilder.buildDropStatisticsSQL(tableIds, analyzeType);
@@ -214,7 +230,8 @@ public class StatisticExecutor {
                 || version == StatsConstants.STATISTIC_HISTOGRAM_VERSION
                 || version == StatsConstants.STATISTIC_TABLE_VERSION
                 || version == StatsConstants.STATISTIC_BATCH_VERSION
-                || version == StatsConstants.STATISTIC_EXTERNAL_VERSION) {
+                || version == StatsConstants.STATISTIC_EXTERNAL_VERSION
+                || version == StatsConstants.STATISTIC_EXTERNAL_QUERY_VERSION) {
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             for (TResultBatch resultBatch : sqlResult) {
                 for (ByteBuffer bb : resultBatch.rows) {
@@ -226,7 +243,7 @@ public class StatisticExecutor {
                 }
             }
         } else {
-            throw new StarRocksPlannerException("Unknnow statistics type " + version, ErrorType.INTERNAL_ERROR);
+            throw new StarRocksPlannerException("Unknow statistics type " + version, ErrorType.INTERNAL_ERROR);
         }
 
         return statistics;

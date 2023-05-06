@@ -236,7 +236,9 @@ public class StatisticsMetaManager extends FrontendDaemon {
         LOG.info("create external full statistics table start");
         TableName tableName = new TableName(StatsConstants.STATISTICS_DB_NAME,
                 StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME);
-        KeysType keysType = RunMode.allowCreateLakeTable() ? KeysType.UNIQUE_KEYS : KeysType.PRIMARY_KEYS;
+        // table_uuid, partition_name, column_name accumulate may be over size of primary_key,
+        // so we should just use unique_keys
+        KeysType keysType = KeysType.UNIQUE_KEYS;
         Map<String, String> properties = Maps.newHashMap();
         int defaultReplicationNum = Math.min(3, GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber());
         properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));

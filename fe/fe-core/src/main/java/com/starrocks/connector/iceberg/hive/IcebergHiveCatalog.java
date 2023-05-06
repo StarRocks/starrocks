@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.iceberg.hive;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
@@ -61,7 +60,6 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     private final Configuration conf;
     private final HiveCatalog delegate;
 
-    @VisibleForTesting
     public IcebergHiveCatalog(String name, Configuration conf, Map<String, String> properties) {
         this.conf = conf;
         this.conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),

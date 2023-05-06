@@ -31,8 +31,9 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.cost.IcebergAnalyzedStatisticProvider;
+import com.starrocks.connector.iceberg.cost.IcebergFileBasedStatisticProvider;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
-import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -90,7 +91,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(IcebergMetadata.class);
     private final String catalogName;
     private final IcebergCatalog icebergCatalog;
-    private final IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
+    private final IcebergStatisticProvider statisticProvider;
 
     private final Map<TableIdentifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
@@ -100,6 +101,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         this.catalogName = catalogName;
         this.icebergCatalog = icebergCatalog;
         new IcebergMetricsReporter().setThreadLocalReporter();
+        if (icebergCatalog instanceof CachingIcebergCatalog) {
+            this.statisticProvider = new IcebergAnalyzedStatisticProvider(icebergCatalog);
+        } else {
+            this.statisticProvider = new IcebergFileBasedStatisticProvider();
+        }
     }
 
     @Override
@@ -178,7 +184,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             tables.put(identifier, table);
             return table;
 
-        } catch (StarRocksConnectorException e) {
+        } catch (StarRocksConnectorException | NoSuchTableException e) {
             LOG.error("Failed to get iceberg table {}", identifier, e);
             return null;
         }
@@ -397,6 +403,13 @@ public class IcebergMetadata implements ConnectorMetadata {
         tasks.clear();
         tables.clear();
         IcebergMetricsReporter.remove();
+    }
+
+    @Override
+    public void dropTableStatistics(String tableUUID, List<String> columns) {
+        if (icebergCatalog instanceof CachingIcebergCatalog) {
+            ((CachingIcebergCatalog) icebergCatalog).invalidateCachedTableStat(tableUUID, columns);
+        }
     }
 
     interface BatchWrite {

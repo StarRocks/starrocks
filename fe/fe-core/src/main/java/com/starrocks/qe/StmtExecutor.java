@@ -1048,7 +1048,7 @@ public class StmtExecutor {
         DropStatsStmt dropStatsStmt = (DropStatsStmt) parsedStmt;
         Table table = MetaUtils.getTable(context, dropStatsStmt.getTableName());
         if (dropStatsStmt.isExternal()) {
-            GlobalStateMgr.getCurrentAnalyzeMgr().dropExternalStats(table.getUUID());
+            GlobalStateMgr.getCurrentAnalyzeMgr().dropExternalStats(table.getUUID(), dropStatsStmt.getTableName().getCatalog());
         } else {
             List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                     .collect(Collectors.toList());

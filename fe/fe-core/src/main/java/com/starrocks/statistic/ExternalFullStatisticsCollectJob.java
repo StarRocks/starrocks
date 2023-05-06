@@ -29,6 +29,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.connector.Connector;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
@@ -105,6 +106,9 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         }
 
         flushInsertStatisticsData(context, true);
+        Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().
+                getConnector(catalogName);
+        connector.getMetadata().dropTableStatistics(table.getUUID(), columns);
     }
 
     private List<List<String>> buildCollectSQLList(int parallelism) {

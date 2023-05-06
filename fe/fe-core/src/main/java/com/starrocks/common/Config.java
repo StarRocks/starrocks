@@ -1857,6 +1857,14 @@ public class Config extends ConfigBase {
     public static boolean enable_refresh_hive_partitions_statistics = true;
 
     /**
+     * cache stats, there is no harm of consistence, so default should be true.
+     * but now it's WIP, just set it false.
+     * we set it as a configuration to avoid that unexpected case.
+     */
+    @ConfField
+    public static boolean enable_iceberg_meta_cache = false;
+
+    /**
      * size of iceberg worker pool
      */
     @ConfField(mutable = true)

@@ -379,16 +379,14 @@ public class Utils {
             } else if (operator instanceof LogicalHiveScanOperator || operator instanceof LogicalHudiScanOperator) {
                 if (ConnectContext.get().getSessionVariable().enableHiveColumnStats()) {
                     if (operator instanceof LogicalHiveScanOperator) {
-                        return ((LogicalHiveScanOperator) operator).hasUnknownColumn();
+                        return ((LogicalHiveScanOperator) operator).hasUnknownColumnStats();
                     } else {
-                        return ((LogicalHudiScanOperator) operator).hasUnknownColumn();
+                        return ((LogicalHudiScanOperator) operator).hasUnknownColumnStats();
                     }
                 }
                 return true;
             } else if (operator instanceof LogicalIcebergScanOperator) {
-                // TODO(stephen): support `analyze table` to collect iceberg table ndv
-                // iceberg metadata doesn't have ndv, we default to unknown for all iceberg table column statistics.
-                return true;
+                return ((LogicalIcebergScanOperator) operator).hasUnknownColumnStats();
             } else {
                 // For other scan operators, we do not know the column statistics.
                 return true;

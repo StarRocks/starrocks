@@ -24,7 +24,7 @@ public class StatsConstants {
     public static final int STATISTIC_TABLE_VERSION = 3;
     public static final int STATISTIC_BATCH_VERSION = 4;
     public static final int STATISTIC_EXTERNAL_VERSION = 5;
-
+    public static final int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;
     public static final String STATISTICS_DB_NAME = "_statistics_";

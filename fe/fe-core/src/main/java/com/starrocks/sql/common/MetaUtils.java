@@ -78,6 +78,40 @@ public class MetaUtils {
         return table;
     }
 
+    /**
+     * @param tableUUID for native tabel it's string(id),
+     *                  for external table it's catalogName.dbName.tableName.Optional(createtime or UUID)
+     * @return Table
+     */
+    public static Table getTableByUUID(String tableUUID) {
+        String[] splits = tableUUID.split("\\.");
+        if (splits.length < 3) {
+            // native table
+            Long tableID;
+            try {
+                tableID = Long.parseLong(splits[0]);
+            } catch (NumberFormatException e) {
+                throw new SemanticException("Table %s is not found", tableUUID);
+            }
+            List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+            for (Long dbId : dbIds) {
+                try {
+                    return getTable(dbId, tableID);
+                } catch (SemanticException ignore) {
+                    // ignored
+                }
+            }
+            throw new SemanticException("Table %s is not found", tableUUID);
+        } else {
+            Table table = getTable(splits[0], splits[1], splits[2]);
+            if (table.getUUID().equals(tableUUID)) {
+                return table;
+            } else {
+                throw new SemanticException("Table %s is not found", tableUUID);
+            }
+        }
+    }
+
     public static Database getDatabase(ConnectContext session, TableName tableName) {
         if (Strings.isNullOrEmpty(tableName.getCatalog())) {
             tableName.setCatalog(session.getCurrentCatalog());

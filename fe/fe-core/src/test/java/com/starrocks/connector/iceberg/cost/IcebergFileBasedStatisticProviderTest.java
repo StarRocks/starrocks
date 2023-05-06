@@ -38,7 +38,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class IcebergStatisticProviderTest extends TableTestBase {
+public class IcebergFileBasedStatisticProviderTest extends TableTestBase {
     private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
@@ -53,7 +53,7 @@ public class IcebergStatisticProviderTest extends TableTestBase {
 
     @Test
     public void testMakeTableStatistics() {
-        IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
+        IcebergFileBasedStatisticProvider statisticProvider = new IcebergFileBasedStatisticProvider();
         table.newFastAppend().appendFile(FILE_A).commit();
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", Lists.newArrayList(), table, Maps.newHashMap());

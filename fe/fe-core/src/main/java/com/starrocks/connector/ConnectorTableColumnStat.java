@@ -13,17 +13,24 @@
 // limitations under the License.
 
 
-package com.starrocks.connector.iceberg.cost;
+package com.starrocks.connector;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.IcebergTable;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
-import java.util.Map;
+public class ConnectorTableColumnStat {
+    private ColumnStatistic columnStatistic;
+    private long rowCount;
 
-public interface IcebergStatisticProvider {
-    Statistics getTableStatistics(IcebergTable icebergTable, ScalarOperator predicate,
-                                  Map<ColumnRefOperator, Column> colRefToColumnMetaMap);
+    ConnectorTableColumnStat(ColumnStatistic columnStatistic, long rowCount) {
+        this.columnStatistic = columnStatistic;
+        this.rowCount = rowCount;
+    }
+
+    public ColumnStatistic getColumnStatistic() {
+        return columnStatistic;
+    }
+
+    public long getRowCount() {
+        return rowCount;
+    }
 }

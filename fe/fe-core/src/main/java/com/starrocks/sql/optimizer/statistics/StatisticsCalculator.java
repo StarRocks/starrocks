@@ -289,6 +289,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             Statistics stats = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableStatistics(
                     optimizerContext, catalogName, table, colRefToColumnMetaMap, null, node.getPredicate());
             context.setStatistics(stats);
+            if (node.isLogical()) {
+                boolean hasUnknownColumns = stats.getColumnStatistics().values().stream()
+                        .anyMatch(ColumnStatistic::isUnknown);
+                ((LogicalIcebergScanOperator) node).setHasUnknownColumnStats(hasUnknownColumns);
+            }
         }
 
         return visitOperator(node, context);
@@ -404,9 +409,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 boolean hasUnknownColumns = statistics.getColumnStatistics().values().stream()
                         .anyMatch(ColumnStatistic::isUnknown);
                 if (node instanceof LogicalHiveScanOperator) {
-                    ((LogicalHiveScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
+                    ((LogicalHiveScanOperator) node).setHasUnknownColumnStats(hasUnknownColumns);
                 } else if (node instanceof LogicalHudiScanOperator) {
-                    ((LogicalHudiScanOperator) node).setHasUnknownColumn(hasUnknownColumns);
+                    ((LogicalHudiScanOperator) node).setHasUnknownColumnStats(hasUnknownColumns);
                 }
             }
 

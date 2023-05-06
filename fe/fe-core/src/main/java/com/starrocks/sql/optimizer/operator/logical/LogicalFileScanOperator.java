@@ -28,7 +28,7 @@ import java.util.Map;
 
 public class LogicalFileScanOperator extends LogicalScanOperator {
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
-    private boolean hasUnknownColumn;
+    private boolean hasUnknownColumnStats = true;
 
     public LogicalFileScanOperator(Table table,
                                    Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
@@ -59,12 +59,12 @@ public class LogicalFileScanOperator extends LogicalScanOperator {
         this.predicates = predicates;
     }
 
-    public boolean hasUnknownColumn() {
-        return hasUnknownColumn;
+    public boolean hasUnknownColumnStats() {
+        return hasUnknownColumnStats;
     }
 
-    public void setHasUnknownColumn(boolean hasUnknownColumn) {
-        this.hasUnknownColumn = hasUnknownColumn;
+    public void setHasUnknownColumnStats(boolean hasUnknownColumnStats) {
+        this.hasUnknownColumnStats = hasUnknownColumnStats;
     }
 
     @Override

@@ -136,6 +136,10 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_FIELD_ERROR, statisticData.columnName);
         }
 
+        return buildColumnStatistics(statisticData, column);
+    }
+
+    public static ColumnStatistic buildColumnStatistics(TStatisticData statisticData, Column column) {
         ColumnStatistic.Builder builder = ColumnStatistic.builder();
         double minValue = Double.NEGATIVE_INFINITY;
         double maxValue = Double.POSITIVE_INFINITY;
@@ -167,8 +171,8 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                 }
             }
         } catch (Exception e) {
-            LOG.warn("convert TStatisticData to ColumnStatistics failed, db : {}, table : {}, column : {}, errMsg : {}",
-                    db.getFullName(), table.getName(), column.getName(), e.getMessage());
+            LOG.warn("convert TStatisticData to ColumnStatistics failed, column : {}, errMsg : {}",
+                    column.getName(), e.getMessage());
         }
 
         return builder.setMinValue(minValue).
@@ -176,5 +180,6 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                 setDistinctValuesCount(statisticData.countDistinct).
                 setAverageRowSize(statisticData.dataSize / Math.max(statisticData.rowCount, 1)).
                 setNullsFraction(statisticData.nullCount * 1.0 / Math.max(statisticData.rowCount, 1)).build();
+
     }
 }

@@ -264,5 +264,6 @@ public interface ConnectorMetadata {
     default void alterView(AlterViewStmt stmt) throws DdlException, UserException {
     }
 
+    default void dropTableStatistics(String tableUUID, List<String> columns) {}
 }
 
