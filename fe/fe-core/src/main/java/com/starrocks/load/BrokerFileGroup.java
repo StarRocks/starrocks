@@ -132,13 +132,18 @@ public class BrokerFileGroup implements Writable {
     public BrokerFileGroup(TempExternalTable table) throws AnalysisException {
         this.tableId = table.getId();
         this.isNegative = false;
+
         this.filePaths = new ArrayList<>();
         this.filePaths.add(table.getPath());
+
         this.fileFormat = table.getFormat();
-        this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
         this.columnSeparator = "\t";
         this.rowDelimiter = "\n";
         this.csvFormat = new CsvFormat((byte) 0, (byte) 0, 0, false);
+        this.fileFieldNames = new ArrayList<>();
+
+        this.columnExprList = table.getColumnExprList();
+        this.columnsFromPath = new ArrayList<>();
     }
 
     public BrokerFileGroup(DataDescription dataDescription) {

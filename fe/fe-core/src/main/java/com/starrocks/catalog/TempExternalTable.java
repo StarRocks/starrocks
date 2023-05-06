@@ -29,6 +29,7 @@ import com.starrocks.proto.PTypeNode;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TBrokerRangeDesc;
@@ -217,6 +218,15 @@ public class TempExternalTable extends Table {
         } catch (Exception e) {
             throw new DdlException("failed to get file schema: " + e.getMessage());
         }
+    }
+
+    public List<ImportColumnDesc> getColumnExprList() {
+        List<ImportColumnDesc> exprs = new ArrayList<>();
+        List<Column> columns = super.getFullSchema();
+        for (Column column : columns) {
+            exprs.add(new ImportColumnDesc(column.getName()));
+        }
+        return exprs;
     }
 
     @Override

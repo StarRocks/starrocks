@@ -130,9 +130,9 @@ Status ParquetReaderWrap::_init_parquet_reader() {
         return Status::OK();
     } catch (parquet::ParquetException& e) {
         std::stringstream str_error;
-        str_error << "Init parquet reader fail. " << e.what();
-        LOG(WARNING) << str_error.str() << " filename: " << _filename;
-        return Status::InternalError(fmt::format("{}. filename: {}", str_error.str(), _filename));
+        str_error << "Init parquet reader fail. " << e.what() << ", filename: " << _filename;
+        LOG(WARNING) << str_error.str();
+        return Status::InternalError(str_error.str());
     }
 }
 
@@ -186,33 +186,49 @@ Status ParquetReaderWrap::get_schema(std::vector<std::string>* col_names, std::v
     auto schema = _file_metadata->schema();
     for (int i = 0; i < schema->num_columns(); ++i) {
         auto column = schema->Column(i);
-        auto physical_type = column->physical_type();
-
         auto name = column->name();
-        TypeDescriptor tp;
+        auto physical_type = column->physical_type();
+        auto logical_type = column->logical_type();
 
+        // See detail in https://github.com/apache/parquet-format/blob/master/LogicalTypes.md.
+        TypeDescriptor tp;
         switch (physical_type) {
         case parquet::Type::BOOLEAN:
             tp = TypeDescriptor(TYPE_BOOLEAN);
             break;
-        case parquet::Type::INT32:
-        case parquet::Type::INT64:
-        case parquet::Type::INT96:
-            tp = TypeDescriptor(TYPE_LARGEINT);
-            break;
         case parquet::Type::FLOAT:
+            tp = TypeDescriptor(TYPE_FLOAT);
+            break;
         case parquet::Type::DOUBLE:
             tp = TypeDescriptor(TYPE_DOUBLE);
+            break;
+        case parquet::Type::INT32:
+            if (logical_type->is_date()) {
+                tp = TypeDescriptor(TYPE_DATE);
+            } else {
+                tp = TypeDescriptor(TYPE_INT);
+            }
+            break;
+        case parquet::Type::INT64:
+            if (logical_type->is_timestamp()) {
+                tp = TypeDescriptor(TYPE_DATETIME);
+            } else {
+                tp = TypeDescriptor(TYPE_BIGINT);
+            }
+            break;
+        case parquet::Type::INT96:
+            tp = TypeDescriptor(TYPE_DATETIME);
             break;
         case parquet::Type::BYTE_ARRAY:
             tp = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
             break;
         default:
-            return Status::NotSupported("Unknown physical type");
+            return Status::NotSupported(
+                    fmt::format("Unkown supported parquet physical type: {}, column name: {}", physical_type, name));
         }
 
-        col_names->push_back(name);
-        col_types->push_back(tp);
+        col_names->emplace_back(std::move(name));
+        col_types->emplace_back(std::move(tp));
     }
     return Status::OK();
 }

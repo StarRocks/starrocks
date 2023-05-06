@@ -251,10 +251,10 @@ public class PlanFragmentBuilder {
         return execPlan;
     }
 
-    public static TupleDescriptor buildTupleDesc(ExecPlan execPlan, MaterializedView view) {
+    public static TupleDescriptor buildTupleDesc(ExecPlan execPlan, Table table) {
         DescriptorTable descriptorTable = execPlan.getDescTbl();
         TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
-        for (Column column : view.getFullSchema()) {
+        for (Column column : table.getFullSchema()) {
             SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
             slotDescriptor.setIsMaterialized(true);
             slotDescriptor.setType(column.getType());
@@ -3053,24 +3053,11 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalTempExtTableScan(OptExpression optExpression, ExecPlan context) {
-            Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), context.getConnectContext());
-
             PhysicalTempExtTableScanOperator node = (PhysicalTempExtTableScanOperator) optExpression.getOp();
 
             TempExternalTable table = (TempExternalTable) node.getTable();
 
-            TupleDescriptor tupleDesc = analyzer.getDescTbl().createTupleDescriptor();
-            tupleDesc.setTable(table);
-
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
-                SlotDescriptor slotDescriptor =
-                        analyzer.getDescTbl().addSlotDescriptor(tupleDesc, new SlotId(entry.getKey().getId()));
-                slotDescriptor.setColumn(entry.getValue());
-                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
-                slotDescriptor.setIsMaterialized(true);
-                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().getName(), slotDescriptor));
-            }
-            tupleDesc.computeMemLayout();
+            TupleDescriptor tupleDesc = buildTupleDesc(context, table);
 
             List<List<TBrokerFileStatus>> files = new ArrayList<>();
             files.add(table.fileList());
@@ -3088,10 +3075,12 @@ public class PlanFragmentBuilder {
                         INTERNAL_ERROR);
             }
 
+            prepareContextSlots(node, context, tupleDesc);
 
             scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, false, 1);
             scanNode.setUseVectorizedLoad(true);
 
+            Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), context.getConnectContext());
             try {
                 scanNode.init(analyzer);
                 scanNode.finalizeStats(analyzer);
