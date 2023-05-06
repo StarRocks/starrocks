@@ -176,6 +176,7 @@ set(EXEC_FILES
     pipeline/scan/olap_schema_chunk_source.cpp
     pipeline/scan/olap_schema_scan_operator.cpp
     pipeline/scan/olap_schema_scan_context.cpp
+    pipeline/sink/iceberg_table_sink_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp

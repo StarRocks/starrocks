@@ -387,6 +387,9 @@ struct TIcebergTable {
 
     // Iceberg schema, used to support schema evolution
     3: optional TIcebergSchema iceberg_schema
+
+    // partition column names
+    4: optional list<string> partition_column_names
 }
 
 struct THudiTable {

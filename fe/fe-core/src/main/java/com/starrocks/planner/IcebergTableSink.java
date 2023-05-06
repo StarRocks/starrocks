@@ -16,12 +16,16 @@ package com.starrocks.planner;
 
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
+import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TIcebergTableSink;
 import org.apache.iceberg.Table;
 
 import java.util.Locale;
 
+import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
 import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 import static org.apache.iceberg.TableProperties.ORC_COMPRESSION;
@@ -35,7 +39,7 @@ public class IcebergTableSink extends DataSink {
     private final long targetTableId;
     private final String fileFormat;
     private final String location;
-    private String compressionType;
+    private final String compressionType;
     private final boolean isStatisticsPartitionSink;
     private final String tableIdentifier;
 
@@ -52,20 +56,40 @@ public class IcebergTableSink extends DataSink {
             case "parquet":
                 compressionType = nativeTable.properties().getOrDefault(PARQUET_COMPRESSION, PARQUET_COMPRESSION_DEFAULT)
                         .toLowerCase(Locale.ROOT);
+                break;
             case "orc":
                 compressionType = nativeTable.properties().getOrDefault(ORC_COMPRESSION, ORC_COMPRESSION_DEFAULT)
                         .toLowerCase(Locale.ROOT);
+                break;
+            default:
+                compressionType = "default";
         }
     }
 
     @Override
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
-        return "";
+        StringBuilder strBuilder = new StringBuilder();
+        strBuilder.append(prefix + "Iceberg TABLE SINK\n");
+        strBuilder.append(prefix + "  TABLE: " + tableIdentifier + "\n");
+        strBuilder.append(prefix + "  TUPLE ID: " + desc.getId() + "\n");
+        strBuilder.append(prefix + "  " + DataPartition.RANDOM.getExplainString(explainLevel));
+        return strBuilder.toString();
     }
 
     @Override
     protected TDataSink toThrift() {
-        return null;
+        TDataSink tDataSink = new TDataSink(TDataSinkType.ICEBERG_TABLE_SINK);
+        TIcebergTableSink tIcebergTableSink = new TIcebergTableSink();
+        tIcebergTableSink.setTarget_table_id(targetTableId);
+        tIcebergTableSink.setTuple_id(desc.getId().asInt());
+        tIcebergTableSink.setLocation(location);
+        tIcebergTableSink.setFile_format(fileFormat);
+        tIcebergTableSink.setIs_statistics_partition_sink(isStatisticsPartitionSink);
+        TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
+        tIcebergTableSink.setCompression_type(compression);
+
+        tDataSink.setIceberg_table_sink(tIcebergTableSink);
+        return tDataSink;
     }
 
     @Override

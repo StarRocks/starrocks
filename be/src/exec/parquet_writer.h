@@ -36,65 +36,47 @@
 namespace starrocks {
 
 struct TableInfo;
-struct PartitionInfo;
 
 struct TableInfo {
-    std::string _table_location;
-    std::string _file_format;
     TCompressionType::type _compress_type = TCompressionType::SNAPPY;
     bool _enable_dictionary = true;
-
+    std::string _partition_location = "";
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
-    ;
-};
-
-struct PartitionInfo {
-    std::vector<std::string> _column_names;
-    std::vector<std::string> _column_values;
-
-    std::string partition_dir() const {
-        std::stringstream ss;
-        for (size_t i = 0; i < _column_names.size(); i++) {
-            ss << _column_names[i];
-            ss << "=";
-            ss << _column_values[i];
-            ss << "/";
-        }
-        return ss.str();
-    }
 };
 
 class RollingAsyncParquetWriter {
 public:
-    RollingAsyncParquetWriter(const TableInfo& tableInfo, const PartitionInfo& partitionInfo,
-                              const std::vector<ExprContext*>& output_expr_ctxs, RuntimeProfile* parent_profile);
+    RollingAsyncParquetWriter(const TableInfo& tableInfo, const std::vector<ExprContext*>& output_expr_ctxs,
+                              RuntimeProfile* parent_profile,
+                              std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> _commit_func);
+
     ~RollingAsyncParquetWriter() = default;
 
-    Status append_chunk(Chunk* chunk, RuntimeState* state); //check if we need a new file, file_writer->write
-    // init filesystem, init writeproperties, schema
-    Status init_rolling_writer(const TableInfo& tableInfo, const PartitionInfo& partitionInfo);
+    Status append_chunk(Chunk* chunk, RuntimeState* state);
+    Status init_rolling_writer(const TableInfo& tableInfo);
     Status close(RuntimeState* state);
     bool writable() const { return _writer == nullptr || _writer->writable(); }
     bool closed();
 
-    static void add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state);
-
 private:
-    std::string get_new_file_name();
-    Status new_file_writer();
+    std::string _new_file_location();
+
+    Status _new_file_writer();
     Status close_current_writer(RuntimeState* state);
 
+private:
     std::shared_ptr<FileSystem> _fs;
     std::shared_ptr<starrocks::parquet::AsyncFileWriter> _writer;
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
-    std::string _partition_dir;
-    int32_t _cnt = 0;
-    std::string _location;
+    std::string _partition_location;
+    int32_t _file_cnt = 0;
+    std::string _outfile_location;
     std::vector<std::shared_ptr<starrocks::parquet::AsyncFileWriter>> _pending_commits;
-    int64_t _max_file_size = 512 * 1024 * 1024;
+    int64_t _max_file_size = 1 * 1024 * 1024 * 1024; // 1GB
     std::vector<ExprContext*> _output_expr_ctxs;
     RuntimeProfile* _parent_profile;
+    std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)> _commit_func;
 };
 
 } // namespace starrocks

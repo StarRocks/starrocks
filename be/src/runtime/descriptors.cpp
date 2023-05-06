@@ -157,6 +157,29 @@ IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, Ob
     _table_location = tdesc.icebergTable.location;
     _columns = tdesc.icebergTable.columns;
     _t_iceberg_schema = tdesc.icebergTable.iceberg_schema;
+    _partition_column_names = tdesc.icebergTable.partition_column_names;
+}
+
+std::vector<int32_t> IcebergTableDescriptor::partition_index_in_schema() {
+    std::vector<std::int32_t> indexes;
+    for (int i = 0; i < _columns.size(); i++) {
+        std::string& name = _columns[i].column_name;
+        if (std::find(_partition_column_names.begin(), _partition_column_names.end(), name) !=
+            _partition_column_names.end()) {
+            indexes.emplace_back(i);
+        }
+    }
+
+    return indexes;
+}
+
+const std::vector<std::string> IcebergTableDescriptor::full_column_names() {
+    std::vector<std::string> full_column_names;
+    for (const auto& column : _columns) {
+        full_column_names.emplace_back(column.column_name);
+    }
+
+    return full_column_names;
 }
 
 DeltaLakeTableDescriptor::DeltaLakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)

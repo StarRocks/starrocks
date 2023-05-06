@@ -46,6 +46,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/data_stream_sender.h"
 #include "runtime/export_sink.h"
+#include "runtime/iceberg_table_sink.h"
 #include "runtime/memory_scratch_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
 #include "runtime/mysql_table_sink.h"
@@ -142,6 +143,13 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
             return Status::InternalError("Missing schema table sink.");
         }
         *sink = std::make_unique<SchemaTableSink>(state->obj_pool(), row_desc, output_exprs);
+        break;
+    }
+    case TDataSinkType::ICEBERG_TABLE_SINK: {
+        if (!thrift_sink.__isset.iceberg_table_sink) {
+            return Status::InternalError("Missing iceberg table sink");
+        }
+        *sink = std::make_unique<IcebergTableSink>(state->obj_pool(), output_exprs);
         break;
     }
 
