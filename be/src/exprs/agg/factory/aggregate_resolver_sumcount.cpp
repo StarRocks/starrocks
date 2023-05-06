@@ -77,11 +77,11 @@ VALUE_GUARD(LogicalType, CountIfLTGuard, lt_is_count_if_support, TYPE_BOOLEAN, T
 struct CountIfDispatcher {
     template <LogicalType lt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_count_if_support<lt>){
-            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, CountIfFunctionState>
-                    ("count_if", false, AggregateFactory::MakeCountIfAggregateFunction<lt>());
-            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, CountIfFunctionState>
-                    ("count_if", true, AggregateFactory::MakeCountIfAggregateFunction<lt>());
+        if constexpr (lt_is_count_if_support<lt>) {
+            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, CountIfFunctionState>(
+                    "count_if", false, AggregateFactory::MakeCountIfAggregateFunction<lt>());
+            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, CountIfFunctionState>(
+                    "count_if", true, AggregateFactory::MakeCountIfAggregateFunction<lt>());
         }
     }
 };

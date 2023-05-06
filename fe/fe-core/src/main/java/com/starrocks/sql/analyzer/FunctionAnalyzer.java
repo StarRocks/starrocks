@@ -121,12 +121,6 @@ public class FunctionAnalyzer {
         }
 
         if (fnName.getFunction().equals(FunctionSet.COUNT_IF)) {
-            if (functionCallExpr.getChildren().size() != 1) {
-                throw new SemanticException(
-                        "count_if requires one parameter: " + functionCallExpr.toSql(),
-                        functionCallExpr.getPos());
-            }
-
             if (fnParams.isDistinct()) {
                 throw new SemanticException("count_if does not support DISTINCT", functionCallExpr.getPos());
             }

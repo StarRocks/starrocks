@@ -15,10 +15,10 @@
 #pragma once
 
 #include "column/nullable_column.h"
-#include "exprs/agg/aggregate.h"
-#include "gutil/casts.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/agg/aggregate.h"
+#include "gutil/casts.h"
 #include "util/value_generator.h"
 
 namespace starrocks {
@@ -29,18 +29,18 @@ struct CountIfFunctionState {
 
 // count not null column
 template <LogicalType LT>
-class CountIfAggregateFunction final : public AggregateFunctionBatchHelper<CountIfFunctionState,
-                                                                           CountIfAggregateFunction<LT>> {
+class CountIfAggregateFunction final
+        : public AggregateFunctionBatchHelper<CountIfFunctionState, CountIfAggregateFunction<LT>> {
 public:
     using InputColumnType = RunTimeColumnType<LT>;
 
     template <bool is_add>
     void do_update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const {
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        if (column.get_data()[row_num]){
+        if (column.get_data()[row_num]) {
             if constexpr (is_add) {
                 ++this->data(state).count;
-            }else{
+            } else {
                 --this->data(state).count;
             }
         }
