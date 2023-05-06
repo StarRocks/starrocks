@@ -889,7 +889,7 @@ public class MaterializedViewRewriter {
                     rewriteScalarOperatorToTarget(mvEqualPreds, queryExprMap, rewriteContext, mvToQueryRefSet, true);
         }
         if (!ConstantOperator.TRUE.equals(mvOtherPreds)) {
-            mvEqualPreds = columnRewriter.rewriteViewToQueryWithViewEc(mvEqualPreds);
+            mvOtherPreds = columnRewriter.rewriteViewToQueryWithViewEc(mvOtherPreds);
             mvOtherPreds =
                     rewriteScalarOperatorToTarget(mvOtherPreds, queryExprMap, rewriteContext, mvToQueryRefSet, false);
         }
