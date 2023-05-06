@@ -61,7 +61,7 @@ Status RollingAsyncParquetWriter::_new_file_writer() {
     ASSIGN_OR_RETURN(auto writable_file, _fs->new_writable_file(options, new_file_location))
     _writer = std::make_shared<starrocks::parquet::AsyncFileWriter>(
             std::move(writable_file), new_file_location, _partition_location, _properties, _schema, _output_expr_ctxs,
-            ExecEnv::GetInstance()->pipeline_sink_io_pool(), _parent_profile);
+            ExecEnv::GetInstance()->pipeline_sink_io_pool(), _parent_profile, _max_file_size);
     auto st = _writer->init();
     return st;
 }
