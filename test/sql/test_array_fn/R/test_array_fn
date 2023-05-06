@@ -3839,3 +3839,10 @@ select array_intersect([[1,2,3], [2,3,4]], [[1,2,3], [2,3,4]]) from array_test o
 [[1,2,3],[2,3,4]]
 [[1,2,3],[2,3,4]]
 -- !result
+select array_sum(array_map(x->not like(x, 'starRocks'),s_1)) from array_test order by 1;
+-- result:
+None
+3
+4
+5
+-- !result

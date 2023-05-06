@@ -663,3 +663,5 @@ select array_intersect([[1,2,3], [2,3,4]], [1.0,2.1,3.2,4.3]) from array_test or
 select array_intersect([[1,2,3], [2,3,4]], ['a', 'b', 'c']) from array_test order by pk;
 select array_intersect([[1,2,3], [2,3,4]], [[1,2,3], [2,3,4]]) from array_test order by pk;
 
+select array_sum(array_map(x->not like(x, 'starRocks'),s_1)) from array_test order by 1;
+
