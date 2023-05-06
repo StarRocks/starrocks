@@ -100,6 +100,7 @@ public class LoadStmt extends DdlStmt {
     public static final String MERGE_CONDITION = "merge_condition";
     public static final String CASE_SENSITIVE = "case_sensitive";
     public static final String LOG_REJECTED_RECORD_NUM = "log_rejected_record_num";
+    public static final String SPARK_LOAD_SUBMIT_TIMEOUT = "spark_load_submit_timeout";
 
     public static final String PARTIAL_UPDATE_MODE = "partial_update_mode";
 
@@ -142,6 +143,7 @@ public class LoadStmt extends DdlStmt {
             .add(CASE_SENSITIVE)
             .add(LOG_REJECTED_RECORD_NUM)
             .add(PARTIAL_UPDATE_MODE)
+            .add(SPARK_LOAD_SUBMIT_TIMEOUT)
             .build();
 
     public LoadStmt(LabelName label, List<DataDescription> dataDescriptions, BrokerDesc brokerDesc,
@@ -251,6 +253,19 @@ public class LoadStmt extends DdlStmt {
                 }
             } catch (NumberFormatException e) {
                 throw new DdlException(TIMEOUT_PROPERTY + " is not a number.");
+            }
+        }
+
+        // spark load wait yarn timeout
+        final String sparkLoadSubmitTimeoutProperty = properties.get(SPARK_LOAD_SUBMIT_TIMEOUT);
+        if (sparkLoadSubmitTimeoutProperty != null) {
+            try {
+                final long sparkLoadSubmitTimeout = Long.parseLong(sparkLoadSubmitTimeoutProperty);
+                if (sparkLoadSubmitTimeout < 0) {
+                    throw new DdlException(SPARK_LOAD_SUBMIT_TIMEOUT + " must be greater than 0");
+                }
+            } catch (NumberFormatException e) {
+                throw new DdlException(SPARK_LOAD_SUBMIT_TIMEOUT + " is not a number.");
             }
         }
 

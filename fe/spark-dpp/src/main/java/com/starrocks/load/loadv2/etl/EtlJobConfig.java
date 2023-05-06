@@ -242,12 +242,15 @@ public class EtlJobConfig implements Serializable {
         public boolean strictMode;
         @SerializedName(value = "timezone")
         public String timezone;
+        @SerializedName(value = "sparkLoadSubmitTimeout")
+        public Long sparkLoadSubmitTimeout;
 
         @Override
         public String toString() {
             return "EtlJobProperty{" +
                     "strictMode=" + strictMode +
                     ", timezone='" + timezone + '\'' +
+                    ", sparkLoadSubmitTimeout='" + sparkLoadSubmitTimeout + '\'' +
                     '}';
         }
     }

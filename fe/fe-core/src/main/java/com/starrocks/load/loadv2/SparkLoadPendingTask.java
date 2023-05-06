@@ -208,6 +208,7 @@ public class SparkLoadPendingTask extends LoadTask {
         EtlJobProperty properties = new EtlJobProperty();
         properties.strictMode = ((LoadJob) callback).strictMode;
         properties.timezone = ((LoadJob) callback).timezone;
+        properties.sparkLoadSubmitTimeout = ((SparkLoadJob) callback).sparkLoadSubmitTimeoutSecond;
         etlJobConfig = new EtlJobConfig(tables, outputFilePattern, loadLabel, properties);
     }
 

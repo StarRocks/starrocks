@@ -84,7 +84,7 @@ public class SparkLauncherMonitor {
     public static class LogMonitor extends Thread {
         private final Process process;
         private SparkLoadAppHandle handle;
-        private long submitTimeoutMs;
+        private long submitTimeoutMs  = 300000L;
         private boolean isStop;
         private OutputStream outputStream;
 
@@ -95,14 +95,10 @@ public class SparkLauncherMonitor {
         private static final String URL = "tracking URL";
         private static final String USER = "user";
 
-        // 5min
-        private static final long DEFAULT_SUBMIT_TIMEOUT_MS = 300000L;
-
         public LogMonitor(SparkLoadAppHandle handle) {
             this.handle = handle;
             this.process = handle.getProcess();
             this.isStop = false;
-            setSubmitTimeoutMs(DEFAULT_SUBMIT_TIMEOUT_MS);
         }
 
         public void setSubmitTimeoutMs(long submitTimeoutMs) {

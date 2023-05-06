@@ -173,7 +173,11 @@ public class SparkEtlJobHandler {
             handle.setProcess(process);
             if (!FeConstants.runningUnitTest) {
                 SparkLauncherMonitor.LogMonitor logMonitor = SparkLauncherMonitor.createLogMonitor(handle);
-                logMonitor.setSubmitTimeoutMs(GET_APPID_TIMEOUT_MS);
+                long sparkLoadSubmitTimeout = GET_APPID_TIMEOUT_MS;
+                if (etlJobConfig.properties.sparkLoadSubmitTimeout != null) {
+                    sparkLoadSubmitTimeout = etlJobConfig.properties.sparkLoadSubmitTimeout * 1000;
+                }
+                logMonitor.setSubmitTimeoutMs(sparkLoadSubmitTimeout);
                 logMonitor.setRedirectLogPath(logFilePath);
                 logMonitor.start();
                 try {
