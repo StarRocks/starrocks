@@ -65,7 +65,6 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
@@ -86,6 +85,7 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
@@ -3825,7 +3825,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 // for adding BE to some Cluster, but loadCluster is after loadBackend.
                 cluster.setBackendIdList(latestBackendIds);
 
-                String dbName = InfoSchemaDb.getFullInfoSchemaDbName();
+                String dbName = InfoSchemaDb.DATABASE_NAME;
                 InfoSchemaDb db;
                 // Use real GlobalStateMgr instance to avoid InfoSchemaDb id continuously increment
                 // when checkpoint thread load image.

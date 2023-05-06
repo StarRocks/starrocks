@@ -21,8 +21,8 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.SchemaTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;
@@ -117,8 +117,8 @@ public class UpdatePlanner {
                 }
                 execPlan.getFragments().get(0).setSink(dataSink);
                 execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
-            } else if (table instanceof SchemaTable) {
-                DataSink dataSink = new SchemaTableSink((SchemaTable) table);
+            } else if (table instanceof SystemTable) {
+                DataSink dataSink = new SchemaTableSink((SystemTable) table);
                 execPlan.getFragments().get(0).setSink(dataSink);
             } else {
                 throw new SemanticException("Unsupported table type: " + table.getClass().getName());

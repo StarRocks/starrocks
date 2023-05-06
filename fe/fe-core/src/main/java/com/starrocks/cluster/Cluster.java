@@ -37,7 +37,7 @@ package com.starrocks.cluster;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.InfoSchemaDb;
+import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.LinkDbInfo;

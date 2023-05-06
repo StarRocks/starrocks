@@ -34,6 +34,7 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.catalog.system.information.InfoSchemaDb;
 import org.junit.Assert;
 import org.junit.Test;
 
