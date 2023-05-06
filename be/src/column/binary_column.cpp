@@ -443,7 +443,9 @@ size_t BinaryColumnBase<T>::filter_range(const Filter& filter, size_t from, size
 
             // copy data
             T size = _offsets[start_offset + batch_nums] - _offsets[start_offset];
-            strings::memcpy_inlined(data + _offsets[result_offset], data + _offsets[start_offset], size);
+            if (result_offset != start_offset) {
+                strings::memcpy_inlined(data + _offsets[result_offset], data + _offsets[start_offset], size);
+            }
 
             // set offsets, try vectorized
             T* offset_data = _offsets.data();
@@ -465,7 +467,9 @@ size_t BinaryColumnBase<T>::filter_range(const Filter& filter, size_t from, size
 
                 T size = _offsets[start_offset + i + 1] - _offsets[start_offset + i];
                 // copy date
-                strings::memcpy_inlined(data + _offsets[result_offset], data + _offsets[start_offset + i], size);
+                if (result_offset != start_offset + i) {
+                    strings::memcpy_inlined(data + _offsets[result_offset], data + _offsets[start_offset + i], size);
+                }
                 // set offsets
                 _offsets[result_offset + 1] = _offsets[result_offset] + size;
                 zero_count = Bits::CountTrailingZeros32(mask);
@@ -482,7 +486,9 @@ size_t BinaryColumnBase<T>::filter_range(const Filter& filter, size_t from, size
             DCHECK_GE(_offsets[i + 1], _offsets[i]);
             T size = _offsets[i + 1] - _offsets[i];
             // copy data
-            strings::memcpy_inlined(data + _offsets[result_offset], data + _offsets[i], size);
+            if (result_offset != i) {
+                strings::memcpy_inlined(data + _offsets[result_offset], data + _offsets[i], size);
+            }
             // set offsets
             _offsets[result_offset + 1] = _offsets[result_offset] + size;
 
