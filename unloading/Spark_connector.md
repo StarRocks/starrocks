@@ -29,7 +29,16 @@ Spark 连接器支持三种数据读取方式：临时视图、Spark DataFrame �
 
 ## 准备工作
 
-1. 下载 [Spark 连接器编译包](https://github.com/StarRocks/starrocks-connector-for-apache-spark)。
+您可以直接下载已经编译好的 Spark connector jar 包，或者通过源码手动编译。
+
+### 直接下载
+
+- [Spark 2.x](https://cdn-thirdparty.starrocks.com/spark/starrocks-spark2_2.11-1.0.0.jar)
+- [Spark 3.x](https://cdn-thirdparty.starrocks.com/spark/starrocks-spark3_2.12-1.0.0.jar)
+
+### 手动编译
+
+1. 下载 [Spark 连接器代码](https://github.com/StarRocks/starrocks-connector-for-apache-spark)。
 
 2. 通过如下命令进行 Spark 连接器的编译：
 
