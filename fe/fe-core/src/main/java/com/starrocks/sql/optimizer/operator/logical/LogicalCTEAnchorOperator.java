@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -34,16 +33,15 @@ import java.util.Objects;
  *
  * */
 public class LogicalCTEAnchorOperator extends LogicalOperator {
-    private final int cteId;
+    private int cteId;
 
     public LogicalCTEAnchorOperator(int cteId) {
         super(OperatorType.LOGICAL_CTE_ANCHOR);
         this.cteId = cteId;
     }
 
-    private LogicalCTEAnchorOperator(LogicalCTEAnchorOperator.Builder builder) {
-        super(OperatorType.LOGICAL_CTE_ANCHOR, builder.getLimit(), builder.getPredicate(), builder.getProjection());
-        this.cteId = builder.cteId;
+    private LogicalCTEAnchorOperator() {
+        super(OperatorType.LOGICAL_CTE_ANCHOR);
     }
 
     @Override
@@ -102,17 +100,16 @@ public class LogicalCTEAnchorOperator extends LogicalOperator {
 
     public static class Builder
             extends LogicalOperator.Builder<LogicalCTEAnchorOperator, LogicalCTEAnchorOperator.Builder> {
-        private int cteId;
 
         @Override
-        public LogicalCTEAnchorOperator build() {
-            return new LogicalCTEAnchorOperator(this);
+        protected LogicalCTEAnchorOperator newInstance() {
+            return new LogicalCTEAnchorOperator();
         }
 
         @Override
         public LogicalCTEAnchorOperator.Builder withOperator(LogicalCTEAnchorOperator operator) {
             super.withOperator(operator);
-            this.cteId = operator.cteId;
+            builder.cteId = operator.cteId;
             return this;
         }
     }

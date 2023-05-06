@@ -157,54 +157,51 @@ public abstract class Operator {
     }
 
     public abstract static class Builder<O extends Operator, B extends Builder> {
-        protected OperatorType opType;
-        protected long limit = DEFAULT_LIMIT;
-        protected ScalarOperator predicate;
-        protected Projection projection;
+        protected O builder = newInstance();
+
+        protected abstract O newInstance();
 
         public B withOperator(O operator) {
-            this.opType = operator.opType;
-            this.limit = operator.limit;
-            this.predicate = operator.predicate;
-            this.projection = operator.projection;
+            builder.limit = operator.limit;
+            builder.predicate = operator.predicate;
+            builder.projection = operator.projection;
             return (B) this;
         }
 
-        public abstract O build();
+        public O build() {
+            O newOne = builder;
+            builder = null;
+            return newOne;
+        }
 
         public OperatorType getOpType() {
-            return opType;
-        }
-
-        public B setOpType(OperatorType opType) {
-            this.opType = opType;
-            return (B) this;
+            return builder.opType;
         }
 
         public long getLimit() {
-            return limit;
+            return builder.limit;
         }
 
         public B setLimit(long limit) {
-            this.limit = limit;
+            builder.limit = limit;
             return (B) this;
         }
 
         public ScalarOperator getPredicate() {
-            return predicate;
+            return builder.predicate;
         }
 
         public B setPredicate(ScalarOperator predicate) {
-            this.predicate = predicate;
+            builder.predicate = predicate;
             return (B) this;
         }
 
         public Projection getProjection() {
-            return projection;
+            return builder.projection;
         }
 
         public B setProjection(Projection projection) {
-            this.projection = projection;
+            builder.projection = projection;
             return (B) this;
         }
     }

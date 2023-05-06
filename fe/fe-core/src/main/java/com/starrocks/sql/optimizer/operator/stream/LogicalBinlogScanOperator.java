@@ -20,10 +20,8 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.Map;
 
@@ -36,14 +34,8 @@ public class LogicalBinlogScanOperator extends LogicalScanOperator {
         super(OperatorType.LOGICAL_BINLOG_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, null, null);
     }
 
-    public LogicalBinlogScanOperator(Table table,
-                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-                                     Map<Column, ColumnRefOperator> columnMetaToColRefMap,
-                                     long limit,
-                                     ScalarOperator predicate,
-                                     Projection projection) {
-        super(OperatorType.LOGICAL_BINLOG_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
-                projection);
+    private LogicalBinlogScanOperator() {
+        super(OperatorType.LOGICAL_BINLOG_SCAN);
     }
 
     @Override
@@ -60,15 +52,8 @@ public class LogicalBinlogScanOperator extends LogicalScanOperator {
             extends LogicalScanOperator.Builder<LogicalBinlogScanOperator, LogicalBinlogScanOperator.Builder> {
 
         @Override
-        public LogicalBinlogScanOperator build() {
-            return new LogicalBinlogScanOperator(table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
-                    projection);
-        }
-
-        @Override
-        public Builder withOperator(LogicalBinlogScanOperator scanOperator) {
-            super.withOperator(scanOperator);
-            return this;
+        protected LogicalBinlogScanOperator newInstance() {
+            return new LogicalBinlogScanOperator();
         }
     }
 
