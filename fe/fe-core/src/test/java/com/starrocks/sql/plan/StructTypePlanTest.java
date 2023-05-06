@@ -46,11 +46,9 @@ public class StructTypePlanTest extends PlanTestBase {
 
     @Test
     public void testSubfieldWindow() throws Exception {
-        // TODO Can't pushdown
         String sql = "select c3.a, row_number() over (partition by c0 order by c2.a) from test";
-        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11), b int(11)>]");
-        assertVerbosePlanContains(sql,
-                "Pruned type: 4 <-> [STRUCT<a int(11), b int(11), c STRUCT<a int(11), b int(11)>, d ARRAY<int(11)>>]");
+        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
+        assertVerbosePlanContains(sql, "Pruned type: 4 <-> [STRUCT<a int(11)>]");
     }
 
     @Test
@@ -91,26 +89,29 @@ public class StructTypePlanTest extends PlanTestBase {
     public void testSubQuery() throws Exception {
         String sql = "select c2.a from (select c1, c2 from test) t";
         assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
+        sql = "select t1.a, rn from (select c3.c as t1, row_number() over (partition by c0 order by c2.a) as rn from test) as t";
+        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]\n" +
+                "     Pruned type: 4 <-> [STRUCT<c STRUCT<a int(11)>>]");
     }
 
     @Test
     public void testStructWithWindow() throws Exception {
         String sql = "select sum(c2.b) over(partition by c2.a order by c0) from test";
-        assertPlanContains(sql, " 4:ANALYTIC\n" +
+        assertPlanContains(sql, " 3:ANALYTIC\n" +
                 "  |  functions: [, sum(7: c2.b), ]\n" +
                 "  |  partition by: 9: c2.a\n" +
                 "  |  order by: 1: c0 ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         sql = "select sum(c0) over(partition by c2.a order by c2.b) from test";
-        assertPlanContains(sql, " 4:ANALYTIC\n" +
+        assertPlanContains(sql, " 3:ANALYTIC\n" +
                 "  |  functions: [, sum(5: c0), ]\n" +
                 "  |  partition by: 9: c2.a\n" +
                 "  |  order by: 10: c2.b ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
 
         sql = "select sum(c1.b[10].b) over(partition by c2.a order by c2.b) from test";
-        assertPlanContains(sql, "4:ANALYTIC\n" +
+        assertPlanContains(sql, "3:ANALYTIC\n" +
                 "  |  functions: [, sum(6: c1.b[10].b), ]\n" +
                 "  |  partition by: 9: c2.a\n" +
                 "  |  order by: 10: c2.b ASC\n" +
@@ -118,9 +119,23 @@ public class StructTypePlanTest extends PlanTestBase {
     }
 
     @Test
+    public void testExcept() throws Exception {
+        String sql = "select c2.a + 1 from test except select c3.a from test";
+        assertVerbosePlanContains(sql, "Pruned type: 9 <-> [STRUCT<a int(11)>]");
+        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
+    }
+
+    @Test
+    public void testIntersect() throws Exception {
+        String sql = "select c2.a + 1 from test intersect select c3.a from test";
+        assertVerbosePlanContains(sql, "Pruned type: 9 <-> [STRUCT<a int(11)>]");
+        assertVerbosePlanContains(sql, "Pruned type: 3 <-> [STRUCT<a int(11)>]");
+    }
+
+    @Test
     public void testLambda() throws Exception {
         String sql = "select array_map(x->x, [])";
-        assertVerbosePlanContains(sql, "ARRAY<unknown type: NULL_TYPE>[]");
+        assertVerbosePlanContains(sql, "ARRAY<boolean>[]");
         sql = "select array_map(x->x+1, c3.d) from test";
         assertVerbosePlanContains(sql, "[STRUCT<d ARRAY<int(11)>>]");
         sql = "select array_sortby(x->x+1, c3.d) from test";

@@ -11,6 +11,7 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/status.h"
+#include "exprs/vectorized/cast_expr.h"
 #include "exprs/vectorized/jsonpath.h"
 #include "glog/logging.h"
 #include "gutil/strings/escaping.h"
@@ -712,6 +713,11 @@ ColumnPtr JsonFunctions::json_keys(FunctionContext* context, const Columns& colu
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr JsonFunctions::to_json(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    return cast_nested_to_json(columns[0]).value();
 }
 
 } // namespace starrocks::vectorized

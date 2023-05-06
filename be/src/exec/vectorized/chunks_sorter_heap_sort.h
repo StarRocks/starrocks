@@ -233,7 +233,7 @@ public:
 
     size_t get_output_rows() const override;
 
-    void setup_runtime(RuntimeProfile* profile) override;
+    void setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker) override;
 
 private:
     size_t _number_of_rows_to_sort() const { return _offset + _limit; }

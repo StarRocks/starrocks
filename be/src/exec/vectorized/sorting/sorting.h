@@ -70,7 +70,6 @@ struct SortDesc {
     bool is_null_first() const { return (null_first * sort_order) == -1; }
     bool asc_order() const { return sort_order == 1; }
 };
-
 struct SortDescs {
     std::vector<SortDesc> descs;
 

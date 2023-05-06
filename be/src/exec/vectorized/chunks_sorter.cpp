@@ -141,7 +141,7 @@ ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>*
 
 ChunksSorter::~ChunksSorter() = default;
 
-void ChunksSorter::setup_runtime(RuntimeProfile* profile) {
+void ChunksSorter::setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
     _build_timer = ADD_TIMER(profile, "BuildingTime");
     _sort_timer = ADD_TIMER(profile, "SortingTime");
     _merge_timer = ADD_TIMER(profile, "MergingTime");

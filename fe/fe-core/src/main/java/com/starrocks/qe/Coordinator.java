@@ -70,6 +70,7 @@ import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.RuntimeFilterDescription;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
@@ -370,7 +371,7 @@ public class Coordinator {
         this.etlJobType = loadPlanner.getEtlJobType();
         this.isBlockQuery = true;
         this.jobId = loadPlanner.getLoadJobId();
-        ConnectContext context = loadPlanner.getContext(); 
+        ConnectContext context = loadPlanner.getContext();
         this.queryId = loadPlanner.getLoadId();
         this.connectContext = context;
         this.descTable = loadPlanner.getDescTable().toThrift();
@@ -407,14 +408,15 @@ public class Coordinator {
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
-    
+
         this.needReport = true;
-        this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();;
+        this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();
+        ;
         this.useComputeNodeNumber = context.getSessionVariable().getUseComputeNodes();
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
-        
+
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
 
@@ -772,6 +774,22 @@ public class Coordinator {
         }
     }
 
+    private void handleErrorBackendExecState(BackendExecState errorBackendExecState, TStatusCode errorCode, String errMessage)
+            throws UserException, RpcException {
+        if (errorBackendExecState != null) {
+            cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+            switch (Objects.requireNonNull(errorCode)) {
+                case TIMEOUT:
+                    throw new UserException("query timeout. backend id: " + errorBackendExecState.backend.getId());
+                case THRIFT_RPC_ERROR:
+                    SimpleScheduler.addToBlacklist(errorBackendExecState.backend.getId());
+                    throw new RpcException(errorBackendExecState.backend.getHost(), "rpc failed");
+                default:
+                    throw new UserException(errMessage + " backend:" + errorBackendExecState.address.hostname);
+            }
+        }
+    }
+
     private void deliverExecFragmentRequests(boolean enablePipelineEngine) throws Exception {
         long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
         lock();
@@ -838,7 +856,8 @@ public class Coordinator {
                 }
 
                 if (tabletSinkTotalDop < 0) {
-                    throw new UserException("tabletSinkTotalDop = " + String.valueOf(tabletSinkTotalDop) + " should be >= 0");
+                    throw new UserException(
+                            "tabletSinkTotalDop = " + String.valueOf(tabletSinkTotalDop) + " should be >= 0");
                 }
 
                 boolean isFirst = true;
@@ -860,7 +879,7 @@ public class Coordinator {
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams =
                             params.toThrift(instanceId2Host.keySet(), descTable, dbIds, enablePipelineEngine,
-                                accTabletSinkDop, tabletSinkTotalDop);
+                                    accTabletSinkDop, tabletSinkTotalDop);
                     if (enablePipelineTableSinkDop) {
                         for (FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
                             if (!forceSetTableSinkDop) {
@@ -893,6 +912,10 @@ public class Coordinator {
                         }
                         futures.add(Pair.create(execState, execState.execRemoteFragmentAsync()));
                     }
+
+                    BackendExecState errorBackendExecState = null;
+                    TStatusCode errorCode = null;
+                    String errMessage = null;
                     for (Pair<BackendExecState, Future<PExecPlanFragmentResult>> pair : futures) {
                         TStatusCode code;
                         String errMsg = null;
@@ -922,18 +945,22 @@ public class Coordinator {
                             LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
                                     errMsg, code, fragment.getFragmentId(),
                                     pair.first.address.hostname, pair.first.address.port);
-                            cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
-                            switch (Objects.requireNonNull(code)) {
-                                case TIMEOUT:
-                                    throw new UserException("query timeout. backend id: " + pair.first.backend.getId());
-                                case THRIFT_RPC_ERROR:
-                                    SimpleScheduler.addToBlacklist(pair.first.backend.getId());
-                                    throw new RpcException(pair.first.backend.getHost(), "rpc failed");
-                                default:
-                                    throw new UserException(errMsg + " backend:" + pair.first.address.hostname);
+                            if (errorBackendExecState == null) {
+                                errorBackendExecState = pair.first;
+                                errorCode = code;
+                                errMessage = errMsg;
+                            }
+                            if (Objects.requireNonNull(code) == TStatusCode.TIMEOUT) {
+                                break;
                             }
                         }
                     }
+
+                    // Handle error results and cancel fragment instances, excluding TIMEOUT errors,
+                    // until all the delivered fragment instances are completed.
+                    // Otherwise, the cancellation RPC may arrive at BE before the delivery fragment instance RPC,
+                    // causing the instances to become stale and only able to be released after a timeout.
+                    handleErrorBackendExecState(errorBackendExecState, errorCode, errMessage);
                 }
                 profileFragmentId += 1;
             }
@@ -1094,8 +1121,8 @@ public class Coordinator {
                     int tabletSinkTotalDop = 0;
                     int accTabletSinkDop = 0;
                     if (enablePipelineTableSinkDop) {
-                        for (Map.Entry<TNetworkAddress, List<FInstanceExecParam>> hostAndRequests : 
-                                    requestsPerHost.entrySet()) {
+                        for (Map.Entry<TNetworkAddress, List<FInstanceExecParam>> hostAndRequests :
+                                requestsPerHost.entrySet()) {
                             List<FInstanceExecParam> requests = hostAndRequests.getValue();
                             for (FInstanceExecParam request : requests) {
                                 if (!forceSetTableSinkDop) {
@@ -1108,7 +1135,8 @@ public class Coordinator {
                     }
 
                     if (tabletSinkTotalDop < 0) {
-                        throw new UserException("tabletSinkTotalDop = " + String.valueOf(tabletSinkTotalDop) + " should be >= 0");
+                        throw new UserException(
+                                "tabletSinkTotalDop = " + String.valueOf(tabletSinkTotalDop) + " should be >= 0");
                     }
 
                     for (Map.Entry<TNetworkAddress, List<FInstanceExecParam>> hostAndRequests : requestsPerHost.entrySet()) {
@@ -1142,8 +1170,8 @@ public class Coordinator {
                                 .map(FInstanceExecParam::getInstanceId)
                                 .collect(Collectors.toSet());
                         TExecBatchPlanFragmentsParams tRequest =
-                                params.toThriftInBatch(curInstanceIds, host, curDescTable, dbIds, enablePipelineEngine, 
-                                    accTabletSinkDop, tabletSinkTotalDop);
+                                params.toThriftInBatch(curInstanceIds, host, curDescTable, dbIds, enablePipelineEngine,
+                                        accTabletSinkDop, tabletSinkTotalDop);
                         if (enablePipelineTableSinkDop) {
                             for (FInstanceExecParam request : requests) {
                                 if (!forceSetTableSinkDop) {
@@ -1199,6 +1227,9 @@ public class Coordinator {
                                 firstExecState.execRemoteBatchFragmentsAsync(inflightRequest.second)));
                     }
 
+                    BackendExecState errorBackendExecState = null;
+                    TStatusCode errorCode = null;
+                    String errMessage = null;
                     for (Pair<BackendExecState, Future<PExecBatchPlanFragmentsResult>> pair : futures) {
                         TStatusCode code;
                         String errMsg = null;
@@ -1228,18 +1259,23 @@ public class Coordinator {
                             LOG.warn("exec plan fragment failed, errmsg={}, code: {}, fragmentId={}, backend={}:{}",
                                     errMsg, code, pair.first.fragmentId,
                                     pair.first.address.hostname, pair.first.address.port);
-                            cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
-                            switch (Objects.requireNonNull(code)) {
-                                case TIMEOUT:
-                                    throw new UserException("query timeout. backend id: " + pair.first.backend.getId());
-                                case THRIFT_RPC_ERROR:
-                                    SimpleScheduler.addToBlacklist(pair.first.backend.getId());
-                                    throw new RpcException(pair.first.backend.getHost(), "rpc failed");
-                                default:
-                                    throw new UserException(errMsg + " backend:" + pair.first.address.hostname);
+                            profileDoneSignal.markedCountDown(pair.first.fragmentInstanceId(), -1L);
+                            if (errorBackendExecState == null) {
+                                errorBackendExecState = pair.first;
+                                errorCode = code;
+                                errMessage = errMsg;
+                            }
+                            if (Objects.requireNonNull(code) == TStatusCode.TIMEOUT) {
+                                break;
                             }
                         }
                     }
+
+                    // Handle error results and cancel fragment instances, excluding TIMEOUT errors,
+                    // until all the delivered fragment instances are completed.
+                    // Otherwise, the cancellation RPC may arrive at BE before the delivery fragment instance RPC,
+                    // causing the instances to become stale and only able to be released after a timeout.
+                    handleErrorBackendExecState(errorBackendExecState, errorCode, errMessage);
                 }
             }
 
@@ -1831,8 +1867,8 @@ public class Coordinator {
             for (Map.Entry<Long, ComputeNode> entry : this.idToComputeNode.entrySet()) {
                 Long backendID = entry.getKey();
                 ComputeNode backend = entry.getValue();
-                infoStr += String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(), 
-                                    backend.isAlive(), SimpleScheduler.isInBlacklist(backendID));
+                infoStr += String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
+                        backend.isAlive(), SimpleScheduler.isInBlacklist(backendID));
             }
             return infoStr;
         } else {
@@ -1840,8 +1876,8 @@ public class Coordinator {
             for (Map.Entry<Long, Backend> entry : this.idToBackend.entrySet()) {
                 Long backendID = entry.getKey();
                 Backend backend = entry.getValue();
-                infoStr += String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(), 
-                                    backend.isAlive(), SimpleScheduler.isInBlacklist(backendID));
+                infoStr += String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(),
+                        backend.isAlive(), SimpleScheduler.isInBlacklist(backendID));
             }
             return infoStr;
         }
@@ -1882,8 +1918,8 @@ public class Coordinator {
                 }
                 if (execHostport == null) {
                     LOG.warn("DataPartition UNPARTITIONED, no scanNode Backend");
-                    throw new UserException("Backend not found. Check if any backend is down or not. " 
-                                            + backendInfosString(usedComputeNode));
+                    throw new UserException("Backend not found. Check if any backend is down or not. "
+                            + backendInfosString(usedComputeNode));
                 }
                 recordUsedBackend(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
@@ -2012,7 +2048,7 @@ public class Coordinator {
                         parallelExecInstanceNum, pipelineDop, usePipeline, params);
                 computeBucketSeq2InstanceOrdinal(params, fragmentIdToBucketNumMap.get(fragment.getFragmentId()));
             } else {
-                boolean assignScanRangesPerDriverSeq = usePipeline && 
+                boolean assignScanRangesPerDriverSeq = usePipeline &&
                         (fragment.isAssignScanRangesPerDriverSeq() || fragment.isForceAssignScanRangesPerDriverSeq());
                 for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> tNetworkAddressMapEntry :
                         fragmentExecParamsMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
@@ -2038,8 +2074,8 @@ public class Coordinator {
                             params.instanceExecParams.add(instanceParam);
 
                             boolean assignPerDriverSeq = assignScanRangesPerDriverSeq &&
-                                    (enableAssignScanRangesPerDriverSeq(scanRangeParams, pipelineDop) 
-                                    || fragment.isForceAssignScanRangesPerDriverSeq());
+                                    (enableAssignScanRangesPerDriverSeq(scanRangeParams, pipelineDop)
+                                            || fragment.isForceAssignScanRangesPerDriverSeq());
                             if (!assignPerDriverSeq) {
                                 instanceParam.perNodeScanRanges.put(planNodeId, scanRangeParams);
                             } else {
@@ -2089,8 +2125,8 @@ public class Coordinator {
                     execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
                 }
                 if (execHostport == null) {
-                    throw new UserException("Backend not found. Check if any backend is down or not. " 
-                                            + backendInfosString(usedComputeNode));
+                    throw new UserException("Backend not found. Check if any backend is down or not. "
+                            + backendInfosString(usedComputeNode));
                 }
                 this.recordUsedBackend(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
@@ -2369,18 +2405,18 @@ public class Coordinator {
 
             FragmentScanRangeAssignment assignment =
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
-            if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
+            if (scanNode instanceof SchemaScanNode) {
+                BackendSelector selector = new NormalBackendSelector(scanNode, locations, assignment);
+                selector.computeScanRangeAssignment();
+            } else if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
                     scanNode instanceof FileTableScanNode) {
-                if (connectContext != null) {
-                    queryOptions.setUse_scan_block_cache(connectContext.getSessionVariable().getUseScanBlockCache());
-                    queryOptions.setEnable_populate_block_cache(
-                            connectContext.getSessionVariable().getEnablePopulateBlockCache());
-                }
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
                                 getSelectorComputeNodes(hasComputeNode),
-                                forceScheduleLocal);
+                                hasComputeNode,
+                                forceScheduleLocal,
+                                connectContext.getSessionVariable().getHDFSBackendSelectorScanRangeShuffle());
                 selector.computeScanRangeAssignment();
             } else {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
@@ -3287,7 +3323,7 @@ public class Coordinator {
 
         List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
                                                TDescriptorTable descTable, Set<Long> dbIds,
-                                               boolean enablePipelineEngine, int accTabletSinkDop, 
+                                               boolean enablePipelineEngine, int accTabletSinkDop,
                                                int tabletSinkTotalDop) throws Exception {
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
             setBucketSeqToInstanceForRuntimeFilters();
@@ -3306,7 +3342,7 @@ public class Coordinator {
                 }
                 TExecPlanFragmentParams params = new TExecPlanFragmentParams();
 
-                toThriftForCommonParams(params, instanceExecParam.getHost(), descTable, enablePipelineEngine, 
+                toThriftForCommonParams(params, instanceExecParam.getHost(), descTable, enablePipelineEngine,
                         tabletSinkTotalDop);
                 toThriftForUniqueParams(params, i, instanceExecParam, enablePipelineEngine,
                         accTabletSinkDop, curTabletSinkDop);
@@ -3319,7 +3355,7 @@ public class Coordinator {
 
         TExecBatchPlanFragmentsParams toThriftInBatch(
                 Set<TUniqueId> inFlightInstanceIds, TNetworkAddress destHost, TDescriptorTable descTable,
-                Set<Long> dbIds, boolean enablePipelineEngine, int accTabletSinkDop, 
+                Set<Long> dbIds, boolean enablePipelineEngine, int accTabletSinkDop,
                 int tabletSinkTotalDop) throws Exception {
 
             boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
@@ -3344,7 +3380,7 @@ public class Coordinator {
                 }
 
                 TExecPlanFragmentParams uniqueParams = new TExecPlanFragmentParams();
-                toThriftForUniqueParams(uniqueParams, i, instanceExecParam, enablePipelineEngine, 
+                toThriftForUniqueParams(uniqueParams, i, instanceExecParam, enablePipelineEngine,
                         accTabletSinkDop, curTabletSinkDop);
                 fillRequiredFieldsToThrift(uniqueParams);
 
@@ -3460,8 +3496,8 @@ public class Coordinator {
                         scanRangeLocations.getLocations(),
                         idToBackend, backendIdRef);
                 if (execHostPort == null) {
-                    throw new UserException("Backend not found. Check if any backend is down or not. " 
-                                            + backendInfosString(false));
+                    throw new UserException("Backend not found. Check if any backend is down or not. "
+                            + backendInfosString(false));
                 }
                 recordUsedBackend(execHostPort, backendIdRef.getRef());
 
@@ -3586,8 +3622,8 @@ public class Coordinator {
                         Reference<Long> backendIdRef = new Reference<>();
                         TNetworkAddress execHostport = SimpleScheduler.getBackendHost(idToBackend, backendIdRef);
                         if (execHostport == null) {
-                            throw new UserException("Backend not found. Check if any backend is down or not. " 
-                                                    + backendInfosString(false));
+                            throw new UserException("Backend not found. Check if any backend is down or not. "
+                                    + backendInfosString(false));
                         }
                         recordUsedBackend(execHostport, backendIdRef.getRef());
                         bucketSeqToAddress.put(bucketSeq, execHostport);
@@ -3639,8 +3675,8 @@ public class Coordinator {
             TNetworkAddress execHostPort =
                     SimpleScheduler.getHost(buckendId, seqLocation.locations, idToBackend, backendIdRef);
             if (execHostPort == null) {
-                throw new UserException("Backend not found. Check if any backend is down or not. " 
-                                        + backendInfosString(false));
+                throw new UserException("Backend not found. Check if any backend is down or not. "
+                        + backendInfosString(false));
             }
 
             recordUsedBackend(execHostPort, backendIdRef.getRef());

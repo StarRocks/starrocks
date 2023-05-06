@@ -103,7 +103,7 @@ public class HDFSBackendSelectorTest {
 
         HDFSBackendSelector selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
-                        ImmutableList.copyOf(computeNodes), false);
+                        ImmutableList.copyOf(computeNodes), false, false, false);
         selector.computeScanRangeAssignment();
 
         int avg = (scanRangeNumber * scanRangeSize) / hostNumber;
@@ -151,7 +151,7 @@ public class HDFSBackendSelectorTest {
 
         HDFSBackendSelector selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, addressToBackendId, usedBackendIDs,
-                        ImmutableList.copyOf(computeNodes), true);
+                        ImmutableList.copyOf(computeNodes), true, true, false);
         selector.computeScanRangeAssignment();
 
         Map<TNetworkAddress, Long> stats = computeHostReadBytes(assignment, scanNodeId);

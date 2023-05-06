@@ -46,6 +46,7 @@ import java.util.TreeSet;
 //          INTO TABLE tbl_name
 //          [PARTITION (p1, p2)]
 //          [COLUMNS TERMINATED BY separator]
+//          [ROWS TERMINATED BY separator]
 //          [FORMAT AS format]
 //          [(tmp_col1, tmp_col2, col3, ...)]
 //          [COLUMNS FROM PATH AS (col1, ...)]

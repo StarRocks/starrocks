@@ -10,6 +10,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
+import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 
@@ -71,6 +72,20 @@ public class CatalogAnalyzer {
                 throw new SemanticException("Can't drop the resource mapping catalog");
             }
 
+            return null;
+        }
+
+        @Override
+        public Void visitSetCatalogStatement(SetCatalogStmt statement, ConnectContext context) {
+            if (Strings.isNullOrEmpty(statement.getCatalogName())) {
+                throw new SemanticException("You have an error in your SQL. The correct syntax is: USE 'CATALOG catalog_name'.");
+            }
+
+            try {
+                FeNameFormat.checkCatalogName(statement.getCatalogName());
+            } catch (AnalysisException e) {
+                throw new SemanticException(e.getMessage());
+            }
             return null;
         }
     }

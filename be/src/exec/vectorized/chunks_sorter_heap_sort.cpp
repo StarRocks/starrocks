@@ -250,8 +250,8 @@ int ChunksSorterHeapSort::_filter_data(detail::ChunkHolder* chunk_holder, int ro
     return chunk_holder->value()->chunk->filter(filter);
 }
 
-void ChunksSorterHeapSort::setup_runtime(RuntimeProfile* profile) {
-    ChunksSorter::setup_runtime(profile);
+void ChunksSorterHeapSort::setup_runtime(RuntimeProfile* profile, MemTracker* parent_mem_tracker) {
+    ChunksSorter::setup_runtime(profile, parent_mem_tracker);
     _sort_filter_costs = ADD_TIMER(profile, "SortFilterCost");
     _sort_filter_rows = ADD_COUNTER(profile, "SortFilterRows", TUnit::UNIT);
 }

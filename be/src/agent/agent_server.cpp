@@ -47,6 +47,8 @@ constexpr size_t DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE = 2048;
 constexpr size_t MIN_CLONE_TASK_THREADS_IN_POOL = 2;
 } // namespace
 
+using TTaskTypeHash = std::hash<std::underlying_type<TTaskType::type>::type>;
+
 const uint32_t REPORT_TASK_WORKER_COUNT = 1;
 const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
@@ -70,6 +72,8 @@ public:
     void release_snapshot(TAgentResult& agent_result, const std::string& snapshot_path);
 
     void publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request);
+
+    void update_max_thread_by_type(int type, int new_val);
 
     ThreadPool* get_thread_pool(int type) const;
 
@@ -130,12 +134,22 @@ void AgentServer::Impl::init_or_die() {
         CHECK(st.ok()) << st;                                                            \
     } while (false)
 
-    // The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
-    // But it seems that there's no limit for the number of tablets of a partition.
-    // Since a large queue size brings a little overhead, a big one is chosen here.
-    BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", config::transaction_publish_version_worker_count,
-                                   config::transaction_publish_version_worker_count,
-                                   DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_publish_version);
+// The ideal queue size of threadpool should be larger than the maximum number of tablet of a partition.
+// But it seems that there's no limit for the number of tablets of a partition.
+// Since a large queue size brings a little overhead, a big one is chosen here.
+#ifdef BE_TEST
+    BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", 1, 1, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                   _thread_pool_publish_version);
+#else
+    int max_publish_version_worker_count = config::transaction_publish_version_worker_count;
+    if (max_publish_version_worker_count <= 0) {
+        max_publish_version_worker_count = CpuInfo::num_cores();
+    }
+    max_publish_version_worker_count = std::max(max_publish_version_worker_count, MIN_TRANSACTION_PUBLISH_WORKER_COUNT);
+    BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
+                                   max_publish_version_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+                                   _thread_pool_publish_version);
+#endif
 
     BUILD_DYNAMIC_TASK_THREAD_POOL("drop", config::drop_tablet_worker_count, config::drop_tablet_worker_count,
                                    std::numeric_limits<int>::max(), _thread_pool_drop);
@@ -264,8 +278,8 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         return;
     }
 
-    phmap::flat_hash_map<TTaskType::type, std::vector<const TAgentTaskRequest*>> task_divider;
-    phmap::flat_hash_map<TPushType::type, std::vector<const TAgentTaskRequest*>> push_divider;
+    phmap::flat_hash_map<TTaskType::type, std::vector<const TAgentTaskRequest*>, TTaskTypeHash> task_divider;
+    phmap::flat_hash_map<TPushType::type, std::vector<const TAgentTaskRequest*>, TTaskTypeHash> push_divider;
 
     for (const auto& task : tasks) {
         VLOG_RPC << "submit one task: " << apache::thrift::ThriftDebugString(task).c_str();
@@ -483,6 +497,16 @@ void AgentServer::Impl::publish_cluster_state(TAgentResult& t_agent_result, cons
     status.to_thrift(&t_agent_result.status);
 }
 
+void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
+    switch (type) {
+    case TTaskType::CLONE:
+        _thread_pool_clone->update_max_threads(new_val);
+        break;
+    default:
+        break;
+    }
+}
+
 ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
     // TODO: more thread pools.
     switch (type) {
@@ -551,6 +575,10 @@ void AgentServer::release_snapshot(TAgentResult& agent_result, const std::string
 
 void AgentServer::publish_cluster_state(TAgentResult& agent_result, const TAgentPublishRequest& request) {
     _impl->publish_cluster_state(agent_result, request);
+}
+
+void AgentServer::update_max_thread_by_type(int type, int new_val) {
+    _impl->update_max_thread_by_type(type, new_val);
 }
 
 ThreadPool* AgentServer::get_thread_pool(int type) const {

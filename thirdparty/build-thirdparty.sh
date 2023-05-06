@@ -60,6 +60,7 @@ if [[ ! -z ${STARROCKS_GCC_HOME} ]]; then
     export CC=${STARROCKS_GCC_HOME}/bin/gcc
     export CPP=${STARROCKS_GCC_HOME}/bin/cpp
     export CXX=${STARROCKS_GCC_HOME}/bin/g++
+    export PATH=${STARROCKS_GCC_HOME}/bin:$PATH
 else
     echo "STARROCKS_GCC_HOME environment variable is not set"
     exit 1
@@ -125,7 +126,7 @@ BUILD_DIR=starrocks_build
 MACHINE_TYPE=$(uname -m)
 
 # handle mac m1 platform, change arm64 to aarch64
-if [[ "${MACHINE_TYPE}" == "arm64" ]]; then 
+if [[ "${MACHINE_TYPE}" == "arm64" ]]; then
     MACHINE_TYPE="aarch64"
 fi
 
@@ -188,7 +189,7 @@ build_openssl() {
 
     LDFLAGS="-L${TP_LIB_DIR}" \
     LIBDIR="lib" \
-    ./Configure --prefix=$TP_INSTALL_DIR -zlib -no-shared ${OPENSSL_PLATFORM}
+    ./Configure --prefix=$TP_INSTALL_DIR -zlib no-shared no-tests ${OPENSSL_PLATFORM}
     make -j$PARALLEL
     make install_sw
 
@@ -256,9 +257,9 @@ build_protobuf() {
     check_if_source_exist $PROTOBUF_SOURCE
     cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE
     rm -fr gmock
-    mkdir gmock 
-    cd gmock 
-    tar xf ${TP_SOURCE_DIR}/$GTEST_NAME 
+    mkdir gmock
+    cd gmock
+    tar xf ${TP_SOURCE_DIR}/$GTEST_NAME
     mv $GTEST_SOURCE gtest
     cd $TP_SOURCE_DIR/$PROTOBUF_SOURCE
     ./autogen.sh
@@ -294,7 +295,7 @@ build_glog() {
     LDFLAGS="-L${TP_LIB_DIR}" \
     CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-frame-pointers --disable-shared --enable-static
-    make -j$PARALLEL 
+    make -j$PARALLEL
     make install
 }
 
@@ -308,7 +309,7 @@ build_gtest() {
     rm -rf CMakeCache.txt CMakeFiles/
     $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DCMAKE_INSTALL_LIBDIR=lib \
     -DCMAKE_POSITION_INDEPENDENT_CODE=On ../
-    ${BUILD_SYSTEM} -j$PARALLEL 
+    ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
 
@@ -350,7 +351,7 @@ build_snappy() {
     -DCMAKE_POSITION_INDEPENDENT_CODE=On \
     -DCMAKE_INSTALL_INCLUDEDIR=$TP_INCLUDE_DIR/snappy \
     -DSNAPPY_BUILD_TESTS=0 ../
-    ${BUILD_SYSTEM} -j$PARALLEL 
+    ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     if [ -f $TP_INSTALL_DIR/lib64/libsnappy.a ]; then
         mkdir -p $TP_INSTALL_DIR/lib
@@ -369,7 +370,7 @@ build_snappy() {
 build_gperftools() {
     check_if_source_exist $GPERFTOOLS_SOURCE
     cd $TP_SOURCE_DIR/$GPERFTOOLS_SOURCE
-    
+
     OLD_FLAGS=$CFLAGS
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
 
@@ -381,7 +382,7 @@ build_gperftools() {
     ./configure --prefix=$TP_INSTALL_DIR/gperftools --disable-shared --enable-static --disable-libunwind --with-pic --enable-frame-pointers
     make -j$PARALLEL
     make install
-    
+
     CFLAGS=$OLD_FLAGS
 }
 
@@ -410,6 +411,19 @@ build_lz4() {
 
     make -C lib -j$PARALLEL install PREFIX=$TP_INSTALL_DIR \
     INCLUDEDIR=$TP_INCLUDE_DIR/lz4/ BUILD_SHARED=no
+}
+
+# lzo
+build_lzo2() {
+    check_if_source_exist $LZO2_SOURCE
+    cd $TP_SOURCE_DIR/$LZO2_SOURCE
+
+    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
+        LDFLAGS="-L${TP_LIB_DIR}" \
+        ./configure --prefix="${TP_INSTALL_DIR}" --disable-shared --enable-static
+
+    make -j "${PARALLEL}"
+    make install
 }
 
 # bzip
@@ -449,7 +463,7 @@ build_boost() {
     # It is difficult to generate static linked b2, so we use LD_LIBRARY_PATH instead
     ./bootstrap.sh --prefix=$TP_INSTALL_DIR
     LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib:${STARROCKS_GCC_HOME}/lib64:${LD_LIBRARY_PATH} \
-    ./b2 link=static runtime-link=static -j $PARALLEL --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR" install
+    ./b2 link=static runtime-link=static -j $PARALLEL --without-test --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR" install
 }
 
 #leveldb
@@ -458,8 +472,8 @@ build_leveldb() {
     cd $TP_SOURCE_DIR/$LEVELDB_SOURCE
     LDFLAGS="-L ${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
     make -j$PARALLEL
-    cp out-static/libleveldb.a ../../installed/lib/libleveldb.a
-    cp -r include/leveldb ../../installed/include/
+    cp out-static/libleveldb.a $TP_LIB_DIR/libleveldb.a
+    cp -r include/leveldb $TP_INCLUDE_DIR
 }
 
 # brpc
@@ -473,7 +487,7 @@ build_brpc() {
     make -j$PARALLEL
     cp -rf output/* ${TP_INSTALL_DIR}/
     if [ -f $TP_INSTALL_DIR/lib/libbrpc.a ]; then
-        mkdir -p $TP_INSTALL_DIR/lib64 
+        mkdir -p $TP_INSTALL_DIR/lib64
         cp $TP_SOURCE_DIR/$BRPC_SOURCE/output/lib/libbrpc.a $TP_INSTALL_DIR/lib64/
     fi
 }
@@ -493,8 +507,8 @@ build_rocksdb() {
     EXTRA_LDFLAGS="-static-libstdc++ -static-libgcc" \
     PORTABLE=1 make USE_RTTI=1 -j$PARALLEL static_lib
 
-    cp librocksdb.a ../../installed/lib/librocksdb.a 
-    cp -r include/rocksdb ../../installed/include/
+    cp librocksdb.a $TP_LIB_DIR/librocksdb.a
+    cp -r include/rocksdb $TP_INCLUDE_DIR
 
     export CFLAGS=$OLD_FLAGS
 }
@@ -506,8 +520,8 @@ build_librdkafka() {
     cd $TP_SOURCE_DIR/$LIBRDKAFKA_SOURCE
 
     $CMAKE_CMD -DCMAKE_LIBRARY_PATH=$TP_INSTALL_DIR/lib -DCMAKE_INCLUDE_PATH=$TP_INSTALL_DIR/include \
-        -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DRDKAFKA_BUILD_STATIC=ON -DWITH_SASL=OFF \
-        -DRDKAFKA_BUILD_EXAMPLES=OFF -DRDKAFKA_BUILD_TESTS=OFF -DWITH_SASL_OAUTHBEARER=ON -DCMAKE_INSTALL_LIBDIR=lib
+        -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR -DRDKAFKA_BUILD_STATIC=ON -DWITH_SASL=OFF -DWITH_SASL_SCRAM=ON \
+        -DRDKAFKA_BUILD_EXAMPLES=OFF -DRDKAFKA_BUILD_TESTS=OFF -DWITH_SSL=ON -DCMAKE_INSTALL_LIBDIR=lib
 
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
@@ -537,9 +551,9 @@ build_flatbuffers() {
   LDFLAGS="-static-libstdc++ -static-libgcc" \
   ${CMAKE_CMD} .. -G "${CMAKE_GENERATOR}" -DFLATBUFFERS_BUILD_TESTS=OFF
   ${BUILD_SYSTEM} -j$PARALLEL
-  cp flatc  ../../../installed/bin/flatc
-  cp -r ../include/flatbuffers  ../../../installed/include/flatbuffers
-  cp libflatbuffers.a ../../../installed/lib/libflatbuffers.a
+  cp flatc  $TP_INSTALL_DIR/bin/flatc
+  cp -r ../include/flatbuffers  $TP_INCLUDE_DIR/flatbuffers
+  cp libflatbuffers.a $TP_LIB_DIR/libflatbuffers.a
 }
 
 # arrow
@@ -570,6 +584,7 @@ build_arrow() {
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DARROW_BOOST_USE_SHARED=OFF -DARROW_GFLAGS_USE_SHARED=OFF -DBoost_NO_BOOST_CMAKE=ON -DBOOST_ROOT=$TP_INSTALL_DIR \
+    -DJEMALLOC_HOME=$TP_INSTALL_DIR \
     -Dzstd_SOURCE=BUNDLED \
     -Dgflags_ROOT=$TP_INSTALL_DIR/ \
     -DSnappy_ROOT=$TP_INSTALL_DIR/ \
@@ -581,7 +596,6 @@ build_arrow() {
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
     #copy dep libs
-    cp -rf ./jemalloc_ep-prefix/src/jemalloc_ep/dist/lib/libjemalloc_pic.a $TP_INSTALL_DIR/lib64/libjemalloc.a
     cp -rf ./brotli_ep/src/brotli_ep-install/lib/libbrotlienc-static.a $TP_INSTALL_DIR/lib64/libbrotlienc.a
     cp -rf ./brotli_ep/src/brotli_ep-install/lib/libbrotlidec-static.a $TP_INSTALL_DIR/lib64/libbrotlidec.a
     cp -rf ./brotli_ep/src/brotli_ep-install/lib/libbrotlicommon-static.a $TP_INSTALL_DIR/lib64/libbrotlicommon.a
@@ -591,7 +605,7 @@ build_arrow() {
         cp -rf ./zstd_ep-install/lib/libzstd.a $TP_INSTALL_DIR/lib64/libzstd.a
     fi
     # copy zstd headers
-    mkdir -p ${TP_INSTALL_DIR}/include/zstd 
+    mkdir -p ${TP_INSTALL_DIR}/include/zstd
     cp ./zstd_ep-install/include/* ${TP_INSTALL_DIR}/include/zstd
 
     export CXXFLAGS=$OLD_FLAGS
@@ -603,7 +617,7 @@ build_arrow() {
 build_s2() {
     check_if_source_exist $S2_SOURCE
     cd $TP_SOURCE_DIR/$S2_SOURCE
-    mkdir -p $BUILD_DIR 
+    mkdir -p $BUILD_DIR
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
     LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
@@ -615,7 +629,7 @@ build_s2() {
     -DGLOG_ROOT_DIR="$TP_INSTALL_DIR/include" \
     -DWITH_GLOG=ON \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
-    ${BUILD_SYSTEM} -j$PARALLEL 
+    ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
 
@@ -691,7 +705,7 @@ build_croaringbitmap() {
     -DROARING_DISABLE_NATIVE=ON \
     -DFORCE_AVX=$FORCE_AVX \
     -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" ..
-    ${BUILD_SYSTEM} -j$PARALLEL 
+    ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
 #orc
@@ -722,7 +736,7 @@ build_cctz() {
     check_if_source_exist $CCTZ_SOURCE
     cd $TP_SOURCE_DIR/$CCTZ_SOURCE
 
-    make -j$PARALLEL 
+    make -j$PARALLEL
     PREFIX=${TP_INSTALL_DIR} make install
 }
 
@@ -924,10 +938,18 @@ build_jemalloc() {
     unset CFLAGS
     export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
     cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
-    ./configure --prefix=${TP_INSTALL_DIR} --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared
+    # jemalloc supports a runtime page size that's smaller or equal to the build
+    # time one, but aborts on a larger one. If not defined, it falls back to the
+    # the build system's _SC_PAGESIZE, which in many architectures can vary. Set
+    # this to 64K (2^16) for arm architecture, and default 4K on x86 for performance.
+    local addition_opts=" --with-lg-page=12"
+    if [[ $MACHINE_TYPE == "aarch64" ]] ; then
+        # change to 64K for arm architecture
+        addition_opts=" --with-lg-page=16"
+    fi
+    ./configure --prefix=${TP_INSTALL_DIR} --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
     make -j$PARALLEL
     make install
-    mv $TP_INSTALL_DIR/lib/libjemalloc.a $TP_INSTALL_DIR/lib/libjemalloc_for_starrocks.a
     export CFLAGS=$OLD_CFLAGS
 }
 
@@ -951,12 +973,12 @@ build_benchmark() {
 build_fast_float() {
     check_if_source_exist $FAST_FLOAT_SOURCE
     cd $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE
-    cp -r $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE/include $STARROCKS_THIRDPARTY/installed
+    cp -r $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE/include $TP_INSTALL_DIR
 }
 
 build_cachelib() {
     check_if_source_exist $CACHELIB_SOURCE
-    mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $STARROCKS_THIRDPARTY/installed/
+    mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $TP_INSTALL_DIR/
 }
 
 # streamvbyte
@@ -985,6 +1007,7 @@ export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=1
 build_libevent
 build_zlib
 build_lz4
+build_lzo2
 build_bzip
 build_openssl
 build_boost # must before thrift
@@ -1003,9 +1026,11 @@ build_leveldb
 build_brpc
 build_rocksdb
 build_librdkafka
-build_pulsar
 build_flatbuffers
+# must build before arrow
+build_jemalloc
 build_arrow
+build_pulsar
 build_s2
 build_bitshuffle
 build_croaringbitmap
@@ -1022,7 +1047,6 @@ build_tencent_cos_jars
 build_aws_cpp_sdk
 build_vpack
 build_opentelemetry
-build_jemalloc
 build_benchmark
 build_fast_float
 build_cachelib

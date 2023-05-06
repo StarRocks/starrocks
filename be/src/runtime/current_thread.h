@@ -21,11 +21,11 @@
 #define SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(check) \
     auto VARNAME_LINENUM(check_setter) = CurrentThreadCheckMemLimitSetter(check)
 
-#define CHECK_MEM_LIMIT(err_msg)                                                     \
-    do {                                                                             \
-        if (tls_thread_status.check_mem_limit()) {                                   \
-            RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit(err_msg)); \
-        }                                                                            \
+#define CHECK_MEM_LIMIT(err_msg)                                                              \
+    do {                                                                                      \
+        if (tls_thread_status.check_mem_limit() && CurrentThread::mem_tracker() != nullptr) { \
+            RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit(err_msg));          \
+        }                                                                                     \
     } while (0)
 
 namespace starrocks {
@@ -267,10 +267,11 @@ private:
         TRY_CATCH_ALLOC_SCOPE_END()             \
     } while (0)
 
+// TRY_CATCH_ALL will not set catched=true, only used for catch unexpected crash,
+// cannot be used to control memory usage.
 #define TRY_CATCH_ALL(result, stmt)                                                      \
     do {                                                                                 \
         try {                                                                            \
-            SCOPED_SET_CATCHED(true);                                                    \
             { result = stmt; }                                                           \
         } catch (std::runtime_error const& e) {                                          \
             result = Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));   \

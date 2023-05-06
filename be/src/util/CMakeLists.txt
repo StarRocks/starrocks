@@ -71,6 +71,7 @@ set(UTIL_FILES
   mysql_row_buffer.cpp
   error_util.cc
   spinlock.cc
+  file_util.cpp
   filesystem_util.cc
   time.cpp
 # coding_util.cpp

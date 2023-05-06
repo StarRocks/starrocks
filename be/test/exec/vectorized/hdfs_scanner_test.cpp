@@ -10,6 +10,7 @@
 #include "exec/vectorized/hdfs_scanner_orc.h"
 #include "exec/vectorized/hdfs_scanner_parquet.h"
 #include "exec/vectorized/hdfs_scanner_text.h"
+#include "exec/vectorized/jni_scanner.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -45,6 +46,8 @@ protected:
     RuntimeProfile* _runtime_profile = nullptr;
     RuntimeState* _runtime_state = nullptr;
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
+    std::string _debug_row_output;
+    int _debug_rows_per_call = 1;
 };
 
 void HdfsScannerTest::_create_runtime_profile() {
@@ -297,26 +300,32 @@ static void extend_partition_values(ObjectPool* pool, HdfsScannerParams* params,
     params->partition_values = part_values;
 }
 
-#define READ_SCANNER_RETURN_ROWS(scanner, records)                                     \
-    do {                                                                               \
-        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                           \
-        for (;;) {                                                                     \
-            chunk->reset();                                                            \
-            status = scanner->get_next(_runtime_state, &chunk);                        \
-            if (status.is_end_of_file()) {                                             \
-                break;                                                                 \
-            }                                                                          \
-            if (!status.ok()) {                                                        \
-                std::cout << "status not ok: " << status.get_error_msg() << std::endl; \
-                break;                                                                 \
-            }                                                                          \
-            chunk->check_or_die();                                                     \
-            if (chunk->num_rows() > 0) {                                               \
-                std::cout << "row#0: " << chunk->debug_row(0) << std::endl;            \
-                EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());           \
-            }                                                                          \
-            records += chunk->num_rows();                                              \
-        }                                                                              \
+#define READ_SCANNER_RETURN_ROWS(scanner, records)                                        \
+    do {                                                                                  \
+        _debug_row_output = "";                                                           \
+        ChunkPtr chunk = ChunkHelper::new_chunk(*tuple_desc, 0);                          \
+        for (;;) {                                                                        \
+            chunk->reset();                                                               \
+            status = scanner->get_next(_runtime_state, &chunk);                           \
+            if (status.is_end_of_file()) {                                                \
+                break;                                                                    \
+            }                                                                             \
+            if (!status.ok()) {                                                           \
+                std::cout << "status not ok: " << status.get_error_msg() << std::endl;    \
+                break;                                                                    \
+            }                                                                             \
+            chunk->check_or_die();                                                        \
+            if (chunk->num_rows() > 0) {                                                  \
+                int rep = std::min(_debug_rows_per_call, (int)chunk->num_rows());         \
+                for (int i = 0; i < rep; i++) {                                           \
+                    std::cout << "row#" << i << ": " << chunk->debug_row(i) << std::endl; \
+                    _debug_row_output += chunk->debug_row(i);                             \
+                    _debug_row_output += '\n';                                            \
+                }                                                                         \
+                EXPECT_EQ(chunk->num_columns(), tuple_desc->slots().size());              \
+            }                                                                             \
+            records += chunk->num_rows();                                                 \
+        }                                                                                 \
     } while (0)
 
 #define READ_SCANNER_ROWS(scanner, exp)             \
@@ -598,6 +607,92 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithDictFilter) {
     // since we use dict filter eval cache, we can do filter on orc cvb
     // so actually read rows is 1000.
     EXPECT_EQ(scanner->raw_rows_read(), 1000);
+    scanner->close(_runtime_state);
+}
+
+// ====================================================================================================
+
+/**
+ *
+File be/test/exec/test_data/orc_scanner/two-strips-dict-and-nodict.orc has 2 stripes
+Stripe Statistics:
+  Stripe 1:
+    Column 0: count: 100 hasNull: false
+    Column 1: count: 100 hasNull: false bytesOnDisk: 19 min: 0 max: 9 sum: 450
+    Column 2: count: 100 hasNull: false bytesOnDisk: 17 min: a max: a sum: 100
+  Stripe 2:
+    Column 0: count: 100 hasNull: false
+    Column 1: count: 100 hasNull: false bytesOnDisk: 20 min: 0 max: 9 sum: 451
+    Column 2: count: 100 hasNull: false bytesOnDisk: 1234 min: a max: ztrddxrhvzodrpeomoie sum: 1981
+
+File Statistics:
+  Column 0: count: 200 hasNull: false
+  Column 1: count: 200 hasNull: false bytesOnDisk: 39 min: 0 max: 9 sum: 901
+  Column 2: count: 200 hasNull: false bytesOnDisk: 1251 min: a max: ztrddxrhvzodrpeomoie sum: 2081
+
+Stripes:
+ Stripe1: offset: 3 data: 36 rows: 100 tail: 52 index: 63
+   Stream: column 0 section ROW_INDEX start: 3 length 11
+   Stream: column 1 section ROW_INDEX start: 14 length 25
+   Stream: column 2 section ROW_INDEX start: 39 length 27
+   Stream: column 1 section DATA start: 66 length 19
+   Stream: column 2 section DATA start: 85 length 7
+   Stream: column 2 section LENGTH start: 92 length 6
+   Stream: column 2 section DICTIONARY_DATA start: 98 length 4
+   Encoding column 0: DIRECT
+   Encoding column 1: DIRECT_V2
+   Encoding column 2: DICTIONARY_V2[1]
+ Stripe2: offset: 154 data: 1254 rows: 100 tail: 50 index: 83
+   Stream: column 0 section ROW_INDEX start: 154 length 11
+   Stream: column 1 section ROW_INDEX start: 165 length 25
+   Stream: column 2 section ROW_INDEX start: 190 length 47
+   Stream: column 1 section DATA start: 237 length 20
+   Stream: column 2 section DATA start: 257 length 1224
+   Stream: column 2 section LENGTH start: 1481 length 10
+   Encoding column 0: DIRECT
+   Encoding column 1: DIRECT_V2
+   Encoding column 2: DIRECT_V2
+*/
+
+TEST_F(HdfsScannerTest, TestOrcGetNextWithDiffEncodeDictFilter) {
+    SlotDesc two_diff_encode_orc_desc[] = {{"x", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+                                           {"y", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
+                                           {""}};
+    const std::string two_diff_encode_orc_file = "./be/test/exec/test_data/orc_scanner/two-strips-dict-and-nodict.orc";
+
+    auto scanner = std::make_shared<HdfsOrcScanner>();
+
+    auto* range = _create_scan_range(two_diff_encode_orc_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(two_diff_encode_orc_desc);
+    auto* param = _create_param(two_diff_encode_orc_file, range, tuple_desc);
+
+    // key = "a", y = 'a' rows is 101
+    {
+        std::vector<TExprNode> nodes;
+        TExprNode lit_node = create_string_literal_node(TPrimitiveType::VARCHAR, "a");
+        push_binary_pred_texpr_node(nodes, TExprOpcode::EQ, tuple_desc->slots()[1], TPrimitiveType::VARCHAR, lit_node);
+        ExprContext* ctx = create_expr_context(&_pool, nodes);
+        std::cout << "equal expr = " << ctx->root()->debug_string() << std::endl;
+        param->conjunct_ctxs_by_slot[1].push_back(ctx);
+    }
+
+    for (auto& it : param->conjunct_ctxs_by_slot) {
+        Expr::prepare(it.second, _runtime_state);
+        Expr::open(it.second, _runtime_state);
+    }
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    // so stripe will not be filtered out by search argument
+    // and we can test dict-filtering strategy.
+    scanner->disable_use_orc_sargs();
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 101);
+    // since we use dict filter eval cache, we can do filter on orc cvb
+    // so actually read rows is 200.
+    EXPECT_EQ(scanner->raw_rows_read(), 200);
     scanner->close(_runtime_state);
 }
 
@@ -1697,6 +1792,418 @@ TEST_F(HdfsScannerTest, TestParquetDictTwoPage) {
     EXPECT_TRUE(status.ok());
     READ_SCANNER_ROWS(scanner, 50);
     EXPECT_EQ(scanner->raw_rows_read(), 200);
+    scanner->close(_runtime_state);
+}
+
+// =======================================================
+
+static bool can_run_jni_test() {
+    if (getenv("STARROCKS_SRC_HOME") == nullptr) {
+        // Right now it's very hard to construct jni ut, because we only build ut-binary but not java extensions.
+        // To make this test run, we have to define `STARROCKS_SRC_HOME` and `STARROCKS_HOME`(which has java-extensions)
+        // and we have to set following env vars
+        /*
+        STARROCKS_SRC_HOME=${STARROCKS_HOME} \
+        STARROCKS_HOME=${STARROCKS_HOME}/output/be \
+        HADOOP_CLASSPATH=${STARROCKS_HOME}/lib/hadoop/common/*:${STARROCKS_HOME}/lib/hadoop/common/lib/*:${STARROCKS_HOME}/lib/hadoop/hdfs/*:${STARROCKS_HOME}/lib/hadoop/hdfs/lib/* \
+        CLASSPATH=$STARROCKS_HOME/conf:$STARROCKS_HOME/lib/jni-packages/*:$HADOOP_CLASSPATH:$CLASSPATH \
+        LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH \
+        */
+        return false;
+    }
+    return true;
+}
+
+/*
+
+CREATE TABLE `test_hudi_mor2` (
+  `uuid` STRING,
+  `ts` int,
+  `a` int,
+  `b` string,
+  `c` array<array<int>>,
+  `d` map<string, array<int>>,
+  `e` struct<a:array<int>, b:map<string,int>, c:struct<a:array<int>, b:struct<a:int,b:string>>>)
+  USING hudi
+TBLPROPERTIES (
+  'primaryKey' = 'uuid',
+  'preCombineField' = 'ts',
+  'type' = 'mor');
+
+insert into test_hudi_mor2 values('AA0', 10, 0, "hello", array(array(10,20,30), array(40,50,60,70) ), map('key1', array(1,10), 'key2', array(2, 20), 'key3', null), struct(array(10, 20), map('key1', 10), struct(array(10, 20), struct(10, "world")))),
+ ('AA1', 10, 0, "hello", null, null , struct(null, map('key1', 10), struct(array(10, 20), struct(10, "world")))),
+ ('AA2', 10, 0, null, array(array(30, 40), array(10,20,30)), null , struct(null, map('key1', 10), struct(array(10, 20), null)));
+
+spark-sql> select a,b,c,d,e from test_hudi_mor2;
+a       b       c       d       e
+0       hello   NULL    NULL    {"a":null,"b":{"key1":10},"c":{"a":[10,20],"b":{"a":10,"b":"world"}}}
+0       NULL    [[30,40],[10,20,30]]    NULL    {"a":null,"b":{"key1":10},"c":{"a":[10,20],"b":null}}
+0       hello   [[10,20,30],[40,50,60,70]]      {"key1":[1,10],"key2":[2,20],"key3":null}       {"a":[10,20],"b":{"key1":10},"c":{"a":[10,20],"b":{"a":10,"b":"world"}}}
+
+*/
+TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct) {
+    if (!can_run_jni_test()) {
+        GTEST_SKIP();
+    }
+
+    TypeDescriptor C(PrimitiveType::TYPE_ARRAY);
+    TypeDescriptor C1(PrimitiveType::TYPE_ARRAY);
+    C1.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    C.children.push_back(C1); // array<array<int>>
+
+    TypeDescriptor D(PrimitiveType::TYPE_MAP);
+    D.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22));
+    D.children.push_back(C1); // map<string, array<int>>
+
+    TypeDescriptor E(PrimitiveType::TYPE_STRUCT);
+    {
+        E.children.push_back(C1); // a: array<int>
+        E.field_names.emplace_back("a");
+
+        TypeDescriptor B0(PrimitiveType::TYPE_MAP);
+        B0.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22));
+        B0.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+        E.children.push_back(B0);
+        E.field_names.emplace_back("b");
+
+        TypeDescriptor C0(PrimitiveType::TYPE_STRUCT);
+        {
+            C0.children.push_back(C1);
+            C0.field_names.emplace_back("a");
+
+            TypeDescriptor B1(PrimitiveType::TYPE_STRUCT);
+            B1.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+            B1.field_names.emplace_back("a");
+            B1.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22));
+            B1.field_names.emplace_back("b");
+            C0.children.push_back(B1);
+            C0.field_names.emplace_back("b");
+        }
+
+        E.children.push_back(C0);
+        E.field_names.emplace_back("c");
+    }
+
+    SlotDesc parquet_descs[] = {{"a", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+                                {"b", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+                                {"c", C},
+                                {"d", D},
+                                {"e", E},
+                                {""}};
+    std::string starrocks_home = getenv("STARROCKS_SRC_HOME");
+    std::string basePath = starrocks_home + "/be/test/exec/test_data/jni_scanner/test_hudi_mor_ams";
+    std::string parquet_file = basePath + "/0df0196b-f46f-43f5-8cf0-06fad7143af3-0_0-27-35_20230110191854854.parquet";
+
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    // be/test/exec/test_data/jni_scanner/test_hudi_mor_ams
+    std::map<std::string, std::string> params;
+
+    params.emplace("base_path", basePath);
+    params.emplace("data_file_path", parquet_file);
+    params.emplace("delta_file_paths", "");
+    params.emplace("hive_column_names",
+                   "_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key,_hoodie_partition_path,_hoodie_file_"
+                   "name,uuid,ts,a,b,c,d,e");
+    params.emplace("hive_column_types",
+                   "string#string#string#string#string#string#int#int#string#array<array<int>>#map<string,array<int>>#"
+                   "struct<a:array<int>,b:map<string,int>,c:struct<a:array<int>,b:struct<a:int,b:string>>>");
+    params.emplace("instant_time", "20230110185815638");
+    params.emplace("data_file_length", "438311");
+    params.emplace("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat");
+    params.emplace("serde", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
+    params.emplace("required_fields", "a,b,c,d,e");
+
+    std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
+    JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 3);
+    EXPECT_EQ(scanner->raw_rows_read(), 3);
+    scanner->close(_runtime_state);
+
+    EXPECT_EQ(_debug_row_output, "[0, 'hello', NULL, NULL, {a:NULL,b:{'key1':10},c:{a:[10,20],b:{a:10,b:'world'}}}]\n");
+}
+
+/*
+CREATE TABLE `test_hudi_mor` (
+  `uuid` STRING,
+  `ts` int,
+  `a` int,
+  `b` string,
+  `c` array<int>,
+  `d` map<string, int>,
+  `e` struct<a:int, b:string>)
+  USING hudi
+TBLPROPERTIES (
+  'primaryKey' = 'uuid',
+  'preCombineField' = 'ts',
+  'type' = 'mor');
+
+spark-sql> select a,b,c,d,e from test_hudi_mor;
+a       b       c       d       e
+1       hello   [10,20,30]      {"key1":1,"key2":2}     {"a":10,"b":"world"}
+
+*/
+TEST_F(HdfsScannerTest, TestHudiMORArrayMapStruct2) {
+    if (!can_run_jni_test()) {
+        GTEST_SKIP();
+    }
+
+    std::string starrocks_home = getenv("STARROCKS_SRC_HOME");
+    std::string basePath = starrocks_home + "/be/test/exec/test_data/jni_scanner/test_hudi_mor_ams2";
+    std::string parquet_file = basePath + "/64798197-be6a-4eca-9898-0c2ed75b9d65-0_0-54-41_20230105142938081.parquet";
+
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+
+    // be/test/exec/test_data/jni_scanner/test_hudi_mor_ams
+    std::map<std::string, std::string> params;
+
+    params.emplace("base_path", basePath);
+    params.emplace("data_file_path", parquet_file);
+    params.emplace("delta_file_paths",
+                   basePath + "/.64798197-be6a-4eca-9898-0c2ed75b9d65-0_20230105142938081.log.1_0-95-78");
+    params.emplace("hive_column_names",
+                   "_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key,_hoodie_partition_path,_hoodie_file_"
+                   "name,uuid,ts,a,b,c,d,e");
+    params.emplace("hive_column_types",
+                   "string#string#string#string#string#string#int#int#string#array<int>#map<string,int>#struct<a:int,b:"
+                   "string>");
+    params.emplace("instant_time", "20230105143305070");
+    params.emplace("data_file_length", "436081");
+    params.emplace("input_format", "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat");
+    params.emplace("serde", "org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
+    params.emplace("required_fields", "a,b,c,d,e");
+
+    std::string scanner_factory_class = "com/starrocks/hudi/reader/HudiSliceScannerFactory";
+
+    // select a,b,c,d,e
+    {
+        // c: array<int>
+        TypeDescriptor C(PrimitiveType::TYPE_ARRAY);
+        C.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+        // d: map<string, int>
+        TypeDescriptor D(PrimitiveType::TYPE_MAP);
+        D.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22));
+        D.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+        TypeDescriptor E(PrimitiveType::TYPE_STRUCT);
+        E.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+        E.field_names.emplace_back("a");
+        E.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22));
+        E.field_names.emplace_back("b");
+
+        SlotDesc parquet_descs[] = {{"a", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+                                    {"b", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+                                    {"c", C},
+                                    {"d", D},
+                                    {"e", E},
+                                    {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[1, 'hello', [10,20,30], {'key1':1,'key2':2}, {a:10,b:'world'}]\n");
+    }
+
+    // select e but as <b:string, a:int>
+    {
+        TypeDescriptor E(PrimitiveType::TYPE_STRUCT);
+        E.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22));
+        E.field_names.emplace_back("b");
+        E.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+        E.field_names.emplace_back("a");
+
+        SlotDesc parquet_descs[] = {{"e", E}, {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        params["required_fields"] = "e";
+        params["nested_fields"] = "e.b,e.a";
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[{b:'world',a:10}]\n");
+    }
+
+    // select e but as <B:string, a:int>
+    {
+        TypeDescriptor E(PrimitiveType::TYPE_STRUCT);
+        E.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22));
+        E.field_names.emplace_back("B");
+        E.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+        E.field_names.emplace_back("a");
+
+        SlotDesc parquet_descs[] = {{"e", E}, {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        params["required_fields"] = "e";
+        params["nested_fields"] = "e.B,e.a";
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[{B:NULL,a:10}]\n");
+    }
+
+    // select e but as <a:int>
+    {
+        TypeDescriptor E(PrimitiveType::TYPE_STRUCT);
+        E.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+        E.field_names.emplace_back("a");
+
+        SlotDesc parquet_descs[] = {{"e", E}, {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        params["required_fields"] = "e";
+        params["nested_fields"] = "e.a";
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[{a:10}]\n");
+    }
+
+    // select d but only key
+    {
+        // d: map<string, int>
+        TypeDescriptor D(PrimitiveType::TYPE_MAP);
+        D.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22));
+        D.children.push_back(TypeDescriptor::from_primtive_type(PrimitiveType::INVALID_TYPE));
+
+        SlotDesc parquet_descs[] = {{"d", D}, {""}};
+
+        auto* tuple_desc = _create_tuple_desc(parquet_descs);
+        auto* param = _create_param(parquet_file, range, tuple_desc);
+
+        params["required_fields"] = "d";
+        params["nested_fields"] = "d.$0";
+        JniScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, params));
+
+        Status status = scanner->init(_runtime_state, *param);
+        EXPECT_TRUE(status.ok());
+        status = scanner->open(_runtime_state);
+        EXPECT_TRUE(status.ok());
+        READ_SCANNER_ROWS(scanner, 1);
+        EXPECT_EQ(scanner->raw_rows_read(), 1);
+        scanner->close(_runtime_state);
+
+        EXPECT_EQ(_debug_row_output, "[{'key1':NULL,'key2':NULL}]\n");
+    }
+}
+
+// =============================================================================
+/*
+spark-sql> select * from test_hudi_mor13;
+_hoodie_commit_time     _hoodie_commit_seqno    _hoodie_record_key      _hoodie_partition_path  _hoodie_file_name       a       b       ts      uuid
+20230216103800029       20230216103800029_0_0   aa1             14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet      300     3023-01-01 00:00:00     40      aa1
+20230216103800029       20230216103800029_0_1   aa0             14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet      200     2023-01-01 00:00:00     30      aa0
+20230216103800029       20230216103800029_0_2   aa2             14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet      400     1000-01-01 00:00:00     50      aa2
+20230216103800029       20230216103800029_0_3   aa              14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet      100     1900-01-01 00:00:00     20      aa
+*/
+
+/*
+_hoodie_commit_time = 20230216103800029
+_hoodie_commit_seqno = 20230216103800029_0_0
+_hoodie_record_key = aa1
+_hoodie_partition_path =
+_hoodie_file_name = 14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet
+a = 300
+b = 33229411200000000
+ts = 40
+uuid = aa1
+
+_hoodie_commit_time = 20230216103800029
+_hoodie_commit_seqno = 20230216103800029_0_1
+_hoodie_record_key = aa0
+_hoodie_partition_path =
+_hoodie_file_name = 14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet
+a = 200
+b = 1672502400000000
+ts = 30
+uuid = aa0
+
+_hoodie_commit_time = 20230216103800029
+_hoodie_commit_seqno = 20230216103800029_0_2
+_hoodie_record_key = aa2
+_hoodie_partition_path =
+_hoodie_file_name = 14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet
+a = 400
+b = -30610253143000000
+ts = 50
+uuid = aa2
+
+_hoodie_commit_time = 20230216103800029
+_hoodie_commit_seqno = 20230216103800029_0_3
+_hoodie_record_key = aa
+_hoodie_partition_path =
+_hoodie_file_name = 14260209-008c-4170-bed3-5533d8783f0f-0_0-167-153_20230216103800029.parquet
+a = 100
+b = -2209017943000000
+ts = 20
+uuid = aa
+*/
+
+TEST_F(HdfsScannerTest, TestParquetTimestampToDatetime) {
+    SlotDesc parquet_descs[] = {{"b", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)}, {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/timestamp_to_datetime.parquet";
+
+    _create_runtime_state("Asia/Shanghai");
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    _debug_rows_per_call = 10;
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+    status = scanner->open(_runtime_state);
+    EXPECT_TRUE(status.ok());
+    READ_SCANNER_ROWS(scanner, 4);
+    EXPECT_EQ(scanner->raw_rows_read(), 4);
+    EXPECT_EQ(_debug_row_output,
+              "[3023-01-01 00:00:00]\n[2023-01-01 00:00:00]\n[1000-01-01 00:00:00]\n[1900-01-01 00:00:00]\n");
     scanner->close(_runtime_state);
 }
 

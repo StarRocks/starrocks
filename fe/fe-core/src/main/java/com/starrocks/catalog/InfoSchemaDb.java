@@ -58,6 +58,11 @@ public class InfoSchemaDb extends Database {
     }
 
     @Override
+    public boolean createMaterializedWithLock(MaterializedView materializedView, boolean isReplay) {
+        return false;
+    }
+
+    @Override
     public void write(DataOutput out) throws IOException {
         // Do nothing
     }

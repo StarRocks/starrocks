@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <thread>
 
+#include "util/cpu_info.h"
 #include "util/defer_op.h"
 #include "util/time.h"
 

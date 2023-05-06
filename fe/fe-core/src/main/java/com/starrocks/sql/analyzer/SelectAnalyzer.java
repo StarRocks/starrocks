@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
 import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
@@ -238,9 +239,11 @@ public class SelectAnalyzer {
 
                 if (item.getExpr() instanceof SlotRef) {
                     outputFields.add(new Field(name, item.getExpr().getType(),
-                            ((SlotRef) item.getExpr()).getTblNameWithoutAnalyzed(), item.getExpr()));
+                            ((SlotRef) item.getExpr()).getTblNameWithoutAnalyzed(), item.getExpr(),
+                            true, item.getExpr().isNullable()));
                 } else {
-                    outputFields.add(new Field(name, item.getExpr().getType(), null, item.getExpr()));
+                    outputFields.add(new Field(name, item.getExpr().getType(), null, item.getExpr(),
+                            true, item.getExpr().isNullable()));
                 }
 
                 // outputExprInOrderByScope is used to record which expressions in outputExpression are to be
@@ -377,8 +380,13 @@ public class SelectAnalyzer {
         AnalyzerUtils.verifyNoWindowFunctions(predicate, "WHERE");
         AnalyzerUtils.verifyNoGroupingFunctions(predicate, "WHERE");
 
-        if (!predicate.getType().matchesType(Type.BOOLEAN) && !predicate.getType().matchesType(Type.NULL)) {
-            throw new SemanticException("WHERE clause must evaluate to a boolean: actual type %s", predicate.getType());
+
+        if (predicate.getType().isBoolean() || predicate.getType().isNull()) {
+            // do nothing
+        } else if (!session.getSessionVariable().isEnableStrictType() && Type.canCastTo(predicate.getType(), Type.BOOLEAN)) {
+            predicate = new CastExpr(Type.BOOLEAN, predicate);
+        } else {
+            throw new SemanticException("WHERE clause %s can not be converted to boolean type", predicate.toSql());
         }
 
         analyzeState.setPredicate(predicate);
@@ -518,11 +526,12 @@ public class SelectAnalyzer {
         if (havingClause != null) {
             Expr predicate = pushNegationToOperands(havingClause);
 
+            RewriteAliasVisitor visitor = new RewriteAliasVisitor(sourceScope, outputScope, outputExprs, session);
+            predicate = predicate.accept(visitor, null);
+
             AnalyzerUtils.verifyNoWindowFunctions(predicate, "HAVING");
             AnalyzerUtils.verifyNoGroupingFunctions(predicate, "HAVING");
 
-            RewriteAliasVisitor visitor = new RewriteAliasVisitor(sourceScope, outputScope, outputExprs, session);
-            predicate = predicate.accept(visitor, null);
             analyzeExpression(predicate, analyzeState, sourceScope);
 
             if (!predicate.getType().matchesType(Type.BOOLEAN) && !predicate.getType().matchesType(Type.NULL)) {

@@ -313,11 +313,16 @@ PARALLEL_TEST(NullableColumnTest, test_compare_row) {
         auto rhs_column = NullableColumn::create(Int32Column::create(), NullColumn::create());
         rhs_column->append_datum(rhs_value);
 
+        auto desc = SortDesc(sort_order, null_first);
+
         for (size_t i = 0; i < c0->size(); i++) {
             if (c0->is_null(i) || rhs_value.is_null()) {
-                res.push_back(c0->compare_at(i, 0, *rhs_column, null_first));
+                auto cmp_res0 = c0->compare_at(i, 0, *rhs_column, desc.nan_direction());
+                auto cmp_res1 = c0->compare_at(i, 0, *rhs_column, desc.null_first) * sort_order;
+                EXPECT_EQ(cmp_res0, cmp_res1);
+                res.push_back(cmp_res0);
             } else {
-                res.push_back(c0->compare_at(i, 0, *rhs_column, null_first) * sort_order);
+                res.push_back(c0->compare_at(i, 0, *rhs_column, desc.null_first) * sort_order);
             }
         }
         return res;

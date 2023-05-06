@@ -121,6 +121,14 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     threads.reserve(data_dirs.size());
     for (auto data_dir : data_dirs) {
         threads.emplace_back([data_dir] {
+            auto res = data_dir->load();
+            if (!res.ok()) {
+                LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
+            }
+        });
+        Thread::set_thread_name(threads.back(), "load_data_dir");
+
+        threads.emplace_back([data_dir] {
             if (config::manual_compact_before_data_dir_load) {
                 uint64_t live_sst_files_size_before = 0;
                 if (!data_dir->get_meta()->get_live_sst_files_size(&live_sst_files_size_before)) {
@@ -140,12 +148,8 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
                               << data_dir->get_meta()->get_stats();
                 }
             }
-            auto res = data_dir->load();
-            if (!res.ok()) {
-                LOG(WARNING) << "Fail to load data dir=" << data_dir->path() << ", res=" << res.to_string();
-            }
         });
-        Thread::set_thread_name(threads.back(), "load_data_dir");
+        Thread::set_thread_name(threads.back(), "compact_data_dir");
     }
     for (auto& thread : threads) {
         thread.join();
@@ -408,6 +412,17 @@ Status StorageEngine::set_cluster_id(int32_t cluster_id) {
     return Status::OK();
 }
 
+std::vector<string> StorageEngine::get_store_paths() {
+    std::vector<string> paths;
+    {
+        std::lock_guard<std::mutex> l(_store_lock);
+        for (auto& it : _store_map) {
+            paths.push_back(it.first);
+        }
+    }
+    return paths;
+}
+
 std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium::type storage_medium) {
     std::vector<DataDir*> stores;
     {
@@ -415,14 +430,21 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
         for (auto& it : _store_map) {
             if (it.second->is_used()) {
                 if (_available_storage_medium_type_count == 1 || it.second->storage_medium() == storage_medium) {
-                    stores.push_back(it.second);
+                    if (it.second->available_bytes() > config::storage_flood_stage_left_capacity_bytes) {
+                        stores.push_back(it.second);
+                    }
                 }
             }
         }
     }
+
+    std::sort(stores.begin(), stores.end(),
+              [](const auto& a, const auto& b) { return a->available_bytes() > b->available_bytes(); });
+
+    const int mid = stores.size() / 2 + 1;
     //  TODO(lingbin): should it be a global util func?
     std::srand(std::random_device()());
-    std::shuffle(stores.begin(), stores.end(), std::mt19937(std::random_device()()));
+    std::shuffle(stores.begin(), stores.begin() + mid, std::mt19937(std::random_device()()));
     return stores;
 }
 

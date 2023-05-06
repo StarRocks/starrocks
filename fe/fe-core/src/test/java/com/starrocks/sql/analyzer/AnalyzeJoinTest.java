@@ -126,7 +126,7 @@ public class AnalyzeJoinTest {
                 (QueryStatement) analyzeSuccess("select v1 from t0 inner join [broadcast] t1 on t0.v1 = t1.v4");
         SelectRelation selectRelation = (SelectRelation) queryStatement.getQueryRelation();
         JoinRelation joinRelation = (JoinRelation) selectRelation.getRelation();
-        Assert.assertEquals("broadcast", joinRelation.getJoinHint());
+        Assert.assertEquals("BROADCAST", joinRelation.getJoinHint());
     }
 
     @Test

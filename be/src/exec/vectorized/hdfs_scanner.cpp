@@ -148,7 +148,7 @@ Status HdfsScanner::open(RuntimeState* runtime_state) {
         if (_scanner_params.open_limit != nullptr) {
             _scanner_params.open_limit->fetch_add(1, std::memory_order_relaxed);
         }
-        LOG(INFO) << "open file success: " << _scanner_params.path;
+        VLOG_FILE << "open file success: " << _scanner_params.path;
     }
     return status;
 }
@@ -259,6 +259,8 @@ void HdfsScanner::update_counter() {
         COUNTER_UPDATE(profile->block_cache_write_counter, stats.write_cache_count);
         COUNTER_UPDATE(profile->block_cache_write_bytes, stats.write_cache_bytes);
         COUNTER_UPDATE(profile->block_cache_write_timer, stats.write_cache_ns);
+        COUNTER_UPDATE(profile->block_cache_write_fail_counter, stats.write_cache_fail_count);
+        COUNTER_UPDATE(profile->block_cache_write_fail_bytes, stats.write_cache_fail_bytes);
     }
     // update scanner private profile.
     do_update_counter(profile);

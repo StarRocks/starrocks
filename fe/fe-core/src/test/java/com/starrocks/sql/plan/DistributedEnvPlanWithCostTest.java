@@ -2,6 +2,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.AggregationNode;
@@ -22,6 +23,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public static void beforeClass() throws Exception {
         DistributedEnvPlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
+        Config.tablet_sched_disable_colocate_overall_balance = true;
     }
 
     @After
@@ -49,11 +51,10 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(distinct P_TYPE) from part group by P_BRAND;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "1:AGGREGATE (update serialize)\n"
-                + "  |  STREAMING\n"
-                + "  |  output: multi_distinct_count(5: P_TYPE)");
-        assertContains(plan, "3:AGGREGATE (merge finalize)\n"
-                + "  |  output: multi_distinct_count(11: count)");
+        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  output: multi_distinct_count(5: P_TYPE)\n" +
+                "  |  group by: 4: P_BRAND");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
 

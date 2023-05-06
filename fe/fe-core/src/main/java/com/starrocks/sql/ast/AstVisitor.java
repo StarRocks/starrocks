@@ -265,6 +265,14 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitSetCatalogStatement(SetCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitShowCreateExternalCatalogStatement(ShowCreateExternalCatalogStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ------------------------------------------- DML Statement -------------------------------------------------------
 
     public R visitInsertStatement(InsertStmt statement, C context) {
@@ -316,7 +324,6 @@ public abstract class AstVisitor<R, C> {
     public R visitShowStreamLoadStatement(ShowStreamLoadStmt statement, C context) {
         return visitShowStatement(statement, context);
     }
-
 
     // ------------------------------------------- Admin Statement -----------------------------------------------------
 
@@ -609,6 +616,10 @@ public abstract class AstVisitor<R, C> {
     }
 
     public R visitExecuteAsStatement(ExecuteAsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitExecuteScriptStatement(ExecuteScriptStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

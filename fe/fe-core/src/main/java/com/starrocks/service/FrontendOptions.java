@@ -124,10 +124,11 @@ public class FrontendOptions {
             System.exit(-1);
         }
         fileStoredHostType = prop.getProperty(HOST_TYPE, null);
+        
         // Check if the ROLE file has property 'hostType'
         // If it not has property 'hostType', start with IP
         // If it has property 'hostType' & hostType = IP, start with IP
-        if (null == fileStoredHostType || fileStoredHostType.equals(HostType.IP.toString())) {
+        if (Strings.isNullOrEmpty(fileStoredHostType) || fileStoredHostType.equals(HostType.IP.toString())) {
             initAddrUseIp(hosts);
             return;
         }

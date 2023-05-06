@@ -270,7 +270,7 @@ Status DataDir::load() {
                                                                     std::string_view value) -> bool {
         Status st =
                 _tablet_manager->load_tablet_from_meta(this, tablet_id, schema_hash, value, false, false, false, false);
-        if (!st.ok() && !st.is_not_found()) {
+        if (!st.ok() && !st.is_not_found() && !st.is_already_exist()) {
             // load_tablet_from_meta() may return NotFound which means the tablet status is DELETED
             // This may happen when the tablet was just deleted before the BE restarted,
             // but it has not been cleared from rocksdb. At this time, restarting the BE
@@ -285,7 +285,22 @@ Status DataDir::load() {
         }
         return true;
     };
-    Status load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
+    Status load_tablet_status =
+            TabletMetaManager::walk_until_timeout(_kv_store, load_tablet_func, config::load_tablet_timeout_seconds);
+    if (load_tablet_status.is_time_out()) {
+        Status s = _kv_store->compact();
+        if (!s.ok()) {
+            LOG(ERROR) << "data dir " << _path << " compact meta befor load failed";
+            return s;
+        }
+        for (auto tablet_id : tablet_ids) {
+            _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
+        }
+        tablet_ids.clear();
+        failed_tablet_ids.clear();
+        load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
+    }
+
     if (failed_tablet_ids.size() != 0) {
         LOG(ERROR) << "load tablets from header failed"
                    << ", loaded tablet: " << tablet_ids.size() << ", error tablet: " << failed_tablet_ids.size()

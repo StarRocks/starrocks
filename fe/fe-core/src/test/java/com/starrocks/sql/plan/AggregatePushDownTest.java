@@ -19,4 +19,14 @@ public class AggregatePushDownTest extends PlanTestBase {
     public void testPushDown() {
         runFileUnitTest("optimized-plan/agg-pushdown");
     }
+
+    @Test
+    public void testPushDownPreAgg() {
+        connectContext.getSessionVariable().setCboPushDownAggregate("local");
+        try {
+            runFileUnitTest("optimized-plan/preagg-pushdown");
+        } finally {
+            connectContext.getSessionVariable().setCboPushDownAggregate("global");
+        }
+    }
 }

@@ -20,7 +20,7 @@ public class PseudoClusterAlterTest {
     @AfterClass
     public static void tearDown() throws Exception {
         PseudoCluster.getInstance().runSql(null, "drop database test force");
-        PseudoCluster.getInstance().shutdown(false);
+        PseudoCluster.getInstance().shutdown(true);
     }
 
     @Test

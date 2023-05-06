@@ -146,7 +146,7 @@ public class OptimizerTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(1);
         TaskContext rootTaskContext = optimizer1.getContext().getTaskContext();
         // just give a valid RuleType
-        Rule timeoutRule = new TimeoutRule(RuleType.TF_MV_FILTER_JOIN_RULE, Pattern.create(OperatorType.PATTERN));
+        Rule timeoutRule = new TimeoutRule(RuleType.TF_MV_ONLY_JOIN_RULE, Pattern.create(OperatorType.PATTERN));
         OptExpression tree = OptExpression.create(new LogicalTreeAnchorOperator(), logicalPlan.getRoot());
         optimizer1.getContext().getTaskScheduler().pushTask(
                 new RewriteTreeTask(rootTaskContext, tree, Lists.newArrayList(timeoutRule), true));
@@ -184,9 +184,9 @@ public class OptimizerTest {
     public void testPreprocessMvNonPartitionMv() throws Exception {
         Config.enable_experimental_mv = true;
         cluster.runSql("test", "insert into t0 values(10, 20, 30)");
-        starRocksAssert.withNewMaterializedView("create materialized view mv_1 distributed by hash(`v1`) " +
+        starRocksAssert.withMaterializedView("create materialized view mv_1 distributed by hash(`v1`) " +
                 "as select v1, v2, sum(v3) as total from t0 group by v1, v2");
-        starRocksAssert.withNewMaterializedView("create materialized view mv_2 distributed by hash(`v1`) " +
+        starRocksAssert.withMaterializedView("create materialized view mv_2 distributed by hash(`v1`) " +
                 "as select v1, sum(total) as total from mv_1 group by v1");
         refreshMaterializedView("test", "mv_1");
         refreshMaterializedView("test", "mv_2");
@@ -211,6 +211,7 @@ public class OptimizerTest {
 
     @Test
     public void testPreprocessMvPartitionMv() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         Config.enable_experimental_mv = true;
         starRocksAssert.withTable("CREATE TABLE test.tbl_with_mv\n" +
                         "(\n" +
@@ -226,11 +227,11 @@ public class OptimizerTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view mv_3\n" +
+                .withMaterializedView("create materialized view mv_3\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
                         "as select k2, sum(v1) as total from tbl_with_mv group by k2;")
-                .withNewMaterializedView("create materialized view mv_4\n" +
+                .withMaterializedView("create materialized view mv_4\n" +
                         "PARTITION BY k1\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh manual\n" +
@@ -261,10 +262,8 @@ public class OptimizerTest {
         Pair<Table, Column> partitionTableAndColumn = mv.getPartitionTableAndColumn();
         Assert.assertEquals("tbl_with_mv", partitionTableAndColumn.first.getName());
 
-        List<OptExpression> scanExpr = MvUtils.collectScanExprs(materializationContext.getMvExpression());
-        Assert.assertEquals(1, scanExpr.size());
-        Assert.assertNotNull(scanExpr.get(0).getOp().getPredicate());
-        ScalarOperator scalarOperator  = scanExpr.get(0).getOp().getPredicate();
+        ScalarOperator scalarOperator  = materializationContext.getMvPartialPartitionPredicate();
+        Assert.assertNotNull(scalarOperator);
         Assert.assertTrue(scalarOperator instanceof CompoundPredicateOperator);
         Assert.assertTrue(((CompoundPredicateOperator) scalarOperator).isAnd());
 
@@ -276,17 +275,15 @@ public class OptimizerTest {
         Assert.assertNotNull(expr2);
         MaterializationContext materializationContext2 = optimizer2.getContext().getCandidateMvs().iterator().next();
         Assert.assertEquals("mv_4", materializationContext2.getMv().getName());
-        List<OptExpression> scanExpr2 = MvUtils.collectScanExprs(materializationContext2.getMvExpression());
-        Assert.assertEquals(1, scanExpr2.size());
-        Assert.assertNotNull(scanExpr2.get(0).getOp().getPredicate());
-        ScalarOperator scalarOperator2  = scanExpr2.get(0).getOp().getPredicate();
+        ScalarOperator scalarOperator2  = materializationContext2.getMvPartialPartitionPredicate();
+        Assert.assertNotNull(scalarOperator2);
         Assert.assertTrue(scalarOperator2 instanceof CompoundPredicateOperator);
         Assert.assertTrue(((CompoundPredicateOperator) scalarOperator2).isOr());
 
         starRocksAssert.dropMaterializedView("mv_3");
         starRocksAssert.dropMaterializedView("mv_4");
 
-        starRocksAssert.withNewMaterializedView("create materialized view mv_5\n" +
+        starRocksAssert.withMaterializedView("create materialized view mv_5\n" +
                 "PARTITION BY date_trunc(\"month\", k1)\n" +
                 "distributed by hash(k2) buckets 3\n" +
                 "refresh manual\n" +
@@ -301,15 +298,15 @@ public class OptimizerTest {
         Assert.assertEquals("mv_5", materializationContext3.getMv().getName());
         List<OptExpression> scanExpr3 = MvUtils.collectScanExprs(materializationContext3.getMvExpression());
         Assert.assertEquals(1, scanExpr3.size());
-        Assert.assertNotNull(scanExpr3.get(0).getOp().getPredicate());
-        ScalarOperator scalarOperator3  = scanExpr3.get(0).getOp().getPredicate();
+        ScalarOperator scalarOperator3  = materializationContext3.getMvPartialPartitionPredicate();
+        Assert.assertNotNull(scalarOperator3);
         Assert.assertTrue(scalarOperator3 instanceof CompoundPredicateOperator);
         Assert.assertTrue(((CompoundPredicateOperator) scalarOperator3).isAnd());
         Assert.assertTrue(scalarOperator3.getChild(0) instanceof BinaryPredicateOperator);
         Assert.assertTrue(scalarOperator3.getChild(0).getChild(0) instanceof ColumnRefOperator);
         ColumnRefOperator columnRef = (ColumnRefOperator) scalarOperator3.getChild(0).getChild(0);
         Assert.assertEquals("k1", columnRef.getName());
-        LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) materializationContext3.getScanMvOperator();
+        LogicalOlapScanOperator scanOperator = materializationContext3.getScanMvOperator();
         Assert.assertEquals(1, scanOperator.getSelectedPartitionId().size());
     }
 }

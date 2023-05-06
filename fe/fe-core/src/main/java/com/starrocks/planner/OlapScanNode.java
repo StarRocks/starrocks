@@ -41,6 +41,7 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -307,7 +308,7 @@ public class OlapScanNode extends ScanNode {
             MaterializedIndex table,
             DistributionInfo distributionInfo) throws AnalysisException {
         DistributionPruner distributionPruner;
-        if(DistributionInfo.DistributionInfoType.HASH == distributionInfo.getType()) {
+        if (DistributionInfo.DistributionInfoType.HASH == distributionInfo.getType()) {
             HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
             distributionPruner = new HashDistributionPruner(table.getTabletIdsInOrder(),
                     info.getDistributionColumns(),
@@ -631,12 +632,21 @@ public class OlapScanNode extends ScanNode {
         List<String> keyColumnNames = new ArrayList<String>();
         List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
         if (selectedIndexId != -1) {
-            for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
-                if (!col.isKey()) {
-                    break;
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
+            if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
+                for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+                    Column col = indexMeta.getSchema().get(sortKeyIdx);
+                    keyColumnNames.add(col.getName());
+                    keyColumnTypes.add(col.getPrimitiveType().toThrift());
                 }
-                keyColumnNames.add(col.getName());
-                keyColumnTypes.add(col.getPrimitiveType().toThrift());
+            } else {
+                for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
+                    if (!col.isKey()) {
+                        break;
+                    }
+                    keyColumnNames.add(col.getName());
+                    keyColumnTypes.add(col.getPrimitiveType().toThrift());
+                }
             }
         }
 
@@ -644,6 +654,7 @@ public class OlapScanNode extends ScanNode {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
             msg.lake_scan_node =
                     new TLakeScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
+            msg.olap_scan_node.setSort_key_column_names(keyColumnNames);
             msg.lake_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
             if (!conjuncts.isEmpty()) {
                 msg.lake_scan_node.setSql_predicates(getExplainString(conjuncts));
@@ -664,6 +675,7 @@ public class OlapScanNode extends ScanNode {
             msg.node_type = TPlanNodeType.OLAP_SCAN_NODE;
             msg.olap_scan_node =
                     new TOlapScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
+            msg.olap_scan_node.setSort_key_column_names(keyColumnNames);
             msg.olap_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
             if (!conjuncts.isEmpty()) {
                 msg.olap_scan_node.setSql_predicates(getExplainString(conjuncts));
@@ -674,6 +686,8 @@ public class OlapScanNode extends ScanNode {
             if (ConnectContext.get() != null) {
                 msg.olap_scan_node.setEnable_column_expr_predicate(
                         ConnectContext.get().getSessionVariable().isEnableColumnExprPredicate());
+                msg.olap_scan_node.setMax_parallel_scan_instance_num(
+                        ConnectContext.get().getSessionVariable().getMaxParallelScanInstanceNum());
             }
             msg.olap_scan_node.setDict_string_id_to_int_ids(dictStringIdToIntIds);
 

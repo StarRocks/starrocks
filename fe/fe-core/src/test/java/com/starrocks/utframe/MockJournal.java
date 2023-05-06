@@ -162,6 +162,11 @@ public class MockJournal implements Journal {
         }
 
         @Override
+        public String getLeaderNodeName() {
+            return "";
+        }
+
+        @Override
         public boolean removeElectableNode(String nodeName) {
             return true;
         }

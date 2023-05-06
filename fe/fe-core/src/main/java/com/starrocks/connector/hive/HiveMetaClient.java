@@ -4,6 +4,7 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
+import com.starrocks.connector.ClassUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.sql.PlannerProfile;
@@ -28,7 +29,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.connector.ClassUtils.getCompatibleParamClasses;
 import static com.starrocks.connector.hive.HiveConnector.DUMMY_THRIFT_URI;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
@@ -122,12 +122,17 @@ public class HiveMetaClient {
     }
 
     public <T> T callRPC(String methodName, String messageIfError, Object... args) {
+        return callRPC(methodName, messageIfError, null, args);
+    }
+
+    public <T> T callRPC(String methodName, String messageIfError, Class<?>[] argClasses, Object... args) {
         RecyclableClient client = null;
         StarRocksConnectorException connectionException = null;
 
         try {
             client = getClient();
-            Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, getCompatibleParamClasses(args));
+            argClasses = argClasses == null ? ClassUtils.getCompatibleParamClasses(args) : argClasses;
+            Method method = client.hiveClient.getClass().getDeclaredMethod(methodName, argClasses);
             return (T) method.invoke(client.hiveClient, args);
         } catch (Exception e) {
             LOG.error(messageIfError, e);
@@ -138,7 +143,7 @@ public class HiveMetaClient {
                 LOG.error("Failed to get hive client. {}", connectionException.getMessage());
             } else if (connectionException != null) {
                 LOG.error("An exception occurred when using the current long link " +
-                        "to access metastore. msg： {}", messageIfError);
+                        "to access metastore. msg: {}", messageIfError);
                 client.close();
             } else if (client != null) {
                 client.finish();
@@ -186,16 +191,17 @@ public class HiveMetaClient {
     }
 
     /**
-     * Both 'getPartitionByNames' and 'getPartitionColumnStatistics' could throw exception or no response
+     * Both 'getPartitionsByNames' and 'getPartitionColumnStatistics' could throw exception or no response
      * when querying too many partitions at present. Due to statistics don't affect accuracy, user could adjust
      * session variable 'hive_partition_stats_sample_size' to ensure 'getPartitionColumnStat' normal return.
-     * But "getPartitionByNames" interface must return the full contents due to the need to get partition file information.
-     * So we resend request "getPartitionByNames" when an exception occurs.
+     * But "getPartitionsByNames" interface must return the full contents due to the need to get partition file information.
+     * So we resend request "getPartitionsByNames" when an exception occurs.
      */
     public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
         int size = partitionNames.size();
         List<Partition> partitions;
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames", String.format("%s partitions", size));
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames." + tblName,
+                String.format("%s partitions", size));
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionsByNames")) {
             RecyclableClient client = null;
@@ -219,7 +225,7 @@ public class HiveMetaClient {
                     LOG.error("Failed to get hive client. {}", connectionException.getMessage());
                 } else if (connectionException != null) {
                     LOG.error("An exception occurred when using the current long link " +
-                            "to access metastore. msg： {}", connectionException.getMessage());
+                            "to access metastore. msg: {}", connectionException.getMessage());
                     client.close();
                 } else if (client != null) {
                     client.finish();
@@ -242,7 +248,8 @@ public class HiveMetaClient {
                                                                           List<String> partitionNames,
                                                                           List<String> columnNames) {
         int size = partitionNames.size();
-        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics", String.format("%s partitions", size));
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics." + tableName,
+                String.format("%s partitions", size));
 
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionColumnStatistics")) {
             return callRPC("getPartitionColumnStatistics",
