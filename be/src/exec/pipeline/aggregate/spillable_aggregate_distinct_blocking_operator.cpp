@@ -121,7 +121,7 @@ Status SpillableAggregateDistinctBlockingSinkOperatorFactory::prepare(RuntimeSta
     _spill_options->mem_table_pool_size = state->spill_mem_table_num();
     _spill_options->spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
     _spill_options->block_manager = state->query_ctx()->spill_manager()->block_manager();
-    _spill_options->name = "agg-blocking-distinct-spill";
+    _spill_options->name = "agg-distinct-blocking-spill";
     _spill_options->plan_node_id = _plan_node_id;
 
     return Status::OK();
