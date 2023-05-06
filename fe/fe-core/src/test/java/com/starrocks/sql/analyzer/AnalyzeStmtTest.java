@@ -163,7 +163,7 @@ public class AnalyzeStmtTest {
         analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         analyzeStatus.setReason("Test Failed");
-        Assert.assertEquals("[-1, test, t0, ALL, FULL, ONCE, FAILED, " +
+        Assert.assertEquals("[-1, default_catalog.test, t0, ALL, FULL, ONCE, FAILED, " +
                         "2020-01-01 01:01:00, 2020-01-01 01:01:00, " +
                         "{}, Test Failed]",
                 ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
@@ -319,22 +319,22 @@ public class AnalyzeStmtTest {
         analyzeStatus.setEndTime(LocalDateTime.of(2020, 1, 1, 1, 1));
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
         Assert.assertEquals(
-                "[-1, test, t0, ALL, FULL, ONCE, RUNNING (0%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+                "[-1, default_catalog.test, t0, ALL, FULL, ONCE, RUNNING (0%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         analyzeStatus.setProgress(50);
         Assert.assertEquals(
-                "[-1, test, t0, ALL, FULL, ONCE, RUNNING (50%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+                "[-1, default_catalog.test, t0, ALL, FULL, ONCE, RUNNING (50%), 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
         Assert.assertEquals(
-                "[-1, test, t0, ALL, FULL, ONCE, SUCCESS, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+                "[-1, default_catalog.test, t0, ALL, FULL, ONCE, SUCCESS, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
 
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
         Assert.assertEquals(
-                "[-1, test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
+                "[-1, default_catalog.test, t0, ALL, FULL, ONCE, FAILED, 2020-01-01 01:01:00, 2020-01-01 01:01:00," +
                 " {}, ]", ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
     }
 

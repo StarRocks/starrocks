@@ -612,7 +612,7 @@ public class PrivilegeCheckerV2Test {
             PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         } catch (SemanticException e) {
             System.out.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on db2.tbl1"));
+            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on default_catalog.db2.tbl1"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db2.tbl1 to test");
         PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
@@ -637,7 +637,7 @@ public class PrivilegeCheckerV2Test {
         try {
             PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         } catch (SemanticException e) {
-            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on db1.tbl2"));
+            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on default_catalog.db1.tbl2"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl2 to test");
         PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
@@ -659,7 +659,7 @@ public class PrivilegeCheckerV2Test {
         try {
             PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
         } catch (SemanticException e) {
-            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on db1.tbl1"));
+            Assert.assertTrue(e.getMessage().contains("You need SELECT and INSERT action on default_catalog.db1.tbl1"));
         }
         grantRevokeSqlAsRoot("grant SELECT,INSERT on db1.tbl1 to test");
         PrivilegeCheckerV2.checkPrivilegeForKillAnalyzeStmt(ctx, analyzeJob.getId());
