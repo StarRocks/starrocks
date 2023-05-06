@@ -37,27 +37,27 @@ Release date: April 28, 2023
 
 #### SQL reference
 
-- Added the following privilege-related SQL statements：[SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md), [SET ROLE](../sql-reference/sql-statements/account-management/SET%20ROLE.md), [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md), and [SHOW USERS](../sql-reference/sql-statements/account-management/SHOW%20USERS.md).
+- Added the following privilege-related SQL statements: [SET DEFAULT ROLE](../sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE.md), [SET ROLE](../sql-reference/sql-statements/account-management/SET%20ROLE.md), [SHOW ROLES](../sql-reference/sql-statements/account-management/SHOW%20ROLES.md), and [SHOW USERS](../sql-reference/sql-statements/account-management/SHOW%20USERS.md).
 - Added the following semi-structured data analysis functions: [map_apply](../sql-reference/sql-functions/map-functions/map_apply.md), [map_from_arrays](../sql-reference/sql-functions/map-functions/map_from_arrays.md), [map_filter](../sql-reference/sql-functions/map-functions/map_filter.md), [transform_keys](../sql-reference/sql-functions/map-functions/transform_keys.md), and [transform_values](../sql-reference/sql-functions/map-functions/transform_values.md).
 - [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md) supports ORDER BY.
 - Window functions [lead](../sql-reference/sql-functions/Window_function.md#lead) and [lag](../sql-reference/sql-functions/Window_function.md#lag) support IGNORE NULLS.
-- Added string functions [replace](../sql-reference/sql-functions/string-functions/replace.md), [hex_decode_binary()](../sql-reference/sql-functions/string-functions/hex_decode_binary.md), and [hex_decode_string()](../sql-reference/sql-functions/string-functions/hex_decode_string.md).
-- Added encryption functions [base64_decode_binary()](../sql-reference/sql-functions/crytographic-functions/base64_decode_binary.md) and [base64_decode_string()](../sql-reference/sql-functions/crytographic-functions/base64_decode_string.md).
-- Added math functions [sinh()](../sql-reference/sql-functions/math-functions/sinh.md), [cosh()](../sql-reference/sql-functions/math-functions/cosh.md), and [tanh()](../sql-reference/sql-functions/math-functions/tanh.md).
+- Added string functions [replace](../sql-reference/sql-functions/string-functions/replace.md), [hex_decode_binary](../sql-reference/sql-functions/string-functions/hex_decode_binary.md), and [hex_decode_string()](../sql-reference/sql-functions/string-functions/hex_decode_string.md).
+- Added encryption functions [base64_decode_binary](../sql-reference/sql-functions/crytographic-functions/base64_decode_binary.md) and [base64_decode_string](../sql-reference/sql-functions/crytographic-functions/base64_decode_string.md).
+- Added math functions [sinh](../sql-reference/sql-functions/math-functions/sinh.md), [cosh](../sql-reference/sql-functions/math-functions/cosh.md), and [tanh](../sql-reference/sql-functions/math-functions/tanh.md).
 - Added utility function [current_role](../sql-reference/sql-functions/utility-functions/current_role.md).
 
 ### Improvements
 
 #### Deployment
 
-- Updated Docker image and the related [Docker deployment document](../quick_start/deploy_with_docker.md) for version 3.0. ([#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021))
+- Updated Docker image and the related [Docker deployment document](../quick_start/deploy_with_docker.md) for version 3.0. [#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021)
 
 #### Storage engine and data ingestion
 
 - Supports more CSV parameters for data ingestion, including SKIP_HEADER, TRIM_SPACE, ENCLOSE, and ESCAPE. See [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md), [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md), and [ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE%20ROUTINE%20LOAD.md).
-- The primary key and sort key are decoupled in [Primary Key tables](../table_design/table_types/primary_key_table.md). The sort key can be separately specified in `ORDER BY`.
+- The primary key and sort key are decoupled in [Primary Key tables](../table_design/table_types/primary_key_table.md). The sort key can be separately specified in `ORDER BY` when you create a table.
 - Optimized the memory usage of data ingestion into Primary Key tables in scenarios such as large-volume ingestion, partial updates, and persistent primary indexes.
-- Supports creating asynchronous INSERT tasks. For more information, see [INSERT](../loading/InsertInto.md#load-data-asynchronously-using-insert) and [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md). ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
+- Supports creating asynchronous INSERT tasks. For more information, see [INSERT](../loading/InsertInto.md#load-data-asynchronously-using-insert) and [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT%20TASK.md). [#20609](https://github.com/StarRocks/starrocks/issues/20609)
 
 #### Materialized view
 
@@ -66,7 +66,7 @@ Release date: April 28, 2023
   - Optimized SQL rewrite of Union with partition.
 - Improved materialized view building capabilities: supporting CTE, select *, and Union.
 - Optimized the information returned by [SHOW MATERIALIZED VIEWS](../sql-reference/sql-statements/data-manipulation/SHOW%20MATERIALIZED%20VIEW.md).
-- Supports adding MV partitions in batches, which improves the efficiency of partition addition during materialized view building. ([#21167](https://github.com/StarRocks/starrocks/pull/21167))
+- Supports adding MV partitions in batches, which improves the efficiency of partition addition during materialized view building. [#21167](https://github.com/StarRocks/starrocks/pull/21167)
 
 #### Query engine
 
@@ -82,16 +82,16 @@ Release date: April 28, 2023
 
 ### Bug Fixes
 
-- Some URLs in the license header of StarRocks' source file cannot be accessed. #[2224](https://github.com/StarRocks/starrocks/issues/2224)
-- An unknown error is returned during SELECT queries.  #[19731](https://github.com/StarRocks/starrocks/issues/19731)
-- Supports SHOW/SET CHARACTER. #[17480](https://github.com/StarRocks/starrocks/issues/17480)
-- When the loaded data exceeds the field length supported by StarRocks, the error message returned is not correct. #[14](https://github.com/StarRocks/DataX/issues/14)
-- Supports `show full fields from 'table'`. #[17233](https://github.com/StarRocks/starrocks/issues/17233)
-- Partition pruning causes MV rewrites to fail. #[14641](https://github.com/StarRocks/starrocks/issues/14641)
-- MV rewrite fails when the CREATE MATERIALIZED VIEW statement contains `count(distinct)` and `count(distinct)` is applied to the DISTRIBUTED BY column. #[16558](https://github.com/StarRocks/starrocks/issues/16558)
-- FEs fail to start when a VARCHAR column is used as the partitioning column of a materialized view. ([#19366](https://github.com/StarRocks/starrocks/issues/19366))
-- Window functions [LEAD](../sql-reference/sql-functions/Window_function.md#lead) and [LAG](../sql-reference/sql-functions/Window_function.md#lag) incorrectly handle IGNORE NULLS. ([#21001](https://github.com/StarRocks/starrocks/pull/21001))
-- Adding temporary partitions conflicts with automatic partition creation. ([#21222](https://github.com/StarRocks/starrocks/issues/21222))
+- Some URLs in the license header of StarRocks' source file cannot be accessed. [#2224](https://github.com/StarRocks/starrocks/issues/2224)
+- An unknown error is returned during SELECT queries. [#19731](https://github.com/StarRocks/starrocks/issues/19731)
+- Supports SHOW/SET CHARACTER. [#17480](https://github.com/StarRocks/starrocks/issues/17480)
+- When the loaded data exceeds the field length supported by StarRocks, the error message returned is not correct. [#14](https://github.com/StarRocks/DataX/issues/14)
+- Supports `show full fields from 'table'`. [#17233](https://github.com/StarRocks/starrocks/issues/17233)
+- Partition pruning causes MV rewrites to fail. [#14641](https://github.com/StarRocks/starrocks/issues/14641)
+- MV rewrite fails when the CREATE MATERIALIZED VIEW statement contains `count(distinct)` and `count(distinct)` is applied to the DISTRIBUTED BY column. [#16558](https://github.com/StarRocks/starrocks/issues/16558)
+- FEs fail to start when a VARCHAR column is used as the partitioning column of a materialized view. [#19366](https://github.com/StarRocks/starrocks/issues/19366)
+- Window functions [LEAD](../sql-reference/sql-functions/Window_function.md#lead) and [LAG](../sql-reference/sql-functions/Window_function.md#lag) incorrectly handle IGNORE NULLS. [#21001](https://github.com/StarRocks/starrocks/pull/21001)
+- Adding temporary partitions conflicts with automatic partition creation. [#21222](https://github.com/StarRocks/starrocks/issues/21222)
 
 ### Behavior Change
 
