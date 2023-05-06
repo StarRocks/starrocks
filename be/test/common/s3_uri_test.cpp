@@ -41,13 +41,42 @@ PARALLEL_TEST(S3URITest, path_style_url) {
 }
 
 PARALLEL_TEST(S3URITest, s3_scheme) {
-    S3URI uri;
-    ASSERT_TRUE(uri.parse("s3://mybucket/puppy.jpg"));
-    EXPECT_EQ("s3", uri.scheme());
-    EXPECT_EQ("", uri.region());
-    EXPECT_EQ("mybucket", uri.bucket());
-    EXPECT_EQ("puppy.jpg", uri.key());
-    EXPECT_EQ("", uri.endpoint());
+    {
+        S3URI uri;
+        ASSERT_TRUE(uri.parse("s3://mybucket/puppy.jpg"));
+        EXPECT_EQ("s3", uri.scheme());
+        EXPECT_EQ("", uri.region());
+        EXPECT_EQ("mybucket", uri.bucket());
+        EXPECT_EQ("puppy.jpg", uri.key());
+        EXPECT_EQ("", uri.endpoint());
+    }
+    {
+        S3URI uri;
+        ASSERT_TRUE(uri.parse("S3://test.name.with.dot/another.test/foo.parquet"));
+        EXPECT_EQ("s3", uri.scheme());
+        EXPECT_EQ("", uri.region());
+        EXPECT_EQ("test.name.with.dot", uri.bucket());
+        EXPECT_EQ("another.test/foo.parquet", uri.key());
+        EXPECT_EQ("", uri.endpoint());
+    }
+    {
+        S3URI uri;
+        ASSERT_TRUE(uri.parse("s3A://test.name.with.dot/another.test/foo.parquet"));
+        EXPECT_EQ("s3a", uri.scheme());
+        EXPECT_EQ("", uri.region());
+        EXPECT_EQ("test.name.with.dot", uri.bucket());
+        EXPECT_EQ("another.test/foo.parquet", uri.key());
+        EXPECT_EQ("", uri.endpoint());
+    }
+    {
+        S3URI uri;
+        ASSERT_TRUE(uri.parse("s3n://test.name.with.dot/another.test/foo.parquet"));
+        EXPECT_EQ("s3n", uri.scheme());
+        EXPECT_EQ("", uri.region());
+        EXPECT_EQ("test.name.with.dot", uri.bucket());
+        EXPECT_EQ("another.test/foo.parquet", uri.key());
+        EXPECT_EQ("", uri.endpoint());
+    }
 }
 
 PARALLEL_TEST(S3URITest, virtual_host_non_s3_url) {
@@ -78,6 +107,16 @@ PARALLEL_TEST(S3URITest, empty) {
 PARALLEL_TEST(S3URITest, missing_scheme) {
     S3URI uri;
     ASSERT_FALSE(uri.parse("/bucket/puppy.jpg"));
+}
+
+PARALLEL_TEST(S3URITest, oss_bucket) {
+    S3URI uri;
+    ASSERT_TRUE(uri.parse("oss://sr-test/dataset/smith/foo.parquet"));
+    EXPECT_EQ("oss", uri.scheme());
+    EXPECT_EQ("", uri.region());
+    EXPECT_EQ("sr-test", uri.bucket());
+    EXPECT_EQ("dataset/smith/foo.parquet", uri.key());
+    EXPECT_EQ("", uri.endpoint());
 }
 
 } // namespace starrocks
