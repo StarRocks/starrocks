@@ -93,7 +93,7 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
         if (_partition_writers.empty()) {
             tableInfo._partition_location = _location + "/data/";
             auto writer = std::make_unique<RollingAsyncParquetWriter>(tableInfo, _output_expr, _common_metrics.get(),
-                                                                      add_iceberg_commit_info);
+                                                                      add_iceberg_commit_info, state, _driver_sequence);
             _partition_writers.insert({"", std::move(writer)});
         }
 
