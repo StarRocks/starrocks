@@ -1017,6 +1017,8 @@ public class ExpressionAnalyzer {
             } else if (FunctionSet.ARRAY_GENERATE.equals(fnName)) {
                 fn = getArrayGenerateFunction(node);
                 argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+            } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
+                fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(node, argumentTypes);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
