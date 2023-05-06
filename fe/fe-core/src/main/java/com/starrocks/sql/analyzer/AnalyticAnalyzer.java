@@ -21,6 +21,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LargeIntLiteral;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
@@ -89,14 +90,33 @@ public class AnalyticAnalyzer {
                                 analyticFunction.toSql(), analyticFunction.getPos());
             }
 
-            // check the default, which needs to be a constant at the moment
             // TODO: remove this check when the backend can handle non-constants
-            if (analyticFunction.getChildren().size() > 2) {
-                if (!analyticFunction.getChild(2).isConstant()) {
-                    throw new SemanticException(
-                            "The default parameter (parameter 3) of LEAD/LAG must be a constant: " +
-                                    analyticFunction.toSql(), analyticFunction.getPos());
+            if (analyticFunction.getChildren().size() == 2) {
+                // do nothing
+            } else if (analyticFunction.getChildren().size() == 3) {
+                Type firstType = analyticFunction.getChild(0).getType();
+
+                if (analyticFunction.getChild(0) instanceof NullLiteral) {
+                    firstType = analyticFunction.getFn().getArgs()[0];
                 }
+
+                try {
+                    analyticFunction.uncheckedCastChild(firstType, 2);
+                } catch (AnalysisException e) {
+                    throw new SemanticException("The third parameter of LEAD/LAG can't convert to " + firstType,
+                            analyticFunction.getChild(2).getPos());
+                }
+
+                // When the parameter is const and nullable in lead/lag, BE use create_const_null_column to store it.
+                // but the nullable info in FE is a more relax than BE (such as the nullable info in upper('a') is true,
+                // but the actually derived column in BE is not nullableColumn)
+                // which make the input colum in chunk not match the _agg_input_column in BE. so add this check in FE.
+                if (!analyticFunction.getChild(2).isLiteral() && analyticFunction.getChild(2).isNullable()) {
+                    throw new SemanticException("The type of the third parameter of LEAD/LAG not match the type " + firstType,
+                            analyticFunction.getChild(2).getPos());
+                }
+            } else {
+                throw new SemanticException("The number of parameter in LEAD/LAG is uncorrected", analyticFunction.getPos());
             }
         }
 

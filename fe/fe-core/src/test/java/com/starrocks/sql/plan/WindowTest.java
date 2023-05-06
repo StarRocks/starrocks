@@ -46,7 +46,7 @@ public class WindowTest extends PlanTestBase {
 
         sql = "select lag(id_datetime, 1, '2020-01-01xxx') over(partition by t1c) from test_all_type;";
         expectedEx.expect(SemanticException.class);
-        expectedEx.expectMessage("The third parameter of `lag` can't convert to DATETIME");
+        expectedEx.expectMessage("The type of the third parameter of LEAD/LAG not match the type DATETIME");
         getThriftPlan(sql);
     }
 
@@ -113,16 +113,18 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
-    public void testLeadAndLagFunction() {
+    public void testLeadAndLagFunction() throws Exception {
         String sql = "select LAG(k7, 3, 3) OVER () from baseall";
-        starRocksAssert.query(sql).analysisError("The third parameter of `lag` can't convert");
+        starRocksAssert.query(sql).explainContains("functions: [, lag(9: k7, 3, '3'), ]");
 
         sql = "select lead(k7, 3, 3) OVER () from baseall";
-        starRocksAssert.query(sql).analysisError("The third parameter of `lead` can't convert");
+        starRocksAssert.query(sql).explainContains("functions: [, lead(9: k7, 3, '3'), ]");
 
         sql = "select lead(k3, 3, 'kks') OVER () from baseall";
-        starRocksAssert.query(sql)
-                .analysisError("Convert type error in offset fn(default value); old_type=VARCHAR new_type=INT");
+        starRocksAssert.query(sql).analysisError("The third parameter of LEAD/LAG can't convert to INT");
+
+        sql = "select lead(k3, 3, abs(k3)) over () from baseall";
+        starRocksAssert.query(sql).analysisError("The default parameter (parameter 3) of LAG must be a constant");
 
         sql = "select lead(id2, 1, 1) OVER () from bitmap_table";
         starRocksAssert.query(sql).analysisError("No matching function with signature: lead(bitmap,");

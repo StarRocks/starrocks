@@ -161,7 +161,7 @@ public class InsertPlanner {
 
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
-            LOG.debug("property" + requiredPropertySet);
+            LOG.debug("property {}", requiredPropertySet);
             OptExpression optimizedPlan;
 
             try (PlannerProfile.ScopedTimer ignore2 = PlannerProfile.getScopedTimer("Optimizer")) {
