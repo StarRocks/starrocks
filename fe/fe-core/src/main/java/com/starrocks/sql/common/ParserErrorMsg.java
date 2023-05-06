@@ -64,11 +64,17 @@ public interface ParserErrorMsg {
     @BaseMessage("Unsupported type specification: ''{0}''")
     String unsupportedType(String a0);
 
+    @BaseMessage("Unsupported type specification: ''{0}'' {1}")
+    String unsupportedType(String a0, String a1);
+
     @BaseMessage("AUTO_INCREMENT column {0} must be NOT NULL")
     String nullColFoundInPK(String a0);
 
     @BaseMessage("Incorrect number of arguments in expr ''{0}''")
     String wrongNumOfArgs(String a0);
+
+    @BaseMessage("Incorrect number {0} of arguments in expr ''{1}'', {2}")
+    String wrongNumOfArgs(int a0, String a1, String a2);
 
     @BaseMessage("Incorrect type/value of arguments in expr ''{0}''")
     String wrongTypeOfArgs(String a0);

@@ -787,7 +787,7 @@ public class AstToStringBuilder {
 
         public String visitMapExpr(MapExpr node, Void context) {
             StringBuilder sb = new StringBuilder();
-            sb.append('(');
+            sb.append("map(");
             sb.append(visitAstList(node.getChildren()));
             sb.append(')');
             return sb.toString();

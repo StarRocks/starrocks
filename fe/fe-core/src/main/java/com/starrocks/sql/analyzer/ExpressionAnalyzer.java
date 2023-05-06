@@ -423,7 +423,19 @@ public class ExpressionAnalyzer {
             if (!node.getChildren().isEmpty()) {
                 Type keyType = node.getKeyCommonType();
                 Type valueType = node.getValueCommonType();
-                node.setType(new MapType(keyType, valueType));
+                Type originalType = node.getType();
+                if (originalType == Type.ANY_MAP) {
+                    node.setType(new MapType(keyType, valueType));
+                } else {
+                    if (!keyType.isFullyCompatible(((MapType) originalType).getKeyType())) {
+                        throw new SemanticException("map.key'type " + keyType + " can't cast to specific " +
+                                ((MapType) originalType).getKeyType());
+                    }
+                    if (!valueType.isFullyCompatible(((MapType) originalType).getValueType())) {
+                        throw new SemanticException("map.value'type " + valueType + " can't cast to specific " +
+                                ((MapType) originalType).getValueType());
+                    }
+                }
             } else {
                 node.setType(new MapType(Type.NULL, Type.NULL));
             }

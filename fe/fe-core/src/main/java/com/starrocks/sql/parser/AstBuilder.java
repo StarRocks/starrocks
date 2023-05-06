@@ -5301,6 +5301,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (fnName.getFunction().equalsIgnoreCase("CONNECTION_ID")) {
             return new InformationFunction("CONNECTION_ID");
         }
+        
+        if (functionName.equals(FunctionSet.MAP)) {
+            List<Expr> exprs;
+            if (context.expression() != null) {
+                int num = context.expression().size();
+                if (num % 2 == 1) {
+                    throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(num, "map()",
+                            "Arguments must be in key/value pairs"), pos);
+                }
+                exprs = visit(context.expression(), Expr.class);
+            } else {
+                exprs = Collections.emptyList();
+            }
+            return new MapExpr(Type.ANY_MAP, exprs, pos);
+        }
 
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName,
                 new FunctionParams(false, visit(context.expression(), Expr.class)), pos);
@@ -5673,6 +5688,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             List<ValueList> rowValues = visit(context.mapExpressionList().mapExpression(), ValueList.class);
             List<List<Expr>> rows = rowValues.stream().map(ValueList::getRow).collect(toList());
             exprs = rows.stream().flatMap(Collection::stream).collect(Collectors.toList());
+            int num = exprs.size();
+            if (num % 2 == 1) {
+                throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(num, "map()",
+                        "Arguments must be in key/value pairs"), pos);
+            }
         } else {
             exprs = Collections.emptyList();
         }
@@ -6373,8 +6393,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     public MapType getMapType(StarRocksParser.MapTypeContext context) {
         Type keyType = getType(context.type(0));
-        if (keyType.isComplexType()) {
-            throw new ParsingException(PARSER_ERROR_MSG.unsupportedType(keyType.toString()),
+        if (!keyType.isValidMapKeyType()) {
+            throw new ParsingException(PARSER_ERROR_MSG.unsupportedType(keyType.toString(),
+                    "for map's key, which should be base types"),
                     createPos(context.type(0)));
         }
         Type valueType = getType(context.type(1));
