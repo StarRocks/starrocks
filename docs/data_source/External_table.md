@@ -667,10 +667,10 @@ select count(*) from profile_wos_p7;
 
 ### Configuration
 
-* The path of the FE configuration file is `fe/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example: HDFS cluster uses a highly available nameservice, you need to put `hdfs-site.xml` under `fe/conf`. If HDFS is configured with viewfs, you need to put the `core-site.xml` under `fe/conf`.
-* The path of the BE configuration file is `be/conf`, to which configuration file can be added if you need to customize the Hadoop cluster. For example, HDFS cluster using a highly available nameservice, you need to put `hdfs-site.xml` under `be/conf`. If HDFS is configured with viewfs, you need to put `core-site.xml` under `be/conf`.
-* The machine where BE is located need to configure JAVA_HOME as a jdk environment rather than a jre environment
-* kerberos supports:
+* The path of the FE configuration file is `fe/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example: If the HDFS cluster uses a highly available nameservice, you need to put `hdfs-site.xml` under `fe/conf`. If HDFS is configured with ViewFs, you need to put the `core-site.xml` under `fe/conf`.
+* The path of the BE configuration file is `be/conf`, to which the configuration file can be added if you need to customize the Hadoop cluster. For example, if the HDFS cluster using a highly available nameservice, you need to put `hdfs-site.xml` under `be/conf`. If HDFS is configured with ViewFs, you need to put `core-site.xml` under `be/conf`.
+* On the machine where BE is located, configure JAVA_HOME as a JDK environment rather than a JRE environment in `bin/start_be.sh`, for example, `export JAVA_HOME = <JDK path>`.
+* Configure Kerberos support:
   1. To log in with `kinit -kt keytab_path principal` to all FE/BE machines, you need to have access to Hive and HDFS. The kinit command login is only good for a period of time and needs to be put into crontab to be executed regularly.
   2. Put `hive-site.xml/core-site.xml/hdfs-site.xml` under `fe/conf`, and put `core-site.xml/hdfs-site.xml` under `be/conf`.
   3. Add **Djava.security.krb5.conf:/etc/krb5.conf** to the **JAVA_OPTS/JAVA_OPTS_FOR_JDK_9** option of the **fe/conf/fe.conf** file. **/etc/krb5.conf** is the path of the **krb5.conf** file. You can adjust the path based on your operating system.
