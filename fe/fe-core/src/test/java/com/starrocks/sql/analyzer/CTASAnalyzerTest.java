@@ -330,6 +330,7 @@ public class CTASAnalyzerTest {
                 "c_2_8, c_2_9, c_2_10, c_2_11, c_2_12, c_2_14, c_2_15";
         CreateTableAsSelectStmt createTableStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql, ctx);
+        createTableStmt.getCreateTableStmt().getProperties().put("replication_num", "1");
         createTableStmt.createTable(ctx);
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
@@ -386,7 +387,7 @@ public class CTASAnalyzerTest {
 
         Map<String, String> properties2 = createTableStmt2.getCreateTableStmt().getProperties();
         Assert.assertTrue(properties2.containsKey("replication_num"));
-        Assert.assertEquals(properties2.get("replication_num"), "1");
+        Assert.assertEquals(properties2.get("replication_num"), "3");
     }
 
     @Test(expected = AnalysisException.class)
