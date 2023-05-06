@@ -41,17 +41,17 @@
 - 新增半结构化数据分析相关函数：[map_from_arrays](../sql-reference/sql-functions/map-functions/map_from_arrays.md)、[map_apply](../sql-reference/sql-functions/map-functions/map_apply.md)、[map_filter](../sql-reference/sql-functions/map-functions/map_filter.md)、[transform_keys](../sql-reference/sql-functions/map-functions/transform_keys.md)、[transform_values](../sql-reference/sql-functions/map-functions/transform_values.md)。
 - [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md) 支持 ORDER BY。
 - 窗口函数 [lead](../sql-reference/sql-functions/Window_function.md#使用-lead-窗口函数)、[lag](../sql-reference/sql-functions/Window_function.md#使用-lag-窗口函数) 支持 IGNORE NULLS。
-- 新增 [BINARY/VARBINARY 数据类型](../sql-reference/sql-statements/data-types/BINARY.md)，新增 [to_binary()](../sql-reference/sql-functions/binary-functions/to_binary.md) ，[from_binary()](../sql-reference/sql-functions/binary-functions/from_binary.md) 函数。
-- 新增字符串函数 [replace](../sql-reference/sql-functions/string-functions/replace.md)、[hex_decode_binary()](../sql-reference/sql-functions/string-functions/hex_decode_binary.md)、[hex_decode_string()](../sql-reference/sql-functions/string-functions/hex_decode_string.md)。
-- 新增加密函数 [base64_decode_binary()](../sql-reference/sql-functions/crytographic-functions/base64_decode_binary.md)、[base64_decode_string()](../sql-reference/sql-functions/crytographic-functions/base64_decode_string.md)。
-- 新增数学函数 [sinh()](../sql-reference/sql-functions/math-functions/sinh.md)、[cosh()](../sql-reference/sql-functions/math-functions/cosh.md)、[tanh()](../sql-reference/sql-functions/math-functions/tanh.md)。
+- 新增 [BINARY/VARBINARY 数据类型](../sql-reference/sql-statements/data-types/BINARY.md)，新增 [to_binary](../sql-reference/sql-functions/binary-functions/to_binary.md)，[from_binary](../sql-reference/sql-functions/binary-functions/from_binary.md) 函数。
+- 新增字符串函数 [replace](../sql-reference/sql-functions/string-functions/replace.md)、[hex_decode_binary](../sql-reference/sql-functions/string-functions/hex_decode_binary.md)、[hex_decode_string](../sql-reference/sql-functions/string-functions/hex_decode_string.md)。
+- 新增加密函数 [base64_decode_binary](../sql-reference/sql-functions/crytographic-functions/base64_decode_binary.md)、[base64_decode_string](../sql-reference/sql-functions/crytographic-functions/base64_decode_string.md)。
+- 新增数学函数 [sinh](../sql-reference/sql-functions/math-functions/sinh.md)、[cosh](../sql-reference/sql-functions/math-functions/cosh.md)、[tanh](../sql-reference/sql-functions/math-functions/tanh.md)。
 - 新增工具函数 [current_role](../sql-reference/sql-functions/utility-functions/current_role.md)。
 
 ### 功能优化
 
 **部署**
 
-- 更新 3.0 版本的 Docker 镜像和相关[部署文档](../quick_start/deploy_with_docker.md)。 ([#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021))
+- 更新 3.0 版本的 Docker 镜像和相关[部署文档](../quick_start/deploy_with_docker.md)。 [#20623](https://github.com/StarRocks/starrocks/pull/20623) [#21021](https://github.com/StarRocks/starrocks/pull/21021)
 
 **存储与导入**
 
@@ -86,16 +86,16 @@
 
 修复了以下问题：
 
-- StarRocks 源文件的许可 header 中部分 url 无法访问。#[2224](https://github.com/StarRocks/starrocks/issues/2224)
-- SELECT 查询出现 unknown error。 #[19731](https://github.com/StarRocks/starrocks/issues/19731)
-- 支持 SHOW/SET CHARACTER。 #[17480](https://github.com/StarRocks/starrocks/issues/17480)
-- 当导入的内容超过 StarRocks 字段长度时，ErrorURL 提示信息不准确。提示源端字段为空，而不是内容超长。 #[14](https://github.com/StarRocks/DataX/issues/14)
-- 支持 show full fields from 'table'。# [17233](https://github.com/StarRocks/starrocks/issues/17233)
-- 分区修剪导致 MV 改写失败。 #[14641](https://github.com/StarRocks/starrocks/issues/14641)
-- 当 MV 创建语句包含 count(distinct) 且 count(distinct) 作用在分布列上时，MV 改写失败。 #[16558](https://github.com/StarRocks/starrocks/issues/16558)
-- 使用 VARCHAR 作为物化视图分区列时导致 FE 无法正常启动。([#19366](https://github.com/StarRocks/starrocks/issues/19366))
-- 窗口函数 [lead](../sql-reference/sql-functions/Window_function.md#使用-lead-窗口函数) 和 [lag](../sql-reference/sql-functions/Window_function.md#使用-lag-窗口函数) 对 IGNORE NULLS 的处理不正确。 ([#21001](https://github.com/StarRocks/starrocks/pull/21001))
-- 插入临时分区和自动创建分区发生冲突。（[#21222](https://github.com/StarRocks/starrocks/issues/21222)）
+- StarRocks 源文件的许可 header 中部分 url 无法访问。[#2224](https://github.com/StarRocks/starrocks/issues/2224)
+- SELECT 查询出现 unknown error。 [#19731](https://github.com/StarRocks/starrocks/issues/19731)
+- 支持 SHOW/SET CHARACTER。 [#17480](https://github.com/StarRocks/starrocks/issues/17480)
+- 当导入的内容超过 StarRocks 字段长度时，ErrorURL 提示信息不准确。提示源端字段为空，而不是内容超长。 [#14](https://github.com/StarRocks/DataX/issues/14)
+- 支持 show full fields from 'table'。 [#17233](https://github.com/StarRocks/starrocks/issues/17233)
+- 分区修剪导致 MV 改写失败。 [#14641](https://github.com/StarRocks/starrocks/issues/14641)
+- 当 MV 创建语句包含 count(distinct) 且 count(distinct) 作用在分布列上时，MV 改写失败。 [#16558](https://github.com/StarRocks/starrocks/issues/16558)
+- 使用 VARCHAR 作为物化视图分区列时导致 FE 无法正常启动。 [#19366](https://github.com/StarRocks/starrocks/issues/19366)
+- 窗口函数 [lead](../sql-reference/sql-functions/Window_function.md#使用-lead-窗口函数) 和 [lag](../sql-reference/sql-functions/Window_function.md#使用-lag-窗口函数) 对 IGNORE NULLS 的处理不正确。 [#21001](https://github.com/StarRocks/starrocks/pull/21001)
+- 插入临时分区和自动创建分区发生冲突。 [#21222](https://github.com/StarRocks/starrocks/issues/21222)
 
 ### 行为变更
 
