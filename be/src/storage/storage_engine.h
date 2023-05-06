@@ -311,29 +311,6 @@ private:
     size_t _compaction_check_one_round();
 
 private:
-    struct CompactionCandidate {
-        CompactionCandidate(uint32_t nicumulative_compaction_, int64_t tablet_id_, uint32_t index_)
-                : nice(nicumulative_compaction_), tablet_id(tablet_id_), disk_index(index_) {}
-        uint32_t nice;
-        int64_t tablet_id;
-        uint32_t disk_index = -1;
-    };
-
-    // In descending order
-    struct CompactionCandidateComparator {
-        bool operator()(const CompactionCandidate& a, const CompactionCandidate& b) { return a.nice > b.nice; }
-    };
-
-    struct CompactionDiskStat {
-        CompactionDiskStat(std::string path, uint32_t index, bool used)
-                : storage_path(std::move(path)), disk_index(index), is_used(used) {}
-        const std::string storage_path;
-        const uint32_t disk_index;
-        uint32_t task_running{0};
-        uint32_t task_remaining{0};
-        bool is_used;
-    };
-
     EngineOptions _options;
     std::mutex _store_lock;
     std::map<std::string, DataDir*> _store_map;
