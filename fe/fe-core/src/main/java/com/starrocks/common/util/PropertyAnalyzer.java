@@ -339,10 +339,29 @@ public class PropertyAnalyzer {
         if (replicationNum <= 0) {
             throw new AnalysisException("Replication num should larger than 0. (suggested 3)");
         }
+<<<<<<< HEAD
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
         if (replicationNum > backendIds.size()) {
             throw new AnalysisException("Replication num should be less than the number of available BE nodes. " 
             + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size());
+=======
+
+        List<Long> backendIds = Config.only_use_compute_node ?
+                GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds() :
+                GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.defaultReplicationNum() > backendIds.size()) {
+                throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
+                        + ", less than " + RunMode.defaultReplicationNum());
+            }
+        } else {
+            if (replicationNum > backendIds.size()) {
+                throw new AnalysisException("Replication num should be less than the number of available BE nodes. "
+                        + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size() +
+                        ", You can change this default by setting the replication_num table properties.");
+            }
+>>>>>>> e3461e405 ([Enhancement] The replication rules of CTAS are consistent with those of table crea… (#22854))
         }
     }
 
