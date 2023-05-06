@@ -910,7 +910,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableSortAggregate = false;
 
     @VarAttr(name = ENABLE_PARALLEL_MERGE)
-    private boolean enableParallelMerge = false;
+    private boolean enableParallelMerge = true;
 
     // 1: sort based, 2: hash based
     @VarAttr(name = WINDOW_PARTITION_MODE, flag = VariableMgr.INVISIBLE)
