@@ -93,7 +93,7 @@ static Status _validate_options(const EngineOptions& options) {
 Status StorageEngine::open(const EngineOptions& options, StorageEngine** engine_ptr) {
     RETURN_IF_ERROR(_validate_options(options));
     std::unique_ptr<StorageEngine> engine = std::make_unique<StorageEngine>(options);
-    RETURN_IF_ERROR_WITH_WARN(engine->_open(), "open engine failed");
+    RETURN_IF_ERROR_WITH_WARN(engine->_open(options), "open engine failed");
     *engine_ptr = engine.release();
     return Status::OK();
 }
@@ -174,12 +174,13 @@ void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
     }
 }
 
-Status StorageEngine::_open() {
+Status StorageEngine::_open(const EngineOptions& options) {
     // init store_map
     RETURN_IF_ERROR_WITH_WARN(_init_store_map(), "_init_store_map failed");
 
     _effective_cluster_id = config::cluster_id;
-    RETURN_IF_ERROR_WITH_WARN(_check_all_root_path_cluster_id(), "fail to check cluster id");
+    RETURN_IF_ERROR_WITH_WARN(_check_all_root_path_cluster_id(options.need_write_cluster_id),
+                              "fail to check cluster id");
 
     _update_storage_medium_type_count();
 
@@ -391,7 +392,7 @@ Status StorageEngine::_check_file_descriptor_number() {
     return Status::OK();
 }
 
-Status StorageEngine::_check_all_root_path_cluster_id() {
+Status StorageEngine::_check_all_root_path_cluster_id(bool need_write_cluster_id) {
     int32_t cluster_id = -1;
     for (auto& it : _store_map) {
         int32_t tmp_cluster_id = it.second->cluster_id();
@@ -413,7 +414,7 @@ Status StorageEngine::_check_all_root_path_cluster_id() {
     RETURN_IF_ERROR(_judge_and_update_effective_cluster_id(cluster_id));
 
     // write cluster id into cluster_id_path if get effective cluster id success
-    if (_effective_cluster_id != -1 && !_is_all_cluster_id_exist) {
+    if (_effective_cluster_id != -1 && !_is_all_cluster_id_exist && need_write_cluster_id) {
         set_cluster_id(_effective_cluster_id);
     }
 
@@ -1337,27 +1338,6 @@ Status StorageEngine::get_next_increment_id_interval(int64_t tableid, size_t num
     std::iota(ids_iter, ids.end(), cur_avaliable_min_id);
     cur_avaliable_min_id += num_row;
 
-    return Status::OK();
-}
-
-DummyStorageEngine::DummyStorageEngine(const EngineOptions& options)
-        : StorageEngine(options), _conf_path(options.conf_path) {
-    _s_instance = this;
-    _effective_cluster_id = config::cluster_id;
-    cluster_id_mgr = std::make_unique<ClusterIdMgr>(options.conf_path);
-}
-
-Status DummyStorageEngine::open(const EngineOptions& options, StorageEngine** engine_ptr) {
-    std::unique_ptr<DummyStorageEngine> engine = std::make_unique<DummyStorageEngine>(options);
-    RETURN_IF_ERROR(engine->cluster_id_mgr->init());
-    *engine_ptr = engine.release();
-    LOG(INFO) << "Opened Empty storage engine";
-    return Status::OK();
-}
-
-Status DummyStorageEngine::set_cluster_id(int32_t cluster_id) {
-    RETURN_IF_ERROR(cluster_id_mgr->set_cluster_id(cluster_id));
-    _effective_cluster_id = cluster_id;
     return Status::OK();
 }
 

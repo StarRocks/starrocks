@@ -239,7 +239,7 @@ protected:
 private:
     // Instance should be inited from `static open()`
     // MUST NOT be called in other circumstances.
-    Status _open();
+    Status _open(const EngineOptions& options);
 
     Status _init_store_map();
 
@@ -247,7 +247,7 @@ private:
 
     // Some check methods
     Status _check_file_descriptor_number();
-    Status _check_all_root_path_cluster_id();
+    Status _check_all_root_path_cluster_id(bool need_write_cluster_id);
     Status _judge_and_update_effective_cluster_id(int32_t cluster_id);
 
     bool _delete_tablets_on_unused_root_path();
@@ -392,18 +392,6 @@ private:
 
     StorageEngine(const StorageEngine&) = delete;
     const StorageEngine& operator=(const StorageEngine&) = delete;
-};
-
-// DummyStorageEngine is used for ComputeNode, it only stores cluster id.
-class DummyStorageEngine : public StorageEngine {
-    std::string _conf_path;
-    std::unique_ptr<ClusterIdMgr> cluster_id_mgr;
-
-public:
-    DummyStorageEngine(const EngineOptions& options);
-    static Status open(const EngineOptions& options, StorageEngine** engine_ptr);
-    Status set_cluster_id(int32_t cluster_id) override;
-    Status start_bg_threads() override { return Status::OK(); };
 };
 
 /// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,
