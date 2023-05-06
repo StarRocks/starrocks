@@ -155,7 +155,7 @@ public enum AggregateType {
 
     public boolean checkCompatibility(Type type) {
         return checkPrimitiveTypeCompatibility(this, type.getPrimitiveType()) ||
-                (this.isReplaceFamily() && type.isArrayType());
+                (this.isReplaceFamily() && type.isComplexType());
     }
 
     public static Type extendedPrecision(Type type) {
