@@ -279,6 +279,7 @@ private:
     size_t _compaction_check_one_round();
 
 private:
+<<<<<<< HEAD
     struct CompactionCandidate {
         CompactionCandidate(uint32_t nicumulative_compaction_, int64_t tablet_id_, uint32_t index_)
                 : nice(nicumulative_compaction_), tablet_id(tablet_id_), disk_index(index_) {}
@@ -302,6 +303,8 @@ private:
         bool is_used;
     };
 
+=======
+>>>>>>> 1166e5112 (Support graceful exit, make it easy to troubleshoot memory leaks (#22871))
     EngineOptions _options;
     std::mutex _store_lock;
     std::map<std::string, DataDir*> _store_map;
