@@ -45,8 +45,6 @@ public:
         return _arguments_ids.size();
     }
 
-    void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
-
 private:
     std::vector<SlotId> _captured_slot_ids;
     std::vector<SlotId> _arguments_ids;
