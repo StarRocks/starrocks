@@ -344,45 +344,45 @@ Status StatisticResultWriter::_fill_full_statistic_data_v4(int version, const Co
     return Status::OK();
 }
 
-Status StatisticResultWriter::_fill_full_statistic_data_external(int version, const Columns& columns, const Chunk* chunk,
-                                                                       TFetchDataResult* result) {
-        SCOPED_TIMER(_serialize_timer);
+Status StatisticResultWriter::_fill_full_statistic_data_external(int version, const Columns& columns,
+                                                                 const Chunk* chunk, TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
 
-        // mapping with Data.thrift.TStatisticData
-        DCHECK(columns.size() == 8);
+    // mapping with Data.thrift.TStatisticData
+    DCHECK(columns.size() == 8);
 
-        // skip read version
-        auto name = ColumnViewer<TYPE_VARCHAR>(columns[1]);
-        auto rowCounts = ColumnViewer<TYPE_BIGINT>(columns[2]);
-        auto dataSizes = ColumnViewer<TYPE_BIGINT>(columns[3]);
-        auto hll = ColumnViewer<TYPE_VARCHAR>(columns[4]);
-        auto nullCounts = ColumnViewer<TYPE_BIGINT>(columns[5]);
-        auto max = ColumnViewer<TYPE_VARCHAR>(columns[6]);
-        auto min = ColumnViewer<TYPE_VARCHAR>(columns[7]);
+    // skip read version
+    auto name = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto rowCounts = ColumnViewer<TYPE_BIGINT>(columns[2]);
+    auto dataSizes = ColumnViewer<TYPE_BIGINT>(columns[3]);
+    auto hll = ColumnViewer<TYPE_VARCHAR>(columns[4]);
+    auto nullCounts = ColumnViewer<TYPE_BIGINT>(columns[5]);
+    auto max = ColumnViewer<TYPE_VARCHAR>(columns[6]);
+    auto min = ColumnViewer<TYPE_VARCHAR>(columns[7]);
 
-        std::vector<TStatisticData> data_list;
-        int num_rows = chunk->num_rows();
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
 
-        data_list.resize(num_rows);
-        for (int i = 0; i < num_rows; ++i) {
-            data_list[i].__set_columnName(name.value(i).to_string());
-            data_list[i].__set_rowCount(rowCounts.value(i));
-            data_list[i].__set_dataSize(dataSizes.value(i));
-            data_list[i].__set_hll(hll.value(i).to_string());
-            data_list[i].__set_nullCount(nullCounts.value(i));
-            data_list[i].__set_max(max.value(i).to_string());
-            data_list[i].__set_min(min.value(i).to_string());
-        }
-
-        result->result_batch.rows.resize(num_rows);
-        result->result_batch.__set_statistic_version(version);
-
-        ThriftSerializer serializer(true, chunk->memory_usage());
-        for (int i = 0; i < num_rows; ++i) {
-            RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
-        }
-        return Status::OK();
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_columnName(name.value(i).to_string());
+        data_list[i].__set_rowCount(rowCounts.value(i));
+        data_list[i].__set_dataSize(dataSizes.value(i));
+        data_list[i].__set_hll(hll.value(i).to_string());
+        data_list[i].__set_nullCount(nullCounts.value(i));
+        data_list[i].__set_max(max.value(i).to_string());
+        data_list[i].__set_min(min.value(i).to_string());
     }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
 
 Status StatisticResultWriter::close() {
     COUNTER_SET(_sent_rows_counter, _written_rows);

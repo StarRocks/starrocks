@@ -115,7 +115,7 @@ public class StatisticsCollectJobFactory {
             columns = StatisticUtils.getCollectibleColumns(table);
         }
         return new ExternalFullStatisticsCollectJob(catalogName, db, table, columns,
-                StatsConstants.AnalyzeType.FULL, scheduleType, properties);
+                analyzeType, scheduleType, properties);
     }
 
     private static void createJob(List<StatisticsCollectJob> allTableJobMap, AnalyzeJob job,

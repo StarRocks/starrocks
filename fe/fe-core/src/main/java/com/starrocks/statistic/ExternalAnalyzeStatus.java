@@ -34,19 +34,19 @@ public class ExternalAnalyzeStatus implements AnalyzeStatus {
 
     private List<String> columns;
 
-    protected StatsConstants.AnalyzeType type;
+    private StatsConstants.AnalyzeType type;
 
     private StatsConstants.ScheduleType scheduleType;
 
     private Map<String, String> properties;
 
-    protected StatsConstants.ScheduleStatus status;
+    private StatsConstants.ScheduleStatus status;
 
     private LocalDateTime startTime;
 
     private LocalDateTime endTime;
 
-    protected String reason;
+    private String reason;
 
     private long progress;
 

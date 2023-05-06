@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -109,7 +110,7 @@ public class AnalyzeStmtAnalyzer {
 
             if (CatalogMgr.isExternalCatalog(statement.getTableName().getCatalog())) {
                 if (statement.isSample()) {
-                    throw new SemanticException("External table %s only support FULL analyze",
+                    throw new SemanticException("External table %s don't support SAMPLE analyze",
                             statement.getTableName().toString());
                 }
                 statement.setExternal(true);
@@ -122,8 +123,14 @@ public class AnalyzeStmtAnalyzer {
             if (null != statement.getTableName()) {
                 TableName tbl = statement.getTableName();
 
+                if ((Strings.isNullOrEmpty(tbl.getCatalog()) &&
+                        CatalogMgr.isExternalCatalog(session.getCurrentCatalog())) ||
+                        CatalogMgr.isExternalCatalog(tbl.getCatalog())) {
+                    throw new SemanticException("External Table don't support analyze job");
+                }
+
                 if (null != tbl.getDb() && null == tbl.getTbl()) {
-                    Database db = MetaUtils.getDatabase(session, statement.getTableName());
+                    Database db = MetaUtils.getDatabase(session, tbl);
 
                     if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
                         throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());

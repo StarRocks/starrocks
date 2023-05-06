@@ -125,7 +125,7 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
 
         context.put("version", StatsConstants.STATISTIC_EXTERNAL_VERSION);
         context.put("columnNameStr", columnNameStr);
-        context.put("dataSize", FullStatisticsCollectJob.getDataSize(column));
+        context.put("dataSize", fullAnalyzeGetDataSize(column));
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());
         context.put("catalogName", this.catalogName);
@@ -175,11 +175,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
             row.add(new StringLiteral(data.getColumnName())); // column name, 20 byte
             row.add(new IntLiteral(data.getRowCount(), Type.BIGINT)); // row count, 8 byte
             row.add(new IntLiteral((long) data.getDataSize(), Type.BIGINT)); // data size, 8 byte
-            row.add(FullStatisticsCollectJob.hllDeserialize(data.getHll())); // hll, 32 kB
+            row.add(hllDeserialize(data.getHll())); // hll, 32 kB
             row.add(new IntLiteral(data.getNullCount(), Type.BIGINT)); // null count, 8 byte
             row.add(new StringLiteral(data.getMax())); // max, 200 byte
             row.add(new StringLiteral(data.getMin())); // min, 200 byte
-            row.add(FullStatisticsCollectJob.nowFn()); // update time, 8 byte
+            row.add(nowFn()); // update time, 8 byte
 
             rowsBuffer.add(row);
             sqlBuffer.add("(" + String.join(", ", params) + ")");

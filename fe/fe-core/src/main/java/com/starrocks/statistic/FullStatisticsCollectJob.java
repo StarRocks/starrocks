@@ -17,14 +17,11 @@ package com.starrocks.statistic;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -49,7 +46,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -110,30 +106,6 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         }
 
         flushInsertStatisticsData(context, true);
-    }
-
-    public static Expr hllDeserialize(byte[] hll) {
-        String str = new String(hll, StandardCharsets.UTF_8);
-        Function unhex = Expr.getBuiltinFunction("unhex", new Type[] {Type.VARCHAR},
-                Function.CompareMode.IS_IDENTICAL);
-
-        FunctionCallExpr unhexExpr = new FunctionCallExpr("unhex", Lists.newArrayList(new StringLiteral(str)));
-        unhexExpr.setFn(unhex);
-        unhexExpr.setType(unhex.getReturnType());
-
-        Function fn = Expr.getBuiltinFunction("hll_deserialize", new Type[] {Type.VARCHAR},
-                Function.CompareMode.IS_IDENTICAL);
-        FunctionCallExpr fe = new FunctionCallExpr("hll_deserialize", Lists.newArrayList(unhexExpr));
-        fe.setFn(fn);
-        fe.setType(fn.getReturnType());
-        return fe;
-    }
-
-    public static Expr nowFn() {
-        Function fn = Expr.getBuiltinFunction(FunctionSet.NOW, new Type[] {}, Function.CompareMode.IS_IDENTICAL);
-        FunctionCallExpr fe = new FunctionCallExpr("now", Lists.newArrayList());
-        fe.setType(fn.getReturnType());
-        return fe;
     }
 
     // INSERT INTO column_statistics values
@@ -260,14 +232,6 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         return Lists.partition(totalQuerySQL, parallelism);
     }
 
-    public static String getDataSize(Column column) {
-        if (column.getPrimitiveType().isCharFamily()) {
-            return "IFNULL(SUM(CHAR_LENGTH(" + StatisticUtils.quoting(column.getName()) + ")), 0)";
-        }
-        long typeSize = column.getType().getTypeSize();
-        return "COUNT(1) * " + typeSize;
-    }
-
     private String buildBatchCollectFullStatisticSQL(Table table, Partition partition, String columnName) {
         StringBuilder builder = new StringBuilder();
         VelocityContext context = new VelocityContext();
@@ -279,7 +243,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         context.put("version", StatsConstants.STATISTIC_BATCH_VERSION);
         context.put("partitionId", partition.getId());
         context.put("columnNameStr", columnNameStr);
-        context.put("dataSize", getDataSize(column));
+        context.put("dataSize", fullAnalyzeGetDataSize(column));
         context.put("partitionName", partition.getName());
         context.put("dbName", db.getOriginName());
         context.put("tableName", table.getName());

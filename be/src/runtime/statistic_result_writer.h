@@ -60,7 +60,6 @@ private:
     Status _fill_full_statistic_data_external(int version, const Columns& columns, const Chunk* chunk,
                                               TFetchDataResult* result);
 
-
 private:
     BufferControlBlock* _sinker;
     const std::vector<ExprContext*>& _output_expr_ctxs;

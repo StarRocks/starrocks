@@ -51,7 +51,7 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
     private List<String> columns;
 
     @SerializedName("type")
-    protected StatsConstants.AnalyzeType type;
+    private StatsConstants.AnalyzeType type;
 
     @SerializedName("scheduleType")
     private StatsConstants.ScheduleType scheduleType;
@@ -60,7 +60,7 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
     private Map<String, String> properties;
 
     @SerializedName("status")
-    protected StatsConstants.ScheduleStatus status;
+    private StatsConstants.ScheduleStatus status;
 
     @SerializedName("startTime")
     private LocalDateTime startTime;
@@ -69,7 +69,7 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
     private LocalDateTime endTime;
 
     @SerializedName("reason")
-    protected String reason;
+    private String reason;
 
     @SerializedName("progress")
     private long progress;
