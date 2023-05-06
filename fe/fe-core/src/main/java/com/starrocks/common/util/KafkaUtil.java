@@ -67,6 +67,8 @@ public class KafkaUtil {
 
     private static final ProxyAPI PROXY_API = new ProxyAPI();
 
+    private static final long GET_INFO_TIMEOUT = 12;
+
     public static List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties) throws UserException {
         return PROXY_API.getAllKafkaPartitions(brokerList, topic, properties);
@@ -186,9 +188,9 @@ public class KafkaUtil {
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
-                request.timeout = Config.routine_load_kafka_timeout_second;
+                request.timeout = GET_INFO_TIMEOUT;
                 Future<PProxyResult> future = BackendServiceClient.getInstance().getInfo(address, request);
-                PProxyResult result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
+                PProxyResult result = future.get(GET_INFO_TIMEOUT, TimeUnit.SECONDS);
                 TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                 if (code != TStatusCode.OK) {
                     LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
