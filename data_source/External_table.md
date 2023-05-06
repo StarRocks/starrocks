@@ -746,49 +746,49 @@ select count(*) from profile_wos_p7;
 
 #### Aliyun OSS 支持
 
-一. 在 $FE_HOME/conf/core-site.xml 中加入如下配置。
+1. 在 $FE_HOME/conf/core-site.xml 中加入如下配置。
 
-~~~xml
-<configuration>
-   <property>
-      <name>fs.oss.impl</name>
-      <value>com.aliyun.jindodata.oss.JindoOssFileSystem</value>
-   </property>
-   <property>
-      <name>fs.AbstractFileSystem.oss.impl</name>
-      <value>com.aliyun.jindodata.oss.OSS</value>
-   </property>
-   <property>
-        <name>fs.oss.accessKeyId</name>
-        <value>xxx</value>
-    </property>
-    <property>
-        <name>fs.oss.accessKeySecret</name>
-        <value>xxx</value>
-    </property>
-    <property>
-        <name>fs.oss.endpoint</name>
-        <!-- 以下以北京地域为例，其他地域请根据实际情况替换。 -->
-        <value>oss-cn-beijing.aliyuncs.com</value>
-    </property>
-</configuration>
-~~~
+   ~~~xml
+   <configuration>
+      <property>
+         <name>fs.oss.impl</name>
+         <value>com.aliyun.jindodata.oss.JindoOssFileSystem</value>
+      </property>
+      <property>
+         <name>fs.AbstractFileSystem.oss.impl</name>
+         <value>com.aliyun.jindodata.oss.OSS</value>
+      </property>
+      <property>
+         <name>fs.oss.accessKeyId</name>
+         <value>xxx</value>
+      </property>
+      <property>
+         <name>fs.oss.accessKeySecret</name>
+         <value>xxx</value>
+      </property>
+      <property>
+         <name>fs.oss.endpoint</name>
+         <!-- 以下以北京地域为例，其他地域请根据实际情况替换。 -->
+         <value>oss-cn-beijing.aliyuncs.com</value>
+      </property>
+   </configuration>
+   ~~~
 
-* `fs.oss.accessKeyId` 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。
-* `fs.oss.accessKeySecret` 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。
-* `fs.oss.endpoint` 指定相关 OSS Bucket 所在地域对应的 Endpoint。
+   * `fs.oss.accessKeyId` 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。
+   * `fs.oss.accessKeySecret` 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.htm?spm=a2c4g.11186623.0.0.128b4b7896DD4W#task968)。
+   * `fs.oss.endpoint` 指定相关 OSS Bucket 所在地域对应的 Endpoint。
     您可以通过以下方式查询 Endpoint：
 
-  * 根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.htm#concept-zt4-cvy-5db)。
-  * 您可以登录 [阿里云 OSS 管理控制台](https://oss.console.aliyun.com/index?spm=a2c4g.11186623.0.0.11d24772leoEEg#/)，进入 Bucket 概览页，Bucket 域名 examplebucket.oss-cn-hangzhou.aliyuncs.com 的后缀部分 oss-cn-hangzhou.aliyuncs.com，即为该 Bucket 的外网 Endpoint。
+     * 根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.htm#concept-zt4-cvy-5db)。
+     * 您可以登录 [阿里云 OSS 管理控制台](https://oss.console.aliyun.com/index?spm=a2c4g.11186623.0.0.11d24772leoEEg#/)，进入 Bucket 概览页，Bucket 域名 examplebucket.oss-cn-hangzhou.aliyuncs.com 的后缀部分 oss-cn-hangzhou.aliyuncs.com，即为该 Bucket 的外网 Endpoint。
 
-二. 在 $BE_HOME/conf/be.conf 中加入如下配置。
+2. 在 $BE_HOME/conf/be.conf 中加入如下配置。
 
-* `object_storage_access_key_id` 与 FE 端 core-site.xml 配置 `fs.oss.accessKeyId` 相同
-* `object_storage_secret_access_key` 与 FE 端 core-site.xml 配置 `fs.oss.accessKeySecret` 相同
-* `object_storage_endpoint` 与 FE 端 core-site.xml 配置 `fs.oss.endpoint` 相同
+   * `object_storage_access_key_id` 与 FE 端 core-site.xml 配置 `fs.oss.accessKeyId` 相同
+   * `object_storage_secret_access_key` 与 FE 端 core-site.xml 配置 `fs.oss.accessKeySecret` 相同
+   * `object_storage_endpoint` 与 FE 端 core-site.xml 配置 `fs.oss.endpoint` 相同
 
-三. 重启 FE，BE。
+3. 重启 FE，BE。
 
 ### 缓存更新
 
