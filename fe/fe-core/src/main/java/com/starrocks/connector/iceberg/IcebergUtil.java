@@ -333,13 +333,6 @@ public class IcebergUtil {
                 int precision = ((Types.DecimalType) icebergType).precision();
                 int scale = ((Types.DecimalType) icebergType).scale();
                 return ScalarType.createUnifiedDecimalType(precision, scale);
-            case LIST:
-                Type type = convertToArrayType(icebergType);
-                if (type.isArrayType()) {
-                    return type;
-                } else {
-                    return Type.UNKNOWN_TYPE;
-                }
             case MAP:
                 Type mapType = convertToMapType(icebergType);
                 if (mapType.isMapType()) {
