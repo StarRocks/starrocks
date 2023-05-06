@@ -16,6 +16,7 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.thrift.THdfsFileFormat;
 
 public enum RemoteFileInputFormat {
@@ -39,7 +40,11 @@ public enum RemoteFileInputFormat {
                     .build();
 
     public static RemoteFileInputFormat fromHdfsInputFormatClass(String className) {
-        return VALID_INPUT_FORMATS.get(className);
+        RemoteFileInputFormat fileInputFormat = VALID_INPUT_FORMATS.get(className);
+        if (fileInputFormat == null) {
+            throw new StarRocksConnectorException("Unsupported file format: %s", className);
+        }
+        return fileInputFormat;
     }
 
     public static boolean isSplittable(String className) {
