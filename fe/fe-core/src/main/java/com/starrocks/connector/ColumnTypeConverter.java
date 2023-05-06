@@ -294,10 +294,6 @@ public class ColumnTypeConverter {
         }
     }
 
-    private static ArrayType convertToArrayType(io.delta.standalone.types.ArrayType arrayType) {
-        return new ArrayType(fromDeltaLakeType(arrayType.getElementType()), true);
-    }
-
     public static String getTypeKeyword(String type) {
         String keyword = type;
         int parenthesesIndex;
