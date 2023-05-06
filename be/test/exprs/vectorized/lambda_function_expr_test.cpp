@@ -39,52 +39,15 @@ ColumnPtr build_int_column(const std::vector<int>& values) {
     return data;
 }
 
-ColumnPtr build_int_column(const std::vector<int>& values, const std::vector<uint8_t>& nullflags) {
-    DCHECK_EQ(values.size(), nullflags.size());
-    auto null = NullColumn::create();
-    null->append_numbers(nullflags.data(), nullflags.size());
-
-    auto data = build_int_column(values);
-
-    return NullableColumn::create(std::move(data), std::move(null));
-}
-
 class VectorizedLambdaFunctionExprTest : public ::testing::Test {
 public:
     void SetUp() override {
-        // init the int_type.
-        TTypeNode node;
-        node.__set_type(TTypeNodeType::SCALAR);
-        TScalarType scalar_type;
-        scalar_type.__set_type(TPrimitiveType::INT);
-        node.__set_scalar_type(scalar_type);
-        int_type.types.push_back(node);
-
-        // init expr_node
-        expr_node.opcode = TExprOpcode::ADD;
-        expr_node.child_type = TPrimitiveType::INT;
-        expr_node.node_type = TExprNodeType::BINARY_PRED;
-        expr_node.num_children = 2;
-        expr_node.__isset.opcode = true;
-        expr_node.__isset.child_type = true;
-        expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-
         create_array_expr();
-        create_lambda_expr();
     }
 
-    void create_lambda_expr() {
-        // create lambda functions
-        TExprNode tlambda_func;
-        tlambda_func.opcode = TExprOpcode::ADD;
-        tlambda_func.child_type = TPrimitiveType::INT;
-        tlambda_func.node_type = TExprNodeType::LAMBDA_FUNCTION_EXPR;
-        tlambda_func.num_children = 2;
-        tlambda_func.__isset.opcode = true;
-        tlambda_func.__isset.child_type = true;
-        tlambda_func.type = gen_type_desc(TPrimitiveType::INT);
-        LambdaFunction* lambda_func = _objpool.add(new LambdaFunction(tlambda_func));
+    static TExprNode create_expr_node();
 
+<<<<<<< HEAD:be/test/exprs/vectorized/lambda_function_expr_test.cpp
         // x -> x
         TExprNode slot_ref;
         slot_ref.node_type = TExprNodeType::SLOT_REF;
@@ -138,6 +101,9 @@ public:
         lambda_func->add_child(col8);
         _lambda_func.push_back(lambda_func);
     }
+=======
+    static std::vector<Expr*> create_lambda_expr(ObjectPool* pool);
+>>>>>>> 7d733abc0 ([BugFix] Fix the memory leak of lambda function (#22886)):be/test/exprs/lambda_array_expr_test.cpp
 
     void create_array_expr() {
         TypeDescriptor type_arr_int;
@@ -211,6 +177,7 @@ public:
         const_array = new_fake_const_expr(const_col, type_arr_int);
         _array_expr.push_back(const_array);
     }
+
     FakeConstExpr* new_fake_const_expr(ColumnPtr value, const TypeDescriptor& type) {
         TExprNode node;
         node.__set_node_type(TExprNodeType::INT_LITERAL);
@@ -221,6 +188,7 @@ public:
         return e;
     }
 
+<<<<<<< HEAD:be/test/exprs/vectorized/lambda_function_expr_test.cpp
     MockExpr* new_mock_expr(ColumnPtr value, const PrimitiveType& type) {
         return new_mock_expr(std::move(value), TypeDescriptor(type));
     }
@@ -244,10 +212,13 @@ public:
         return expr;
     }
     TExprNode create_int_literal_node(int64_t value_literal) {
+=======
+    static TExprNode create_int_literal_node(int64_t value_literal) {
+>>>>>>> 7d733abc0 ([BugFix] Fix the memory leak of lambda function (#22886)):be/test/exprs/lambda_array_expr_test.cpp
         TExprNode lit_node;
         lit_node.__set_node_type(TExprNodeType::INT_LITERAL);
         lit_node.__set_num_children(0);
-        lit_node.__set_type(int_type);
+        lit_node.__set_type(gen_type_desc(TPrimitiveType::INT));
         TIntLiteral lit_value;
         lit_value.__set_value(value_literal);
         lit_node.__set_int_literal(lit_value);
@@ -255,18 +226,101 @@ public:
         return lit_node;
     }
 
-    TExprNode expr_node;
-    std::vector<Expr*> _lambda_func;
     std::vector<Expr*> _array_expr;
     std::vector<Chunk*> _chunks;
 
-private:
-    TTypeDesc int_type;
+protected:
     RuntimeState _runtime_state;
     ObjectPool _objpool;
 };
 
+<<<<<<< HEAD:be/test/exprs/vectorized/lambda_function_expr_test.cpp
 TypeDescriptor array_type(const PrimitiveType& child_type) {
+=======
+TExprNode VectorizedLambdaFunctionExprTest::create_expr_node() {
+    TExprNode expr_node;
+    expr_node.opcode = TExprOpcode::ADD;
+    expr_node.child_type = TPrimitiveType::INT;
+    expr_node.node_type = TExprNodeType::BINARY_PRED;
+    expr_node.num_children = 2;
+    expr_node.__isset.opcode = true;
+    expr_node.__isset.child_type = true;
+    expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    return expr_node;
+}
+
+std::vector<Expr*> VectorizedLambdaFunctionExprTest::create_lambda_expr(ObjectPool* pool) {
+    std::vector<Expr*> lambda_funcs;
+
+    // create lambda functions
+    TExprNode tlambda_func;
+    tlambda_func.opcode = TExprOpcode::ADD;
+    tlambda_func.child_type = TPrimitiveType::INT;
+    tlambda_func.node_type = TExprNodeType::LAMBDA_FUNCTION_EXPR;
+    tlambda_func.num_children = 2;
+    tlambda_func.__isset.opcode = true;
+    tlambda_func.__isset.child_type = true;
+    tlambda_func.type = gen_type_desc(TPrimitiveType::INT);
+    LambdaFunction* lambda_func = pool->add(new LambdaFunction(tlambda_func));
+
+    // x -> x
+    TExprNode slot_ref;
+    slot_ref.node_type = TExprNodeType::SLOT_REF;
+    slot_ref.type = gen_type_desc(TPrimitiveType::INT);
+    slot_ref.num_children = 0;
+    slot_ref.__isset.slot_ref = true;
+    slot_ref.slot_ref.slot_id = 100000;
+    slot_ref.slot_ref.tuple_id = 0;
+    slot_ref.__set_is_nullable(true);
+
+    ColumnRef* col1 = pool->add(new ColumnRef(slot_ref));
+    ColumnRef* col2 = pool->add(new ColumnRef(slot_ref));
+    lambda_func->add_child(col1);
+    lambda_func->add_child(col2);
+    lambda_funcs.push_back(lambda_func);
+
+    // x -> x is null
+    lambda_func = pool->add(new LambdaFunction(tlambda_func));
+    ColumnRef* col3 = pool->add(new ColumnRef(slot_ref));
+    ColumnRef* col4 = pool->add(new ColumnRef(slot_ref));
+    TExprNode node = create_expr_node();
+    node.fn.name.function_name = "is_null_pred";
+    auto* is_null = pool->add(VectorizedIsNullPredicateFactory::from_thrift(node));
+    is_null->add_child(col4);
+    lambda_func->add_child(is_null);
+    lambda_func->add_child(col3);
+    lambda_funcs.push_back(lambda_func);
+
+    // x -> x + a (captured columns)
+    lambda_func = pool->add(new LambdaFunction(tlambda_func));
+    ColumnRef* col5 = pool->add(new ColumnRef(slot_ref));
+    node = create_expr_node();
+    node.opcode = TExprOpcode::ADD;
+    node.type = gen_type_desc(TPrimitiveType::INT);
+    auto* add_expr = pool->add(VectorizedArithmeticExprFactory::from_thrift(node));
+    ColumnRef* col6 = pool->add(new ColumnRef(slot_ref));
+    slot_ref.slot_ref.slot_id = 1;
+    ColumnRef* col7 = pool->add(new ColumnRef(slot_ref));
+    add_expr->_children.push_back(col6);
+    add_expr->_children.push_back(col7);
+    lambda_func->add_child(add_expr);
+    lambda_func->add_child(col5);
+    lambda_funcs.push_back(lambda_func);
+
+    // x -> -110
+    lambda_func = pool->add(new LambdaFunction(tlambda_func));
+    auto tint_literal = create_int_literal_node(-110);
+    auto int_literal = pool->add(new VectorizedLiteral(tint_literal));
+    slot_ref.slot_ref.slot_id = 100000;
+    ColumnRef* col8 = pool->add(new ColumnRef(slot_ref));
+    lambda_func->add_child(int_literal);
+    lambda_func->add_child(col8);
+    lambda_funcs.push_back(lambda_func);
+    return lambda_funcs;
+}
+
+TypeDescriptor array_type(const LogicalType& child_type) {
+>>>>>>> 7d733abc0 ([BugFix] Fix the memory leak of lambda function (#22886)):be/test/exprs/lambda_array_expr_test.cpp
     TypeDescriptor t;
     t.type = TYPE_ARRAY;
     t.children.resize(1);
@@ -282,16 +336,17 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
     std::vector<int> vec_a = {1, 1, 1};
     cur_chunk->append_column(build_int_column(vec_a), 1);
     for (int i = 0; i < 1; ++i) {
-        for (int j = 0; j < _lambda_func.size(); ++j) {
+        auto lambda_funcs = create_lambda_expr(&_objpool);
+        for (int j = 0; j < lambda_funcs.size(); ++j) {
             ArrayMapExpr array_map_expr(array_type(TYPE_INT));
             array_map_expr.clear_children();
-            array_map_expr.add_child(_lambda_func[j]);
+            array_map_expr.add_child(lambda_funcs[j]);
             array_map_expr.add_child(_array_expr[i]);
             ExprContext exprContext(&array_map_expr);
             std::vector<ExprContext*> expr_ctxs = {&exprContext};
             ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
             ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
-            auto lambda = dynamic_cast<LambdaFunction*>(_lambda_func[j]);
+            auto lambda = dynamic_cast<LambdaFunction*>(lambda_funcs[j]);
 
             // check LambdaFunction::prepare()
             std::vector<SlotId> ids, arguments;
@@ -357,16 +412,17 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
     std::vector<int> vec_a = {1, 1, 1};
     cur_chunk->append_column(build_int_column(vec_a), 1);
     for (int i = 1; i < 5; ++i) {
-        for (int j = 0; j < _lambda_func.size(); ++j) {
+        auto lambda_funcs = create_lambda_expr(&_objpool);
+        for (int j = 0; j < lambda_funcs.size(); ++j) {
             ArrayMapExpr array_map_expr(array_type(TYPE_INT));
             array_map_expr.clear_children();
-            array_map_expr.add_child(_lambda_func[j]);
+            array_map_expr.add_child(lambda_funcs[j]);
             array_map_expr.add_child(_array_expr[i]);
             ExprContext exprContext(&array_map_expr);
             std::vector<ExprContext*> expr_ctxs = {&exprContext};
             ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
             ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
-            auto lambda = dynamic_cast<LambdaFunction*>(_lambda_func[j]);
+            auto lambda = dynamic_cast<LambdaFunction*>(lambda_funcs[j]);
 
             // check LambdaFunction::prepare()
             std::vector<SlotId> ids, arguments;
@@ -427,16 +483,17 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
     std::vector<int> vec_a = {1, 1, 1};
     cur_chunk->append_column(build_int_column(vec_a), 1);
     for (int i = 5; i < _array_expr.size(); ++i) {
-        for (int j = 0; j < _lambda_func.size(); ++j) {
+        auto lambda_funcs = create_lambda_expr(&_objpool);
+        for (int j = 0; j < lambda_funcs.size(); ++j) {
             ArrayMapExpr array_map_expr(array_type(j == 1 ? TYPE_BOOLEAN : TYPE_INT));
             array_map_expr.clear_children();
-            array_map_expr.add_child(_lambda_func[j]);
+            array_map_expr.add_child(lambda_funcs[j]);
             array_map_expr.add_child(_array_expr[i]);
             ExprContext exprContext(&array_map_expr);
             std::vector<ExprContext*> expr_ctxs = {&exprContext};
             ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
             ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
-            auto lambda = dynamic_cast<LambdaFunction*>(_lambda_func[j]);
+            auto lambda = dynamic_cast<LambdaFunction*>(lambda_funcs[j]);
 
             // check LambdaFunction::prepare()
             std::vector<SlotId> ids, arguments;

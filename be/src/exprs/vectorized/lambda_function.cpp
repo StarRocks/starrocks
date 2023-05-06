@@ -89,6 +89,7 @@ ColumnPtr LambdaFunction::evaluate(ExprContext* context, Chunk* ptr) {
     return get_child(0)->evaluate(context, ptr);
 }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/lambda_function.cpp
 void LambdaFunction::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
     _arguments_ids.clear();
     _captured_slot_ids.clear();
@@ -97,3 +98,6 @@ void LambdaFunction::close(RuntimeState* state, ExprContext* context, FunctionCo
 }
 
 } // namespace starrocks::vectorized
+=======
+} // namespace starrocks
+>>>>>>> 7d733abc0 ([BugFix] Fix the memory leak of lambda function (#22886)):be/src/exprs/lambda_function.cpp

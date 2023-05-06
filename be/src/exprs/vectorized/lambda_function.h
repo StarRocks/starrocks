@@ -45,7 +45,11 @@ public:
         return _arguments_ids.size();
     }
 
+<<<<<<< HEAD:be/src/exprs/vectorized/lambda_function.h
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
+=======
+    Expr* get_lambda_expr() const { return _children[0]; }
+>>>>>>> 7d733abc0 ([BugFix] Fix the memory leak of lambda function (#22886)):be/src/exprs/lambda_function.h
 
 private:
     std::vector<SlotId> _captured_slot_ids;
