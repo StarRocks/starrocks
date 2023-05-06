@@ -151,6 +151,7 @@ private:
 };
 
 void RepeatedStoredColumnReader::reset() {
+    _meet_first_record = false;
     size_t num_levels = _levels_decoded - _levels_parsed;
     if (_levels_parsed == 0 || num_levels == 0) {
         _levels_parsed = _levels_decoded = 0;
@@ -161,7 +162,6 @@ void RepeatedStoredColumnReader::reset() {
     memmove(&_rep_levels[0], &_rep_levels[_levels_parsed], num_levels * sizeof(level_t));
     _levels_decoded -= _levels_parsed;
     _levels_parsed = 0;
-    _meet_first_record = false;
 }
 
 Status RepeatedStoredColumnReader::do_read_records(size_t* num_records, ColumnContentType content_type,
@@ -603,7 +603,10 @@ Status StoredColumnReader::_lazy_load_page_rows(size_t batch_size, ColumnContent
     while (load_rows > 0) {
         size_t to_read = std::min(load_rows, batch_size);
         auto temp_column = dst->clone_empty();
-        RETURN_IF_ERROR(read_records(&to_read, content_type, temp_column.get()));
+        RETURN_IF_ERROR(do_read_records(&to_read, content_type, temp_column.get()));
+        // TODO(SmithCruise) Refactor it
+        // We need reset def/rep cursor after lazy load
+        reset();
         load_rows -= to_read;
     }
     _opts.context->filter = filter;
