@@ -266,7 +266,9 @@ int main(int argc, char** argv) {
 
     if (paths.empty()) {
         if (as_cn) {
+#ifdef USE_STAROS
             starrocks::config::starlet_cache_dir = "";
+#endif
         } else {
             LOG(FATAL) << "All disks are broken, exit.";
             exit(-1);
