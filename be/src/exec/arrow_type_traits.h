@@ -56,6 +56,7 @@ M_ArrowTypeIdToTypeStruct(ArrowTypeId::LIST, arrow::ListType);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::LARGE_LIST, arrow::LargeListType);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::FIXED_SIZE_LIST, arrow::FixedSizeListType);
 M_ArrowTypeIdToTypeStruct(ArrowTypeId::MAP, arrow::MapType);
+M_ArrowTypeIdToTypeStruct(ArrowTypeId::STRUCT, arrow::StructType);
 
 template <ArrowTypeId AT>
 using ArrowTypeIdToType = typename ArrowTypeStructTraits<AT>::TypeStruct;
