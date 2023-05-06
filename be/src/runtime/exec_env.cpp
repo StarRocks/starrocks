@@ -168,6 +168,8 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
     _stream_mgr = new DataStreamMgr();
     _result_mgr = new ResultBufferMgr();
     _result_queue_mgr = new ResultQueueMgr();
+    _health_checker = new HealthChecker();
+    _thread_pool_checker = new ThreadPoolChecker();
     _backend_client_cache = new BackendServiceClientCache(config::max_client_cache_size_per_host);
     _frontend_client_cache = new FrontendServiceClientCache(config::max_client_cache_size_per_host);
     _broker_client_cache = new BrokerServiceClientCache(config::max_client_cache_size_per_host);
@@ -226,6 +228,9 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
                             .build(&driver_executor_thread_pool));
     _driver_executor = new pipeline::GlobalDriverExecutor("pip_exe", std::move(driver_executor_thread_pool), false);
     _driver_executor->initialize(_max_executor_threads);
+
+    _thread_pool_checker->start();
+    _health_checker->register_monitor(_thread_pool_checker->get_name() , _thread_pool_checker);
 
     _driver_limiter =
             new pipeline::DriverLimiter(_max_executor_threads * config::pipeline_max_num_drivers_per_exec_thread);
@@ -500,6 +505,9 @@ void ExecEnv::_destroy() {
     if (_automatic_partition_pool) {
         _automatic_partition_pool->shutdown();
     }
+
+    _thread_pool_checker->stop();
+    _health_checker->stop();
 
     SAFE_DELETE(_agent_server);
     SAFE_DELETE(_runtime_filter_worker);

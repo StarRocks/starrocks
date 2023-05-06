@@ -49,6 +49,8 @@ class TAgentResult;
 class TAgentPublishRequest;
 class TSnapshotRequest;
 class ThreadPool;
+class ThreadPoolChecker;
+class HealthChecker;
 
 // Each method corresponds to one RPC from FE Master, see BackendService.
 class AgentServer {

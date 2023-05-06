@@ -50,6 +50,8 @@
 #include "gutil/strings/substitute.h"
 #include "gutil/sysinfo.h"
 #include "runtime/exec_env.h"
+#include "runtime/thread_pool_checker.h"
+#include "runtime/health_checker.h"
 #include "storage/snapshot_manager.h"
 #include "util/phmap/phmap.h"
 #include "util/threadpool.h"
@@ -171,6 +173,7 @@ void AgentServer::Impl::init_or_die() {
                                        max_publish_version_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
                                        _thread_pool_publish_version);
 #endif
+        _exec_env->thread_pool_checker()->register_thread_pool("publish_version_pool" ,_thread_pool_publish_version.get());
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("drop", config::drop_tablet_worker_count, config::drop_tablet_worker_count,
                                        std::numeric_limits<int>::max(), _thread_pool_drop);

@@ -44,6 +44,7 @@
 #include "http/action/lake/dump_tablet_metadata_action.h"
 #include "http/action/meta_action.h"
 #include "http/action/metrics_action.h"
+#include "http/monitor_action.h"
 #include "http/action/pipeline_blocking_drivers_action.h"
 #include "http/action/pprof_actions.h"
 #include "http/action/query_cache_action.h"
@@ -135,6 +136,14 @@ Status HttpServiceBE::start() {
     auto* stop_be_action = new StopBeAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_stop_be", stop_be_action);
     _http_handlers.emplace_back(stop_be_action);
+
+    // Register monitor action
+    auto* monitor_action = new MonitorAction();
+    // Register all monitors
+    starrocks::ExecEnv::GetInstance()->get_health_checker()->register_monitors_to_http_action(monitor_action);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/monitor", monitor_action);
+    _http_handlers.emplace_back(monitor_action);
+
 
     // register pprof actions
     if (!config::pprof_profile_dir.empty()) {
