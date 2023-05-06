@@ -29,7 +29,7 @@ class MapColumn final : public ColumnFactory<Column, MapColumn> {
 public:
     using ValueType = void;
 
-    MapColumn(ColumnPtr keys, ColumnPtr values, UInt32Column::Ptr offests);
+    MapColumn(ColumnPtr keys, ColumnPtr values, UInt32Column::Ptr offsets);
 
     MapColumn(const MapColumn& rhs)
             : _keys(rhs._keys->clone_shared()),

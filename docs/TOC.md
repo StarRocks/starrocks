@@ -605,6 +605,7 @@
       + [starts_with](./sql-reference/sql-functions/string-functions/starts_with.md)
       + [strleft](./sql-reference/sql-functions/string-functions/strleft.md)
       + [strright](./sql-reference/sql-functions/string-functions/strright.md)
+      + [str_to_map](./sql-reference/sql-functions/string-functions/str_to_map.md)
       + [substring](./sql-reference/sql-functions/string-functions/substring.md)
       + [trim](./sql-reference/sql-functions/string-functions/trim.md)
       + [ucase](./sql-reference/sql-functions/string-functions/ucase.md)

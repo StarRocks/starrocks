@@ -5307,6 +5307,31 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName.getFunction()), e1, e2, pos);
         }
 
+        if (functionName.equals(FunctionSet.STR_TO_MAP)) {
+            Expr e0;
+            Expr e1;
+            Expr e2;
+            String collectionDelimiter = ",";
+            String mapDelimiter = ":";
+            if (context.expression().size() == 1) {
+                e0 = (Expr) visit(context.expression(0));
+                e1 = new StringLiteral(collectionDelimiter, pos);
+                e2 = new StringLiteral(mapDelimiter, pos);
+            } else if (context.expression().size() == 2) {
+                e0 = (Expr) visit(context.expression(0));
+                e1 = (Expr) visit(context.expression(1));
+                e2 = new StringLiteral(mapDelimiter, pos);
+            } else if (context.expression().size() == 3) {
+                e0 = (Expr) visit(context.expression(0));
+                e1 = (Expr) visit(context.expression(1));
+                e2 = (Expr) visit(context.expression(2));
+            } else {
+                throw new ParsingException(PARSER_ERROR_MSG.wrongNumOfArgs(FunctionSet.STR_TO_MAP));
+            }
+            FunctionCallExpr split = new FunctionCallExpr(FunctionSet.SPLIT, ImmutableList.of(e0, e1), pos);
+            return new FunctionCallExpr(functionName, ImmutableList.of(split, e2), pos);
+        }
+
         if (fnName.getFunction().equalsIgnoreCase("CONNECTION_ID")) {
             return new InformationFunction("CONNECTION_ID");
         }

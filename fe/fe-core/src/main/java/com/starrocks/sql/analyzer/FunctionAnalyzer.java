@@ -28,6 +28,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 
@@ -98,6 +99,12 @@ public class FunctionAnalyzer {
             Preconditions.checkState(functionCallExpr.getChild(0).getChild(0) != null,
                     "map_apply's lambda function can not be null");
             functionCallExpr.setType(functionCallExpr.getChild(0).getChild(0).getType());
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.STR_TO_MAP)) {
+            Type retType = new MapType(Type.VARCHAR, Type.VARCHAR);
+            functionCallExpr.setType(retType);
+            functionCallExpr.getFn().setRetType(retType);
         }
     }
 
