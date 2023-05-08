@@ -14,24 +14,25 @@
 
 #pragma once
 
-#include "exec/hdfs_scanner.h"
+#include "exec/parquet_scanner.h"
 
 namespace starrocks {
 
-class HdfsParquetScanner final : public HdfsScanner {
+class IcebergDeleteFileIterator {
 public:
-    HdfsParquetScanner() = default;
-    ~HdfsParquetScanner() override = default;
+    IcebergDeleteFileIterator() = default;
+    ~IcebergDeleteFileIterator() = default;
 
-    Status do_open(RuntimeState* runtime_state) override;
-    void do_close(RuntimeState* runtime_state) noexcept override;
-    Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
-    Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
-    void do_update_counter(HdfsScanProfile* profile) override;
+    Status init(FileSystem* fs, const std::string& timezone, const std::string& file_path, int64_t file_length,
+                const std::vector<SlotDescriptor*>& src_slot_descriptors, bool position_delete);
+
+    bool has_next();
+
+    std::shared_ptr<::arrow::RecordBatch> next();
 
 private:
-    std::shared_ptr<parquet::FileReader> _reader = nullptr;
-    std::set<std::int64_t> _need_skip_rowids;
+    std::shared_ptr<::arrow::RecordBatch> _batch;
+    std::shared_ptr<ParquetChunkReader> _file_reader;
 };
 
 } // namespace starrocks
