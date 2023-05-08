@@ -20,10 +20,6 @@
       helm repo add starrocks-community https://starrocks.github.io/helm-charts
       ```
 
-      > **NOTE**
-      >
-      > You can also add the [Helm Chart Repo from Artifact Hub](). For detailed information, see https://artifacthub.io/packages/helm/fslstarrocks/kube-starrocks
-
    2. Update the Helm Chart Repo to the latest version.
 
       ```Bash
@@ -89,23 +85,23 @@
 
 ## Next steps
 
-**Access StarRocks cluster**
+- Access StarRocks cluster
 
-You can access the StarRocks cluster from inside and outside the Kubernetes cluster. For detailed instructions, see [Access StarRocks Cluster](https://chat.openai.com/sr_operator#accessing-the-starrocks-cluster).
+  You can access the StarRocks cluster from inside and outside the Kubernetes cluster. For detailed instructions, see [Access StarRocks Cluster](https://chat.openai.com/sr_operator#accessing-the-starrocks-cluster).
 
-> **NOTICE**
->
-> The StarRocks cluster is located in the namespace `default`.
+  > **NOTICE**
+  >
+  > The StarRocks cluster is located in the namespace `default`.
 
-**Manage StarRocks operator and StarRocks cluster**
+- Manage StarRocks operator and StarRocks cluster
 
-- If you need to update the configurations of the StarRocks operator and StarRocks cluster, see [Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/).
-- If you need to uninstall the StarRocks Operator and StarRocks cluster, run the following command:
+  - If you need to update the configurations of the StarRocks operator and StarRocks cluster, see [Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/).
+  - If you need to uninstall the StarRocks Operator and StarRocks cluster, run the following command:
 
-  ```bash
-  helm uninstall starrocks
-  ```
+    ```bash
+    helm uninstall starrocks
+    ```
 
-**Search Helm Chart maintained by StarRocks on Artifact Hub**
+- Search Helm Chart maintained by StarRocks on Artifact Hub
 
-See [kube-starrocks](https://artifacthub.io/packages/helm/fslstarrocks/kube-starrocks).
+  See [kube-starrocks](https://artifacthub.io/packages/helm/fslstarrocks/kube-starrocks).

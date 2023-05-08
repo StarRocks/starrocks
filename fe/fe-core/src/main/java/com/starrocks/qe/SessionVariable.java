@@ -164,6 +164,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_DELIVER_BATCH_FRAGMENTS = "enable_deliver_batch_fragments";
 
+    public static final String ENABLE_QUERY_TABLET_AFFINITY = "enable_query_tablet_affinity";
+
     // Use resource group. It will influence the CPU schedule, I/O scheduler, and
     // memory limit etc. in BE.
     public static final String ENABLE_RESOURCE_GROUP = "enable_resource_group";
@@ -407,6 +409,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      */
     @VariableMgr.VarAttr(name = ENABLE_DELIVER_BATCH_FRAGMENTS)
     private boolean enableDeliverBatchFragments = true;
+
+    /**
+     * Determines whether to enable query tablet affinity. When enabled, attempts to schedule
+     * fragments that access the same tablet to run on the same node to improve cache hit.
+     */
+    @VariableMgr.VarAttr(name = ENABLE_QUERY_TABLET_AFFINITY)
+    private boolean enableQueryTabletAffinity = false;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -962,6 +971,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableShowAllVariables(boolean enableShowAllVariables) {
         this.enableShowAllVariables = enableShowAllVariables;
+    }
+
+    public boolean isEnableQueryTabletAffinity() {
+        return enableQueryTabletAffinity;
     }
 
     public int getStatisticCollectParallelism() {
