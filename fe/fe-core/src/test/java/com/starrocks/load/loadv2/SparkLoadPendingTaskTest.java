@@ -153,7 +153,8 @@ public class SparkLoadPendingTaskTest {
             public void submitEtlJob(long loadJobId, String loadLabel, EtlJobConfig etlJobConfig,
                                      SparkResource resource, BrokerDesc brokerDesc,
                                      SparkLoadAppHandle handle,
-                                     SparkPendingTaskAttachment attachment) throws LoadException {
+                                     SparkPendingTaskAttachment attachment,
+                                     Long sparkLoadSubmitTimeout) throws LoadException {
                 attachment.setAppId(appId);
             }
         };
