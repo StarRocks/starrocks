@@ -1,4 +1,20 @@
+<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+=======
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+>>>>>>> 1f053fc5c ([BugFix] Fix un-processed NULL_TYPE (#22688))
 
 package com.starrocks.analysis;
 
@@ -136,10 +152,10 @@ public class ShowCreateViewStmtTest {
                 .replaceAll(",\\s*(true|false)]", "");
         String snippet = "  0:UNION\n" +
                 "  |  child exprs:\n" +
-                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
-                "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
+                "  |      [32: c1, VARCHAR | [33: cast, VARCHAR | [34: cast, VARCHAR | [35: cast, VARCHAR\n" +
+                "  |      [37: c1, VARCHAR | [38: c2, VARCHAR | [42: cast, VARCHAR | [40: c4, VARCHAR\n" +
                 "  |  pass-through-operands: all";
-        Assert.assertTrue(plan.contains(snippet));
+        Assert.assertTrue(plan, plan.contains(snippet));
 
         DropTableStmt dropViewStmt = new DropTableStmt(
                 false, new TableName("default_cluster:test", "v2"), true, true);
