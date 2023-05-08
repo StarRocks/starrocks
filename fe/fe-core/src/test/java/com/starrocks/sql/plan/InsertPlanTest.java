@@ -805,6 +805,10 @@ public class InsertPlanTest extends PlanTestBase {
                 icebergTable.getUUID();
                 result = 12345566;
                 minTimes = 0;
+
+                icebergTable.isUnPartitioned();
+                result = true;
+                minTimes = 0;
             }
         };
 
