@@ -8,7 +8,7 @@ Broker 与 BE 之间使用网络传输数据，当 Broker 和 BE 部署在相同
 
 ## 下载并解压安装包
 
-[下载](https://www.mirrorship.cn/zh-CN/download) StarRocks 并解压二进制安装包。
+[下载](https://www.mirrorship.cn/zh-CN/download/community) StarRocks 并解压二进制安装包。
 
 ```bash
 tar -xzvf StarRocks-x.x.x.tar.gz
