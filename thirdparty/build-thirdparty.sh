@@ -514,8 +514,8 @@ build_rocksdb() {
     export CFLAGS=$OLD_FLAGS
 }
 
-# libsasl
-build_librdkafka() {
+# sasl
+build_sasl() {
     check_if_source_exist $SASL_SOURCE
 
     cd $TP_SOURCE_DIR/$SASL_SOURCE
