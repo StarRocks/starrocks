@@ -1,20 +1,4 @@
-<<<<<<< HEAD
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-=======
-// Copyright 2021-present StarRocks, Inc. All rights reserved.
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     https://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
->>>>>>> 1f053fc5c ([BugFix] Fix un-processed NULL_TYPE (#22688))
 
 package com.starrocks.sql.plan;
 
@@ -225,20 +209,10 @@ public class SetTest extends PlanTestBase {
     public void testSetOpCast() throws Exception {
         String sql = "select * from t0 union all (select * from t1 union all select k1,k7,k8 from  baseall)";
         String plan = getVerboseExplain(sql);
-<<<<<<< HEAD
-        Assert.assertTrue(plan.contains(
-                "  0:UNION\n" +
-                        "  |  child exprs:\n" +
-                        "  |      [1, BIGINT, true] | [4, VARCHAR(20), true] | [5, DOUBLE, true]\n" +
-                        "  |      [23, BIGINT, true] | [24, VARCHAR(20), true] | [25, DOUBLE, true]"));
-=======
         assertContains(plan, "  0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      [26, BIGINT, true] | [27, VARCHAR(20), true] | [28, DOUBLE, true]\n" +
                 "  |  child exprs:\n" +
                 "  |      [1: v1, BIGINT, true] | [4: cast, VARCHAR(20), true] | [5: cast, DOUBLE, true]\n" +
                 "  |      [23: v4, BIGINT, true] | [24: cast, VARCHAR(20), true] | [25: cast, DOUBLE, true]");
->>>>>>> 1f053fc5c ([BugFix] Fix un-processed NULL_TYPE (#22688))
         Assert.assertTrue(plan.contains(
                 "  |  19 <-> [19: k7, VARCHAR, true]\n" +
                         "  |  20 <-> [20: k8, DOUBLE, true]\n" +
@@ -247,13 +221,7 @@ public class SetTest extends PlanTestBase {
         sql =
                 "select * from t0 union all (select cast(v4 as int), v5,v6 from t1 except select cast(v7 as int), v8, v9 from t2)";
         plan = getVerboseExplain(sql);
-<<<<<<< HEAD
-        Assert.assertTrue(plan.contains("  0:UNION\n" +
-=======
         assertContains(plan, "0:UNION\n" +
-                "  |  output exprs:\n" +
-                "  |      [16, BIGINT, true] | [17, BIGINT, true] | [18, BIGINT, true]\n" +
->>>>>>> 1f053fc5c ([BugFix] Fix un-processed NULL_TYPE (#22688))
                 "  |  child exprs:\n" +
                 "  |      [1: v1, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
                 "  |      [15: cast, BIGINT, true] | [13: v5, BIGINT, true] | [14: v6, BIGINT, true]\n" +
@@ -281,13 +249,8 @@ public class SetTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:EXCEPT\n" +
                 "  |  child exprs:\n" +
-<<<<<<< HEAD
-                "  |      [7, INT, true] | [5, BIGINT, true] | [6, BIGINT, true]\n" +
-                "  |      [11, INT, true] | [9, BIGINT, true] | [10, BIGINT, true]"));
-=======
                 "  |      [7: cast, INT, true] | [5: v5, BIGINT, true] | [6: v6, BIGINT, true]\n" +
                 "  |      [11: cast, INT, true] | [9: v8, BIGINT, true] | [10: v9, BIGINT, true]");
->>>>>>> 1f053fc5c ([BugFix] Fix un-processed NULL_TYPE (#22688))
     }
 
     @Test
@@ -303,39 +266,24 @@ public class SetTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("  0:UNION\n" +
                 "  |  child exprs:\n" +
-<<<<<<< HEAD
-                "  |      [2, TINYINT, false]\n" +
-                "  |      [5, TINYINT, true]"));
-=======
                 "  |      [2: expr, TINYINT, false]\n" +
-                "  |      [5: cast, TINYINT, true]");
->>>>>>> 1f053fc5c ([BugFix] Fix un-processed NULL_TYPE (#22688))
+                "  |      [5: cast, TINYINT, true]"));
 
         sql =
                 "select count(*) from (select cast('1.2' as decimal(10,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("0:UNION\n" +
                 "  |  child exprs:\n" +
-<<<<<<< HEAD
-                "  |      [3, DECIMAL64(12,2), true]\n" +
-                "  |      [6, DECIMAL64(12,2), true]"));
-=======
-                "  |      [3: cast, DECIMAL64(12,2), false]\n" +
-                "  |      [6: cast, DECIMAL64(12,2), false]\n");
->>>>>>> 1f053fc5c ([BugFix] Fix un-processed NULL_TYPE (#22688))
+                "  |      [3: cast, DECIMAL64(12,2), true]\n" +
+                "  |      [6: cast, DECIMAL64(12,2), true]\n"));
 
         sql =
                 "select count(*) from (select cast('1.2' as decimal(5,2)) as c1 union all select cast('1.2' as decimal(10,0)) as c1) t group by t.c1";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains("0:UNION\n" +
                 "  |  child exprs:\n" +
-<<<<<<< HEAD
-                "  |      [3, DECIMAL64(12,2), true]\n" +
-                "  |      [6, DECIMAL64(12,2), true]"));
-=======
-                "  |      [3: cast, DECIMAL64(12,2), false]\n" +
-                "  |      [6: cast, DECIMAL64(12,2), false]");
->>>>>>> 1f053fc5c ([BugFix] Fix un-processed NULL_TYPE (#22688))
+                "  |      [3: cast, DECIMAL64(12,2), true]\n" +
+                "  |      [6: cast, DECIMAL64(12,2), true]"));
     }
 
     @Test
@@ -572,36 +520,9 @@ public class SetTest extends PlanTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testSetExpression() throws Exception {
         UtFrameUtils.parseAndAnalyzeStmt("set exec_mem_limit = 2 * 4", connectContext);
         UtFrameUtils.parseAndAnalyzeStmt("set exec_mem_limit = 2 + 4 - 1 * 3", connectContext);
-=======
-    public void testUserVariable() throws Exception {
-        String sql = "set @var = (select v1,v2 from test.t0)";
-        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
-        SetExecutor setExecutor = new SetExecutor(connectContext, (SetStmt) statementBase);
-        Assert.assertThrows("Scalar subquery should output one column", SemanticException.class,
-                () -> setExecutor.execute());
-        try {
-            setExecutor.execute();
-            Assert.fail();
-        } catch (Exception e) {
-            Assert.assertEquals("Getting analyzing error. Detail message: Scalar subquery should output one column.",
-                    e.getMessage());
-        }
-    }
-
-    @Test
-    public void testMinus() throws Exception {
-        String sql = "select * from t0 minus select * from t1";
-        String plan = getFragmentPlan(sql);
-        assertContains(plan, "0:EXCEPT\n" +
-                "  |  \n" +
-                "  |----4:EXCHANGE\n" +
-                "  |    \n" +
-                "  2:EXCHANGE");
->>>>>>> 1f053fc5c ([BugFix] Fix un-processed NULL_TYPE (#22688))
     }
 
     @Test
