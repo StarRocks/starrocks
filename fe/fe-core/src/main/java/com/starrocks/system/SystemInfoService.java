@@ -250,6 +250,11 @@ public class SystemInfoService {
         // add backend to DEFAULT_CLUSTER
         setBackendOwner(newBackend);
 
+        // add it to warehouse
+        Warehouse currentWarehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        currentWarehouse.getAnyAvailableCluster().addNode(newBackend.getId());
+
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddBackend(newBackend);
         LOG.info("finished to add {} ", newBackend);
@@ -450,6 +455,15 @@ public class SystemInfoService {
         } else {
             LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
         }
+
+
+        // drop it from warehouse
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        if (warehouse != null) {
+            warehouse.getAnyAvailableCluster().dropNode(droppedBackend.getId());
+        }
+
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logDropBackend(droppedBackend);
         LOG.info("finished to drop {}", droppedBackend);
@@ -1042,6 +1056,15 @@ public class SystemInfoService {
                 // cluster is not created. Be in cluster will be updated in loadCluster.
             }
         }
+
+        // add it to DEFAULT_WAREHOUSE
+        final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        if (warehouse != null) {
+            warehouse.getAnyAvailableCluster().addNode(newBackend.getId());
+        } else {
+            // TODO: cn will be updated in loadWarehouse
+        }
     }
 
     public void replayDropComputeNode(long computeNodeId) {
@@ -1067,6 +1090,16 @@ public class SystemInfoService {
             warehouse.getAnyAvailableCluster().dropNode(cn.getId());
         }
 
+        // clear map in starosAgent
+        if (RunMode.allowCreateLakeTable()) {
+            long starletPort = cn.getStarletPort();
+            if (starletPort == 0) {
+                return;
+            }
+            String workerAddr = cn.getHost() + ":" + starletPort;
+            long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerId(workerAddr);
+            GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
+        }
     }
 
     public void replayDropBackend(Backend backend) {
@@ -1085,6 +1118,14 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         if (null != cluster) {
             cluster.removeBackend(backend.getId());
+
+            // drop it from warehouse
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                    getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+            if (warehouse != null) {
+                warehouse.getAnyAvailableCluster().dropNode(backend.getId());
+            }
+
             // clear map in starosAgent
             if (RunMode.allowCreateLakeTable()) {
                 long starletPort = backend.getStarletPort();
