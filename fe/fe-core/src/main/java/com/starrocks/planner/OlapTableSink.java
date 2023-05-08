@@ -300,6 +300,9 @@ public class OlapTableSink extends DataSink {
                 }
                 break;
             }
+            case RANDOM: {
+                break;
+            }
             default:
                 throw new UserException("unsupported distributed type, type=" + distInfo.getType());
         }

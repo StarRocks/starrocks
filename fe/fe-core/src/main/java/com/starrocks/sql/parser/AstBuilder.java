@@ -258,6 +258,7 @@ import com.starrocks.sql.ast.PropertySet;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
@@ -6061,11 +6062,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.INTEGER_VALUE() != null) {
             buckets = Integer.parseInt(context.INTEGER_VALUE().getText());
         }
-        List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
-
-        return new HashDistributionDesc(buckets,
-                identifierList.stream().map(Identifier::getValue).collect(toList()),
-                pos);
+        if (context.HASH() != null) {
+            List<Identifier> identifierList = visit(context.identifierList().identifier(), Identifier.class);
+            return new HashDistributionDesc(buckets,
+                    identifierList.stream().map(Identifier::getValue).collect(toList()),
+                    pos);
+        } else {
+            return new RandomDistributionDesc(buckets, pos);
+        }
     }
 
     @Override

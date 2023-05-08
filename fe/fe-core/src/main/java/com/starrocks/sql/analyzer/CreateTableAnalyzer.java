@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.NodePosition;
@@ -357,8 +358,11 @@ public class CreateTableAnalyzer {
                     }
                     distributionDesc = new HashDistributionDesc(0, Lists.newArrayList(columnDefs.get(0).getName()));
                 } else {
-                    throw new SemanticException("Create olap table should contain distribution desc");
+                    distributionDesc = new RandomDistributionDesc();
                 }
+            }
+            if (distributionDesc instanceof RandomDistributionDesc && keysDesc.getKeysType() != KeysType.DUP_KEYS) {
+                throw new SemanticException("Random distribution must be used in DUP_KEYS", distributionDesc.getPos());
             }
             distributionDesc.analyze(columnSet);
             statement.setDistributionDesc(distributionDesc);
