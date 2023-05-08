@@ -108,17 +108,11 @@ public:
 
     void construct_brpc_attachment(PTransmitChunkParams* _chunk_request, butil::IOBuf* attachment);
 
-    // Return total number of bytes sent in TRowBatch.data. If batches are
-    // broadcast to multiple receivers, they are counted once per receiver.
-    [[maybe_unused]] int64_t get_num_data_bytes_sent() const;
-
     RuntimeProfile* profile() override { return _profile; }
 
     TPartitionType::type get_partition_type() const { return _part_type; }
 
     const std::vector<ExprContext*>& get_partition_exprs() const { return _partition_expr_ctxs; }
-
-    int32_t get_destinations_size() const { return _channels.size(); }
 
     PlanNodeId get_dest_node_id() const { return _dest_node_id; }
 

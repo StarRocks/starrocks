@@ -85,16 +85,11 @@ public:
             : _parent(parent),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
-
               _brpc_dest_addr(brpc_dest),
               _is_transfer_chain(is_transfer_chain),
               _send_query_statistics_with_every_batch(send_query_statistics_with_every_batch) {}
 
     virtual ~Channel() {
-        if (_closure != nullptr && _closure->unref()) {
-            delete _closure;
-        }
-
         if (_chunk_closure != nullptr && _chunk_closure->unref()) {
             delete _chunk_closure;
         }
@@ -130,8 +125,6 @@ public:
     // Get close wait's response, to finish channel close operation.
     void close_wait(RuntimeState* state);
 
-    int64_t num_data_bytes_sent() const { return _num_data_bytes_sent; }
-
     std::string get_fragment_instance_id_str() { return print_id(_fragment_instance_id); }
 
     TUniqueId get_fragment_instance_id() { return _fragment_instance_id; }
@@ -164,8 +157,6 @@ private:
     TUniqueId _fragment_instance_id;
     PlanNodeId _dest_node_id;
 
-    // the number of TRowBatch.data bytes sent successfully
-    int64_t _num_data_bytes_sent{0};
     int64_t _request_seq{0};
 
     std::unique_ptr<Chunk> _chunk;
@@ -189,7 +180,6 @@ private:
     size_t _current_request_bytes = 0;
 
     doris::PBackendService_Stub* _brpc_stub = nullptr;
-    RefCountClosure<PTransmitDataResult>* _closure = nullptr;
 
     int32_t _brpc_timeout_ms = 500;
     // whether the dest can be treated as query statistics transfer chain.
@@ -718,18 +708,6 @@ void DataStreamSender::construct_brpc_attachment(PTransmitChunkParams* params, b
         attachment->append(chunk->data());
         chunk->clear_data();
     }
-}
-
-int64_t DataStreamSender::get_num_data_bytes_sent() const {
-    // TODO: do we need synchronization here or are reads & writes to 8-byte ints
-    // atomic?
-    int64_t result = 0;
-
-    for (auto _channel : _channels) {
-        result += _channel->num_data_bytes_sent();
-    }
-
-    return result;
 }
 
 } // namespace starrocks
