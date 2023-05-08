@@ -591,7 +591,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select count(*) from " +
                 "locations join emps on emps.locationid = locations.locationid + 1 " +
                 "group by emps.deptno");
-        testRewriteFail(mv, "select count(*) , emps.deptno from " +
+        testRewriteOK(mv, "select count(*) , emps.deptno from " +
                 "locations join emps on emps.locationid = locations.locationid + 1 " +
                 "where emps.deptno > 10 " +
                 "group by emps.deptno");
