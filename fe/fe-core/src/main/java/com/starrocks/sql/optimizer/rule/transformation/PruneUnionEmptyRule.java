@@ -12,6 +12,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -76,7 +77,13 @@ public class PruneUnionEmptyRule extends TransformationRule {
         for (List<ColumnRefOperator> childOutputColumn : unionOperator.getChildOutputColumns()) {
             if (newInputs.get(0).getOutputColumns().isIntersect(new ColumnRefSet(childOutputColumn))) {
                 for (int i = 0; i < unionOperator.getOutputColumnRefOp().size(); i++) {
-                    projectMap.put(unionOperator.getOutputColumnRefOp().get(i), childOutputColumn.get(i));
+                    ColumnRefOperator unionOutputColumn = unionOperator.getOutputColumnRefOp().get(i);
+                    // TODO: if we implement COW in BE, we could remove it
+                    if (childOutputColumn.get(i).isColumnRef() && projectMap.containsValue(childOutputColumn.get(i))) {
+                        projectMap.put(unionOutputColumn, new CloneOperator(childOutputColumn.get(i)));
+                    } else {
+                        projectMap.put(unionOutputColumn, childOutputColumn.get(i));
+                    }
                 }
                 break;
             }
