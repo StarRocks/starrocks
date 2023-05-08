@@ -2035,7 +2035,7 @@ specialFunctionExpression
     | MOD '(' expression ',' expression ')'
     | MONTH '(' expression ')'
     | QUARTER '(' expression ')'
-    | REGEXP '(' expression ',' expression ')'
+    | REGEXP '(' (expression (',' expression)*)? ')'
     | REPLACE '(' (expression (',' expression)*)? ')'
     | RIGHT '(' expression ',' expression ')'
     | RLIKE '(' expression ',' expression ')'
