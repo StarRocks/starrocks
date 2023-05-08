@@ -97,9 +97,12 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const Schema& schema, const RowsetReadOp
             continue;
         }
 
-        if (options.rowid_range_option != nullptr && !options.rowid_range_option->match_segment(seg_ptr.get())) {
-            continue;
-        }
+        //        if (options.rowid_range_option != nullptr) {
+        //            seg_options.rowid_range_option = options.rowid_range_option->get_segment_rowid_range(this, seg_ptr.get());
+        //            if (seg_options.rowid_range_option == nullptr) {
+        //                continue;
+        //            }
+        //        }
 
         auto res = seg_ptr->new_iterator(*segment_schema, seg_options);
         if (res.status().is_end_of_file()) {

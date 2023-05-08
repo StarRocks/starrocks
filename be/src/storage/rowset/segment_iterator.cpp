@@ -1611,7 +1611,7 @@ Status SegmentIterator::_get_row_ranges_by_rowid_range() {
         return Status::OK();
     }
 
-    _scan_range = _scan_range.intersection(_opts.rowid_range_option->rowid_range);
+    _scan_range = _scan_range.intersection(*_opts.rowid_range_option);
     return Status::OK();
 }
 
