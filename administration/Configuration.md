@@ -424,7 +424,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |base_compaction_num_threads_per_disk|1|每个磁盘 BaseCompaction 线程的数目。|
 |base_cumulative_delta_ratio|0.3|BaseCompaction 触发条件之一：Cumulative 文件大小达到 Base 文件的比例。|
 |compaction_trace_threshold|60|单次 Compaction 打印 trace 的时间阈值，如果单次 compaction 时间超过该阈值就打印 trace，单位为秒。|
-|webserver_port|8040|HTTP Server 端口。|
+|be_http_port|8040|HTTP Server 端口。|
 |webserver_num_workers|48|HTTP Server 线程数。|
 |load_data_reserve_hours|4|小批量导入生成的文件保留的时。|
 |number_tablet_writer_threads|16|流式导入的线程数。|
