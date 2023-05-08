@@ -1449,7 +1449,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             StreamLoadPlanner planner = new StreamLoadPlanner(db, (OlapTable) table, streamLoadInfo);
             TExecPlanFragmentParams plan = planner.plan(streamLoadInfo.getId());
 
-            if (Config.enable_stream_load_profile) {
+            if (plan.query_options.enable_profile) {
                 StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().getStreamLoadManager().
                         getSyncSteamLoadTaskByTxnId(request.getTxnId());
                 if (streamLoadTask == null) {

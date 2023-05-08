@@ -208,12 +208,12 @@ public class Coordinator {
 
         deltaUrls = Lists.newArrayList();
         loadCounters = Maps.newHashMap();
+        this.connectContext = new ConnectContext();
         // for complie
         descTable = null;
 
         this.isBlockQuery = true;
         this.jobId = -1;
-        this.connectContext = null;
         this.scanNodes = null;
         this.queryOptions = null;
         this.queryGlobals = null;

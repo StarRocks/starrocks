@@ -39,6 +39,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.analysis.SlotDescriptor;
@@ -101,10 +102,14 @@ public class StreamLoadPlanner {
     private Analyzer analyzer;
     private DescriptorTable descTable;
 
+    // just for using session variable
+    private ConnectContext connectContext;
+
     public StreamLoadPlanner(Database db, OlapTable destTable, StreamLoadInfo streamLoadInfo) {
         this.db = db;
         this.destTable = destTable;
         this.streamLoadInfo = streamLoadInfo;
+        this.connectContext = new ConnectContext();
     }
 
     private void resetAnalyzer() {
@@ -115,6 +120,10 @@ public class StreamLoadPlanner {
     // can only be called after "plan()", or it will return null
     public OlapTable getDestTable() {
         return destTable;
+    }
+
+    public ConnectContext getConnectContext() {
+        return connectContext;
     }
 
     // create the plan. the plan's query id and load id are same, using the parameter 'loadId'
@@ -253,7 +262,7 @@ public class StreamLoadPlanner {
         queryOptions.setMem_limit(streamLoadInfo.getExecMemLimit());
         queryOptions.setLoad_mem_limit(streamLoadInfo.getLoadMemLimit());
 
-        if (Config.enable_stream_load_profile) {
+        if (connectContext.getSessionVariable().isEnableLoadProfile()) {
             queryOptions.setEnable_profile(true);
         }
 
