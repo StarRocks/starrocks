@@ -37,7 +37,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private long selectedIndexId;
     private List<Long> selectedPartitionId;
     private PartitionNames partitionNames;
-    private boolean hasHintsPartitionNames;
+    private boolean hasTableHints;
     private List<Long> selectedTabletId;
     private List<Long> hintsTabletIds;
 
@@ -59,6 +59,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 ((OlapTable) table).getBaseIndexId(),
                 null,
                 null,
+                false,
                 Lists.newArrayList(),
                 Lists.newArrayList());
     }
@@ -73,7 +74,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             long selectedIndexId,
             List<Long> selectedPartitionId,
             PartitionNames partitionNames,
-            boolean hasHintsPartitionNames,
+            boolean hasTableHints,
             List<Long> selectedTabletId,
             List<Long> hintsTabletIds) {
         super(OperatorType.LOGICAL_OLAP_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
@@ -84,26 +85,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.selectedIndexId = selectedIndexId;
         this.selectedPartitionId = selectedPartitionId;
         this.partitionNames = partitionNames;
-        this.hasHintsPartitionNames = hasHintsPartitionNames;
+        this.hasTableHints = hasTableHints;
         this.selectedTabletId = selectedTabletId;
         this.hintsTabletIds = hintsTabletIds;
         this.prunedPartitionPredicates = Lists.newArrayList();
-    }
-
-    public LogicalOlapScanOperator(
-            Table table,
-            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
-            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
-            DistributionSpec distributionSpec,
-            long limit,
-            ScalarOperator predicate,
-            long selectedIndexId,
-            List<Long> selectedPartitionId,
-            PartitionNames partitionNames,
-            List<Long> selectedTabletId,
-            List<Long> hintsTabletIds) {
-        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, distributionSpec, limit, predicate,
-                selectedIndexId, selectedPartitionId, partitionNames, false, selectedTabletId, hintsTabletIds);
     }
 
     private LogicalOlapScanOperator() {
@@ -134,8 +119,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return hintsTabletIds;
     }
 
-    public boolean hasTabletOrPartitionHints() {
-        return (hintsTabletIds != null && !hintsTabletIds.isEmpty()) || hasHintsPartitionNames;
+    public boolean hasTableHints() {
+        return hasTableHints;
     }
 
     public List<ScalarOperator> getPrunedPartitionPredicates() {
@@ -187,7 +172,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             builder.selectedIndexId = scanOperator.selectedIndexId;
             builder.selectedPartitionId = scanOperator.selectedPartitionId;
             builder.partitionNames = scanOperator.partitionNames;
-            builder.hasHintsPartitionNames = scanOperator.hasHintsPartitionNames;
+            builder.hasTableHints = scanOperator.hasTableHints;
             builder.selectedTabletId = scanOperator.selectedTabletId;
             builder.hintsTabletIds = scanOperator.hintsTabletIds;
             builder.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;

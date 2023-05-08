@@ -49,7 +49,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
     private boolean checkOlapScanWithoutTabletOrPartitionHints(OptExpression input) {
         if (input.getOp() instanceof LogicalOlapScanOperator) {
             LogicalOlapScanOperator scan = input.getOp().cast();
-            if (scan.hasTabletOrPartitionHints()) {
+            if (scan.hasTableHints()) {
                 return false;
             }
         }
