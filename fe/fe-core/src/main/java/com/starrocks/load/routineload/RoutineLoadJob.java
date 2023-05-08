@@ -1500,10 +1500,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         return state.isFinalState();
     }
 
-    public boolean isEnableProfile() {
-        return enableProfile && Config.enable_stream_load_profile;
-    }
-
     public static RoutineLoadJob read(DataInput in) throws IOException {
         RoutineLoadJob job = null;
         LoadDataSourceType type = LoadDataSourceType.valueOf(Text.readString(in));

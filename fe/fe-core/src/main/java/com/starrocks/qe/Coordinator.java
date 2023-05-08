@@ -209,9 +209,9 @@ public class Coordinator {
         deltaUrls = Lists.newArrayList();
         loadCounters = Maps.newHashMap();
         this.connectContext = new ConnectContext();
+
         // for complie
         descTable = null;
-
         this.isBlockQuery = true;
         this.jobId = -1;
         this.scanNodes = null;
@@ -1835,6 +1835,13 @@ public class Coordinator {
 
     public boolean isDone() {
         return profileDoneSignal.getCount() == 0;
+    }
+
+    public boolean isEnableLoadProfile() {
+        if (connectContext != null && connectContext.getSessionVariable().isEnableLoadProfile()) {
+            return true;
+        }
+        return false;
     }
 
     // consistent with EXPLAIN's fragment index

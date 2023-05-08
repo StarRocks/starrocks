@@ -1147,7 +1147,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         long timeoutSecond = request.isSetTimeout() ? request.getTimeout() : Config.stream_load_default_timeout_second;
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
 
-        if (Config.enable_stream_load_profile) {
+        // just use default value of session variable
+        // as there is no connectContext for sync stream load
+        ConnectContext connectContext = new ConnectContext();
+        if (connectContext.getSessionVariable().isEnableLoadProfile()) {
             TransactionResult resp = new TransactionResult();
             StreamLoadManager streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadManager();
             streamLoadManager.beginLoadTask(dbName, table.getName(), request.getLabel(), timeoutSecond, resp);

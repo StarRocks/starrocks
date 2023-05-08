@@ -791,7 +791,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
                     throw new LoadException(TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
                 }
 
-                if (Config.enable_stream_load_profile) {
+                if (coord.isEnableLoadProfile()) {
                     collectProfile();
                 }
 
@@ -971,7 +971,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
         }
 
         // sync stream load collect profile
-        if (isSyncStreamLoad() && Config.enable_stream_load_profile) {
+        if (isSyncStreamLoad() && coord.isEnableLoadProfile()) {
             collectProfile();
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
             // set state to commited for remove by streamLoadManager
@@ -1060,7 +1060,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback implements Wr
             return;
         }
 
-        if (isSyncStreamLoad && Config.enable_stream_load_profile) {
+        if (isSyncStreamLoad && coord.isEnableLoadProfile()) {
             state = State.CANCELLED;
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
             return;
