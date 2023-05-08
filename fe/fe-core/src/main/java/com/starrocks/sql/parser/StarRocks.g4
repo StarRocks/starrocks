@@ -2237,6 +2237,7 @@ distributionClause
 distributionDesc
     : DISTRIBUTED BY HASH identifierList (BUCKETS INTEGER_VALUE)?
     | DISTRIBUTED BY HASH identifierList
+    | DISTRIBUTED BY RANDOM (BUCKETS INTEGER_VALUE)?
     ;
 
 refreshSchemeDesc

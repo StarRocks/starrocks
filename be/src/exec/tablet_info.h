@@ -25,6 +25,7 @@
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/descriptors.pb.h"
 #include "runtime/descriptors.h"
+#include "util/random.h"
 
 namespace starrocks {
 
@@ -248,6 +249,8 @@ private:
     ObjectPool _obj_pool;
     std::map<int64_t, OlapTablePartition*> _partitions;
     std::map<ChunkRow*, OlapTablePartition*, PartionKeyComparator> _partitions_map;
+
+    Random _rand{(uint32_t)time(nullptr)};
 };
 
 } // namespace starrocks

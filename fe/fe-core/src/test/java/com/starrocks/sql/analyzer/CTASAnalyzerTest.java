@@ -29,8 +29,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
-import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RandomDistributionDesc;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
@@ -361,9 +361,7 @@ public class CTASAnalyzerTest {
         String sql = "CREATE TABLE tbl as select vc1,vc2 from v1";
         CreateTableAsSelectStmt createTableStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        HashDistributionDesc hashDistributionDesc
-                = (HashDistributionDesc) createTableStmt.getCreateTableStmt().getDistributionDesc();
-        Assert.assertEquals("vc1", hashDistributionDesc.getDistributionColumnNames().get(0));
+        Assert.assertTrue(createTableStmt.getCreateTableStmt().getDistributionDesc() instanceof RandomDistributionDesc);
     }
 
     @Test

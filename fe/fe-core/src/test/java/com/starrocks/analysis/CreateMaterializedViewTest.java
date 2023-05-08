@@ -1221,7 +1221,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testDistributeByIsNull1() {
+    public void testDistributeByIsNull1() throws Exception {
         String sql = "create materialized view mv1 " +
                 "partition by ss " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
@@ -1229,11 +1229,7 @@ public class CreateMaterializedViewTest {
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
                 "as select tbl1.k1 ss from tbl1;";
-        try {
-            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Materialized view should contain distribution desc"));
-        }
+        UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
     }
 
     @Test
