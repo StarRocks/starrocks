@@ -37,6 +37,7 @@ package com.starrocks.load.loadv2;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
+import com.starrocks.common.Config;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;
 import org.apache.logging.log4j.LogManager;
@@ -84,7 +85,7 @@ public class SparkLauncherMonitor {
     public static class LogMonitor extends Thread {
         private final Process process;
         private SparkLoadAppHandle handle;
-        private long submitTimeoutMs  = 300000L;
+        private long submitTimeoutMs  = Config.spark_load_submit_timeout_second * 1000;
         private boolean isStop;
         private OutputStream outputStream;
 
