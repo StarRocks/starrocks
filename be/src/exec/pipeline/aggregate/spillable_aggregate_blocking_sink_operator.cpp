@@ -62,14 +62,13 @@ Status SpillableAggregateBlockingSinkOperator::set_finishing(RuntimeState* state
 
     if (_aggregator->spill_channel()->is_working()) {
         DCHECK(_spill_strategy == spill::SpillStrategy::SPILL_ALL);
-        std::function<StatusOr<ChunkPtr>()> flush_task = [this, state, io_executor,
-                                                          flush_function]() -> StatusOr<ChunkPtr> {
+        std::function<StatusOr<ChunkPtr>()> flush_task = [state, io_executor, flush_function]() -> StatusOr<ChunkPtr> {
             RETURN_IF_ERROR(flush_function(state, io_executor));
             return Status::EndOfFile("eos");
         };
         _aggregator->spill_channel()->add_spill_task({flush_task});
-        std::function<StatusOr<ChunkPtr>()> task = [state, io_executor, set_call_back_function,
-                                                    this]() -> StatusOr<ChunkPtr> {
+        std::function<StatusOr<ChunkPtr>()> task = [state, io_executor,
+                                                    set_call_back_function]() -> StatusOr<ChunkPtr> {
             RETURN_IF_ERROR(set_call_back_function(state, io_executor));
             return Status::EndOfFile("eos");
         };

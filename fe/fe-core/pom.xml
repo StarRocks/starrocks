@@ -558,7 +558,6 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
-            <version>3.3.3</version>
             <exclusions>
                 <exclusion>
                     <artifactId>zookeeper</artifactId>
@@ -738,10 +737,10 @@ under the License.
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
+        <!-- we need pg driver for jdbc connector -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>test</scope>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->

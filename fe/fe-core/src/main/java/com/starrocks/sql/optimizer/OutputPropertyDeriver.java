@@ -319,15 +319,20 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
     @Override
     public PhysicalPropertySet visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
-        HashDistributionSpec olapDistributionSpec = node.getDistributionSpec();
+        DistributionSpec olapDistributionSpec = node.getDistributionSpec();
 
         DistributionSpec.PropertyInfo physicalPropertyInfo = new DistributionSpec.PropertyInfo();
 
         physicalPropertyInfo.tableId = node.getTable().getId();
         physicalPropertyInfo.partitionIds = node.getSelectedPartitionId();
-        return createPropertySetByDistribution(new HashDistributionSpec(
-                new HashDistributionDesc(olapDistributionSpec.getShuffleColumns(),
-                        HashDistributionDesc.SourceType.LOCAL), physicalPropertyInfo));
+
+        if (olapDistributionSpec instanceof HashDistributionSpec) {
+            return createPropertySetByDistribution(new HashDistributionSpec(
+                    new HashDistributionDesc(((HashDistributionSpec) olapDistributionSpec).getShuffleColumns(),
+                            HashDistributionDesc.SourceType.LOCAL), physicalPropertyInfo));
+        } else {
+            return createPropertySetByDistribution(olapDistributionSpec);
+        }
     }
 
     @Override

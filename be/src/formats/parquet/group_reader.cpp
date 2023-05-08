@@ -30,7 +30,9 @@ namespace starrocks::parquet {
 constexpr static const LogicalType kDictCodePrimitiveType = TYPE_INT;
 constexpr static const LogicalType kDictCodeFieldType = TYPE_INT;
 
-GroupReader::GroupReader(GroupReaderParam& param, int row_group_number) : _param(param) {
+GroupReader::GroupReader(GroupReaderParam& param, int row_group_number, const std::set<std::int64_t>* need_skip_rowids,
+                         int64_t row_group_first_row)
+        : _row_group_first_row(row_group_number), _need_skip_rowids(need_skip_rowids), _param(param) {
     _row_group_metadata =
             std::make_shared<tparquet::RowGroup>(param.file_metadata->t_metadata().row_groups[row_group_number]);
 }
@@ -67,6 +69,7 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         _column_reader_opts.context->filter = nullptr;
         status = _read(_active_column_indices, &count, &active_chunk);
         _param.stats->raw_rows_read += count;
+        _raw_rows_read += count;
         if (!status.ok() && !status.is_end_of_file()) {
             return status;
         }
@@ -78,6 +81,18 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
     int chunk_size = -1;
     Filter chunk_filter(count, 1);
     DCHECK_EQ(active_chunk->num_rows(), count);
+
+    // row id filter
+    if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
+        std::int64_t current_chunk_base_row = _row_group_first_row + _raw_rows_read - count;
+        auto start_iter = lower_bound(_need_skip_rowids->begin(), _need_skip_rowids->end(), current_chunk_base_row);
+        auto end_iter =
+                upper_bound(_need_skip_rowids->begin(), _need_skip_rowids->end(), current_chunk_base_row + count);
+        for (; start_iter != end_iter; start_iter++) {
+            chunk_filter[*start_iter] = 0;
+            has_filter = true;
+        }
+    }
 
     // dict filter chunk
     {

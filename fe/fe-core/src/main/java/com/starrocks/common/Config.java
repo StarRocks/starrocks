@@ -753,6 +753,12 @@ public class Config extends ConfigBase {
     public static int broker_load_default_timeout_second = 14400; // 4 hour
 
     /**
+     * Default timeout of spark submit task and wait for yarn response
+     */
+    @ConfField
+    public static long spark_load_submit_timeout_second = 300; // 5min
+
+    /**
      * Maximal bytes that a single broker scanner will read.
      * Do not set this if you know what you are doing.
      */
@@ -2255,4 +2261,16 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static short default_replication_num = 3;
+
+    /**
+     * The default scheduler interval for alter jobs.
+     */
+    @ConfField(mutable = true)
+    public static int alter_scheduler_interval_millisecond = 10000;
+
+    /**
+     * The default scheduler interval for routine loads.
+     */
+    @ConfField(mutable = true)
+    public static int routine_load_scheduler_interval_millisecond = 10000;
 }

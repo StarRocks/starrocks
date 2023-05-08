@@ -31,6 +31,7 @@ set(EXEC_FILES
         ./exec/es/es_query_builder_test.cpp
         ./exec/es/es_scan_reader_test.cpp
         ./exec/es/es_scroll_parser_test.cpp
+        ./exec/iceberg/iceberg_delete_builder_test.cpp
         ./exec/workgroup/scan_task_queue_test.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
         ./exec/pipeline/pipeline_driver_queue_test.cpp
@@ -155,6 +156,7 @@ set(EXEC_FILES
         ./formats/parquet/file_reader_test.cpp
         ./formats/parquet/file_writer_test.cpp
         ./formats/parquet/iceberg_schema_evolution_file_reader_test.cpp
+        ./formats/parquet/column_converter_test.cpp
         ./formats/parquet/parquet_footer_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp

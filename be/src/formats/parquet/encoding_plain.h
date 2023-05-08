@@ -122,6 +122,16 @@ public:
         return Status::OK();
     }
 
+    Status skip(size_t values_to_skip) override {
+        size_t fetch_size = values_to_skip * SIZE_OF_TYPE;
+        if (fetch_size + _offset > _data.size) {
+            return Status::InternalError(strings::Substitute(
+                    "going to skip out-of-bounds data, offset=$0,skip=$1,size=$2", _offset, fetch_size, _data.size));
+        }
+        _offset += fetch_size;
+        return Status::OK();
+    }
+
     Status next_batch(size_t count, uint8_t* dst) override {
         size_t max_fetch = count * SIZE_OF_TYPE;
         if (max_fetch + _offset > _data.size) {
@@ -179,6 +189,22 @@ public:
         return Status::OK();
     }
 
+    Status skip(size_t values_to_skip) override {
+        size_t num_decoded = 0;
+        while (num_decoded < values_to_skip && _offset < _data.size) {
+            uint32_t length = decode_fixed32_le(reinterpret_cast<const uint8_t*>(_data.data) + _offset);
+            _offset += sizeof(int32_t);
+            _offset += length;
+            num_decoded++;
+        }
+        // unlikely happened
+        if (UNLIKELY(num_decoded < values_to_skip || _offset > _data.size)) {
+            return Status::InternalError(
+                    strings::Substitute("going to skip out-of-bounds data, offset=$0,size=$1", _offset, _data.size));
+        }
+        return Status::OK();
+    }
+
     Status next_batch(size_t count, uint8_t* dst) override {
         auto* slices = reinterpret_cast<Slice*>(dst);
 
@@ -225,6 +251,13 @@ public:
                     "going to read out-of-bounds data, count=$0,num_unpacked_values=$1", count, num_unpacked_values));
         }
         return Status::OK();
+    }
+
+    Status skip(size_t values_to_skip) override {
+        //TODO(Smith) still heavy work load
+        std::vector<uint8_t> tmp;
+        tmp.reserve(values_to_skip);
+        return next_batch(values_to_skip, tmp.data());
     }
 
     Status next_batch(size_t count, uint8_t* dst) override {
@@ -330,7 +363,7 @@ public:
         return Status::OK();
     }
 
-    void set_type_legth(int32_t type_length) override { _type_length = type_length; }
+    void set_type_length(int32_t type_length) override { _type_length = type_length; }
 
     Status set_data(const Slice& data) override {
         _data = data;
@@ -346,6 +379,16 @@ public:
         [[maybe_unused]] auto ret =
                 dst->append_continuous_fixed_length_strings(_data.data + _offset, count, _type_length);
         _offset += count * _type_length;
+        return Status::OK();
+    }
+
+    Status skip(size_t values_to_skip) override {
+        if (_offset + _type_length * values_to_skip > _data.size) {
+            return Status::InternalError(
+                    strings::Substitute("going to skip out-of-bounds data, offset=$0,skip=$1,size=$2", _offset,
+                                        _type_length * values_to_skip, _data.size));
+        }
+        _offset += _type_length * values_to_skip;
         return Status::OK();
     }
 

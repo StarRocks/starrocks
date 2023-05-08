@@ -2,31 +2,29 @@
 
 ## Description
 
-Translate a binary type to a varchar type according to the input's binary type, the binary type only supports `hex`, `encode64` and `utf8`; if no `binary_type` is set, `hex` is the  default.
+Converts a binary value to a VARCHAR string based on the specified binary format (`binary_type`). The following binary formats are supported: `hex`, `encode64`, and `utf8`. If no `binary_type` is specified, `hex` is the default.
 
 ## Syntax
 
 ```Haskell
-from_bianry(binary, [binary_type])
+from_binary(binary[, binary_type])
 ```
 
 ## Parameters
 
-`binary`: the input binary to be converted.
+- `binary`: the input binary to convert, required.
 
-`binary_type`:
+- `binary_type`: the binary format for conversion, optional.
 
-- `hex`(default type): `from_binary` will assume the input binary will use the `hex` method to encode the input binary to `varchar`.
-- `encode64`: `from_binary` will use the `base64` method to encode the input binary to `varchar`.
-- `utf8`:  `from_binary` will convert the input binary as a varchar type without any transformations.
+  - `hex` (default): `from_binary` uses the `hex` method to encode the input binary to a VARCHAR string.
+  - `encode64`: `from_binary` uses the `base64` method to encode the input binary to a VARCHAR string.
+  - `utf8`: `from_binary` converts the input binary to a VARCHAR string without any transformation.
 
 ## Return value
 
-Returns a varchar value of the converted input binary with the defined varchar type.
+Returns a VARCHAR string.
 
 ## Examples
-
-Use this function to shift numeric values.
 
 ```Plain
 mysql> select from_binary(to_binary('ABAB', 'hex'), 'hex');
@@ -58,3 +56,4 @@ mysql> select from_binary(to_binary('STARROCKS', 'utf8'), 'utf8');
 ## References
 
 - [to_binary](to_binary.md)
+- [BINARY/VARBINARY data type](../../sql-statements/data-types/BINARY.md)

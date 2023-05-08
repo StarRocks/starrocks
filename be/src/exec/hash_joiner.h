@@ -30,6 +30,7 @@
 #include "exec/pipeline/spill_process_channel.h"
 #include "exec/spill/spiller.h"
 #include "exprs/in_const_predicate.hpp"
+#include "gen_cpp/PlanNodes_types.h"
 #include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
@@ -117,6 +118,24 @@ struct HashJoinerParam {
 
     const TJoinDistributionMode::type _distribution_mode;
 };
+
+inline bool could_short_circuit(TJoinOp::type join_type) {
+    return join_type == TJoinOp::INNER_JOIN || join_type == TJoinOp::LEFT_SEMI_JOIN ||
+           join_type == TJoinOp::RIGHT_SEMI_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
+           join_type == TJoinOp::RIGHT_OUTER_JOIN;
+}
+
+inline bool has_post_probe(TJoinOp::type join_type) {
+    return join_type == TJoinOp::RIGHT_OUTER_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
+           join_type == TJoinOp::FULL_OUTER_JOIN;
+}
+
+inline bool is_spillable(TJoinOp::type join_type) {
+    return join_type == TJoinOp::LEFT_SEMI_JOIN || join_type == TJoinOp::INNER_JOIN ||
+           join_type == TJoinOp::LEFT_ANTI_JOIN || join_type == TJoinOp::LEFT_OUTER_JOIN ||
+           join_type == TJoinOp::RIGHT_OUTER_JOIN || join_type == TJoinOp::RIGHT_ANTI_JOIN ||
+           join_type == TJoinOp::RIGHT_SEMI_JOIN || join_type == TJoinOp::FULL_OUTER_JOIN;
+}
 
 struct HashJoinProbeMetrics {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
@@ -254,6 +273,33 @@ public:
     HashJoinProber* new_prober(ObjectPool* pool) { return _hash_join_prober->clone_empty(pool); }
     HashJoinBuilder* new_builder(ObjectPool* pool) { return _hash_join_builder->clone_empty(pool); }
 
+    Status filter_probe_output_chunk(ChunkPtr& chunk) {
+        // Probe in JoinHashMap is divided into probe with other_conjuncts and without other_conjuncts.
+        // Probe without other_conjuncts directly labels the hash table as hit, while _process_other_conjunct()
+        // only remains the rows which are not hit the hash table before. Therefore, _process_other_conjunct can
+        // not be called when other_conjuncts is empty.
+        if (chunk && !chunk->is_empty() && !_other_join_conjunct_ctxs.empty()) {
+            RETURN_IF_ERROR(_process_other_conjunct(&chunk));
+        }
+
+        // TODO(satanson): _conjunct_ctxs shouldn't include local runtime in-filters.
+        if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
+            RETURN_IF_ERROR(_process_where_conjunct(&chunk));
+        }
+
+        return Status::OK();
+    }
+
+    Status filter_post_probe_output_chunk(ChunkPtr& chunk) {
+        // Post probe needn't process _other_join_conjunct_ctxs, because they
+        // are `ON` predicates, which need to be processed only on probe phase.
+        if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
+            // TODO(satanson): _conjunct_ctxs should including local runtime in-filters.
+            RETURN_IF_ERROR(_process_where_conjunct(&chunk));
+        }
+        return Status::OK();
+    }
+
 private:
     static bool _has_null(const ColumnPtr& column);
 
@@ -290,9 +336,7 @@ private:
         size_t row_count = _hash_table_build_rows;
 
         // special cases of short-circuit break.
-        if (row_count == 0 && (_join_type == TJoinOp::INNER_JOIN || _join_type == TJoinOp::LEFT_SEMI_JOIN ||
-                               _join_type == TJoinOp::RIGHT_SEMI_JOIN || _join_type == TJoinOp::RIGHT_ANTI_JOIN ||
-                               _join_type == TJoinOp::RIGHT_OUTER_JOIN)) {
+        if (row_count == 0 && could_short_circuit(_join_type)) {
             _phase = HashJoinPhase::EOS;
             return;
         }
@@ -326,33 +370,6 @@ private:
     Status _process_right_anti_join_with_other_conjunct(ChunkPtr* chunk);
     Status _process_other_conjunct(ChunkPtr* chunk);
     Status _process_where_conjunct(ChunkPtr* chunk);
-
-    Status _filter_probe_output_chunk(ChunkPtr& chunk) {
-        // Probe in JoinHashMap is divided into probe with other_conjuncts and without other_conjuncts.
-        // Probe without other_conjuncts directly labels the hash table as hit, while _process_other_conjunct()
-        // only remains the rows which are not hit the hash table before. Therefore, _process_other_conjunct can
-        // not be called when other_conjuncts is empty.
-        if (chunk && !chunk->is_empty() && !_other_join_conjunct_ctxs.empty()) {
-            RETURN_IF_ERROR(_process_other_conjunct(&chunk));
-        }
-
-        // TODO(satanson): _conjunct_ctxs shouldn't include local runtime in-filters.
-        if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
-            RETURN_IF_ERROR(_process_where_conjunct(&chunk));
-        }
-
-        return Status::OK();
-    }
-
-    Status _filter_post_probe_output_chunk(ChunkPtr& chunk) {
-        // Post probe needn't process _other_join_conjunct_ctxs, because they
-        // are `ON` predicates, which need to be processed only on probe phase.
-        if (chunk && !chunk->is_empty() && !_conjunct_ctxs.empty()) {
-            // TODO(satanson): _conjunct_ctxs should including local runtime in-filters.
-            RETURN_IF_ERROR(_process_where_conjunct(&chunk));
-        }
-        return Status::OK();
-    }
 
     Status _create_runtime_in_filters(RuntimeState* state);
 

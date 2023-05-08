@@ -423,7 +423,19 @@ public class ExpressionAnalyzer {
             if (!node.getChildren().isEmpty()) {
                 Type keyType = node.getKeyCommonType();
                 Type valueType = node.getValueCommonType();
-                node.setType(new MapType(keyType, valueType));
+                Type originalType = node.getType();
+                if (originalType == Type.ANY_MAP) {
+                    node.setType(new MapType(keyType, valueType));
+                } else {
+                    if (!keyType.isFullyCompatible(((MapType) originalType).getKeyType())) {
+                        throw new SemanticException("map.key'type " + keyType + " can't cast to specific " +
+                                ((MapType) originalType).getKeyType());
+                    }
+                    if (!valueType.isFullyCompatible(((MapType) originalType).getValueType())) {
+                        throw new SemanticException("map.value'type " + valueType + " can't cast to specific " +
+                                ((MapType) originalType).getValueType());
+                    }
+                }
             } else {
                 node.setType(new MapType(Type.NULL, Type.NULL));
             }
@@ -1005,6 +1017,8 @@ public class ExpressionAnalyzer {
             } else if (FunctionSet.ARRAY_GENERATE.equals(fnName)) {
                 fn = getArrayGenerateFunction(node);
                 argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
+            } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
+                fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(node, argumentTypes);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }

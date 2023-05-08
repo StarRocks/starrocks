@@ -24,7 +24,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import java.util.List;
 
 public class LogicalUnionOperator extends LogicalSetOperator {
-    private final boolean isUnionAll;
+    private boolean isUnionAll;
 
     public LogicalUnionOperator(List<ColumnRefOperator> result, List<List<ColumnRefOperator>> childOutputColumns,
                                 boolean isUnionAll) {
@@ -32,11 +32,8 @@ public class LogicalUnionOperator extends LogicalSetOperator {
         this.isUnionAll = isUnionAll;
     }
 
-    private LogicalUnionOperator(LogicalUnionOperator.Builder builder) {
-        super(OperatorType.LOGICAL_UNION, builder.outputColumnRefOp, builder.childOutputColumns,
-                builder.getLimit(),
-                builder.getProjection());
-        this.isUnionAll = builder.isUnionAll;
+    private LogicalUnionOperator() {
+        super(OperatorType.LOGICAL_UNION);
     }
 
     public boolean isUnionAll() {
@@ -77,22 +74,20 @@ public class LogicalUnionOperator extends LogicalSetOperator {
     }
 
     public static class Builder extends LogicalSetOperator.Builder<LogicalUnionOperator, LogicalUnionOperator.Builder> {
-        private boolean isUnionAll;
-
         @Override
-        public LogicalUnionOperator build() {
-            return new LogicalUnionOperator(this);
+        protected LogicalUnionOperator newInstance() {
+            return new LogicalUnionOperator();
         }
 
         @Override
         public Builder withOperator(LogicalUnionOperator unionOperator) {
             super.withOperator(unionOperator);
-            isUnionAll = unionOperator.isUnionAll;
+            builder.isUnionAll = unionOperator.isUnionAll;
             return this;
         }
 
         public Builder isUnionAll(boolean isUnionAll) {
-            this.isUnionAll = isUnionAll;
+            builder.isUnionAll = isUnionAll;
             return this;
         }
     }

@@ -105,7 +105,7 @@ private:
     const int64_t _max_output_amplification_factor;
 
     std::vector<BufferChunkQueue> _buffer_chunk_queue_per_driver_seq;
-    std::vector<uint8_t> _is_finishing_per_driver_seq;
+    std::vector<std::atomic<uint8_t>> _is_finishing_per_driver_seq;
     std::vector<uint8_t> _is_finished_per_driver_seq;
 
     RuntimeState* const _runtime_state;
@@ -175,7 +175,14 @@ private:
     static constexpr size_t UNPLUG_THRESHOLD_PER_DRIVER_SEQ = MAX_PASSTHROUGH_CHUNKS_PER_DRIVER_SEQ / 2;
 
     using ChunkQueue = moodycamel::ConcurrentQueue<ChunkPtr>;
-    std::vector<ChunkQueue> _in_chunk_queue_per_driver_seq;
+    struct ChunkQueueWrapper {
+        ChunkQueueWrapper() : queue(), token(queue) {}
+
+        ChunkQueue queue;
+        // token is used to ensure that the order of dequeueing is the same as enqueueing.
+        ChunkQueue::producer_token_t token;
+    };
+    std::vector<ChunkQueueWrapper> _in_chunk_queue_per_driver_seq;
     mutable std::vector<uint8_t> _unpluging_per_driver_seq;
 };
 
