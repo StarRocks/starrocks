@@ -37,7 +37,8 @@ RollingAsyncParquetWriter::RollingAsyncParquetWriter(
 }
 
 Status RollingAsyncParquetWriter::init_rolling_writer(const TableInfo& tableInfo) {
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(tableInfo._partition_location))
+    ASSIGN_OR_RETURN(
+            _fs, FileSystem::CreateUniqueFromString(tableInfo._partition_location, FSOptions(&tableInfo._cloud_conf)))
     _schema = tableInfo._schema;
     _partition_location = tableInfo._partition_location;
 

@@ -20,12 +20,15 @@ import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.connector.Connector;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -241,7 +244,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
             if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
                 try {
                     URI uri = new Path(value).toUri();
-                    FileSystem fileSystem = FileSystem.get(uri, new Configuration());
+                    FileSystem fileSystem = FileSystem.get(uri, conf);
                     fileSystem.exists(new Path(value));
                 } catch (Exception e) {
                     LOG.error("Invalid location URI: {}", value, e);
@@ -357,7 +360,7 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         Path path = new Path(location);
         URI uri = path.toUri();
         try {
-            FileSystem fileSystem = FileSystem.get(uri, new Configuration());
+            FileSystem fileSystem = FileSystem.get(uri, conf);
             fileSystem.delete(path, true);
         } catch (IOException e) {
             LOG.error("Failed to delete location {}", location, e);

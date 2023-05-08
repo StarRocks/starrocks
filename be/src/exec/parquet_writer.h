@@ -42,6 +42,7 @@ struct TableInfo {
     bool _enable_dictionary = true;
     std::string _partition_location = "";
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
+    TCloudConfiguration _cloud_conf;
 };
 
 class RollingAsyncParquetWriter {
@@ -66,7 +67,7 @@ private:
     Status close_current_writer(RuntimeState* state);
 
 private:
-    std::shared_ptr<FileSystem> _fs;
+    std::unique_ptr<FileSystem> _fs;
     std::shared_ptr<starrocks::parquet::AsyncFileWriter> _writer;
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;

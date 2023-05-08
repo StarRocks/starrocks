@@ -15,11 +15,18 @@
 package com.starrocks.planner;
 
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.connector.Connector;
+import com.starrocks.connector.iceberg.IcebergConnector;
+import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TIcebergTableSink;
 import org.apache.iceberg.Table;
 
@@ -42,6 +49,7 @@ public class IcebergTableSink extends DataSink {
     private final String compressionType;
     private final boolean isStatisticsPartitionSink;
     private final String tableIdentifier;
+    private final CloudConfiguration cloudConfiguration;
 
     public IcebergTableSink(IcebergTable icebergTable, TupleDescriptor desc, boolean isStatisticsPartitionSink) {
         Table nativeTable = icebergTable.getNativeTable();
@@ -64,6 +72,9 @@ public class IcebergTableSink extends DataSink {
             default:
                 compressionType = "default";
         }
+        String catalogName = icebergTable.getCatalogName();
+        Connector connector  = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+        this.cloudConfiguration = connector != null ? connector.getCloudConfiguration() : null;
     }
 
     @Override
@@ -87,6 +98,12 @@ public class IcebergTableSink extends DataSink {
         tIcebergTableSink.setIs_statistics_partition_sink(isStatisticsPartitionSink);
         TCompressionType compression = PARQUET_COMPRESSION_TYPE_MAP.get(compressionType);
         tIcebergTableSink.setCompression_type(compression);
+
+        if (cloudConfiguration != null) {
+            TCloudConfiguration tCloudConfiguration = new TCloudConfiguration();
+            cloudConfiguration.toThrift(tCloudConfiguration);
+            tIcebergTableSink.setCloud_configuration(tCloudConfiguration);
+        }
 
         tDataSink.setIceberg_table_sink(tIcebergTableSink);
         return tDataSink;

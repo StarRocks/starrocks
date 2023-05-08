@@ -88,6 +88,7 @@ Status IcebergTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr&
     TableInfo tableInfo;
     tableInfo._schema = _parquet_file_schema;
     tableInfo._compress_type = _compression_codec;
+    tableInfo._cloud_conf = _cloud_conf;
 
     if (_iceberg_table->is_unpartitioned_table()) {
         if (_partition_writers.empty()) {
@@ -182,6 +183,7 @@ IcebergTableSinkOperatorFactory::IcebergTableSinkOperatorFactory(int32_t id, Fra
           _location(thrift_sink.location),
           _file_format(thrift_sink.file_format),
           _compression_codec(thrift_sink.compression_type),
+          _cloud_conf(thrift_sink.cloud_configuration),
           _partition_expr_ctxs(std::move(partition_expr_ctxs)) {}
 
 Status IcebergTableSinkOperatorFactory::prepare(RuntimeState* state) {
