@@ -94,7 +94,8 @@ public class SparkEtlJobHandler {
     private static final String YARN_KILL_CMD = "%s --config %s application -kill %s";
 
     public void submitEtlJob(long loadJobId, String loadLabel, EtlJobConfig etlJobConfig, SparkResource resource,
-                             BrokerDesc brokerDesc, SparkLoadAppHandle handle, SparkPendingTaskAttachment attachment)
+                             BrokerDesc brokerDesc, SparkLoadAppHandle handle, SparkPendingTaskAttachment attachment,
+                             Long sparkLoadSubmitTimeout)
             throws LoadException {
         // delete outputPath
         deleteEtlOutputPath(etlJobConfig.outputPath, brokerDesc);
@@ -173,9 +174,10 @@ public class SparkEtlJobHandler {
             handle.setProcess(process);
             if (!FeConstants.runningUnitTest) {
                 SparkLauncherMonitor.LogMonitor logMonitor = SparkLauncherMonitor.createLogMonitor(handle);
-                long sparkLoadSubmitTimeout = GET_APPID_TIMEOUT_MS;
-                if (etlJobConfig.properties.sparkLoadSubmitTimeout != null) {
-                    sparkLoadSubmitTimeout = etlJobConfig.properties.sparkLoadSubmitTimeout * 1000;
+                if (sparkLoadSubmitTimeout != null) {
+                    sparkLoadSubmitTimeout = sparkLoadSubmitTimeout * 1000;
+                } else {
+                    sparkLoadSubmitTimeout = GET_APPID_TIMEOUT_MS;
                 }
                 logMonitor.setSubmitTimeoutMs(sparkLoadSubmitTimeout);
                 logMonitor.setRedirectLogPath(logFilePath);
