@@ -20,7 +20,7 @@
 
 ## 安装 BE 节点后启动失败，并返回错误 "StarRocks BE http service did not start correctly, exiting"。我该如何解决？
 
-如果在安装 BE 后启动报错 `StarRocks Be http service did not start correctly,exiting`，该问题是 BE 节点 `webserver_port` 端口被占用导致。您需要修改 BE 配置文件 **be.conf** 中的 `webserver_port` 配置项并重启 BE 服务使配置生效。如果多次修改为未被占用的端口，系统仍然重复报错，您需要检查节点是否装有 Yarn 等程序，确认监听端口选择修改监听规则，或者 BE 的端口选取范围绕过。
+如果在安装 BE 后启动报错 `StarRocks Be http service did not start correctly,exiting`，该问题是 BE 节点 `be_http_port` 端口被占用导致。您需要修改 BE 配置文件 **be.conf** 中的 `be_http_port` 配置项并重启 BE 服务使配置生效。如果多次修改为未被占用的端口，系统仍然重复报错，您需要检查节点是否装有 Yarn 等程序，确认监听端口选择修改监听规则，或者 BE 的端口选取范围绕过。
 
 ## 在部署企业版 StarRocks 的过程当中，配置节点时报错：“Failed to Distribute files to node”。我该如何解决？
 

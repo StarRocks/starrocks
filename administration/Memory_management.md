@@ -17,7 +17,7 @@ curl -XGET -s http://be_ip:8040/metrics | grep "^starrocks_be_.*_mem_bytes\|^sta
 > 说明：
 >
 > * 将以上 `be_ip` 改为 BE 节点实际的 IP 地址。
-> * BE `webserver_port` 默认为 `8040`。
+> * BE `be_http_port` 默认为 `8040`。
 
 对应指标的含义参考 [内存分类](#内存分类)。
 
@@ -30,7 +30,7 @@ http://be_ip:8040/mem_tracker
 > 说明：
 >
 > * 将以上 `be_ip` 改为 BE 节点实际的 IP 地址。
-> * BE `webserver_port` 默认为 `8040`。
+> * BE `be_http_port` 默认为 `8040`。
 
 ![MemTracker](../assets/memory_management_1.png)
 
@@ -52,7 +52,7 @@ http://be_ip:8040/memz
 > 说明：
 >
 > * 将以上 `be_ip` 改为 BE 节点实际的 IP 地址。
-> * BE `webserver_port` 默认为 `8040`。
+> * BE `be_http_port` 默认为 `8040`。
 
 示例：
 
