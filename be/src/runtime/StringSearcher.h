@@ -255,4 +255,26 @@ struct LibcASCIICaseSensitiveStringSearcher {
     }
 };
 
+struct LibcASCIICaseInsensitiveStringSearcher {
+    const char* const needle;
+    const size_t needle_size;
+
+    template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
+    LibcASCIICaseInsensitiveStringSearcher(const CharT* const needle_, const size_t needle_size_)
+            : needle(reinterpret_cast<const char*>(needle_)), needle_size(needle_size_) {}
+
+    template <typename CharT, typename = std::enable_if_t<sizeof(CharT) == 1>>
+    const CharT* search(const CharT* haystack, size_t haystack_len) const {
+
+        std::string lowercaseNeedle(needle, needle + needle_size);
+        std::transform(lowercaseNeedle.begin(), lowercaseNeedle.end(), lowercaseNeedle.begin(), ::tolower);
+
+        std::string lowercaseHaystack(haystack, haystack + haystack_len);
+        std::transform(lowercaseHaystack.begin(), lowercaseHaystack.end(), lowercaseHaystack.begin(), ::tolower);
+
+        return reinterpret_cast<const CharT*>(memmem(lowercaseHaystack.data(), lowercaseHaystack.size(), lowercaseNeedle.data(), lowercaseNeedle.size()));
+    }
+};
+
+
 } // namespace starrocks
