@@ -29,6 +29,13 @@ namespace starrocks {
 * @param: [array_string, delimiter]
 * @paramType: [ArrayBinaryColumn, BinaryColumn]
 * @return: MapColumn map<string,string>
+
+ the original str_to_map(str, del1, del2) is rewritten to str_to_map(split(str, del1), del2), the first input results
+ from split(str, del1), its return type is array_string, note each array's item wouldn't NULL.
+
+ empty array or string results into "" key, and not-found delimiter case causes NULL value.
+
+ TODO: split UTF8 chinese character according to its size, which would be greater than 1.
 */
 
 StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const Columns& columns) {
@@ -69,15 +76,15 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const 
             ColumnHelper::unpack_and_duplicate_const_column(column_size, columns[1])); // column range
 
     for (auto i = 0; i < column_size; ++i) {
-        // either input is null resulting null to keep consistent with split()
+        // either null input results into null to keep consistent with split()
         if ((nulls != nullptr && nulls->get_data()[i]) || delimiter_viewer.is_null(i)) {
             res_null->get_data()[i] = 1;
             res_offsets->append(res_offsets->get_data().back());
             continue;
         }
         res_null->get_data()[i] = 0;
-        // empty array
-        if (offsets->get_data()[i] == offsets->get_data()[i + 1]) { // return {"":NULL}
+        // empty array return {"":NULL}
+        if (offsets->get_data()[i] == offsets->get_data()[i + 1]) {
             keys_builder.append("");
             values_builder.append_null();
             res_offsets->append(res_offsets->get_data().back() + 1);

@@ -5307,6 +5307,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new ArithmeticExpr(ArithmeticExpr.getArithmeticOperator(fnName.getFunction()), e1, e2, pos);
         }
 
+        // add default delimiters and rewrite str_to_map(str, del1, del2) to str_to_map(split(str, del1),del2)
         if (functionName.equals(FunctionSet.STR_TO_MAP)) {
             Expr e0;
             Expr e1;

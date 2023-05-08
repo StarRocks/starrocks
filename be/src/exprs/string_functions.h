@@ -292,6 +292,7 @@ public:
     * @paramType: [ArrayBinaryColumn, BinaryColumn]
     * @return: MapColumn map<string,string>
     */
+
     DEFINE_VECTORIZED_FN(str_to_map);
 
     /**
@@ -305,7 +306,6 @@ public:
     static Status regexp_extract_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_replace_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status regexp_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
-
 
     /**
      * @param: [string_value, pattern_value, index_value]
