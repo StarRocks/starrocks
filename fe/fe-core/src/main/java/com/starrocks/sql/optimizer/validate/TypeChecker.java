@@ -44,7 +44,6 @@ import static com.starrocks.catalog.FunctionSet.INTERSECT_COUNT;
 import static com.starrocks.catalog.FunctionSet.MAX;
 import static com.starrocks.catalog.FunctionSet.MAX_BY;
 import static com.starrocks.catalog.FunctionSet.MIN;
-import static com.starrocks.catalog.FunctionSet.MIN_BY;
 import static com.starrocks.catalog.FunctionSet.NDV;
 import static com.starrocks.catalog.FunctionSet.PERCENTILE_APPROX;
 import static com.starrocks.catalog.FunctionSet.PERCENTILE_CONT;
@@ -198,7 +197,6 @@ public class TypeChecker implements PlanValidator.Checker {
                 case ANY_VALUE:
                     checkColType(arguments.get(0), aggCall, definedTypes[0], argTypes.get(0));
                     break;
-                case MIN_BY:
                 case MAX_BY:
                     if (!isMergeAggFn) {
                         checkArgument(definedTypes.length == 2 && argTypes.size() == 2,
