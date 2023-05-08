@@ -515,59 +515,41 @@ void StorageEngine::stop() {
 
     _bg_worker_stopped.store(true, std::memory_order_release);
 
-    if (_update_cache_expire_thread.joinable()) {
-        _update_cache_expire_thread.join();
+#define JOIN_THREAD(THREAD)  \
+    if (THREAD.joinable()) { \
+        THREAD.join();       \
     }
-    if (_unused_rowset_monitor_thread.joinable()) {
-        _unused_rowset_monitor_thread.join();
+
+#define JOIN_THREADS(THREADS)      \
+    for (auto& thread : THREADS) { \
+        JOIN_THREAD(thread);       \
     }
-    if (_garbage_sweeper_thread.joinable()) {
-        _garbage_sweeper_thread.join();
-    }
-    if (_disk_stat_monitor_thread.joinable()) {
-        _disk_stat_monitor_thread.join();
-    }
-    for (auto& thread : _base_compaction_threads) {
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
-    for (auto& thread : _cumulative_compaction_threads) {
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
-    for (auto& thread : _update_compaction_threads) {
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
-    if (_repair_compaction_thread.joinable()) {
-        _repair_compaction_thread.join();
-    }
-    for (auto& thread : _tablet_checkpoint_threads) {
-        if (thread.joinable()) {
-            thread.join();
-        }
-    }
-    if (_fd_cache_clean_thread.joinable()) {
-        _fd_cache_clean_thread.join();
-    }
-    if (_adjust_cache_thread.joinable()) {
-        _adjust_cache_thread.join();
-    }
+
+    JOIN_THREAD(_update_cache_expire_thread)
+    JOIN_THREAD(_update_cache_evict_thread)
+    JOIN_THREAD(_unused_rowset_monitor_thread)
+    JOIN_THREAD(_garbage_sweeper_thread)
+    JOIN_THREAD(_disk_stat_monitor_thread)
+
+    JOIN_THREADS(_base_compaction_threads)
+    JOIN_THREADS(_cumulative_compaction_threads)
+    JOIN_THREADS(_update_compaction_threads)
+
+    JOIN_THREAD(_repair_compaction_thread)
+
+    JOIN_THREADS(_manual_compaction_threads)
+    JOIN_THREADS(_tablet_checkpoint_threads)
+
+    JOIN_THREAD(_fd_cache_clean_thread)
+    JOIN_THREAD(_adjust_cache_thread)
+
     if (config::path_gc_check) {
-        for (auto& thread : _path_scan_threads) {
-            if (thread.joinable()) {
-                thread.join();
-            }
-        }
-        for (auto& thread : _path_gc_threads) {
-            if (thread.joinable()) {
-                thread.join();
-            }
-        }
+        JOIN_THREADS(_path_scan_threads)
+        JOIN_THREADS(_path_gc_threads);
     }
+
+#undef JOIN_THREADS
+#undef JOIN_THREAD
 
     {
         std::lock_guard<std::mutex> l(_store_lock);
