@@ -147,6 +147,8 @@ PROPERTIES
 );
 ```
 
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+
 #### Load data from AWS S3
 
 Execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your AWS S3 bucket `bucket_s3` into `table1` and `table2`, respectively:
@@ -173,6 +175,8 @@ WITH BROKER
 > **NOTE**
 >
 > Broker Load supports accessing AWS S3 only according to the S3A protocol. Therefore, when you load data from AWS S3, you must replace `s3://` in the S3 URI you pass as the file path with `s3a://`.
+
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 #### Load data from Google GCS
 
@@ -201,6 +205,8 @@ WITH BROKER
 >
 > Broker Load supports accessing Google GCS only according to the gs protocol. Therefore, when you load data from Google GCS, you must include `gs://` as the prefix in the GCS URI that you pass as the file path.
 
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+
 #### Load data from other S3-compatible storage system
 
 Use MinIO as an example. You can execute the following statement to load `file1.csv` and `file2.csv` from the `input` folder of your MinIO bucket `bucket_minio` into `table1` and `table2`, respectively:
@@ -223,6 +229,8 @@ WITH BROKER
     StorageCredentialParams
 );
 ```
+
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 #### Load data from Microsoft Azure Storage
 
@@ -258,6 +266,8 @@ WITH BROKER
   > - When you load data from Data Lake Storage Gen2, you must include `abfs://` or `abfss://` as a prefix in the file path based on the protocol that is used to access your storage account:
   >   - If your Data Lake Storage Gen2 allows access only via HTTP, use `abfs://` as the prefix, for example, `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
   >   - If your Data Lake Storage Gen2 allows access only via HTTPS, use `abfss://` as the prefix, for example, `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`.
+
+For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
 #### Query data
 
