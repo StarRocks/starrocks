@@ -384,7 +384,8 @@ public class StarRocksAssert {
             try {
                 explainQuery();
             } catch (AnalysisException | StarRocksPlannerException analysisException) {
-                Assert.assertTrue(Stream.of(keywords).allMatch(analysisException.getMessage()::contains));
+                Assert.assertTrue(analysisException.getMessage(),
+                        Stream.of(keywords).allMatch(analysisException.getMessage()::contains));
                 return;
             } catch (Exception ex) {
                 Assert.fail();
