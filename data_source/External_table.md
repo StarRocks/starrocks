@@ -404,11 +404,15 @@ properties (
 
 * `jdbc_uri`：JDBC 驱动程序连接目标数据库的 URI，需要满足目标数据库 URI 的语法。常见的目标数据库 URI，请参见 [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/use/#connecting-to-the-database)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) 官网文档。
 
-    > 说明：目标数据库 URI 中必须指定具体数据库的名称，如上示例中的 `jdbc_test`。
+    > **说明**
+    >
+    > 目标数据库 URI 中必须指定具体数据库的名称，如上示例中的 `jdbc_test`。
 
 * `driver_url`：用于下载 JDBC 驱动程序 JAR 包的 URL，支持使用 HTTP 协议 或者 file 协议。例如`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar`，`file:///home/disk1/postgresql-42.3.3.jar`。
 
-    > 说明：不同目标数据库使用的 JDBC 驱动程序不同，使用其他数据库的 JDBC 驱动程序会有不兼容的问题，建议访问目标数据库官网，查询并使用其支持的 JDBC 驱动程序。常见的目标数据库的  JDBC 驱动程序下载地址，请参见 [MySQL](https://dev.mysql.com/downloads/connector/j/)、[Oracle](https://www.oracle.com/database/technologies/maven-central-guide.html)、[PostgreSQL](https://jdbc.postgresql.org/download/)、[SQL Server](https://learn.microsoft.com/en-us/sql/connect/jdbc/download-microsoft-jdbc-driver-for-sql-server?view=sql-server-ver16) 。
+    > **说明**
+    >
+    > 不同目标数据库使用的 JDBC 驱动程序不同，使用其他数据库的 JDBC 驱动程序会有不兼容的问题，建议访问目标数据库官网，查询并使用其支持的 JDBC 驱动程序。常见的目标数据库的  JDBC 驱动程序下载地址，请参见 [MySQL](https://dev.mysql.com/downloads/connector/j/)、[Oracle](https://www.oracle.com/database/technologies/maven-central-guide.html)、[PostgreSQL](https://jdbc.postgresql.org/download/)、[SQL Server](https://learn.microsoft.com/en-us/sql/connect/jdbc/download-microsoft-jdbc-driver-for-sql-server?view=sql-server-ver16) 。
 
 * `driver_class`：JDBC 驱动程序的类名称。以下列举常见 JDBC 驱动程序的类名称：
 
@@ -419,7 +423,9 @@ properties (
 
 创建资源时，FE 通过 `driver_url` 下载 JDBC 驱动程序 JAR 包，生成 checksum 并保存起来，用于校验 BE 下载的 JDBC 驱动程序 JAR 包的正确性。
 
-> 说明：如果下载 JDBC 驱动程序失败，则创建资源也会失败。
+> **说明**
+>
+> 如果下载 JDBC 驱动程序失败，则创建资源也会失败。
 
 BE 节点首次查询 JDBC 外部表时，如果发现所在机器上不存在相应的 JDBC 驱动程序 JAR 包，则会通过 `driver_url` 进行下载，所有的 JDBC 驱动程序 JAR 包都会保存在 **${STARROCKS_HOME}/lib/jdbc_drivers** 目录下。
 
@@ -427,7 +433,9 @@ BE 节点首次查询 JDBC 外部表时，如果发现所在机器上不存在�
 
 执行如下语句，查看 StarRocks 中的所有 JDBC 资源：
 
-> 说明：`ResourceType` 列为 `jdbc`。
+> **说明**
+>
+> `ResourceType` 列为 `jdbc`。
 
 ~~~SQL
 SHOW RESOURCES;
@@ -441,7 +449,9 @@ SHOW RESOURCES;
 DROP RESOURCE "jdbc0";
 ~~~
 
-> 说明：删除 JDBC 资源会导致使用该 JDBC 资源创建的 JDBC 外部表不可用，但目标数据库的数据并不会丢失。如果您仍需要通过 StarRocks 查询目标数据库的数据，可以重新创建 JDBC 资源和 JDBC 外部表。
+> **说明**
+>
+> 删除 JDBC 资源会导致使用该 JDBC 资源创建的 JDBC 外部表不可用，但目标数据库的数据并不会丢失。如果您仍需要通过 StarRocks 查询目标数据库的数据，可以重新创建 JDBC 资源和 JDBC 外部表。
 
 ### **创建数据库**
 
@@ -452,7 +462,9 @@ CREATE DATABASE jdbc_test;
 USE jdbc_test; 
 ~~~
 
-> 说明：库名无需与目标数据库的名称保持一致。
+> **说明**
+>
+> 库名无需与目标数据库的名称保持一致。
 
 ### **创建 JDBC 外部表**
 
@@ -476,16 +488,19 @@ properties (
 * `table`：目标数据库表名，必填项。
 
 支持的数据类型以及与 StarRocks 的数据类型映射关系，请参见[数据类型映射](#数据类型映射)。
-> 说明：
- >
- > * 不支持索引。
- > * 不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
+
+> **说明**
+>
+> * 不支持索引。
+> * 不支持通过 PARTITION BY、DISTRIBUTED BY 来指定数据分布规则。
 
 ### **查询 JDBC 外部表**
 
 查询 JDBC 外部表前，必须启用 Pipeline 引擎。
 
-> 说明：如果已经启用 Pipeline 引擎，则可跳过本步骤。
+> **说明**
+>
+> 如果已经启用 Pipeline 引擎，则可跳过本步骤。
 
 ~~~SQL
 set enable_pipeline_engine=true;
@@ -691,8 +706,8 @@ select count(*) from profile_wos_p7;
 * Kerberos 支持
   1. 在所有的 FE/BE 机器上用 `kinit -kt keytab_path principal` 登录，该用户需要有访问 Hive 和 HDFS 的权限。kinit 命令登录是有实效性的，需要将其放入 crontab 中定期执行。
   2. 把 Hadoop 集群中的 hive-site.xml/core-site.xml/hdfs-site.xml 放到 $FE_HOME/conf 下，把 core-site.xml/hdfs-site.xml 放到 $BE_HOME/conf 下。
-  3. 在 $FE_HOME/conf/fe.conf 文件中的 JAVA_OPTS/JAVA_OPTS_FOR_JDK_9 选项加上 -Djava.security.krb5.conf=/etc/krb5.conf，/etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
-  4. 在 $BE_HOME/conf/be.conf 文件增加选项 JAVA_OPTS/JAVA_OPTS_FOR_JDK_9="-Djava.security.krb5.conf=/etc/krb5.conf"，其中 /etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
+  3. 在 $FE_HOME/conf/fe.conf 文件中的 JAVA_OPTS 选项取值里添加 -Djava.security.krb5.conf=/etc/krb5.conf，其中 /etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
+  4. 在 $BE_HOME/conf/be.conf 文件增加选项 JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"，其中 /etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
   5. resource 中的 uri 地址一定要使用域名，并且相应的 Hive 和 HDFS 的域名与 IP 的映射都需要配置到 /etc/hosts 中。
 
 #### AWS S3/Tencent Cloud COS支持
@@ -887,7 +902,9 @@ Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可�
 * 如果使用 Hive metastore 作为 Iceberg 的元数据服务，则可以创建 catalog 类型为 `HIVE` 的资源。
 * 如果想要自定义 Iceberg 的元数据服务，则可以开发一个 custom catalog （即自定义 catalog），然后创建 catalog 类型为 `CUSTOM` 的资源。
 
-> 说明：仅 StarRocks 2.3 及以上版本支持创建 catalog 类型为 `CUSTOM` 的资源。
+> **说明**
+>
+> 仅 StarRocks 2.3 及以上版本支持创建 catalog 类型为 `CUSTOM` 的资源。
 
 **创建 catalog 类型为 `HIVE` 的资源**
 
@@ -955,7 +972,9 @@ DROP RESOURCE "iceberg0";
 CREATE DATABASE iceberg_test; 
 ~~~
 
-> 说明：该数据库名称不需要和待查询的 Iceberg 数据库名称保持一致。
+> **说明**
+>
+> 该数据库名称不需要和待查询的 Iceberg 数据库名称保持一致。
 
 #### 步骤三：创建 Iceberg 外部表
 
