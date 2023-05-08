@@ -6,7 +6,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
-import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -97,22 +96,13 @@ public class WindowTransformer {
         } else if (AnalyticExpr.isOffsetFn(callExpr.getFn())) {
             try {
                 Preconditions.checkState(windowFrame == null);
-
-                if (callExpr.getChildren().size() == 1) {
-                    callExpr.addChild(new IntLiteral("1", Type.BIGINT));
-                    callExpr.addChild(new NullLiteral());
-                } else if (callExpr.getChildren().size() == 2) {
-                    callExpr.addChild(new NullLiteral());
-                } else {
-                    Preconditions.checkState(callExpr.getChildren().size() == 3);
-                }
-
                 Type firstType = callExpr.getChild(0).getType();
                 // In old planner, the NullLiteral will cast to function arg type.
                 // But in new planner, the NullLiteral type is still null.
                 if (callExpr.getChild(0) instanceof NullLiteral) {
                     firstType = callExpr.getFn().getArgs()[0];
                 }
+<<<<<<< HEAD
                 try {
                     callExpr.uncheckedCastChild(firstType, 2);
                 } catch (AnalysisException e) {
@@ -123,6 +113,15 @@ public class WindowTransformer {
                     throw new SemanticException(
                             "The third parameter of `" + callExpr.getFn().getFunctionName().getFunction() +
                                     "` can't not convert to " + callExpr.getChildren().get(0).getType());
+=======
+
+
+                if (callExpr.getChildren().size() == 1) {
+                    callExpr.addChild(new IntLiteral("1", Type.BIGINT));
+                    callExpr.addChild(NullLiteral.create(firstType));
+                } else if (callExpr.getChildren().size() == 2) {
+                    callExpr.addChild(NullLiteral.create(firstType));
+>>>>>>> eb756dfd7 ([BugFix] Maintaining consistency in BE and FE for the parameter validation in LEAD/LAG function (#22939))
                 }
 
                 AnalyticExpr.checkDefaultValue(callExpr);

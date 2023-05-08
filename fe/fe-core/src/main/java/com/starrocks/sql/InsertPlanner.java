@@ -124,6 +124,7 @@ public class InsertPlanner {
 
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
+<<<<<<< HEAD
             LOG.info("property" + requiredPropertySet.toString());
             OptExpression optimizedPlan = optimizer.optimize(
                     session,
@@ -131,6 +132,10 @@ public class InsertPlanner {
                     requiredPropertySet,
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
+=======
+            LOG.debug("property {}", requiredPropertySet);
+            OptExpression optimizedPlan;
+>>>>>>> eb756dfd7 ([BugFix] Maintaining consistency in BE and FE for the parameter validation in LEAD/LAG function (#22939))
 
             //7. Build fragment exec plan
             boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
