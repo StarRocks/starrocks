@@ -14,10 +14,14 @@
 
 package com.starrocks.storagevolume;
 
+import com.google.common.collect.Lists;
+import com.google.gson.Gson;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
+import org.apache.parquet.Strings;
 
 import java.util.HashMap;
 import java.util.List;
@@ -45,6 +49,8 @@ public class StorageVolume {
     private int refCount;
 
     private boolean enabled;
+
+    private boolean isDefault;
 
     public StorageVolume(String name, String svt, List<String> locations,
                          Map<String, String> params, boolean enabled, String comment) throws AnalysisException {
@@ -91,6 +97,18 @@ public class StorageVolume {
         return comment;
     }
 
+    public int getRefCount() {
+        return refCount;
+    }
+
+    public void setIsDefault() {
+        isDefault = true;
+    }
+
+    public boolean isDefault() {
+        return isDefault;
+    }
+
     private StorageVolumeType toStorageVolumeType(String svt) {
         switch (svt.toLowerCase()) {
             case "s3":
@@ -111,5 +129,16 @@ public class StorageVolume {
             default:
                 return false;
         }
+    }
+
+    public void getProcNodeData(BaseProcResult result) {
+        Gson gson = new Gson();
+        result.addRow(Lists.newArrayList(name,
+                String.valueOf(svt.name()),
+                String.valueOf(isDefault),
+                String.valueOf(Strings.join(locations, ", ")),
+                String.valueOf(gson.toJson(params)),
+                String.valueOf(enabled),
+                String.valueOf(comment)));
     }
 }

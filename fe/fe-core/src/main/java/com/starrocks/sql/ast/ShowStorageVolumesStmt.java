@@ -15,7 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.cloud.hadoop.repackaged.gcs.com.google.common.base.Strings;
+import com.google.common.base.Strings;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -39,7 +39,6 @@ public class ShowStorageVolumesStmt extends ShowStmt {
     public String getPattern() {
         return pattern;
     }
-
 
     @Override
     public ShowResultSetMetaData getMetaData() {

@@ -39,6 +39,7 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
+import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -67,6 +68,7 @@ import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
+import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -82,6 +84,7 @@ import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.DropWarehouseStmt;
@@ -100,6 +103,7 @@ import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
@@ -889,6 +893,39 @@ public class DDLStmtExecutor {
             } catch (UserException e) {
                 throw new RuntimeException(e);
             }
+        }
+
+        @Override
+        public ShowResultSet visitCreateStorageVolumeStatement(CreateStorageVolumeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getStorageVolumeMgr().createStorageVolume(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterStorageVolumeStatement(AlterStorageVolumeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getStorageVolumeMgr().updateStorageVolume(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropStorageVolumeStatement(DropStorageVolumeStmt stmt, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getStorageVolumeMgr().removeStorageVolume(stmt)
+            );
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitSetDefaultStorageVolumeStatement(SetDefaultStorageVolumeStmt stmt,
+                                                                   ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    context.getGlobalStateMgr().getStorageVolumeMgr().setDefaultStorageVolume(stmt)
+            );
+            return null;
         }
     }
 
