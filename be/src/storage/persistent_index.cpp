@@ -2248,8 +2248,6 @@ Status ImmutableIndex::get(size_t n, const Slice* keys, KeysInfo& keys_info, Ind
                 check_keys_info.emplace_back(std::make_pair(key_idx, hash));
             }
         }
-        LOG(INFO) << "L1 total size: " << total_size() << " bloom filter memory usage: " << memory_usage()
-                  << " origin kv size: " << keys_info.size() << ", kv size after filter: " << check_keys_info.size();
         filter = true;
     }
 
@@ -2812,7 +2810,7 @@ Status PersistentIndex::prepare(const EditVersion& version, size_t n) {
                                 .build(&_get_thread_pool));
         LOG(INFO) << "get kv thread num: " << _get_thread_pool->num_threads();
     }
-    _set_error(false);
+    _set_error(false, "");
     return Status::OK();
 }
 
@@ -2962,8 +2960,10 @@ Status PersistentIndex::get_from_one_immutable_index(size_t n, const Slice* keys
     auto st = _l1_vec[idx]->get(n, keys, *keys_info, values, found_keys_info, key_size);
     std::unique_lock<std::mutex> ul(_lock);
     if (!st.ok()) {
-        LOG(WARNING) << "get failed:" << st.to_string();
-        _set_error(true);
+        std::string msg =
+                strings::Substitute("get from one immutableindex failed, l1 idx: $0, status: $1", idx, st.to_string());
+        LOG(ERROR) << msg;
+        _set_error(true, msg);
     }
     _running_get_task--;
     if (_running_get_task == 0) {
@@ -2982,6 +2982,7 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
 
     std::unique_lock<std::mutex> ul(_lock);
     std::map<size_t, KeysInfo>::iterator iter;
+    std::string error_msg;
     for (iter = keys_info_by_key_size.begin(); iter != keys_info_by_key_size.end(); iter++) {
         if (iter->second.size() == 0) {
             break;
@@ -2995,15 +2996,16 @@ Status PersistentIndex::_get_from_immutable_index_parallel(size_t n, const Slice
             std::shared_ptr<Runnable> r(std::make_shared<GetFromImmutableIndexTask>(task));
             auto st = _get_thread_pool->submit(std::move(r));
             if (!st.ok()) {
-                LOG(WARNING) << "get from immutable index failed: " << st.to_string();
+                error_msg = strings::Substitute("get from immutable index failed: $0", st.to_string());
+                LOG(ERROR) << error_msg;
                 return st;
             }
             _running_get_task++;
         }
         _get_task_finished.wait(ul, [&] { return _running_get_task == 0; });
         if (is_error()) {
-            LOG(WARNING) << "get from immutable index failed";
-            return Status::InternalError("get failed");
+            LOG(ERROR) << _error_msg;
+            return Status::InternalError(_error_msg);
         }
 
         // wait all task finished
