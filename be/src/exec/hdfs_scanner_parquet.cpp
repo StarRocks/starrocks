@@ -14,7 +14,10 @@
 
 #include "exec/hdfs_scanner_parquet.h"
 
+#include "exec/hdfs_scanner.h"
+#include "exec/iceberg/iceberg_delete_builder.h"
 #include "formats/parquet/file_reader.h"
+#include "runtime/descriptors.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -22,6 +25,14 @@ namespace starrocks {
 static const std::string kParquetProfileSectionPrefix = "Parquet";
 
 Status HdfsParquetScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
+    if (!scanner_params.deletes.empty()) {
+        std::unique_ptr<IcebergDeleteBuilder> iceberg_delete_builder(
+                new IcebergDeleteBuilder(scanner_params.fs, scanner_params.path, scanner_params.conjunct_ctxs,
+                                         scanner_params.materialize_slots, &_need_skip_rowids));
+        for (const auto& tdelete_file : scanner_params.deletes) {
+            RETURN_IF_ERROR(iceberg_delete_builder->build_parquet(runtime_state->timezone(), *tdelete_file));
+        }
+    }
     return Status::OK();
 }
 
@@ -74,7 +85,8 @@ Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     // create file reader
     _reader = std::make_shared<parquet::FileReader>(runtime_state->chunk_size(), _file.get(), _file->get_size().value(),
-                                                    _shared_buffered_input_stream.get());
+                                                    _shared_buffered_input_stream.get(), &_need_skip_rowids);
+
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     RETURN_IF_ERROR(_reader->init(&_scanner_ctx));
     return Status::OK();

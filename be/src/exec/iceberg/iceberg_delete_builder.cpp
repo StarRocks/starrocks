@@ -15,6 +15,7 @@
 #include "exec/iceberg/iceberg_delete_builder.h"
 
 #include "column/vectorized_fwd.h"
+#include "exec/iceberg/iceberg_delete_file_iterator.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "gen_cpp/Types_types.h"
@@ -33,6 +34,26 @@ static const IcebergColumnMeta k_delete_file_path{
 
 static const IcebergColumnMeta k_delete_file_pos{
         .id = INT32_MAX - 102, .col_name = "pos", .type = TPrimitiveType::BIGINT};
+
+Status ParquetPositionDeleteBuilder::build(const std::string& timezone, const std::string& delete_file_path,
+                                           int64_t file_length, std::set<int64_t>* need_skip_rowids) {
+    std::vector<SlotDescriptor*> slot_descriptors{&(IcebergDeleteFileMeta::get_delete_file_path_slot()),
+                                                  &(IcebergDeleteFileMeta::get_delete_file_pos_slot())};
+    std::unique_ptr<IcebergDeleteFileIterator> iter(new IcebergDeleteFileIterator());
+    RETURN_IF_ERROR(iter->init(_fs, timezone, delete_file_path, file_length, slot_descriptors, true));
+    std::shared_ptr<::arrow::RecordBatch> batch;
+    while (iter->has_next()) {
+        batch = iter->next();
+        ::arrow::StringArray* file_path_array = static_cast<arrow::StringArray*>(batch->column(0).get());
+        ::arrow::Int64Array* pos_array = static_cast<arrow::Int64Array*>(batch->column(1).get());
+        for (size_t row = 0; row < batch->num_rows(); row++) {
+            if (file_path_array->Value(row) == _datafile_path) {
+                need_skip_rowids->emplace(pos_array->Value(row));
+            }
+        }
+    }
+    return Status::OK();
+}
 
 Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::string& delete_file_path,
                                        int64_t file_length, std::set<int64_t>* need_skip_rowids) {
