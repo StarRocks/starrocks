@@ -67,7 +67,7 @@ public class KafkaUtil {
 
     private static final ProxyAPI PROXY_API = new ProxyAPI();
 
-    private static final long GET_INFO_TIMEOUT = 12;
+    private static final long GET_INFO_TIMEOUT = 300;
 
     public static List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties) throws UserException {
