@@ -16,6 +16,8 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
@@ -88,6 +90,12 @@ public class StorageVolumeAnalyzer {
             if (Strings.isNullOrEmpty(svName)) {
                 throw new SemanticException("'storage volume name' can not be null or empty");
             }
+
+            StorageVolumeMgr storageVolumeMgr = GlobalStateMgr.getCurrentState().getStorageVolumeMgr();
+            if (!storageVolumeMgr.exists(svName)) {
+                throw new SemanticException(String.format("storage volume '%s' not exists", svName));
+            }
+
             return null;
         }
 

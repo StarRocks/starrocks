@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.cloud.hadoop.repackaged.gcs.com.google.common.base.Strings;
+import com.google.common.base.Strings;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -36,6 +36,14 @@ public class AlterStorageVolumeStmt extends DdlStmt {
 
     public String getName() {
         return storageVolumeName;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
+    }
+
+    public String getComment() {
+        return comment;
     }
 
     @Override

@@ -18,8 +18,13 @@ import com.google.common.base.Preconditions;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.AlterStorageVolumeStmt;
+import com.starrocks.sql.ast.CreateStorageVolumeStmt;
+import com.starrocks.sql.ast.DropStorageVolumeStmt;
+import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.storagevolume.StorageVolume;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +39,16 @@ public class StorageVolumeMgr {
 
     private String defaultSV;
 
+    private static final String ENABLED = "enabled";
+
+
+    public void createStorageVolume(CreateStorageVolumeStmt stmt) throws AlreadyExistsException, AnalysisException {
+        Map<String, String> params = new HashMap<>();
+        Optional<Boolean> enabled = parseProperties(stmt.getProperties(), params);
+        createStorageVolume(stmt.getName(), stmt.getStorageVolumeType(), stmt.getStorageLocations(), params,
+                enabled, stmt.getComment());
+    }
+
     public void createStorageVolume(String name, String svType, List<String> locations, Map<String, String> params,
                                     Optional<Boolean> enabled, String comment)
             throws AlreadyExistsException, AnalysisException {
@@ -46,13 +61,24 @@ public class StorageVolumeMgr {
         }
     }
 
+    public void removeStorageVolume(DropStorageVolumeStmt stmt) {
+        removeStorageVolume(stmt.getName());
+    }
+
     public void removeStorageVolume(String name) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(nameToSV.containsKey(name),
                     "Storage Volume '%s' does not exist", name);
             Preconditions.checkState(!name.equals(defaultSV), "default storage volume can not be removed");
+            // TODO: check ref count
             nameToSV.remove(name);
         }
+    }
+
+    public void updateStorageVolume(AlterStorageVolumeStmt stmt) throws AnalysisException {
+        Map<String, String> params = new HashMap<>();
+        Optional<Boolean> enabled = parseProperties(stmt.getProperties(), params);
+        updateStorageVolume(stmt.getName(), params, enabled, stmt.getComment());
     }
 
     public void updateStorageVolume(String name, Map<String, String> params, Optional<Boolean> enabled, String comment)
@@ -79,10 +105,16 @@ public class StorageVolumeMgr {
         }
     }
 
+    public void setDefaultStorageVolume(SetDefaultStorageVolumeStmt stmt) {
+        setDefaultStorageVolume(stmt.getName());
+    }
+
     public void setDefaultStorageVolume(String svKey) {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             Preconditions.checkState(nameToSV.containsKey(svKey),
                     "Storage Volume '%s' does not exist", svKey);
+            StorageVolume sv = nameToSV.get(svKey);
+            sv.setIsDefault();
             defaultSV = svKey;
         }
     }
@@ -103,5 +135,19 @@ public class StorageVolumeMgr {
         try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
             return nameToSV.get(svKey);
         }
+    }
+
+    public List<String> listStorageVolumeNames() {
+        return new ArrayList<>(nameToSV.keySet());
+    }
+
+    private Optional<Boolean> parseProperties(Map<String, String> properties, Map<String, String> params) {
+        params.putAll(properties);
+        Optional<Boolean> enabled = Optional.empty();
+        if (params.containsKey(ENABLED)) {
+            enabled = Optional.of(Boolean.parseBoolean(params.get(ENABLED)));
+            params.remove(ENABLED);
+        }
+        return enabled;
     }
 }

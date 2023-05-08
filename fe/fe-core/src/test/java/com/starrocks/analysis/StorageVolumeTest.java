@@ -14,6 +14,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
@@ -22,6 +23,8 @@ import com.starrocks.sql.ast.DropStorageVolumeStmt;
 import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
 import com.starrocks.sql.ast.ShowStorageVolumesStmt;
 import com.starrocks.sql.ast.StatementBase;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -107,6 +110,15 @@ public class StorageVolumeTest {
 
     @Test
     public void testDescStorageVolumeParserAndAnalyzer() {
+        new MockUp<StorageVolumeMgr>() {
+            @Mock
+            public boolean exists(String svKey) {
+                if (svKey.equals("storage_volume1")) {
+                    return true;
+                }
+                return false;
+            }
+        };
         String sql = "DESC STORAGE VOLUME storage_volume1";
         StatementBase stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof DescStorageVolumeStmt);
@@ -116,6 +128,9 @@ public class StorageVolumeTest {
         stmt = AnalyzeTestUtil.analyzeSuccess(sql);
         Assert.assertTrue(stmt instanceof DescStorageVolumeStmt);
         Assert.assertEquals("DESC STORAGE VOLUME storage_volume1", stmt.toSql());
+
+        sql = "DESC STORAGE VOLUME storage_volume2";
+        AnalyzeTestUtil.analyzeFail(sql, "storage volume 'storage_volume2' not exists");
     }
 
     @Test
