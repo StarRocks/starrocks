@@ -51,6 +51,7 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.TypeManager;
@@ -220,7 +221,8 @@ public class InsertPlanner {
                 dataSink = new MysqlTableSink((MysqlTable) targetTable);
             } else if (targetTable instanceof IcebergTable) {
                 descriptorTable.addReferencedTable(targetTable);
-                dataSink = new IcebergTableSink((IcebergTable) targetTable, tupleDesc, insertStmt.isSpecifyKeyPartition());
+                dataSink = new IcebergTableSink((IcebergTable) targetTable, tupleDesc,
+                        isKeyPartitionStaticInsert(insertStmt, queryRelation));
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
@@ -641,5 +643,35 @@ public class InsertPlanner {
         Table targetTable = stmt.getTargetTable();
         return stmt.isSpecifyKeyPartition() &&
                 ((IcebergTable) targetTable).partitionColumnIndexes().contains(columnIdx);
+    }
+
+    private boolean isKeyPartitionStaticInsert(InsertStmt insertStmt, QueryRelation queryRelation) {
+        if (!(queryRelation instanceof SelectRelation)) {
+            return false;
+        }
+
+        if (!(insertStmt.getTargetTable() instanceof IcebergTable)) {
+            return false;
+        }
+
+        IcebergTable icebergTable = (IcebergTable) insertStmt.getTargetTable();
+        if (icebergTable.isUnPartitioned()) {
+            return false;
+        }
+
+        if (insertStmt.isSpecifyKeyPartition()) {
+            return true;
+        }
+
+        SelectRelation selectRelation = (SelectRelation) queryRelation;
+        List<SelectListItem> listItems = selectRelation.getSelectList().getItems();
+        List<Integer> partitionIndexes = icebergTable.partitionColumnIndexes();
+        for (int partitionIndex : partitionIndexes) {
+            Expr expr = listItems.get(partitionIndex).getExpr();
+            if (!expr.isConstant()) {
+                return false;
+            }
+        }
+        return true;
     }
 }
