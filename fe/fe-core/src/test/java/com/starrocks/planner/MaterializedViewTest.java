@@ -299,6 +299,40 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select empid as col2, locations.locationid from emps " +
                 "join locations on emps.locationid = locations.locationid " +
                 "and locations.locationid > 10");
+        testRewriteOK(mv, "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where emps.locationid=10");
+    }
+
+    @Test
+    public void testsInnerJoinCompleteWithPredicates() {
+        String mv = "select locations.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid group by empid,locations.locationid";
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where empid = 10 group by empid,emps.locationid");
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where locations.locationid= 10 " +
+                "group by empid,emps.locationid");
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where emps.locationid= 10 " +
+                "group by empid,emps.locationid");
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid where emps.locationid= 10 " +
+                "group by empid,emps.locationid");
+        testRewriteOK(mv, "select emps.locationid, empid, sum(emps.deptno) as col3 from " +
+                "locations inner join emps on locations.locationid = emps.locationid where emps.locationid= 10 " +
+                "group by empid,emps.locationid");
+    }
+
+    @Test
+    public void testsInnerJoinCompleteWithPredicates2() {
+        String mv = "select locations.name, locations.locationid, sum(emps.deptno) as col3 from emps " +
+                "join locations on emps.locationid = locations.locationid group by locations.name,locations.locationid";
+        testRewriteOK(mv, "select locations.name, emps.locationid, sum(emps.deptno) as col3 from " +
+                "locations inner join emps on locations.locationid = emps.locationid where emps.locationid= 10 " +
+                "group by locations.name,emps.locationid");
+        testRewriteOK(mv, "select locations.name, emps.locationid, sum(emps.deptno) as col3 from " +
+                "locations inner join emps on locations.locationid = emps.locationid where locations.locationid>10 " +
+                "group by locations.name,emps.locationid");
     }
 
     @Test
