@@ -593,6 +593,44 @@ TEST_F(LikeTest, constValueRegexp) {
                         .ok());
 }
 
+
+TEST_F(LikeTest, constValueCaseInsensitiveRegexp) {
+    auto context = FunctionContext::create_test_context();
+    std::unique_ptr<FunctionContext> ctx(context);
+
+    const int num_rows = 4;
+
+    auto value_col = ColumnHelper::create_const_column<TYPE_VARCHAR>("Abcd", num_rows);
+    auto flag = ColumnHelper::create_const_column<TYPE_VARCHAR>("i", num_rows);
+    auto pattern_col = BinaryColumn::create();
+    pattern_col->append("abc");
+    pattern_col->append("ab.*");
+    pattern_col->append("abcd");
+    pattern_col->append("abcm");
+
+    bool expected[num_rows] = {true, true, true, false};
+
+    Columns columns;
+    columns.emplace_back(std::move(value_col));
+    columns.emplace_back(std::move(pattern_col));
+    columns.emplace_back(std::move(flag));
+    context->set_constant_columns(columns);
+
+    ASSERT_TRUE(LikePredicate::regex_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = LikePredicate::regex(context, columns).value();
+    ASSERT_TRUE(result->is_numeric());
+    ASSERT_EQ(num_rows, result->size());
+
+    auto v = ColumnHelper::cast_to<TYPE_BOOLEAN>(result);
+    for (int i = 0; i < num_rows; ++i) {
+        ASSERT_EQ(expected[i], v->get_data()[i]);
+    }
+
+    ASSERT_TRUE(LikePredicate::regex_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                        .ok());
+}
+
 TEST_F(LikeTest, constValueRegexpLargerThanHyperscan) {
     auto context = FunctionContext::create_test_context();
     std::unique_ptr<FunctionContext> ctx(context);
