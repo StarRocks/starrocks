@@ -34,14 +34,10 @@
 
 #include "runtime/data_stream_recvr.h"
 
-#include <fmt/format.h>
 #include <util/time.h>
 
 #include <condition_variable>
 #include <deque>
-#include <memory>
-#include <unordered_map>
-#include <unordered_set>
 #include <utility>
 
 #include "column/chunk.h"
@@ -53,7 +49,6 @@
 #include "runtime/exec_env.h"
 #include "runtime/sender_queue.h"
 #include "runtime/sorted_chunks_merger.h"
-#include "serde/protobuf_serde.h"
 #include "util/compression/block_compression.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
