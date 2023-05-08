@@ -687,7 +687,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  2:EXCHANGE\n"));
         Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
-                "    HASH_PARTITIONED: <slot 4>\n" +
+                "    HASH_PARTITIONED: 4: v7\n" +
                 "\n" +
                 "  1:OlapScanNode\n" +
                 "     TABLE: t2"));
@@ -843,8 +843,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             String unionPlan = plans.get(0);
             assertContains(unionPlan, "  0:UNION\n" +
                     "  |  child exprs:\n" +
-                    "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
+                    "  |      [4: expr, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
+                    "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n" +
                     "  |  pass-through-operands: all\n");
             assertContains(unionPlan, "  4:OlapScanNode\n" +
                     "     table: t1, rollup: t1\n" +
@@ -876,8 +876,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             String exceptPlan = plans.get(1);
             Assert.assertTrue(exceptPlan.contains("  0:EXCEPT\n" +
                     "  |  child exprs:\n" +
+<<<<<<< HEAD
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
                     "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n"));
+=======
+                    "  |      [4: expr, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
+                    "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n");
+>>>>>>> 1f053fc5c ([BugFix] Fix un-processed NULL_TYPE (#22688))
             Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
@@ -888,8 +893,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             String intersectPlan = plans.get(2);
             Assert.assertTrue(intersectPlan.contains("  0:INTERSECT\n" +
                     "  |  child exprs:\n" +
+<<<<<<< HEAD
                     "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
                     "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n"));
+=======
+                    "  |      [4: expr, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
+                    "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n");
+>>>>>>> 1f053fc5c ([BugFix] Fix un-processed NULL_TYPE (#22688))
             Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
