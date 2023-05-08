@@ -179,7 +179,7 @@ public class HttpServer {
         ConnectionAction.registerAction(controller);
         ShowDataAction.registerAction(controller);
         QueryDumpAction.registerAction(controller);
-        // for stop fe
+        // for stop FE
         StopFeAction.registerAction(controller);
 
         // meta service action
