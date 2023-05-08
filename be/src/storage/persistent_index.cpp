@@ -2788,7 +2788,7 @@ Status PersistentIndex::prepare(const EditVersion& version, size_t n) {
     _dump_snapshot = false;
     _flushed = false;
     _version = version;
-    if (config::enable_parallel_get_and_bf && n > config::max_kv_num_for_bf) {
+    if (config::enable_parallel_get_and_bf && n > _size / 2) {
         _need_bloom_filter = true;
         RETURN_IF_ERROR(ThreadPoolBuilder("get_kv_thread")
                                 .set_min_threads(config::min_get_kv_thread_num)
@@ -3142,7 +3142,11 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     size_t num_erased = 0;
     RETURN_IF_ERROR(_l0->erase(n, keys, old_values, &num_erased, not_founds_by_key_size));
     _dump_snapshot |= _can_dump_directly();
-    RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size));
+    if (_get_thread_pool != nullptr) {
+        RETURN_IF_ERROR(_get_from_immutable_index_parallel(n, keys, old_values, not_founds_by_key_size));
+    } else {
+        RETURN_IF_ERROR(_get_from_immutable_index(n, keys, old_values, not_founds_by_key_size));
+    }
     std::vector<std::pair<int64_t, int64_t>> add_usage_and_size(kMaxKeyLength + 1, std::pair<int64_t, int64_t>(0, 0));
     for (size_t i = 0; i < n; i++) {
         if (old_values[i].get_value() != NullIndexValue) {
@@ -3208,7 +3212,7 @@ Status PersistentIndex::flush_advance() {
     std::string l1_tmp_file =
             strings::Substitute("$0/index.l1.$1.$2.$3.tmp", _path, _version.major(), _version.minor(), idx);
     _bf.reset();
-    if (_need_bloom_filter && _l0->size() < config::max_kv_num_for_bf) {
+    if (_need_bloom_filter) {
         Status st = BloomFilter::create(BLOCK_BLOOM_FILTER, &_bf);
         if (!st.ok()) {
             LOG(WARNING) << "failed to create bloom filter, status: " << st;
@@ -3779,7 +3783,7 @@ Status PersistentIndex::_merge_compaction_advance() {
     for (int i = merge_l1_start_idx; i < merge_l1_end_idx; i++) {
         total_merge_size += _l1_vec[i]->total_size();
     }
-    if (_need_bloom_filter && total_merge_size < config::max_kv_num_for_bf) {
+    if (_need_bloom_filter) {
         Status st = BloomFilter::create(BLOCK_BLOOM_FILTER, &_bf);
         if (!st.ok()) {
             LOG(WARNING) << "failed to create bloom filter, status: " << st;
