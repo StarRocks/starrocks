@@ -102,8 +102,9 @@ public class SparkLauncherMonitor {
             this.isStop = false;
         }
 
-        public void setSubmitTimeoutMs(long submitTimeoutMs) {
-            this.submitTimeoutMs = submitTimeoutMs;
+        // Seconds turn into milliseconds
+        public void setSubmitTimeoutMs(long submitTimeout) {
+            this.submitTimeoutMs = submitTimeout * 1000;
         }
 
         public void setRedirectLogPath(String redirectLogPath) throws IOException {

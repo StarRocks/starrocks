@@ -183,7 +183,8 @@ public class SparkEtlJobHandlerTest {
         BrokerDesc brokerDesc = new BrokerDesc(broker, Maps.newHashMap());
         SparkPendingTaskAttachment attachment = new SparkPendingTaskAttachment(pendingTaskId);
         SparkEtlJobHandler handler = new SparkEtlJobHandler();
-        handler.submitEtlJob(loadJobId, label, etlJobConfig, resource, brokerDesc, handle, attachment, null);
+        long sparkLoadSubmitTimeout = Config.spark_load_submit_timeout_second;
+        handler.submitEtlJob(loadJobId, label, etlJobConfig, resource, brokerDesc, handle, attachment, sparkLoadSubmitTimeout);
 
         // check submit etl job success
         Assert.assertEquals(appId, attachment.getAppId());
@@ -220,43 +221,8 @@ public class SparkEtlJobHandlerTest {
         BrokerDesc brokerDesc = new BrokerDesc(broker, Maps.newHashMap());
         SparkPendingTaskAttachment attachment = new SparkPendingTaskAttachment(pendingTaskId);
         SparkEtlJobHandler handler = new SparkEtlJobHandler();
-        handler.submitEtlJob(loadJobId, label, etlJobConfig, resource, brokerDesc, handle, attachment, null);
-    }
-
-    @Test
-    public void testSparkLoadSubmitTimeout(@Mocked BrokerUtil brokerUtil, @Mocked SparkLauncher launcher,
-                                 @Injectable Process process,
-                                 @Mocked SparkLoadAppHandle handle) throws IOException, LoadException {
-        new Expectations() {
-            {
-                launcher.launch();
-                result = process;
-                handle.getAppId();
-                result = appId;
-                handle.getState();
-                result = SparkLoadAppHandle.State.RUNNING;
-            }
-        };
-        EtlJobConfig etlJobConfig = new EtlJobConfig(Maps.newHashMap(), etlOutputPath, label, null);
-        SparkResource resource = new SparkResource(resourceName);
-        new Expectations(resource) {
-            {
-                resource.prepareArchive();
-                result = archive;
-            }
-        };
-
-        Map<String, String> sparkConfigs = resource.getSparkConfigs();
-        sparkConfigs.put("spark.master", "yarn");
-        sparkConfigs.put("spark.submit.deployMode", "cluster");
-        sparkConfigs.put("spark.hadoop.yarn.resourcemanager.address", "127.0.0.1:9999");
-        BrokerDesc brokerDesc = new BrokerDesc(broker, Maps.newHashMap());
-        SparkPendingTaskAttachment attachment = new SparkPendingTaskAttachment(pendingTaskId);
-        SparkEtlJobHandler handler = new SparkEtlJobHandler();
-        handler.submitEtlJob(loadJobId, label, etlJobConfig, resource, brokerDesc, handle, attachment, 600L);
-
-        // check submit etl job success
-        Assert.assertEquals(appId, attachment.getAppId());
+        long sparkLoadSubmitTimeout = Config.spark_load_submit_timeout_second;
+        handler.submitEtlJob(loadJobId, label, etlJobConfig, resource, brokerDesc, handle, attachment, sparkLoadSubmitTimeout);
     }
 
     @Test
