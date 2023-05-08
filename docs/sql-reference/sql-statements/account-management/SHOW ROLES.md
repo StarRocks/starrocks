@@ -2,7 +2,8 @@
 
 ## Description
 
-Displays all roles in the system. You can use `SHOW GRANTS FOR ROLE <role_name>;` to view the privileges of a specific role. For more information, see [SHOW GRANTS](SHOW%20GRANTS.md).
+Displays all roles in the system. You can use `SHOW GRANTS FOR ROLE <role_name>;` to view the privileges of a specific role. For more information, see [SHOW GRANTS](SHOW%20GRANTS.md). This command is supported from v3.0.
+
 
 > Note: Only the `user_admin` role can execute this statement.
 

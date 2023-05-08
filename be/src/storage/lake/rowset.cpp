@@ -179,10 +179,18 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_each_segment_iterator_with_d
 Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache) {
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
+    bool ignore_lost_segment = config::experimental_lake_ignore_lost_segment;
     segments->reserve(_rowset_metadata->segments().size());
     for (const auto& seg_name : _rowset_metadata->segments()) {
-        ASSIGN_OR_RETURN(auto segment, _tablet->load_segment(seg_name, seg_id++, &footer_size_hint, fill_cache));
-        segments->emplace_back(std::move(segment));
+        auto segment_or = _tablet->load_segment(seg_name, seg_id++, &footer_size_hint, fill_cache);
+        if (segment_or.ok()) {
+            segments->emplace_back(std::move(segment_or.value()));
+        } else if (segment_or.status().is_not_found() && ignore_lost_segment) {
+            LOG(WARNING) << "Ignored lost segment " << seg_name;
+            continue;
+        } else {
+            return segment_or.status();
+        }
     }
     return Status::OK();
 }

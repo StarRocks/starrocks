@@ -72,6 +72,7 @@ set(EXEC_FILES
         ./exprs/decimal_binary_function_test.cpp
         ./exprs/array_expr_test.cpp
         ./exprs/array_functions_test.cpp
+        ./exprs/binary_function_test.cpp
         ./exprs/binary_functions_test.cpp
         ./exprs/binary_predicate_test.cpp
         ./exprs/bitmap_functions_test.cpp

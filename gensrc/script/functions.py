@@ -312,6 +312,19 @@ vectorized_functions = [
      'StringFunctions::parse_url_prepare', 'StringFunctions::parse_url_close'],
     [30420, 'strcmp', 'INT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::strcmp'],
 
+    # Binary Functions
+    # to_binary
+    [30600, 'to_binary', 'VARBINARY', ['VARCHAR', 'VARCHAR'], 'BinaryFunctions::to_binary',
+     'BinaryFunctions::to_binary_prepare', 'BinaryFunctions::to_binary_close'],
+    [30601, 'to_binary', 'VARBINARY', ['VARCHAR'], 'BinaryFunctions::to_binary',
+     'BinaryFunctions::to_binary_prepare', 'BinaryFunctions::to_binary_close'],
+    # from_binary
+    [30602, 'from_binary', 'VARCHAR', ['VARBINARY', 'VARCHAR'], 'BinaryFunctions::from_binary',
+     'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
+    [30603, 'from_binary', 'VARCHAR', ['VARBINARY'], 'BinaryFunctions::from_binary',
+     'BinaryFunctions::from_binary_prepare', 'BinaryFunctions::from_binary_close'],
+
+
     # 50xxx: timestamp functions
     [50008, 'year', 'SMALLINT', ['DATE'], 'TimeFunctions::yearV3'],
     [50009, 'year', 'SMALLINT', ['DATETIME'], 'TimeFunctions::yearV2'],
@@ -605,6 +618,7 @@ vectorized_functions = [
     [120150, "md5sum", "VARCHAR", ["VARCHAR", "..."], "EncryptionFunctions::md5sum", False],
     [120151, "md5sum_numeric", "LARGEINT", ["VARCHAR", "..."], "EncryptionFunctions::md5sum_numeric", False],
     [120160, "sha2", "VARCHAR", ["VARCHAR", "INT"], "EncryptionFunctions::sha2", "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close", False],
+    [120161, "to_base64", "VARCHAR", ["VARBINARY"], "EncryptionFunctions::to_base64", False],
 
       # geo function
     [120000, "ST_Point", "VARCHAR", ["DOUBLE", "DOUBLE"], "GeoFunctions::st_point", False],

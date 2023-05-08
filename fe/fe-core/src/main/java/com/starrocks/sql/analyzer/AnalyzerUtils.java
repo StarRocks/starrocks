@@ -474,7 +474,12 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            if (!node.getTable().isOlapTable() && tables.isEmpty()) {
+            if (!tables.isEmpty()) {
+                return null;
+            }
+            // if olap table has MV, we remove it
+            if (!node.getTable().isOlapTable() ||
+                    !node.getTable().getRelatedMaterializedViews().isEmpty()) {
                 tables.put(node.getName(), node.getTable());
             }
             return null;
