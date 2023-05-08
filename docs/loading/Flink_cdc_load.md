@@ -114,9 +114,9 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
 
     ```Bash
     ## for Linux x86
-    wget https://cdn-thirdparty.starrocks.com/smt.tar.gz
+    https://releases.starrocks.io/resources/smt.tar.gz
     ## for macOS ARM64
-    wget https://cdn-thirdparty.starrocks.com/smt_darwin_arm64.tar.gz
+    https://releases.starrocks.io/resources/smt_darwin_arm64.tar.gz
     ```
 
 ### Enable MySQL binary log
