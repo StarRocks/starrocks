@@ -730,7 +730,7 @@ public class MaterializedViewRewriter {
                                                    Multimap<ColumnRefOperator, ColumnRefOperator> compensationJoinColumns,
                                                    List<ScalarOperator> srcJoinOnPredicates,
                                                    List<ScalarOperator> targetJoinOnPredicates,
-                                                   boolean isQueryAgainstView) {
+                                                   boolean isQueryToMV) {
         if (srcJoinOnPredicates.isEmpty() && targetJoinOnPredicates.isEmpty()) {
             return ConstantOperator.TRUE;
         }
@@ -770,7 +770,7 @@ public class MaterializedViewRewriter {
                 targetEquivalenceClasses,
                 srcJoinOnPredicateSplit,
                 targetJoinOnPredicateSplit,
-                isQueryAgainstView);
+                isQueryToMV);
         if (compensationPredicates == null) {
             return null;
         }
@@ -818,13 +818,8 @@ public class MaterializedViewRewriter {
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(predicate);
         // swapped by query based view ec
         List<ScalarOperator> rewrittenConjuncts = conjuncts.stream()
-                .map(conjunct -> {
-                    if (isMVBased) {
-                        return rewriter.rewriteByViewEc(conjunct);
-                    } else {
-                        return rewriter.rewriteByQueryEc(conjunct);
-                    }
-                })
+                .map(conjunct ->  rewriter.rewriteByEc(conjunct, isMVBased))
+                .distinct() // equal-class scalar operators may generate the same rewritten conjunct.
                 .collect(Collectors.toList());
         if (rewrittenConjuncts.isEmpty()) {
             return null;
@@ -1150,19 +1145,15 @@ public class MaterializedViewRewriter {
     protected EquationRewriter buildEquationRewriter(
             Map<ColumnRefOperator, ScalarOperator> columnRefMap,
             RewriteContext rewriteContext,
-            boolean isViewBased, boolean isQueryAgainstView) {
+            boolean isViewBased, boolean isQueryToMV) {
 
         EquationRewriter rewriter = new EquationRewriter();
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
             ScalarOperator rewritten = rewriteContext.getMvColumnRefRewriter().rewrite(entry.getValue());
             ScalarOperator rewriteScalarOp;
-            if (isQueryAgainstView) {
-                if (isViewBased) {
-                    rewriteScalarOp = columnRewriter.rewriteViewToQueryWithViewEc(rewritten);
-                } else {
-                    rewriteScalarOp = columnRewriter.rewriteViewToQueryWithQueryEc(rewritten);
-                }
+            if (isQueryToMV) {
+                rewriteScalarOp = columnRewriter.rewriteToTargetWithEc(rewritten, isViewBased);
                 // if rewriteScalarOp == rewritten and !rewritten.getUsedColumns().isEmpty(),
                 // it means the rewritten can not be mapped from mv to query.
                 // and ColumnRefOperator may conflict between mv and query(same id but not same name),
@@ -1171,11 +1162,7 @@ public class MaterializedViewRewriter {
                     rewriter.addMapping(rewriteScalarOp, entry.getKey());
                 }
             } else {
-                if (isViewBased) {
-                    rewriteScalarOp = columnRewriter.rewriteByViewEc(rewritten);
-                } else {
-                    rewriteScalarOp = columnRewriter.rewriteByQueryEc(rewritten);
-                }
+                rewriteScalarOp = columnRewriter.rewriteByEc(rewritten, isViewBased);
                 rewriter.addMapping(rewriteScalarOp, entry.getKey());
             }
 
@@ -1575,14 +1562,14 @@ public class MaterializedViewRewriter {
                 false);
     }
 
-    // when isQueryAgainstView is true, get compensation predicates of query against view
+    // when isQueryToMV is true, get compensation predicates of query against view
     // or get compensation predicates of view against query
     private PredicateSplit getCompensationPredicates(ColumnRewriter columnRewriter,
                                                      EquivalenceClasses sourceEquivalenceClasses,
                                                      EquivalenceClasses targetEquivalenceClasses,
                                                      PredicateSplit srcPredicateSplit,
                                                      PredicateSplit targetPredicateSplit,
-                                                     boolean isQueryAgainstView) {
+                                                     boolean isQueryToMV) {
         // 1. equality join subsumption test
         final ScalarOperator compensationEqualPredicate =
                 getCompensationEqualPredicate(sourceEquivalenceClasses, targetEquivalenceClasses);
@@ -1594,7 +1581,7 @@ public class MaterializedViewRewriter {
         ScalarOperator srcPr = srcPredicateSplit.getRangePredicates();
         ScalarOperator targetPr = targetPredicateSplit.getRangePredicates();
         ScalarOperator compensationPr =
-                getCompensationPredicate(srcPr, targetPr, columnRewriter, true, isQueryAgainstView);
+                getCompensationPredicate(srcPr, targetPr, columnRewriter, true, isQueryToMV);
         if (compensationPr == null) {
             return null;
         }
@@ -1605,7 +1592,7 @@ public class MaterializedViewRewriter {
         if (srcPu == null && targetPu != null) {
             // query: empid < 5
             // mv: empid < 5 or salary > 100
-            if (!isQueryAgainstView) {
+            if (!isQueryToMV) {
                 // compensationEqualPredicate and compensationPr is based on query, need to change it to view based
                 srcPu = Utils.compoundAnd(columnRewriter.rewriteQueryToView(compensationEqualPredicate),
                         columnRewriter.rewriteQueryToView(compensationPr));
@@ -1614,7 +1601,7 @@ public class MaterializedViewRewriter {
             }
         }
         ScalarOperator compensationPu =
-                getCompensationPredicate(srcPu, targetPu, columnRewriter, false, isQueryAgainstView);
+                getCompensationPredicate(srcPu, targetPu, columnRewriter, false, isQueryToMV);
         if (compensationPu == null) {
             return null;
         }
@@ -1626,7 +1613,7 @@ public class MaterializedViewRewriter {
                                                     ScalarOperator targetPu,
                                                     ColumnRewriter columnRewriter,
                                                     boolean isRangePredicate,
-                                                    boolean isQueryAgainstView) {
+                                                    boolean isQueryToMV) {
         if (srcPu == null && targetPu == null) {
             return ConstantOperator.TRUE;
         }
@@ -1637,21 +1624,10 @@ public class MaterializedViewRewriter {
         } else if (targetPu == null) {
             compensationPu = srcPu;
         } else {
-            ScalarOperator swappedSrcPu;
-            ScalarOperator swappedTargetPu;
-            if (isQueryAgainstView) {
-                // src is query
-                swappedSrcPu = columnRewriter.rewriteByQueryEc(srcPu.clone());
-                // target is view
-                swappedTargetPu = columnRewriter.rewriteViewToQueryWithQueryEc(targetPu.clone());
-            } else {
-                // src is view
-                swappedSrcPu = columnRewriter.rewriteViewToQueryWithViewEc(srcPu.clone());
-                // target is query
-                swappedTargetPu = columnRewriter.rewriteByViewEc(targetPu.clone());
-            }
-            ScalarOperator canonizedSrcPu = MvUtils.canonizePredicateForRewrite(swappedSrcPu);
-            ScalarOperator canonizedTargetPu = MvUtils.canonizePredicateForRewrite(swappedTargetPu);
+            Pair<ScalarOperator, ScalarOperator> rewrittenSrcTarget =
+                    columnRewriter.rewriteSrcTargetWithEc(srcPu.clone(), targetPu.clone(), isQueryToMV);
+            ScalarOperator canonizedSrcPu = MvUtils.canonizePredicateForRewrite(rewrittenSrcTarget.first);
+            ScalarOperator canonizedTargetPu = MvUtils.canonizePredicateForRewrite(rewrittenSrcTarget.second);
 
             if (isRangePredicate) {
                 compensationPu = getCompensationRangePredicate(canonizedSrcPu, canonizedTargetPu);
