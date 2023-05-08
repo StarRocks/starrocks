@@ -733,10 +733,10 @@ under the License.
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
+        <!-- we need pg driver for jdbc connector -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>test</scope>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
