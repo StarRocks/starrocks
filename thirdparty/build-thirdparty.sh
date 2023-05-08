@@ -514,6 +514,21 @@ build_rocksdb() {
     export CFLAGS=$OLD_FLAGS
 }
 
+# libsasl
+build_librdkafka() {
+    check_if_source_exist $SASL_SOURCE
+
+    cd $TP_SOURCE_DIR/$SASL_SOURCE
+    sh ./autogen.sh
+    ./configure --prefix=$TP_INSTALL_DIR  --enable-static=yes
+    make -j$PARALLEL
+    make install
+    cd $TP_INSTALL_DIR/lib
+    ls | grep sasl | grep so | xargs rm -rf
+    cd $TP_INSTALL_DIR/lib/sasl2
+    find . | grep so | xargs rm -rf
+}
+
 # librdkafka
 build_librdkafka() {
     check_if_source_exist $LIBRDKAFKA_SOURCE
@@ -1092,6 +1107,7 @@ build_thrift
 build_leveldb
 build_brpc
 build_rocksdb
+build_sasl
 build_librdkafka
 build_flatbuffers
 # must build before arrow
