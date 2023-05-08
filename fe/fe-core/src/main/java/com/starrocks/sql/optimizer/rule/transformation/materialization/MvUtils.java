@@ -346,6 +346,7 @@ public class MvUtils {
         optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
         optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
         optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
+        optimizerConfig.setMVRewritePlan(true);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,
@@ -414,7 +415,7 @@ public class MvUtils {
                 // Now join's on-predicates may be pushed down below join, so use original on-predicates
                 // instead of new on-predicates.
                 List<ScalarOperator> conjuncts = Utils.extractConjuncts(joinOperator.getOriginalOnPredicate());
-                predicates.addAll(conjuncts);
+                collectValidPredicates(conjuncts, predicates);
             }
         }
         for (OptExpression child : root.getInputs()) {
@@ -439,6 +440,10 @@ public class MvUtils {
         return new ReplaceColumnRefRewriter(mvLineage, true);
     }
 
+    private static void collectValidPredicates(List<ScalarOperator> conjuncts, List<ScalarOperator> predicates) {
+        conjuncts.stream().filter(x -> !x.isRedundant()).forEach(predicates::add);
+    }
+
     private static void getAllPredicates(OptExpression root, List<ScalarOperator> predicates) {
         Operator operator = root.getOp();
 
@@ -446,13 +451,13 @@ public class MvUtils {
         // aggregation functions' rewrite and should not be pushed down into mv scan operator.
         if (operator.getPredicate() != null && !(operator instanceof LogicalAggregationOperator)) {
             List<ScalarOperator> conjuncts = Utils.extractConjuncts(operator.getPredicate());
-            predicates.addAll(conjuncts);
+            collectValidPredicates(conjuncts, predicates);
         }
         if (operator instanceof LogicalJoinOperator) {
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
             if (joinOperator.getOnPredicate() != null) {
                 List<ScalarOperator> conjuncts = Utils.extractConjuncts(joinOperator.getOnPredicate());
-                predicates.addAll(conjuncts);
+                collectValidPredicates(conjuncts, predicates);
             }
         }
         for (OptExpression child : root.getInputs()) {
