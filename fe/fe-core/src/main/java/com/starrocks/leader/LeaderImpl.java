@@ -78,6 +78,7 @@ import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -186,17 +187,20 @@ public class LeaderImpl {
         String host = tBackend.getHost();
         int bePort = tBackend.getBe_port();
         long backendId = -1L;
-        ComputeNode cn = Config.only_use_compute_node ?
-                GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort) :
-                GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
+        ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
 
         if (cn == null) {
-            tStatus.setStatus_code(TStatusCode.CANCELLED);
-            List<String> errorMsgs = new ArrayList<>();
-            errorMsgs.add("backend not exist.");
-            tStatus.setError_msgs(errorMsgs);
-            LOG.warn("backend does not found. host: {}, be port: {}. task: {}", host, bePort, request.toString());
-            return result;
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                cn = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort);
+            }
+            if (cn == null) {
+                tStatus.setStatus_code(TStatusCode.CANCELLED);
+                List<String> errorMsgs = new ArrayList<>();
+                errorMsgs.add("backend not exist.");
+                tStatus.setError_msgs(errorMsgs);
+                LOG.warn("backend does not found. host: {}, be port: {}. task: {}", host, bePort, request.toString());
+                return result;
+            }
         } else {
             backendId = cn.getId();
         }

@@ -53,7 +53,6 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
@@ -170,11 +169,10 @@ public class SystemInfoService {
         setComputeNodeOwner(newComputeNode);
 
         // add it to warehouse
-        if (Config.only_use_compute_node) {
-            Warehouse currentWarehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                    getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            currentWarehouse.getAnyAvailableCluster().addNode(newComputeNode.getId());
-        }
+        Warehouse currentWarehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        currentWarehouse.getAnyAvailableCluster().addNode(newComputeNode.getId());
+
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logAddComputeNode(newComputeNode);
@@ -335,11 +333,9 @@ public class SystemInfoService {
         }
 
         // drop it from warehouse
-        if (Config.only_use_compute_node) {
-            Warehouse currentWarehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                    getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            currentWarehouse.getAnyAvailableCluster().dropNode(dropComputeNode.getId());
-        }
+        Warehouse currentWarehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        currentWarehouse.getAnyAvailableCluster().dropNode(dropComputeNode.getId());
 
         // log
         GlobalStateMgr.getCurrentState().getEditLog()
@@ -1012,14 +1008,12 @@ public class SystemInfoService {
         }
 
         // add it to DEFAULT_WAREHOUSE
-        if (Config.only_use_compute_node) {
-            final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                    getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            if (warehouse != null) {
-                warehouse.getAnyAvailableCluster().addNode(newComputeNode.getId());
-            } else {
-                // TODO: cn will be updated in loadWarehouse
-            }
+        final Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        if (warehouse != null) {
+            warehouse.getAnyAvailableCluster().addNode(newComputeNode.getId());
+        } else {
+            // TODO: cn will be updated in loadWarehouse
         }
     }
 
@@ -1067,13 +1061,12 @@ public class SystemInfoService {
         }
 
         // drop it from warehouse
-        if (Config.only_use_compute_node) {
-            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
-                    getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            if (warehouse != null) {
-                warehouse.getAnyAvailableCluster().dropNode(cn.getId());
-            }
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                getWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_NAME);
+        if (warehouse != null) {
+            warehouse.getAnyAvailableCluster().dropNode(cn.getId());
         }
+
     }
 
     public void replayDropBackend(Backend backend) {

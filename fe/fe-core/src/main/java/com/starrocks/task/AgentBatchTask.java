@@ -38,6 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TAgentServiceVersion;
@@ -172,9 +173,10 @@ public class AgentBatchTask implements Runnable {
             TNetworkAddress address = null;
             boolean ok = false;
             try {
-                ComputeNode computeNode = Config.only_use_compute_node ?
-                        GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendId) :
-                        GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && computeNode == null) {
+                    computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendId);
+                }
 
                 if (computeNode == null || !computeNode.isAlive()) {
                     continue;

@@ -414,13 +414,11 @@ public class StarOSAgent {
                         String workerAddr = workerInfo.getIpPort();
                         String[] pair = workerAddr.split(":");
 
-                        long backendId = -1L;
-                        if (Config.only_use_compute_node) {
+                        long backendId = GlobalStateMgr.getCurrentSystemInfo()
+                                .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
+                        if (backendId == -1L) {
                             backendId = GlobalStateMgr.getCurrentSystemInfo().
                                     getComputeNodeIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
-                        } else {
-                            backendId = GlobalStateMgr.getCurrentSystemInfo()
-                                    .getBackendIdWithStarletPort(pair[0], Integer.parseInt(pair[1]));
                         }
 
                         if (backendId == -1L) {
