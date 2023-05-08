@@ -104,10 +104,10 @@
 5. 下载并解压 [SMT](https://www.mirrorship.cn/zh-CN/download/community)，并将其放在 **flink-1.14.5** 目录下。您可以根据操作系统和 CPU 架构选择对应的 SMT 安装包。
 
    ```Bash
-   ## 适用于 Linux x86
-   wget https://cdn-thirdparty.starrocks.com/smt.tar.gz
-   ## 适用于 macOS ARM64
-   wget https://cdn-thirdparty.starrocks.com/smt_darwin_arm64.tar.gz
+   # 适用于 Linux x86
+   wget https://releases.starrocks.io/resources/smt.tar.gz
+   # 适用于 macOS ARM64
+   wget https://releases.starrocks.io/resources/smt_darwin_arm64.tar.gz
   
    ```
 

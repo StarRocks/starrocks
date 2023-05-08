@@ -4,7 +4,7 @@
 
 > **说明**
 >
-> StarRocks Manager 为企业版功能，如需试用，请至 [下载页面](https://www.mirrorship.cn/zh-CN/download) 下方点击「现在咨询」获取。
+> StarRocks Manager 为企业版功能，如需试用，请至 [下载页面](https://www.mirrorship.cn/zh-CN/download/community) 下方点击「现在咨询」获取。
 
 ## 前提条件
 
