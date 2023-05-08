@@ -866,10 +866,12 @@ public class MaterializedViewRewriter {
                 mvCompensationToQuery.getRangePredicates(),
                 mvCompensationToQuery.getResidualPredicates()));
         if (!ConstantOperator.TRUE.equals(mvEqualPreds)) {
+            mvEqualPreds = columnRewriter.rewriteViewToQueryWithQueryEc(mvEqualPreds);
             mvEqualPreds =
                     rewriteScalarOperatorToTarget(mvEqualPreds, queryExprMap, rewriteContext, mvToQueryRefSet, true);
         }
         if (!ConstantOperator.TRUE.equals(mvOtherPreds)) {
+            mvOtherPreds = columnRewriter.rewriteViewToQueryWithViewEc(mvOtherPreds);
             mvOtherPreds =
                     rewriteScalarOperatorToTarget(mvOtherPreds, queryExprMap, rewriteContext, mvToQueryRefSet, false);
         }
