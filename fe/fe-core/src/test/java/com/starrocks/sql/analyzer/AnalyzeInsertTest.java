@@ -14,9 +14,17 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -55,4 +63,5 @@ public class AnalyzeInsertTest {
         analyzeSuccess("insert into t0 with label l1 select * from t0");
         analyzeSuccess("insert into t0 with label `l1` select * from t0");
     }
+
 }
