@@ -138,7 +138,7 @@ Release date: January 21, 2022
 
 ### Behavior Change
 
-StarRocks can use external tables to access Hive and its AWS S3-based external tables. However, the jar file that is used to access S3 data is too large and the binary package of StarRocks does not contain this jar file. If you want to use this jar file, you can download it from [Hive_s3_lib](https://cdn-thirdparty.starrocks.com/hive_s3_jar.tar.gz).
+StarRocks can use external tables to access Hive and its AWS S3-based external tables. However, the jar file that is used to access S3 data is too large and the binary package of StarRocks does not contain this jar file. If you want to use this jar file, you can download it from [Hive_s3_lib](https://releases.starrocks.io/resources/hive_s3_jar.tar.gz).
 
 ## 2.0.0
 
