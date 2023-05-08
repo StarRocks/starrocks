@@ -16,18 +16,20 @@
 
 #include <fmt/format.h>
 
+#include <filesystem>
+
 #ifdef WITH_CACHELIB
 #include "block_cache/cachelib_wrapper.h"
 #endif
-
 #include "block_cache/starcache_wrapper.h"
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/statusor.h"
-#include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks {
+
+namespace fs = std::filesystem;
 
 BlockCache* BlockCache::instance() {
     static BlockCache cache;
@@ -39,17 +41,16 @@ Status BlockCache::init(const CacheOptions& options) {
         if (dir.size == 0) {
             continue;
         }
-        if (fs::path_exist(dir.path)) {
-            ASSIGN_OR_RETURN(const bool is_dir, fs::is_directory(dir.path));
-            if (!is_dir) {
+        fs::path dir_path(dir.path);
+        if (fs::exists(dir_path)) {
+            if (!fs::is_directory(dir_path)) {
                 LOG(ERROR) << "the block cache disk path already exists but not a directory, path: " << dir.path;
                 return Status::InvalidArgument("invalid block cache disk path");
             }
         } else {
-            auto create_res = fs::create_directories(dir.path);
-            if (!create_res.ok()) {
-                LOG(ERROR) << "create block cache disk path failed, path: " << dir.path
-                           << ", reason: " << create_res.get_error_msg();
+            std::error_code ec;
+            if (!fs::create_directory(dir_path, ec)) {
+                LOG(ERROR) << "create block cache disk path failed, path: " << dir.path << ", reason: " << ec.message();
                 return Status::InvalidArgument("invalid block cache disk path");
             }
         }
