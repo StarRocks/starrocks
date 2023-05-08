@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.common.Config;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergCatalog;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
@@ -25,6 +26,7 @@ import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
+import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 import org.apache.iceberg.BaseMetastoreCatalog;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.CatalogProperties;
@@ -106,6 +108,9 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
             this.conf.set(HiveConf.ConfVars.METASTOREWAREHOUSE.varname,
                     properties.get(CatalogProperties.WAREHOUSE_LOCATION));
         }
+
+        this.conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
+                String.valueOf(Config.hive_meta_store_timeout_s));
 
         String fileIOImpl = properties.get(CatalogProperties.FILE_IO_IMPL);
         this.fileIO =
