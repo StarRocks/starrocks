@@ -150,7 +150,11 @@ public class BaseTableInfo {
     }
 
     public String getReadableString() {
-        return catalogName + "." + getDbName() + "." + getTableName();
+        String dbName = getDbName();
+        dbName = dbName != null ? dbName : "null";
+        String tableName = getTableName();
+        tableName = tableName != null ? tableName : "null";
+        return catalogName + "." + dbName + "." + tableName;
     }
 
     @Override

@@ -689,7 +689,7 @@ public class PropertyAnalyzer {
                             dbName, tableName);
                     if (uniqueConstraintTable == null) {
                         throw new AnalysisException(
-                                String.format("table:%s.%s.%s does not exist", catalogName, dbName, tableName));
+                                String.format("table: %s.%s.%s does not exist", catalogName, dbName, tableName));
                     }
                     boolean columnExist = uniqueConstraint.getUniqueColumns().stream()
                             .allMatch(uniqueConstraintTable::containColumn);

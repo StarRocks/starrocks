@@ -113,7 +113,7 @@ public class UniqueConstraint {
             try {
                 parseUniqueConstraintColumns(columnNames, uniqueConstraints);
             } catch (AnalysisException e) {
-                LOG.warn("parse unique constraint failed, unique constraint: {}", constraintDesc);
+                LOG.warn("parse unique constraint failed, unique constraint: {}", constraintDesc, e);
                 throw e;
             }
         }
