@@ -115,6 +115,7 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
     For x86:
 
     ```Bash
+<<<<<<< HEAD
     wget https://cdn-thirdparty.starrocks.com/smt.tar.gz
     ```
 
@@ -122,6 +123,12 @@ To synchronize data from MySQL, you need to install the following tools: SMT, Fl
 
     ```Bash
     wget https://cdn-thirdparty.starrocks.com/smt_darwin_arm64.tar.gz
+=======
+    # for Linux x86
+    wget https://releases.starrocks.io/resources/smt.tar.gz
+    # for macOS ARM64
+    wget https://releases.starrocks.io/resources/smt_darwin_arm64.tar.gz
+>>>>>>> f16692e6f ([Doc] Update Download links (#22968))
     ```
 
 ### Enable MySQL binary log
