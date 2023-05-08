@@ -598,7 +598,10 @@ public:
 private:
     size_t _dump_bound();
 
-    void _set_error(bool error) { _error = error; }
+    void _set_error(bool error, const string& msg) {
+        _error = error;
+        _error_msg = msg;
+    }
     // check _l0 should dump as snapshot or not
     bool _can_dump_directly();
     bool _need_flush_advance();
@@ -665,6 +668,7 @@ private:
     std::condition_variable _get_task_finished;
     size_t _running_get_task = 0;
     std::atomic<bool> _error{false};
+    std::string _error_msg;
     std::vector<KeysInfo> _found_keys_info;
 };
 
