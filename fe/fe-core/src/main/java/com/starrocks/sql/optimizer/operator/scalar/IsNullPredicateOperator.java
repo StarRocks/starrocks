@@ -22,13 +22,17 @@ public class IsNullPredicateOperator extends PredicateOperator {
     private final boolean isNotNull;
 
     public IsNullPredicateOperator(ScalarOperator arguments) {
-        super(OperatorType.IS_NULL, arguments);
-        this.isNotNull = false;
+        this(false, arguments, false);
     }
 
     public IsNullPredicateOperator(boolean isNotNull, ScalarOperator arguments) {
+        this(isNotNull, arguments, false);
+
+    }
+    public IsNullPredicateOperator(boolean isNotNull, ScalarOperator arguments, boolean isRedundant) {
         super(OperatorType.IS_NULL, arguments);
         this.isNotNull = isNotNull;
+        this.isRedundant = isRedundant;
     }
 
     public boolean isNotNull() {
