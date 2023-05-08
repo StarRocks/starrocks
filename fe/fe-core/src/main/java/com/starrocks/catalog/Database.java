@@ -641,6 +641,25 @@ public class Database extends MetaObject implements Writable {
         return null;
     }
 
+    public Pair<Table, MaterializedIndex> getMaterializedViewIndex(String mvName) {
+        // TODO: add an index to speed it up.
+        for (Table table : idToTable.values()) {
+            if (table instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) table;
+                for (MaterializedIndex mvIndex : olapTable.getVisibleIndex()) {
+                    String indexName = olapTable.getIndexNameById(mvIndex.getId());
+                    if (indexName == null) {
+                        continue;
+                    }
+                    if (indexName.equals(mvName)) {
+                        return Pair.create(table, mvIndex);
+                    }
+                }
+            }
+        }
+        return null;
+    }
+
     /**
      * This is a thread-safe method when idToTable is a concurrent hash map
      *

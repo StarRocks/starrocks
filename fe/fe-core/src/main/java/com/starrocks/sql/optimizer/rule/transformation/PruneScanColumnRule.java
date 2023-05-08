@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -74,19 +75,10 @@ public class PruneScanColumnRule extends TransformationRule {
                     .collect(Collectors.toMap(identity(), scanOperator.getColRefToColumnMetaMap()::get));
             if (scanOperator instanceof LogicalOlapScanOperator) {
                 LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) scanOperator;
-                LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
-                        olapScanOperator.getTable(),
-                        newColumnRefMap,
-                        olapScanOperator.getColumnMetaToColRefMap(),
-                        olapScanOperator.getDistributionSpec(),
-                        olapScanOperator.getLimit(),
-                        olapScanOperator.getPredicate(),
-                        olapScanOperator.getSelectedIndexId(),
-                        olapScanOperator.getSelectedPartitionId(),
-                        olapScanOperator.getPartitionNames(),
-                        olapScanOperator.getSelectedTabletId(),
-                        olapScanOperator.getHintsTabletIds());
 
+                LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+                LogicalOlapScanOperator newScanOperator = builder.withOperator(olapScanOperator)
+                        .setColRefToColumnMetaMap(ImmutableMap.copyOf(newColumnRefMap)).build();
                 return Lists.newArrayList(new OptExpression(newScanOperator));
             } else {
                 LogicalScanOperator.Builder builder = OperatorBuilderFactory.build(scanOperator);
