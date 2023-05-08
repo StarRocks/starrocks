@@ -33,13 +33,13 @@ import java.util.Map;
 import java.util.Objects;
 
 public final class LogicalOlapScanOperator extends LogicalScanOperator {
-    private final HashDistributionSpec hashDistributionSpec;
-    private final long selectedIndexId;
-    private final List<Long> selectedPartitionId;
-    private final PartitionNames partitionNames;
-    private final boolean hasTableHints;
-    private final List<Long> selectedTabletId;
-    private final List<Long> hintsTabletIds;
+    private HashDistributionSpec hashDistributionSpec;
+    private long selectedIndexId;
+    private List<Long> selectedPartitionId;
+    private PartitionNames partitionNames;
+    private boolean hasTableHints;
+    private List<Long> selectedTabletId;
+    private List<Long> hintsTabletIds;
 
     private List<ScalarOperator> prunedPartitionPredicates;
 
@@ -91,20 +91,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.prunedPartitionPredicates = Lists.newArrayList();
     }
 
-    private LogicalOlapScanOperator(Builder builder) {
-        super(OperatorType.LOGICAL_OLAP_SCAN, builder.table,
-                builder.colRefToColumnMetaMap, builder.columnMetaToColRefMap,
-                builder.getLimit(),
-                builder.getPredicate(),
-                builder.getProjection());
-        this.hashDistributionSpec = builder.hashDistributionSpec;
-        this.selectedIndexId = builder.selectedIndexId;
-        this.selectedPartitionId = builder.selectedPartitionId;
-        this.partitionNames = builder.partitionNames;
-        this.hasTableHints = builder.hasTableHints;
-        this.selectedTabletId = builder.selectedTabletId;
-        this.hintsTabletIds = builder.hintsTabletIds;
-        this.prunedPartitionPredicates = builder.prunedPartitionPredicates;
+    private LogicalOlapScanOperator() {
+        super(OperatorType.LOGICAL_OLAP_SCAN);
     }
 
     public HashDistributionSpec getDistributionSpec() {
@@ -171,17 +159,6 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     public static class Builder
             extends LogicalScanOperator.Builder<LogicalOlapScanOperator, LogicalOlapScanOperator.Builder> {
-        private HashDistributionSpec hashDistributionSpec;
-        private long selectedIndexId;
-        private List<Long> selectedPartitionId;
-        private PartitionNames partitionNames;
-
-        private boolean hasTableHints;
-        private List<Long> selectedTabletId;
-        private List<Long> hintsTabletIds;
-
-        private List<ScalarOperator> prunedPartitionPredicates;
-
         @Override
         protected LogicalOlapScanOperator newInstance() {
             return new LogicalOlapScanOperator();
@@ -191,14 +168,14 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         public Builder withOperator(LogicalOlapScanOperator scanOperator) {
             super.withOperator(scanOperator);
 
-            this.hashDistributionSpec = scanOperator.hashDistributionSpec;
-            this.selectedIndexId = scanOperator.selectedIndexId;
-            this.selectedPartitionId = scanOperator.selectedPartitionId;
-            this.partitionNames = scanOperator.partitionNames;
-            this.hasTableHints = scanOperator.hasTableHints;
-            this.selectedTabletId = scanOperator.selectedTabletId;
-            this.hintsTabletIds = scanOperator.hintsTabletIds;
-            this.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
+            builder.hashDistributionSpec = scanOperator.hashDistributionSpec;
+            builder.selectedIndexId = scanOperator.selectedIndexId;
+            builder.selectedPartitionId = scanOperator.selectedPartitionId;
+            builder.partitionNames = scanOperator.partitionNames;
+            builder.hasTableHints = scanOperator.hasTableHints;
+            builder.selectedTabletId = scanOperator.selectedTabletId;
+            builder.hintsTabletIds = scanOperator.hintsTabletIds;
+            builder.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
             return this;
         }
 
