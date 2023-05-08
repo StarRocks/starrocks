@@ -1239,7 +1239,8 @@ public class PlanFragmentBuilder {
             fragments.remove(fragments.size() - 1);
 
             clearOlapScanNodePartitions(sourceFragment.getPlanRoot());
-
+            sourceFragment.clearDestination();
+            sourceFragment.clearOutputPartition();
             return sourceFragment;
         }
 
@@ -2261,6 +2262,8 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getNextFragmentId(), setOperationNode, DataPartition.RANDOM);
             List<List<Expr>> materializedResultExprLists = Lists.newArrayList();
 
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
             for (int i = 0; i < optExpr.getInputs().size(); i++) {
                 List<ColumnRefOperator> childOutput = setOperation.getChildOutputColumns().get(i);
                 PlanFragment fragment = visit(optExpr.getInputs().get(i), context);
@@ -2269,8 +2272,7 @@ public class PlanFragmentBuilder {
 
                 // keep output column order
                 for (ColumnRefOperator ref : childOutput) {
-                    SlotDescriptor slotDescriptor = context.getDescTbl().getSlotDesc(new SlotId(ref.getId()));
-                    materializedExpressions.add(new SlotRef(slotDescriptor));
+                    materializedExpressions.add(ScalarOperatorToExpr.buildExecExpression(ref, formatterContext));
                 }
 
                 materializedResultExprLists.add(materializedExpressions);

@@ -27,6 +27,15 @@ Spark has been deployed.
 
 ## Before you begin
 
+You can directly download the compiled Spark Connector Jar file. You can also compile Spark connector by yourself.
+
+### Download the compiled Jar file
+
+- [Spark 2.x](https://cdn-thirdparty.starrocks.com/spark/starrocks-spark2_2.11-1.0.0.jar)
+- [Spark 3.x](https://cdn-thirdparty.starrocks.com/spark/starrocks-spark3_2.12-1.0.0.jar)
+
+### Compile by yourself
+
 1. Download the [Spark connector package](https://github.com/StarRocks/starrocks-connector-for-apache-spark).
 
 2. Take one of the following actions to compile the Spark connector:

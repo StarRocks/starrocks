@@ -85,7 +85,8 @@ Status SegmentWriter::init() {
 
 inline bool is_zone_map_key_type(FieldType type) {
     return type != FieldType::OLAP_FIELD_TYPE_CHAR && type != FieldType::OLAP_FIELD_TYPE_VARCHAR &&
-           type != FieldType::OLAP_FIELD_TYPE_JSON;
+           type != FieldType::OLAP_FIELD_TYPE_JSON && type != FieldType::OLAP_FIELD_TYPE_HLL &&
+           type != FieldType::OLAP_FIELD_TYPE_OBJECT && type != FieldType::OLAP_FIELD_TYPE_PERCENTILE;
 }
 
 Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has_key, SegmentFooterPB* footer) {
