@@ -29,6 +29,7 @@ namespace starrocks {
 
 static std::atomic<int32_t> connector_scan_node_open_limit;
 static constexpr double kChunkBufferMemRatio = 0.5;
+static constexpr int64_t ESTIMATED_MEMORY_USAGE_PER_FIELD = 4LL * 1024 * 1024;
 
 // ======================================================
 // if *lvalue == expect, swap(*lvalue,*rvalue)
@@ -153,8 +154,7 @@ void ConnectorScanNode::_estimate_scan_row_bytes() {
 void ConnectorScanNode::_estimate_mem_usage_per_chunk_source() {
     const TupleDescriptor* tuple_desc = _data_source_provider->tuple_descriptor(runtime_state());
     const auto& slots = tuple_desc->slots();
-    const int64_t size_per_field = 4 * 1024 * 1024; // 4MB per field
-    _estimated_mem_usage_per_chunk_source = slots.size() * size_per_field;
+    _estimated_mem_usage_per_chunk_source = slots.size() * ESTIMATED_MEMORY_USAGE_PER_FIELD;
 }
 
 int ConnectorScanNode::_estimated_max_concurrent_chunks() const {
