@@ -250,6 +250,7 @@ public class StatisticsCalculatorTest {
                     ((OlapTable) table).getBaseIndexId(),
                     partitionIds,
                     null,
+                    false,
                     Lists.newArrayList(),
                     Lists.newArrayList());
 
@@ -312,6 +313,7 @@ public class StatisticsCalculatorTest {
                         ((OlapTable) table).getBaseIndexId(),
                         partitionIds,
                         null,
+                        false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
 
@@ -367,6 +369,7 @@ public class StatisticsCalculatorTest {
                         ((OlapTable) table).getBaseIndexId(),
                         partitionIds,
                         null,
+                        false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
 
@@ -394,6 +397,7 @@ public class StatisticsCalculatorTest {
                         null, -1, null, ((OlapTable) table).getBaseIndexId(),
                         partitionIds,
                         null,
+                        false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,
@@ -452,6 +456,7 @@ public class StatisticsCalculatorTest {
                         ((OlapTable) table).getBaseIndexId(),
                         partitionIds,
                         null,
+                        false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
 
@@ -481,6 +486,7 @@ public class StatisticsCalculatorTest {
                         ((OlapTable) table).getBaseIndexId(),
                         partitionIds,
                         null,
+                        false,
                         Lists.newArrayList(),
                         Lists.newArrayList());
         olapScanOperator.setPredicate(new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE,

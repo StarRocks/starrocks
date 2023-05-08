@@ -118,7 +118,7 @@ public class MaterializedViewRule extends Rule {
 
         init(optExpression);
 
-        if (scanOperators.stream().anyMatch(LogicalOlapScanOperator::hasTabletOrPartitionHints)) {
+        if (scanOperators.stream().anyMatch(LogicalOlapScanOperator::hasTableHints)) {
             return Lists.newArrayList(optExpression);
         }
 
