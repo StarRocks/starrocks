@@ -42,6 +42,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TFileFormatType;
@@ -194,6 +195,11 @@ public class KafkaTaskInfo extends RoutineLoadTaskInfo {
         TUniqueId loadId = new TUniqueId(id.getMostSignificantBits(), id.getLeastSignificantBits());
         // plan for each task, in case table has change(rollup or schema change)
         TExecPlanFragmentParams tExecPlanFragmentParams = routineLoadJob.plan(loadId, txnId, label);
+        if (tExecPlanFragmentParams.query_options.enable_profile) {
+            StreamLoadTask streamLoadTask = GlobalStateMgr.getCurrentState().
+                    getStreamLoadManager().getSyncSteamLoadTaskByLabel(label);
+            setStreamLoadTask(streamLoadTask);
+        }
         TPlanFragment tPlanFragment = tExecPlanFragmentParams.getFragment();
         tPlanFragment.getOutput_sink().getOlap_table_sink().setTxn_id(txnId);
         return tExecPlanFragmentParams;

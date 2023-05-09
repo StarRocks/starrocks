@@ -208,7 +208,7 @@ public class Coordinator {
 
         deltaUrls = Lists.newArrayList();
         loadCounters = Maps.newHashMap();
-        this.connectContext = new ConnectContext();
+        this.connectContext = planner.getConnectContext();
 
         // for complie
         descTable = null;
