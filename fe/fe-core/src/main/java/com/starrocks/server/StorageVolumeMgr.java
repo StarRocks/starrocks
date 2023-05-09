@@ -58,7 +58,8 @@ public class StorageVolumeMgr {
             if (nameToSV.containsKey(name)) {
                 throw new AlreadyExistsException(String.format("Storage Volume '%s' already exists", name));
             }
-            StorageVolume sv = new StorageVolume(name, svType, locations, params, enabled.orElse(true), comment);
+            long id = GlobalStateMgr.getCurrentState().getNextId();
+            StorageVolume sv = new StorageVolume(id, name, svType, locations, params, enabled.orElse(true), comment);
             nameToSV.put(name, sv);
             idToSV.put(sv.getId(), sv);
         }
