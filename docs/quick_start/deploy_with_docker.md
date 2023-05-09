@@ -2,7 +2,7 @@
 
 This QuickStart tutorial guides you through the procedures to deploy StarRocks on your local machine with Docker. Before getting started, you can read [StarRocks Architecture](../introduction/Architecture.md) for more conceptual details.
 
-By following these steps, you can deploy a simple StarRocks cluster with **one FE node** and **one BE node**. It can help you complete the upcoming QuickStart tutorials on [creating a table](../quick_start/Create_table.md) and [importing and querying data](../quick_start/Import_and_query.md), and thereby acquaints you with the basic operations of StarRocks.
+By following these steps, you can deploy a simple StarRocks cluster with **one FE node** and **one BE node**. It can help you complete the upcoming QuickStart tutorials on [creating a table](../quick_start/Create_table.md) and [loading and querying data](../quick_start/Import_and_query.md), and thereby acquaints you with the basic operations of StarRocks.
 
 > **CAUTION**
 >
@@ -165,4 +165,4 @@ sudo docker rm <container_id>
 
 ## What to do next
 
-Having deployed StarRocks, you can continue the QuickStart tutorials on [creating a table](../quick_start/Create_table.md) and [importing and querying data](../quick_start/Import_and_query.md).
+Having deployed StarRocks, you can continue the QuickStart tutorials on [creating a table](../quick_start/Create_table.md) and [loading and querying data](../quick_start/Import_and_query.md).
