@@ -40,7 +40,8 @@ public enum PartitionType {
     UNPARTITIONED("UNPARTITIONED"),
     RANGE("RANGE"),
     LIST("LIST"),
-    EXPR_RANGE("EXPR_RANGE");
+    EXPR_RANGE("EXPR_RANGE"),
+    EXPR_RANGE_EX("EXPR_RANGE_EX");
 
     public String typeString;
 

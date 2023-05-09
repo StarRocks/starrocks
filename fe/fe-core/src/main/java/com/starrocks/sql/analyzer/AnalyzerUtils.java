@@ -23,6 +23,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -819,6 +820,27 @@ public class AnalyzerUtils {
             for (Expr child : children) {
                 if (child instanceof SlotRef) {
                     return (SlotRef) child;
+                }
+            }
+        }
+        return null;
+    }
+
+    public static SlotRef getSlotRefFromCast(Expr expr) {
+        if (expr instanceof CastExpr) {
+            CastExpr castExpr = (CastExpr) expr;
+            ArrayList<Expr> children = castExpr.getChildren();
+            for (Expr child : children) {
+                SlotRef slotRef = null;
+                if (child instanceof SlotRef) {
+                    slotRef = (SlotRef) child;
+                } else if (child instanceof CastExpr) {
+                    slotRef = getSlotRefFromCast(child);
+                } else if (child instanceof FunctionCallExpr) {
+                    slotRef = getSlotRefFromFunctionCall(child);
+                }
+                if (slotRef != null) {
+                    return slotRef;
                 }
             }
         }

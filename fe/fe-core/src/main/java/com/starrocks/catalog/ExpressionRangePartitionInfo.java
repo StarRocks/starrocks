@@ -115,8 +115,8 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
                 SlotRef slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
                 for (Column partitionColumn : partitionColumns) {
                     if (slotRef.getColumnName().equalsIgnoreCase(partitionColumn.getName())) {
-                        PartitionExprAnalyzer.analyzePartitionExpr(expr, partitionColumn.getType());
                         slotRef.setType(partitionColumn.getType());
+                        PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
                     }
                 }
             }
