@@ -63,13 +63,13 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map(FunctionContext* context, const 
     res_offsets->append(0);
     res_null->resize(column_size);
 
-    auto is_unique = [=](std::vector<Slice>& exist_slice, Slice s) {
-        for (auto tmp : exist_slice) {
+    auto is_unique = [=](std::vector<Slice>& exist_slice, Slice&& s) {
+        for (auto& tmp : exist_slice) {
             if (s == tmp) {
                 return false;
             }
         }
-        exist_slice.push_back(s);
+        exist_slice.emplace_back(s);
         return true;
     };
     ColumnViewer string_viewer = ColumnViewer<TYPE_VARCHAR>(nullable_str);
