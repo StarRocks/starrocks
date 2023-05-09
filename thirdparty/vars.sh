@@ -201,7 +201,7 @@ ROCKSDB_MD5SUM="02727e52cdb94fa6a9dbbd68d157e619"
 SASL_DOWNLOAD="https://github.com/cyrusimap/cyrus-sasl/archive/refs/tags/cyrus-sasl-2.1.28.tar.gz"
 SASL_NAME=cyrus-sasl-2.1.28.tar.gz
 SASL_SOURCE=cyrus-sasl-2.1.28
-SASL_MD5SUM="6f228a692516f5318a64505b46966cfa"
+SASL_MD5SUM="7dcf3919b3085a1d09576438171bda91"
 
 # librdkafka
 LIBRDKAFKA_DOWNLOAD="https://github.com/confluentinc/librdkafka/archive/refs/tags/v2.0.2.tar.gz"
