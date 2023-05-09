@@ -190,7 +190,7 @@ public:
 
     Status unfold_const_children(const starrocks::TypeDescriptor& type) override;
 
-    void remove_duplicated_keys();
+    void remove_duplicated_keys(bool need_recursive = false);
 
 private:
     // Keys must be NullableColumn to facilitate handling nested types.

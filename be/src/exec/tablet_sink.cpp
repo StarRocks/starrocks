@@ -44,6 +44,7 @@
 #include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
 #include "config.h"
@@ -1951,6 +1952,7 @@ void OlapTableSink::_validate_decimal(RuntimeState* state, Chunk* chunk, Column*
     }
 }
 
+/// TODO: recursively validate columns for nested columns, including array, map, struct
 void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (int i = 0; i < _output_tuple_desc->slots().size(); ++i) {
@@ -2100,6 +2102,12 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         case TYPE_DECIMAL128:
             _validate_decimal<TYPE_DECIMAL128>(state, chunk, column, desc, &_validate_selection);
             break;
+        case TYPE_MAP: {
+            column = ColumnHelper::get_data_column(column);
+            auto* map = down_cast<MapColumn*>(column);
+            map->remove_duplicated_keys(true);
+            break;
+        }
         default:
             break;
         }
