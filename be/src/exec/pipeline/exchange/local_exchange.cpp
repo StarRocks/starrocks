@@ -127,7 +127,7 @@ KeyPartitionExchanger::KeyPartitionExchanger(const std::shared_ptr<LocalExchange
                                              LocalExchangeSourceOperatorFactory* source,
                                              const std::vector<ExprContext*>& partition_expr_ctxs,
                                              const size_t num_sinks)
-        : LocalExchanger(strings::Substitute("KeyPartition($0)"), memory_manager, source),
+        : LocalExchanger(strings::Substitute("KeyPartition"), memory_manager, source),
           _source(source),
           _partition_expr_ctxs(partition_expr_ctxs) {
     _channel_partitions_columns.reserve(num_sinks);
@@ -189,24 +189,25 @@ Status KeyPartitionExchanger::accept(const ChunkPtr& chunk, const int32_t sink_d
     Partition2RowIndexes partition_row_indexes;
     for (int i = 0; i < num_rows; ++i) {
         auto partition_key = std::make_shared<PartitionKey>(std::make_shared<Columns>(partitions_columns), i);
-        if (partition_row_indexes.find(partition_key) == partition_row_indexes.end()) {
+        auto partition_row_index = partition_row_indexes.find(partition_key);
+        if (partition_row_index == partition_row_indexes.end()) {
             partition_row_indexes.emplace(std::move(partition_key), std::make_shared<std::vector<uint32_t>>(1, i));
         } else {
-            partition_row_indexes.at(partition_key)->emplace_back(i);
+            partition_row_index->second->emplace_back(i);
         }
     }
 
     std::vector<uint32_t> hash_values(chunk->num_rows());
-    for (auto& i : partition_row_indexes) {
-        RowIndexPtr indexes = i.second;
-        hash_values[indexes->at(0)] = HashUtil::FNV_SEED;
+    for (auto& partition_row_index : partition_row_indexes) {
+        RowIndexPtr indexes = partition_row_index.second;
+        hash_values[(*indexes)[0]] = HashUtil::FNV_SEED;
         for (const ColumnPtr& column : partitions_columns) {
-            column->fnv_hash(&hash_values[0], indexes->at(0), indexes->at(0) + 1);
+            column->fnv_hash(&hash_values[0], (*indexes)[0], (*indexes)[1]);
         }
 
-        uint32_t shuffle_channel_id = hash_values[indexes->at(0)] % source_op_cnt;
+        uint32_t shuffle_channel_id = hash_values[(*indexes)[0]] % source_op_cnt;
 
-        size_t memory_usage(0);
+        size_t memory_usage = 0;
         for (unsigned int row_index : *indexes) {
             memory_usage += chunk->bytes_usage(row_index, 1);
         }

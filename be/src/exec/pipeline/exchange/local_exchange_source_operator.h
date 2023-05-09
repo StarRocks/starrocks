@@ -76,13 +76,12 @@ class LocalExchangeSourceOperator final : public SourceOperator {
     };
 
     struct PendingPartitionChunks {
-        PendingPartitionChunks(std::shared_ptr<std::queue<PartitionChunk>> partition_chunk_queue_, uint32_t index_,
-                               size_t memory_usage_)
+        PendingPartitionChunks(std::queue<PartitionChunk> partition_chunk_queue_, uint32_t index_, size_t memory_usage_)
                 : partition_chunk_queue(std::move(partition_chunk_queue_)),
                   partition_row_nums(index_),
                   memory_usage(memory_usage_) {}
 
-        std::shared_ptr<std::queue<PartitionChunk>> partition_chunk_queue;
+        std::queue<PartitionChunk> partition_chunk_queue;
         int64_t partition_row_nums;
         size_t memory_usage;
     };
@@ -146,7 +145,7 @@ private:
 
     bool _key_partition_pending_chunk_empty() const {
         for (const auto& pending_chunks : _partitions) {
-            if (!pending_chunks.second.partition_chunk_queue->empty()) {
+            if (!pending_chunks.second.partition_chunk_queue.empty()) {
                 return false;
             }
         }

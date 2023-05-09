@@ -59,8 +59,9 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, std::shared_ptr<st
         return Status::OK();
     }
 
-    auto partition_key = std::make_shared<PartitionKey>(std::make_shared<Columns>(partition_columns), indexes->at(0));
-    if (_partitions.find(partition_key) == _partitions.end()) {
+    auto partition_key = std::make_shared<PartitionKey>(std::make_shared<Columns>(partition_columns), (*indexes)[0]);
+    auto partition_entry = _partitions.find(partition_key);
+    if (partition_entry == _partitions.end()) {
         ChunkPtr one_row_chunk = chunk->clone_empty_with_slot();
         one_row_chunk->append_selective(*chunk, indexes.get()->data(), 0, 1);
 
@@ -73,13 +74,13 @@ Status LocalExchangeSourceOperator::add_chunk(ChunkPtr chunk, std::shared_ptr<st
         auto copied_partition_key =
                 std::make_shared<PartitionKey>(std::make_shared<Columns>(one_row_partitions_columns), 0);
 
-        auto queue = std::make_shared<std::queue<PartitionChunk>>();
-        queue->emplace(std::move(chunk), std::move(indexes), from, size, memory_usage);
+        auto queue = std::queue<PartitionChunk>();
+        queue.emplace(std::move(chunk), std::move(indexes), from, size, memory_usage);
         PendingPartitionChunks pendingPartitionChunks(std::move(queue), size, memory_usage);
         _partitions.emplace(std::move(copied_partition_key), std::move(pendingPartitionChunks));
     } else {
-        PendingPartitionChunks& chunks = _partitions.at(partition_key);
-        chunks.partition_chunk_queue->emplace(std::move(chunk), std::move(indexes), from, size, memory_usage);
+        PendingPartitionChunks& chunks = partition_entry->second;
+        chunks.partition_chunk_queue.emplace(std::move(chunk), std::move(indexes), from, size, memory_usage);
         chunks.partition_row_nums += size;
         chunks.memory_usage += memory_usage;
     }
@@ -194,15 +195,15 @@ ChunkPtr LocalExchangeSourceOperator::_pull_key_partition_chunk(RuntimeState* st
 
         PendingPartitionChunks& pendingPartitionChunks = _max_row_partition_chunks();
 
-        DCHECK(!pendingPartitionChunks.partition_chunk_queue->empty());
+        DCHECK(!pendingPartitionChunks.partition_chunk_queue.empty());
 
-        while (!pendingPartitionChunks.partition_chunk_queue->empty() &&
-               rows_num + pendingPartitionChunks.partition_chunk_queue->front().size <= state->chunk_size()) {
-            rows_num += pendingPartitionChunks.partition_chunk_queue->front().size;
-            memory_usage += pendingPartitionChunks.partition_chunk_queue->front().memory_usage;
+        while (!pendingPartitionChunks.partition_chunk_queue.empty() &&
+               rows_num + pendingPartitionChunks.partition_chunk_queue.front().size <= state->chunk_size()) {
+            rows_num += pendingPartitionChunks.partition_chunk_queue.front().size;
+            memory_usage += pendingPartitionChunks.partition_chunk_queue.front().memory_usage;
 
-            selected_partition_chunks.emplace_back(std::move(pendingPartitionChunks.partition_chunk_queue->front()));
-            pendingPartitionChunks.partition_chunk_queue->pop();
+            selected_partition_chunks.emplace_back(std::move(pendingPartitionChunks.partition_chunk_queue.front()));
+            pendingPartitionChunks.partition_chunk_queue.pop();
         }
 
         pendingPartitionChunks.partition_row_nums -= rows_num;
@@ -224,11 +225,10 @@ ChunkPtr LocalExchangeSourceOperator::_pull_key_partition_chunk(RuntimeState* st
 
 int64_t LocalExchangeSourceOperator::_key_partition_max_rows() const {
     int64_t max_rows = 0;
-    if (!_partitions.empty()) {
-        for (const auto& partition : _partitions) {
-            max_rows = std::max(partition.second.partition_row_nums, max_rows);
-        }
+    for (const auto& partition : _partitions) {
+        max_rows = std::max(partition.second.partition_row_nums, max_rows);
     }
+
     return max_rows;
 }
 
