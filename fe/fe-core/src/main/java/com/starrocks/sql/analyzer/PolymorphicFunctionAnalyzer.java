@@ -171,6 +171,13 @@ public class PolymorphicFunctionAnalyzer {
         }
     }
 
+    private static class DistinctMapKeysDeduce implements java.util.function.Function<Type[], Type> {
+        @Override
+        public Type apply(Type[] types) {
+            return types[0];
+        }
+    }
+
     private static class RowDeduce implements java.util.function.Function<Type[], Type> {
         @Override
         public Type apply(Type[] types) {
@@ -186,6 +193,7 @@ public class PolymorphicFunctionAnalyzer {
             .put("row", new RowDeduce())
             .put("map_apply", new MapApplyDeduce())
             .put("map_filter", new MapFilterDeduce())
+            .put("distinct_map_keys", new DistinctMapKeysDeduce())
             .build();
 
     private static Function resolveByDeducingReturnType(Function fn, Type[] inputArgTypes) {
