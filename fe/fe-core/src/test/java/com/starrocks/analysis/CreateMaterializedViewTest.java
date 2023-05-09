@@ -1620,8 +1620,9 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Materialized view query statement select item rand() " +
-                    "not supported nondeterministic function", e.getMessage());
+            Assert.assertEquals("Getting analyzing error from line 3, column 38 to line 3, column 43." +
+                    " Detail message: Materialized view query statement select item rand()" +
+                    " not supported nondeterministic function.", e.getMessage());
         }
     }
 

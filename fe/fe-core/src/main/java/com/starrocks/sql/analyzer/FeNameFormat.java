@@ -66,7 +66,7 @@ public class FeNameFormat {
         }
     }
 
-    public static void checkColumnName(String columnName) throws AnalysisException {
+    public static void checkColumnName(String columnName) {
         if (Strings.isNullOrEmpty(columnName) || !columnName.matches(COLUMN_NAME_REGEX)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
         }

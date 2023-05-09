@@ -526,6 +526,7 @@ dropTaskStatement
 
 createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
+    ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
     comment?
     materializedViewDesc*
     AS queryStatement

@@ -225,6 +225,10 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = baseTableInfo;
 
+                mv.getBaseSchema();
+                minTimes = 0;
+                result = Lists.newArrayList(column1, column2);
+
                 mv.getType();
                 minTimes = 0;
                 result = TableType.MATERIALIZED_VIEW;
