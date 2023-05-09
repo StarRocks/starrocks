@@ -830,13 +830,19 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         final GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
         if (db == null || !db.writeLockAndCheckExist()) {
-            throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " not exist");
+            throw new SchedException(Status.UNRECOVERABLE, "db " + dbId + " does not exist");
         }
         try {
             OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(
                     globalStateMgr.getDbIncludeRecycleBin(dbId),
                     tblId);
+            if (olapTable == null) {
+                throw new SchedException(Status.UNRECOVERABLE, "table " + tblId + " does not exist");
+            }
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
+            if (indexMeta == null) {
+                throw new SchedException(Status.UNRECOVERABLE, "materialized view " + indexId + " does not exist");
+            }
             CreateReplicaTask createReplicaTask = new CreateReplicaTask(destBackendId, dbId,
                     tblId, partitionId, indexId, tabletId, indexMeta.getShortKeyColumnCount(),
                     indexMeta.getSchemaHash(), visibleVersion,
