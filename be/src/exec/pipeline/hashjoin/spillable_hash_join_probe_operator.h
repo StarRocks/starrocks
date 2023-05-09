@@ -68,10 +68,14 @@ private:
     void set_spill_strategy(spill::SpillStrategy strategy) { _join_builder->set_spill_strategy(strategy); }
     spill::SpillStrategy spill_strategy() const { return _join_builder->spill_strategy(); }
 
+    SpillableHashJoinProbeOperator* raw() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
+
+    // acquire next build-side partitions
     void _acquire_next_partitions();
 
     bool _all_loaded_partition_data_ready();
 
+    // indicates that all partitions to be processed are complete
     bool _all_partition_finished() const;
 
     Status _load_all_partition_build_side(RuntimeState* state);
@@ -79,11 +83,16 @@ private:
     Status _load_partition_build_side(RuntimeState* state, const std::shared_ptr<spill::SpillerReader>& reader,
                                       size_t idx);
 
-    void _update_status(Status&& status);
+    void _update_status(Status&& status) const;
 
     Status _status() const;
 
     Status _push_probe_chunk(RuntimeState* state, const ChunkPtr& chunk);
+
+    Status _restore_probe_partition(RuntimeState* state);
+
+    // some DCHECK for hash table/partition num_rows
+    void _check_partitions();
 
 private:
     SpillableHashJoinProbeMetrics metrics;
@@ -94,7 +103,9 @@ private:
     std::unordered_set<int32_t> _processed_partitions;
 
     std::vector<std::shared_ptr<spill::SpillerReader>> _current_reader;
-    std::vector<bool> _eofs;
+    std::vector<bool> _probe_read_eofs;
+    std::vector<bool> _probe_post_eofs;
+    bool _has_probe_remain = true;
     std::shared_ptr<spill::Spiller> _probe_spiller;
 
     ObjectPool _component_pool;
@@ -107,11 +118,10 @@ private:
 
     NoBlockCountDownLatch _latch;
     mutable std::mutex _mutex;
-    Status _operator_status;
+    mutable Status _operator_status;
 
     std::shared_ptr<spill::IOTaskExecutor> _executor;
-
-    ChunkPtr _staging_chunk;
+    bool _need_post_probe = false;
 };
 
 class SpillableHashJoinProbeOperatorFactory : public HashJoinProbeOperatorFactory {

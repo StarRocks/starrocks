@@ -53,7 +53,7 @@ bool SpillableHashJoinBuildOperator::need_input() const {
 }
 
 Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
-    if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
+    if (!_join_builder->spiller()->spilled()) {
         _join_builder->spill_channel()->set_finishing();
         return HashJoinBuildOperator::set_finishing(state);
     }
