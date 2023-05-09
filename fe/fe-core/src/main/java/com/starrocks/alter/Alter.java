@@ -46,6 +46,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
@@ -57,6 +58,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -291,7 +293,7 @@ public class Alter {
                 processChangeRefreshScheme(refreshSchemeDesc, materializedView, dbName);
             } else if (modifyTablePropertiesClause != null) {
                 try {
-                    processModifyTableProperties(modifyTablePropertiesClause, materializedView);
+                    processModifyTableProperties(modifyTablePropertiesClause, db, materializedView);
                 } catch (AnalysisException ae) {
                     throw new DdlException(ae.getMessage());
                 }
@@ -306,6 +308,7 @@ public class Alter {
     }
 
     private void processModifyTableProperties(ModifyTablePropertiesClause modifyTablePropertiesClause,
+                                              Database db,
                                               MaterializedView materializedView) throws AnalysisException {
         Map<String, String> properties = modifyTablePropertiesClause.getProperties();
         Map<String, String> propClone = Maps.newHashMap();
@@ -329,6 +332,16 @@ public class Alter {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
             excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
             properties.remove(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+        }
+        List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, materializedView);
+            properties.remove(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
+        }
+        List<ForeignKeyConstraint> foreignKeyConstraints = Lists.newArrayList();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, materializedView);
+            properties.remove(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
         }
 
         if (!properties.isEmpty()) {
@@ -371,6 +384,15 @@ public class Alter {
             materializedView.getTableProperty().setExcludedTriggerTables(excludedTriggerTables);
             isChanged = true;
         }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            materializedView.setUniqueConstraints(uniqueConstraints);
+            isChanged = true;
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            materializedView.setForeignKeyConstraints(foreignKeyConstraints);
+            isChanged = true;
+        }
+
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
         if (!properties.isEmpty()) {
             // set properties if there are no exceptions
