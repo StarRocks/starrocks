@@ -2,7 +2,7 @@
 
 本小节介绍如何通过 Bitmap 在 StarRocks 中精确去重。
 
-Bitmap 去重是指，当给定一个数组 A，其取值范围为 [0, n)，可采用 (n+7)/8 的字节长度的 bitmap 对该数组去重， 初始化为全 0；逐个处理数组 A 的元素，以 A 中元素取值作为 bitmap 的下标，将该下标的 bit 置 1；最后统计 bitmap 中 1 的个数即为数组 A 的 count distinct 结果。
+Bitmap 去重是指，当给定一个数组 A，其取值范围为 [0, n)，可采用 `floor((n+7)/8)` 个字节长度的 bitmap 对该数组去重。bitmap 初始化为全 0，计算过程中逐个处理数组 A 的元素，以 A 中元素取值作为 bitmap 的下标，将该下标的 bit 置 1，最后统计 bitmap 中 1 的个数即为数组 A 的 count distinct 结果。
 
 与传统使用 [count distinct](#传统 count distinct 计算) 方式相比，Bitmap 的优势主要体现在以下两点 ：
 
