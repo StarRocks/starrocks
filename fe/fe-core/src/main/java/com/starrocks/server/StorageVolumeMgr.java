@@ -35,6 +35,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class StorageVolumeMgr {
     private Map<String, StorageVolume> nameToSV = new HashMap<>();
 
+    private Map<Long, StorageVolume> idToSV = new HashMap<>();
+
     private final ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     private String defaultSV;
@@ -56,8 +58,10 @@ public class StorageVolumeMgr {
             if (nameToSV.containsKey(name)) {
                 throw new AlreadyExistsException(String.format("Storage Volume '%s' already exists", name));
             }
-            StorageVolume sv = new StorageVolume(name, svType, locations, params, enabled.orElse(true), comment);
+            long id = GlobalStateMgr.getCurrentState().getNextId();
+            StorageVolume sv = new StorageVolume(id, name, svType, locations, params, enabled.orElse(true), comment);
             nameToSV.put(name, sv);
+            idToSV.put(sv.getId(), sv);
         }
     }
 
@@ -71,7 +75,8 @@ public class StorageVolumeMgr {
                     "Storage Volume '%s' does not exist", name);
             Preconditions.checkState(!name.equals(defaultSV), "default storage volume can not be removed");
             // TODO: check ref count
-            nameToSV.remove(name);
+            StorageVolume sv = nameToSV.remove(name);
+            idToSV.remove(sv.getId());
         }
     }
 

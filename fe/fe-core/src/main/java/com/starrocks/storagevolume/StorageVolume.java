@@ -34,6 +34,10 @@ public class StorageVolume {
         HDFS
     }
 
+    // Without id, the scenario like "create storage volume 'a', drop storage volume 'a', create storage volume 'a'"
+    // can not be handled. They will be treated as the same storage volume.
+    private long id;
+
     private String name;
 
     private StorageVolumeType svt;
@@ -52,8 +56,9 @@ public class StorageVolume {
 
     private boolean isDefault;
 
-    public StorageVolume(String name, String svt, List<String> locations,
+    public StorageVolume(long id, String name, String svt, List<String> locations,
                          Map<String, String> params, boolean enabled, String comment) throws AnalysisException {
+        this.id = id;
         this.name = name;
         this.svt = toStorageVolumeType(svt);
         this.locations = locations;
@@ -79,6 +84,10 @@ public class StorageVolume {
 
     public CloudConfiguration getCloudConfiguration() {
         return cloudConfiguration;
+    }
+
+    public long getId() {
+        return id;
     }
 
     public void setEnabled(boolean enabled) {
