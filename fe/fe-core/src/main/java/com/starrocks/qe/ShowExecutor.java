@@ -946,11 +946,24 @@ public class ShowExecutor {
     // Show create database
     private void handleShowCreateDb() throws AnalysisException {
         ShowCreateDbStmt showStmt = (ShowCreateDbStmt) stmt;
+        String catalogName = showStmt.getCatalogName();
+        String dbName = showStmt.getDb();
         List<List<String>> rows = Lists.newArrayList();
-        Database db = connectContext.getGlobalStateMgr().getDb(showStmt.getDb());
-        MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
-        rows.add(Lists.newArrayList(showStmt.getDb(),
-                "CREATE DATABASE `" + showStmt.getDb() + "`"));
+
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            Database db = connectContext.getGlobalStateMgr().getDb(dbName);
+            MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
+            rows.add(Lists.newArrayList(showStmt.getDb(),
+                    "CREATE DATABASE `" + showStmt.getDb() + "`"));
+        } else { // external database
+            MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+            Database db = metadataMgr.getDb(catalogName, dbName);
+            MetaUtils.checkDbNullAndReport(db, showStmt.getDb());
+            rows.add(Lists.newArrayList(showStmt.getDb(),
+                    "CREATE DATABASE `" + showStmt.getDb() + "`\n" +
+                    "PROPERTIES (\"location\" = \"" + db.getLocation() + "\")"));
+        }
+
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
