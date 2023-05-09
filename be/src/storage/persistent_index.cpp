@@ -2800,7 +2800,7 @@ Status PersistentIndex::prepare(const EditVersion& version, size_t n) {
     _dump_snapshot = false;
     _flushed = false;
     _version = version;
-    if (config::enable_parallel_get_and_bf && n > _size / 2) {
+    if (config::enable_parallel_get_and_bf && n > _size / 2 && n > config::min_enable_bf_kv_num) {
         _need_bloom_filter = true;
         RETURN_IF_ERROR(ThreadPoolBuilder("get_kv_thread")
                                 .set_min_threads(config::min_get_kv_thread_num)

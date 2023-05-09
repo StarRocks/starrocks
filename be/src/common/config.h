@@ -917,9 +917,10 @@ CONF_mInt64(l0_max_file_size, "209715200"); // 200MB
 CONF_mInt64(l0_max_mem_usage, "67108864");  // 64MB
 CONF_mInt64(max_tmp_l1_num, "10");
 CONF_mBool(enable_parallel_get_and_bf, "false");
-CONF_mInt64(page_shard_read_ratio, "20");
-CONF_mInt64(min_get_kv_thread_num, "1");
-CONF_mInt64(max_get_kv_thread_num, "10");
+CONF_mInt64(min_enable_bf_kv_num, "100000000");
+CONF_mInt32(page_shard_read_ratio, "20");
+CONF_mInt32(min_get_kv_thread_num, "1");
+CONF_mInt32(max_get_kv_thread_num, "10");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
