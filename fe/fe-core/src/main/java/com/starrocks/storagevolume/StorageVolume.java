@@ -21,6 +21,7 @@ import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.parquet.Strings;
 
 import java.util.HashMap;
@@ -33,6 +34,8 @@ public class StorageVolume {
         S3,
         HDFS
     }
+
+    private long id;
 
     private String name;
 
@@ -65,6 +68,7 @@ public class StorageVolume {
             throw new AnalysisException("Storage params is not valid");
         }
         this.params = params;
+        this.id = GlobalStateMgr.getCurrentState().getNextId();
     }
 
     public void setCloudConfiguration(Map<String, String> params) throws AnalysisException {
@@ -79,6 +83,10 @@ public class StorageVolume {
 
     public CloudConfiguration getCloudConfiguration() {
         return cloudConfiguration;
+    }
+
+    public long getId() {
+        return id;
     }
 
     public void setEnabled(boolean enabled) {
