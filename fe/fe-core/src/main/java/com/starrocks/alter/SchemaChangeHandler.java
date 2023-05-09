@@ -1687,7 +1687,8 @@ public class SchemaChangeHandler extends AlterHandler {
         if (tableProperty != null) {
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
                 try {
-                    List<UniqueConstraint> newUniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, olapTable);
+                    List<UniqueConstraint> newUniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db,
+                            olapTable);
                     List<UniqueConstraint> originalUniqueConstraints = tableProperty.getUniqueConstraints();
                     if (originalUniqueConstraints == null
                             || !newUniqueConstraints.toString().equals(originalUniqueConstraints.toString())) {

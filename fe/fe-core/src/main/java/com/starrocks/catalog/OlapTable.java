@@ -2270,11 +2270,6 @@ public class OlapTable extends Table {
         tableProperty.clearBinlogAvailableVersion();
     }
 
-    public boolean hasUniqueConstraints() {
-        List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
-        return uniqueConstraint != null;
-    }
-
     @Override
     public List<UniqueConstraint> getUniqueConstraints() {
         if (tableProperty == null) {

@@ -295,6 +295,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return isOlapTableOrMaterializedView() || isCloudNativeTableOrMaterializedView();
     }
 
+    public boolean isNativeTable() {
+        return isOlapTable() || isCloudNativeTable();
+    }
+
     public boolean isHiveTable() {
         return type == TableType.HIVE;
     }
@@ -668,6 +672,11 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public boolean supportsUpdate() {
         return false;
+    }
+
+    public boolean hasUniqueConstraints() {
+        List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
+        return uniqueConstraint != null;
     }
 
     public void setUniqueConstraints(List<UniqueConstraint> uniqueConstraints) {
