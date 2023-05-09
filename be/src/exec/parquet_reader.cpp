@@ -42,13 +42,28 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
           _current_line_of_group(0),
           _current_line_of_batch(0),
           _read_offset(read_offset),
-          _read_size(read_size),
-          _parquet_int96_timestamp_unit(arrow::TimeUnit::MICRO) {
+          _read_size(read_size) {
     _parquet = std::move(parquet_file);
     _properties = parquet::ReaderProperties();
     _properties.enable_buffered_stream();
     _properties.set_buffer_size(8 * 1024 * 1024);
     _filename = (reinterpret_cast<ParquetChunkFile*>(_parquet.get()))->filename();
+
+    const std::string unit_config = config::parquet_coerce_int96_timestamp_unit;
+    std::string unit = unit_config;
+    std::transform(unit_config.begin(), unit_config.end(), unit.begin(), ::toupper);
+
+    if (unit == "SECOND") {
+        _parquet_int96_timestamp_unit = arrow::TimeUnit::SECOND;
+    } else if (unit == "MILLI") {
+        _parquet_int96_timestamp_unit = arrow::TimeUnit::MILLI;
+    } else if (unit == "MICRO") {
+        _parquet_int96_timestamp_unit = arrow::TimeUnit::MICRO;
+    } else if (unit == "NANO") {
+        _parquet_int96_timestamp_unit = arrow::TimeUnit::NANO;
+    } else {
+        _parquet_int96_timestamp_unit = arrow::TimeUnit::MICRO;
+    }
 }
 
 Status ParquetReaderWrap::next_selected_row_group() {
@@ -162,21 +177,6 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
 
 void ParquetReaderWrap::close() {
     [[maybe_unused]] auto st = _parquet->Close();
-}
-
-void ParquetReaderWrap::set_coerce_int96_timestamp_unit(std::string unit) {
-    // The default unit is MICRO, which is the precision of DATETIME/TIMESTAMP in MySQL.
-    if (unit == "SECOND") {
-        _parquet_int96_timestamp_unit = arrow::TimeUnit::SECOND;
-    } else if (unit == "MILLI") {
-        _parquet_int96_timestamp_unit = arrow::TimeUnit::MILLI;
-    } else if (unit == "MICRO") {
-        _parquet_int96_timestamp_unit = arrow::TimeUnit::MICRO;
-    } else if (unit == "NANO") {
-        _parquet_int96_timestamp_unit = arrow::TimeUnit::NANO;
-    } else {
-        _parquet_int96_timestamp_unit = arrow::TimeUnit::MICRO;
-    }
 }
 
 Status ParquetReaderWrap::size(int64_t* size) {

@@ -2267,14 +2267,4 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int routine_load_scheduler_interval_millisecond = 10000;
-
-    /*
-     * timestamp unit to use for INT96-encoded timestamps in parquet.
-     * SECOND, MICRO, MILLI, NANO
-     * The default unit is MICRO, which is the precision of DATETIME/TIMESTAMP in MySQL.
-     * https://dev.mysql.com/doc/refman/8.0/en/datetime.html
-     * A DATETIME or TIMESTAMP value can include a trailing fractional seconds part in up to microseconds (6 digits) precision
-     */
-    @ConfField
-    public static String parquet_coerce_int96_timestamp_unit = "MICRO";
 }

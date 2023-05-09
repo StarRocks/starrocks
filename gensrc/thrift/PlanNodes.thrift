@@ -257,8 +257,6 @@ struct TBrokerScanRangeParams {
     27: optional i8 escape
     // confluent schema registry url for pb import
     28: optional string confluent_schema_registry_url
-    // unit for parquet scanner to parse int96 timestamp
-    29: optional string parquet_coerce_int96_timestamp_unit
 }
 
 // Broker scan range

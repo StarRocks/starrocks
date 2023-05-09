@@ -379,8 +379,6 @@ Status ParquetScanner::open_next_reader() {
         auto parquet_file = std::make_shared<ParquetChunkFile>(file, 0);
         auto parquet_reader = std::make_shared<ParquetReaderWrap>(std::move(parquet_file), _num_of_columns_from_file,
                                                                   range_desc.start_offset, range_desc.size);
-        parquet_reader->set_coerce_int96_timestamp_unit(_scan_range.params.parquet_coerce_int96_timestamp_unit);
-
         _next_file++;
         int64_t file_size;
         RETURN_IF_ERROR(parquet_reader->size(&file_size));

@@ -70,7 +70,6 @@ public:
     Status read_record_batch(const std::vector<SlotDescriptor*>& tuple_slot_descs, bool* eof);
     const std::shared_ptr<arrow::RecordBatch>& get_batch();
     int64_t num_rows() { return _num_rows; }
-    void set_coerce_int96_timestamp_unit(std::string unit);
 
 private:
     Status column_indices(const std::vector<SlotDescriptor*>& tuple_slot_descs);
