@@ -44,6 +44,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
+import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletSchedCtx.Priority;
@@ -914,6 +915,7 @@ public class TabletScheduler extends LeaderDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
         }
         try {
+            checkMetaExist(tabletCtx);
             if (deleteBackendDropped(tabletCtx, force)
                     || deleteBadReplica(tabletCtx, force)
                     || deleteBackendUnavailable(tabletCtx, force)
@@ -1119,6 +1121,7 @@ public class TabletScheduler extends LeaderDaemon {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
         }
         try {
+            checkMetaExist(tabletCtx);
             List<Replica> replicas = tabletCtx.getReplicas();
             for (Replica replica : replicas) {
                 boolean forceDropBad = false;
@@ -1438,14 +1441,6 @@ public class TabletScheduler extends LeaderDaemon {
         return list;
     }
 
-    private int getCurrentAvailableSlotNum() {
-        int total = 0;
-        for (PathSlot pathSlot : backendsWorkingSlots.values()) {
-            total += pathSlot.getTotalAvailSlotNum();
-        }
-        return total;
-    }
-
     /**
      * return true if we want to remove the clone task from AgentTaskQueue
      */
@@ -1672,6 +1667,34 @@ public class TabletScheduler extends LeaderDaemon {
         response.setTablet_schedules(
                 tabletCtxs.stream().map(t -> t.toTabletScheduleThrift()).collect(Collectors.toList()));
         return response;
+    }
+
+    // caller should hold db lock
+    private void checkMetaExist(TabletSchedCtx ctx) throws SchedException {
+        Database db = globalStateMgr.getDbIncludeRecycleBin(ctx.getDbId());
+        if (db == null) {
+            throw new SchedException(Status.UNRECOVERABLE, "db " + ctx.getDbId() + " dose not exist");
+        }
+
+        OlapTable tbl = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, ctx.getTblId());
+        if (tbl == null) {
+            throw new SchedException(Status.UNRECOVERABLE, "table " + ctx.getTblId() + " dose not exist");
+        }
+
+        Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(tbl, ctx.getPartitionId());
+        if (partition == null) {
+            throw new SchedException(Status.UNRECOVERABLE, "partition " + ctx.getPartitionId() + " dose not exist");
+        }
+
+        MaterializedIndex idx = partition.getIndex(ctx.getIndexId());
+        if (idx == null) {
+            throw new SchedException(Status.UNRECOVERABLE, "materialized index " + ctx.getIndexId() + " dose not exist");
+        }
+
+        Tablet tablet = idx.getTablet(ctx.getTabletId());
+        if (tablet == null) {
+            throw new SchedException(Status.UNRECOVERABLE, "tablet " + ctx.getTabletId() + " dose not exist");
+        }
     }
 
     /**
