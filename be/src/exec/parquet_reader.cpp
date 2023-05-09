@@ -48,22 +48,6 @@ ParquetReaderWrap::ParquetReaderWrap(std::shared_ptr<arrow::io::RandomAccessFile
     _properties.enable_buffered_stream();
     _properties.set_buffer_size(8 * 1024 * 1024);
     _filename = (reinterpret_cast<ParquetChunkFile*>(_parquet.get()))->filename();
-
-    const std::string unit_config = config::parquet_coerce_int96_timestamp_unit;
-    std::string unit = unit_config;
-    std::transform(unit_config.begin(), unit_config.end(), unit.begin(), ::toupper);
-
-    if (unit == "SECOND") {
-        _parquet_int96_timestamp_unit = arrow::TimeUnit::SECOND;
-    } else if (unit == "MILLI") {
-        _parquet_int96_timestamp_unit = arrow::TimeUnit::MILLI;
-    } else if (unit == "MICRO") {
-        _parquet_int96_timestamp_unit = arrow::TimeUnit::MICRO;
-    } else if (unit == "NANO") {
-        _parquet_int96_timestamp_unit = arrow::TimeUnit::NANO;
-    } else {
-        _parquet_int96_timestamp_unit = arrow::TimeUnit::MICRO;
-    }
 }
 
 Status ParquetReaderWrap::next_selected_row_group() {
@@ -90,13 +74,20 @@ Status ParquetReaderWrap::next_selected_row_group() {
 Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs,
                                               const std::string& timezone) {
     try {
-        parquet::ArrowReaderProperties properties;
-        properties.set_coerce_int96_timestamp_unit(_parquet_int96_timestamp_unit);
+        parquet::ArrowReaderProperties arrow_reader_properties;
+        /*
+        * timestamp unit to use for INT96-encoded timestamps in parquet.
+        * SECOND, MICRO, MILLI, NANO
+        * We use MICRO second as the unit to parse int96 timestamp, which is the precision of DATETIME/TIMESTAMP in MySQL.
+        * https://dev.mysql.com/doc/refman/8.0/en/datetime.html
+        * A DATETIME or TIMESTAMP value can include a trailing fractional seconds part in up to microseconds (6 digits) precision
+        */
+        arrow_reader_properties.set_coerce_int96_timestamp_unit(arrow::TimeUnit::MICRO);
 
         // new file reader for parquet file
         auto st = parquet::arrow::FileReader::Make(arrow::default_memory_pool(),
-                                                   parquet::ParquetFileReader::Open(_parquet, _properties), properties,
-                                                   &_reader);
+                                                   parquet::ParquetFileReader::Open(_parquet, _properties),
+                                                   arrow_reader_properties, &_reader);
         if (!st.ok()) {
             LOG(WARNING) << "Failed to create parquet file reader. error: " << st.ToString()
                          << ", filename: " << _filename;

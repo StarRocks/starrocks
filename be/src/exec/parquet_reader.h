@@ -102,8 +102,6 @@ private:
 
     std::string _timezone;
     std::string _filename;
-
-    arrow::TimeUnit::type _parquet_int96_timestamp_unit;
 };
 
 // Reader of broker parquet file
